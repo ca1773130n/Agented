@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { superAgentSessionApi } from '../../services/api/super-agents';
+
+const { t } = useI18n();
 import type { SuperAgentSession, GitAction } from '../../services/api/types';
 
 const props = defineProps<{
@@ -56,48 +59,48 @@ function handleCommit() {
   <div v-if="hasWorktree()" class="git-actions-toolbar">
     <div class="toolbar-row">
       <span class="branch-badge" :title="session.branch_name || ''">
-        {{ session.branch_name || 'no branch' }}
+        {{ session.branch_name || t('gitActionsToolbar.noBranch') }}
       </span>
       <div class="actions">
         <button
           class="action-btn"
           :disabled="!!loading"
           @click="showCommitInput = !showCommitInput"
-          title="Commit changes"
+          :title="t('gitActionsToolbar.commitTitle')"
         >
-          {{ loading === 'commit' ? '...' : 'Commit' }}
+          {{ loading === 'commit' ? '...' : t('gitActionsToolbar.commit') }}
         </button>
         <button
           class="action-btn"
           :disabled="!!loading"
           @click="runAction('push')"
-          title="Push to remote"
+          :title="t('gitActionsToolbar.pushTitle')"
         >
-          {{ loading === 'push' ? '...' : 'Push' }}
+          {{ loading === 'push' ? '...' : t('gitActionsToolbar.push') }}
         </button>
         <button
           class="action-btn action-btn--primary"
           :disabled="!!loading || !!session.pr_url"
           @click="runAction('create_pr')"
-          title="Create pull request"
+          :title="t('gitActionsToolbar.createPrTitle')"
         >
-          {{ loading === 'create_pr' ? '...' : session.pr_url ? 'PR Created' : 'Create PR' }}
+          {{ loading === 'create_pr' ? '...' : session.pr_url ? t('gitActionsToolbar.prCreated') : t('gitActionsToolbar.createPr') }}
         </button>
         <button
           class="action-btn"
           :disabled="!!loading"
           @click="runAction('rebase')"
-          title="Rebase onto main"
+          :title="t('gitActionsToolbar.rebaseTitle')"
         >
-          {{ loading === 'rebase' ? '...' : 'Rebase' }}
+          {{ loading === 'rebase' ? '...' : t('gitActionsToolbar.rebase') }}
         </button>
         <button
           class="action-btn"
           :disabled="!!loading"
           @click="runAction('diff')"
-          title="Show diff vs main"
+          :title="t('gitActionsToolbar.diffTitle')"
         >
-          {{ loading === 'diff' ? '...' : 'Diff' }}
+          {{ loading === 'diff' ? '...' : t('gitActionsToolbar.diff') }}
         </button>
       </div>
       <a
@@ -107,7 +110,7 @@ function handleCommit() {
         rel="noopener"
         class="pr-link"
       >
-        View PR
+        {{ t('gitActionsToolbar.viewPr') }}
       </a>
     </div>
 
@@ -115,12 +118,12 @@ function handleCommit() {
       <input
         v-model="commitMessage"
         type="text"
-        placeholder="Commit message..."
+        :placeholder="t('gitActionsToolbar.commitPlaceholder')"
         class="commit-input"
         @keydown.enter="handleCommit"
       />
       <button class="action-btn action-btn--primary" @click="handleCommit">
-        Commit
+        {{ t('gitActionsToolbar.commit') }}
       </button>
     </div>
 
@@ -133,8 +136,8 @@ function handleCommit() {
 
     <div v-if="showDiff" class="diff-panel">
       <div class="diff-header">
-        <span>Diff vs main</span>
-        <button class="action-btn" @click="showDiff = false">Close</button>
+        <span>{{ t('gitActionsToolbar.diffVsMain') }}</span>
+        <button class="action-btn" @click="showDiff = false">{{ t('common.close') }}</button>
       </div>
       <pre class="diff-content">{{ diffContent }}</pre>
     </div>

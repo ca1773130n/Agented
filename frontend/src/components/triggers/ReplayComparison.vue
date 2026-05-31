@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { ReplayComparison, OutputDiff } from '../../services/api';
 import { replayApi, ApiError } from '../../services/api';
 import DiffViewer from './DiffViewer.vue';
 import { useToast } from '../../composables/useToast';
 import { safeFormatDateTime } from '../../utils/datetime';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   executionId: string;
@@ -26,7 +29,7 @@ async function loadComparisons() {
     const result = await replayApi.getComparisons(props.executionId);
     comparisons.value = result.comparisons || [];
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load comparisons';
+    const message = err instanceof ApiError ? err.message : t('replayComparison.toast.loadComparisonsFailed');
     showToast(message, 'error');
   } finally {
     isLoadingComparisons.value = false;
@@ -38,7 +41,7 @@ async function handleReplay() {
   isReplaying.value = true;
   try {
     const result = await replayApi.create(props.executionId, replayNotes.value || undefined);
-    showToast('Replay started successfully', 'success');
+    showToast(t('replayComparison.toast.replayStarted'), 'success');
     replayNotes.value = '';
     // Reload comparisons to show the new one
     await loadComparisons();
@@ -48,7 +51,7 @@ async function handleReplay() {
       await viewDiff(newComparison);
     }
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to replay execution';
+    const message = err instanceof ApiError ? err.message : t('replayComparison.toast.replayFailed');
     showToast(message, 'error');
   } finally {
     isReplaying.value = false;
@@ -62,7 +65,7 @@ async function viewDiff(comparison: ReplayComparison) {
   try {
     diffData.value = await replayApi.getDiff(comparison.id);
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load diff';
+    const message = err instanceof ApiError ? err.message : t('replayComparison.toast.loadDiffFailed');
     showToast(message, 'error');
     selectedComparison.value = null;
   } finally {
@@ -91,13 +94,13 @@ onMounted(loadComparisons);
   <div class="replay-comparison">
     <!-- Replay Trigger Section -->
     <div class="replay-trigger">
-      <h4 class="section-title">Replay Execution</h4>
+      <h4 class="section-title">{{ t('replayComparison.replayExecution') }}</h4>
       <div class="replay-form">
         <input
           v-model="replayNotes"
           type="text"
           class="replay-notes-input"
-          placeholder="Optional notes (e.g., 'testing prompt v2')"
+          :placeholder="t('replayComparison.notesPlaceholder')"
           :disabled="isReplaying"
           @keydown.enter="handleReplay"
         />
@@ -110,7 +113,7 @@ onMounted(loadComparisons);
           <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polygon points="5,3 19,12 5,21 5,3" />
           </svg>
-          {{ isReplaying ? 'Replaying...' : 'Replay' }}
+          {{ isReplaying ? t('replayComparison.replaying') : t('replayComparison.replay') }}
         </button>
       </div>
     </div>
@@ -118,17 +121,17 @@ onMounted(loadComparisons);
     <!-- Comparisons List -->
     <div class="comparisons-section">
       <h4 class="section-title">
-        Comparisons
+        {{ t('replayComparison.comparisons') }}
         <span v-if="comparisons.length" class="comparison-count">{{ comparisons.length }}</span>
       </h4>
 
       <div v-if="isLoadingComparisons" class="loading-state">
         <span class="spinner-small"></span>
-        Loading comparisons...
+        {{ t('replayComparison.loadingComparisons') }}
       </div>
 
       <div v-else-if="comparisons.length === 0" class="empty-comparisons">
-        No replay comparisons yet. Click "Replay" to create one.
+        {{ t('replayComparison.emptyComparisons') }}
       </div>
 
       <div v-else class="comparison-list">
@@ -150,7 +153,7 @@ onMounted(loadComparisons);
             :class="{ active: selectedComparison?.id === comparison.id }"
             @click="selectedComparison?.id === comparison.id ? closeDiff() : viewDiff(comparison)"
           >
-            {{ selectedComparison?.id === comparison.id ? 'Close' : 'View Diff' }}
+            {{ selectedComparison?.id === comparison.id ? t('common.close') : t('replayComparison.viewDiff') }}
           </button>
         </div>
       </div>
@@ -160,7 +163,7 @@ onMounted(loadComparisons);
     <div v-if="selectedComparison" class="diff-section">
       <div v-if="isLoadingDiff" class="loading-state">
         <span class="spinner-small"></span>
-        Loading diff...
+        {{ t('replayComparison.loadingDiff') }}
       </div>
       <DiffViewer v-else-if="diffData" :diff-data="diffData" />
     </div>

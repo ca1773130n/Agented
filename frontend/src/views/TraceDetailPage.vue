@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import { tracingApi, type Trace, type TraceSpan } from '../services/api/tracing';
 import { useTraceStream } from '../composables/useTraceStream';
 import SpanTreeNode, { type SpanTreeChild } from '../components/tracing/SpanTreeNode.vue';
 
+const { t } = useI18n();
 const route = useRoute();
 const traceId = computed(() => route.params.id as string);
 
@@ -26,7 +28,7 @@ async function load() {
       start();
     }
   } catch (e) {
-    loadError.value = e instanceof Error ? e.message : 'Failed to load trace';
+    loadError.value = e instanceof Error ? e.message : t('traceDetail.loadFailed');
   } finally {
     isLoading.value = false;
   }
@@ -77,10 +79,10 @@ watch(traceId, () => {
 
 <template>
   <div class="trace-detail-page">
-    <div v-if="isLoading" data-testid="loading-state">Loading…</div>
+    <div v-if="isLoading" data-testid="loading-state">{{ t('traceDetail.loading') }}</div>
     <div v-else-if="loadError" data-testid="error-state" class="error-state">
       {{ loadError }}
-      <button @click="load">Retry</button>
+      <button @click="load">{{ t('common.retry') }}</button>
     </div>
     <template v-else-if="trace">
       <header class="trace-header">
@@ -92,8 +94,8 @@ watch(traceId, () => {
           <span v-if="trace.duration_ms != null">{{ trace.duration_ms }}ms</span>
         </div>
         <pre v-if="trace.error_message" class="trace-error">{{ trace.error_message }}</pre>
-        <pre v-if="trace.output">output: {{ JSON.stringify(trace.output, null, 2) }}</pre>
-        <pre v-if="trace.attributes">attributes: {{ JSON.stringify(trace.attributes, null, 2) }}</pre>
+        <pre v-if="trace.output">{{ t('traceDetail.outputLabel') }} {{ JSON.stringify(trace.output, null, 2) }}</pre>
+        <pre v-if="trace.attributes">{{ t('traceDetail.attributesLabel') }} {{ JSON.stringify(trace.attributes, null, 2) }}</pre>
       </header>
       <section class="span-tree">
         <SpanTreeNode
@@ -102,7 +104,7 @@ watch(traceId, () => {
           :span="root.span"
           :children="root.children"
         />
-        <div v-if="tree.length === 0" class="empty-tree">No spans yet.</div>
+        <div v-if="tree.length === 0" class="empty-tree">{{ t('traceDetail.noSpans') }}</div>
       </section>
     </template>
   </div>

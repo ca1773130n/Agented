@@ -3,6 +3,9 @@ import { ref } from 'vue';
 import type { Team, TriggerSource } from '../../services/api';
 import { teamApi, ApiError } from '../../services/api';
 import { useToast } from '../../composables/useToast';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   team: Team;
@@ -20,15 +23,15 @@ const editTriggerConfig = ref<Record<string, string>>({});
 const editEnabled = ref(1);
 const isSavingTrigger = ref(false);
 
-function getTriggerLabel(t?: string): string {
-  if (!t) return 'None';
+function getTriggerLabel(src?: string): string {
+  if (!src) return t('teamTriggerCard.none');
   const labels: Record<string, string> = {
     webhook: 'Webhook',
     github: 'GitHub',
-    manual: 'Manual',
-    scheduled: 'Scheduled',
+    manual: t('teamTriggerCard.manual'),
+    scheduled: t('teamTriggerCard.scheduled'),
   };
-  return labels[t] || t;
+  return labels[src] || src;
 }
 
 function startEditTrigger() {
@@ -50,11 +53,11 @@ async function saveTrigger() {
       trigger_config: JSON.stringify(editTriggerConfig.value),
       enabled: editEnabled.value,
     });
-    showToast('Trigger updated', 'success');
+    showToast(t('teamTriggerCard.updated'), 'success');
     editingTrigger.value = false;
     emit('updated');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to update trigger';
+    const message = err instanceof ApiError ? err.message : t('teamTriggerCard.updateError');
     showToast(message, 'error');
   } finally {
     isSavingTrigger.value = false;
@@ -66,42 +69,42 @@ async function saveTrigger() {
   <div class="card">
     <div class="card-header">
       <div class="header-left">
-        <h3>Trigger</h3>
+        <h3>{{ t('teamTriggerCard.title') }}</h3>
         <span v-if="team.trigger_source" class="card-count">{{ getTriggerLabel(team.trigger_source) }}</span>
-        <span v-else class="card-count">Not configured</span>
+        <span v-else class="card-count">{{ t('teamTriggerCard.notConfigured') }}</span>
       </div>
       <button class="add-btn" @click="editingTrigger ? (editingTrigger = false) : startEditTrigger()">
-        {{ editingTrigger ? 'Cancel' : 'Edit' }}
+        {{ editingTrigger ? t('common.cancel') : t('common.edit') }}
       </button>
     </div>
     <div v-if="editingTrigger" class="card-body">
       <div class="form-group">
-        <label>Trigger Source</label>
+        <label>{{ t('teamTriggerCard.triggerSource') }}</label>
         <select v-model="editTriggerSource" class="form-select">
-          <option :value="null">None</option>
+          <option :value="null">{{ t('teamTriggerCard.none') }}</option>
           <option value="webhook">Webhook</option>
           <option value="github">GitHub</option>
-          <option value="manual">Manual</option>
-          <option value="scheduled">Scheduled</option>
+          <option value="manual">{{ t('teamTriggerCard.manual') }}</option>
+          <option value="scheduled">{{ t('teamTriggerCard.scheduled') }}</option>
         </select>
       </div>
 
       <!-- Webhook config fields -->
       <template v-if="editTriggerSource === 'webhook'">
         <div class="form-group">
-          <label>Match Field Path</label>
+          <label>{{ t('teamTriggerCard.matchFieldPath') }}</label>
           <input v-model="editTriggerConfig.match_field_path" type="text" class="form-input" placeholder="e.g., action" />
         </div>
         <div class="form-group">
-          <label>Match Field Value</label>
+          <label>{{ t('teamTriggerCard.matchFieldValue') }}</label>
           <input v-model="editTriggerConfig.match_field_value" type="text" class="form-input" placeholder="e.g., opened" />
         </div>
         <div class="form-group">
-          <label>Text Field Path</label>
+          <label>{{ t('teamTriggerCard.textFieldPath') }}</label>
           <input v-model="editTriggerConfig.text_field_path" type="text" class="form-input" placeholder="e.g., pull_request.body" />
         </div>
         <div class="form-group">
-          <label>Detection Keyword</label>
+          <label>{{ t('teamTriggerCard.detectionKeyword') }}</label>
           <input v-model="editTriggerConfig.detection_keyword" type="text" class="form-input" placeholder="e.g., review" />
         </div>
       </template>
@@ -109,23 +112,23 @@ async function saveTrigger() {
       <!-- Scheduled config fields -->
       <template v-if="editTriggerSource === 'scheduled'">
         <div class="form-group">
-          <label>Schedule Type</label>
+          <label>{{ t('teamTriggerCard.scheduleType') }}</label>
           <select v-model="editTriggerConfig.schedule_type" class="form-select">
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
+            <option value="daily">{{ t('teamTriggerCard.daily') }}</option>
+            <option value="weekly">{{ t('teamTriggerCard.weekly') }}</option>
+            <option value="monthly">{{ t('teamTriggerCard.monthly') }}</option>
           </select>
         </div>
         <div class="form-group">
-          <label>Schedule Time</label>
+          <label>{{ t('teamTriggerCard.scheduleTime') }}</label>
           <input v-model="editTriggerConfig.schedule_time" type="time" class="form-input" />
         </div>
         <div v-if="editTriggerConfig.schedule_type === 'weekly'" class="form-group">
-          <label>Day of Week (0=Mon, 6=Sun)</label>
+          <label>{{ t('teamTriggerCard.dayOfWeek') }}</label>
           <input v-model="editTriggerConfig.schedule_day" type="number" min="0" max="6" class="form-input" />
         </div>
         <div class="form-group">
-          <label>Timezone</label>
+          <label>{{ t('teamTriggerCard.timezone') }}</label>
           <input v-model="editTriggerConfig.schedule_timezone" type="text" class="form-input" :placeholder="'e.g., ' + Intl.DateTimeFormat().resolvedOptions().timeZone" />
         </div>
       </template>
@@ -133,19 +136,19 @@ async function saveTrigger() {
       <div class="form-group">
         <label class="toggle-label">
           <input type="checkbox" :checked="editEnabled === 1" @change="editEnabled = ($event.target as HTMLInputElement).checked ? 1 : 0" />
-          <span>Enabled</span>
+          <span>{{ t('teamTriggerCard.enabled') }}</span>
         </label>
       </div>
 
       <div class="card-actions">
         <button class="action-btn primary compact" :disabled="isSavingTrigger" @click="saveTrigger">
-          {{ isSavingTrigger ? 'Saving...' : 'Save Trigger' }}
+          {{ isSavingTrigger ? t('teamTriggerCard.saving') : t('teamTriggerCard.saveTrigger') }}
         </button>
       </div>
     </div>
     <div v-else-if="!team.trigger_source" class="empty-state">
-      <p>No trigger configured</p>
-      <span>Set a trigger to define when the team executes</span>
+      <p>{{ t('teamTriggerCard.emptyTitle') }}</p>
+      <span>{{ t('teamTriggerCard.emptyHint') }}</span>
     </div>
   </div>
 </template>

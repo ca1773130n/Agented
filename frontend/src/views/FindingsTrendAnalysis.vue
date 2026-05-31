@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import LoadingState from '../components/base/LoadingState.vue';
+
+const { t } = useI18n();
 
 const isLoading = ref(true);
 const selectedBot = ref<string>('all');
@@ -81,8 +84,8 @@ function deltaClass(key: keyof TrendPoint): string {
 
 function deltaLabel(key: keyof TrendPoint): string {
   const d = delta(key);
-  if (d === 0) return 'No change';
-  return (d > 0 ? '+' : '') + d + ' vs period start';
+  if (d === 0) return t('findingsTrendAnalysis.noChange');
+  return t('findingsTrendAnalysis.deltaVsStart', { delta: (d > 0 ? '+' : '') + d });
 }
 
 // Simple SVG sparkline
@@ -109,18 +112,18 @@ onMounted(loadData);
 <template>
   <div class="findings-trend-page">
 
-    <LoadingState v-if="isLoading" message="Loading findings trend..." />
+    <LoadingState v-if="isLoading" :message="t('findingsTrendAnalysis.loading')" />
 
     <template v-else>
       <!-- Controls -->
       <div class="controls-row">
         <div class="page-title">
-          <h1>Findings Trend Analysis</h1>
-          <p>Track whether your codebase is improving or degrading over time</p>
+          <h1>{{ t('findingsTrendAnalysis.title') }}</h1>
+          <p>{{ t('findingsTrendAnalysis.subtitle') }}</p>
         </div>
         <div class="control-group">
           <select v-model="selectedBot" class="filter-select" @change="loadData">
-            <option value="all">All bots</option>
+            <option value="all">{{ t('findingsTrendAnalysis.allBots') }}</option>
             <option v-for="b in availableBots" :key="b" :value="b">{{ b }}</option>
           </select>
           <div class="period-toggle">
@@ -132,7 +135,7 @@ onMounted(loadData);
       <!-- Summary Cards -->
       <div class="stats-grid" v-if="latest">
         <div class="card stat-card" :class="deltaClass('critical')">
-          <div class="stat-severity critical">Critical</div>
+          <div class="stat-severity critical">{{ t('findingsTrendAnalysis.severity.critical') }}</div>
           <div class="stat-count">{{ latest.critical }}</div>
           <div class="stat-delta" :class="deltaClass('critical')">{{ deltaLabel('critical') }}</div>
           <svg class="sparkline" viewBox="0 0 180 40" preserveAspectRatio="none">
@@ -140,7 +143,7 @@ onMounted(loadData);
           </svg>
         </div>
         <div class="card stat-card" :class="deltaClass('high')">
-          <div class="stat-severity high">High</div>
+          <div class="stat-severity high">{{ t('findingsTrendAnalysis.severity.high') }}</div>
           <div class="stat-count">{{ latest.high }}</div>
           <div class="stat-delta" :class="deltaClass('high')">{{ deltaLabel('high') }}</div>
           <svg class="sparkline" viewBox="0 0 180 40" preserveAspectRatio="none">
@@ -148,7 +151,7 @@ onMounted(loadData);
           </svg>
         </div>
         <div class="card stat-card" :class="deltaClass('medium')">
-          <div class="stat-severity medium">Medium</div>
+          <div class="stat-severity medium">{{ t('findingsTrendAnalysis.severity.medium') }}</div>
           <div class="stat-count">{{ latest.medium }}</div>
           <div class="stat-delta" :class="deltaClass('medium')">{{ deltaLabel('medium') }}</div>
           <svg class="sparkline" viewBox="0 0 180 40" preserveAspectRatio="none">
@@ -156,7 +159,7 @@ onMounted(loadData);
           </svg>
         </div>
         <div class="card stat-card">
-          <div class="stat-severity low">Low</div>
+          <div class="stat-severity low">{{ t('findingsTrendAnalysis.severity.low') }}</div>
           <div class="stat-count">{{ latest.low }}</div>
           <div class="stat-delta" :class="deltaClass('low')">{{ deltaLabel('low') }}</div>
           <svg class="sparkline" viewBox="0 0 180 40" preserveAspectRatio="none">
@@ -168,12 +171,12 @@ onMounted(loadData);
       <!-- Total Trend Chart -->
       <div class="card chart-card">
         <div class="chart-header">
-          <h3>Total Findings Over Time</h3>
+          <h3>{{ t('findingsTrendAnalysis.totalOverTime') }}</h3>
           <div class="chart-legend">
-            <span class="legend-item critical">Critical</span>
-            <span class="legend-item high">High</span>
-            <span class="legend-item medium">Medium</span>
-            <span class="legend-item low">Low</span>
+            <span class="legend-item critical">{{ t('findingsTrendAnalysis.severity.critical') }}</span>
+            <span class="legend-item high">{{ t('findingsTrendAnalysis.severity.high') }}</span>
+            <span class="legend-item medium">{{ t('findingsTrendAnalysis.severity.medium') }}</span>
+            <span class="legend-item low">{{ t('findingsTrendAnalysis.severity.low') }}</span>
           </div>
         </div>
 
@@ -194,26 +197,26 @@ onMounted(loadData);
 
       <!-- Trend Summary -->
       <div class="card summary-card">
-        <h3>Period Summary ({{ selectedPeriod }})</h3>
+        <h3>{{ t('findingsTrendAnalysis.periodSummary', { period: selectedPeriod }) }}</h3>
         <div class="summary-grid">
           <div class="summary-item">
-            <span class="summary-label">Period start total</span>
+            <span class="summary-label">{{ t('findingsTrendAnalysis.periodStartTotal') }}</span>
             <span class="summary-value">{{ first?.total ?? 0 }}</span>
           </div>
           <div class="summary-item">
-            <span class="summary-label">Period end total</span>
+            <span class="summary-label">{{ t('findingsTrendAnalysis.periodEndTotal') }}</span>
             <span class="summary-value">{{ latest?.total ?? 0 }}</span>
           </div>
           <div class="summary-item">
-            <span class="summary-label">Net change</span>
+            <span class="summary-label">{{ t('findingsTrendAnalysis.netChange') }}</span>
             <span class="summary-value" :class="delta('total') < 0 ? 'improving' : delta('total') > 0 ? 'worsening' : ''">
-              {{ delta('total') > 0 ? '+' : '' }}{{ delta('total') }} findings
+              {{ t('findingsTrendAnalysis.netChangeValue', { delta: (delta('total') > 0 ? '+' : '') + delta('total') }) }}
             </span>
           </div>
           <div class="summary-item">
-            <span class="summary-label">Trend</span>
+            <span class="summary-label">{{ t('findingsTrendAnalysis.trend') }}</span>
             <span class="summary-value" :class="delta('total') < 0 ? 'improving' : delta('total') > 0 ? 'worsening' : ''">
-              {{ delta('total') < 0 ? 'Improving' : delta('total') > 0 ? 'Worsening' : 'Stable' }}
+              {{ delta('total') < 0 ? t('findingsTrendAnalysis.improving') : delta('total') > 0 ? t('findingsTrendAnalysis.worsening') : t('findingsTrendAnalysis.stable') }}
             </span>
           </div>
         </div>

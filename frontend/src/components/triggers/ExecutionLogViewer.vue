@@ -4,6 +4,9 @@ import type { Execution, LogLine, AuthenticatedEventSource } from '../../service
 import { executionApi } from '../../services/api';
 import { safeParseSSE } from '../../composables/useEventSource';
 import { useToast } from '../../composables/useToast';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   executionId: string;
@@ -70,7 +73,7 @@ async function loadExecution() {
       startElapsedTimer();
     }
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Failed to load execution';
+    error.value = err instanceof Error ? err.message : t('executionLogViewer.loadFailed');
   } finally {
     isLoading.value = false;
   }
@@ -199,9 +202,9 @@ async function handleCancel() {
   cancelling.value = true;
   try {
     await executionApi.cancel(props.executionId);
-    showToast('Execution cancelled', 'success');
+    showToast(t('executionLogViewer.cancelled'), 'success');
   } catch (error: unknown) {
-    showToast(error instanceof Error ? error.message : 'Failed to cancel execution', 'error');
+    showToast(error instanceof Error ? error.message : t('executionLogViewer.cancelFailed'), 'error');
   } finally {
     cancelling.value = false;
   }
@@ -229,7 +232,7 @@ watch(() => props.executionId, () => {
       <div class="header-left">
         <div class="status-badge" :class="statusClass">
           <span class="status-dot"></span>
-          {{ execution?.status || 'loading' }}
+          {{ execution?.status || t('common.loading') }}
         </div>
         <span class="duration">{{ formattedDuration }}</span>
         <button
@@ -237,16 +240,16 @@ watch(() => props.executionId, () => {
           class="cancel-btn"
           :disabled="cancelling"
           @click="handleCancel"
-          title="Cancel execution"
+          :title="t('executionLogViewer.cancelExecution')"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="3" y="3" width="18" height="18" rx="2"/>
           </svg>
-          {{ cancelling ? 'Cancelling...' : 'Cancel' }}
+          {{ cancelling ? t('executionLogViewer.cancelling') : t('common.cancel') }}
         </button>
       </div>
       <div class="header-actions">
-        <button class="icon-btn" @click="autoScroll = !autoScroll" :title="autoScroll ? 'Auto-scroll ON' : 'Auto-scroll OFF'">
+        <button class="icon-btn" @click="autoScroll = !autoScroll" :title="autoScroll ? t('executionLogViewer.autoScrollOn') : t('executionLogViewer.autoScrollOff')">
           <svg v-if="autoScroll" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 5v14M5 12l7 7 7-7"/>
           </svg>
@@ -254,13 +257,13 @@ watch(() => props.executionId, () => {
             <path d="M18 15l-6-6-6 6"/>
           </svg>
         </button>
-        <button class="icon-btn" @click="copyLogs" title="Copy logs">
+        <button class="icon-btn" @click="copyLogs" :title="t('executionLogViewer.copyLogs')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="9" y="9" width="13" height="13" rx="2"/>
             <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
           </svg>
         </button>
-        <button v-if="$emit" class="icon-btn" @click="emit('close')" title="Close">
+        <button v-if="$emit" class="icon-btn" @click="emit('close')" :title="t('common.close')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M18 6L6 18M6 6l12 12"/>
           </svg>
@@ -271,7 +274,7 @@ watch(() => props.executionId, () => {
     <!-- Loading state -->
     <div v-if="isLoading" class="log-loading">
       <div class="spinner"></div>
-      <span>Loading execution logs...</span>
+      <span>{{ t('executionLogViewer.loadingLogs') }}</span>
     </div>
 
     <!-- Error state -->
@@ -294,7 +297,7 @@ watch(() => props.executionId, () => {
           <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
           <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
         </svg>
-        Some log lines were dropped — output may be incomplete.
+        {{ t('executionLogViewer.queueOverflow') }}
       </div>
     <div
       ref="logContainer"
@@ -306,7 +309,7 @@ watch(() => props.executionId, () => {
           <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
           <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
         </svg>
-        <span>{{ execution?.status === 'running' ? 'Waiting for output...' : 'No output recorded' }}</span>
+        <span>{{ execution?.status === 'running' ? t('executionLogViewer.waitingOutput') : t('executionLogViewer.noOutput') }}</span>
       </div>
 
       <div v-for="(line, index) in logLines" :key="index" class="log-line" :class="line.stream">

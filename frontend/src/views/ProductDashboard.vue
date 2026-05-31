@@ -13,6 +13,9 @@ import { useToast } from '../composables/useToast';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 import { useTourMachine } from '../composables/useTourMachine';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   productId?: string;
@@ -106,7 +109,7 @@ async function openAddProjectModal() {
       createMode.value = false;
     }
   } catch (err) {
-    showToast('Failed to load projects', 'error');
+    showToast(t('productDashboard.toasts.loadProjectsFailed'), 'error');
   }
 }
 
@@ -120,7 +123,7 @@ async function createAndAssignProject() {
       product_id: productId.value,
       github_repo: newProjectGithubRepo.value.trim() || undefined,
     });
-    showToast('Project created and assigned', 'success');
+    showToast(t('productDashboard.toasts.projectCreated'), 'success');
     showAddProjectModal.value = false;
     await loadData();
     // Navigate to project settings FIRST, then advance tour
@@ -134,7 +137,7 @@ async function createAndAssignProject() {
       tourMachine.nextStep();
     }
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to create project';
+    const message = err instanceof ApiError ? err.message : t('productDashboard.errors.createProject');
     showToast(message, 'error');
   } finally {
     isCreatingProject.value = false;
@@ -146,7 +149,7 @@ async function addProjectToProduct() {
   isAddingProject.value = true;
   try {
     await projectApi.update(selectedProjectId.value, { product_id: productId.value });
-    showToast('Project added to product', 'success');
+    showToast(t('productDashboard.toasts.projectAdded'), 'success');
     showAddProjectModal.value = false;
     // Reload product data to show new project
     await loadData();
@@ -156,7 +159,7 @@ async function addProjectToProduct() {
       tourMachine.nextStep();
     }
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to add project';
+    const message = err instanceof ApiError ? err.message : t('productDashboard.errors.addProject');
     showToast(message, 'error');
   } finally {
     isAddingProject.value = false;
@@ -218,14 +221,14 @@ function getStatusClass(status: string): string {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M19 12H5M12 19l-7-7 7-7"/>
           </svg>
-          All Products
+          {{ t('productDashboard.allProducts') }}
         </button>
         <button class="action-btn secondary" @click="router.push({ name: 'product-settings', params: { productId: productId } })">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
           </svg>
-          Edit Product
+          {{ t('productDashboard.editProduct') }}
         </button>
       </div>
 
@@ -233,14 +236,14 @@ function getStatusClass(status: string): string {
       <div class="card">
         <div class="card-header">
           <div class="header-left">
-            <h3>Projects</h3>
-            <span class="card-count">{{ product.projects?.length || 0 }} projects</span>
+            <h3>{{ t('productDashboard.projects') }}</h3>
+            <span class="card-count">{{ t('productDashboard.projectsCount', { count: product.projects?.length || 0 }) }}</span>
           </div>
           <button class="add-btn" data-tour="create-project" @click="openAddProjectModal">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 5v14M5 12h14"/>
             </svg>
-            Add Project
+            {{ t('productDashboard.addProject') }}
           </button>
         </div>
 
@@ -250,9 +253,9 @@ function getStatusClass(status: string): string {
               <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
             </svg>
           </div>
-          <h3>No projects yet</h3>
-          <p>Create projects and assign them to this product</p>
-          <button class="btn btn-primary" @click="openAddProjectModal">Add Your First Project</button>
+          <h3>{{ t('productDashboard.emptyTitle') }}</h3>
+          <p>{{ t('productDashboard.emptyDescription') }}</p>
+          <button class="btn btn-primary" @click="openAddProjectModal">{{ t('productDashboard.addFirstProject') }}</button>
         </div>
 
         <div v-else class="projects-list">
@@ -276,31 +279,31 @@ function getStatusClass(status: string): string {
       <!-- Product Info -->
       <div class="card">
         <div class="card-header">
-          <h3>Product Info</h3>
+          <h3>{{ t('productDashboard.productInfo') }}</h3>
         </div>
         <div class="info-grid">
           <div class="info-item">
-            <span class="info-label">Product ID</span>
+            <span class="info-label">{{ t('productDashboard.info.productId') }}</span>
             <span class="info-value mono">{{ product.id }}</span>
           </div>
           <div class="info-item">
-            <span class="info-label">Status</span>
+            <span class="info-label">{{ t('productDashboard.info.status') }}</span>
             <span class="info-value">{{ product.status }}</span>
           </div>
           <div v-if="product.owner_team_name" class="info-item">
-            <span class="info-label">Owner Team</span>
+            <span class="info-label">{{ t('productDashboard.info.ownerTeam') }}</span>
             <span class="info-value">{{ product.owner_team_name }}</span>
           </div>
           <div class="info-item">
-            <span class="info-label">Owner Agent</span>
-            <span class="info-value">{{ product.owner_agent_name || 'Not assigned' }}</span>
+            <span class="info-label">{{ t('productDashboard.info.ownerAgent') }}</span>
+            <span class="info-value">{{ product.owner_agent_name || t('productDashboard.notAssigned') }}</span>
           </div>
           <div class="info-item">
-            <span class="info-label">Projects</span>
-            <span class="info-value">{{ product.project_count }} total</span>
+            <span class="info-label">{{ t('productDashboard.projects') }}</span>
+            <span class="info-value">{{ t('productDashboard.totalCount', { count: product.project_count }) }}</span>
           </div>
           <div v-if="product.created_at" class="info-item">
-            <span class="info-label">Created</span>
+            <span class="info-label">{{ t('productDashboard.info.created') }}</span>
             <span class="info-value">{{ new Date(product.created_at).toLocaleDateString() }}</span>
           </div>
         </div>
@@ -323,14 +326,14 @@ function getStatusClass(status: string): string {
           :tokenSpend="dashboardData.token_spend"
         />
       </div>
-      <LoadingState v-else-if="isDashboardLoading" message="Loading dashboard data..." />
+      <LoadingState v-else-if="isDashboardLoading" :message="t('productDashboard.loadingDashboard')" />
     </template>
 
     <!-- Add Project Modal -->
     <div v-if="showAddProjectModal" ref="addProjectOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-add-project" tabindex="-1" @click.self="showAddProjectModal = false" @keydown.escape="showAddProjectModal = false">
       <div class="modal">
         <div class="modal-header">
-          <h3 id="modal-title-add-project">Add Project to Product</h3>
+          <h3 id="modal-title-add-project">{{ t('productDashboard.modal.title') }}</h3>
           <button class="modal-close" @click="showAddProjectModal = false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 6L6 18M6 6l12 12"/>
@@ -345,29 +348,29 @@ function getStatusClass(status: string): string {
               :class="{ active: !createMode }"
               @click="createMode = false"
             >
-              Assign Existing
+              {{ t('productDashboard.modal.assignExisting') }}
             </button>
             <button
               class="modal-tab"
               :class="{ active: createMode }"
               @click="createMode = true"
             >
-              Create New
+              {{ t('productDashboard.modal.createNew') }}
             </button>
           </div>
 
           <!-- Assign Existing tab -->
           <template v-if="!createMode">
-            <p class="modal-description">Select an unassigned project to add to this product.</p>
+            <p class="modal-description">{{ t('productDashboard.modal.assignDescription') }}</p>
 
             <div v-if="unassignedProjects.length === 0" class="empty-modal-state">
-              <p>No existing projects — create one below.</p>
-              <button class="btn btn-link" @click="createMode = true">Switch to Create New</button>
+              <p>{{ t('productDashboard.modal.noExisting') }}</p>
+              <button class="btn btn-link" @click="createMode = true">{{ t('productDashboard.modal.switchToCreate') }}</button>
             </div>
 
             <div v-else class="project-select-wrapper">
               <select v-model="selectedProjectId" class="project-select">
-                <option value="">Select a project...</option>
+                <option value="">{{ t('productDashboard.modal.selectProject') }}</option>
                 <option v-for="proj in unassignedProjects" :key="proj.id" :value="proj.id">
                   {{ proj.name }}
                   <template v-if="proj.github_repo"> ({{ proj.github_repo }})</template>
@@ -381,49 +384,49 @@ function getStatusClass(status: string): string {
 
           <!-- Create New tab -->
           <template v-if="createMode">
-            <p class="modal-description">Create a new project and assign it to this product.</p>
+            <p class="modal-description">{{ t('productDashboard.modal.createDescription') }}</p>
             <div class="form-group">
-              <label class="form-label" for="new-project-name">Name <span class="required">*</span></label>
+              <label class="form-label" for="new-project-name">{{ t('productDashboard.modal.nameLabel') }} <span class="required">*</span></label>
               <input
                 id="new-project-name"
                 v-model="newProjectName"
                 type="text"
                 class="form-input"
-                placeholder="e.g., My Project"
+                :placeholder="t('productDashboard.modal.namePlaceholder')"
               />
             </div>
             <div class="form-group">
-              <label class="form-label" for="new-project-desc">Description</label>
+              <label class="form-label" for="new-project-desc">{{ t('productDashboard.modal.descriptionLabel') }}</label>
               <textarea
                 id="new-project-desc"
                 v-model="newProjectDescription"
                 class="form-textarea"
-                placeholder="Optional description..."
+                :placeholder="t('productDashboard.modal.descriptionPlaceholder')"
                 rows="3"
               ></textarea>
             </div>
             <div class="form-group">
-              <label class="form-label" for="new-project-repo">GitHub Repository</label>
+              <label class="form-label" for="new-project-repo">{{ t('productDashboard.modal.repoLabel') }}</label>
               <input
                 id="new-project-repo"
                 v-model="newProjectGithubRepo"
                 type="text"
                 class="form-input"
-                placeholder="e.g., org/repo"
+                :placeholder="t('productDashboard.modal.repoPlaceholder')"
               />
             </div>
           </template>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="showAddProjectModal = false">Cancel</button>
+          <button class="btn btn-secondary" @click="showAddProjectModal = false">{{ t('common.cancel') }}</button>
           <button
             v-if="!createMode"
             class="btn btn-primary"
             :disabled="!selectedProjectId || isAddingProject"
             @click="addProjectToProduct"
           >
-            <span v-if="isAddingProject">Adding...</span>
-            <span v-else>Add Project</span>
+            <span v-if="isAddingProject">{{ t('productDashboard.modal.adding') }}</span>
+            <span v-else>{{ t('productDashboard.addProject') }}</span>
           </button>
           <button
             v-else
@@ -431,8 +434,8 @@ function getStatusClass(status: string): string {
             :disabled="!newProjectName.trim() || isCreatingProject"
             @click="createAndAssignProject"
           >
-            <span v-if="isCreatingProject">Creating...</span>
-            <span v-else>Create &amp; Assign</span>
+            <span v-if="isCreatingProject">{{ t('productDashboard.modal.creating') }}</span>
+            <span v-else>{{ t('productDashboard.modal.createAndAssign') }}</span>
           </button>
         </div>
       </div>

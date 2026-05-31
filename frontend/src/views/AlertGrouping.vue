@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 import { analyticsApi, ApiError } from '../services/api';
 import type { HealthAlert } from '../services/api';
+const { t } = useI18n();
 const showToast = useToast();
 
 const alerts = ref<HealthAlert[]>([]);
@@ -38,7 +40,7 @@ async function loadAlerts() {
     const data = await analyticsApi.fetchHealthAlerts({ limit: 100 });
     alerts.value = data.alerts ?? [];
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load alerts';
+    const message = err instanceof ApiError ? err.message : t('alertGrouping.loadFailed');
     loadError.value = message;
   } finally {
     isLoading.value = false;
@@ -51,9 +53,9 @@ async function handleAcknowledge(alert: HealthAlert) {
     await analyticsApi.acknowledgeAlert(alert.id);
     const idx = alerts.value.findIndex(a => a.id === alert.id);
     if (idx !== -1) alerts.value[idx] = { ...alerts.value[idx], acknowledged: true };
-    showToast('Alert acknowledged', 'success');
+    showToast(t('alertGrouping.toast.acknowledged'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to acknowledge alert';
+    const message = err instanceof ApiError ? err.message : t('alertGrouping.toast.ackFailed');
     showToast(message, 'error');
   } finally {
     processingId.value = null;
@@ -63,11 +65,11 @@ async function handleAcknowledge(alert: HealthAlert) {
 async function handleRunCheck() {
   try {
     await analyticsApi.runHealthCheck();
-    showToast('Health check started', 'success');
+    showToast(t('alertGrouping.toast.checkStarted'), 'success');
     // Reload alerts after a brief delay to allow the check to complete
     setTimeout(loadAlerts, 2000);
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to run health check';
+    const message = err instanceof ApiError ? err.message : t('alertGrouping.toast.checkFailed');
     showToast(message, 'error');
   }
 }
@@ -79,10 +81,10 @@ function severityColor(s: string): string {
 
 function alertTypeLabel(type: string): string {
   const map: Record<string, string> = {
-    consecutive_failure: 'Consecutive Failures',
-    slow_execution: 'Slow Execution',
-    missing_fire: 'Missing Trigger Fire',
-    budget_exceeded: 'Budget Exceeded',
+    consecutive_failure: t('alertGrouping.alertType.consecutiveFailure'),
+    slow_execution: t('alertGrouping.alertType.slowExecution'),
+    missing_fire: t('alertGrouping.alertType.missingFire'),
+    budget_exceeded: t('alertGrouping.alertType.budgetExceeded'),
   };
   return map[type] ?? type;
 }
@@ -98,32 +100,32 @@ onMounted(loadAlerts);
   <div class="alert-grouping">
 
     <PageHeader
-      title="Health Alerts"
-      subtitle="Monitor bot health alerts with severity tracking and acknowledgment."
+      :title="t('alertGrouping.title')"
+      :subtitle="t('alertGrouping.subtitle')"
     >
       <template #actions>
         <button class="btn btn-ghost" @click="handleRunCheck">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
           </svg>
-          Run Health Check
+          {{ t('alertGrouping.runHealthCheck') }}
         </button>
       </template>
     </PageHeader>
 
-    <LoadingState v-if="isLoading" message="Loading health alerts..." />
+    <LoadingState v-if="isLoading" :message="t('alertGrouping.loading')" />
 
     <div v-else-if="loadError" class="card error-card">
       <div class="error-inner">
         <p>{{ loadError }}</p>
-        <button class="btn btn-ghost" @click="loadAlerts">Retry</button>
+        <button class="btn btn-ghost" @click="loadAlerts">{{ t('common.retry') }}</button>
       </div>
     </div>
 
     <template v-else>
       <div class="filter-tabs">
         <button
-          v-for="[key, label] in [['all', 'All'], ['active', 'Active'], ['critical', 'Critical'], ['warning', 'Warning'], ['acknowledged', 'Acknowledged']]"
+          v-for="[key, label] in [['all', t('alertGrouping.filter.all')], ['active', t('alertGrouping.filter.active')], ['critical', t('alertGrouping.filter.critical')], ['warning', t('alertGrouping.filter.warning')], ['acknowledged', t('alertGrouping.filter.acknowledged')]]"
           :key="key"
           class="filter-tab"
           :class="{ active: activeFilter === key }"
@@ -153,23 +155,23 @@ onMounted(loadAlerts);
               </div>
               <p class="group-message">{{ alert.message }}</p>
               <div v-if="alert.details" class="root-cause">
-                <div class="rc-label">Details</div>
+                <div class="rc-label">{{ t('alertGrouping.details') }}</div>
                 <p class="rc-text">{{ alert.details }}</p>
               </div>
               <div class="group-meta">
-                <span class="meta-item">Created: {{ formatDate(alert.created_at) }}</span>
-                <span v-if="alert.acknowledged" class="status-pill acked">Acknowledged</span>
-                <span v-else class="status-pill active-pill">Active</span>
+                <span class="meta-item">{{ t('alertGrouping.created', { date: formatDate(alert.created_at) }) }}</span>
+                <span v-if="alert.acknowledged" class="status-pill acked">{{ t('alertGrouping.acknowledged') }}</span>
+                <span v-else class="status-pill active-pill">{{ t('alertGrouping.activeStatus') }}</span>
               </div>
             </div>
             <div class="group-actions">
               <template v-if="!alert.acknowledged">
                 <button class="btn btn-sm btn-ack" :disabled="processingId === alert.id" @click="handleAcknowledge(alert)">
-                  {{ processingId === alert.id ? '...' : 'Acknowledge' }}
+                  {{ processingId === alert.id ? '...' : t('alertGrouping.acknowledge') }}
                 </button>
               </template>
               <template v-else>
-                <span class="acked-label">Acknowledged</span>
+                <span class="acked-label">{{ t('alertGrouping.acknowledged') }}</span>
               </template>
             </div>
           </div>
@@ -180,7 +182,7 @@ onMounted(loadAlerts);
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40" style="opacity: 0.3; color: var(--text-tertiary)">
               <polyline points="20 6 9 17 4 12"/>
             </svg>
-            <p>No alerts in this category</p>
+            <p>{{ t('alertGrouping.emptyCategory') }}</p>
           </div>
         </div>
       </div>

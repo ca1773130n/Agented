@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+
 defineProps<{
   /** Whether config has been detected */
   hasConfig: boolean;
@@ -14,7 +18,7 @@ defineProps<{
 <template>
   <div class="sidebar-right">
     <div class="sidebar-header">
-      <h3>{{ title || 'Config Preview' }}</h3>
+      <h3>{{ title || t('configPreviewSidebar.title') }}</h3>
     </div>
     <div v-if="!hasConfig" class="sidebar-empty">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">

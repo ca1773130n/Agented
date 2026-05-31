@@ -10,7 +10,9 @@ import PageLayout from '../components/base/PageLayout.vue';
 import { useToast } from '../composables/useToast';
 import { useUnsavedGuard } from '../composables/useUnsavedGuard';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
+import { useI18n } from 'vue-i18n';
 
+const { t } = useI18n();
 const router = useRouter();
 const showToast = useToast();
 
@@ -75,11 +77,11 @@ function selectComponent(comp: PluginComponent) {
 }
 
 const typeLabels: Record<string, string> = {
-  skill: 'Skills',
-  command: 'Commands',
-  hook: 'Hooks',
-  rule: 'Rules',
-  agent: 'Agents',
+  skill: t('pluginDesign.types.skills'),
+  command: t('pluginDesign.types.commands'),
+  hook: t('pluginDesign.types.hooks'),
+  rule: t('pluginDesign.types.rules'),
+  agent: t('pluginDesign.types.agents'),
 };
 
 const typeIcons: Record<string, string> = {
@@ -106,7 +108,7 @@ async function copyComponentContent() {
 async function finalizePlugin() {
   const result = await conversation.finalize();
   if (result) {
-    showToast(`Plugin "${(result.plugin as { name: string }).name}" created successfully!`, 'success');
+    showToast(t('pluginDesign.toasts.created', { name: (result.plugin as { name: string }).name }), 'success');
     router.push({ name: 'plugin-detail', params: { pluginId: result.plugin_id as string } });
   }
 }
@@ -119,8 +121,8 @@ useWizardAutoResume(conversation, pluginConversationApi, 'agented_plugin_conv_id
 // v0.7.82 — tooltip mirrors the visible hint when disabled.
 const finalizeTooltip = computed(() =>
   conversation.canFinalize.value
-    ? 'Create the plugin'
-    : "Keep chatting — Claude needs more details before the plugin can be created. Tell it the plugin's name, what it does, and at least one component (skill / command / hook / rule).",
+    ? t('pluginDesign.finalizeTooltipReady')
+    : t('pluginDesign.finalizeTooltipNotReady'),
 );
 </script>
 
@@ -129,8 +131,8 @@ const finalizeTooltip = computed(() =>
   <div class="design-page">
     <div class="design-header">
       <div class="header-title">
-        <h1>Design a Plugin</h1>
-        <p>Chat with Claude to design your plugin with multiple components</p>
+        <h1>{{ t('pluginDesign.title') }}</h1>
+        <p>{{ t('pluginDesign.subtitle') }}</p>
       </div>
       <!-- v0.7.82 — always-visible disabled Create button with
            explicit hint. Same pattern as v0.7.79 for /skills/new. -->
@@ -145,16 +147,14 @@ const finalizeTooltip = computed(() =>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M20 6L9 17l-5-5"/>
           </svg>
-          {{ conversation.isFinalizing.value ? 'Creating...' : 'Create Plugin' }}
+          {{ conversation.isFinalizing.value ? t('pluginDesign.creating') : t('pluginDesign.createPlugin') }}
         </button>
         <p
           v-if="!conversation.canFinalize.value"
           id="finalize-hint"
           class="finalize-hint"
         >
-          Keep chatting — once Claude has the plugin's name,
-          purpose, and at least one component (skill / command /
-          hook / rule), this button activates.
+          {{ t('pluginDesign.finalizeHint') }}
         </p>
       </div>
     </div>
@@ -163,13 +163,13 @@ const finalizeTooltip = computed(() =>
       <!-- Left Sidebar: Component Tree -->
       <div class="sidebar-left">
         <div class="sidebar-header">
-          <h3>Components</h3>
+          <h3>{{ t('pluginDesign.components') }}</h3>
         </div>
         <div v-if="!conversation.detectedConfig.value" class="sidebar-empty">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
           </svg>
-          <p>Components will appear here as you design your plugin</p>
+          <p>{{ t('pluginDesign.componentsEmpty') }}</p>
         </div>
         <div v-else class="component-tree">
           <div class="plugin-info">
@@ -214,10 +214,10 @@ const finalizeTooltip = computed(() =>
         :selected-model="conversation.selectedModel.value"
         :use-cli-runner="conversation.useCliRunner.value"
         :assistant-icon-paths="PLUGIN_ICON_PATHS"
-        input-placeholder="Describe your plugin or answer Claude's questions..."
+        :input-placeholder="t('pluginDesign.inputPlaceholder')"
         entity-label="plugin"
-        banner-title="Plugin Ready to Create!"
-        banner-button-label="Create Plugin Now"
+        :banner-title="t('pluginDesign.bannerTitle')"
+        :banner-button-label="t('pluginDesign.bannerButtonLabel')"
         :detected-entity-name="conversation.detectedConfig.value?.name"
         @update:input-message="conversation.inputMessage.value = $event"
         @update:selected-backend="conversation.setBackend($event)"
@@ -233,8 +233,8 @@ const finalizeTooltip = computed(() =>
       <ConfigPreviewSidebar
         :has-config="!!selectedComponent"
         :empty-icon-paths="['M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122']"
-        empty-text="Select a component from the tree to preview its details"
-        title="Component Preview"
+        :empty-text="t('pluginDesign.previewEmpty')"
+        :title="t('pluginDesign.componentPreview')"
       >
         <template v-if="selectedComponent">
           <div class="preview-header">
@@ -244,11 +244,11 @@ const finalizeTooltip = computed(() =>
             <h4>{{ selectedComponent.name }}</h4>
           </div>
           <div class="preview-content">
-            <div class="preview-label">Content</div>
+            <div class="preview-label">{{ t('pluginDesign.content') }}</div>
             <div class="code-block">
               <div class="code-header">
                 <span class="code-lang">{{ selectedComponent.type }}</span>
-                <button class="code-copy-btn" @click="copyComponentContent" title="Copy content">
+                <button class="code-copy-btn" @click="copyComponentContent" :title="t('pluginDesign.copyContent')">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
                     <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>

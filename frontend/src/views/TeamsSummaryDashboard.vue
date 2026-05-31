@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import type { Team } from '../services/api';
 import { teamApi } from '../services/api';
@@ -12,6 +13,7 @@ import EmptyState from '../components/base/EmptyState.vue';
 import { useToast } from '../composables/useToast';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
+const { t } = useI18n();
 const router = useRouter();
 
 const showToast = useToast();
@@ -42,13 +44,13 @@ useWebMcpTool({
   deps: [isLoading, totalTeams, totalMembers, enabledCount],
 });
 
-const columns: DataTableColumn[] = [
-  { key: 'name', label: 'Name' },
-  { key: 'member_count', label: 'Members' },
-  { key: 'leader_name', label: 'Leader' },
-  { key: 'topology', label: 'Topology' },
-  { key: 'trigger_source', label: 'Trigger' },
-];
+const columns = computed<DataTableColumn[]>(() => [
+  { key: 'name', label: t('teamsSummaryDashboard.columns.name') },
+  { key: 'member_count', label: t('teamsSummaryDashboard.columns.members') },
+  { key: 'leader_name', label: t('teamsSummaryDashboard.columns.leader') },
+  { key: 'topology', label: t('teamsSummaryDashboard.columns.topology') },
+  { key: 'trigger_source', label: t('teamsSummaryDashboard.columns.trigger') },
+]);
 
 async function loadData() {
   isLoading.value = true;
@@ -56,7 +58,7 @@ async function loadData() {
     const res = await teamApi.list();
     teams.value = res.teams || [];
   } catch {
-    showToast('Failed to load teams data', 'error');
+    showToast(t('teamsSummaryDashboard.toast.loadFailed'), 'error');
   } finally {
     isLoading.value = false;
   }
@@ -68,28 +70,28 @@ onMounted(loadData);
 <template>
   <div class="summary-dashboard">
 
-    <PageHeader title="Teams Overview" subtitle="Summary of all teams and their members">
+    <PageHeader :title="t('teamsSummaryDashboard.title')" :subtitle="t('teamsSummaryDashboard.subtitle')">
       <template #actions>
-        <button class="manage-btn" @click="router.push({ name: 'teams' })">Manage Teams</button>
+        <button class="manage-btn" @click="router.push({ name: 'teams' })">{{ t('teamsSummaryDashboard.manageTeams') }}</button>
       </template>
     </PageHeader>
 
-    <LoadingState v-if="isLoading" message="Loading teams data..." />
+    <LoadingState v-if="isLoading" :message="t('teamsSummaryDashboard.loading')" />
 
     <template v-else>
       <div class="stats-grid">
-        <StatCard title="Total Teams" :value="totalTeams" />
-        <StatCard title="Total Members" :value="totalMembers" color="var(--accent-cyan)" />
-        <StatCard title="Enabled" :value="enabledCount" color="#22c55e" />
+        <StatCard :title="t('teamsSummaryDashboard.totalTeams')" :value="totalTeams" />
+        <StatCard :title="t('teamsSummaryDashboard.totalMembers')" :value="totalMembers" color="var(--accent-cyan)" />
+        <StatCard :title="t('teamsSummaryDashboard.enabled')" :value="enabledCount" color="#22c55e" />
       </div>
 
       <div class="entity-section">
         <div class="section-header">
-          <h2 class="section-title">All Teams</h2>
-          <span class="section-count">{{ totalTeams }} total</span>
+          <h2 class="section-title">{{ t('teamsSummaryDashboard.allTeams') }}</h2>
+          <span class="section-count">{{ t('teamsSummaryDashboard.totalCount', { count: totalTeams }) }}</span>
         </div>
 
-        <EmptyState v-if="teams.length === 0" title="No teams found" description="Create your first team to get started." />
+        <EmptyState v-if="teams.length === 0" :title="t('teamsSummaryDashboard.emptyTitle')" :description="t('teamsSummaryDashboard.emptyDescription')" />
 
         <DataTable v-else :columns="columns" :items="teams" row-clickable @row-click="(item: Team) => router.push({ name: 'team-dashboard', params: { teamId: item.id } })">
           <template #cell-name="{ item }">

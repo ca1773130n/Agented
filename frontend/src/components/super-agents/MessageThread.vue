@@ -4,6 +4,9 @@ import type { AgentMessage } from '../../services/api';
 import { agentMessageApi } from '../../services/api';
 import { safeFormatDateTime } from '../../utils/datetime';
 import MarkdownContent from '../base/MarkdownContent.vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   superAgentId: string;
@@ -61,14 +64,14 @@ onMounted(loadMessages);
           <path d="M19 12H5M12 19l-7-7 7-7" />
         </svg>
       </button>
-      <span class="peer-label">Conversation with {{ peerAgentId }}</span>
+      <span class="peer-label">{{ t('messageThread.conversationWith', { agent: peerAgentId }) }}</span>
     </div>
 
     <div v-if="threadMessages.length === 0" class="empty-state">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
       </svg>
-      <p>No messages with this agent</p>
+      <p>{{ t('messageThread.empty') }}</p>
     </div>
 
     <div v-else class="thread-list">
@@ -78,7 +81,7 @@ onMounted(loadMessages);
         :class="['thread-bubble', { own: isOwnMessage(msg), peer: !isOwnMessage(msg) }]"
       >
         <div class="bubble-content">
-          <div v-if="msg.priority === 'high'" class="bubble-priority">HIGH</div>
+          <div v-if="msg.priority === 'high'" class="bubble-priority">{{ t('messageThread.highPriority') }}</div>
           <MarkdownContent class="bubble-text" :content="msg.content" :breaks="true" />
           <div class="bubble-meta">
             <span :class="['bubble-status', `status-${msg.status}`]">{{ msg.status }}</span>

@@ -9,6 +9,7 @@
 -->
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import {
   harnessTakeawaysApi,
   TAKEAWAY_KIND_LABEL,
@@ -20,6 +21,7 @@ import LoadingState from '../../../components/base/LoadingState.vue';
 import ErrorState from '../../../components/base/ErrorState.vue';
 
 const emit = defineEmits<{ loaded: [slug: string] }>();
+const { t } = useI18n();
 
 const isLoading = ref(false);
 const loadError = ref<string | null>(null);
@@ -43,7 +45,7 @@ async function loadData() {
     takeaways.value = res?.takeaways || [];
   } catch (err) {
     loadError.value =
-      err instanceof Error ? err.message : 'Failed to load takeaways';
+      err instanceof Error ? err.message : t('harnessTakeawaysCard.error.load');
     takeaways.value = [];
   } finally {
     isLoading.value = false;
@@ -58,10 +60,10 @@ async function applyOne(tk: Takeaway) {
   try {
     const res = await harnessTakeawaysApi.apply(tk.id);
     if (!res.applied) {
-      actionError.value = res.reason || 'Apply failed';
+      actionError.value = res.reason || t('harnessTakeawaysCard.error.apply');
     }
   } catch (err) {
-    actionError.value = err instanceof Error ? err.message : 'Apply failed';
+    actionError.value = err instanceof Error ? err.message : t('harnessTakeawaysCard.error.apply');
   } finally {
     actingId.value = null;
     await loadData();
@@ -73,12 +75,12 @@ async function dismissOne(tk: Takeaway) {
   actingId.value = tk.id;
   actionError.value = null;
   try {
-    const res = await harnessTakeawaysApi.dismiss(tk.id, 'operator rejected');
+    const res = await harnessTakeawaysApi.dismiss(tk.id, t('harnessTakeawaysCard.operatorRejected'));
     if (!res.dismissed) {
-      actionError.value = res.reason || 'Dismiss failed';
+      actionError.value = res.reason || t('harnessTakeawaysCard.error.dismiss');
     }
   } catch (err) {
-    actionError.value = err instanceof Error ? err.message : 'Dismiss failed';
+    actionError.value = err instanceof Error ? err.message : t('harnessTakeawaysCard.error.dismiss');
   } finally {
     actingId.value = null;
     await loadData();
@@ -100,23 +102,21 @@ onMounted(loadData);
   >
     <header class="lane-card__head">
       <div>
-        <h2 class="lane-card__title">Session takeaways</h2>
+        <h2 class="lane-card__title">{{ t('harnessTakeawaysCard.title') }}</h2>
         <p class="lane-card__subtitle">
-          What sessions taught us — user preferences, discovered procedures,
-          domain facts. Apply to memory / rules / KG, or dismiss.
+          {{ t('harnessTakeawaysCard.subtitle') }}
         </p>
       </div>
       <label class="head-toggle">
         <input type="checkbox" v-model="showAll" />
-        <span>Show applied / dismissed</span>
+        <span>{{ t('harnessTakeawaysCard.showAll') }}</span>
       </label>
     </header>
 
-    <LoadingState v-if="isLoading" message="Loading…" />
+    <LoadingState v-if="isLoading" :message="t('harnessTakeawaysCard.loading')" />
     <ErrorState v-else-if="loadError" :message="loadError" @retry="loadData" />
     <p v-else-if="isEmpty" class="empty" data-testid="takeaways-empty">
-      No pending takeaways. Sessions haven't surfaced anything yet — or
-      you've reviewed them all.
+      {{ t('harnessTakeawaysCard.empty') }}
     </p>
     <template v-else>
       <p v-if="actionError" class="action-error" role="alert">
@@ -149,28 +149,28 @@ onMounted(loadData);
             <span
               v-if="tk.applied"
               class="tk__badge tk__badge--applied"
-            >applied → {{ tk.applied_target }} #{{ tk.applied_asset_id }}</span>
+            >{{ t('harnessTakeawaysCard.appliedBadge') }} → {{ tk.applied_target }} #{{ tk.applied_asset_id }}</span>
             <span
               v-else-if="tk.dismissed"
               class="tk__badge tk__badge--dismissed"
-            >dismissed{{ tk.dismissed_reason ? `: ${tk.dismissed_reason}` : '' }}</span>
+            >{{ t('harnessTakeawaysCard.dismissedBadge') }}{{ tk.dismissed_reason ? `: ${tk.dismissed_reason}` : '' }}</span>
             <template v-else>
               <button
                 class="btn btn-apply"
                 :disabled="actingId === tk.id || !tk.suggested_target"
                 :data-testid="`takeaway-apply-${tk.id}`"
                 @click="applyOne(tk)"
-              >Apply</button>
+              >{{ t('harnessTakeawaysCard.apply') }}</button>
               <button
                 class="btn btn-dismiss"
                 :disabled="actingId === tk.id"
                 :data-testid="`takeaway-dismiss-${tk.id}`"
                 @click="dismissOne(tk)"
-              >Dismiss</button>
+              >{{ t('harnessTakeawaysCard.dismiss') }}</button>
               <span
                 v-if="!tk.suggested_target"
                 class="tk__manual-hint"
-              >No target suggested — review manually</span>
+              >{{ t('harnessTakeawaysCard.noTargetHint') }}</span>
             </template>
           </footer>
         </li>

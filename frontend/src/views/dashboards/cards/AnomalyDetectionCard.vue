@@ -9,12 +9,14 @@
 // "not yet enabled" banner instead of falling through to the legacy
 // demo-on-failure mock data, which masked the missing feature.
 import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import LoadingState from '../../../components/base/LoadingState.vue';
 import StatCard from '../../../components/base/StatCard.vue';
 import { useToast } from '../../../composables/useToast';
 import { isNotImplemented } from '../../../services/api/error-handler';
 import NotEnabledBanner from '../../../components/base/NotEnabledBanner.vue';
 
+const { t } = useI18n();
 const emit = defineEmits<{ loaded: [slug: string] }>();
 const showToast = useToast();
 
@@ -103,10 +105,10 @@ async function acknowledge(anomaly: Anomaly) {
     const res = await fetch(`/admin/executions/anomalies/${anomaly.id}/acknowledge`, { method: 'POST' });
     if (!res.ok) throw new HttpStatusError(res.status);
     anomaly.acknowledged = true;
-    showToast('Anomaly acknowledged', 'success');
+    showToast(t('anomalyDetectionCard.toast.acknowledged'), 'success');
   } catch {
     anomaly.acknowledged = true;
-    showToast('Anomaly acknowledged', 'success');
+    showToast(t('anomalyDetectionCard.toast.acknowledged'), 'success');
   }
 }
 
@@ -135,9 +137,9 @@ function deviationPct(baseline: number, observed: number): string {
 
 function timeAgo(iso: string): string {
   const secs = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (secs < 60) return `${secs}s ago`;
-  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
-  return `${Math.floor(secs / 3600)}h ago`;
+  if (secs < 60) return t('anomalyDetectionCard.timeAgo.seconds', { n: secs });
+  if (secs < 3600) return t('anomalyDetectionCard.timeAgo.minutes', { n: Math.floor(secs / 60) });
+  return t('anomalyDetectionCard.timeAgo.hours', { n: Math.floor(secs / 3600) });
 }
 
 onMounted(() => {
@@ -152,26 +154,26 @@ onUnmounted(() => { if (refreshInterval) clearInterval(refreshInterval); });
   <section id="anomaly-detection" class="lane-card anomaly-card-wrap">
     <header class="lane-card__head">
       <div>
-        <h2 class="lane-card__title">Anomaly Detection</h2>
-        <p class="lane-card__subtitle">Executions flagged for deviating from per-bot baselines</p>
+        <h2 class="lane-card__title">{{ t('anomalyDetectionCard.title') }}</h2>
+        <p class="lane-card__subtitle">{{ t('anomalyDetectionCard.subtitle') }}</p>
       </div>
     </header>
 
-    <LoadingState v-if="isLoading" message="Loading anomaly data..." />
+    <LoadingState v-if="isLoading" :message="t('anomalyDetectionCard.loading')" />
 
     <NotEnabledBanner
       v-else-if="notEnabled"
-      feature="Anomaly detection"
-      detail="This card will populate once anomaly baselines are wired up server-side."
+      :feature="t('anomalyDetectionCard.notEnabled.feature')"
+      :detail="t('anomalyDetectionCard.notEnabled.detail')"
       testid="anomaly-not-enabled"
     />
 
     <template v-else>
       <div class="stats-grid">
-        <StatCard title="Unacknowledged" :value="unacknowledgedCount" color="var(--accent-amber)" />
-        <StatCard title="Critical" :value="criticalCount" color="var(--accent-crimson)" />
-        <StatCard title="Total Anomalies" :value="anomalies.length" />
-        <StatCard title="Bots Monitored" :value="baselines.length" />
+        <StatCard :title="t('anomalyDetectionCard.stats.unacknowledged')" :value="unacknowledgedCount" color="var(--accent-amber)" />
+        <StatCard :title="t('anomalyDetectionCard.stats.critical')" :value="criticalCount" color="var(--accent-crimson)" />
+        <StatCard :title="t('anomalyDetectionCard.stats.totalAnomalies')" :value="anomalies.length" />
+        <StatCard :title="t('anomalyDetectionCard.stats.botsMonitored')" :value="baselines.length" />
       </div>
 
       <div class="anomaly-section">
@@ -180,11 +182,11 @@ onUnmounted(() => { if (refreshInterval) clearInterval(refreshInterval); });
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
             </svg>
-            Detected Anomalies
+            {{ t('anomalyDetectionCard.detected.heading') }}
           </h3>
           <label class="toggle-label">
             <input v-model="filterAcknowledged" type="checkbox" />
-            Show acknowledged
+            {{ t('anomalyDetectionCard.detected.showAcknowledged') }}
           </label>
         </div>
 
@@ -192,7 +194,7 @@ onUnmounted(() => { if (refreshInterval) clearInterval(refreshInterval); });
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
           </svg>
-          <span>No active anomalies — all executions look normal</span>
+          <span>{{ t('anomalyDetectionCard.detected.empty') }}</span>
         </div>
 
         <div class="anomaly-list">
@@ -212,7 +214,7 @@ onUnmounted(() => { if (refreshInterval) clearInterval(refreshInterval); });
                 <span class="severity-badge" :style="{ color: anomalyColor(anomaly.severity), borderColor: anomalyColor(anomaly.severity) }">
                   {{ anomaly.severity }}
                 </span>
-                <span v-if="anomaly.acknowledged" class="ack-badge">Acknowledged</span>
+                <span v-if="anomaly.acknowledged" class="ack-badge">{{ t('anomalyDetectionCard.acknowledgedBadge') }}</span>
               </div>
             </div>
 
@@ -220,24 +222,24 @@ onUnmounted(() => { if (refreshInterval) clearInterval(refreshInterval); });
 
             <div class="anomaly-values">
               <div class="value-item">
-                <span class="value-label">Baseline</span>
+                <span class="value-label">{{ t('anomalyDetectionCard.values.baseline') }}</span>
                 <span class="value-num">{{ anomaly.baseline_value }} {{ anomaly.unit }}</span>
               </div>
               <div class="value-arrow">→</div>
               <div class="value-item">
-                <span class="value-label">Observed</span>
+                <span class="value-label">{{ t('anomalyDetectionCard.values.observed') }}</span>
                 <span class="value-num" :style="{ color: anomalyColor(anomaly.severity) }">{{ anomaly.observed_value }} {{ anomaly.unit }}</span>
               </div>
               <div class="value-item">
-                <span class="value-label">Deviation</span>
+                <span class="value-label">{{ t('anomalyDetectionCard.values.deviation') }}</span>
                 <span class="value-num" :style="{ color: anomalyColor(anomaly.severity) }">{{ deviationPct(anomaly.baseline_value, anomaly.observed_value) }}</span>
               </div>
             </div>
 
             <div class="anomaly-footer">
-              <span class="exec-link">Execution: {{ anomaly.execution_id }}</span>
+              <span class="exec-link">{{ t('anomalyDetectionCard.executionLabel', { id: anomaly.execution_id }) }}</span>
               <button v-if="!anomaly.acknowledged" class="btn-ghost" @click="acknowledge(anomaly)">
-                Acknowledge
+                {{ t('anomalyDetectionCard.acknowledgeBtn') }}
               </button>
             </div>
           </div>
@@ -245,16 +247,16 @@ onUnmounted(() => { if (refreshInterval) clearInterval(refreshInterval); });
       </div>
 
       <div class="baseline-section">
-        <h3>Bot Baselines (last 30 days)</h3>
-        <p class="baseline-desc">Anomalies are flagged when executions deviate significantly from these baselines.</p>
+        <h3>{{ t('anomalyDetectionCard.baselines.heading') }}</h3>
+        <p class="baseline-desc">{{ t('anomalyDetectionCard.baselines.desc') }}</p>
         <div class="baseline-table">
           <div class="baseline-head">
-            <span>Bot</span>
-            <span>Avg Duration</span>
-            <span>Avg Output</span>
-            <span>Avg Findings</span>
-            <span>Error Rate</span>
-            <span>Samples</span>
+            <span>{{ t('anomalyDetectionCard.baselines.cols.bot') }}</span>
+            <span>{{ t('anomalyDetectionCard.baselines.cols.avgDuration') }}</span>
+            <span>{{ t('anomalyDetectionCard.baselines.cols.avgOutput') }}</span>
+            <span>{{ t('anomalyDetectionCard.baselines.cols.avgFindings') }}</span>
+            <span>{{ t('anomalyDetectionCard.baselines.cols.errorRate') }}</span>
+            <span>{{ t('anomalyDetectionCard.baselines.cols.samples') }}</span>
           </div>
           <div v-for="bl in baselines" :key="bl.bot_id" class="baseline-row">
             <span class="baseline-name">{{ bl.bot_name }}</span>

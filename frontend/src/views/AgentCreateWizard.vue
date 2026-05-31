@@ -7,7 +7,9 @@ import { useWizardAutoResume } from '../composables/useWizardAutoResume';
 import { AiChatPanelManaged as AiChatPanel } from '@ai-accounts/vue-styled';
 import { useToast } from '../composables/useToast';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
+import { useI18n } from 'vue-i18n';
 
+const { t } = useI18n();
 const router = useRouter();
 const showToast = useToast();
 
@@ -60,7 +62,7 @@ const AGENT_ICON_PATHS = [
 async function finalizeAgent() {
   const result = await conversation.finalize();
   if (result) {
-    showToast(`Agent "${(result.agent as { name: string }).name}" created successfully!`, 'success');
+    showToast(t('agentCreateWizard.toastCreated', { name: (result.agent as { name: string }).name }), 'success');
     router.push({ name: 'agent-design', params: { agentId: result.agent_id as string } });
   }
 }
@@ -74,8 +76,8 @@ useWizardAutoResume(conversation, agentConversationApi, 'agented_agent_conv_id')
 // switches to the action description once enabled.
 const finalizeTooltip = computed(() =>
   conversation.canFinalize.value
-    ? 'Create the agent'
-    : "Keep chatting — Claude needs more details before the agent can be created. Tell it the agent's name, what it does, and how it should behave.",
+    ? t('agentCreateWizard.tooltipReady')
+    : t('agentCreateWizard.tooltipNotReady'),
 );
 </script>
 
@@ -83,8 +85,8 @@ const finalizeTooltip = computed(() =>
   <div class="wizard-page">
     <div class="wizard-header">
       <div class="header-title">
-        <h1>Design Agent</h1>
-        <p>Chat with Claude to design your AI agent</p>
+        <h1>{{ t('agentCreateWizard.title') }}</h1>
+        <p>{{ t('agentCreateWizard.subtitle') }}</p>
       </div>
       <!-- v0.7.82 — always-visible disabled Create button with
            an explicit hint, so a new operator can see the
@@ -101,16 +103,14 @@ const finalizeTooltip = computed(() =>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M20 6L9 17l-5-5"/>
           </svg>
-          {{ conversation.isFinalizing.value ? 'Creating...' : 'Create Agent' }}
+          {{ conversation.isFinalizing.value ? t('agentCreateWizard.creating') : t('agentCreateWizard.createAgent') }}
         </button>
         <p
           v-if="!conversation.canFinalize.value"
           id="finalize-hint"
           class="finalize-hint"
         >
-          Keep chatting — once Claude has the agent's name,
-          purpose, and behavior locked in, this button activates
-          and creates the agent.
+          {{ t('agentCreateWizard.finalizeHint') }}
         </p>
       </div>
     </div>
@@ -130,10 +130,10 @@ const finalizeTooltip = computed(() =>
       :selected-account-id="conversation.selectedAccountId.value"
       :selected-model="conversation.selectedModel.value"
       :assistant-icon-paths="AGENT_ICON_PATHS"
-      input-placeholder="Describe your agent or answer Claude's questions..."
+      :input-placeholder="t('agentCreateWizard.inputPlaceholder')"
       entity-label="agent"
-      banner-title="Agent Ready to Create!"
-      banner-button-label="Create Agent Now"
+      :banner-title="t('agentCreateWizard.bannerTitle')"
+      :banner-button-label="t('agentCreateWizard.bannerButtonLabel')"
       :detected-entity-name="conversation.detectedConfig.value?.name"
       @update:input-message="conversation.inputMessage.value = $event"
       @update:selected-backend="conversation.setBackend($event)"

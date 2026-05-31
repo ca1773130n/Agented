@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import {
   sessionEventsApi,
   type SessionEvent,
   type SessionEventsFilters,
 } from '../services/api/session-events';
+
+const { t } = useI18n();
 
 const events = ref<SessionEvent[]>([]);
 const loading = ref(false);
@@ -53,31 +56,30 @@ const eventCount = computed(() => events.value.length);
 <template>
   <main class="page">
     <header class="page-header">
-      <h1>Session events</h1>
+      <h1>{{ t('sessionEvents.title') }}</h1>
       <p class="subtitle">
-        Audit log of session lifecycle events
-        ({{ eventCount }} shown).
+        {{ t('sessionEvents.subtitle', { count: eventCount }) }}
       </p>
     </header>
 
     <section class="filters">
       <label>
-        <span>User ID</span>
-        <input v-model="filterUser" type="text" placeholder="(any)" />
+        <span>{{ t('sessionEvents.userId') }}</span>
+        <input v-model="filterUser" type="text" :placeholder="t('sessionEvents.any')" />
       </label>
       <label>
-        <span>Session ID</span>
-        <input v-model="filterSession" type="text" placeholder="(any)" />
+        <span>{{ t('sessionEvents.sessionId') }}</span>
+        <input v-model="filterSession" type="text" :placeholder="t('sessionEvents.any')" />
       </label>
       <label>
-        <span>Event type</span>
+        <span>{{ t('sessionEvents.eventType') }}</span>
         <select v-model="filterEventType">
-          <option value="">(any)</option>
-          <option v-for="t in EVENT_TYPES" :key="t" :value="t">{{ t }}</option>
+          <option value="">{{ t('sessionEvents.any') }}</option>
+          <option v-for="evtType in EVENT_TYPES" :key="evtType" :value="evtType">{{ evtType }}</option>
         </select>
       </label>
       <button type="button" :disabled="loading" @click="load">
-        {{ loading ? 'Loading…' : 'Refresh' }}
+        {{ loading ? t('sessionEvents.loadingShort') : t('sessionEvents.refresh') }}
       </button>
     </section>
 
@@ -86,11 +88,11 @@ const eventCount = computed(() => events.value.length);
     <table v-else class="events-table">
       <thead>
         <tr>
-          <th>Occurred at</th>
-          <th>Event</th>
-          <th>Session</th>
-          <th>User</th>
-          <th>Metadata</th>
+          <th>{{ t('sessionEvents.cols.occurredAt') }}</th>
+          <th>{{ t('sessionEvents.cols.event') }}</th>
+          <th>{{ t('sessionEvents.cols.session') }}</th>
+          <th>{{ t('sessionEvents.cols.user') }}</th>
+          <th>{{ t('sessionEvents.cols.metadata') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -102,7 +104,7 @@ const eventCount = computed(() => events.value.length);
           <td class="mono">{{ formatMetadata(evt.metadata) }}</td>
         </tr>
         <tr v-if="!events.length && !loading">
-          <td colspan="5" class="empty">No events match the filters.</td>
+          <td colspan="5" class="empty">{{ t('sessionEvents.noEvents') }}</td>
         </tr>
       </tbody>
     </table>

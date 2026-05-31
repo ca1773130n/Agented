@@ -8,6 +8,10 @@
  * - Right: Save, Run, and Execution monitoring toggle
  */
 
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
+
 defineProps<{
   workflowName: string
   isDirty: boolean
@@ -31,21 +35,21 @@ defineEmits<{
   <div class="workflow-toolbar">
     <!-- Left: Back button + Workflow name + dirty indicator -->
     <div class="toolbar-left">
-      <button class="toolbar-btn back-btn" title="Back to workflows" @click="$emit('back')">
+      <button class="toolbar-btn back-btn" :title="t('workflowToolbar.backToWorkflows')" @click="$emit('back')">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M10 12L6 8l4-4" />
         </svg>
       </button>
-      <span class="toolbar-label">{{ workflowName || 'Untitled Workflow' }}</span>
-      <button class="toolbar-btn metadata-btn" title="Edit workflow metadata" @click="$emit('toggle-metadata')">
+      <span class="toolbar-label">{{ workflowName || t('workflowToolbar.untitled') }}</span>
+      <button class="toolbar-btn metadata-btn" :title="t('workflowToolbar.editMetadata')" @click="$emit('toggle-metadata')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="3"/>
           <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
         </svg>
       </button>
-      <span v-if="isDirty" class="dirty-badge" title="Unsaved changes">
+      <span v-if="isDirty" class="dirty-badge" :title="t('workflowToolbar.unsavedChanges')">
         <span class="dirty-dot"></span>
-        Unsaved
+        {{ t('workflowToolbar.unsaved') }}
       </span>
     </div>
 
@@ -53,7 +57,7 @@ defineEmits<{
     <div class="toolbar-center">
       <button
         class="toolbar-btn"
-        title="Auto-arrange nodes"
+        :title="t('workflowToolbar.autoArrange')"
         @click="$emit('auto-layout')"
       >
         <svg
@@ -71,13 +75,13 @@ defineEmits<{
           <rect x="1" y="10" width="5" height="5" rx="1" />
           <rect x="10" y="10" width="5" height="5" rx="1" />
         </svg>
-        Layout
+        {{ t('workflowToolbar.layout') }}
       </button>
 
       <button
         class="toolbar-btn"
         :class="{ active: validationErrors > 0 }"
-        title="Toggle validation panel"
+        :title="t('workflowToolbar.toggleValidation')"
         @click="$emit('toggle-validation')"
       >
         <svg
@@ -96,7 +100,7 @@ defineEmits<{
           <line x1="8" y1="6" x2="8" y2="9" />
           <line x1="8" y1="11.5" x2="8.01" y2="11.5" />
         </svg>
-        Validate
+        {{ t('workflowToolbar.validate') }}
         <span v-if="validationErrors > 0" class="error-count-badge">
           {{ validationErrors }}
         </span>
@@ -107,7 +111,7 @@ defineEmits<{
     <div class="toolbar-right">
       <button
         class="toolbar-btn"
-        title="Toggle execution monitoring"
+        :title="t('workflowToolbar.toggleExecution')"
         @click="$emit('toggle-execution')"
       >
         <svg
@@ -122,14 +126,14 @@ defineEmits<{
         >
           <polyline points="1 8 4 8 6 3 10 13 12 8 15 8" />
         </svg>
-        Monitor
+        {{ t('workflowToolbar.monitor') }}
       </button>
 
       <div class="toolbar-separator"></div>
 
       <button
         class="toolbar-btn primary"
-        title="Save workflow"
+        :title="t('workflowToolbar.saveWorkflow')"
         :disabled="!isDirty || readOnly"
         @click="$emit('save')"
       >
@@ -147,12 +151,12 @@ defineEmits<{
           <path d="M11 15V9H5v6" />
           <path d="M5 1v4h4" />
         </svg>
-        Save
+        {{ t('common.save') }}
       </button>
 
       <button
         class="toolbar-btn run"
-        title="Run workflow"
+        :title="t('workflowToolbar.runWorkflow')"
         :disabled="isDirty || isRunning || readOnly"
         @click="$emit('run')"
       >
@@ -168,7 +172,7 @@ defineEmits<{
         >
           <polygon points="5 3 13 8 5 13 5 3" />
         </svg>
-        {{ isRunning ? 'Running...' : 'Run' }}
+        {{ isRunning ? t('workflowToolbar.running') : t('workflowToolbar.run') }}
       </button>
     </div>
   </div>

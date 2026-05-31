@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import type { ProductHealth } from '../../services/api';
+
+const { t } = useI18n();
 
 defineProps<{
   health: ProductHealth;
@@ -42,8 +45,8 @@ function getStatusColor(status: string): string {
   <div class="card">
     <div class="card-header">
       <div class="header-left">
-        <h3>Project Health</h3>
-        <span class="card-count">{{ health.project_count }} projects</span>
+        <h3>{{ t('productHealthGrid.title') }}</h3>
+        <span class="card-count">{{ t('productHealthGrid.projectCount', { count: health.project_count }) }}</span>
       </div>
     </div>
 
@@ -65,7 +68,7 @@ function getStatusColor(status: string): string {
           {{ health.health.toUpperCase() }}
         </span>
         <span class="health-reason">{{ health.reason }}</span>
-        <span class="health-counts">{{ health.active_count }} active / {{ health.project_count }} total</span>
+        <span class="health-counts">{{ t('productHealthGrid.activeTotal', { active: health.active_count, total: health.project_count }) }}</span>
       </div>
     </div>
 
@@ -85,7 +88,7 @@ function getStatusColor(status: string): string {
       </div>
     </div>
     <div v-else class="empty-state">
-      <p>No projects assigned</p>
+      <p>{{ t('productHealthGrid.noProjects') }}</p>
     </div>
   </div>
 </template>

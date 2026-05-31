@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue';
+import { ref, watch, onMounted, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import type { Agent } from '../services/api';
 import { agentApi, ApiError } from '../services/api';
@@ -18,6 +19,7 @@ import { usePagination } from '../composables/usePagination';
 import { useWebMcpPageTools } from '../composables/useWebMcpPageTools';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
+const { t } = useI18n();
 const router = useRouter();
 const showToast = useToast();
 
@@ -39,10 +41,10 @@ const { searchQuery, sortField, sortOrder, filteredAndSorted, hasActiveFilter, r
 
 const pagination = usePagination({ defaultPageSize: 25, storageKey: 'agents-pagination' });
 
-const sortOptions = [
-  { value: 'name', label: 'Name' },
-  { value: 'created_at', label: 'Date Created' },
-];
+const sortOptions = computed(() => [
+  { value: 'name', label: t('agents.sort.name') },
+  { value: 'created_at', label: t('agents.sort.dateCreated') },
+]);
 
 useWebMcpPageTools({
   page: 'AgentsPage',
@@ -117,7 +119,7 @@ async function loadAgents() {
     agents.value = data.agents || [];
     if (data.total_count != null) pagination.totalCount.value = data.total_count;
   } catch (e) {
-    loadError.value = e instanceof ApiError ? e.message : 'Failed to load agents';
+    loadError.value = e instanceof ApiError ? e.message : t('agents.toast.loadFailed');
     showToast(loadError.value, 'error');
   } finally {
     isLoading.value = false;
@@ -132,13 +134,13 @@ async function runAgent(agent: Agent) {
   lastRunAgentId.value = null;
   try {
     const result = await agentApi.run(agent.id);
-    showToast(`Agent "${agent.name}" started (execution: ${result.execution_id})`, 'success');
+    showToast(t('agents.toast.started', { name: agent.name, id: result.execution_id }), 'success');
     lastRunAgentId.value = agent.id;
   } catch (e) {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to run agent', 'error');
+      showToast(t('agents.toast.runFailed'), 'error');
     }
   } finally {
     runningAgentId.value = null;
@@ -155,7 +157,7 @@ async function deleteAgent() {
   deletingId.value = agentToDelete.value.id;
   try {
     await agentApi.delete(agentToDelete.value.id);
-    showToast(`Agent "${agentToDelete.value.name}" deleted`, 'success');
+    showToast(t('agents.toast.deleted', { name: agentToDelete.value.name }), 'success');
     showDeleteConfirm.value = false;
     agentToDelete.value = null;
     await loadAgents();
@@ -163,7 +165,7 @@ async function deleteAgent() {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to delete agent', 'error');
+      showToast(t('agents.toast.deleteFailed'), 'error');
     }
   } finally {
     deletingId.value = null;
@@ -176,7 +178,7 @@ async function toggleEnabled(agent: Agent) {
     await agentApi.update(agent.id, { enabled: agent.enabled ? 0 : 1 });
     await loadAgents();
   } catch (e) {
-    showToast('Failed to update agent', 'error');
+    showToast(t('agents.toast.updateFailed'), 'error');
   } finally {
     togglingId.value = null;
   }
@@ -189,10 +191,10 @@ onMounted(() => {
 
 <template>
   <PageLayout >
-    <PageHeader title="Agents" subtitle="Manage AI agents with rich context and autonomous capabilities">
+    <PageHeader :title="t('agents.title')" :subtitle="t('agents.subtitle')">
       <template #actions>
         <button class="btn btn-primary" @click="router.push({ name: 'agent-create' })">
-          + Create Agent
+          {{ t('agents.createAgentPlus') }}
         </button>
       </template>
     </PageHeader>
@@ -205,20 +207,20 @@ onMounted(() => {
       :sort-options="sortOptions"
       :result-count="resultCount"
       :total-count="totalCount"
-      placeholder="Search agents..."
+      :placeholder="t('agents.searchPlaceholder')"
     />
 
-    <LoadingState v-if="isLoading" message="Loading agents..." />
+    <LoadingState v-if="isLoading" :message="t('agents.loading')" />
 
-    <ErrorState v-else-if="loadError" title="Failed to load agents" :message="loadError" @retry="loadAgents" />
+    <ErrorState v-else-if="loadError" :title="t('agents.toast.loadFailed')" :message="loadError" @retry="loadAgents" />
 
-    <EmptyState v-else-if="agents.length === 0" title="No agents yet" description="Create your first AI agent to get started">
+    <EmptyState v-else-if="agents.length === 0" :title="t('agents.empty.title')" :description="t('agents.empty.description')">
       <template #actions>
-        <button class="btn btn-primary" @click="router.push({ name: 'agent-create' })">Create Agent</button>
+        <button class="btn btn-primary" @click="router.push({ name: 'agent-create' })">{{ t('agents.createAgent') }}</button>
       </template>
     </EmptyState>
 
-    <EmptyState v-else-if="filteredAndSorted.length === 0 && hasActiveFilter" title="No matching agents" description="Try a different search term" />
+    <EmptyState v-else-if="filteredAndSorted.length === 0 && hasActiveFilter" :title="t('agents.noMatch.title')" :description="t('agents.noMatch.description')" />
 
     <div v-else class="agents-grid">
       <!--
@@ -244,7 +246,7 @@ onMounted(() => {
             <h3>{{ agent.name }}</h3>
             <span class="agent-id">{{ agent.id }}</span>
           </div>
-          <StatusBadge :label="agent.enabled ? 'Active' : 'Disabled'" :variant="agent.enabled ? 'success' : 'neutral'" />
+          <StatusBadge :label="agent.enabled ? t('agents.active') : t('agents.disabled')" :variant="agent.enabled ? 'success' : 'neutral'" />
         </div>
 
         <p v-if="agent.description" class="agent-description">{{ agent.description }}</p>
@@ -252,15 +254,15 @@ onMounted(() => {
 
         <div class="agent-meta">
           <div v-if="agent.skills && agent.skills.length > 0" class="meta-item">
-            <span class="meta-label">Skills:</span>
+            <span class="meta-label">{{ t('agents.meta.skills') }}</span>
             <span class="meta-value">{{ Array.isArray(agent.skills) ? agent.skills.join(', ') : agent.skills }}</span>
           </div>
           <div v-if="agent.goals && Array.isArray(agent.goals) && agent.goals.length > 0" class="meta-item">
-            <span class="meta-label">Goals:</span>
-            <span class="meta-value">{{ agent.goals.length }} defined</span>
+            <span class="meta-label">{{ t('agents.meta.goals') }}</span>
+            <span class="meta-value">{{ t('agents.meta.defined', { count: agent.goals.length }) }}</span>
           </div>
           <div class="meta-item">
-            <span class="meta-label">Backend:</span>
+            <span class="meta-label">{{ t('agents.meta.backend') }}</span>
             <span class="meta-value backend-badge" :class="agent.backend_type">{{ agent.backend_type }}</span>
           </div>
         </div>
@@ -271,7 +273,7 @@ onMounted(() => {
             <svg v-else viewBox="0 0 24 24" fill="currentColor">
               <polygon points="5 3 19 12 5 21 5 3"/>
             </svg>
-            {{ runningAgentId === agent.id ? 'Running...' : 'Run' }}
+            {{ runningAgentId === agent.id ? t('agents.running') : t('agents.run') }}
           </button>
           <button v-if="lastRunAgentId === agent.id" class="btn btn-small btn-view-log" @click="router.push({ name: 'execution-history' })">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -280,11 +282,11 @@ onMounted(() => {
               <line x1="16" y1="13" x2="8" y2="13"/>
               <line x1="16" y1="17" x2="8" y2="17"/>
             </svg>
-            View Log
+            {{ t('agents.viewLog') }}
           </button>
           <button class="btn btn-small" @click="toggleEnabled(agent)" :disabled="togglingId === agent.id">
             <span v-if="togglingId === agent.id" class="btn-spinner"></span>
-            {{ togglingId === agent.id ? '...' : (agent.enabled ? 'Disable' : 'Enable') }}
+            {{ togglingId === agent.id ? '...' : (agent.enabled ? t('agents.disable') : t('agents.enable')) }}
           </button>
           <button class="btn btn-small btn-danger" @click="confirmDelete(agent)" :disabled="deletingId === agent.id">
             <span v-if="deletingId === agent.id" class="btn-spinner"></span>
@@ -311,10 +313,10 @@ onMounted(() => {
 
     <ConfirmModal
       :open="showDeleteConfirm"
-      title="Delete Agent"
-      :message="`Are you sure you want to delete \u201C${agentToDelete?.name}\u201D? This action cannot be undone.`"
-      confirm-label="Delete"
-      cancel-label="Cancel"
+      :title="t('agents.deleteModal.title')"
+      :message="t('agents.deleteModal.message', { name: agentToDelete?.name })"
+      :confirm-label="t('common.delete')"
+      :cancel-label="t('common.cancel')"
       variant="danger"
       @confirm="deleteAgent"
       @cancel="showDeleteConfirm = false"

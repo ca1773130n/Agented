@@ -10,6 +10,7 @@
 -->
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { superAgentActivityApi } from '../services/api';
 import type {
   SuperAgentActivityEvent,
@@ -21,6 +22,8 @@ import type {
 import SuperAgentOuroborosRunsPanel from '../components/super-agents/SuperAgentOuroborosRunsPanel.vue';
 
 const props = defineProps<{ superAgentId: string }>();
+
+const { t } = useI18n();
 
 const POLL_INTERVAL_MS = 10_000;
 
@@ -128,7 +131,12 @@ function toggleExpand(id: number) {
 }
 
 function pillLabel(s: SuperAgentStatusPill): string {
-  return { active: 'Active', errored: 'Errored', idle: 'Idle', healthy: 'Healthy' }[s];
+  return {
+    active: t('superAgentInspector.pill.active'),
+    errored: t('superAgentInspector.pill.errored'),
+    idle: t('superAgentInspector.pill.idle'),
+    healthy: t('superAgentInspector.pill.healthy'),
+  }[s];
 }
 
 function fmtCost(v: number | null): string {
@@ -154,7 +162,7 @@ function fmtPayload(p: string): string {
   <div class="sa-inspector">
     <header class="sa-inspector__header">
       <div>
-        <h1>Super-Agent Inspector</h1>
+        <h1>{{ t('superAgentInspector.title') }}</h1>
         <p class="sa-inspector__subtitle">{{ superAgentId }}</p>
       </div>
       <select
@@ -162,19 +170,19 @@ function fmtPayload(p: string): string {
         class="sa-inspector__window"
         data-testid="window-select"
       >
-        <option value="1h">Last 1 hour</option>
-        <option value="24h">Last 24 hours</option>
-        <option value="7d">Last 7 days</option>
-        <option value="30d">Last 30 days</option>
+        <option value="1h">{{ t('superAgentInspector.window.1h') }}</option>
+        <option value="24h">{{ t('superAgentInspector.window.24h') }}</option>
+        <option value="7d">{{ t('superAgentInspector.window.7d') }}</option>
+        <option value="30d">{{ t('superAgentInspector.window.30d') }}</option>
       </select>
     </header>
 
     <div v-if="loading" class="sa-inspector__loading" data-testid="loading">
-      Loading…
+      {{ t('superAgentInspector.loading') }}
     </div>
     <div v-else-if="error" class="sa-inspector__error" data-testid="error">
       {{ error }}
-      <button @click="load()">Retry</button>
+      <button @click="load()">{{ t('common.retry') }}</button>
     </div>
     <template v-else>
       <article
@@ -184,34 +192,34 @@ function fmtPayload(p: string): string {
         data-testid="rollup-card"
       >
         <header class="sa-rollup__head">
-          <h2 class="sa-rollup__title">Rollup</h2>
+          <h2 class="sa-rollup__title">{{ t('superAgentInspector.rollup.title') }}</h2>
           <span class="sa-rollup__pill" :data-status="rollup.status_pill">
             {{ pillLabel(rollup.status_pill) }}
           </span>
         </header>
         <dl class="sa-rollup__metrics">
           <div>
-            <dt>Events</dt>
+            <dt>{{ t('superAgentInspector.rollup.events') }}</dt>
             <dd>{{ rollup.event_count }}</dd>
           </div>
           <div>
-            <dt>Errors</dt>
+            <dt>{{ t('superAgentInspector.rollup.errors') }}</dt>
             <dd>{{ rollup.error_count }}</dd>
           </div>
           <div>
-            <dt>Error rate</dt>
+            <dt>{{ t('superAgentInspector.rollup.errorRate') }}</dt>
             <dd>{{ fmtRate(rollup.error_rate) }}</dd>
           </div>
           <div>
-            <dt>Total cost</dt>
+            <dt>{{ t('superAgentInspector.rollup.totalCost') }}</dt>
             <dd>{{ fmtCost(rollup.total_cost_usd) }}</dd>
           </div>
           <div>
-            <dt>Avg / event</dt>
+            <dt>{{ t('superAgentInspector.rollup.avgPerEvent') }}</dt>
             <dd>{{ fmtCost(rollup.cost_per_event_avg) }}</dd>
           </div>
           <div>
-            <dt>Last active</dt>
+            <dt>{{ t('superAgentInspector.rollup.lastActive') }}</dt>
             <dd>{{ rollup.last_active_at ?? '—' }}</dd>
           </div>
         </dl>
@@ -225,28 +233,28 @@ function fmtPayload(p: string): string {
 
       <div class="sa-inspector__filters">
         <fieldset class="sa-inspector__type-filter" data-testid="type-filter">
-          <legend>Event types</legend>
+          <legend>{{ t('superAgentInspector.eventTypes') }}</legend>
           <label
-            v-for="t in EVENT_TYPES"
-            :key="t"
+            v-for="evType in EVENT_TYPES"
+            :key="evType"
             class="sa-inspector__type-chip"
-            :data-testid="`type-chip-${t}`"
+            :data-testid="`type-chip-${evType}`"
           >
             <input
               type="checkbox"
-              :value="t"
-              :checked="selectedTypes.includes(t)"
-              @change="toggleType(t)"
+              :value="evType"
+              :checked="selectedTypes.includes(evType)"
+              @change="toggleType(evType)"
             />
-            <span>{{ t }}</span>
+            <span>{{ evType }}</span>
           </label>
         </fieldset>
         <label class="sa-inspector__status-filter">
-          Status
+          {{ t('superAgentInspector.status') }}
           <select v-model="statusFilter" data-testid="status-filter">
-            <option value="all">All</option>
-            <option value="ok">OK only</option>
-            <option value="error">Errored only</option>
+            <option value="all">{{ t('superAgentInspector.statusFilter.all') }}</option>
+            <option value="ok">{{ t('superAgentInspector.statusFilter.okOnly') }}</option>
+            <option value="error">{{ t('superAgentInspector.statusFilter.erroredOnly') }}</option>
           </select>
         </label>
       </div>
@@ -256,7 +264,7 @@ function fmtPayload(p: string): string {
         class="sa-inspector__empty"
         data-testid="empty"
       >
-        No activity yet.
+        {{ t('superAgentInspector.empty') }}
       </div>
       <ol v-else class="sa-timeline" data-testid="timeline">
         <li
@@ -281,7 +289,7 @@ function fmtPayload(p: string): string {
             <span
               v-if="ev.status === 'error'"
               class="sa-timeline__err-flag"
-            >ERROR</span>
+            >{{ t('superAgentInspector.errorFlag') }}</span>
           </button>
           <pre
             v-if="expanded.has(ev.id)"

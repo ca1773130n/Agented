@@ -14,6 +14,9 @@ import { useListFilter } from '../composables/useListFilter';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import { usePagination } from '../composables/usePagination';
 import { useWebMcpPageTools } from '../composables/useWebMcpPageTools';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const showToast = useToast();
 
@@ -35,8 +38,8 @@ const { searchQuery, sortField, sortOrder, filteredAndSorted, hasActiveFilter, r
 const pagination = usePagination({ defaultPageSize: 25, storageKey: 'projects-pagination' });
 
 const sortOptions = [
-  { value: 'name', label: 'Name' },
-  { value: 'created_at', label: 'Date Created' },
+  { value: 'name', label: t('projects.sortName') },
+  { value: 'created_at', label: t('projects.sortCreated') },
 ];
 
 const showLocalPath = ref(false);
@@ -93,7 +96,7 @@ async function loadProjects() {
     products.value = productsData.products || [];
     teams.value = teamsData.teams || [];
   } catch (e) {
-    loadError.value = e instanceof ApiError ? e.message : 'Failed to load projects';
+    loadError.value = e instanceof ApiError ? e.message : t('projects.loadError');
     showToast(loadError.value, 'error');
   } finally {
     isLoading.value = false;
@@ -109,11 +112,11 @@ watch([searchQuery, sortField, sortOrder], () => { pagination.resetToFirstPage()
 
 async function createProject() {
   if (!newProject.value.name.trim()) {
-    showToast('Project name is required', 'error');
+    showToast(t('projects.nameRequired'), 'error');
     return;
   }
   if (!newProject.value.github_repo.trim() && !(showLocalPath.value && newProject.value.local_path.trim())) {
-    showToast('GitHub repository is required', 'error');
+    showToast(t('projects.githubRequired'), 'error');
     return;
   }
   creatingProject.value = true;
@@ -129,11 +132,11 @@ async function createProject() {
     // Show clone feedback
     const project = (result as { project?: { clone_path?: string; clone_error?: string } }).project;
     if (project?.clone_path) {
-      showToast('Project created and repository cloned', 'success');
+      showToast(t('projects.createdAndCloned'), 'success');
     } else if (project?.clone_error) {
-      showToast(`Project created. Clone deferred: ${project.clone_error}`, 'info');
+      showToast(t('projects.cloneDeferred', { error: project.clone_error }), 'info');
     } else {
-      showToast('Project created successfully', 'success');
+      showToast(t('projects.createSuccess'), 'success');
     }
     showCreateModal.value = false;
     newProject.value = { name: '', description: '', status: 'active', product_id: '', github_repo: '', local_path: '' };
@@ -143,7 +146,7 @@ async function createProject() {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to create project', 'error');
+      showToast(t('projects.createError'), 'error');
     }
   } finally {
     creatingProject.value = false;
@@ -160,7 +163,7 @@ async function deleteProject() {
   deletingId.value = projectToDelete.value.id;
   try {
     await projectApi.delete(projectToDelete.value.id);
-    showToast(`Project "${projectToDelete.value.name}" deleted`, 'success');
+    showToast(t('projects.deleteSuccess', { name: projectToDelete.value.name }), 'success');
     showDeleteConfirm.value = false;
     projectToDelete.value = null;
     await loadProjects();
@@ -168,7 +171,7 @@ async function deleteProject() {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to delete project', 'error');
+      showToast(t('projects.deleteError'), 'error');
     }
   } finally {
     deletingId.value = null;
@@ -191,13 +194,13 @@ onMounted(() => {
 
 <template>
   <div class="projects-page" data-tour="assign-teams">
-    <PageHeader title="Projects" subtitle="Manage your projects and their team assignments">
+    <PageHeader :title="t('projects.title')" :subtitle="t('projects.subtitle')">
       <template #actions>
         <button class="btn btn-primary" @click="showCreateModal = true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 5v14M5 12h14"/>
           </svg>
-          Create Project
+          {{ t('projects.createProject') }}
         </button>
       </template>
     </PageHeader>
@@ -210,20 +213,20 @@ onMounted(() => {
       :sort-options="sortOptions"
       :result-count="resultCount"
       :total-count="totalCount"
-      placeholder="Search projects..."
+      :placeholder="t('projects.searchPlaceholder')"
     />
 
-    <LoadingState v-if="isLoading" message="Loading projects..." />
+    <LoadingState v-if="isLoading" :message="t('projects.loading')" />
 
-    <ErrorState v-else-if="loadError" title="Failed to load projects" :message="loadError" @retry="loadProjects" />
+    <ErrorState v-else-if="loadError" :title="t('projects.loadFailed')" :message="loadError" @retry="loadProjects" />
 
-    <EmptyState v-else-if="projects.length === 0" title="No projects yet" description="Create your first project to start organizing your work">
+    <EmptyState v-else-if="projects.length === 0" :title="t('projects.emptyTitle')" :description="t('projects.emptyDescription')">
       <template #actions>
-        <button class="btn btn-primary" @click="showCreateModal = true">Create Your First Project</button>
+        <button class="btn btn-primary" @click="showCreateModal = true">{{ t('projects.createFirst') }}</button>
       </template>
     </EmptyState>
 
-    <EmptyState v-else-if="filteredAndSorted.length === 0 && hasActiveFilter" title="No matching projects" description="Try a different search term" />
+    <EmptyState v-else-if="filteredAndSorted.length === 0 && hasActiveFilter" :title="t('projects.noMatchTitle')" :description="t('projects.noMatchDescription')" />
 
     <div v-else class="projects-grid">
       <router-link
@@ -249,19 +252,19 @@ onMounted(() => {
 
         <div class="project-meta">
           <div v-if="project.product_name" class="meta-item">
-            <span class="meta-label">Product:</span>
+            <span class="meta-label">{{ t('projects.productLabel') }}</span>
             <span class="meta-value">{{ project.product_name }}</span>
           </div>
           <div class="meta-item">
-            <span class="meta-label">Teams:</span>
+            <span class="meta-label">{{ t('projects.teamsLabel') }}</span>
             <span class="meta-value">{{ project.team_count }}</span>
           </div>
           <div v-if="project.github_repo" class="meta-item full-width">
-            <span class="meta-label">GitHub:</span>
+            <span class="meta-label">{{ t('projects.githubLabel') }}</span>
             <span class="meta-value github">{{ project.github_repo }}</span>
           </div>
           <div v-if="project.local_path" class="meta-item full-width">
-            <span class="meta-label">Local:</span>
+            <span class="meta-label">{{ t('projects.localLabel') }}</span>
             <span class="meta-value">{{ project.local_path }}</span>
           </div>
         </div>
@@ -272,7 +275,7 @@ onMounted(() => {
             <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
             </svg>
-            {{ deletingId === project.id ? 'Deleting...' : 'Delete' }}
+            {{ deletingId === project.id ? t('projects.deleting') : t('common.delete') }}
           </button>
         </div>
       </router-link>
@@ -296,50 +299,50 @@ onMounted(() => {
       <div v-if="showCreateModal" ref="createModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-create-project" tabindex="-1" @click.self="showCreateModal = false" @keydown.escape="showCreateModal = false">
         <div class="modal">
           <div class="modal-header">
-            <h2 id="modal-title-create-project">Create Project</h2>
+            <h2 id="modal-title-create-project">{{ t('projects.createProject') }}</h2>
             <button class="modal-close" @click="showCreateModal = false">&times;</button>
           </div>
           <div class="modal-body">
             <div class="form-group">
-              <label>Project Name *</label>
-              <input v-model="newProject.name" type="text" placeholder="e.g., API Gateway" />
+              <label>{{ t('projects.projectNameLabel') }}</label>
+              <input v-model="newProject.name" type="text" :placeholder="t('projects.projectNamePlaceholder')" />
             </div>
             <div class="form-group">
-              <label>Description</label>
-              <textarea v-model="newProject.description" placeholder="Describe the project..."></textarea>
+              <label>{{ t('projects.descriptionLabel') }}</label>
+              <textarea v-model="newProject.description" :placeholder="t('projects.descriptionPlaceholder')"></textarea>
             </div>
             <div class="form-group">
-              <label>Status</label>
+              <label>{{ t('projects.statusLabel') }}</label>
               <select v-model="newProject.status">
-                <option value="active">Active</option>
-                <option value="planning">Planning</option>
-                <option value="archived">Archived</option>
+                <option value="active">{{ t('projects.statusActive') }}</option>
+                <option value="planning">{{ t('projects.statusPlanning') }}</option>
+                <option value="archived">{{ t('projects.statusArchived') }}</option>
               </select>
             </div>
             <div class="form-group">
-              <label>Product</label>
+              <label>{{ t('projects.productSelectLabel') }}</label>
               <select v-model="newProject.product_id">
-                <option value="">No product</option>
+                <option value="">{{ t('projects.noProduct') }}</option>
                 <option v-for="product in products" :key="product.id" :value="product.id">{{ product.name }}</option>
               </select>
             </div>
             <div class="form-group">
-              <label>GitHub Repository *</label>
-              <input v-model="newProject.github_repo" type="text" placeholder="e.g., org/repo" />
+              <label>{{ t('projects.githubRepoLabel') }}</label>
+              <input v-model="newProject.github_repo" type="text" :placeholder="t('projects.githubRepoPlaceholder')" />
               <span class="local-path-toggle" @click="showLocalPath = !showLocalPath">
-                {{ showLocalPath ? 'Hide local path' : 'or use a local path' }}
+                {{ showLocalPath ? t('projects.hideLocalPath') : t('projects.orUseLocalPath') }}
               </span>
             </div>
             <div v-if="showLocalPath" class="form-group">
-              <label>Local Path</label>
-              <input v-model="newProject.local_path" type="text" placeholder="e.g., /home/user/projects/my-app" />
+              <label>{{ t('projects.localPathLabel') }}</label>
+              <input v-model="newProject.local_path" type="text" :placeholder="t('projects.localPathPlaceholder')" />
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" @click="showCreateModal = false">Cancel</button>
+            <button class="btn btn-secondary" @click="showCreateModal = false">{{ t('common.cancel') }}</button>
             <button class="btn btn-primary" @click="createProject" :disabled="creatingProject">
               <span v-if="creatingProject" class="btn-spinner"></span>
-              {{ creatingProject ? 'Creating...' : 'Create Project' }}
+              {{ creatingProject ? t('projects.creating') : t('projects.createProject') }}
             </button>
           </div>
         </div>
@@ -348,10 +351,10 @@ onMounted(() => {
 
     <ConfirmModal
       :open="showDeleteConfirm"
-      title="Delete Project"
-      :message="`Are you sure you want to delete \u201C${projectToDelete?.name}\u201D? This action cannot be undone.`"
-      confirm-label="Delete"
-      cancel-label="Cancel"
+      :title="t('projects.deleteTitle')"
+      :message="t('projects.deleteConfirm', { name: projectToDelete?.name })"
+      :confirm-label="t('common.delete')"
+      :cancel-label="t('common.cancel')"
       variant="danger"
       @confirm="deleteProject"
       @cancel="showDeleteConfirm = false"

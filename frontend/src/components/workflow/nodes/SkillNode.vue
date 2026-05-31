@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 interface SkillNodeData {
   label: string
@@ -20,9 +23,14 @@ const statusClass = computed(() =>
   props.data.executionStatus ? `status-${props.data.executionStatus}` : '',
 )
 
+const isUnconfigured = computed(() => {
+  const name = props.data.config?.skill_name
+  return !(typeof name === 'string' && name)
+})
+
 const skillName = computed(() => {
   const name = props.data.config?.skill_name
-  return typeof name === 'string' && name ? name : 'Not configured'
+  return typeof name === 'string' && name ? name : t('skillNode.notConfigured')
 })
 
 const needsConfig = computed(() => {
@@ -33,14 +41,14 @@ const needsConfig = computed(() => {
 
 <template>
   <div :class="['workflow-node', 'node-skill', statusClass]">
-    <div v-if="needsConfig" class="validation-dot" title="Required configuration missing"></div>
+    <div v-if="needsConfig" class="validation-dot" :title="t('skillNode.configMissing')"></div>
     <Handle type="target" :position="Position.Top" :style="inputHandleStyle" />
     <div class="node-header">
       <span class="node-icon">&#x2728;</span>
       <span class="node-label">{{ data.label }}</span>
     </div>
     <div class="node-body">
-      <span :class="['skill-name', { unconfigured: skillName === 'Not configured' }]">{{
+      <span :class="['skill-name', { unconfigured: isUnconfigured }]">{{
         skillName
       }}</span>
     </div>

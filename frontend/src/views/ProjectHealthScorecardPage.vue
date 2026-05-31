@@ -3,6 +3,9 @@ import { ref, computed, watch, onMounted } from 'vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { projectApi, projectHealthApi } from '../services/api';
 import type { Project, HealthCategory, HealthSignal, HealthRecommendation } from '../services/api';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const projects = ref<Project[]>([]);
 const selectedProjectId = ref('');
@@ -90,7 +93,7 @@ function trendClass(trend: number | null): string {
 }
 
 function trendLabel(trend: number | null): string {
-  if (trend == null) return '— N/A';
+  if (trend == null) return `— ${t('projectHealthScorecard.na')}`;
   if (trend > 0) return `↑ +${trend}`;
   if (trend < 0) return `↓ ${trend}`;
   return '→ 0';
@@ -103,8 +106,8 @@ function impactClass(impact: number): string {
 }
 
 function impactLabel(impact: number): string {
-  if (impact > 0) return `+${impact} pts`;
-  return `${impact} pts`;
+  if (impact > 0) return t('projectHealthScorecard.ptsPositive', { value: impact });
+  return t('projectHealthScorecard.pts', { value: impact });
 }
 
 function statusClass(status: HealthSignal['status']): string {
@@ -132,7 +135,7 @@ function historyBarHeightPct(val: number): number {
 }
 
 function formatLastUpdated(iso: string): string {
-  if (!iso) return 'N/A';
+  if (!iso) return t('projectHealthScorecard.na');
   try {
     return new Date(iso).toLocaleString();
   } catch {
@@ -145,18 +148,18 @@ function formatLastUpdated(iso: string): string {
   <div class="scorecard-page">
 
     <PageHeader
-      title="Project Health Scorecard"
-      subtitle="Aggregate bot signals into a single health score with trend tracking and drill-down."
+      :title="t('projectHealthScorecard.title')"
+      :subtitle="t('projectHealthScorecard.subtitle')"
     />
 
     <!-- Project Selector -->
     <div class="selector-bar">
-      <label class="selector-label">Project</label>
+      <label class="selector-label">{{ t('projectHealthScorecard.projectLabel') }}</label>
       <select v-model="selectedProjectId" class="project-select">
         <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
       </select>
       <span class="selector-meta">
-        Last updated: {{ lastUpdated ? formatLastUpdated(lastUpdated) : (loading ? 'Loading…' : 'N/A') }}
+        {{ t('projectHealthScorecard.lastUpdated', { value: lastUpdated ? formatLastUpdated(lastUpdated) : (loading ? t('projectHealthScorecard.loadingShort') : t('projectHealthScorecard.na')) }) }}
       </span>
     </div>
 
@@ -177,12 +180,12 @@ function formatLastUpdated(iso: string): string {
         </div>
         <div class="hero-meta">
           <div class="hero-project">{{ selectedProject?.name ?? '—' }}</div>
-          <div class="hero-label">Overall Health Score</div>
+          <div class="hero-label">{{ t('projectHealthScorecard.overallHealthScore') }}</div>
           <div :class="['hero-trend', trendDelta > 0 ? 'trend-up' : 'trend-down']">
-            {{ trendDelta > 0 ? '↑' : '↓' }} {{ trendDelta > 0 ? '+' : '' }}{{ trendDelta }} from last week
+            {{ trendDelta > 0 ? '↑' : '↓' }} {{ t('projectHealthScorecard.fromLastWeek', { value: (trendDelta > 0 ? '+' : '') + trendDelta }) }}
           </div>
           <div class="hero-status-label" :style="{ color: scoreColor(overallScore) }">
-            {{ overallScore >= 80 ? 'Healthy' : overallScore >= 60 ? 'Needs Attention' : 'Critical' }}
+            {{ overallScore >= 80 ? t('projectHealthScorecard.healthy') : overallScore >= 60 ? t('projectHealthScorecard.needsAttention') : t('projectHealthScorecard.critical') }}
           </div>
         </div>
       </div>
@@ -201,7 +204,7 @@ function formatLastUpdated(iso: string): string {
         </div>
         <template v-if="cat.score !== null">
           <div class="cat-score" :style="{ color: scoreColor(cat.score) }">{{ cat.score }}</div>
-          <div class="cat-score-label">/ 100</div>
+          <div class="cat-score-label">{{ t('projectHealthScorecard.outOf100') }}</div>
           <div class="cat-bar-track">
             <div
               class="cat-bar-fill"
@@ -225,8 +228,8 @@ function formatLastUpdated(iso: string): string {
           </div>
         </template>
         <template v-else>
-          <div class="cat-score cat-score-na">N/A</div>
-          <div class="cat-score-label">No data</div>
+          <div class="cat-score cat-score-na">{{ t('projectHealthScorecard.na') }}</div>
+          <div class="cat-score-label">{{ t('projectHealthScorecard.noData') }}</div>
         </template>
       </div>
     </div>
@@ -238,20 +241,20 @@ function formatLastUpdated(iso: string): string {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
           </svg>
-          Signal Breakdown
+          {{ t('projectHealthScorecard.signalBreakdown') }}
         </h3>
-        <span class="header-meta">{{ signals.length }} signals from {{ [...new Set(signals.map(s => s.bot))].length }} bots</span>
+        <span class="header-meta">{{ t('projectHealthScorecard.signalsFromBots', { signals: signals.length, bots: [...new Set(signals.map(s => s.bot))].length }) }}</span>
       </div>
       <div class="table-wrapper">
         <table class="signal-table">
           <thead>
             <tr>
-              <th>Bot</th>
-              <th>Metric</th>
-              <th>Current</th>
-              <th>Previous</th>
-              <th>Score Impact</th>
-              <th>Status</th>
+              <th>{{ t('projectHealthScorecard.thBot') }}</th>
+              <th>{{ t('projectHealthScorecard.thMetric') }}</th>
+              <th>{{ t('projectHealthScorecard.thCurrent') }}</th>
+              <th>{{ t('projectHealthScorecard.thPrevious') }}</th>
+              <th>{{ t('projectHealthScorecard.thScoreImpact') }}</th>
+              <th>{{ t('projectHealthScorecard.thStatus') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -284,9 +287,9 @@ function formatLastUpdated(iso: string): string {
             <rect x="3" y="3" width="18" height="18" rx="2"/>
             <path d="M3 9h18M9 21V9"/>
           </svg>
-          Weekly Score History
+          {{ t('projectHealthScorecard.weeklyScoreHistory') }}
         </h3>
-        <span class="header-meta">Last 8 weeks</span>
+        <span class="header-meta">{{ t('projectHealthScorecard.last8Weeks') }}</span>
       </div>
       <div class="history-section">
         <div class="history-bars">
@@ -305,7 +308,7 @@ function formatLastUpdated(iso: string): string {
               <span class="history-val" :style="{ color: i === weeklyHistory.length - 1 ? scoreColor(val) : 'var(--text-tertiary)' }">
                 {{ val }}
               </span>
-              <span class="history-week">W{{ i + 1 }}</span>
+              <span class="history-week">{{ t('projectHealthScorecard.weekShort', { n: i + 1 }) }}</span>
             </div>
           </div>
         </div>
@@ -327,9 +330,9 @@ function formatLastUpdated(iso: string): string {
             <line x1="12" y1="8" x2="12" y2="12"/>
             <line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
-          Recommendations
+          {{ t('projectHealthScorecard.recommendations') }}
         </h3>
-        <span class="header-meta">{{ recommendations.length }} actionable items</span>
+        <span class="header-meta">{{ t('projectHealthScorecard.actionableItems', { count: recommendations.length }) }}</span>
       </div>
       <div class="recs-list">
         <div v-for="rec in recommendations" :key="rec.id" class="rec-row">
@@ -350,11 +353,11 @@ function formatLastUpdated(iso: string): string {
 
     <!-- Empty state -->
     <div class="card empty-card" v-if="!loading && projects.length === 0">
-      <p class="empty-text">No projects found. Create a project to see health data.</p>
+      <p class="empty-text">{{ t('projectHealthScorecard.noProjects') }}</p>
     </div>
 
     <div class="card empty-card" v-else-if="!loading && weeklyHistory.length === 0 && signals.length === 0 && selectedProjectId">
-      <p class="empty-text">No execution data available for this project yet.</p>
+      <p class="empty-text">{{ t('projectHealthScorecard.noExecutionData') }}</p>
     </div>
   </div>
 </template>

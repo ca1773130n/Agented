@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { GrdPlan, GrdPhase } from '../../services/api';
 import KanbanColumn from './KanbanColumn.vue';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   projectId: string;
@@ -17,11 +20,11 @@ const emit = defineEmits<{
 
 // Column configuration
 const COLUMNS = [
-  { id: 'backlog', label: 'Backlog', status: 'pending', phaseFilter: 'pending' },
-  { id: 'planned', label: 'Planned', status: 'pending', phaseFilter: 'active' },
-  { id: 'in-progress', label: 'In Progress', status: 'in_progress', phaseFilter: null },
-  { id: 'in-review', label: 'In Review', status: 'in_review', phaseFilter: null },
-  { id: 'done', label: 'Done', status: 'completed', phaseFilter: null },
+  { id: 'backlog', labelKey: 'kanbanBoard.columns.backlog', status: 'pending', phaseFilter: 'pending' },
+  { id: 'planned', labelKey: 'kanbanBoard.columns.planned', status: 'pending', phaseFilter: 'active' },
+  { id: 'in-progress', labelKey: 'kanbanBoard.columns.inProgress', status: 'in_progress', phaseFilter: null },
+  { id: 'in-review', labelKey: 'kanbanBoard.columns.inReview', status: 'in_review', phaseFilter: null },
+  { id: 'done', labelKey: 'kanbanBoard.columns.done', status: 'completed', phaseFilter: null },
 ] as const;
 
 // Local reactive copy to avoid mutating props
@@ -100,7 +103,7 @@ function onPlanMoved(planId: string, newStatus: string) {
       v-for="col in COLUMNS"
       :key="col.id"
       :column-id="col.id"
-      :column-label="col.label"
+      :column-label="t(col.labelKey)"
       :column-status="col.status"
       :plans="columnPlans[col.id] || []"
       :phases="phases"

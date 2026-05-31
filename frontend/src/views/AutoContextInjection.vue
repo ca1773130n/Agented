@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { settingsApi, triggerApi, ApiError } from '../services/api';
 import type { Trigger } from '../services/api';
+const { t } = useI18n();
 const showToast = useToast();
 
 const loading = ref(true);
@@ -38,10 +40,10 @@ async function loadData() {
 
     // Map known settings keys to context rules
     const ruleMap: Record<string, { name: string; type: ContextRule['type']; tokens: number }> = {
-      'context.changed_files': { name: 'Changed files from PR', type: 'changed_files', tokens: 8000 },
-      'context.git_history': { name: 'Recent git history', type: 'git_history', tokens: 2000 },
-      'context.dependency_graph': { name: 'Import dependency graph', type: 'dependency_graph', tokens: 3500 },
-      'context.file_pattern': { name: 'File pattern injection', type: 'file_pattern', tokens: 5000 },
+      'context.changed_files': { name: t('autoContextInjection.rule.changedFiles'), type: 'changed_files', tokens: 8000 },
+      'context.git_history': { name: t('autoContextInjection.rule.gitHistory'), type: 'git_history', tokens: 2000 },
+      'context.dependency_graph': { name: t('autoContextInjection.rule.dependencyGraph'), type: 'dependency_graph', tokens: 3500 },
+      'context.file_pattern': { name: t('autoContextInjection.rule.filePattern'), type: 'file_pattern', tokens: 5000 },
     };
 
     for (const [key, meta] of Object.entries(ruleMap)) {
@@ -51,7 +53,7 @@ async function loadData() {
         name: meta.name,
         enabled: val === 'true' || val === '1' || val === 'enabled',
         type: meta.type,
-        config: val ?? 'not configured',
+        config: val ?? t('autoContextInjection.notConfigured'),
         estimatedTokens: meta.tokens,
       });
     }
@@ -62,10 +64,10 @@ async function loadData() {
     }
 
     rules.value = contextRules.length > 0 ? contextRules : [
-      { id: 'context.changed_files', name: 'Changed files from PR', enabled: false, type: 'changed_files', config: 'not configured', estimatedTokens: 8000 },
-      { id: 'context.git_history', name: 'Recent git history', enabled: false, type: 'git_history', config: 'not configured', estimatedTokens: 2000 },
-      { id: 'context.dependency_graph', name: 'Import dependency graph', enabled: false, type: 'dependency_graph', config: 'not configured', estimatedTokens: 3500 },
-      { id: 'context.file_pattern', name: 'File pattern injection', enabled: false, type: 'file_pattern', config: 'not configured', estimatedTokens: 5000 },
+      { id: 'context.changed_files', name: t('autoContextInjection.rule.changedFiles'), enabled: false, type: 'changed_files', config: t('autoContextInjection.notConfigured'), estimatedTokens: 8000 },
+      { id: 'context.git_history', name: t('autoContextInjection.rule.gitHistory'), enabled: false, type: 'git_history', config: t('autoContextInjection.notConfigured'), estimatedTokens: 2000 },
+      { id: 'context.dependency_graph', name: t('autoContextInjection.rule.dependencyGraph'), enabled: false, type: 'dependency_graph', config: t('autoContextInjection.notConfigured'), estimatedTokens: 3500 },
+      { id: 'context.file_pattern', name: t('autoContextInjection.rule.filePattern'), enabled: false, type: 'file_pattern', config: t('autoContextInjection.notConfigured'), estimatedTokens: 5000 },
     ];
 
     updateTotals();
@@ -98,7 +100,7 @@ async function toggleRule(r: ContextRule) {
   } catch (err) {
     r.enabled = !r.enabled;
     updateTotals();
-    showToast(err instanceof ApiError ? err.message : 'Failed to update setting', 'error');
+    showToast(err instanceof ApiError ? err.message : t('autoContextInjection.toast.updateFailed'), 'error');
   }
 }
 
@@ -109,16 +111,21 @@ async function handleSave() {
     await Promise.all(
       rules.value.map(r => settingsApi.set(r.id, r.enabled ? 'true' : 'false'))
     );
-    showToast('Context rules saved', 'success');
+    showToast(t('autoContextInjection.toast.saved'), 'success');
   } catch (err) {
-    showToast(err instanceof ApiError ? err.message : 'Save failed', 'error');
+    showToast(err instanceof ApiError ? err.message : t('autoContextInjection.toast.saveFailed'), 'error');
   } finally {
     isSaving.value = false;
   }
 }
 
-function typeLabel(t: ContextRule['type']): string {
-  return { changed_files: 'Changed Files', git_history: 'Git History', dependency_graph: 'Dependency Graph', file_pattern: 'File Pattern' }[t];
+function typeLabel(type: ContextRule['type']): string {
+  return {
+    changed_files: t('autoContextInjection.type.changedFiles'),
+    git_history: t('autoContextInjection.type.gitHistory'),
+    dependency_graph: t('autoContextInjection.type.dependencyGraph'),
+    file_pattern: t('autoContextInjection.type.filePattern'),
+  }[type];
 }
 </script>
 
@@ -126,19 +133,19 @@ function typeLabel(t: ContextRule['type']): string {
   <div class="aci-page">
 
     <PageHeader
-      title="Automatic Codebase Context Injection"
-      subtitle="Configure rules to automatically inject relevant file contents, git history, or dependency graphs into bot prompts."
+      :title="t('autoContextInjection.title')"
+      :subtitle="t('autoContextInjection.subtitle')"
     />
 
     <!-- Loading state -->
     <div v-if="loading" class="card" style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
-      <p>Loading settings and trigger data...</p>
+      <p>{{ t('autoContextInjection.loading') }}</p>
     </div>
 
     <!-- Error state -->
     <div v-else-if="error" class="card" style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
       <p>{{ error }}</p>
-      <button class="btn btn-primary" style="margin-top: 12px" @click="loadData">Retry</button>
+      <button class="btn btn-primary" style="margin-top: 12px" @click="loadData">{{ t('common.retry') }}</button>
     </div>
 
     <template v-else>
@@ -146,7 +153,7 @@ function typeLabel(t: ContextRule['type']): string {
         <div class="main-col">
           <div class="card rules-card">
             <div class="rules-header">
-              <span>Context Rules</span>
+              <span>{{ t('autoContextInjection.contextRules') }}</span>
               <!--
                 The "Add Rule" UI hasn't shipped yet. Hide the button
                 instead of showing a "coming soon" toast — the toast
@@ -170,9 +177,9 @@ function typeLabel(t: ContextRule['type']): string {
                 </div>
                 <div class="rule-tokens">
                   <div class="token-val">~{{ (rule.estimatedTokens / 1000).toFixed(1) }}k</div>
-                  <div class="token-label">tokens</div>
+                  <div class="token-label">{{ t('autoContextInjection.tokens') }}</div>
                 </div>
-                <button class="edit-btn" @click="isEditing = rule">Edit</button>
+                <button class="edit-btn" @click="isEditing = rule">{{ t('common.edit') }}</button>
               </div>
             </div>
           </div>
@@ -180,75 +187,75 @@ function typeLabel(t: ContextRule['type']): string {
           <!-- Triggers with context info -->
           <div v-if="triggers.length > 0" class="card">
             <div class="rules-header">
-              <span>Triggers ({{ triggers.length }})</span>
+              <span>{{ t('autoContextInjection.triggers', { count: triggers.length }) }}</span>
             </div>
             <div class="rules-list">
-              <div v-for="t in triggers" :key="t.id" class="rule-row">
+              <div v-for="trigger in triggers" :key="trigger.id" class="rule-row">
                 <div class="rule-info" style="flex: 1;">
-                  <div class="rule-name">{{ t.name }}</div>
-                  <div class="rule-config">{{ t.trigger_source }} · {{ t.backend_type }}</div>
+                  <div class="rule-name">{{ trigger.name }}</div>
+                  <div class="rule-config">{{ trigger.trigger_source }} · {{ trigger.backend_type }}</div>
                 </div>
-                <div class="rule-type-badge">{{ t.enabled ? 'Active' : 'Disabled' }}</div>
+                <div class="rule-type-badge">{{ trigger.enabled ? t('autoContextInjection.active') : t('autoContextInjection.disabled') }}</div>
               </div>
             </div>
           </div>
 
           <div class="card preview-card">
-            <div class="preview-header">Injection Preview</div>
+            <div class="preview-header">{{ t('autoContextInjection.injectionPreview') }}</div>
             <div class="preview-body">
               <div class="preview-stat">
-                <span class="stat-label">Active rules</span>
+                <span class="stat-label">{{ t('autoContextInjection.activeRules') }}</span>
                 <span class="stat-val">{{ rules.filter(r => r.enabled).length }}</span>
               </div>
               <div class="preview-stat">
-                <span class="stat-label">Estimated total context tokens</span>
+                <span class="stat-label">{{ t('autoContextInjection.estTotalTokens') }}</span>
                 <span :class="['stat-val', { 'stat-warn': totalTokens > 16000 }]">
                   ~{{ (totalTokens / 1000).toFixed(1) }}k
                 </span>
               </div>
               <div v-if="totalTokens > 16000" class="warning-bar">
-                ⚠️ High context size may increase costs and reduce response quality. Consider disabling some rules.
+                {{ t('autoContextInjection.highContextWarning') }}
               </div>
             </div>
           </div>
 
           <div class="actions">
             <button class="btn btn-primary" :disabled="isSaving" @click="handleSave">
-              {{ isSaving ? 'Saving...' : 'Save Rules' }}
+              {{ isSaving ? t('autoContextInjection.saving') : t('autoContextInjection.saveRules') }}
             </button>
           </div>
         </div>
 
         <div class="info-col">
           <div class="card info-card">
-            <div class="info-header">How It Works</div>
+            <div class="info-header">{{ t('autoContextInjection.howItWorks') }}</div>
             <div class="info-body">
               <div class="step">
                 <div class="step-num">1</div>
-                <div class="step-text">A trigger fires (PR opened, webhook received, etc.)</div>
+                <div class="step-text">{{ t('autoContextInjection.step1') }}</div>
               </div>
               <div class="step">
                 <div class="step-num">2</div>
-                <div class="step-text">Active context rules are evaluated against the payload</div>
+                <div class="step-text">{{ t('autoContextInjection.step2') }}</div>
               </div>
               <div class="step">
                 <div class="step-num">3</div>
-                <div class="step-text">Matching files/history/graphs are fetched and formatted</div>
+                <div class="step-text">{{ t('autoContextInjection.step3') }}</div>
               </div>
               <div class="step">
                 <div class="step-num">4</div>
-                <div class="step-text">Context is injected into the bot prompt before execution</div>
+                <div class="step-text">{{ t('autoContextInjection.step4') }}</div>
               </div>
             </div>
           </div>
 
           <div class="card type-info-card">
-            <div class="info-header">Rule Types</div>
+            <div class="info-header">{{ t('autoContextInjection.ruleTypes') }}</div>
             <div class="type-list">
-              <div class="type-item"><span class="type-name">Changed Files</span><span class="type-desc">Files modified in the triggering PR or commit</span></div>
-              <div class="type-item"><span class="type-name">Git History</span><span class="type-desc">Recent commit messages and authors</span></div>
-              <div class="type-item"><span class="type-name">Dependency Graph</span><span class="type-desc">Import/dependency relationships between modules</span></div>
-              <div class="type-item"><span class="type-name">File Pattern</span><span class="type-desc">Any files matching a glob pattern</span></div>
+              <div class="type-item"><span class="type-name">{{ t('autoContextInjection.type.changedFiles') }}</span><span class="type-desc">{{ t('autoContextInjection.typeDesc.changedFiles') }}</span></div>
+              <div class="type-item"><span class="type-name">{{ t('autoContextInjection.type.gitHistory') }}</span><span class="type-desc">{{ t('autoContextInjection.typeDesc.gitHistory') }}</span></div>
+              <div class="type-item"><span class="type-name">{{ t('autoContextInjection.type.dependencyGraph') }}</span><span class="type-desc">{{ t('autoContextInjection.typeDesc.dependencyGraph') }}</span></div>
+              <div class="type-item"><span class="type-name">{{ t('autoContextInjection.type.filePattern') }}</span><span class="type-desc">{{ t('autoContextInjection.typeDesc.filePattern') }}</span></div>
             </div>
           </div>
         </div>

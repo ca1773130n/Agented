@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { Team, Agent, Command, Hook, UserSkill, PluginComponent, HarnessConfig, MarketplaceSearchResult } from '../../services/api';
 import { marketplaceApi } from '../../services/api';
 
@@ -19,6 +20,8 @@ const emit = defineEmits<{
   copyConfig: [success: boolean];
   downloadConfig: [];
 }>();
+
+const { t } = useI18n();
 
 const expandedSections = ref<Record<string, boolean>>({
   teams: true,
@@ -113,7 +116,7 @@ function downloadConfig() {
             <circle cx="9" cy="7" r="4"/>
             <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
           </svg>
-          <h2>Included Teams ({{ includedTeams.length }})</h2>
+          <h2>{{ t('harnessProjectScanner.teams.title', { count: includedTeams.length }) }}</h2>
         </div>
         <svg class="chevron" :class="{ expanded: expandedSections.teams }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="6 9 12 15 18 9"/>
@@ -121,14 +124,14 @@ function downloadConfig() {
       </div>
       <div v-if="expandedSections.teams" class="section-content">
         <div v-if="includedTeams.length === 0" class="empty-section">
-          <span>No teams assigned</span>
+          <span>{{ t('harnessProjectScanner.teams.empty') }}</span>
         </div>
         <div v-else class="items-grid">
           <div v-for="team in includedTeams" :key="team.id" class="item-card team-card">
             <div class="item-color" :style="{ backgroundColor: team.color }"></div>
             <div class="item-info">
               <span class="item-name">{{ team.name }}</span>
-              <span class="item-meta">{{ team.member_count }} members</span>
+              <span class="item-meta">{{ t('harnessProjectScanner.members', { count: team.member_count }) }}</span>
             </div>
           </div>
         </div>
@@ -139,14 +142,14 @@ function downloadConfig() {
             <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
               <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
             </svg>
-            <span>Teams from GitHub ({{ syncedTeams.length }})</span>
+            <span>{{ t('harnessProjectScanner.teams.fromGithub', { count: syncedTeams.length }) }}</span>
           </div>
           <div class="items-grid">
             <div v-for="team in syncedTeams" :key="team.id" class="item-card team-card synced">
               <div class="item-color" :style="{ backgroundColor: team.color }"></div>
               <div class="item-info">
                 <span class="item-name">{{ team.name }}</span>
-                <span class="item-meta">{{ team.member_count }} members</span>
+                <span class="item-meta">{{ t('harnessProjectScanner.members', { count: team.member_count }) }}</span>
               </div>
               <span class="source-badge github">GitHub</span>
             </div>
@@ -163,7 +166,7 @@ function downloadConfig() {
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
             <path d="M7 11V7a5 5 0 0110 0v4"/>
           </svg>
-          <h2>Included Agents ({{ agents.length }})</h2>
+          <h2>{{ t('harnessProjectScanner.agents.title', { count: agents.length }) }}</h2>
         </div>
         <svg class="chevron" :class="{ expanded: expandedSections.agents }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="6 9 12 15 18 9"/>
@@ -171,7 +174,7 @@ function downloadConfig() {
       </div>
       <div v-if="expandedSections.agents" class="section-content">
         <div v-if="agents.length === 0" class="empty-section">
-          <span>No agents included</span>
+          <span>{{ t('harnessProjectScanner.agents.empty') }}</span>
         </div>
         <div v-else class="items-grid">
           <div v-for="agent in agents" :key="agent.id" class="item-card agent-card">
@@ -183,7 +186,7 @@ function downloadConfig() {
             </div>
             <div class="item-info">
               <span class="item-name">{{ agent.name }}</span>
-              <span class="item-meta">{{ agent.role || agent.description || 'No role defined' }}</span>
+              <span class="item-meta">{{ agent.role || agent.description || t('harnessProjectScanner.agents.noRole') }}</span>
             </div>
           </div>
         </div>
@@ -198,7 +201,7 @@ function downloadConfig() {
             <polyline points="4 17 10 11 4 5"/>
             <line x1="12" y1="19" x2="20" y2="19"/>
           </svg>
-          <h2>Included Commands ({{ commands.length }})</h2>
+          <h2>{{ t('harnessProjectScanner.commands.title', { count: commands.length }) }}</h2>
         </div>
         <svg class="chevron" :class="{ expanded: expandedSections.commands }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="6 9 12 15 18 9"/>
@@ -206,7 +209,7 @@ function downloadConfig() {
       </div>
       <div v-if="expandedSections.commands" class="section-content">
         <div v-if="commands.length === 0" class="empty-section">
-          <span>No commands configured</span>
+          <span>{{ t('harnessProjectScanner.commands.empty') }}</span>
         </div>
         <div v-else class="items-list">
           <div v-for="cmd in commands" :key="cmd.id" class="item-row">
@@ -218,10 +221,10 @@ function downloadConfig() {
             </div>
             <div class="item-info">
               <span class="item-name">/{{ cmd.name }}</span>
-              <span class="item-meta">{{ cmd.description || 'No description' }}</span>
+              <span class="item-meta">{{ cmd.description || t('harnessProjectScanner.noDescription') }}</span>
             </div>
             <span class="item-badge" :class="cmd.enabled ? 'enabled' : 'disabled'">
-              {{ cmd.enabled ? 'Enabled' : 'Disabled' }}
+              {{ cmd.enabled ? t('harnessProjectScanner.enabled') : t('harnessProjectScanner.disabled') }}
             </span>
           </div>
         </div>
@@ -236,7 +239,7 @@ function downloadConfig() {
             <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/>
             <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>
           </svg>
-          <h2>Included Hooks ({{ hooks.length }})</h2>
+          <h2>{{ t('harnessProjectScanner.hooks.title', { count: hooks.length }) }}</h2>
         </div>
         <svg class="chevron" :class="{ expanded: expandedSections.hooks }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="6 9 12 15 18 9"/>
@@ -244,7 +247,7 @@ function downloadConfig() {
       </div>
       <div v-if="expandedSections.hooks" class="section-content">
         <div v-if="hooks.length === 0" class="empty-section">
-          <span>No hooks configured</span>
+          <span>{{ t('harnessProjectScanner.hooks.empty') }}</span>
         </div>
         <div v-else class="items-list">
           <div v-for="hook in hooks" :key="hook.id" class="item-row">
@@ -256,7 +259,7 @@ function downloadConfig() {
             </div>
             <div class="item-info">
               <span class="item-name">{{ hook.name }}</span>
-              <span class="item-meta">{{ hook.event }} - {{ hook.description || 'No description' }}</span>
+              <span class="item-meta">{{ hook.event }} - {{ hook.description || t('harnessProjectScanner.noDescription') }}</span>
             </div>
             <span class="item-badge event-badge">{{ hook.event }}</span>
           </div>
@@ -273,7 +276,7 @@ function downloadConfig() {
             <path d="M2 17l10 5 10-5"/>
             <path d="M2 12l10 5 10-5"/>
           </svg>
-          <h2>Included Skills ({{ skills.length }})</h2>
+          <h2>{{ t('harnessProjectScanner.skills.title', { count: skills.length }) }}</h2>
         </div>
         <svg class="chevron" :class="{ expanded: expandedSections.skills }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="6 9 12 15 18 9"/>
@@ -281,7 +284,7 @@ function downloadConfig() {
       </div>
       <div v-if="expandedSections.skills" class="section-content">
         <div v-if="skills.length === 0" class="empty-section">
-          <span>No skills selected for harness</span>
+          <span>{{ t('harnessProjectScanner.skills.empty') }}</span>
         </div>
         <div v-else class="items-list">
           <div v-for="skill in skills" :key="skill.id" class="item-row">
@@ -309,7 +312,7 @@ function downloadConfig() {
             <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
             <path d="M3 9h18M9 21V9"/>
           </svg>
-          <h2>Marketplace Plugins ({{ selectedPlugins.length }})</h2>
+          <h2>{{ t('harnessProjectScanner.plugins.title', { count: selectedPlugins.length }) }}</h2>
         </div>
         <svg class="chevron" :class="{ expanded: expandedSections.plugins }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="6 9 12 15 18 9"/>
@@ -326,7 +329,7 @@ function downloadConfig() {
             <input
               v-model="pluginSearchQuery"
               type="text"
-              placeholder="Search plugins from marketplaces..."
+              :placeholder="t('harnessProjectScanner.plugins.searchPlaceholder')"
               @input="onPluginSearchInput"
               @focus="onPluginSearchInput"
               @blur="closePluginDropdown"
@@ -344,26 +347,26 @@ function downloadConfig() {
             >
               <div class="dropdown-item-info">
                 <span class="dropdown-item-name">{{ plugin.name }}</span>
-                <span class="dropdown-item-desc">{{ plugin.description || 'No description' }}</span>
+                <span class="dropdown-item-desc">{{ plugin.description || t('harnessProjectScanner.noDescription') }}</span>
               </div>
               <span class="dropdown-marketplace-badge">{{ plugin.marketplace_name }}</span>
             </div>
           </div>
 
           <div v-if="showPluginDropdown && pluginSearchResults.length === 0 && !isSearchingPlugins && pluginSearchQuery.trim().length >= 2" class="plugin-dropdown">
-            <div class="plugin-dropdown-empty">No plugins found</div>
+            <div class="plugin-dropdown-empty">{{ t('harnessProjectScanner.plugins.noResults') }}</div>
           </div>
         </div>
 
         <!-- Selected Plugins -->
         <div v-if="selectedPlugins.length === 0" class="empty-section">
-          <span>No marketplace plugins selected. Search above to add plugins.</span>
+          <span>{{ t('harnessProjectScanner.plugins.empty') }}</span>
         </div>
         <div v-else class="selected-plugins">
           <div v-for="(plugin, index) in selectedPlugins" :key="`selected-${plugin.marketplace_id}-${plugin.name}`" class="selected-plugin-chip">
             <span class="chip-name">{{ plugin.name }}</span>
             <span class="chip-marketplace">{{ plugin.marketplace_name }}</span>
-            <button class="chip-remove" @click="removeSelectedPlugin(index)" title="Remove plugin">
+            <button class="chip-remove" @click="removeSelectedPlugin(index)" :title="t('harnessProjectScanner.plugins.removeTitle')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18"/>
                 <line x1="6" y1="6" x2="18" y2="18"/>
@@ -385,7 +388,7 @@ function downloadConfig() {
             <line x1="16" y1="17" x2="8" y2="17"/>
             <polyline points="10 9 9 9 8 9"/>
           </svg>
-          <h2>Included Scripts ({{ scripts.length }})</h2>
+          <h2>{{ t('harnessProjectScanner.scripts.title', { count: scripts.length }) }}</h2>
         </div>
         <svg class="chevron" :class="{ expanded: expandedSections.scripts }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="6 9 12 15 18 9"/>
@@ -393,7 +396,7 @@ function downloadConfig() {
       </div>
       <div v-if="expandedSections.scripts" class="section-content">
         <div v-if="scripts.length === 0" class="empty-section">
-          <span>No scripts configured</span>
+          <span>{{ t('harnessProjectScanner.scripts.empty') }}</span>
         </div>
         <div v-else class="items-list">
           <div v-for="script in scripts" :key="script.id" class="item-row">
@@ -421,7 +424,7 @@ function downloadConfig() {
             <line x1="16" y1="13" x2="8" y2="13"/>
             <line x1="16" y1="17" x2="8" y2="17"/>
           </svg>
-          <h2>Config Preview</h2>
+          <h2>{{ t('harnessProjectScanner.configPreview.title') }}</h2>
         </div>
         <div class="preview-actions">
           <button class="btn btn-sm" @click="copyConfig" :disabled="!harnessConfig">
@@ -432,13 +435,13 @@ function downloadConfig() {
             <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M20 6L9 17l-5-5"/>
             </svg>
-            {{ copied ? 'Copied!' : 'Copy' }}
+            {{ copied ? t('harnessProjectScanner.configPreview.copied') : t('harnessProjectScanner.configPreview.copy') }}
           </button>
           <button class="btn btn-sm" @click="downloadConfig" :disabled="!harnessConfig">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
             </svg>
-            Download
+            {{ t('harnessProjectScanner.configPreview.download') }}
           </button>
         </div>
       </div>

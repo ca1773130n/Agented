@@ -22,6 +22,9 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { superAgentApi } from '../../services/api';
 import { safeFormatRelative } from '../../utils/datetime';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   superAgentId: string;
@@ -162,20 +165,20 @@ function openRun(run: OuroborosRun) {
 <template>
   <article class="ouroboros-panel" data-testid="ouroboros-runs-panel">
     <header class="ouroboros-panel__head">
-      <h2 class="ouroboros-panel__title">Recent Ouroboros runs</h2>
+      <h2 class="ouroboros-panel__title">{{ t('superAgentOuroborosRunsPanel.title') }}</h2>
       <button
         v-if="!loading"
         type="button"
         class="ouroboros-panel__refresh"
         data-testid="ouroboros-runs-refresh"
-        :aria-label="`Refresh Ouroboros runs for super-agent ${superAgentId}`"
+        :aria-label="t('superAgentOuroborosRunsPanel.refreshAria', { id: superAgentId })"
         @click="load()"
       >
-        Refresh
+        {{ t('superAgentOuroborosRunsPanel.refresh') }}
       </button>
     </header>
 
-    <div v-if="loading" class="ouroboros-panel__empty">Loading…</div>
+    <div v-if="loading" class="ouroboros-panel__empty">{{ t('superAgentOuroborosRunsPanel.loading') }}</div>
     <div
       v-else-if="error"
       class="ouroboros-panel__error"
@@ -188,9 +191,9 @@ function openRun(run: OuroborosRun) {
       class="ouroboros-panel__empty"
       data-testid="ouroboros-runs-empty"
     >
-      No Ouroboros runs yet. Use the
-      <strong>Run Ouroboros</strong> button on the SA list page to
-      spawn one — it'll appear here.
+      {{ t('superAgentOuroborosRunsPanel.emptyBefore') }}
+      <strong>{{ t('superAgentOuroborosRunsPanel.runButton') }}</strong>
+      {{ t('superAgentOuroborosRunsPanel.emptyAfter') }}
     </div>
     <ol v-else class="ouroboros-panel__list" data-testid="ouroboros-runs-list">
       <li
@@ -202,7 +205,7 @@ function openRun(run: OuroborosRun) {
         <button
           type="button"
           class="ouroboros-row__btn"
-          :aria-label="`Open Ouroboros session ${r.session_id}`"
+          :aria-label="t('superAgentOuroborosRunsPanel.openSessionAria', { id: r.session_id })"
           @click="openRun(r)"
         >
           <div class="ouroboros-row__head">
@@ -217,29 +220,29 @@ function openRun(run: OuroborosRun) {
           </div>
           <div class="ouroboros-row__meta">
             <span class="meta-item">
-              <span class="meta-label">iterations</span>
+              <span class="meta-label">{{ t('superAgentOuroborosRunsPanel.iterations') }}</span>
               <span class="meta-value">{{ r.iteration_count }}</span>
             </span>
             <span class="meta-item">
-              <span class="meta-label">started</span>
+              <span class="meta-label">{{ t('superAgentOuroborosRunsPanel.started') }}</span>
               <span class="meta-value" :title="r.started_at ?? ''">
                 {{ formatRelative(r.started_at) }}
               </span>
             </span>
             <span v-if="r.ended_at" class="meta-item">
-              <span class="meta-label">ended</span>
+              <span class="meta-label">{{ t('superAgentOuroborosRunsPanel.ended') }}</span>
               <span class="meta-value" :title="r.ended_at">
                 {{ formatRelative(r.ended_at) }}
               </span>
             </span>
             <span v-else class="meta-item">
-              <span class="meta-label">last activity</span>
+              <span class="meta-label">{{ t('superAgentOuroborosRunsPanel.lastActivity') }}</span>
               <span class="meta-value" :title="r.last_activity_at ?? ''">
                 {{ formatRelative(r.last_activity_at) }}
               </span>
             </span>
             <span class="meta-item meta-item--project">
-              <span class="meta-label">project</span>
+              <span class="meta-label">{{ t('superAgentOuroborosRunsPanel.project') }}</span>
               <span class="meta-value">{{ r.project_id }}</span>
             </span>
           </div>

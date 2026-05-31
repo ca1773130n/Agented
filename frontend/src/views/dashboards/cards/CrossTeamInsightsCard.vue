@@ -4,10 +4,12 @@
 -->
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useToast } from '../../../composables/useToast';
 import { analyticsApi } from '../../../services/api/analytics';
 import type { TeamInsightData, OrgFindingData, RepoRiskData } from '../../../services/api/types';
 
+const { t } = useI18n();
 const emit = defineEmits<{ loaded: [slug: string] }>();
 const showToast = useToast();
 
@@ -32,7 +34,7 @@ onMounted(async () => {
     orgFindings.value = data.org_findings as OrgFinding[];
     topRiskyRepos.value = data.top_risky_repos;
   } catch {
-    showToast('Failed to load cross-team insights', 'error');
+    showToast(t('crossTeamInsightsCard.toast.loadFailed'), 'error');
   } finally {
     emit('loaded', 'cross-team-insights');
   }
@@ -83,7 +85,7 @@ function changeColor(pct: number): string {
 }
 
 function exportReport() {
-  showToast('Cross-team insights report exported', 'success');
+  showToast(t('crossTeamInsightsCard.toast.exported'), 'success');
 }
 </script>
 
@@ -91,32 +93,32 @@ function exportReport() {
   <section id="cross-team-insights" class="lane-card insights-card">
     <header class="lane-card__head">
       <div>
-        <h2 class="lane-card__title">Cross-Team Insights</h2>
-        <p class="lane-card__subtitle">Org-level view of automation activity, common findings, and risk signals across all teams</p>
+        <h2 class="lane-card__title">{{ t('crossTeamInsightsCard.title') }}</h2>
+        <p class="lane-card__subtitle">{{ t('crossTeamInsightsCard.subtitle') }}</p>
       </div>
-      <button class="btn-secondary" @click="exportReport">↓ Export Report</button>
+      <button class="btn-secondary" @click="exportReport">↓ {{ t('crossTeamInsightsCard.exportReport') }}</button>
     </header>
 
     <!-- Org-level stats -->
     <div class="stats-row">
       <div class="stat-card">
-        <div class="stat-label">Total Executions</div>
+        <div class="stat-label">{{ t('crossTeamInsightsCard.stats.totalExecutions') }}</div>
         <div class="stat-value">{{ orgTotals.executions.toLocaleString() }}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Total Findings</div>
+        <div class="stat-label">{{ t('crossTeamInsightsCard.stats.totalFindings') }}</div>
         <div class="stat-value" :style="{ color: orgTotals.findings > 50 ? 'var(--accent-amber)' : 'var(--text-primary)' }">
           {{ orgTotals.findings }}
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Critical Findings</div>
+        <div class="stat-label">{{ t('crossTeamInsightsCard.stats.criticalFindings') }}</div>
         <div class="stat-value" :style="{ color: orgTotals.critical > 0 ? 'var(--accent-red)' : 'var(--accent-green)' }">
           {{ orgTotals.critical }}
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Org Success Rate</div>
+        <div class="stat-label">{{ t('crossTeamInsightsCard.stats.orgSuccessRate') }}</div>
         <div class="stat-value">{{ orgTotals.avgSuccess.toFixed(1) }}%</div>
       </div>
     </div>
@@ -124,11 +126,11 @@ function exportReport() {
     <!-- Team leaderboard -->
     <div class="section-card">
       <div class="section-header">
-        <h3 class="section-title">Team Automation Overview</h3>
+        <h3 class="section-title">{{ t('crossTeamInsightsCard.teamOverview.title') }}</h3>
         <div class="sort-tabs">
-          <span class="sort-label">Sort:</span>
+          <span class="sort-label">{{ t('crossTeamInsightsCard.teamOverview.sort') }}</span>
           <button v-for="k in (['executions', 'findings', 'successRate', 'riskScore'] as SortKey[])" :key="k" class="sort-tab" :class="{ active: sortKey === k }" @click="sortKey = k">
-            {{ k === 'executions' ? 'Activity' : k === 'findings' ? 'Findings' : k === 'successRate' ? 'Success' : 'Risk' }}
+            {{ k === 'executions' ? t('crossTeamInsightsCard.sortKeys.activity') : k === 'findings' ? t('crossTeamInsightsCard.sortKeys.findings') : k === 'successRate' ? t('crossTeamInsightsCard.sortKeys.success') : t('crossTeamInsightsCard.sortKeys.risk') }}
           </button>
         </div>
       </div>
@@ -143,29 +145,29 @@ function exportReport() {
           <div class="team-header">
             <div class="team-name">{{ team.teamName }}</div>
             <div class="team-change" :style="{ color: changeColor(team.weekOverWeekChange) }">
-              {{ team.weekOverWeekChange > 0 ? '+' : '' }}{{ team.weekOverWeekChange }}% WoW
+              {{ team.weekOverWeekChange > 0 ? '+' : '' }}{{ team.weekOverWeekChange }}{{ t('crossTeamInsightsCard.team.wow') }}
             </div>
           </div>
           <div class="team-stats">
             <div class="ts">
-              <div class="ts-label">Executions</div>
+              <div class="ts-label">{{ t('crossTeamInsightsCard.team.executions') }}</div>
               <div class="ts-val">{{ team.totalExecutions }}</div>
             </div>
             <div class="ts">
-              <div class="ts-label">Bots</div>
+              <div class="ts-label">{{ t('crossTeamInsightsCard.team.bots') }}</div>
               <div class="ts-val">{{ team.activeBots }}</div>
             </div>
             <div class="ts">
-              <div class="ts-label">Findings</div>
+              <div class="ts-label">{{ t('crossTeamInsightsCard.team.findings') }}</div>
               <div class="ts-val" :style="{ color: team.findingsCount > 30 ? 'var(--accent-amber)' : 'inherit' }">{{ team.findingsCount }}</div>
             </div>
             <div class="ts">
-              <div class="ts-label">Critical</div>
+              <div class="ts-label">{{ t('crossTeamInsightsCard.team.critical') }}</div>
               <div class="ts-val" :style="{ color: team.criticalFindings > 0 ? 'var(--accent-red)' : 'var(--accent-green)' }">{{ team.criticalFindings }}</div>
             </div>
           </div>
           <div class="team-risk-bar-wrap">
-            <div class="risk-bar-label">Risk Score</div>
+            <div class="risk-bar-label">{{ t('crossTeamInsightsCard.team.riskScore') }}</div>
             <div class="risk-bar-track">
               <div
                 class="risk-bar-fill"
@@ -176,11 +178,11 @@ function exportReport() {
           </div>
           <div v-if="selectedTeamId === team.teamId" class="team-detail">
             <div class="detail-row">
-              <span class="detail-label">Most active bot:</span>
+              <span class="detail-label">{{ t('crossTeamInsightsCard.team.mostActiveBot') }}</span>
               <span>{{ team.mostActiveBotName }}</span>
             </div>
             <div class="detail-row">
-              <span class="detail-label">Top risks:</span>
+              <span class="detail-label">{{ t('crossTeamInsightsCard.team.topRisks') }}</span>
             </div>
             <ul class="risk-list">
               <li v-for="r in team.topRisks" :key="r">{{ r }}</li>
@@ -193,8 +195,8 @@ function exportReport() {
     <!-- Common findings across org -->
     <div class="section-card">
       <div class="section-header">
-        <h3 class="section-title">Common Findings Across Teams</h3>
-        <span class="section-hint">Issues appearing in multiple teams' bot outputs</span>
+        <h3 class="section-title">{{ t('crossTeamInsightsCard.commonFindings.title') }}</h3>
+        <span class="section-hint">{{ t('crossTeamInsightsCard.commonFindings.hint') }}</span>
       </div>
       <div class="findings-list">
         <div v-for="f in orgFindings" :key="f.id" class="finding-row">
@@ -204,8 +206,7 @@ function exportReport() {
           <div class="finding-body">
             <div class="finding-title">{{ f.title }}</div>
             <div class="finding-meta">
-              {{ f.count }} occurrences · {{ f.affectedTeams.join(', ') }} ·
-              {{ f.affectedRepos.length }} repos · Last seen {{ formatDate(f.lastSeen) }}
+              {{ t('crossTeamInsightsCard.commonFindings.meta', { count: f.count, teams: f.affectedTeams.join(', '), repos: f.affectedRepos.length, lastSeen: formatDate(f.lastSeen) }) }}
             </div>
           </div>
           <div class="finding-repos">
@@ -219,17 +220,17 @@ function exportReport() {
     <!-- Riskiest repos -->
     <div class="section-card">
       <div class="section-header">
-        <h3 class="section-title">Highest Risk Repositories</h3>
-        <span class="section-hint">Repos with most unresolved findings</span>
+        <h3 class="section-title">{{ t('crossTeamInsightsCard.riskyRepos.title') }}</h3>
+        <span class="section-hint">{{ t('crossTeamInsightsCard.riskyRepos.hint') }}</span>
       </div>
       <table class="bench-table">
         <thead>
           <tr>
-            <th>Repository</th>
-            <th>Team</th>
-            <th>Risk Score</th>
-            <th>Open Findings</th>
-            <th>Last Scanned</th>
+            <th>{{ t('crossTeamInsightsCard.riskyRepos.cols.repository') }}</th>
+            <th>{{ t('crossTeamInsightsCard.riskyRepos.cols.team') }}</th>
+            <th>{{ t('crossTeamInsightsCard.riskyRepos.cols.riskScore') }}</th>
+            <th>{{ t('crossTeamInsightsCard.riskyRepos.cols.openFindings') }}</th>
+            <th>{{ t('crossTeamInsightsCard.riskyRepos.cols.lastScanned') }}</th>
           </tr>
         </thead>
         <tbody>

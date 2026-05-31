@@ -8,9 +8,11 @@
 -->
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
+const { t } = useI18n();
 const router = useRouter();
 
 interface LaneTile {
@@ -24,33 +26,33 @@ interface LaneTile {
 
 const lanes: LaneTile[] = [
   {
-    name: 'Quality',
+    name: t('dashboards.lanes.quality.name'),
     routeName: 'dashboards-quality',
-    description: 'Security findings, PR review status, and execution anomaly detection.',
+    description: t('dashboards.lanes.quality.description'),
     accent: 'var(--accent-crimson)',
     gradient: 'linear-gradient(135deg, var(--accent-crimson), var(--accent-amber))',
     icon: '⬡',
   },
   {
-    name: 'Cost',
+    name: t('dashboards.lanes.cost.name'),
     routeName: 'dashboards-cost',
-    description: 'Token usage, spend trend, budgets, and rate-limit windows.',
+    description: t('dashboards.lanes.cost.description'),
     accent: 'var(--accent-amber)',
     gradient: 'linear-gradient(135deg, var(--accent-amber), var(--accent-emerald))',
     icon: '◇',
   },
   {
-    name: 'Health',
+    name: t('dashboards.lanes.health.name'),
     routeName: 'dashboards-health',
-    description: 'System health, per-bot rollups, and AI-service status.',
+    description: t('dashboards.lanes.health.description'),
     accent: 'var(--accent-emerald)',
     gradient: 'linear-gradient(135deg, var(--accent-emerald), var(--accent-cyan))',
     icon: '⊕',
   },
   {
-    name: 'Activity',
+    name: t('dashboards.lanes.activity.name'),
     routeName: 'dashboards-activity',
-    description: 'Scheduling, execution queue, volume / success trends, and team reports.',
+    description: t('dashboards.lanes.activity.description'),
     accent: 'var(--accent-cyan)',
     gradient: 'linear-gradient(135deg, var(--accent-cyan), var(--accent-violet))',
     icon: '◈',
@@ -66,22 +68,22 @@ interface DeepLink {
 
 const deepLinks: DeepLink[] = [
   {
-    label: 'Token Usage',
+    label: t('dashboards.deepLinks.tokenUsage.label'),
     routeName: 'dashboards-cost',
     hash: '#token-usage',
-    description: 'Jump straight to Cost — Token Usage card.',
+    description: t('dashboards.deepLinks.tokenUsage.description'),
   },
   {
-    label: 'Scheduling',
+    label: t('dashboards.deepLinks.scheduling.label'),
     routeName: 'dashboards-activity',
     hash: '#scheduling',
-    description: 'Jump to the Scheduling card in Activity.',
+    description: t('dashboards.deepLinks.scheduling.description'),
   },
   {
-    label: 'Service Health',
+    label: t('dashboards.deepLinks.serviceHealth.label'),
     routeName: 'dashboards-health',
     hash: '#service-health',
-    description: 'Jump to AI-service account health in Health.',
+    description: t('dashboards.deepLinks.serviceHealth.description'),
   },
 ];
 
@@ -94,27 +96,27 @@ interface OrgTile {
 
 const orgTiles: OrgTile[] = [
   {
-    label: 'Products',
+    label: t('dashboards.orgTiles.products.label'),
     routeName: 'products-summary',
-    description: 'All products with project + team rollups.',
+    description: t('dashboards.orgTiles.products.description'),
     accent: 'var(--accent-violet)',
   },
   {
-    label: 'Projects',
+    label: t('dashboards.orgTiles.projects.label'),
     routeName: 'projects-summary',
-    description: 'All projects with activity + health rollups.',
+    description: t('dashboards.orgTiles.projects.description'),
     accent: 'var(--accent-cyan)',
   },
   {
-    label: 'Teams',
+    label: t('dashboards.orgTiles.teams.label'),
     routeName: 'teams-summary',
-    description: 'All teams with member + bot rollups.',
+    description: t('dashboards.orgTiles.teams.description'),
     accent: 'var(--accent-emerald)',
   },
   {
-    label: 'Agents',
+    label: t('dashboards.orgTiles.agents.label'),
     routeName: 'agents-summary',
-    description: 'All agents with run + skill rollups.',
+    description: t('dashboards.orgTiles.agents.description'),
     accent: 'var(--accent-amber)',
   },
 ];
@@ -152,9 +154,9 @@ function openOrgTile(tile: OrgTile) {
 
 <template>
   <div class="dashboards-page">
-    <PageHeader title="Dashboards" subtitle="Four lanes, one operator console" />
+    <PageHeader :title="t('dashboards.title')" :subtitle="t('dashboards.subtitle')" />
 
-    <section class="lane-tiles" aria-label="Dashboard lanes">
+    <section class="lane-tiles" :aria-label="t('dashboards.ariaLanes')">
       <button
         v-for="tile in lanes"
         :key="tile.routeName"
@@ -169,8 +171,8 @@ function openOrgTile(tile: OrgTile) {
       </button>
     </section>
 
-    <section class="org-tiles" aria-label="Org-overview dashboards">
-      <h2 class="org-tiles__title">Org overview</h2>
+    <section class="org-tiles" :aria-label="t('dashboards.ariaOrgTiles')">
+      <h2 class="org-tiles__title">{{ t('dashboards.orgOverview') }}</h2>
       <div class="org-tiles__grid">
         <button
           v-for="tile in orgTiles"
@@ -186,8 +188,8 @@ function openOrgTile(tile: OrgTile) {
       </div>
     </section>
 
-    <section class="deep-links" aria-label="Quick deep links">
-      <h2 class="deep-links__title">Quick links</h2>
+    <section class="deep-links" :aria-label="t('dashboards.ariaDeepLinks')">
+      <h2 class="deep-links__title">{{ t('dashboards.quickLinks') }}</h2>
       <div class="deep-links__grid">
         <button
           v-for="link in deepLinks"

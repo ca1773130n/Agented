@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, toRef } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type {
   MonitoringStatus,
   RotationEvaluatorStatus,
@@ -34,6 +35,7 @@ const emit = defineEmits<{
   (e: 'update:selectedProjectionWindow', value: Record<number, string>): void;
 }>();
 
+const { t } = useI18n();
 const { getCountdownText } = useMonitoringCountdowns(toRef(props, 'monitoringStatus'));
 
 const monitoringAccountCards = computed(() => buildAccountCards(props.monitoringStatus));
@@ -71,25 +73,25 @@ function handleSelectProjectionWindow(accountId: number, windowType: string) {
     <!-- Initial loading (no status yet) -->
     <div v-if="!monitoringStatus && (monitoringLoading || pollNowLoading)" class="monitoring-loading-full">
       <div class="loading-spinner-large"></div>
-      <span>Loading rate limit data...</span>
+      <span>{{ t('monitoringSection.loadingData') }}</span>
     </div>
 
     <!-- Monitoring disabled -->
     <div v-else-if="!monitoringStatus || !monitoringStatus.enabled" class="monitoring-disabled">
-      <span class="monitoring-mode-tag manual">MANUAL CHECK</span>
-      <p>Enable monitoring in Settings to see live rate limit gauges and projections.</p>
+      <span class="monitoring-mode-tag manual">{{ t('monitoringSection.manualCheck') }}</span>
+      <p>{{ t('monitoringSection.enableHint') }}</p>
     </div>
 
     <!-- Monitoring enabled but loading first data -->
     <div v-else-if="monitoringLoading && !monitoringStatus.windows?.length" class="monitoring-loading-full">
       <div class="loading-spinner-large"></div>
-      <span>Polling rate limits...</span>
+      <span>{{ t('monitoringSection.pollingRateLimits') }}</span>
     </div>
 
     <!-- Monitoring enabled with no data -->
     <div v-else-if="!monitoringStatus.windows?.length" class="monitoring-collecting">
-      <span class="monitoring-mode-tag active">MONITORING</span>
-      <span>Gauges will appear after the first polling cycle.</span>
+      <span class="monitoring-mode-tag active">{{ t('monitoringSection.monitoring') }}</span>
+      <span>{{ t('monitoringSection.gaugesWillAppear') }}</span>
     </div>
 
     <!-- Monitoring enabled with data -->

@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { pipeApi } from '../services/api/bot-pipes';
 import type { BotPipe, BotPipeExecution } from '../services/api/bot-pipes';
+
+const { t } = useI18n();
 
 const pipes = ref<BotPipe[]>([]);
 const executions = ref<BotPipeExecution[]>([]);
@@ -10,11 +13,11 @@ const selectedPipeId = ref<string>('');
 
 const selectedPipe = computed(() => pipes.value.find(p => p.id === selectedPipeId.value) ?? pipes.value[0]);
 
-function transformLabel(t: string): string {
-  if (t === 'passthrough') return 'Passthrough';
-  if (t === 'trim') return 'Trim Whitespace';
-  if (t === 'json-extract') return 'JSON Extract';
-  return t;
+function transformLabel(transform: string): string {
+  if (transform === 'passthrough') return t('botOutputPiping.transform.passthrough');
+  if (transform === 'trim') return t('botOutputPiping.transform.trim');
+  if (transform === 'json-extract') return t('botOutputPiping.transform.jsonExtract');
+  return transform;
 }
 
 async function togglePipe(pipe: BotPipe) {
@@ -40,8 +43,8 @@ onMounted(async () => {
   <div class="bot-output-piping">
 
     <PageHeader
-      title="Bot Output Piping"
-      subtitle="Chain bot executions sequentially — the output of one bot becomes the input context for the next."
+      :title="t('botOutputPiping.title')"
+      :subtitle="t('botOutputPiping.subtitle')"
     />
 
     <!-- Pipe List -->
@@ -51,13 +54,13 @@ onMounted(async () => {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
             <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
           </svg>
-          Configured Pipes
+          {{ t('botOutputPiping.configuredPipes') }}
         </h3>
         <button class="btn btn-primary">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
-          Create New Pipe
+          {{ t('botOutputPiping.createNewPipe') }}
         </button>
       </div>
       <div class="pipes-list">
@@ -86,7 +89,7 @@ onMounted(async () => {
               <div class="toggle-thumb" />
             </div>
             <span class="toggle-label" :class="pipe.enabled ? 'text-green' : 'text-muted'">
-              {{ pipe.enabled ? 'Enabled' : 'Disabled' }}
+              {{ pipe.enabled ? t('botOutputPiping.enabled') : t('botOutputPiping.disabled') }}
             </span>
           </div>
         </div>
@@ -102,7 +105,7 @@ onMounted(async () => {
             <rect x="9" y="9" width="6" height="6" rx="1"/>
             <rect x="16" y="7" width="6" height="10" rx="1"/>
           </svg>
-          Pipe Diagram
+          {{ t('botOutputPiping.pipeDiagram') }}
         </h3>
         <span class="pipe-title-badge">{{ selectedPipe?.name }}</span>
       </div>
@@ -114,9 +117,9 @@ onMounted(async () => {
               <path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/>
             </svg>
           </div>
-          <div class="node-label">Source Bot</div>
+          <div class="node-label">{{ t('botOutputPiping.node.sourceBot') }}</div>
           <div class="node-value">{{ selectedPipe?.source_bot_id }}</div>
-          <div class="node-sublabel">stdout captured</div>
+          <div class="node-sublabel">{{ t('botOutputPiping.node.stdoutCaptured') }}</div>
         </div>
 
         <div class="diagram-arrow">
@@ -133,9 +136,9 @@ onMounted(async () => {
               <polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/>
             </svg>
           </div>
-          <div class="node-label">Transform</div>
+          <div class="node-label">{{ t('botOutputPiping.node.transform') }}</div>
           <div class="node-value">{{ transformLabel(selectedPipe?.transform ?? 'passthrough') }}</div>
-          <div class="node-sublabel">output processed</div>
+          <div class="node-sublabel">{{ t('botOutputPiping.node.outputProcessed') }}</div>
         </div>
 
         <div class="diagram-arrow">
@@ -152,9 +155,9 @@ onMounted(async () => {
               <polyline points="22 4 12 14.01 9 11.01"/>
             </svg>
           </div>
-          <div class="node-label">Destination Bot</div>
+          <div class="node-label">{{ t('botOutputPiping.node.destBot') }}</div>
           <div class="node-value">{{ selectedPipe?.dest_bot_id }}</div>
-          <div class="node-sublabel">stdin injected</div>
+          <div class="node-sublabel">{{ t('botOutputPiping.node.stdinInjected') }}</div>
         </div>
       </div>
     </div>
@@ -166,15 +169,15 @@ onMounted(async () => {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
           </svg>
-          Recent Pipe Executions
+          {{ t('botOutputPiping.recentExecutions') }}
         </h3>
       </div>
       <div class="exec-table">
         <div class="exec-thead">
-          <span>Pipe</span>
-          <span>Triggered</span>
-          <span>Source Preview</span>
-          <span>Destination Status</span>
+          <span>{{ t('botOutputPiping.col.pipe') }}</span>
+          <span>{{ t('botOutputPiping.col.triggered') }}</span>
+          <span>{{ t('botOutputPiping.col.sourcePreview') }}</span>
+          <span>{{ t('botOutputPiping.col.destStatus') }}</span>
         </div>
         <div v-for="exec in executions" :key="exec.id" class="exec-row">
           <span class="exec-pipe">{{ exec.pipe_name }}</span>

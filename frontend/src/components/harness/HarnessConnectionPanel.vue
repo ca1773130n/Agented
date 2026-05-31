@@ -1,7 +1,11 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+
 defineProps<{
   includedTeamsCount: number;
 }>();
+
+const { t } = useI18n();
 </script>
 
 <template>
@@ -15,8 +19,8 @@ defineProps<{
         </svg>
       </div>
       <div class="step-info">
-        <span class="step-label">Discover</span>
-        <span class="step-desc">Load components from GitHub</span>
+        <span class="step-label">{{ t('harnessConnectionPanel.discover.label') }}</span>
+        <span class="step-desc">{{ t('harnessConnectionPanel.discover.desc') }}</span>
       </div>
     </div>
     <div class="step-connector"></div>
@@ -27,8 +31,8 @@ defineProps<{
         </svg>
       </div>
       <div class="step-info">
-        <span class="step-label">Import</span>
-        <span class="step-desc">Select components to include</span>
+        <span class="step-label">{{ t('harnessConnectionPanel.import.label') }}</span>
+        <span class="step-desc">{{ t('harnessConnectionPanel.import.desc') }}</span>
       </div>
     </div>
     <div class="step-connector"></div>
@@ -39,8 +43,8 @@ defineProps<{
         </svg>
       </div>
       <div class="step-info">
-        <span class="step-label">Configure</span>
-        <span class="step-desc">Customize settings</span>
+        <span class="step-label">{{ t('harnessConnectionPanel.configure.label') }}</span>
+        <span class="step-desc">{{ t('harnessConnectionPanel.configure.desc') }}</span>
       </div>
     </div>
     <div class="step-connector"></div>
@@ -52,8 +56,8 @@ defineProps<{
         </svg>
       </div>
       <div class="step-info">
-        <span class="step-label">Validate</span>
-        <span class="step-desc">Check configuration</span>
+        <span class="step-label">{{ t('harnessConnectionPanel.validate.label') }}</span>
+        <span class="step-desc">{{ t('harnessConnectionPanel.validate.desc') }}</span>
       </div>
     </div>
     <div class="step-connector"></div>
@@ -64,8 +68,8 @@ defineProps<{
         </svg>
       </div>
       <div class="step-info">
-        <span class="step-label">Deploy</span>
-        <span class="step-desc">Push to GitHub</span>
+        <span class="step-label">{{ t('harnessConnectionPanel.deploy.label') }}</span>
+        <span class="step-desc">{{ t('harnessConnectionPanel.deploy.desc') }}</span>
       </div>
     </div>
   </div>

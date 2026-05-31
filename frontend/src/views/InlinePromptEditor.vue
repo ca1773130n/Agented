@@ -4,6 +4,8 @@ import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { triggerApi, ApiError } from '../services/api';
 import type { Trigger } from '../services/api';
+import { useI18n } from 'vue-i18n';
+const { t } = useI18n();
 const showToast = useToast();
 
 const triggers = ref<Trigger[]>([]);
@@ -57,7 +59,7 @@ function validatePayload() {
     payloadError.value = '';
     return true;
   } catch (e: unknown) {
-    payloadError.value = e instanceof Error ? e.message : 'Invalid JSON';
+    payloadError.value = e instanceof Error ? e.message : t('inlinePromptEditor.invalidJson');
     return false;
   }
 }
@@ -79,7 +81,7 @@ async function loadTriggers() {
       await loadTriggerPrompt(triggers.value[0].id);
     }
   } catch (e) {
-    loadError.value = e instanceof ApiError ? e.message : 'Failed to load triggers';
+    loadError.value = e instanceof ApiError ? e.message : t('inlinePromptEditor.loadTriggersFailed');
   } finally {
     isLoadingTriggers.value = false;
   }
@@ -91,7 +93,7 @@ async function loadTriggerPrompt(triggerId: string) {
     const trigger = await triggerApi.get(triggerId);
     prompt.value = trigger.prompt_template || '';
   } catch (e) {
-    showToast(e instanceof ApiError ? e.message : 'Failed to load prompt', 'error');
+    showToast(e instanceof ApiError ? e.message : t('inlinePromptEditor.loadPromptFailed'), 'error');
   } finally {
     isLoadingPrompt.value = false;
   }
@@ -105,15 +107,15 @@ watch(selectedTriggerId, async (newId) => {
 
 async function handleSave() {
   if (!selectedTriggerId.value) {
-    showToast('Select a trigger first', 'info');
+    showToast(t('inlinePromptEditor.selectTriggerFirst'), 'info');
     return;
   }
   isSaving.value = true;
   try {
     await triggerApi.update(selectedTriggerId.value, { prompt_template: prompt.value });
-    showToast('Prompt template saved', 'success');
+    showToast(t('inlinePromptEditor.toast.saved'), 'success');
   } catch (e) {
-    showToast(e instanceof ApiError ? e.message : 'Failed to save prompt', 'error');
+    showToast(e instanceof ApiError ? e.message : t('inlinePromptEditor.savePromptFailed'), 'error');
   } finally {
     isSaving.value = false;
   }
@@ -130,25 +132,25 @@ function highlightPrompt(text: string) {
   <div class="prompt-editor">
 
     <PageHeader
-      title="Inline Prompt Editor with Live Preview"
-      subtitle="Split-pane editor with template variable highlighting, test payload injector, and rendered preview."
+      :title="t('inlinePromptEditor.title')"
+      :subtitle="t('inlinePromptEditor.subtitle')"
     />
 
     <!-- Trigger selector -->
-    <div v-if="isLoadingTriggers" class="loading-bar">Loading triggers...</div>
+    <div v-if="isLoadingTriggers" class="loading-bar">{{ t('inlinePromptEditor.loadingTriggers') }}</div>
     <div v-else-if="loadError" class="error-bar">{{ loadError }}</div>
-    <div v-else-if="triggers.length === 0" class="empty-bar">No triggers found. Create a trigger first.</div>
+    <div v-else-if="triggers.length === 0" class="empty-bar">{{ t('inlinePromptEditor.noTriggers') }}</div>
     <div v-else class="trigger-selector">
-      <label class="selector-label">Trigger:</label>
+      <label class="selector-label">{{ t('inlinePromptEditor.triggerLabel') }}</label>
       <select v-model="selectedTriggerId" class="trigger-select">
         <option v-for="t in triggers" :key="t.id" :value="t.id">{{ t.name }} ({{ t.id }})</option>
       </select>
     </div>
 
-    <div v-if="isLoadingPrompt" class="loading-bar">Loading prompt...</div>
+    <div v-if="isLoadingPrompt" class="loading-bar">{{ t('inlinePromptEditor.loadingPrompt') }}</div>
 
     <div class="variables-bar" v-if="variables.length > 0">
-      <span class="vars-label">Variables:</span>
+      <span class="vars-label">{{ t('inlinePromptEditor.variables') }}</span>
       <span
         v-for="v in variables"
         :key="v"
@@ -160,9 +162,9 @@ function highlightPrompt(text: string) {
       <!-- Left: Prompt editor -->
       <div class="pane">
         <div class="pane-header">
-          <span>Prompt Template</span>
+          <span>{{ t('inlinePromptEditor.promptTemplate') }}</span>
           <button class="btn btn-primary btn-sm" :disabled="isSaving || !selectedTriggerId" @click="handleSave">
-            {{ isSaving ? 'Saving...' : 'Save' }}
+            {{ isSaving ? t('inlinePromptEditor.saving') : t('common.save') }}
           </button>
         </div>
         <textarea v-model="prompt" class="prompt-textarea" spellcheck="false"></textarea>
@@ -171,7 +173,7 @@ function highlightPrompt(text: string) {
       <!-- Middle: Test payload -->
       <div class="pane">
         <div class="pane-header">
-          <span>Test Payload (JSON)</span>
+          <span>{{ t('inlinePromptEditor.testPayload') }}</span>
           <span v-if="payloadError" class="payload-error">{{ payloadError }}</span>
         </div>
         <textarea
@@ -185,9 +187,9 @@ function highlightPrompt(text: string) {
       <!-- Right: Rendered preview -->
       <div class="pane">
         <div class="pane-header">
-          <span>Rendered Preview</span>
+          <span>{{ t('inlinePromptEditor.renderedPreview') }}</span>
           <span v-if="unresolvedVars.length > 0" class="unresolved-warning">
-            {{ unresolvedVars.length }} unresolved
+            {{ t('inlinePromptEditor.unresolvedCount', { count: unresolvedVars.length }) }}
           </span>
         </div>
         <div class="rendered-preview" v-html="highlightPrompt(renderedPrompt)"></div>

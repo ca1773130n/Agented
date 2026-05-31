@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { Execution, MergedChunkResults } from '../services/api';
 import { executionApi, triggerApi, ApiError, chunkApi } from '../services/api';
 import ExecutionLogViewer from '../components/triggers/ExecutionLogViewer.vue';
@@ -21,6 +22,7 @@ const props = withDefaults(defineProps<{
   triggerId: '',
 });
 
+const { t } = useI18n();
 const showToast = useToast();
 
 const executions = ref<Execution[]>([]);
@@ -74,9 +76,9 @@ const filteredExecutions = computed(() => {
 });
 
 const pageTitle = computed(() => {
-  if (props.triggerId && triggerName.value) return `${triggerName.value} Executions`;
-  if (props.triggerId) return 'Trigger Executions';
-  return 'Execution History';
+  if (props.triggerId && triggerName.value) return t('executionHistory.titleNamed', { name: triggerName.value });
+  if (props.triggerId) return t('executionHistory.titleTrigger');
+  return t('executionHistory.title');
 });
 
 async function loadData() {
@@ -98,7 +100,7 @@ async function loadData() {
       executions.value = result.executions || [];
     }
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load execution history';
+    const message = err instanceof ApiError ? err.message : t('executionHistory.errors.load');
     showToast(message, 'error');
   } finally {
     isLoading.value = false;
@@ -128,8 +130,12 @@ function formatDuration(ms?: number): string {
 }
 
 function formatSourceType(type: string | undefined): string {
-  const labels: Record<string, string> = { bot: 'Bot', super_agent: 'Super Agent', user_chat: 'Chat' };
-  return labels[type || 'bot'] || type || 'Bot';
+  const labels: Record<string, string> = {
+    bot: t('executionHistory.source.bot'),
+    super_agent: t('executionHistory.source.superAgent'),
+    user_chat: t('executionHistory.source.chat'),
+  };
+  return labels[type || 'bot'] || type || t('executionHistory.source.bot');
 }
 
 function closeLogs() {
@@ -144,10 +150,10 @@ async function handleRetryExecution(execution: Execution) {
   retryingId.value = execution.execution_id;
   try {
     await triggerApi.run(execution.trigger_id);
-    showToast('Execution retry started', 'success');
+    showToast(t('executionHistory.toast.retryStarted'), 'success');
     await loadData();
   } catch (err: unknown) {
-    showToast(err instanceof Error ? err.message : 'Failed to retry execution', 'error');
+    showToast(err instanceof Error ? err.message : t('executionHistory.errors.retry'), 'error');
   } finally {
     retryingId.value = null;
   }
@@ -168,10 +174,10 @@ async function handleCancelExecution(executionId: string) {
   cancellingId.value = executionId;
   try {
     await executionApi.cancel(executionId);
-    showToast('Execution cancelled', 'success');
+    showToast(t('executionHistory.toast.cancelled'), 'success');
     await loadData();
   } catch (err: unknown) {
-    showToast(err instanceof Error ? err.message : 'Failed to cancel execution', 'error');
+    showToast(err instanceof Error ? err.message : t('executionHistory.errors.cancel'), 'error');
   } finally {
     cancellingId.value = null;
   }
@@ -216,20 +222,20 @@ onMounted(loadData);
 <template>
   <div class="execution-history">
 
-    <PageHeader :title="pageTitle" subtitle="View execution logs and history">
+    <PageHeader :title="pageTitle" :subtitle="t('executionHistory.subtitle')">
       <template #actions>
         <div class="header-stats">
           <div class="stat-chip">
             <span class="stat-value">{{ executions.length }}</span>
-            <span class="stat-label">Total Runs</span>
+            <span class="stat-label">{{ t('executionHistory.stats.totalRuns') }}</span>
           </div>
           <div class="stat-chip success">
             <span class="stat-value">{{ executions.filter(e => e.status === 'success').length }}</span>
-            <span class="stat-label">Success</span>
+            <span class="stat-label">{{ t('executionHistory.stats.success') }}</span>
           </div>
           <div class="stat-chip failed">
             <span class="stat-value">{{ executions.filter(e => e.status === 'failed' || e.status === 'timeout').length }}</span>
-            <span class="stat-label">Failed</span>
+            <span class="stat-label">{{ t('executionHistory.stats.failed') }}</span>
           </div>
         </div>
       </template>
@@ -242,43 +248,43 @@ onMounted(loadData);
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <polygon points="22,3 2,3 10,12.46 10,19 14,21 14,12.46"/>
           </svg>
-          <label>Filter by Status</label>
+          <label>{{ t('executionHistory.filterByStatus') }}</label>
           <select v-model="selectedStatus">
-            <option value="">All Statuses</option>
-            <option value="running">Running</option>
-            <option value="success">Success</option>
-            <option value="failed">Failed</option>
-            <option value="timeout">Timeout</option>
-            <option value="cancelled">Cancelled</option>
-            <option value="interrupted">Interrupted</option>
+            <option value="">{{ t('executionHistory.status.all') }}</option>
+            <option value="running">{{ t('executionHistory.status.running') }}</option>
+            <option value="success">{{ t('executionHistory.status.success') }}</option>
+            <option value="failed">{{ t('executionHistory.status.failed') }}</option>
+            <option value="timeout">{{ t('executionHistory.status.timeout') }}</option>
+            <option value="cancelled">{{ t('executionHistory.status.cancelled') }}</option>
+            <option value="interrupted">{{ t('executionHistory.status.interrupted') }}</option>
           </select>
         </div>
         <div class="filter-info">
-          Showing {{ filteredExecutions.length }} of {{ executions.length }} executions
+          {{ t('executionHistory.showing', { shown: filteredExecutions.length, total: executions.length }) }}
         </div>
       </div>
 
-      <LoadingState v-if="isLoading" message="Loading execution history..." />
+      <LoadingState v-if="isLoading" :message="t('executionHistory.loading')" />
 
       <div v-else class="table-wrapper">
         <table class="data-table">
           <thead>
             <tr>
-              <th v-if="!triggerId">Name</th>
-              <th>Started</th>
-              <th>Duration</th>
-              <th>Source</th>
-              <th>Backend</th>
-              <th>Status</th>
-              <th>Actions</th>
+              <th v-if="!triggerId">{{ t('executionHistory.table.name') }}</th>
+              <th>{{ t('executionHistory.table.started') }}</th>
+              <th>{{ t('executionHistory.table.duration') }}</th>
+              <th>{{ t('executionHistory.table.source') }}</th>
+              <th>{{ t('executionHistory.table.backend') }}</th>
+              <th>{{ t('executionHistory.table.status') }}</th>
+              <th>{{ t('executionHistory.table.actions') }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="filteredExecutions.length === 0">
               <td :colspan="triggerId ? 6 : 7" class="table-empty">
                 <EmptyState
-                  title="No execution history available"
-                  description="Executions will appear here when bots are run"
+                  :title="t('executionHistory.emptyTitle')"
+                  :description="t('executionHistory.emptyDescription')"
                 />
               </td>
             </tr>
@@ -298,7 +304,7 @@ onMounted(loadData);
               <td class="cell-duration">
                 <span v-if="execution.status === 'running'" class="running-duration">
                   <span class="spinner-small"></span>
-                  Running...
+                  {{ t('executionHistory.running') }}
                 </span>
                 <span v-else>{{ formatDuration(execution.duration_ms) }}</span>
               </td>
@@ -317,7 +323,7 @@ onMounted(loadData);
                 </span>
               </td>
               <td class="cell-actions">
-                <button class="btn-icon" @click="viewLogs(execution)" title="View logs">
+                <button class="btn-icon" @click="viewLogs(execution)" :title="t('executionHistory.actions.viewLogs')">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                     <circle cx="12" cy="12" r="3"/>
@@ -328,7 +334,7 @@ onMounted(loadData);
                   class="btn-icon btn-cancel"
                   :disabled="cancellingId === execution.execution_id"
                   @click="handleCancelExecution(execution.execution_id)"
-                  title="Cancel execution"
+                  :title="t('executionHistory.actions.cancel')"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="3" y="3" width="18" height="18" rx="2"/>
@@ -339,7 +345,7 @@ onMounted(loadData);
                   class="btn-icon btn-retry"
                   :disabled="retryingId === execution.execution_id"
                   @click="handleRetryExecution(execution)"
-                  title="Retry execution"
+                  :title="t('executionHistory.actions.retry')"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M1 4v6h6M23 20v-6h-6"/>
@@ -351,7 +357,7 @@ onMounted(loadData);
                   class="btn-icon btn-replay"
                   :class="{ active: replayExpandedId === execution.execution_id }"
                   @click="toggleReplay(execution.execution_id)"
-                  title="Replay & Compare"
+                  :title="t('executionHistory.actions.replay')"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>
@@ -361,7 +367,7 @@ onMounted(loadData);
                   class="btn-icon btn-chunks"
                   :class="{ active: chunkExpandedId === execution.execution_id }"
                   @click="toggleChunkResults(execution.execution_id)"
-                  title="Chunk Results"
+                  :title="t('executionHistory.actions.chunkResults')"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="3" y="3" width="7" height="7" rx="1"/>
@@ -374,7 +380,7 @@ onMounted(loadData);
                   class="btn-icon btn-branches"
                   :class="{ active: branchExpandedId === execution.execution_id }"
                   @click="toggleBranches(execution.execution_id)"
-                  title="Branches"
+                  :title="t('executionHistory.actions.branches')"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M6 3v12M18 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM18 9c-3 0-6 3-6 6v3"/>
@@ -393,10 +399,10 @@ onMounted(loadData);
               <td :colspan="triggerId ? 6 : 7" class="chunk-expansion-cell">
                 <div v-if="chunkLoading" class="expansion-loading">
                   <div class="spinner-small"></div>
-                  Loading chunk results...
+                  {{ t('executionHistory.loadingChunks') }}
                 </div>
                 <ChunkResults v-else-if="chunkResults" :results="chunkResults" />
-                <div v-else class="expansion-empty">No chunk results available for this execution.</div>
+                <div v-else class="expansion-empty">{{ t('executionHistory.noChunks') }}</div>
               </td>
             </tr>
             <!-- Branch Navigator Expansion Row -->
@@ -416,7 +422,7 @@ onMounted(loadData);
       <div class="log-modal">
         <div class="modal-header">
           <div class="modal-title">
-            <h3 id="modal-title-execution-log">Execution Logs</h3>
+            <h3 id="modal-title-execution-log">{{ t('executionHistory.logsModalTitle') }}</h3>
             <span class="execution-id">{{ selectedExecution.execution_id }}</span>
           </div>
           <PresenceIndicator v-if="isJoined" :viewers="viewers" />

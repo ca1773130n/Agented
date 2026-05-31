@@ -10,6 +10,9 @@ import EmptyState from '../components/base/EmptyState.vue';
 import { useToast } from '../composables/useToast';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import { useWebMcpPageTools } from '../composables/useWebMcpPageTools';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   highlightId?: string | null;
@@ -83,7 +86,7 @@ async function loadData() {
     discoveredSkills.value = discovered.skills || [];
     userSkills.value = user.skills || [];
   } catch (e) {
-    showToast('Failed to load skills', 'error');
+    showToast(t('mySkills.toasts.loadFailed'), 'error');
   } finally {
     isLoading.value = false;
   }
@@ -96,14 +99,14 @@ async function addSkill(skill: SkillInfo) {
       skill_path: skill.source_path || '',
       description: skill.description || ''
     });
-    showToast(`Skill "${skill.name}" added`, 'success');
+    showToast(t('mySkills.toasts.skillAdded', { name: skill.name }), 'success');
     showAddModal.value = false;
     await loadData();
   } catch (e) {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to add skill', 'error');
+      showToast(t('mySkills.toasts.addFailed'), 'error');
     }
   }
 }
@@ -111,10 +114,10 @@ async function addSkill(skill: SkillInfo) {
 async function removeSkill(skill: UserSkill) {
   try {
     await userSkillsApi.delete(skill.id);
-    showToast(`Skill "${skill.skill_name}" removed`, 'success');
+    showToast(t('mySkills.toasts.skillRemoved', { name: skill.skill_name }), 'success');
     await loadData();
   } catch (e) {
-    showToast('Failed to remove skill', 'error');
+    showToast(t('mySkills.toasts.removeFailed'), 'error');
   }
 }
 
@@ -123,7 +126,7 @@ async function toggleEnabled(skill: UserSkill) {
     await userSkillsApi.update(skill.id, { enabled: skill.enabled ? 0 : 1 });
     await loadData();
   } catch (e) {
-    showToast('Failed to update skill', 'error');
+    showToast(t('mySkills.toasts.updateFailed'), 'error');
   }
 }
 
@@ -132,11 +135,11 @@ async function toggleHarness(skill: UserSkill) {
     await userSkillsApi.update(skill.id, { selected_for_harness: skill.selected_for_harness ? 0 : 1 });
     await loadData();
     showToast(
-      skill.selected_for_harness ? 'Removed from harness' : 'Added to harness',
+      skill.selected_for_harness ? t('mySkills.toasts.removedFromHarness') : t('mySkills.toasts.addedToHarness'),
       'success'
     );
   } catch (e) {
-    showToast('Failed to update skill', 'error');
+    showToast(t('mySkills.toasts.updateFailed'), 'error');
   }
 }
 
@@ -147,13 +150,13 @@ onMounted(() => {
 
 <template>
   <PageLayout >
-    <PageHeader title="Skill Library" subtitle="Manage your collection of Claude skills">
+    <PageHeader :title="t('mySkills.title')" :subtitle="t('mySkills.subtitle')">
       <template #actions>
         <button class="btn btn-primary" @click="showAddModal = true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 5v14M5 12h14"/>
           </svg>
-          Add Skill
+          {{ t('mySkills.addSkill') }}
         </button>
         <!-- PR-D — entry point to the skill-create wizard. The audit
              flagged MySkills as the only wizard parent list page without
@@ -167,17 +170,17 @@ onMounted(() => {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 5v14M5 12h14"/>
           </svg>
-          Create Skill
+          {{ t('mySkills.createSkill') }}
         </button>
       </template>
     </PageHeader>
 
-    <LoadingState v-if="isLoading" message="Loading skills..." />
+    <LoadingState v-if="isLoading" :message="t('mySkills.loading')" />
 
     <EmptyState
       v-else-if="userSkills.length === 0"
-      title="No skills configured"
-      description="Add skills from discovered skills to manage them here"
+      :title="t('mySkills.emptyTitle')"
+      :description="t('mySkills.emptyDescription')"
     >
       <template #icon>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -187,7 +190,7 @@ onMounted(() => {
         </svg>
       </template>
       <template #actions>
-        <button class="btn btn-primary" @click="showAddModal = true">Add Your First Skill</button>
+        <button class="btn btn-primary" @click="showAddModal = true">{{ t('mySkills.addFirstSkill') }}</button>
       </template>
     </EmptyState>
 
@@ -219,15 +222,15 @@ onMounted(() => {
 
         <div class="skill-toggles">
           <label class="toggle-row">
-            <span>Enabled</span>
+            <span>{{ t('mySkills.enabled') }}</span>
             <button class="toggle-btn" :class="{ active: skill.enabled }" @click.stop="toggleEnabled(skill)">
               <span class="toggle-knob"></span>
             </button>
           </label>
           <label class="toggle-row">
             <div class="toggle-label">
-              <span>Include to Harness</span>
-              <span class="toggle-hint">Bundle into harness plugin config for deployment</span>
+              <span>{{ t('mySkills.includeToHarness') }}</span>
+              <span class="toggle-hint">{{ t('mySkills.includeToHarnessHint') }}</span>
             </div>
             <button class="toggle-btn" :class="{ active: skill.selected_for_harness }" @click.stop="toggleHarness(skill)">
               <span class="toggle-knob"></span>
@@ -240,7 +243,7 @@ onMounted(() => {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
             </svg>
-            Remove
+            {{ t('common.remove') }}
           </button>
         </div>
       </router-link>
@@ -251,7 +254,7 @@ onMounted(() => {
       <div v-if="showAddModal" ref="addModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-add-skill-library" tabindex="-1" @click.self="showAddModal = false" @keydown.escape="showAddModal = false">
         <div class="modal add-skill-modal">
           <div class="modal-header">
-            <h2 id="modal-title-add-skill-library">Add Skill</h2>
+            <h2 id="modal-title-add-skill-library">{{ t('mySkills.addSkill') }}</h2>
             <button class="btn-close" @click="showAddModal = false">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M18 6L6 18M6 6l12 12"/>
@@ -264,12 +267,12 @@ onMounted(() => {
               <circle cx="11" cy="11" r="8"/>
               <path d="M21 21l-4.35-4.35"/>
             </svg>
-            <input v-model="searchQuery" type="text" placeholder="Search discovered skills..." />
+            <input v-model="searchQuery" type="text" :placeholder="t('mySkills.searchPlaceholder')" />
           </div>
 
           <div class="discovered-skills-list">
             <div v-if="filteredDiscoveredSkills.length === 0" class="no-skills">
-              <p>No skills available to add</p>
+              <p>{{ t('mySkills.noSkillsAvailable') }}</p>
             </div>
             <div
               v-for="skill in filteredDiscoveredSkills"
@@ -284,7 +287,7 @@ onMounted(() => {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M12 5v14M5 12h14"/>
                 </svg>
-                Add
+                {{ t('common.add') }}
               </button>
             </div>
           </div>

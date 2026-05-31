@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface LogEntry {
   type: string;
@@ -34,14 +37,14 @@ watch(() => props.log.length, () => {
   <div class="ai-streaming-log">
     <div class="streaming-header">
       <div class="streaming-spinner"></div>
-      <span>{{ phase || 'Processing...' }}</span>
+      <span>{{ phase || t('aiStreamingLog.processing') }}</span>
     </div>
     <div class="streaming-log-container" ref="logContainer">
       <div v-for="(entry, i) in log" :key="i" class="log-line" :class="'log-' + entry.type">
-        <span class="log-prefix" v-if="entry.type === 'phase'">SYSTEM</span>
+        <span class="log-prefix" v-if="entry.type === 'phase'">{{ t('aiStreamingLog.prefixSystem') }}</span>
         <span class="log-prefix" v-else-if="entry.type === 'thinking'">{{ assistantName.toUpperCase() }}</span>
-        <span class="log-prefix" v-else-if="entry.type === 'output'">OUTPUT</span>
-        <span class="log-prefix" v-else-if="entry.type === 'error'">ERROR</span>
+        <span class="log-prefix" v-else-if="entry.type === 'output'">{{ t('aiStreamingLog.prefixOutput') }}</span>
+        <span class="log-prefix" v-else-if="entry.type === 'error'">{{ t('aiStreamingLog.prefixError') }}</span>
         <span class="log-text">{{ entry.text }}</span>
       </div>
     </div>

@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { orchestrationApi, listGroupedBackends, ApiError } from '../services/api';
 import type { AccountHealth, AIBackend } from '../services/api';
 const showToast = useToast();
+const { t } = useI18n();
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -49,7 +51,7 @@ async function loadData() {
     const results: BenchmarkResult[] = accounts.value.map((acct) => {
       const backendInfo = backends.value.find(b => b.id === acct.backend_id);
       return {
-        provider: backendInfo?.name ?? acct.backend_name ?? acct.backend_type ?? 'Unknown',
+        provider: backendInfo?.name ?? acct.backend_name ?? acct.backend_type ?? t('providerBenchmarkDashboard.unknown'),
         model: acct.plan ?? 'default',
         quality: acct.is_rate_limited ? 3 : 8,
         latencyMs: acct.cooldown_remaining_seconds ? acct.cooldown_remaining_seconds * 1000 : 0,
@@ -63,8 +65,8 @@ async function loadData() {
     if (results.length > 0) {
       benchmarks.value = [{
         id: 'bm-live',
-        name: 'Live Account Health',
-        prompt: 'Real-time comparison of provider accounts based on health, latency, and cost metrics.',
+        name: t('providerBenchmarkDashboard.liveAccountHealth'),
+        prompt: t('providerBenchmarkDashboard.livePrompt'),
         runAt: new Date().toISOString(),
         results,
       }];
@@ -74,7 +76,7 @@ async function loadData() {
     if (err instanceof ApiError) {
       error.value = `API Error (${err.status}): ${err.message}`;
     } else {
-      error.value = err instanceof Error ? err.message : 'Unknown error';
+      error.value = err instanceof Error ? err.message : t('providerBenchmarkDashboard.unknownError');
     }
   } finally {
     loading.value = false;
@@ -92,9 +94,9 @@ async function handleRerun() {
   isRunning.value = true;
   try {
     await loadData();
-    showToast('Benchmark data refreshed', 'success');
+    showToast(t('providerBenchmarkDashboard.toasts.refreshed'), 'success');
   } catch {
-    showToast('Refresh failed', 'error');
+    showToast(t('providerBenchmarkDashboard.toasts.refreshFailed'), 'error');
   } finally {
     isRunning.value = false;
   }
@@ -114,30 +116,30 @@ function formatDate(ts: string) {
   <div class="benchmark-page">
 
     <PageHeader
-      title="Provider Benchmarking Dashboard"
-      subtitle="Run the same bot against multiple AI providers simultaneously and compare quality, latency, and cost."
+      :title="t('providerBenchmarkDashboard.title')"
+      :subtitle="t('providerBenchmarkDashboard.subtitle')"
     />
 
     <!-- Loading state -->
     <div v-if="loading" class="card" style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
-      <p>Loading provider health and backend data...</p>
+      <p>{{ t('providerBenchmarkDashboard.loading') }}</p>
     </div>
 
     <!-- Error state -->
     <div v-else-if="error" class="card" style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
       <p>{{ error }}</p>
-      <button class="btn btn-primary" style="margin-top: 12px" @click="loadData">Retry</button>
+      <button class="btn btn-primary" style="margin-top: 12px" @click="loadData">{{ t('common.retry') }}</button>
     </div>
 
     <!-- Empty state -->
     <div v-else-if="!selected || sorted.length === 0" class="card" style="text-align: center; padding: 60px 20px; color: var(--text-tertiary);">
-      <p>No provider accounts found. Configure backends and accounts to see benchmark data.</p>
+      <p>{{ t('providerBenchmarkDashboard.empty') }}</p>
     </div>
 
     <template v-else>
       <div class="layout">
         <aside class="sidebar card">
-          <div class="sidebar-header">Benchmarks</div>
+          <div class="sidebar-header">{{ t('providerBenchmarkDashboard.benchmarks') }}</div>
           <div
             v-for="b in benchmarks"
             :key="b.id"
@@ -146,7 +148,7 @@ function formatDate(ts: string) {
             @click="selected = b"
           >
             <div class="bm-name">{{ b.name }}</div>
-            <div class="bm-meta">{{ b.results.length }} providers · {{ formatDate(b.runAt) }}</div>
+            <div class="bm-meta">{{ t('providerBenchmarkDashboard.providersCount', { count: b.results.length }) }} · {{ formatDate(b.runAt) }}</div>
           </div>
         </aside>
 
@@ -154,33 +156,33 @@ function formatDate(ts: string) {
           <!-- Winner summary -->
           <div class="winners-row">
             <div v-if="bestQuality" class="winner-chip card">
-              <div class="winner-chip-label">Best Quality</div>
+              <div class="winner-chip-label">{{ t('providerBenchmarkDashboard.bestQuality') }}</div>
               <div class="winner-chip-provider">{{ bestQuality.provider }}</div>
               <div class="winner-chip-val">{{ bestQuality.quality.toFixed(1) }}/10</div>
             </div>
             <div v-if="bestSpeed" class="winner-chip card">
-              <div class="winner-chip-label">Fastest</div>
+              <div class="winner-chip-label">{{ t('providerBenchmarkDashboard.fastest') }}</div>
               <div class="winner-chip-provider">{{ bestSpeed.provider }}</div>
               <div class="winner-chip-val">{{ bestSpeed.latencyMs }}ms</div>
             </div>
             <div v-if="bestCost" class="winner-chip card">
-              <div class="winner-chip-label">Cheapest</div>
+              <div class="winner-chip-label">{{ t('providerBenchmarkDashboard.cheapest') }}</div>
               <div class="winner-chip-provider">{{ bestCost.provider }}</div>
-              <div class="winner-chip-val">${{ bestCost.costPer1k }}/1k tokens</div>
+              <div class="winner-chip-val">{{ t('providerBenchmarkDashboard.costPer1k', { cost: bestCost.costPer1k }) }}</div>
             </div>
           </div>
 
           <!-- Comparison table -->
           <div class="card results-card">
             <div class="results-header">
-              <span>Comparison Results</span>
+              <span>{{ t('providerBenchmarkDashboard.comparisonResults') }}</span>
               <button class="btn btn-primary btn-sm" :disabled="isRunning" @click="handleRerun">
-                {{ isRunning ? 'Refreshing...' : '▶ Refresh Data' }}
+                {{ isRunning ? t('providerBenchmarkDashboard.refreshing') : t('providerBenchmarkDashboard.refreshData') }}
               </button>
             </div>
             <div class="results-table">
               <div class="table-head">
-                <span>Provider</span><span>Quality</span><span>Latency</span><span>Cost /1k</span><span>Tokens Out</span>
+                <span>{{ t('providerBenchmarkDashboard.cols.provider') }}</span><span>{{ t('providerBenchmarkDashboard.cols.quality') }}</span><span>{{ t('providerBenchmarkDashboard.cols.latency') }}</span><span>{{ t('providerBenchmarkDashboard.cols.cost') }}</span><span>{{ t('providerBenchmarkDashboard.cols.tokensOut') }}</span>
               </div>
               <div v-for="(r, i) in sorted" :key="r.provider" class="table-row" :class="{ 'row-first': i === 0 }">
                 <div class="col-provider">
@@ -214,7 +216,7 @@ function formatDate(ts: string) {
 
           <!-- Prompt card -->
           <div class="card prompt-card">
-            <div class="prompt-header">Benchmark Description</div>
+            <div class="prompt-header">{{ t('providerBenchmarkDashboard.benchmarkDescription') }}</div>
             <div class="prompt-body">{{ selected.prompt }}</div>
           </div>
         </div>

@@ -18,6 +18,9 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { ApiError, projectApi, superAgentApi } from '../../services/api';
 import { useFocusTrap } from '../../composables/useFocusTrap';
 import { useToast } from '../../composables/useToast';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 interface Project {
   id: string;
@@ -72,7 +75,7 @@ async function loadProjects() {
     projects.value = res.projects.map(p => ({ id: p.id, name: p.name }));
   } catch (e) {
     projectsError.value =
-      e instanceof Error ? e.message : 'Failed to load projects';
+      e instanceof Error ? e.message : t('superAgentOuroborosDialog.loadProjectsError');
   } finally {
     projectsLoading.value = false;
   }
@@ -116,7 +119,7 @@ async function submit() {
       yolo_mode: yoloMode.value,
     });
     showToast(
-      `Ouroboros run started for ${props.superAgentName}`,
+      t('superAgentOuroborosDialog.runStarted', { name: props.superAgentName }),
       'success',
     );
     emit('started', {
@@ -126,7 +129,7 @@ async function submit() {
     });
     emit('close');
   } catch (e: unknown) {
-    let msg = 'Failed to start Ouroboros run';
+    let msg = t('superAgentOuroborosDialog.startError');
     if (e instanceof ApiError || e instanceof Error) {
       msg = e.message;
     }
@@ -153,11 +156,11 @@ function onCancel() {
   >
     <div ref="dialogRef" class="modal">
       <header class="modal-header">
-        <h2 id="ouroboros-dialog-title">Run Ouroboros — {{ superAgentName }}</h2>
+        <h2 id="ouroboros-dialog-title">{{ t('superAgentOuroborosDialog.title', { name: superAgentName }) }}</h2>
         <button
           class="btn-close"
           type="button"
-          aria-label="Close"
+          :aria-label="t('common.close')"
           @click="onCancel"
         >
           ×
@@ -165,50 +168,46 @@ function onCancel() {
       </header>
 
       <p class="modal-hint">
-        Spawns a goal-loop session that runs in Ouroboros mode: each
-        turn states a hypothesis + predicted outcome, the judge
-        scores it, and falsified approaches go into the session's
-        dead-end registry so the agent doesn't re-walk failures.
+        {{ t('superAgentOuroborosDialog.hint') }}
       </p>
 
       <form class="modal-form" @submit.prevent="submit">
         <div class="form-group">
           <label for="ouroboros-goal">
-            Goal
+            {{ t('superAgentOuroborosDialog.goal') }}
             <span class="required">*</span>
           </label>
           <textarea
             id="ouroboros-goal"
             v-model="goal"
             rows="3"
-            placeholder="e.g. Get tests/test_x.py passing"
+            :placeholder="t('superAgentOuroborosDialog.goalPlaceholder')"
             :disabled="submitting"
             required
           />
         </div>
 
         <div class="form-group">
-          <label for="ouroboros-project">Project</label>
+          <label for="ouroboros-project">{{ t('superAgentOuroborosDialog.project') }}</label>
           <select
             id="ouroboros-project"
             v-model="projectId"
             :disabled="submitting || projectsLoading"
           >
-            <option value="">— Use SA's most recent project —</option>
+            <option value="">{{ t('superAgentOuroborosDialog.useRecentProject') }}</option>
             <option v-for="p in projects" :key="p.id" :value="p.id">
               {{ p.name }}
             </option>
           </select>
           <p v-if="projectsError" class="form-error">{{ projectsError }}</p>
           <p v-else class="form-hint">
-            Leave empty to fall back to the project this SA most
-            recently ran against.
+            {{ t('superAgentOuroborosDialog.projectHint') }}
           </p>
         </div>
 
         <div class="form-row">
           <div class="form-group">
-            <label for="ouroboros-iter">Max iterations</label>
+            <label for="ouroboros-iter">{{ t('superAgentOuroborosDialog.maxIterations') }}</label>
             <input
               id="ouroboros-iter"
               v-model.number="maxIterations"
@@ -219,7 +218,7 @@ function onCancel() {
             />
           </div>
           <div class="form-group">
-            <label for="ouroboros-wall">Max wall time (minutes)</label>
+            <label for="ouroboros-wall">{{ t('superAgentOuroborosDialog.maxWallTime') }}</label>
             <input
               id="ouroboros-wall"
               v-model.number="maxWallMinutes"
@@ -233,19 +232,18 @@ function onCancel() {
 
         <div class="form-group">
           <label for="ouroboros-check">
-            Check command
-            <span class="optional">(optional)</span>
+            {{ t('superAgentOuroborosDialog.checkCommand') }}
+            <span class="optional">{{ t('superAgentOuroborosDialog.optional') }}</span>
           </label>
           <input
             id="ouroboros-check"
             v-model="checkCmd"
             type="text"
-            placeholder="e.g. cd backend && uv run pytest tests/test_x.py"
+            :placeholder="t('superAgentOuroborosDialog.checkCommandPlaceholder')"
             :disabled="submitting"
           />
           <p class="form-hint">
-            When set, the judge runs this command after each turn and
-            uses its exit code instead of asking an LLM.
+            {{ t('superAgentOuroborosDialog.checkCommandHint') }}
           </p>
         </div>
 
@@ -257,11 +255,9 @@ function onCancel() {
               :disabled="submitting"
             />
             <span class="toggle-body">
-              <span class="toggle-title">Yolo mode</span>
+              <span class="toggle-title">{{ t('superAgentOuroborosDialog.yoloMode') }}</span>
               <span class="toggle-sub">
-                Bypass project allowed-accounts whitelist and
-                permission prompts. Use when this SA needs free
-                rein.
+                {{ t('superAgentOuroborosDialog.yoloModeSub') }}
               </span>
             </span>
           </label>
@@ -274,14 +270,14 @@ function onCancel() {
             :disabled="submitting"
             @click="onCancel"
           >
-            Cancel
+            {{ t('common.cancel') }}
           </button>
           <button
             type="submit"
             class="btn btn-primary"
             :disabled="!goalIsValid || submitting"
           >
-            {{ submitting ? 'Starting…' : 'Run Ouroboros' }}
+            {{ submitting ? t('superAgentOuroborosDialog.starting') : t('superAgentOuroborosDialog.runButton') }}
           </button>
         </footer>
       </form>

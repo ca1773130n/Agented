@@ -16,6 +16,9 @@ import { useFocusTrap } from '../composables/useFocusTrap';
 import { usePagination } from '../composables/usePagination';
 import { useWebMcpPageTools } from '../composables/useWebMcpPageTools';
 import { useTourMachine } from '../composables/useTourMachine';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const router = useRouter();
 const tourMachine = useTourMachine();
@@ -38,8 +41,8 @@ const { searchQuery, sortField, sortOrder, filteredAndSorted, hasActiveFilter, r
 const pagination = usePagination({ defaultPageSize: 25, storageKey: 'products-pagination' });
 
 const sortOptions = [
-  { value: 'name', label: 'Name' },
-  { value: 'created_at', label: 'Date Created' },
+  { value: 'name', label: t('products.sortName') },
+  { value: 'created_at', label: t('products.sortCreated') },
 ];
 
 const newProduct = ref({ name: '', description: '', status: 'active', owner_team_id: '' });
@@ -107,7 +110,7 @@ const isCreating = ref(false);
 async function createProduct() {
   if (isCreating.value) return;
   if (!newProduct.value.name.trim()) {
-    showToast('Product name is required', 'error');
+    showToast(t('products.nameRequired'), 'error');
     return;
   }
   isCreating.value = true;
@@ -118,7 +121,7 @@ async function createProduct() {
       status: newProduct.value.status,
       owner_team_id: newProduct.value.owner_team_id || undefined
     });
-    showToast('Product created successfully', 'success');
+    showToast(t('products.createSuccess'), 'success');
     showCreateModal.value = false;
     newProduct.value = { name: '', description: '', status: 'active', owner_team_id: '' };
     await loadProducts();
@@ -134,7 +137,7 @@ async function createProduct() {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to create product', 'error');
+      showToast(t('products.createError'), 'error');
     }
   } finally {
     isCreating.value = false;
@@ -151,7 +154,7 @@ async function deleteProduct() {
   deletingId.value = productToDelete.value.id;
   try {
     await productApi.delete(productToDelete.value.id);
-    showToast(`Product "${productToDelete.value.name}" deleted`, 'success');
+    showToast(t('products.deleteSuccess', { name: productToDelete.value.name }), 'success');
     showDeleteConfirm.value = false;
     productToDelete.value = null;
     await loadProducts();
@@ -159,7 +162,7 @@ async function deleteProduct() {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to delete product', 'error');
+      showToast(t('products.deleteError'), 'error');
     }
   } finally {
     deletingId.value = null;
@@ -182,13 +185,13 @@ onMounted(() => {
 
 <template>
   <div class="products-page">
-    <PageHeader title="Products" subtitle="Manage your product portfolio and their associated projects">
+    <PageHeader :title="t('products.title')" :subtitle="t('products.subtitle')">
       <template #actions>
         <button class="btn btn-primary" data-tour="create-product" @click="showCreateModal = true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 5v14M5 12h14"/>
           </svg>
-          Create Product
+          {{ t('products.createProduct') }}
         </button>
       </template>
     </PageHeader>
@@ -201,20 +204,20 @@ onMounted(() => {
       :sort-options="sortOptions"
       :result-count="resultCount"
       :total-count="totalCount"
-      placeholder="Search products..."
+      :placeholder="t('products.searchPlaceholder')"
     />
 
-    <LoadingState v-if="isLoading" message="Loading products..." />
+    <LoadingState v-if="isLoading" :message="t('products.loading')" />
 
-    <ErrorState v-else-if="loadError" title="Failed to load products" :message="loadError" @retry="loadProducts" />
+    <ErrorState v-else-if="loadError" :title="t('products.loadFailed')" :message="loadError" @retry="loadProducts" />
 
-    <EmptyState v-else-if="products.length === 0" title="No products yet" description="Create your first product to organize your projects">
+    <EmptyState v-else-if="products.length === 0" :title="t('products.emptyTitle')" :description="t('products.emptyDescription')">
       <template #actions>
-        <button class="btn btn-primary" @click="showCreateModal = true">Create Your First Product</button>
+        <button class="btn btn-primary" @click="showCreateModal = true">{{ t('products.createFirst') }}</button>
       </template>
     </EmptyState>
 
-    <EmptyState v-else-if="filteredAndSorted.length === 0 && hasActiveFilter" title="No matching products" description="Try a different search term" />
+    <EmptyState v-else-if="filteredAndSorted.length === 0 && hasActiveFilter" :title="t('products.noMatchTitle')" :description="t('products.noMatchDescription')" />
 
     <div v-else class="products-grid">
       <router-link
@@ -240,11 +243,11 @@ onMounted(() => {
 
         <div class="product-meta">
           <div v-if="product.owner_team_name" class="meta-item">
-            <span class="meta-label">Owner:</span>
+            <span class="meta-label">{{ t('products.ownerLabel') }}</span>
             <span class="meta-value">{{ product.owner_team_name }}</span>
           </div>
           <div class="meta-item">
-            <span class="meta-label">Projects:</span>
+            <span class="meta-label">{{ t('products.projectsLabel') }}</span>
             <span class="meta-value">{{ product.project_count }}</span>
           </div>
         </div>
@@ -255,7 +258,7 @@ onMounted(() => {
             <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
             </svg>
-            {{ deletingId === product.id ? 'Deleting...' : 'Delete' }}
+            {{ deletingId === product.id ? t('products.deleting') : t('common.delete') }}
           </button>
         </div>
       </router-link>
@@ -279,38 +282,38 @@ onMounted(() => {
       <div v-if="showCreateModal" ref="createModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-create-product" tabindex="-1" @click.self="showCreateModal = false" @keydown.escape="showCreateModal = false">
         <div class="modal">
           <div class="modal-header">
-            <h2 id="modal-title-create-product">Create Product</h2>
+            <h2 id="modal-title-create-product">{{ t('products.createProduct') }}</h2>
             <button class="modal-close" @click="showCreateModal = false">&times;</button>
           </div>
           <div class="modal-body">
             <div class="form-group">
-              <label>Product Name *</label>
-              <input v-model="newProduct.name" type="text" placeholder="e.g., Core Platform" />
+              <label>{{ t('products.productNameLabel') }}</label>
+              <input v-model="newProduct.name" type="text" :placeholder="t('products.productNamePlaceholder')" />
             </div>
             <div class="form-group">
-              <label>Description</label>
-              <textarea v-model="newProduct.description" placeholder="Describe the product..."></textarea>
+              <label>{{ t('products.descriptionLabel') }}</label>
+              <textarea v-model="newProduct.description" :placeholder="t('products.descriptionPlaceholder')"></textarea>
             </div>
             <div class="form-group">
-              <label>Status</label>
+              <label>{{ t('products.statusLabel') }}</label>
               <select v-model="newProduct.status">
-                <option value="active">Active</option>
-                <option value="planning">Planning</option>
-                <option value="archived">Archived</option>
+                <option value="active">{{ t('products.statusActive') }}</option>
+                <option value="planning">{{ t('products.statusPlanning') }}</option>
+                <option value="archived">{{ t('products.statusArchived') }}</option>
               </select>
             </div>
             <div class="form-group">
-              <label>Owner Team</label>
+              <label>{{ t('products.ownerTeamLabel') }}</label>
               <select v-model="newProduct.owner_team_id">
-                <option value="">No owner</option>
+                <option value="">{{ t('products.noOwner') }}</option>
                 <option v-for="team in teams" :key="team.id" :value="team.id">{{ team.name }}</option>
               </select>
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" @click="showCreateModal = false">Cancel</button>
+            <button class="btn btn-secondary" @click="showCreateModal = false">{{ t('common.cancel') }}</button>
             <button class="btn btn-primary" :disabled="isCreating" @click="createProduct">
-              {{ isCreating ? 'Creating…' : 'Create Product' }}
+              {{ isCreating ? t('products.creating') : t('products.createProduct') }}
             </button>
           </div>
         </div>
@@ -319,10 +322,10 @@ onMounted(() => {
 
     <ConfirmModal
       :open="showDeleteConfirm"
-      title="Delete Product"
-      :message="`Are you sure you want to delete \u201C${productToDelete?.name}\u201D? This action cannot be undone.`"
-      confirm-label="Delete"
-      cancel-label="Cancel"
+      :title="t('products.deleteTitle')"
+      :message="t('products.deleteConfirm', { name: productToDelete?.name })"
+      :confirm-label="t('common.delete')"
+      :cancel-label="t('common.cancel')"
       variant="danger"
       @confirm="deleteProduct"
       @cancel="showDeleteConfirm = false"

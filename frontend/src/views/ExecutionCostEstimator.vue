@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { modelPricingApi } from '../services/api/model-pricing';
+
+const { t } = useI18n();
 
 const promptText = ref('');
 const codebaseSize = ref<'small' | 'medium' | 'large' | 'xlarge'>('medium');
@@ -43,10 +46,10 @@ const CODEBASE_TOKENS: Record<string, number> = {
 };
 
 const CODEBASE_LABELS: Record<string, string> = {
-  small: 'Small (<1k files)',
-  medium: 'Medium (1k–10k files)',
-  large: 'Large (10k–50k files)',
-  xlarge: 'Extra Large (50k+ files)',
+  small: t('executionCostEstimator.codebase.small'),
+  medium: t('executionCostEstimator.codebase.medium'),
+  large: t('executionCostEstimator.codebase.large'),
+  xlarge: t('executionCostEstimator.codebase.xlarge'),
 };
 
 function countTokens(text: string): number {
@@ -97,8 +100,8 @@ function speedColor(speed: string): string {
   <div class="cost-estimator">
 
     <PageHeader
-      title="Execution Cost Estimator"
-      subtitle="Estimate token usage and dollar cost before running your bot."
+      :title="t('executionCostEstimator.title')"
+      :subtitle="t('executionCostEstimator.subtitle')"
     />
 
     <div class="estimator-layout">
@@ -109,23 +112,23 @@ function speedColor(speed: string): string {
               <line x1="12" y1="1" x2="12" y2="23"/>
               <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
             </svg>
-            Estimate Parameters
+            {{ t('executionCostEstimator.estimateParameters') }}
           </h3>
         </div>
         <div class="input-body">
           <div class="field-group">
-            <label class="field-label">Prompt Template</label>
+            <label class="field-label">{{ t('executionCostEstimator.promptTemplate') }}</label>
             <textarea
               v-model="promptText"
               class="text-area"
               rows="6"
-              placeholder="Paste your prompt template here..."
+              :placeholder="t('executionCostEstimator.promptPlaceholder')"
             />
-            <div class="field-hint">{{ formatTokens(promptTokens) }} tokens estimated</div>
+            <div class="field-hint">{{ t('executionCostEstimator.tokensEstimated', { count: formatTokens(promptTokens) }) }}</div>
           </div>
 
           <div class="field-group">
-            <label class="field-label">Typical Codebase Size</label>
+            <label class="field-label">{{ t('executionCostEstimator.codebaseSize') }}</label>
             <div class="size-pills">
               <button
                 v-for="(label, key) in CODEBASE_LABELS"
@@ -140,7 +143,7 @@ function speedColor(speed: string): string {
           </div>
 
           <div class="field-group">
-            <label class="field-label">Model</label>
+            <label class="field-label">{{ t('executionCostEstimator.model') }}</label>
             <select v-model="selectedModel" class="select-input">
               <option v-for="m in models" :key="m.id" :value="m.id">{{ m.name }}</option>
             </select>
@@ -154,7 +157,7 @@ function speedColor(speed: string): string {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
             </svg>
-            Cost Estimate
+            {{ t('executionCostEstimator.costEstimate') }}
           </h3>
         </div>
         <div class="estimate-body">
@@ -164,31 +167,31 @@ function speedColor(speed: string): string {
               <span class="range-sep">–</span>
               <span class="range-high">{{ formatCost(estimatedCostHigh) }}</span>
             </div>
-            <div class="estimate-label">estimated per execution</div>
+            <div class="estimate-label">{{ t('executionCostEstimator.estimatedPerExecution') }}</div>
           </div>
 
           <div class="token-breakdown">
             <div class="token-row">
-              <span class="token-label">Prompt tokens</span>
+              <span class="token-label">{{ t('executionCostEstimator.promptTokens') }}</span>
               <span class="token-val">{{ formatTokens(promptTokens) }}</span>
             </div>
             <div class="token-row">
-              <span class="token-label">Context (codebase)</span>
+              <span class="token-label">{{ t('executionCostEstimator.contextCodebase') }}</span>
               <span class="token-val">{{ formatTokens(contextTokens) }}</span>
             </div>
             <div class="token-row token-total">
-              <span class="token-label">Total input</span>
+              <span class="token-label">{{ t('executionCostEstimator.totalInput') }}</span>
               <span class="token-val">{{ formatTokens(totalInputTokens) }}</span>
             </div>
             <div class="token-row">
-              <span class="token-label">Est. output</span>
+              <span class="token-label">{{ t('executionCostEstimator.estOutput') }}</span>
               <span class="token-val">{{ formatTokens(estimatedOutputTokens) }}</span>
             </div>
           </div>
 
           <div class="context-bar-wrap">
             <div class="context-bar-label">
-              <span>Context window usage</span>
+              <span>{{ t('executionCostEstimator.contextWindowUsage') }}</span>
               <span>{{ contextFillPct(selectedModelInfo).toFixed(1) }}%</span>
             </div>
             <div class="context-bar">
@@ -201,7 +204,7 @@ function speedColor(speed: string): string {
               />
             </div>
             <div v-if="contextFillPct(selectedModelInfo) > 80" class="bar-warning">
-              Warning: High context usage risks truncation
+              {{ t('executionCostEstimator.truncationWarning') }}
             </div>
           </div>
         </div>
@@ -219,19 +222,19 @@ function speedColor(speed: string): string {
             <line x1="9" y1="3" x2="9" y2="21"/>
             <line x1="15" y1="3" x2="15" y2="21"/>
           </svg>
-          Model Comparison
+          {{ t('executionCostEstimator.modelComparison') }}
         </h3>
       </div>
       <div class="table-wrap">
         <table class="compare-table">
           <thead>
             <tr>
-              <th>Model</th>
-              <th>Input / 1M tokens</th>
-              <th>Output / 1M tokens</th>
-              <th>Est. cost (this request)</th>
-              <th>Context window</th>
-              <th>Speed</th>
+              <th>{{ t('executionCostEstimator.model') }}</th>
+              <th>{{ t('executionCostEstimator.table.input') }}</th>
+              <th>{{ t('executionCostEstimator.table.output') }}</th>
+              <th>{{ t('executionCostEstimator.table.estCost') }}</th>
+              <th>{{ t('executionCostEstimator.table.contextWindow') }}</th>
+              <th>{{ t('executionCostEstimator.table.speed') }}</th>
             </tr>
           </thead>
           <tbody>

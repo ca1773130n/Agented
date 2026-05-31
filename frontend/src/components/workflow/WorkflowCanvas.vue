@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { markRaw, onMounted, nextTick, toRef, watch, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { VueFlow, useVueFlow, ConnectionMode } from '@vue-flow/core'
 import type { Connection, Node, Edge, NodeTypesObject } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
@@ -77,6 +78,7 @@ const {
 } = useWorkflowCanvas(workflowIdRef)
 
 const { layoutNodes } = useCanvasLayout()
+const { t } = useI18n()
 
 const {
   onConnect,
@@ -140,8 +142,8 @@ function highlightNodes(nodeIds: string[]) {
 // ---------------------------------------------------------------------------
 
 onConnect((params) => {
-  const label = params.sourceHandle === 'true' ? 'True'
-              : params.sourceHandle === 'false' ? 'False'
+  const label = params.sourceHandle === 'true' ? t('workflowCanvas.edgeTrue')
+              : params.sourceHandle === 'false' ? t('workflowCanvas.edgeFalse')
               : undefined
   addEdges([
     {

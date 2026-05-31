@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   /** Async function that fetches the entity. Throw on not-found. */
@@ -35,7 +38,9 @@ async function load(opts: { keepStale?: boolean } = {}) {
       router.replace({ name: 'not-found' });
       return;
     }
-    loadError.value = error?.message || `Failed to load ${props.entityLabel || 'entity'}`;
+    loadError.value =
+      error?.message ||
+      t('entityLayout.loadFailed', { entity: props.entityLabel || t('entityLayout.entity') });
   } finally {
     isLoading.value = false;
   }
@@ -53,7 +58,7 @@ watch(() => route.params, () => load({ keepStale: true }), { deep: true });
     <!-- Loading state -->
     <div v-if="isLoading" class="entity-layout__loading">
       <div class="entity-layout__spinner" />
-      <span class="entity-layout__loading-text">Loading {{ entityLabel || 'entity' }}...</span>
+      <span class="entity-layout__loading-text">{{ t('entityLayout.loading', { entity: entityLabel || t('entityLayout.entity') }) }}</span>
     </div>
     <!-- Error state -->
     <div v-else-if="loadError" class="entity-layout__error">
@@ -63,8 +68,8 @@ watch(() => route.params, () => load({ keepStale: true }), { deep: true });
       </svg>
       <p class="entity-layout__error-message">{{ loadError }}</p>
       <div class="entity-layout__error-actions">
-        <button class="btn" @click="() => load()">Retry</button>
-        <button class="btn" @click="router.back()">Go Back</button>
+        <button class="btn" @click="() => load()">{{ t('common.retry') }}</button>
+        <button class="btn" @click="router.back()">{{ t('entityLayout.goBack') }}</button>
       </div>
     </div>
     <!-- Content slot (only rendered when entity is loaded) -->

@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useToast } from '../composables/useToast';
 import { triggerApi } from '../services/api';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 const triggers = ref<Array<{ id: string; name: string }>>([]);
@@ -65,13 +67,13 @@ jobs:
 
 function copyYaml() {
   navigator.clipboard.writeText(yamlSnippet.value).then(() => {
-    showToast('YAML snippet copied to clipboard', 'success');
+    showToast(t('gitHubActions.toast.yamlCopied'), 'success');
   });
 }
 
 function copyWebhookUrl() {
   navigator.clipboard.writeText(generatedWebhookUrl.value).then(() => {
-    showToast('Webhook URL copied', 'success');
+    showToast(t('gitHubActions.toast.webhookCopied'), 'success');
   });
 }
 </script>
@@ -81,8 +83,8 @@ function copyWebhookUrl() {
 
     <div class="page-title-row">
       <div>
-        <h2>GitHub Actions Integration</h2>
-        <p class="subtitle">Embed Agented bot analysis in your CI/CD pipelines</p>
+        <h2>{{ t('gitHubActions.title') }}</h2>
+        <p class="subtitle">{{ t('gitHubActions.subtitle') }}</p>
       </div>
     </div>
 
@@ -90,37 +92,37 @@ function copyWebhookUrl() {
       <!-- Generator controls -->
       <div class="card">
         <div class="card-header">
-          <h3>Configuration</h3>
+          <h3>{{ t('gitHubActions.configuration') }}</h3>
         </div>
 
         <div class="field-group">
-          <label class="field-label">Trigger</label>
+          <label class="field-label">{{ t('gitHubActions.triggerLabel') }}</label>
           <select v-model="botId" class="field-input" :disabled="loading">
-            <option v-if="loading" value="">Loading…</option>
-            <option v-else-if="triggers.length === 0" value="">No triggers found</option>
-            <option v-for="t in triggers" :key="t.id" :value="t.id">{{ t.name }}</option>
+            <option v-if="loading" value="">{{ t('common.loading') }}</option>
+            <option v-else-if="triggers.length === 0" value="">{{ t('gitHubActions.noTriggers') }}</option>
+            <option v-for="trg in triggers" :key="trg.id" :value="trg.id">{{ trg.name }}</option>
           </select>
-          <p class="field-hint">Which trigger to fire on each PR or push event</p>
+          <p class="field-hint">{{ t('gitHubActions.triggerHint') }}</p>
         </div>
 
         <div class="field-group">
-          <label class="field-label">Webhook URL (generated)</label>
+          <label class="field-label">{{ t('gitHubActions.webhookUrlLabel') }}</label>
           <div class="copy-row">
             <input
               :value="generatedWebhookUrl"
               class="field-input copy-input"
               readonly
             />
-            <button class="btn btn-secondary btn-sm" @click="copyWebhookUrl">Copy</button>
+            <button class="btn btn-secondary btn-sm" @click="copyWebhookUrl">{{ t('gitHubActions.copy') }}</button>
           </div>
         </div>
 
         <div class="field-group">
-          <label class="field-label">Store API Key as GitHub Secret</label>
+          <label class="field-label">{{ t('gitHubActions.storeSecretLabel') }}</label>
           <div class="secret-info card-inner">
             <span class="secret-name">AGENTED_API_KEY</span>
             <p class="field-hint">
-              Add this secret in your repo under Settings &gt; Secrets and variables &gt; Actions
+              {{ t('gitHubActions.secretHint') }}
             </p>
           </div>
         </div>
@@ -129,14 +131,14 @@ function copyWebhookUrl() {
       <!-- How it works -->
       <div class="card">
         <div class="card-header">
-          <h3>How it works</h3>
+          <h3>{{ t('gitHubActions.howItWorks') }}</h3>
         </div>
         <ol class="steps-list">
-          <li>A PR or push triggers the GitHub Actions workflow</li>
-          <li>The workflow calls your Agented webhook endpoint</li>
-          <li>Agented dispatches the configured bot with PR context</li>
-          <li>The bot runs its prompt and reports findings</li>
-          <li>Results are visible in the Agented execution logs</li>
+          <li>{{ t('gitHubActions.steps.step1') }}</li>
+          <li>{{ t('gitHubActions.steps.step2') }}</li>
+          <li>{{ t('gitHubActions.steps.step3') }}</li>
+          <li>{{ t('gitHubActions.steps.step4') }}</li>
+          <li>{{ t('gitHubActions.steps.step5') }}</li>
         </ol>
       </div>
     </div>
@@ -144,8 +146,8 @@ function copyWebhookUrl() {
     <!-- YAML snippet -->
     <div class="card snippet-card">
       <div class="card-header">
-        <h3>Workflow YAML Snippet</h3>
-        <button class="btn btn-secondary btn-sm" @click="copyYaml">Copy YAML</button>
+        <h3>{{ t('gitHubActions.yamlSnippet') }}</h3>
+        <button class="btn btn-secondary btn-sm" @click="copyYaml">{{ t('gitHubActions.copyYaml') }}</button>
       </div>
       <pre class="yaml-code">{{ yamlSnippet }}</pre>
     </div>

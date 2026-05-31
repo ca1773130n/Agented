@@ -2,6 +2,8 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
+import { useI18n } from 'vue-i18n';
+const { t } = useI18n();
 const showToast = useToast();
 
 const isLoading = ref(true);
@@ -47,20 +49,20 @@ async function loadData() {
 
 async function togglePushNotifications() {
   if (!('Notification' in window)) {
-    showToast('Push notifications not supported in this browser', 'error');
+    showToast(t('mobileExecutionMonitor.toast.notSupported'), 'error');
     return;
   }
   if (isPushEnabled.value) {
     isPushEnabled.value = false;
-    showToast('Push notifications disabled', 'success');
+    showToast(t('mobileExecutionMonitor.toast.disabled'), 'success');
     return;
   }
   const permission = await Notification.requestPermission();
   if (permission === 'granted') {
     isPushEnabled.value = true;
-    showToast('Push notifications enabled for bot failures', 'success');
+    showToast(t('mobileExecutionMonitor.toast.enabled'), 'success');
   } else {
-    showToast('Notification permission denied', 'error');
+    showToast(t('mobileExecutionMonitor.toast.permissionDenied'), 'error');
   }
 }
 
@@ -88,9 +90,9 @@ function statusColor(status: Execution['status']): string {
 
 function timeAgo(iso: string): string {
   const secs = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (secs < 60) return `${secs}s ago`;
-  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
-  return `${Math.floor(secs / 3600)}h ago`;
+  if (secs < 60) return t('mobileExecutionMonitor.secondsAgo', { count: secs });
+  if (secs < 3600) return t('mobileExecutionMonitor.minutesAgo', { count: Math.floor(secs / 60) });
+  return t('mobileExecutionMonitor.hoursAgo', { count: Math.floor(secs / 3600) });
 }
 
 onMounted(() => {
@@ -106,20 +108,20 @@ onUnmounted(() => {
 <template>
   <div class="mobile-monitor-page">
 
-    <LoadingState v-if="isLoading" message="Loading executions..." />
+    <LoadingState v-if="isLoading" :message="t('mobileExecutionMonitor.loading')" />
 
     <template v-else>
       <!-- Mobile-first header -->
       <div class="monitor-header">
         <div class="header-left">
-          <h1>Execution Monitor</h1>
-          <p class="refresh-note">Auto-refreshes every 15s</p>
+          <h1>{{ t('mobileExecutionMonitor.title') }}</h1>
+          <p class="refresh-note">{{ t('mobileExecutionMonitor.autoRefresh') }}</p>
         </div>
         <button class="push-btn" :class="{ enabled: isPushEnabled }" @click="togglePushNotifications">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/>
           </svg>
-          {{ isPushEnabled ? 'Alerts On' : 'Enable Alerts' }}
+          {{ isPushEnabled ? t('mobileExecutionMonitor.alertsOn') : t('mobileExecutionMonitor.enableAlerts') }}
         </button>
       </div>
 
@@ -127,15 +129,15 @@ onUnmounted(() => {
       <div class="status-summary">
         <div class="status-pill running" :class="{ active: filterStatus === 'running' }" @click="filterStatus = filterStatus === 'running' ? 'all' : 'running'">
           <span class="pill-count">{{ runningCount }}</span>
-          <span class="pill-label">Running</span>
+          <span class="pill-label">{{ t('mobileExecutionMonitor.running') }}</span>
         </div>
         <div class="status-pill failed" :class="{ active: filterStatus === 'failed' }" @click="filterStatus = filterStatus === 'failed' ? 'all' : 'failed'">
           <span class="pill-count">{{ failedCount }}</span>
-          <span class="pill-label">Failed</span>
+          <span class="pill-label">{{ t('mobileExecutionMonitor.failed') }}</span>
         </div>
         <div class="status-pill success" :class="{ active: filterStatus === 'success' }" @click="filterStatus = filterStatus === 'success' ? 'all' : 'success'">
           <span class="pill-count">{{ successCount }}</span>
-          <span class="pill-label">Succeeded</span>
+          <span class="pill-label">{{ t('mobileExecutionMonitor.succeeded') }}</span>
         </div>
       </div>
 
@@ -162,34 +164,34 @@ onUnmounted(() => {
           <!-- Expanded detail -->
           <div v-if="selectedExec?.id === exec.id" class="exec-detail">
             <div class="detail-row">
-              <span class="detail-key">ID</span>
+              <span class="detail-key">{{ t('mobileExecutionMonitor.detail.id') }}</span>
               <span class="detail-val">{{ exec.id }}</span>
             </div>
             <div class="detail-row">
-              <span class="detail-key">Bot</span>
+              <span class="detail-key">{{ t('mobileExecutionMonitor.detail.bot') }}</span>
               <span class="detail-val">{{ exec.bot_id }}</span>
             </div>
             <div class="detail-row">
-              <span class="detail-key">Status</span>
+              <span class="detail-key">{{ t('mobileExecutionMonitor.detail.status') }}</span>
               <span class="detail-val" :style="{ color: statusColor(exec.status) }">{{ exec.status }}</span>
             </div>
             <div class="detail-row">
-              <span class="detail-key">Started</span>
+              <span class="detail-key">{{ t('mobileExecutionMonitor.detail.started') }}</span>
               <span class="detail-val">{{ new Date(exec.started_at).toLocaleTimeString() }}</span>
             </div>
             <div v-if="exec.finished_at" class="detail-row">
-              <span class="detail-key">Finished</span>
+              <span class="detail-key">{{ t('mobileExecutionMonitor.detail.finished') }}</span>
               <span class="detail-val">{{ new Date(exec.finished_at).toLocaleTimeString() }}</span>
             </div>
             <div v-if="exec.error" class="detail-row error-row">
-              <span class="detail-key">Error</span>
+              <span class="detail-key">{{ t('mobileExecutionMonitor.detail.error') }}</span>
               <span class="detail-val error-val">{{ exec.error }}</span>
             </div>
           </div>
         </div>
 
         <div v-if="filteredExecutions.length === 0" class="empty-list">
-          No {{ filterStatus === 'all' ? '' : filterStatus }} executions found.
+          {{ filterStatus === 'all' ? t('mobileExecutionMonitor.emptyAll') : t('mobileExecutionMonitor.emptyFiltered', { status: filterStatus }) }}
         </div>
       </div>
 
@@ -198,7 +200,7 @@ onUnmounted(() => {
           <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
           <line x1="12" y1="18" x2="12.01" y2="18"/>
         </svg>
-        This view is optimized for mobile. Enable push alerts to get notified of failures at 2am.
+        {{ t('mobileExecutionMonitor.mobileHint') }}
       </div>
     </template>
   </div>

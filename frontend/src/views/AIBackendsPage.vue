@@ -1,19 +1,19 @@
 <template>
   <PageLayout >
-    <PageHeader title="AI Backends" subtitle="Manage AI backend providers and accounts">
+    <PageHeader :title="t('aIBackends.title')" :subtitle="t('aIBackends.subtitle')">
       <template #actions>
         <button
           class="btn btn-ghost upgrade-cliproxy-btn"
           :disabled="isUpgradingCliproxy"
           data-testid="upgrade-cliproxy-btn"
-          :title="isUpgradingCliproxy ? 'Upgrade in progress…' : 'Upgrade the cliproxyapi binary (admin only)'"
+          :title="isUpgradingCliproxy ? t('aIBackends.upgradeInProgress') : t('aIBackends.upgradeCliproxyTooltip')"
           @click="upgradeCliproxy"
         >
           <svg v-if="!isUpgradingCliproxy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
             <polyline points="23 4 23 10 17 10"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/>
           </svg>
           <div v-else class="spinner-sm spinner-sm-dark"></div>
-          {{ isUpgradingCliproxy ? 'Upgrading…' : 'Upgrade CLIProxy' }}
+          {{ isUpgradingCliproxy ? t('aIBackends.upgrading') : t('aIBackends.upgradeCliproxy') }}
         </button>
         <button
           class="btn btn-secondary detect-btn"
@@ -25,7 +25,7 @@
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
           <div v-else class="spinner-sm spinner-sm-dark"></div>
-          {{ isDetecting ? 'Detecting…' : 'Detect Existing' }}
+          {{ isDetecting ? t('aIBackends.detecting') : t('aIBackends.detectExisting') }}
         </button>
         <button
           class="btn btn-primary add-account-btn"
@@ -36,7 +36,7 @@
             <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
           <div v-else class="spinner-sm"></div>
-          {{ isAddingAccount ? 'Logging in...' : 'Add Account' }}
+          {{ isAddingAccount ? t('aIBackends.loggingIn') : t('aIBackends.addAccount') }}
         </button>
       </template>
     </PageHeader>
@@ -49,14 +49,14 @@
          hides when there are no missing credentials. -->
     <CredentialStatusBanner />
 
-    <LoadingState v-if="isLoading" message="Loading backends..." />
+    <LoadingState v-if="isLoading" :message="t('aIBackends.loadingBackends')" />
 
     <ErrorState v-else-if="error" :message="error" @retry="loadBackends()" />
 
     <EmptyState
       v-else-if="backends.length === 0"
-      title="No backends configured"
-      description="We can scan this machine for existing CLI logins (claude / codex / gemini / opencode)."
+      :title="t('aIBackends.emptyTitle')"
+      :description="t('aIBackends.emptyDescription')"
     >
       <template #icon>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -71,7 +71,7 @@
           data-testid="detect-existing-empty-btn"
           @click="openDetectModal"
         >
-          {{ isDetecting ? 'Detecting…' : 'Detect Existing Logins' }}
+          {{ isDetecting ? t('aIBackends.detecting') : t('aIBackends.detectExistingLogins') }}
         </button>
       </template>
     </EmptyState>
@@ -107,7 +107,7 @@
           </div>
           <div class="backend-status-area">
             <span class="backend-status" :class="{ installed: backend.is_installed }">
-              {{ backend.is_installed ? 'Installed' : 'Not Installed' }}
+              {{ backend.is_installed ? t('common.installed') : t('common.notInstalled') }}
             </span>
             <button
               v-if="!backend.is_installed"
@@ -116,30 +116,30 @@
               @click.stop="installBackendCli(backend)"
             >
               <div v-if="installingBackend === backend.id" class="spinner-sm"></div>
-              {{ installingBackend === backend.id ? 'Installing...' : 'Install' }}
+              {{ installingBackend === backend.id ? t('aIBackends.installing') : t('aIBackends.install') }}
             </button>
           </div>
         </div>
 
         <div class="backend-meta">
           <div v-if="backend.models?.length" class="meta-item">
-            <span class="meta-label">Models:</span>
+            <span class="meta-label">{{ t('aIBackends.metaModels') }}</span>
             <span class="meta-value">
               <span v-for="model in backend.models" :key="model" class="model-pill">{{ model }}</span>
             </span>
           </div>
           <div class="meta-item">
-            <span class="meta-label">Accounts:</span>
+            <span class="meta-label">{{ t('aIBackends.metaAccounts') }}</span>
             <span class="meta-value account-badge" :class="{ 'has-accounts': (backend.account_count ?? 0) > 0 }">
-              {{ (backend.account_count ?? 0) > 0 ? backend.account_count : 'None' }}
+              {{ (backend.account_count ?? 0) > 0 ? backend.account_count : t('aIBackends.none') }}
             </span>
           </div>
           <div class="meta-item">
-            <span class="meta-label">Last Used:</span>
+            <span class="meta-label">{{ t('aIBackends.metaLastUsed') }}</span>
             <span class="meta-value">{{ formatLastUsed(backend.last_used_at) }}</span>
           </div>
           <div v-if="getCapabilityTags(backend.id).length > 0" class="meta-item">
-            <span class="meta-label">Capabilities:</span>
+            <span class="meta-label">{{ t('aIBackends.metaCapabilities') }}</span>
             <span class="meta-value">
               <span v-for="tag in getCapabilityTags(backend.id)" :key="tag" class="capability-pill">{{ tag }}</span>
             </span>
@@ -162,11 +162,11 @@
       >
         <div class="modal detect-modal">
           <div class="modal-header">
-            <h2 id="detect-modal-title">Detected CLI logins</h2>
+            <h2 id="detect-modal-title">{{ t('aIBackends.detectedLoginsTitle') }}</h2>
             <button
               type="button"
               class="modal-close-btn"
-              aria-label="Close"
+              :aria-label="t('common.close')"
               data-testid="detect-modal-close"
               @click="closeDetectModal"
             >×</button>
@@ -175,7 +175,7 @@
           <div class="modal-body">
             <div v-if="isDetecting" class="detect-loading">
               <div class="spinner-md"></div>
-              <p>Probing CLIs on this machine. This may take ~12 s per candidate…</p>
+              <p>{{ t('aIBackends.probingClis') }}</p>
             </div>
 
             <div
@@ -183,8 +183,8 @@
               class="detect-empty"
               data-testid="detect-empty"
             >
-              <p><strong>Nothing found.</strong></p>
-              <p>Install a CLI like <code>claude</code>, <code>codex</code>, <code>gemini</code>, or <code>opencode</code> and login, then try again.</p>
+              <p><strong>{{ t('aIBackends.nothingFound') }}</strong></p>
+              <p>{{ t('aIBackends.installCliHintPre') }} <code>claude</code>, <code>codex</code>, <code>gemini</code>, {{ t('aIBackends.installCliHintOr') }} <code>opencode</code> {{ t('aIBackends.installCliHintPost') }}</p>
             </div>
 
             <ul v-else class="detect-list" data-testid="detect-list">
@@ -208,13 +208,13 @@
                     :title="item.error ?? undefined"
                     :aria-label="item.error ?? undefined"
                   >
-                    {{ item.is_logged_in ? 'Logged in' : 'Not logged in' }}
+                    {{ item.is_logged_in ? t('aIBackends.loggedIn') : t('aIBackends.notLoggedIn') }}
                   </span>
                   <span
                     v-if="item.backend_id"
                     class="already-imported-badge"
                     data-testid="already-imported"
-                  >Already imported</span>
+                  >{{ t('aIBackends.alreadyImported') }}</span>
                   <button
                     v-else-if="item.is_logged_in"
                     type="button"
@@ -224,9 +224,9 @@
                     @click="importItem(item)"
                   >
                     <div v-if="importingPath === item.path" class="spinner-sm"></div>
-                    {{ importingPath === item.path ? 'Importing…' : 'Import' }}
+                    {{ importingPath === item.path ? t('aIBackends.importing') : t('aIBackends.import') }}
                   </button>
-                  <span v-else class="not-logged-hint">Login required</span>
+                  <span v-else class="not-logged-hint">{{ t('aIBackends.loginRequired') }}</span>
                 </div>
               </li>
             </ul>
@@ -239,12 +239,12 @@
               :disabled="isDetecting"
               data-testid="detect-rescan"
               @click="rescan"
-            >Rescan</button>
+            >{{ t('aIBackends.rescan') }}</button>
             <button
               type="button"
               class="btn btn-secondary"
               @click="closeDetectModal"
-            >Close</button>
+            >{{ t('common.close') }}</button>
           </div>
         </div>
       </div>
@@ -252,14 +252,14 @@
 
     <div class="test-panel-section">
       <div class="section-header">
-        <h2>Test Backend</h2>
-        <p class="subtitle">Send a test prompt to verify your backend configuration</p>
+        <h2>{{ t('aIBackends.testBackend') }}</h2>
+        <p class="subtitle">{{ t('aIBackends.testBackendSubtitle') }}</p>
       </div>
       <div class="test-chat-container">
         <AiChatPanel
           density="detailed"
-          welcome-title="Test a backend"
-          placeholder="Ask any backend..."
+          :welcome-title="t('aIBackends.testWelcomeTitle')"
+          :placeholder="t('aIBackends.testPlaceholder')"
         />
       </div>
     </div>
@@ -279,7 +279,9 @@ import CredentialStatusBanner from '../components/credentials/CredentialStatusBa
 import { AiChatPanel } from '@ai-accounts/vue-styled';
 import { useAiAccounts } from '@ai-accounts/vue-headless';
 import { useToast } from '../composables/useToast';
+import { useI18n } from 'vue-i18n';
 
+const { t } = useI18n();
 const { client: aiAccountsClient } = useAiAccounts();
 
 /**
@@ -317,9 +319,9 @@ function parseVersion(version?: string): string {
 }
 
 function formatLastUsed(timestamp?: string): string {
-  if (!timestamp) return 'Never';
+  if (!timestamp) return t('aIBackends.never');
   const d = new Date(timestamp);
-  if (isNaN(d.getTime())) return 'Never';
+  if (isNaN(d.getTime())) return t('aIBackends.never');
   const date = d.toLocaleDateString();
   const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   return `${date} ${time}`;
@@ -339,13 +341,13 @@ const installingBackend = ref<string | null>(null);
 async function installBackendCli(backend: AIBackend) {
   if (installingBackend.value) return;
   installingBackend.value = backend.id;
-  showToast(`Installing ${backend.name} CLI...`, 'info');
+  showToast(t('aIBackends.toastInstalling', { name: backend.name }), 'info');
   try {
     const result = await backendManagementApi.installCli(backend.id);
-    showToast(result.message || `${backend.name} installed`, 'success');
+    showToast(result.message || t('aIBackends.toastInstalled', { name: backend.name }), 'success');
     await loadBackends(true);
   } catch (e: unknown) {
-    showToast(e instanceof Error ? e.message : `Failed to install ${backend.name}`, 'error');
+    showToast(e instanceof Error ? e.message : t('aIBackends.toastInstallFailed', { name: backend.name }), 'error');
   } finally {
     installingBackend.value = null;
   }
@@ -354,17 +356,17 @@ async function installBackendCli(backend: AIBackend) {
 async function addProxyAccount() {
   if (isAddingAccount.value) return;
   isAddingAccount.value = true;
-  showToast('Opening browser for Claude OAuth login...', 'info');
+  showToast(t('aIBackends.toastOpeningOauth'), 'info');
   try {
     const result = await backendManagementApi.proxyLogin();
     if (result.status === 'completed') {
-      showToast('Account added successfully', 'success');
+      showToast(t('aIBackends.toastAccountAdded'), 'success');
       await loadBackends(true);
     } else {
-      showToast(result.message || 'Login failed', 'error');
+      showToast(result.message || t('aIBackends.toastLoginFailed'), 'error');
     }
   } catch (e: unknown) {
-    showToast(e instanceof Error ? e.message : 'Failed to start login', 'error');
+    showToast(e instanceof Error ? e.message : t('aIBackends.toastLoginStartFailed'), 'error');
   } finally {
     isAddingAccount.value = false;
   }
@@ -375,18 +377,18 @@ const isUpgradingCliproxy = ref(false);
 async function upgradeCliproxy() {
   if (isUpgradingCliproxy.value) return;
   isUpgradingCliproxy.value = true;
-  showToast('Upgrading CLIProxy…', 'info');
+  showToast(t('aIBackends.toastUpgradingCliproxy'), 'info');
   try {
     const result = await backendManagementApi.upgradeCliproxy();
     const versionSuffix = result.version ? ` (v${result.version})` : '';
     if (result.success) {
-      showToast(`CLIProxy upgraded${versionSuffix}`, 'success');
+      showToast(t('aIBackends.toastCliproxyUpgraded', { version: versionSuffix }), 'success');
     } else {
-      showToast(`CLIProxy upgrade failed: ${result.message}`, 'error');
+      showToast(t('aIBackends.toastCliproxyUpgradeFailed', { message: result.message }), 'error');
     }
     await loadBackends(true);
   } catch (e: unknown) {
-    showToast(e instanceof Error ? e.message : 'Failed to upgrade CLIProxy', 'error');
+    showToast(e instanceof Error ? e.message : t('aIBackends.toastCliproxyUpgradeError'), 'error');
   } finally {
     isUpgradingCliproxy.value = false;
   }
@@ -404,11 +406,11 @@ async function runDiscovery() {
     const res = await aiAccountsClient.discoverConfigs();
     discoveredItems.value = res.items;
     if (res.items.length === 0) {
-      showToast('No existing CLI logins detected on this machine.', 'info');
+      showToast(t('aIBackends.toastNoLoginsDetected'), 'info');
     }
   } catch (e: unknown) {
     discoveredItems.value = [];
-    showToast(e instanceof Error ? e.message : 'Discovery failed', 'error');
+    showToast(e instanceof Error ? e.message : t('aIBackends.toastDiscoveryFailed'), 'error');
   } finally {
     isDetecting.value = false;
   }
@@ -432,14 +434,14 @@ async function importItem(item: DiscoveredItem) {
       path: item.path,
       display_name: item.suggested_name,
     });
-    showToast(`Imported ${item.suggested_name}`, 'success');
+    showToast(t('aIBackends.toastImported', { name: item.suggested_name }), 'success');
     // Mark locally so the row flips to "Already imported" without
     // a full rescan (which would re-prompt every CLI again).
     item.backend_id = 'imported';
     await loadBackends(true);
   } catch (e: unknown) {
     showToast(
-      e instanceof Error ? e.message : `Failed to import ${item.suggested_name}`,
+      e instanceof Error ? e.message : t('aIBackends.toastImportFailed', { name: item.suggested_name }),
       'error',
     );
   } finally {
@@ -457,7 +459,7 @@ async function loadBackends(silent = false) {
     backends.value = response.backends;
   } catch (err) {
     if (!silent) {
-      error.value = 'Failed to load backends';
+      error.value = t('aIBackends.errorLoadBackends');
     }
   } finally {
     if (!silent) {
@@ -483,10 +485,10 @@ function getCapabilityTags(backendId: string): string[] {
   const caps = backendCapabilities.value.get(backendId);
   if (!caps) return [];
   const tags: string[] = [];
-  if (caps.supports_json_output) tags.push('JSON Output');
-  if (caps.supports_token_usage) tags.push('Token Usage');
-  if (caps.supports_streaming) tags.push('Streaming');
-  if (caps.supports_non_interactive) tags.push('Non-Interactive');
+  if (caps.supports_json_output) tags.push(t('aIBackends.capJsonOutput'));
+  if (caps.supports_token_usage) tags.push(t('aIBackends.capTokenUsage'));
+  if (caps.supports_streaming) tags.push(t('aIBackends.capStreaming'));
+  if (caps.supports_non_interactive) tags.push(t('aIBackends.capNonInteractive'));
   return tags;
 }
 

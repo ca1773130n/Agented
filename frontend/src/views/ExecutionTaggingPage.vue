@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { executionTaggingApi } from '../services/api/execution-tagging';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 type TagColor = 'blue' | 'green' | 'amber' | 'red' | 'purple';
@@ -75,7 +77,7 @@ async function loadTags() {
     const res = await executionTaggingApi.listTags();
     tags.value = res.tags.map(mapApiTag);
   } catch {
-    showToast('Failed to load tags', 'error');
+    showToast(t('executionTagging.toast.loadTagsFailed'), 'error');
   }
 }
 
@@ -84,7 +86,7 @@ async function loadExecutions() {
     const res = await executionTaggingApi.listExecutions({ limit: 50 });
     executions.value = res.executions.map(mapApiExecution);
   } catch {
-    showToast('Failed to load executions', 'error');
+    showToast(t('executionTagging.toast.loadExecutionsFailed'), 'error');
   }
 }
 
@@ -167,9 +169,9 @@ async function addTagToExecution(execId: string, tagId: string) {
     }
     const tag = tags.value.find((t) => t.id === tagId);
     if (tag) tag.executionCount++;
-    showToast(`Tag "${tag?.name}" added`, 'success');
+    showToast(t('executionTagging.toast.tagAdded', { name: tag?.name }), 'success');
   } catch {
-    showToast('Failed to add tag', 'error');
+    showToast(t('executionTagging.toast.addTagFailed'), 'error');
   }
 }
 
@@ -182,15 +184,15 @@ async function removeTagFromExecution(execId: string, tagId: string) {
     }
     const tag = tags.value.find((t) => t.id === tagId);
     if (tag && tag.executionCount > 0) tag.executionCount--;
-    showToast('Tag removed', 'info');
+    showToast(t('executionTagging.toast.tagRemoved'), 'info');
   } catch {
-    showToast('Failed to remove tag', 'error');
+    showToast(t('executionTagging.toast.removeTagFailed'), 'error');
   }
 }
 
 async function createTag() {
   if (!newTagName.value.trim()) {
-    showToast('Tag name cannot be empty', 'error');
+    showToast(t('executionTagging.toast.tagNameEmpty'), 'error');
     return;
   }
   try {
@@ -198,9 +200,9 @@ async function createTag() {
     tags.value.push(mapApiTag(res.tag));
     showCreateTag.value = false;
     newTagName.value = '';
-    showToast('Tag created', 'success');
+    showToast(t('executionTagging.toast.tagCreated'), 'success');
   } catch {
-    showToast('Failed to create tag', 'error');
+    showToast(t('executionTagging.toast.createTagFailed'), 'error');
   }
 }
 
@@ -212,9 +214,9 @@ async function deleteTag(tagId: string) {
       e.tags = e.tags.filter((t) => t !== tagId);
     });
     selectedTagIds.value = selectedTagIds.value.filter((t) => t !== tagId);
-    showToast('Tag deleted', 'info');
+    showToast(t('executionTagging.toast.tagDeleted'), 'info');
   } catch {
-    showToast('Failed to delete tag', 'error');
+    showToast(t('executionTagging.toast.deleteTagFailed'), 'error');
   }
 }
 
@@ -235,19 +237,19 @@ const tagColors: TagColor[] = ['blue', 'green', 'amber', 'red', 'purple'];
 <template>
   <div class="page-container">
     <PageHeader
-      title="Execution Tagging & Full-Text Search"
-      subtitle="Tag executions with labels and search across full log output to quickly find relevant runs"
+      :title="t('executionTagging.title')"
+      :subtitle="t('executionTagging.subtitle')"
     />
 
     <!-- Tag manager -->
     <div class="section-card">
       <div class="section-header">
-        <h3 class="section-title">Tags</h3>
-        <button class="btn-secondary" @click="showCreateTag = !showCreateTag">+ New Tag</button>
+        <h3 class="section-title">{{ t('executionTagging.tagsHeading') }}</h3>
+        <button class="btn-secondary" @click="showCreateTag = !showCreateTag">{{ t('executionTagging.newTag') }}</button>
       </div>
 
       <div v-if="showCreateTag" class="create-tag-row">
-        <input v-model="newTagName" class="form-input" placeholder="Tag name…" @keydown.enter="createTag" />
+        <input v-model="newTagName" class="form-input" :placeholder="t('executionTagging.tagNamePlaceholder')" @keydown.enter="createTag" />
         <div class="color-picker">
           <button
             v-for="c in tagColors"
@@ -258,8 +260,8 @@ const tagColors: TagColor[] = ['blue', 'green', 'amber', 'red', 'purple'];
             @click="newTagColor = c"
           ></button>
         </div>
-        <button class="btn-primary-sm" @click="createTag">Create</button>
-        <button class="btn-cancel" @click="showCreateTag = false">Cancel</button>
+        <button class="btn-primary-sm" @click="createTag">{{ t('common.create') }}</button>
+        <button class="btn-cancel" @click="showCreateTag = false">{{ t('common.cancel') }}</button>
       </div>
 
       <div class="tags-row">
@@ -281,7 +283,7 @@ const tagColors: TagColor[] = ['blue', 'green', 'amber', 'red', 'purple'];
           class="clear-filter"
           @click="selectedTagIds = []"
         >
-          Clear filters
+          {{ t('executionTagging.clearFilters') }}
         </button>
       </div>
     </div>
@@ -292,7 +294,7 @@ const tagColors: TagColor[] = ['blue', 'green', 'amber', 'red', 'purple'];
       <input
         v-model="searchQuery"
         class="search-input"
-        placeholder="Search execution logs, bot names, or tags…"
+        :placeholder="t('executionTagging.searchPlaceholder')"
       />
       <span v-if="searchQuery" class="search-clear" @click="searchQuery = ''">✕</span>
     </div>
@@ -300,9 +302,9 @@ const tagColors: TagColor[] = ['blue', 'green', 'amber', 'red', 'purple'];
     <!-- Results summary -->
     <div class="results-meta">
       <span>
-        {{ filteredExecutions.length }} execution{{ filteredExecutions.length !== 1 ? 's' : '' }}
-        <template v-if="selectedTagIds.length > 0"> · filtered by {{ selectedTagIds.length }} tag{{ selectedTagIds.length !== 1 ? 's' : '' }}</template>
-        <template v-if="searchQuery"> · matching "{{ searchQuery }}"</template>
+        {{ t('executionTagging.executionCount', { count: filteredExecutions.length }) }}
+        <template v-if="selectedTagIds.length > 0"> · {{ t('executionTagging.filteredByTags', { count: selectedTagIds.length }) }}</template>
+        <template v-if="searchQuery"> · {{ t('executionTagging.matching', { query: searchQuery }) }}</template>
       </span>
     </div>
 
@@ -328,7 +330,7 @@ const tagColors: TagColor[] = ['blue', 'green', 'amber', 'red', 'purple'];
               </span>
             </div>
             <div class="add-tag-dropdown-wrap">
-              <button class="btn-add-tag" @click="addTagTarget = addTagTarget === exec.id ? null : exec.id">+ Tag</button>
+              <button class="btn-add-tag" @click="addTagTarget = addTagTarget === exec.id ? null : exec.id">{{ t('executionTagging.addTag') }}</button>
               <div v-if="addTagTarget === exec.id" class="tag-dropdown">
                 <div
                   v-for="tag in tags.filter(t => !exec.tags.includes(t.id))"
@@ -340,7 +342,7 @@ const tagColors: TagColor[] = ['blue', 'green', 'amber', 'red', 'purple'];
                   {{ tag.name }}
                 </div>
                 <div v-if="tags.filter(t => !exec.tags.includes(t.id)).length === 0" class="tag-option muted">
-                  All tags applied
+                  {{ t('executionTagging.allTagsApplied') }}
                 </div>
               </div>
             </div>
@@ -352,14 +354,14 @@ const tagColors: TagColor[] = ['blue', 'green', 'amber', 'red', 'purple'];
           v-html="exec.hasMatch ? highlightMatch(exec.logSnippet, searchQuery) : exec.logSnippet"
         ></div>
         <div v-if="exec.hasMatch && searchQuery" class="match-note">
-          Log match found for "{{ searchQuery }}"
+          {{ t('executionTagging.logMatchFound', { query: searchQuery }) }}
         </div>
       </div>
 
       <div v-if="filteredExecutions.length === 0" class="empty-state">
         <div class="empty-icon">🔍</div>
-        <div class="empty-text">No executions match your filters</div>
-        <button class="btn-secondary" @click="searchQuery = ''; selectedTagIds = []">Clear all filters</button>
+        <div class="empty-text">{{ t('executionTagging.noExecutionsMatch') }}</div>
+        <button class="btn-secondary" @click="searchQuery = ''; selectedTagIds = []">{{ t('executionTagging.clearAllFilters') }}</button>
       </div>
     </div>
   </div>

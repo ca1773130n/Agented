@@ -4,6 +4,8 @@ import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 import { workflowExecutionApi, ApiError } from '../services/api';
+import { useI18n } from 'vue-i18n';
+const { t } = useI18n();
 const showToast = useToast();
 
 interface PendingApproval {
@@ -32,7 +34,7 @@ async function loadPendingApprovals() {
     const data = await workflowExecutionApi.listPendingApprovals();
     pending.value = data.pending_approvals ?? [];
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load pending approvals';
+    const message = err instanceof ApiError ? err.message : t('humanApprovalGates.toast.loadFailed');
     loadError.value = message;
   } finally {
     isLoading.value = false;
@@ -45,9 +47,9 @@ async function handleApprove(pa: PendingApproval) {
   try {
     await workflowExecutionApi.approveNode(pa.execution_id, pa.node_id);
     pending.value = pending.value.filter(p => approvalKey(p) !== key);
-    showToast('Approval granted', 'success');
+    showToast(t('humanApprovalGates.toast.granted'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to approve';
+    const message = err instanceof ApiError ? err.message : t('humanApprovalGates.toast.approveFailed');
     showToast(message, 'error');
   } finally {
     processingKey.value = null;
@@ -62,9 +64,9 @@ async function handleReject(pa: PendingApproval) {
     pending.value = pending.value.filter(p => approvalKey(p) !== key);
     rejectingKey.value = null;
     rejectReason.value = '';
-    showToast('Approval rejected', 'info');
+    showToast(t('humanApprovalGates.toast.rejected'), 'info');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to reject';
+    const message = err instanceof ApiError ? err.message : t('humanApprovalGates.toast.rejectFailed');
     showToast(message, 'error');
   } finally {
     processingKey.value = null;
@@ -75,16 +77,22 @@ function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleString();
 }
 
+function isExpired(pa: PendingApproval): boolean {
+  if (!pa.timeout_seconds) return false;
+  const expiresAt = new Date(pa.requested_at).getTime() + pa.timeout_seconds * 1000;
+  return expiresAt - Date.now() <= 0;
+}
+
 function timeRemaining(pa: PendingApproval): string {
   if (!pa.timeout_seconds) return '';
   const requestedAt = new Date(pa.requested_at).getTime();
   const expiresAt = requestedAt + pa.timeout_seconds * 1000;
   const remaining = expiresAt - Date.now();
-  if (remaining <= 0) return 'Expired';
+  if (remaining <= 0) return t('humanApprovalGates.expired');
   const minutes = Math.floor(remaining / 60000);
   const hours = Math.floor(minutes / 60);
-  if (hours > 0) return `${hours}h ${minutes % 60}m remaining`;
-  return `${minutes}m remaining`;
+  if (hours > 0) return t('humanApprovalGates.remainingHours', { hours, minutes: minutes % 60 });
+  return t('humanApprovalGates.remainingMinutes', { minutes });
 }
 
 const pendingCount = computed(() => pending.value.length);
@@ -96,25 +104,25 @@ onMounted(loadPendingApprovals);
   <div class="approval-gates">
 
     <PageHeader
-      title="Human Approval Gates"
-      subtitle="Review and process pending workflow approval requests."
+      :title="t('humanApprovalGates.title')"
+      :subtitle="t('humanApprovalGates.subtitle')"
     >
       <template #actions>
         <button class="btn btn-ghost" @click="loadPendingApprovals">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
           </svg>
-          Refresh
+          {{ t('humanApprovalGates.refresh') }}
         </button>
       </template>
     </PageHeader>
 
-    <LoadingState v-if="isLoading" message="Loading pending approvals..." />
+    <LoadingState v-if="isLoading" :message="t('humanApprovalGates.loading')" />
 
     <div v-else-if="loadError" class="card error-card">
       <div class="error-inner">
         <p>{{ loadError }}</p>
-        <button class="btn btn-ghost" @click="loadPendingApprovals">Retry</button>
+        <button class="btn btn-ghost" @click="loadPendingApprovals">{{ t('common.retry') }}</button>
       </div>
     </div>
 
@@ -127,9 +135,9 @@ onMounted(loadPendingApprovals);
               <circle cx="12" cy="12" r="10"/>
               <polyline points="12 6 12 12 16 14"/>
             </svg>
-            Pending Approvals
+            {{ t('humanApprovalGates.pendingApprovals') }}
           </h3>
-          <span v-if="pendingCount > 0" class="badge-warn">{{ pendingCount }} pending</span>
+          <span v-if="pendingCount > 0" class="badge-warn">{{ t('humanApprovalGates.pendingCount', { count: pendingCount }) }}</span>
         </div>
         <div class="pending-list">
           <div
@@ -139,21 +147,21 @@ onMounted(loadPendingApprovals);
           >
             <div class="pending-info">
               <div class="pending-ids">
-                <span class="id-label">Execution</span>
+                <span class="id-label">{{ t('humanApprovalGates.execution') }}</span>
                 <code class="id-value">{{ pa.execution_id }}</code>
-                <span class="id-label">Node</span>
+                <span class="id-label">{{ t('humanApprovalGates.node') }}</span>
                 <code class="id-value">{{ pa.node_id }}</code>
               </div>
               <div class="pending-meta">
-                <span class="meta-item">Requested: {{ formatDate(pa.requested_at) }}</span>
+                <span class="meta-item">{{ t('humanApprovalGates.requested') }}: {{ formatDate(pa.requested_at) }}</span>
                 <template v-if="pa.timeout_seconds">
                   <span class="meta-sep">&middot;</span>
-                  <span class="meta-item" :class="{ 'text-warn': timeRemaining(pa) === 'Expired' }">
+                  <span class="meta-item" :class="{ 'text-warn': isExpired(pa) }">
                     {{ timeRemaining(pa) }}
                   </span>
                 </template>
                 <span class="meta-sep">&middot;</span>
-                <span class="meta-item">Status: {{ pa.status }}</span>
+                <span class="meta-item">{{ t('humanApprovalGates.statusLabel') }}: {{ pa.status }}</span>
               </div>
             </div>
             <div class="pending-actions">
@@ -165,7 +173,7 @@ onMounted(loadPendingApprovals);
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                   <polyline points="20 6 9 17 4 12"/>
                 </svg>
-                {{ processingKey === approvalKey(pa) ? '...' : 'Approve' }}
+                {{ processingKey === approvalKey(pa) ? '...' : t('humanApprovalGates.approve') }}
               </button>
               <button
                 class="btn btn-reject"
@@ -175,15 +183,15 @@ onMounted(loadPendingApprovals);
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                   <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                 </svg>
-                Reject
+                {{ t('humanApprovalGates.reject') }}
               </button>
             </div>
             <div v-if="rejectingKey === approvalKey(pa)" class="reject-form">
-              <input v-model="rejectReason" type="text" class="text-input" placeholder="Reason for rejection (optional)..." />
+              <input v-model="rejectReason" type="text" class="text-input" :placeholder="t('humanApprovalGates.rejectReasonPlaceholder')" />
               <div class="reject-actions">
-                <button class="btn btn-ghost-sm" @click="rejectingKey = null">Cancel</button>
+                <button class="btn btn-ghost-sm" @click="rejectingKey = null">{{ t('common.cancel') }}</button>
                 <button class="btn btn-reject-confirm" :disabled="processingKey === approvalKey(pa)" @click="handleReject(pa)">
-                  Confirm Reject
+                  {{ t('humanApprovalGates.confirmReject') }}
                 </button>
               </div>
             </div>
@@ -192,7 +200,7 @@ onMounted(loadPendingApprovals);
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40" style="opacity: 0.3; color: var(--text-tertiary)">
               <polyline points="20 6 9 17 4 12"/>
             </svg>
-            <p>No pending approvals</p>
+            <p>{{ t('humanApprovalGates.noPending') }}</p>
           </div>
         </div>
       </div>

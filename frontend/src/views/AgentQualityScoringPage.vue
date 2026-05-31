@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { qualityApi } from '../services/api/quality-ratings';
 import type { QualityEntry, BotQualityStats } from '../services/api/quality-ratings';
+const { t } = useI18n();
 const showToast = useToast();
 
 const bots = ref<BotQualityStats[]>([]);
@@ -30,7 +32,7 @@ onMounted(async () => {
     bots.value = statsRes.bots;
     entries.value = entriesRes.entries;
   } catch (err) {
-    showToast('Failed to load quality data', 'error');
+    showToast(t('agentQualityScoring.toast.loadFailed'), 'error');
   } finally {
     loading.value = false;
   }
@@ -55,12 +57,12 @@ async function submitRating(entry: QualityEntry) {
     if (idx !== -1) entries.value[idx] = { ...entries.value[idx], ...result };
     delete pendingRatings.value[entry.execution_id];
     delete pendingFeedback.value[entry.execution_id];
-    showToast('Rating submitted', 'success');
+    showToast(t('agentQualityScoring.toast.ratingSubmitted'), 'success');
     // Refresh stats
     const statsRes = await qualityApi.getStats();
     bots.value = statsRes.bots;
   } catch {
-    showToast('Failed to submit rating', 'error');
+    showToast(t('agentQualityScoring.toast.submitFailed'), 'error');
   }
 }
 
@@ -93,17 +95,17 @@ function starClass(star: number, rating: number | null, pending: number | undefi
   <div class="quality-scoring">
 
     <PageHeader
-      title="Agent Quality Scoring"
-      subtitle="Collect feedback on bot outputs and surface per-agent quality scores with trend analysis."
+      :title="t('agentQualityScoring.title')"
+      :subtitle="t('agentQualityScoring.subtitle')"
     />
 
-    <div v-if="loading" class="loading-msg">Loading quality data…</div>
+    <div v-if="loading" class="loading-msg">{{ t('agentQualityScoring.loading') }}</div>
 
     <!-- Summary cards -->
     <div v-else-if="bots.length > 0" class="bot-grid">
       <div v-for="bot in bots" :key="bot.trigger_id ?? 'unknown'" class="bot-card card" @click="selectedBotFilter = bot.trigger_id ?? 'all'">
         <div class="bot-card-header">
-          <div class="bot-name">{{ bot.trigger_name ?? bot.trigger_id ?? 'Unknown Bot' }}</div>
+          <div class="bot-name">{{ bot.trigger_name ?? bot.trigger_id ?? t('agentQualityScoring.unknownBot') }}</div>
           <span class="trend-badge" :style="{ color: trendColor(bot.trend) }">
             {{ trendIcon(bot.trend) }} {{ bot.trend }}
           </span>
@@ -113,9 +115,9 @@ function starClass(star: number, rating: number | null, pending: number | undefi
           <span class="score-max">/5</span>
         </div>
         <div class="bot-stats">
-          <span class="stat-item">{{ bot.total_rated }} rated</span>
-          <span class="stat-item stat-up">{{ bot.thumbs_up }} good</span>
-          <span class="stat-item stat-down">{{ bot.thumbs_down }} poor</span>
+          <span class="stat-item">{{ t('agentQualityScoring.rated', { count: bot.total_rated }) }}</span>
+          <span class="stat-item stat-up">{{ t('agentQualityScoring.good', { count: bot.thumbs_up }) }}</span>
+          <span class="stat-item stat-down">{{ t('agentQualityScoring.poor', { count: bot.thumbs_down }) }}</span>
         </div>
         <div class="mini-chart">
           <div
@@ -127,28 +129,28 @@ function starClass(star: number, rating: number | null, pending: number | undefi
         </div>
       </div>
     </div>
-    <div v-else-if="!loading" class="empty-bots">No quality ratings yet. Submit ratings below to see per-bot statistics.</div>
+    <div v-else-if="!loading" class="empty-bots">{{ t('agentQualityScoring.emptyBots') }}</div>
 
     <!-- Filter -->
     <div class="filter-row">
       <select v-model="selectedBotFilter" class="select">
-        <option value="all">All Bots</option>
+        <option value="all">{{ t('agentQualityScoring.allBots') }}</option>
         <option v-for="bot in bots" :key="bot.trigger_id ?? 'unknown'" :value="bot.trigger_id">
-          {{ bot.trigger_name ?? bot.trigger_id ?? 'Unknown' }}
+          {{ bot.trigger_name ?? bot.trigger_id ?? t('agentQualityScoring.unknown') }}
         </option>
       </select>
-      <span class="filter-count">{{ filteredEntries.length }} executions</span>
+      <span class="filter-count">{{ t('agentQualityScoring.executions', { count: filteredEntries.length }) }}</span>
     </div>
 
     <!-- Entry list -->
     <div class="card">
-      <div class="card-header">Execution Feedback</div>
-      <div v-if="entries.length === 0 && !loading" class="empty-entries">No execution entries to rate yet.</div>
+      <div class="card-header">{{ t('agentQualityScoring.executionFeedback') }}</div>
+      <div v-if="entries.length === 0 && !loading" class="empty-entries">{{ t('agentQualityScoring.emptyEntries') }}</div>
       <div class="entry-list">
         <div v-for="entry in filteredEntries" :key="entry.execution_id" class="entry-row">
           <div class="entry-left">
             <div class="entry-id">{{ entry.execution_id }}</div>
-            <div class="entry-preview">{{ entry.output_preview || '(no output)' }}</div>
+            <div class="entry-preview">{{ entry.output_preview || t('agentQualityScoring.noOutput') }}</div>
             <div class="entry-meta">
               <span class="entry-bot">{{ entry.trigger_name ?? entry.trigger_id ?? '—' }}</span>
               <span class="sep">·</span>
@@ -169,9 +171,9 @@ function starClass(star: number, rating: number | null, pending: number | undefi
               v-if="pendingRatings[entry.execution_id]"
               class="btn-submit"
               @click="submitRating(entry)"
-            >Submit</button>
-            <span v-else-if="entry.rating" class="rated-label">Rated</span>
-            <span v-else class="unrated-label">Unrated</span>
+            >{{ t('agentQualityScoring.submit') }}</button>
+            <span v-else-if="entry.rating" class="rated-label">{{ t('agentQualityScoring.ratedLabel') }}</span>
+            <span v-else class="unrated-label">{{ t('agentQualityScoring.unrated') }}</span>
           </div>
         </div>
       </div>

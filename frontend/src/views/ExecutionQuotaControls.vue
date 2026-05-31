@@ -6,11 +6,13 @@
 // page and disable the create/edit/delete controls so operators don't
 // believe their changes persisted.
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import LoadingState from '../components/base/LoadingState.vue';
 import EmptyState from '../components/base/EmptyState.vue';
 import { useToast } from '../composables/useToast';
 import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 // Quota enforcement is not yet wired up server-side. Flipping this constant
@@ -84,10 +86,10 @@ async function saveRule(rule: QuotaRule) {
       body: JSON.stringify(rule),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    showToast('Quota rule updated', 'success');
+    showToast(t('executionQuotaControls.toast.updated'), 'success');
     editingId.value = null;
   } catch {
-    showToast('Quota updated (demo)', 'success');
+    showToast(t('executionQuotaControls.toast.updatedDemo'), 'success');
     editingId.value = null;
   } finally {
     isSaving.value = false;
@@ -105,7 +107,7 @@ async function createRule() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const created = await res.json();
     quotaRules.value.push(created);
-    showToast('Quota rule created', 'success');
+    showToast(t('executionQuotaControls.toast.created'), 'success');
   } catch {
     quotaRules.value.push({
       id: `q-${Date.now()}`,
@@ -113,7 +115,7 @@ async function createRule() {
       current_hour: 0,
       current_day: 0,
     });
-    showToast('Quota rule created', 'success');
+    showToast(t('executionQuotaControls.toast.created'), 'success');
   } finally {
     isSaving.value = false;
     showNewForm.value = false;
@@ -124,10 +126,10 @@ async function deleteRule(id: string) {
   try {
     await fetch(`/admin/executions/quotas/${id}`, { method: 'DELETE' });
     quotaRules.value = quotaRules.value.filter(r => r.id !== id);
-    showToast('Quota rule deleted', 'success');
+    showToast(t('executionQuotaControls.toast.deleted'), 'success');
   } catch {
     quotaRules.value = quotaRules.value.filter(r => r.id !== id);
-    showToast('Quota rule deleted', 'success');
+    showToast(t('executionQuotaControls.toast.deleted'), 'success');
   }
 }
 
@@ -147,12 +149,12 @@ onMounted(loadData);
 
     <NotEnabledBanner
       v-if="!FEATURE_ENABLED"
-      feature="Quota enforcement"
-      detail="Creating, editing, or deleting quota rules is disabled until the backend ships persistent quota enforcement."
+      :feature="t('executionQuotaControls.notEnabled.feature')"
+      :detail="t('executionQuotaControls.notEnabled.detail')"
       testid="quotas-not-enabled"
     />
 
-    <LoadingState v-if="isLoading" message="Loading quota rules..." />
+    <LoadingState v-if="isLoading" :message="t('executionQuotaControls.loading')" />
 
     <template v-else>
       <!-- Alerts -->
@@ -164,7 +166,7 @@ onMounted(loadData);
           </svg>
         </div>
         <div>
-          <strong>{{ alertingRules.length }} quota{{ alertingRules.length > 1 ? 's' : '' }} nearing limit</strong>
+          <strong>{{ t('executionQuotaControls.nearingLimit', { count: alertingRules.length }) }}</strong>
           <span class="alert-names">{{ alertingRules.map(r => r.target_name).join(', ') }}</span>
         </div>
       </div>
@@ -172,92 +174,92 @@ onMounted(loadData);
       <!-- Header + Add -->
       <div class="section-header">
         <div>
-          <h2>Quota Rules</h2>
-          <p>Set max executions per bot per hour/day. Hard stops block; soft alerts notify only.</p>
+          <h2>{{ t('executionQuotaControls.rulesTitle') }}</h2>
+          <p>{{ t('executionQuotaControls.rulesDescription') }}</p>
         </div>
         <button
           class="btn btn-primary"
           :disabled="!FEATURE_ENABLED"
-          :title="!FEATURE_ENABLED ? 'Quota enforcement is not yet enabled' : ''"
+          :title="!FEATURE_ENABLED ? t('executionQuotaControls.notEnabledShort') : ''"
           @click="showNewForm = !showNewForm"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-          New Rule
+          {{ t('executionQuotaControls.newRule') }}
         </button>
       </div>
 
       <!-- New Rule Form -->
       <div v-if="showNewForm" class="card new-rule-card">
-        <h3>Create Quota Rule</h3>
+        <h3>{{ t('executionQuotaControls.createRuleTitle') }}</h3>
         <div class="form-grid">
           <div class="form-group">
-            <label>Target Type</label>
+            <label>{{ t('executionQuotaControls.form.targetType') }}</label>
             <select v-model="newRule.target_type" class="form-input">
-              <option value="bot">Bot</option>
-              <option value="team">Team</option>
-              <option value="global">Global</option>
+              <option value="bot">{{ t('executionQuotaControls.form.bot') }}</option>
+              <option value="team">{{ t('executionQuotaControls.form.team') }}</option>
+              <option value="global">{{ t('executionQuotaControls.form.global') }}</option>
             </select>
           </div>
           <div class="form-group">
-            <label>Target Name / ID</label>
-            <input v-model="newRule.target_name" type="text" class="form-input" placeholder="e.g. bot-security" />
+            <label>{{ t('executionQuotaControls.form.targetName') }}</label>
+            <input v-model="newRule.target_name" type="text" class="form-input" :placeholder="t('executionQuotaControls.form.targetNamePlaceholder')" />
           </div>
           <div class="form-group">
-            <label>Max per Hour</label>
-            <input v-model.number="newRule.max_per_hour" type="number" class="form-input" placeholder="e.g. 10" />
+            <label>{{ t('executionQuotaControls.form.maxPerHour') }}</label>
+            <input v-model.number="newRule.max_per_hour" type="number" class="form-input" :placeholder="t('executionQuotaControls.form.maxPerHourPlaceholder')" />
           </div>
           <div class="form-group">
-            <label>Max per Day</label>
-            <input v-model.number="newRule.max_per_day" type="number" class="form-input" placeholder="e.g. 100" />
+            <label>{{ t('executionQuotaControls.form.maxPerDay') }}</label>
+            <input v-model.number="newRule.max_per_day" type="number" class="form-input" :placeholder="t('executionQuotaControls.form.maxPerDayPlaceholder')" />
           </div>
           <div class="form-group">
-            <label>Alert at (%)</label>
+            <label>{{ t('executionQuotaControls.form.alertAt') }}</label>
             <input v-model.number="newRule.alert_threshold" type="number" class="form-input" min="1" max="100" />
           </div>
           <div class="form-group form-check">
             <label class="check-label">
               <input v-model="newRule.hard_stop" type="checkbox" />
-              Hard stop (block executions when limit hit)
+              {{ t('executionQuotaControls.form.hardStopFull') }}
             </label>
           </div>
         </div>
         <div class="form-actions">
-          <button class="btn btn-ghost" @click="showNewForm = false">Cancel</button>
+          <button class="btn btn-ghost" @click="showNewForm = false">{{ t('common.cancel') }}</button>
           <button
             class="btn btn-primary"
             :disabled="isSaving || !FEATURE_ENABLED"
-            :title="!FEATURE_ENABLED ? 'Quota enforcement is not yet enabled in this deployment' : undefined"
+            :title="!FEATURE_ENABLED ? t('executionQuotaControls.notEnabledDeployment') : undefined"
             data-testid="quota-create-submit"
             @click="createRule"
-          >Create Rule</button>
+          >{{ t('executionQuotaControls.createRule') }}</button>
         </div>
       </div>
 
       <!-- Rules List -->
-      <EmptyState v-if="quotaRules.length === 0" title="No quota rules configured" description="Click &quot;Add Rule&quot; to create one." />
+      <EmptyState v-if="quotaRules.length === 0" :title="t('executionQuotaControls.emptyTitle')" :description="t('executionQuotaControls.emptyDescription')" />
       <div class="rules-list">
         <div v-for="rule in quotaRules" :key="rule.id" class="card rule-card">
           <div class="rule-header">
             <div class="rule-meta">
               <span class="rule-type-badge" :class="rule.target_type">{{ rule.target_type }}</span>
               <span class="rule-name">{{ rule.target_name }}</span>
-              <span v-if="rule.hard_stop" class="hard-stop-badge">Hard Stop</span>
+              <span v-if="rule.hard_stop" class="hard-stop-badge">{{ t('executionQuotaControls.hardStop') }}</span>
             </div>
             <div class="rule-actions">
               <button
                 class="btn btn-ghost btn-sm"
                 :disabled="!FEATURE_ENABLED"
-                :title="!FEATURE_ENABLED ? 'Quota enforcement is not yet enabled' : ''"
+                :title="!FEATURE_ENABLED ? t('executionQuotaControls.notEnabledShort') : ''"
                 @click="editingId = editingId === rule.id ? null : rule.id"
               >
-                {{ editingId === rule.id ? 'Cancel' : 'Edit' }}
+                {{ editingId === rule.id ? t('common.cancel') : t('common.edit') }}
               </button>
               <button
                 class="btn btn-ghost btn-sm btn-danger"
                 :disabled="!FEATURE_ENABLED"
-                :title="!FEATURE_ENABLED ? 'Quota enforcement is not yet enabled' : ''"
+                :title="!FEATURE_ENABLED ? t('executionQuotaControls.notEnabledShort') : ''"
                 @click="deleteRule(rule.id)"
-              >Delete</button>
+              >{{ t('common.delete') }}</button>
             </div>
           </div>
 
@@ -265,7 +267,7 @@ onMounted(loadData);
             <!-- Hourly -->
             <div class="usage-item">
               <div class="usage-label-row">
-                <span class="usage-label">This Hour</span>
+                <span class="usage-label">{{ t('executionQuotaControls.thisHour') }}</span>
                 <span class="usage-value">{{ rule.current_hour }} / {{ rule.max_per_hour ?? '∞' }}</span>
               </div>
               <div class="usage-bar-wrap">
@@ -278,7 +280,7 @@ onMounted(loadData);
             <!-- Daily -->
             <div class="usage-item">
               <div class="usage-label-row">
-                <span class="usage-label">Today</span>
+                <span class="usage-label">{{ t('executionQuotaControls.today') }}</span>
                 <span class="usage-value">{{ rule.current_day }} / {{ rule.max_per_day ?? '∞' }}</span>
               </div>
               <div class="usage-bar-wrap">
@@ -294,21 +296,21 @@ onMounted(loadData);
           <div v-if="editingId === rule.id" class="edit-form">
             <div class="form-grid">
               <div class="form-group">
-                <label>Max per Hour</label>
+                <label>{{ t('executionQuotaControls.form.maxPerHour') }}</label>
                 <input v-model.number="rule.max_per_hour" type="number" class="form-input" />
               </div>
               <div class="form-group">
-                <label>Max per Day</label>
+                <label>{{ t('executionQuotaControls.form.maxPerDay') }}</label>
                 <input v-model.number="rule.max_per_day" type="number" class="form-input" />
               </div>
               <div class="form-group">
-                <label>Alert Threshold (%)</label>
+                <label>{{ t('executionQuotaControls.form.alertThreshold') }}</label>
                 <input v-model.number="rule.alert_threshold" type="number" class="form-input" min="1" max="100" />
               </div>
               <div class="form-group form-check">
                 <label class="check-label">
                   <input v-model="rule.hard_stop" type="checkbox" />
-                  Hard stop
+                  {{ t('executionQuotaControls.form.hardStopShort') }}
                 </label>
               </div>
             </div>
@@ -316,9 +318,9 @@ onMounted(loadData);
               <button
                 class="btn btn-primary btn-sm"
                 :disabled="isSaving || !FEATURE_ENABLED"
-                :title="!FEATURE_ENABLED ? 'Quota enforcement is not yet enabled in this deployment' : undefined"
+                :title="!FEATURE_ENABLED ? t('executionQuotaControls.notEnabledDeployment') : undefined"
                 @click="saveRule(rule)"
-              >Save Changes</button>
+              >{{ t('executionQuotaControls.saveChanges') }}</button>
             </div>
           </div>
         </div>

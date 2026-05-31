@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, inject } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { Trigger, BackendCheck, ProjectPath, Project, Team } from '../services/api';
 import { triggerApi, utilityApi, projectApi, teamApi, listGroupedBackends, getGroupedBackend, ApiError } from '../services/api';
 import AddTriggerModal from '../components/triggers/AddTriggerModal.vue';
@@ -10,6 +11,7 @@ import TriggerDetailPanel from '../components/triggers/TriggerDetailPanel.vue';
 import { useToast } from '../composables/useToast';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
+const { t } = useI18n();
 const showToast = useToast();
 const refreshTriggers = inject('refreshTriggers', () => Promise.resolve()) as () => Promise<void>;
 
@@ -70,7 +72,7 @@ async function loadTriggers() {
     const data = await triggerApi.list();
     triggers.value = data.triggers || [];
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load triggers';
+    const message = err instanceof ApiError ? err.message : t('triggerManagement.toast.loadFailed');
     showToast(message, 'error');
   } finally { isLoading.value = false; }
 }
@@ -82,7 +84,7 @@ async function selectTrigger(triggerId: string) {
     selectedTrigger.value = trig;
     triggerPaths.value = trig.paths || [];
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load trigger details';
+    const message = err instanceof ApiError ? err.message : t('triggerManagement.toast.loadDetailsFailed');
     showToast(message, 'error');
   }
 }
@@ -91,9 +93,9 @@ async function toggleTriggerEnabled(triggerId: string, enabled: number) {
   try {
     await triggerApi.update(triggerId, { enabled });
     await loadTriggers();
-    showToast(enabled ? 'Trigger enabled' : 'Trigger disabled', 'success');
+    showToast(enabled ? t('triggerManagement.toast.enabled') : t('triggerManagement.toast.disabled'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to update trigger';
+    const message = err instanceof ApiError ? err.message : t('triggerManagement.toast.updateFailed');
     showToast(message, 'error');
   }
 }
@@ -116,9 +118,9 @@ async function confirmDeleteTrigger() {
     }
     await loadTriggers();
     await refreshTriggers();
-    showToast('Trigger deleted', 'success');
+    showToast(t('triggerManagement.toast.deleted'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to delete trigger';
+    const message = err instanceof ApiError ? err.message : t('triggerManagement.toast.deleteFailed');
     showToast(message, 'error');
   }
 }
@@ -223,9 +225,9 @@ onMounted(() => {
 
     <ConfirmModal
       :open="showDeleteConfirm"
-      title="Delete Trigger"
-      message="Delete this trigger?"
-      confirm-label="Delete"
+      :title="t('triggerManagement.deleteTitle')"
+      :message="t('triggerManagement.deleteMessage')"
+      :confirm-label="t('common.delete')"
       variant="danger"
       @confirm="confirmDeleteTrigger"
       @cancel="showDeleteConfirm = false"

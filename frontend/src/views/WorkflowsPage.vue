@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import type { Workflow } from '../services/api';
 import { workflowApi, ApiError } from '../services/api';
@@ -13,6 +14,7 @@ import { useFocusTrap } from '../composables/useFocusTrap';
 import { useWebMcpPageTools } from '../composables/useWebMcpPageTools';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
+const { t } = useI18n();
 const router = useRouter();
 
 const showToast = useToast();
@@ -89,7 +91,7 @@ async function loadWorkflows() {
     const data = await workflowApi.list();
     workflows.value = data.workflows || [];
   } catch (e) {
-    loadError.value = e instanceof ApiError ? e.message : 'Failed to load workflows';
+    loadError.value = e instanceof ApiError ? e.message : t('workflows.errors.load');
     showToast(loadError.value, 'error');
   } finally {
     isLoading.value = false;
@@ -98,7 +100,7 @@ async function loadWorkflows() {
 
 async function createWorkflow() {
   if (!createForm.value.name.trim()) {
-    showToast('Name is required', 'error');
+    showToast(t('workflows.errors.nameRequired'), 'error');
     return;
   }
   try {
@@ -107,7 +109,7 @@ async function createWorkflow() {
       description: createForm.value.description || undefined,
       trigger_type: createForm.value.trigger_type,
     });
-    showToast('Workflow created successfully', 'success');
+    showToast(t('workflows.toast.created'), 'success');
     showCreateModal.value = false;
     createForm.value = { name: '', description: '', trigger_type: 'manual' };
     await loadWorkflows();
@@ -115,7 +117,7 @@ async function createWorkflow() {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to create workflow', 'error');
+      showToast(t('workflows.errors.create'), 'error');
     }
   }
 }
@@ -129,7 +131,7 @@ async function deleteWorkflow() {
   if (!workflowToDelete.value) return;
   try {
     await workflowApi.delete(workflowToDelete.value.id);
-    showToast(`Workflow "${workflowToDelete.value.name}" deleted`, 'success');
+    showToast(t('workflows.toast.deleted', { name: workflowToDelete.value.name }), 'success');
     showDeleteConfirm.value = false;
     workflowToDelete.value = null;
     await loadWorkflows();
@@ -137,7 +139,7 @@ async function deleteWorkflow() {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to delete workflow', 'error');
+      showToast(t('workflows.errors.delete'), 'error');
     }
   }
 }
@@ -147,12 +149,12 @@ async function toggleEnabled(wf: Workflow) {
     const newVal = wf.enabled ? 0 : 1;
     await workflowApi.update(wf.id, { enabled: newVal });
     wf.enabled = newVal;
-    showToast(`Workflow ${wf.enabled ? 'enabled' : 'disabled'}`, 'success');
+    showToast(wf.enabled ? t('workflows.toast.enabled') : t('workflows.toast.disabled'), 'success');
   } catch (e) {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to update workflow', 'error');
+      showToast(t('workflows.errors.update'), 'error');
     }
   }
 }
@@ -178,7 +180,7 @@ onMounted(loadWorkflows);
 
 <template>
   <div class="workflows-page">
-    <PageHeader title="Workflows" subtitle="Visual DAG-based workflow automation with triggers, conditions, and agent orchestration">
+    <PageHeader :title="t('workflows.title')" :subtitle="t('workflows.subtitle')">
       <template #actions>
         <div class="search-wrapper">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -188,7 +190,7 @@ onMounted(loadWorkflows);
           <input
             v-model="searchQuery"
             type="text"
-            placeholder="Search workflows..."
+            :placeholder="t('workflows.searchPlaceholder')"
             class="search-input"
           />
         </div>
@@ -196,16 +198,16 @@ onMounted(loadWorkflows);
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 5v14M5 12h14"/>
           </svg>
-          Create Workflow
+          {{ t('workflows.createWorkflow') }}
         </button>
       </template>
     </PageHeader>
 
-    <LoadingState v-if="isLoading" message="Loading workflows..." />
+    <LoadingState v-if="isLoading" :message="t('workflows.loading')" />
 
-    <ErrorState v-else-if="loadError" title="Failed to load workflows" :message="loadError" @retry="loadWorkflows" />
+    <ErrorState v-else-if="loadError" :title="t('workflows.errors.load')" :message="loadError" @retry="loadWorkflows" />
 
-    <EmptyState v-else-if="workflows.length === 0" title="No workflows yet" description="Create your first workflow to get started with visual automation">
+    <EmptyState v-else-if="workflows.length === 0" :title="t('workflows.empty.title')" :description="t('workflows.empty.description')">
       <template #icon>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <rect x="8" y="2" width="8" height="5" rx="1"/>
@@ -216,11 +218,11 @@ onMounted(loadWorkflows);
         </svg>
       </template>
       <template #actions>
-        <button class="btn btn-primary" @click="showCreateModal = true">Create Your First Workflow</button>
+        <button class="btn btn-primary" @click="showCreateModal = true">{{ t('workflows.empty.createFirst') }}</button>
       </template>
     </EmptyState>
 
-    <EmptyState v-else-if="filteredWorkflows.length === 0 && searchQuery" title="No matching workflows" description="Try a different search term" />
+    <EmptyState v-else-if="filteredWorkflows.length === 0 && searchQuery" :title="t('workflows.noMatch.title')" :description="t('workflows.noMatch.description')" />
 
     <div v-else class="wf-grid">
       <div
@@ -243,7 +245,7 @@ onMounted(loadWorkflows);
             <h3>{{ wf.name }}</h3>
             <div class="wf-badges">
               <span :class="['badge-trigger', getTriggerBadgeClass(wf.trigger_type)]">{{ wf.trigger_type }}</span>
-              <StatusBadge :label="wf.enabled ? 'Enabled' : 'Disabled'" :variant="wf.enabled ? 'success' : 'neutral'" />
+              <StatusBadge :label="wf.enabled ? t('workflows.status.enabled') : t('workflows.status.disabled')" :variant="wf.enabled ? 'success' : 'neutral'" />
             </div>
           </div>
         </div>
@@ -252,7 +254,7 @@ onMounted(loadWorkflows);
 
         <div class="wf-meta">
           <div v-if="wf.created_at" class="meta-item">
-            <span class="meta-label">Created:</span>
+            <span class="meta-label">{{ t('workflows.card.created') }}</span>
             <span class="meta-value">{{ formatDate(wf.created_at) }}</span>
           </div>
         </div>
@@ -263,20 +265,20 @@ onMounted(loadWorkflows);
               <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
               <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
             </svg>
-            Edit
+            {{ t('common.edit') }}
           </button>
           <button
             class="btn btn-sm"
             :class="wf.enabled ? 'btn-warning' : 'btn-success'"
             @click.stop="toggleEnabled(wf)"
           >
-            {{ wf.enabled ? 'Disable' : 'Enable' }}
+            {{ wf.enabled ? t('workflows.actions.disable') : t('workflows.actions.enable') }}
           </button>
           <button class="btn btn-sm btn-danger" @click.stop="confirmDelete(wf)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
               <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
             </svg>
-            Delete
+            {{ t('common.delete') }}
           </button>
         </div>
       </div>
@@ -287,32 +289,32 @@ onMounted(loadWorkflows);
       <div v-if="showCreateModal" ref="createModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-create-workflow" tabindex="-1" @click.self="showCreateModal = false" @keydown.escape="showCreateModal = false">
         <div class="modal">
           <div class="modal-header">
-            <h2 id="modal-title-create-workflow">Create Workflow</h2>
+            <h2 id="modal-title-create-workflow">{{ t('workflows.createModal.title') }}</h2>
             <button class="modal-close" @click="showCreateModal = false">&times;</button>
           </div>
           <div class="modal-body">
             <div class="form-group">
-              <label>Name *</label>
-              <input v-model="createForm.name" type="text" placeholder="e.g., deploy-pipeline" />
+              <label>{{ t('workflows.createModal.nameLabel') }}</label>
+              <input v-model="createForm.name" type="text" :placeholder="t('workflows.createModal.namePlaceholder')" />
             </div>
             <div class="form-group">
-              <label>Description</label>
-              <textarea v-model="createForm.description" placeholder="Describe what this workflow does..."></textarea>
+              <label>{{ t('workflows.createModal.descriptionLabel') }}</label>
+              <textarea v-model="createForm.description" :placeholder="t('workflows.createModal.descriptionPlaceholder')"></textarea>
             </div>
             <div class="form-group">
-              <label>Trigger Type</label>
+              <label>{{ t('workflows.createModal.triggerTypeLabel') }}</label>
               <select v-model="createForm.trigger_type">
-                <option value="manual">Manual</option>
-                <option value="cron">Cron</option>
-                <option value="poll">Poll</option>
-                <option value="file_watch">File Watch</option>
-                <option value="completion">Completion</option>
+                <option value="manual">{{ t('workflows.triggerType.manual') }}</option>
+                <option value="cron">{{ t('workflows.triggerType.cron') }}</option>
+                <option value="poll">{{ t('workflows.triggerType.poll') }}</option>
+                <option value="file_watch">{{ t('workflows.triggerType.fileWatch') }}</option>
+                <option value="completion">{{ t('workflows.triggerType.completion') }}</option>
               </select>
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn" @click="showCreateModal = false">Cancel</button>
-            <button class="btn btn-primary" @click="createWorkflow">Create</button>
+            <button class="btn" @click="showCreateModal = false">{{ t('common.cancel') }}</button>
+            <button class="btn btn-primary" @click="createWorkflow">{{ t('common.create') }}</button>
           </div>
         </div>
       </div>
@@ -323,15 +325,15 @@ onMounted(loadWorkflows);
       <div v-if="showDeleteConfirm" ref="deleteModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-delete-workflow" tabindex="-1" @click.self="showDeleteConfirm = false" @keydown.escape="showDeleteConfirm = false">
         <div class="modal modal-small">
           <div class="modal-header">
-            <h2 id="modal-title-delete-workflow">Delete Workflow</h2>
+            <h2 id="modal-title-delete-workflow">{{ t('workflows.deleteModal.title') }}</h2>
           </div>
           <div class="modal-body">
-            <p>Are you sure you want to delete "<strong>{{ workflowToDelete?.name }}</strong>"?</p>
-            <p class="warning-text">This action cannot be undone. All versions and execution history will be removed.</p>
+            <p>{{ t('workflows.deleteModal.confirmPrefix') }}"<strong>{{ workflowToDelete?.name }}</strong>"{{ t('workflows.deleteModal.confirmSuffix') }}</p>
+            <p class="warning-text">{{ t('workflows.deleteModal.warning') }}</p>
           </div>
           <div class="modal-footer">
-            <button class="btn" @click="showDeleteConfirm = false">Cancel</button>
-            <button class="btn btn-danger" @click="deleteWorkflow">Delete</button>
+            <button class="btn" @click="showDeleteConfirm = false">{{ t('common.cancel') }}</button>
+            <button class="btn btn-danger" @click="deleteWorkflow">{{ t('common.delete') }}</button>
           </div>
         </div>
       </div>

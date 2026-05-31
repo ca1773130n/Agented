@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Chart, registerables } from 'chart.js';
 import type { MeetingMessage, TokenSpendDay } from '../../services/api';
 import { safeFormatRelative } from '../../utils/datetime';
+
+const { t } = useI18n();
 
 Chart.register(...registerables);
 
@@ -55,7 +58,7 @@ function renderChart() {
       labels,
       datasets: [
         {
-          label: 'Input Tokens',
+          label: t('productActivityFeed.inputTokens'),
           data: sorted.map(d => d.input_tokens),
           backgroundColor: colors.inputBg,
           borderColor: colors.input,
@@ -63,7 +66,7 @@ function renderChart() {
           borderRadius: 3,
         },
         {
-          label: 'Output Tokens',
+          label: t('productActivityFeed.outputTokens'),
           data: sorted.map(d => d.output_tokens),
           backgroundColor: colors.outputBg,
           borderColor: colors.output,
@@ -178,15 +181,15 @@ watch(() => props.tokenSpend, () => {
 <template>
   <div class="card">
     <div class="card-header">
-      <h3>Activity & Token Spend</h3>
+      <h3>{{ t('productActivityFeed.title') }}</h3>
     </div>
 
     <!-- Recent Activity Section -->
     <div class="section">
-      <h4 class="section-title">Recent Activity</h4>
+      <h4 class="section-title">{{ t('productActivityFeed.recentActivity') }}</h4>
 
       <div v-if="activity.length === 0" class="empty-inline">
-        <span>No recent activity</span>
+        <span>{{ t('productActivityFeed.noActivity') }}</span>
       </div>
 
       <div v-else class="activity-list">
@@ -212,10 +215,10 @@ watch(() => props.tokenSpend, () => {
 
     <!-- Token Spend Section -->
     <div class="section">
-      <h4 class="section-title">Token Spend</h4>
+      <h4 class="section-title">{{ t('productActivityFeed.tokenSpend') }}</h4>
 
       <div v-if="tokenSpend.length === 0" class="empty-inline">
-        <span>No token usage data</span>
+        <span>{{ t('productActivityFeed.noTokenData') }}</span>
       </div>
 
       <div v-else class="chart-container">

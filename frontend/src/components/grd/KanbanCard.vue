@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import type { GrdPlan } from '../../services/api';
+
+const { t } = useI18n();
 
 defineProps<{
   plan: GrdPlan;
@@ -10,11 +13,11 @@ defineProps<{
 
 function statusLabel(status: string): string {
   switch (status) {
-    case 'pending': return 'Pending';
-    case 'in_progress': return 'In Progress';
-    case 'in_review': return 'In Review';
-    case 'completed': return 'Completed';
-    case 'failed': return 'Failed';
+    case 'pending': return t('kanbanCard.status.pending');
+    case 'in_progress': return t('kanbanCard.status.inProgress');
+    case 'in_review': return t('kanbanCard.status.inReview');
+    case 'completed': return t('kanbanCard.status.completed');
+    case 'failed': return t('kanbanCard.status.failed');
     default: return status;
   }
 }
@@ -38,11 +41,11 @@ function statusClass(status: string): string {
       <span class="card-number">#{{ String(plan.plan_number).padStart(2, '0') }}</span>
     </div>
     <div class="card-meta">
-      <span class="phase-indicator">Phase {{ phaseNumber }}: {{ phaseName }}</span>
+      <span class="phase-indicator">{{ t('kanbanCard.phaseLabel', { number: phaseNumber, name: phaseName }) }}</span>
     </div>
     <div class="card-footer">
       <span :class="['status-badge', statusClass(plan.status)]">{{ statusLabel(plan.status) }}</span>
-      <span class="agent-name">{{ agentName || 'Unassigned' }}</span>
+      <span class="agent-name">{{ agentName || t('kanbanCard.unassigned') }}</span>
     </div>
   </div>
 </template>

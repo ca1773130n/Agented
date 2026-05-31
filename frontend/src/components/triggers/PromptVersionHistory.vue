@@ -4,6 +4,9 @@ import type { PromptHistoryEntry } from '../../services/api';
 import { triggerApi, ApiError } from '../../services/api';
 import { safeFormatDate } from '../../utils/datetime';
 import { useToast } from '../../composables/useToast';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   triggerId: string;
@@ -25,7 +28,7 @@ async function loadHistory() {
     const res = await triggerApi.getPromptHistory(props.triggerId);
     history.value = res.history || [];
   } catch (err) {
-    error.value = err instanceof ApiError ? err.message : 'Failed to load version history';
+    error.value = err instanceof ApiError ? err.message : t('promptVersionHistory.loadFailed');
   } finally {
     isLoading.value = false;
   }
@@ -47,11 +50,11 @@ async function confirmRollback(versionId: number) {
   isRollingBack.value = true;
   try {
     await triggerApi.rollbackPrompt(props.triggerId, versionId);
-    showToast('Prompt rolled back successfully', 'success');
+    showToast(t('promptVersionHistory.rollbackSuccess'), 'success');
     confirmRollbackId.value = null;
     await loadHistory();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to rollback prompt';
+    const message = err instanceof ApiError ? err.message : t('promptVersionHistory.rollbackFailed');
     showToast(message, 'error');
   } finally {
     isRollingBack.value = false;
@@ -81,24 +84,24 @@ onMounted(loadHistory);
 <template>
   <div class="version-history">
     <div class="section-header">
-      <h3>Prompt Version History</h3>
-      <span v-if="history.length" class="entry-count">{{ history.length }} versions</span>
+      <h3>{{ t('promptVersionHistory.title') }}</h3>
+      <span v-if="history.length" class="entry-count">{{ t('promptVersionHistory.versionsCount', { count: history.length }) }}</span>
     </div>
 
     <div v-if="isLoading" class="loading-state">
       <span class="spinner"></span>
-      Loading version history...
+      {{ t('promptVersionHistory.loading') }}
     </div>
 
     <div v-else-if="error" class="error-state">
       <p>{{ error }}</p>
-      <button class="retry-btn" @click="loadHistory">Retry</button>
+      <button class="retry-btn" @click="loadHistory">{{ t('common.retry') }}</button>
     </div>
 
     <div v-else-if="history.length === 0" class="empty-state">
       <div class="empty-icon">&#9671;</div>
-      <p>No version history yet</p>
-      <span>Edit the prompt template to start tracking changes.</span>
+      <p>{{ t('promptVersionHistory.empty') }}</p>
+      <span>{{ t('promptVersionHistory.emptyHint') }}</span>
     </div>
 
     <div v-else class="version-list">
@@ -110,7 +113,7 @@ onMounted(loadHistory);
         <div class="version-header" @click="toggleExpand(entry.id)">
           <div class="version-info">
             <span class="version-number">v{{ history.length - index }}</span>
-            <span class="version-author">{{ entry.author || 'system' }}</span>
+            <span class="version-author">{{ entry.author || t('promptVersionHistory.systemAuthor') }}</span>
             <span class="version-date">{{ formatDate(entry.changed_at) }}</span>
           </div>
           <div class="version-actions">
@@ -120,9 +123,9 @@ onMounted(loadHistory);
               @click.stop="requestRollback(entry.id)"
               :disabled="isRollingBack"
             >
-              Rollback to this version
+              {{ t('promptVersionHistory.rollbackToVersion') }}
             </button>
-            <span v-else class="current-badge">Current</span>
+            <span v-else class="current-badge">{{ t('promptVersionHistory.current') }}</span>
             <span class="expand-icon" :class="{ expanded: expandedVersionId === entry.id }">
               &#9662;
             </span>
@@ -131,12 +134,12 @@ onMounted(loadHistory);
 
         <!-- Rollback confirmation -->
         <div v-if="confirmRollbackId === entry.id" class="rollback-confirm">
-          <p>Are you sure you want to rollback to v{{ history.length - index }}?</p>
+          <p>{{ t('promptVersionHistory.confirmQuestion', { version: history.length - index }) }}</p>
           <div class="confirm-actions">
             <button class="confirm-btn" @click="confirmRollback(entry.id)" :disabled="isRollingBack">
-              {{ isRollingBack ? 'Rolling back...' : 'Confirm Rollback' }}
+              {{ isRollingBack ? t('promptVersionHistory.rollingBack') : t('promptVersionHistory.confirmRollback') }}
             </button>
-            <button class="cancel-btn" @click="cancelRollback">Cancel</button>
+            <button class="cancel-btn" @click="cancelRollback">{{ t('common.cancel') }}</button>
           </div>
         </div>
 
@@ -147,7 +150,7 @@ onMounted(loadHistory);
             :key="lineIdx"
           ><span :class="getDiffLineClass(line)">{{ line }}
 </span></template></pre>
-          <p v-else class="no-diff">No diff available for this version.</p>
+          <p v-else class="no-diff">{{ t('promptVersionHistory.noDiff') }}</p>
         </div>
       </div>
     </div>

@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { WorkflowExecution, WorkflowNodeExecution } from '../../services/api';
 import { workflowExecutionApi } from '../../services/api';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   workflowId: string;
@@ -35,7 +38,7 @@ async function loadExecutions(): Promise<void> {
       return dateB - dateA;
     });
   } catch (err) {
-    loadError.value = err instanceof Error ? err.message : 'Failed to load executions';
+    loadError.value = err instanceof Error ? err.message : t('executionHistoryPanel.loadFailed');
   } finally {
     isLoading.value = false;
   }
@@ -71,7 +74,7 @@ function formatDuration(exec: WorkflowExecution | WorkflowNodeExecution): string
   const endedAt = exec.ended_at;
 
   if (!startedAt) return '--';
-  if (!endedAt) return 'Running...';
+  if (!endedAt) return t('executionHistoryPanel.running');
 
   const start = new Date(startedAt).getTime();
   const end = new Date(endedAt).getTime();
@@ -136,15 +139,15 @@ watch(
   <div v-if="visible" class="history-panel">
     <!-- Header -->
     <div class="history-header">
-      <h3>Execution History</h3>
+      <h3>{{ t('executionHistoryPanel.title') }}</h3>
       <div class="header-actions">
-        <button class="icon-btn" @click="loadExecutions" title="Refresh" :disabled="isLoading">
+        <button class="icon-btn" @click="loadExecutions" :title="t('executionHistoryPanel.refresh')" :disabled="isLoading">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M23 4v6h-6M1 20v-6h6"/>
             <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
           </svg>
         </button>
-        <button class="icon-btn" @click="emit('close')" title="Close">
+        <button class="icon-btn" @click="emit('close')" :title="t('common.close')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M18 6L6 18M6 6l12 12"/>
           </svg>
@@ -155,13 +158,13 @@ watch(
     <!-- Loading state -->
     <div v-if="isLoading && executions.length === 0" class="loading-state">
       <div class="spinner"></div>
-      <span>Loading executions...</span>
+      <span>{{ t('executionHistoryPanel.loading') }}</span>
     </div>
 
     <!-- Error state -->
     <div v-else-if="loadError" class="error-state">
       <span>{{ loadError }}</span>
-      <button class="retry-btn" @click="loadExecutions">Retry</button>
+      <button class="retry-btn" @click="loadExecutions">{{ t('common.retry') }}</button>
     </div>
 
     <!-- Empty state -->
@@ -170,7 +173,7 @@ watch(
         <circle cx="12" cy="12" r="10"/>
         <path d="M12 6v6l4 2"/>
       </svg>
-      <span>No executions yet. Run your workflow from the toolbar.</span>
+      <span>{{ t('executionHistoryPanel.empty') }}</span>
     </div>
 
     <!-- Execution list -->
@@ -199,11 +202,11 @@ watch(
 
         <!-- Replay button -->
         <div class="exec-actions">
-          <button class="replay-btn" @click.stop="emit('replay-execution', exec.id)" title="Replay execution">
+          <button class="replay-btn" @click.stop="emit('replay-execution', exec.id)" :title="t('executionHistoryPanel.replayExecution')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polygon points="5 3 19 12 5 21 5 3"/>
             </svg>
-            Replay
+            {{ t('executionHistoryPanel.replay') }}
           </button>
         </div>
 
@@ -211,10 +214,10 @@ watch(
         <div v-if="expandedExecutionId === exec.id" class="node-detail-section">
           <div v-if="nodeLoading" class="node-loading">
             <div class="spinner-sm"></div>
-            Loading nodes...
+            {{ t('executionHistoryPanel.loadingNodes') }}
           </div>
           <div v-else-if="nodeExecutions.length === 0" class="node-empty">
-            No node execution data available.
+            {{ t('executionHistoryPanel.noNodeData') }}
           </div>
           <div v-else class="node-execution-list">
             <div
@@ -232,23 +235,23 @@ watch(
               <!-- Node detail expansion -->
               <div v-if="expandedNodeId === node.node_id" class="node-exec-detail">
                 <div v-if="node.input_json" class="detail-section">
-                  <div class="detail-label">Input</div>
+                  <div class="detail-label">{{ t('executionHistoryPanel.input') }}</div>
                   <pre class="json-display">{{ formatJson(node.input_json) }}</pre>
                 </div>
                 <div v-if="node.output_json" class="detail-section">
-                  <div class="detail-label">Output</div>
+                  <div class="detail-label">{{ t('executionHistoryPanel.output') }}</div>
                   <pre class="json-display">{{ formatJson(node.output_json) }}</pre>
                 </div>
                 <div v-if="node.error" class="detail-section">
-                  <div class="detail-label error-label">Error</div>
+                  <div class="detail-label error-label">{{ t('executionHistoryPanel.error') }}</div>
                   <pre class="json-display error-display">{{ node.error }}</pre>
                 </div>
                 <div class="detail-section">
-                  <div class="detail-label">Timing</div>
+                  <div class="detail-label">{{ t('executionHistoryPanel.timing') }}</div>
                   <div class="timing-info">
-                    <span>Start: {{ formatTime(node.started_at) }}</span>
-                    <span>End: {{ formatTime(node.ended_at) }}</span>
-                    <span>Duration: {{ formatDuration(node) }}</span>
+                    <span>{{ t('executionHistoryPanel.start') }} {{ formatTime(node.started_at) }}</span>
+                    <span>{{ t('executionHistoryPanel.end') }} {{ formatTime(node.ended_at) }}</span>
+                    <span>{{ t('executionHistoryPanel.duration') }} {{ formatDuration(node) }}</span>
                   </div>
                 </div>
               </div>

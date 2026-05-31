@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { TraceSpan } from '../../services/api/tracing';
+
+const { t } = useI18n();
 
 export interface SpanTreeChild {
   span: TraceSpan;
@@ -30,10 +33,10 @@ function toggle() { expanded.value = !expanded.value; }
       <span v-if="span.duration_ms != null" class="span-duration">{{ span.duration_ms }}ms</span>
     </div>
     <div v-if="expanded" class="span-body" data-testid="span-body">
-      <pre v-if="span.input">input: {{ JSON.stringify(span.input, null, 2) }}</pre>
-      <pre v-if="span.output">output: {{ JSON.stringify(span.output, null, 2) }}</pre>
-      <pre v-if="span.attributes">attributes: {{ JSON.stringify(span.attributes, null, 2) }}</pre>
-      <pre v-if="span.error_message" class="span-error">error: {{ span.error_message }}</pre>
+      <pre v-if="span.input">{{ t('spanTreeNode.input') }}: {{ JSON.stringify(span.input, null, 2) }}</pre>
+      <pre v-if="span.output">{{ t('spanTreeNode.output') }}: {{ JSON.stringify(span.output, null, 2) }}</pre>
+      <pre v-if="span.attributes">{{ t('spanTreeNode.attributes') }}: {{ JSON.stringify(span.attributes, null, 2) }}</pre>
+      <pre v-if="span.error_message" class="span-error">{{ t('spanTreeNode.error') }}: {{ span.error_message }}</pre>
     </div>
     <div v-if="children.length > 0" class="span-children">
       <SpanTreeNode

@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { triggerApi, ApiError } from '../services/api';
 import type { Trigger, PromptHistoryEntry } from '../services/api';
 const route = useRoute();
 const showToast = useToast();
+const { t } = useI18n();
 
 const botId = computed(() => (route.params.botId as string) || '');
 
@@ -56,7 +58,7 @@ async function loadTriggers() {
     const res = await triggerApi.list();
     triggers.value = res.triggers;
   } catch (e) {
-    triggerLoadError.value = e instanceof ApiError ? e.message : 'Failed to load triggers';
+    triggerLoadError.value = e instanceof ApiError ? e.message : t('viewsPromptVersionHistory.errors.loadTriggers');
   } finally {
     isLoadingTriggers.value = false;
   }
@@ -86,7 +88,7 @@ async function loadHistory(triggerId: string) {
       version: history.length + 1,
       author: 'current',
       timestamp: currentTrigger.created_at || new Date().toISOString(),
-      message: 'Current active version',
+      message: t('viewsPromptVersionHistory.currentActiveVersion'),
       prompt: currentTrigger.prompt_template || '',
       tokensEstimate: Math.round((currentTrigger.prompt_template || '').split(/\s+/).length * 1.3),
       tag: 'current',
@@ -99,7 +101,7 @@ async function loadHistory(triggerId: string) {
         version: history.length - idx,
         author: entry.author || 'unknown',
         timestamp: entry.changed_at,
-        message: entry.diff_text ? `Changed: ${entry.diff_text.substring(0, 60)}...` : 'Prompt updated',
+        message: entry.diff_text ? t('viewsPromptVersionHistory.changedPrefix', { text: entry.diff_text.substring(0, 60) }) : t('viewsPromptVersionHistory.promptUpdated'),
         prompt: entry.old_template,
         tokensEstimate: Math.round((entry.old_template || '').split(/\s+/).length * 1.3),
       });
@@ -116,9 +118,9 @@ async function loadHistory(triggerId: string) {
     }
   } catch (e) {
     if (e instanceof ApiError && e.status === 404) {
-      historyError.value = 'No prompt history found for this trigger.';
+      historyError.value = t('viewsPromptVersionHistory.errors.noHistory');
     } else {
-      historyError.value = e instanceof ApiError ? e.message : 'Failed to load prompt history';
+      historyError.value = e instanceof ApiError ? e.message : t('viewsPromptVersionHistory.errors.loadHistory');
     }
   } finally {
     isLoadingHistory.value = false;
@@ -190,15 +192,15 @@ async function rollbackTo(v: PromptVersion) {
       await triggerApi.rollbackPrompt(activeTrigId.value, v.id);
     } else {
       // Rollback to current version doesn't make sense
-      showToast('Already on current version', 'info');
+      showToast(t('viewsPromptVersionHistory.toasts.alreadyCurrent'), 'info');
       isRollingBack.value = false;
       return;
     }
-    showToast(`Rolled back to v${v.version}. Prompt has been restored.`, 'success');
+    showToast(t('viewsPromptVersionHistory.toasts.rolledBack', { version: v.version }), 'success');
     activeTab.value = 'list';
     await loadHistory(activeTrigId.value);
   } catch (e) {
-    showToast(e instanceof ApiError ? e.message : 'Rollback failed', 'error');
+    showToast(e instanceof ApiError ? e.message : t('viewsPromptVersionHistory.toasts.rollbackFailed'), 'error');
   } finally {
     isRollingBack.value = false;
   }
@@ -209,35 +211,35 @@ async function rollbackTo(v: PromptVersion) {
   <div class="prompt-version-history">
 
     <PageHeader
-      title="Prompt Template Version History"
-      subtitle="Every change to this bot's prompt template — with diffs, authors, and one-click rollback."
+      :title="t('viewsPromptVersionHistory.title')"
+      :subtitle="t('viewsPromptVersionHistory.subtitle')"
     />
 
     <!-- Trigger selector (when no botId in route) -->
     <div v-if="!botId">
-      <div v-if="isLoadingTriggers" class="loading-msg">Loading triggers...</div>
+      <div v-if="isLoadingTriggers" class="loading-msg">{{ t('viewsPromptVersionHistory.loadingTriggers') }}</div>
       <div v-else-if="triggerLoadError" class="error-msg">{{ triggerLoadError }}</div>
       <div v-else class="trigger-selector">
-        <label class="selector-label">Select Trigger:</label>
+        <label class="selector-label">{{ t('viewsPromptVersionHistory.selectTrigger') }}</label>
         <select v-model="selectedTriggerId" class="trigger-select">
-          <option value="">Choose a trigger...</option>
-          <option v-for="t in triggers" :key="t.id" :value="t.id">{{ t.name }} ({{ t.id }})</option>
+          <option value="">{{ t('viewsPromptVersionHistory.chooseTrigger') }}</option>
+          <option v-for="trig in triggers" :key="trig.id" :value="trig.id">{{ trig.name }} ({{ trig.id }})</option>
         </select>
       </div>
     </div>
 
-    <div v-if="isLoadingHistory" class="loading-msg">Loading prompt history...</div>
+    <div v-if="isLoadingHistory" class="loading-msg">{{ t('viewsPromptVersionHistory.loadingHistory') }}</div>
     <div v-else-if="historyError" class="error-msg">{{ historyError }}</div>
-    <div v-else-if="versions.length === 0 && activeTrigId" class="empty-msg">No prompt history found for this trigger.</div>
-    <div v-else-if="versions.length === 0 && !activeTrigId" class="empty-msg">Select a trigger to view its prompt history.</div>
+    <div v-else-if="versions.length === 0 && activeTrigId" class="empty-msg">{{ t('viewsPromptVersionHistory.emptyNoHistory') }}</div>
+    <div v-else-if="versions.length === 0 && !activeTrigId" class="empty-msg">{{ t('viewsPromptVersionHistory.emptySelectTrigger') }}</div>
 
     <template v-if="versions.length > 0">
       <div class="tab-row">
         <button class="tab-btn" :class="{ active: activeTab === 'list' }" @click="activeTab = 'list'">
-          Version List
+          {{ t('viewsPromptVersionHistory.tabs.versionList') }}
         </button>
         <button class="tab-btn" :class="{ active: activeTab === 'diff' }" @click="activeTab = 'diff'">
-          Diff View
+          {{ t('viewsPromptVersionHistory.tabs.diffView') }}
           <span v-if="addedCount || removedCount" class="diff-badge">
             <span class="added-badge">+{{ addedCount }}</span>
             <span class="removed-badge">-{{ removedCount }}</span>
@@ -264,12 +266,12 @@ async function rollbackTo(v: PromptVersion) {
               <span class="sep">·</span>
               <span class="date">{{ fmtDate(v.timestamp) }}</span>
               <span class="sep">·</span>
-              <span class="tokens">~{{ v.tokensEstimate }} tokens</span>
+              <span class="tokens">{{ t('viewsPromptVersionHistory.tokens', { count: v.tokensEstimate }) }}</span>
             </div>
           </div>
           <div class="version-actions">
             <button class="btn btn-xs btn-ghost" @click="selectForDiff(v.id)">
-              Diff vs current
+              {{ t('viewsPromptVersionHistory.actions.diffVsCurrent') }}
             </button>
             <button
               v-if="v.tag !== 'current'"
@@ -277,10 +279,10 @@ async function rollbackTo(v: PromptVersion) {
               :disabled="isRollingBack"
               @click="rollbackTo(v)"
             >
-              Rollback
+              {{ t('viewsPromptVersionHistory.actions.rollback') }}
             </button>
             <button class="btn btn-xs btn-ghost" @click="activeTab = 'diff'; selectedLeft = String(v.id)">
-              View
+              {{ t('viewsPromptVersionHistory.actions.view') }}
             </button>
           </div>
         </div>
@@ -291,7 +293,7 @@ async function rollbackTo(v: PromptVersion) {
         <div class="diff-controls card">
           <div class="diff-select-row">
             <div class="diff-select-group">
-              <label class="diff-label">Base (older)</label>
+              <label class="diff-label">{{ t('viewsPromptVersionHistory.diff.baseOlder') }}</label>
               <select v-model="selectedLeft" class="select">
                 <option v-for="v in versions" :key="v.id" :value="String(v.id)">
                   v{{ v.version }} — {{ v.message }}
@@ -300,7 +302,7 @@ async function rollbackTo(v: PromptVersion) {
             </div>
             <div class="diff-arrow">&rarr;</div>
             <div class="diff-select-group">
-              <label class="diff-label">Compare (newer)</label>
+              <label class="diff-label">{{ t('viewsPromptVersionHistory.diff.compareNewer') }}</label>
               <select v-model="selectedRight" class="select">
                 <option v-for="v in versions" :key="v.id" :value="String(v.id)">
                   v{{ v.version }} — {{ v.message }}
@@ -309,8 +311,8 @@ async function rollbackTo(v: PromptVersion) {
             </div>
           </div>
           <div class="diff-summary">
-            <span class="added-badge">+{{ addedCount }} added</span>
-            <span class="removed-badge">-{{ removedCount }} removed</span>
+            <span class="added-badge">{{ t('viewsPromptVersionHistory.diff.added', { count: addedCount }) }}</span>
+            <span class="removed-badge">{{ t('viewsPromptVersionHistory.diff.removed', { count: removedCount }) }}</span>
           </div>
         </div>
 

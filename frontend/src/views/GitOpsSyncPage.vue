@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { ApiError } from '../services/api';
 import { gitopsApi } from '../services/api';
 import type { GitOpsRepo, SyncLog } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
+const { t } = useI18n();
 const showToast = useToast();
 
 const repos = ref<GitOpsRepo[]>([]);
@@ -38,7 +40,7 @@ async function loadRepos() {
       await loadLogs(repos.value[0].id);
     }
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load GitOps repos';
+    const message = err instanceof ApiError ? err.message : t('gitOpsSync.error.loadRepos');
     loadError.value = message;
   } finally {
     isLoading.value = false;
@@ -61,7 +63,7 @@ async function selectRepo(repoId: string) {
 
 async function handleCreate() {
   if (!newRepoName.value.trim() || !newRepoUrl.value.trim()) {
-    showToast('Name and repository URL are required', 'info');
+    showToast(t('gitOpsSync.toast.nameUrlRequired'), 'info');
     return;
   }
   isCreating.value = true;
@@ -79,9 +81,9 @@ async function handleCreate() {
     newBranch.value = 'main';
     newConfigPath.value = '.agented/';
     showAddForm.value = false;
-    showToast('Repository added', 'success');
+    showToast(t('gitOpsSync.toast.repoAdded'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to create repo';
+    const message = err instanceof ApiError ? err.message : t('gitOpsSync.error.createRepo');
     showToast(message, 'error');
   } finally {
     isCreating.value = false;
@@ -93,13 +95,13 @@ async function handleSync(dryRun = false) {
   isSyncing.value = true;
   try {
     const result = await gitopsApi.triggerSync(selectedRepoId.value, dryRun);
-    showToast(dryRun ? 'Dry run completed' : 'Sync completed', 'success');
+    showToast(dryRun ? t('gitOpsSync.toast.dryRunCompleted') : t('gitOpsSync.toast.syncCompleted'), 'success');
     if (result.status) {
       // Refresh repo and logs
       await Promise.all([loadRepos(), loadLogs(selectedRepoId.value!)]);
     }
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Sync failed';
+    const message = err instanceof ApiError ? err.message : t('gitOpsSync.error.syncFailed');
     showToast(message, 'error');
   } finally {
     isSyncing.value = false;
@@ -116,9 +118,9 @@ async function handleDelete(repo: GitOpsRepo) {
       if (selectedRepoId.value) await loadLogs(selectedRepoId.value);
       else syncLogs.value = [];
     }
-    showToast('Repository removed', 'success');
+    showToast(t('gitOpsSync.toast.repoRemoved'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to delete repo';
+    const message = err instanceof ApiError ? err.message : t('gitOpsSync.error.deleteRepo');
     showToast(message, 'error');
   } finally {
     deletingId.value = null;
@@ -130,9 +132,9 @@ async function toggleEnabled(repo: GitOpsRepo) {
   try {
     await gitopsApi.updateRepo(repo.id, { enabled: newEnabled });
     repo.enabled = newEnabled ? 1 : 0;
-    showToast(`Repository ${newEnabled ? 'enabled' : 'disabled'}`, 'success');
+    showToast(newEnabled ? t('gitOpsSync.toast.repoEnabled') : t('gitOpsSync.toast.repoDisabled'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to update repo';
+    const message = err instanceof ApiError ? err.message : t('gitOpsSync.error.updateRepo');
     showToast(message, 'error');
   }
 }
@@ -144,7 +146,7 @@ function statusColor(status: string | null): string {
 }
 
 function formatDate(dateStr: string | null): string {
-  if (!dateStr) return 'Never';
+  if (!dateStr) return t('gitOpsSync.never');
   return new Date(dateStr).toLocaleString();
 }
 
@@ -155,25 +157,25 @@ onMounted(loadRepos);
   <div class="gitops">
 
     <PageHeader
-      title="GitOps Repository Sync"
-      subtitle="Configure Git repositories for syncing bot and agent configurations."
+      :title="t('gitOpsSync.title')"
+      :subtitle="t('gitOpsSync.subtitle')"
     >
       <template #actions>
         <button class="btn btn-primary" @click="showAddForm = !showAddForm">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
-          Add Repository
+          {{ t('gitOpsSync.addRepository') }}
         </button>
       </template>
     </PageHeader>
 
-    <LoadingState v-if="isLoading" message="Loading GitOps configuration..." />
+    <LoadingState v-if="isLoading" :message="t('gitOpsSync.loadingConfig')" />
 
     <div v-else-if="loadError" class="card error-card">
       <div class="error-inner">
         <p>{{ loadError }}</p>
-        <button class="btn btn-ghost" @click="loadRepos">Retry</button>
+        <button class="btn btn-ghost" @click="loadRepos">{{ t('common.retry') }}</button>
       </div>
     </div>
 
@@ -185,34 +187,34 @@ onMounted(loadRepos);
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16">
               <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
             </svg>
-            Add Repository
+            {{ t('gitOpsSync.addRepository') }}
           </h3>
         </div>
         <div class="form-body">
           <div class="field-row">
             <div class="field">
-              <label class="field-label">Name <span class="required">*</span></label>
+              <label class="field-label">{{ t('gitOpsSync.form.name') }} <span class="required">*</span></label>
               <input v-model="newRepoName" type="text" class="input" placeholder="my-project-config" />
             </div>
             <div class="field">
-              <label class="field-label">Repository URL <span class="required">*</span></label>
+              <label class="field-label">{{ t('gitOpsSync.form.repoUrl') }} <span class="required">*</span></label>
               <input v-model="newRepoUrl" type="text" class="input" placeholder="https://github.com/org/repo.git" />
             </div>
           </div>
           <div class="field-row">
             <div class="field">
-              <label class="field-label">Branch</label>
+              <label class="field-label">{{ t('gitOpsSync.form.branch') }}</label>
               <input v-model="newBranch" type="text" class="input" placeholder="main" />
             </div>
             <div class="field">
-              <label class="field-label">Config Path</label>
+              <label class="field-label">{{ t('gitOpsSync.form.configPath') }}</label>
               <input v-model="newConfigPath" type="text" class="input" placeholder=".agented/" />
             </div>
           </div>
           <div class="form-actions">
-            <button class="btn btn-ghost" @click="showAddForm = false">Cancel</button>
+            <button class="btn btn-ghost" @click="showAddForm = false">{{ t('common.cancel') }}</button>
             <button class="btn btn-primary" :disabled="isCreating || !newRepoName.trim() || !newRepoUrl.trim()" @click="handleCreate">
-              {{ isCreating ? 'Adding...' : 'Add Repository' }}
+              {{ isCreating ? t('gitOpsSync.adding') : t('gitOpsSync.addRepository') }}
             </button>
           </div>
         </div>
@@ -223,7 +225,7 @@ onMounted(loadRepos);
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40" style="opacity: 0.3; color: var(--text-tertiary)">
             <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
           </svg>
-          <p>No GitOps repositories configured yet.</p>
+          <p>{{ t('gitOpsSync.noRepos') }}</p>
         </div>
       </div>
 
@@ -232,7 +234,7 @@ onMounted(loadRepos);
         <div class="side-col">
           <div class="card">
             <div class="card-header">
-              <h3>Repositories</h3>
+              <h3>{{ t('gitOpsSync.repositories') }}</h3>
               <span class="card-badge">{{ repos.length }}</span>
             </div>
             <div class="repo-list">
@@ -248,7 +250,7 @@ onMounted(loadRepos);
                   <div class="repo-item-url">{{ repo.repo_url }}</div>
                   <div class="repo-item-meta">
                     <span class="status-dot" :style="{ background: statusColor(repo.last_sync_status) }" />
-                    <span>{{ repo.last_sync_status || 'Not synced' }}</span>
+                    <span>{{ repo.last_sync_status || t('gitOpsSync.notSynced') }}</span>
                     <span class="meta-sep">&middot;</span>
                     <span>{{ repo.branch }}</span>
                   </div>
@@ -265,16 +267,16 @@ onMounted(loadRepos);
             <div class="status-banner" :style="{ borderColor: statusColor(selectedRepo.last_sync_status) }">
               <div class="status-dot" :style="{ background: statusColor(selectedRepo.last_sync_status) }" />
               <span class="status-label" :style="{ color: statusColor(selectedRepo.last_sync_status) }">
-                {{ selectedRepo.last_sync_status || 'Not synced' }}
+                {{ selectedRepo.last_sync_status || t('gitOpsSync.notSynced') }}
               </span>
-              <span v-if="selectedRepo.last_sync_at" class="status-time">Last synced {{ formatDate(selectedRepo.last_sync_at) }}</span>
+              <span v-if="selectedRepo.last_sync_at" class="status-time">{{ t('gitOpsSync.lastSynced', { date: formatDate(selectedRepo.last_sync_at) }) }}</span>
               <div class="banner-actions">
                 <button
                   class="btn btn-sm btn-ghost"
                   :disabled="isSyncing"
                   @click="handleSync(true)"
                 >
-                  Dry Run
+                  {{ t('gitOpsSync.dryRun') }}
                 </button>
                 <button
                   class="btn btn-primary btn-sm"
@@ -288,7 +290,7 @@ onMounted(loadRepos);
                     <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
                     <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
                   </svg>
-                  {{ isSyncing ? 'Syncing...' : 'Sync Now' }}
+                  {{ isSyncing ? t('gitOpsSync.syncing') : t('gitOpsSync.syncNow') }}
                 </button>
               </div>
             </div>
@@ -305,30 +307,30 @@ onMounted(loadRepos);
                     <span class="toggle-thumb" />
                   </button>
                   <button class="btn btn-sm btn-delete" :disabled="deletingId === selectedRepo.id" @click="handleDelete(selectedRepo)">
-                    {{ deletingId === selectedRepo.id ? '...' : 'Delete' }}
+                    {{ deletingId === selectedRepo.id ? '...' : t('common.delete') }}
                   </button>
                 </div>
               </div>
               <div class="detail-grid">
                 <div class="detail-item">
-                  <span class="detail-label">Repository URL</span>
+                  <span class="detail-label">{{ t('gitOpsSync.form.repoUrl') }}</span>
                   <span class="detail-value">{{ selectedRepo.repo_url }}</span>
                 </div>
                 <div class="detail-item">
-                  <span class="detail-label">Branch</span>
+                  <span class="detail-label">{{ t('gitOpsSync.form.branch') }}</span>
                   <span class="detail-value">{{ selectedRepo.branch }}</span>
                 </div>
                 <div class="detail-item">
-                  <span class="detail-label">Config Path</span>
+                  <span class="detail-label">{{ t('gitOpsSync.form.configPath') }}</span>
                   <span class="detail-value">{{ selectedRepo.config_path }}</span>
                 </div>
                 <div class="detail-item">
-                  <span class="detail-label">Poll Interval</span>
+                  <span class="detail-label">{{ t('gitOpsSync.pollInterval') }}</span>
                   <span class="detail-value">{{ selectedRepo.poll_interval_seconds }}s</span>
                 </div>
                 <div class="detail-item">
-                  <span class="detail-label">Last Sync SHA</span>
-                  <span class="detail-value mono">{{ selectedRepo.last_sync_sha || 'None' }}</span>
+                  <span class="detail-label">{{ t('gitOpsSync.lastSyncSha') }}</span>
+                  <span class="detail-value mono">{{ selectedRepo.last_sync_sha || t('gitOpsSync.none') }}</span>
                 </div>
               </div>
             </div>
@@ -340,10 +342,10 @@ onMounted(loadRepos);
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16">
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                   </svg>
-                  Sync History
+                  {{ t('gitOpsSync.syncHistory') }}
                 </h3>
               </div>
-              <div v-if="syncLogs.length === 0" class="list-empty">No sync history yet.</div>
+              <div v-if="syncLogs.length === 0" class="list-empty">{{ t('gitOpsSync.noSyncHistory') }}</div>
               <div v-else class="log-list">
                 <div v-for="log in syncLogs" :key="log.id" class="log-entry">
                   <span class="log-time">{{ formatDate(log.created_at) }}</span>
@@ -352,7 +354,7 @@ onMounted(loadRepos);
                   </span>
                   <span class="log-action">
                     {{ log.changes_summary || log.error_message || log.status }}
-                    <span v-if="log.dry_run" class="dry-run-badge">dry run</span>
+                    <span v-if="log.dry_run" class="dry-run-badge">{{ t('gitOpsSync.dryRunBadge') }}</span>
                   </span>
                 </div>
               </div>

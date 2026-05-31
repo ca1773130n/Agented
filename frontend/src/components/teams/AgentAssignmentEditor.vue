@@ -3,6 +3,9 @@ import { ref, onMounted, computed } from 'vue';
 import type { TeamAgentAssignment, EntityType, SkillInfo, Command, Hook, Rule } from '../../services/api';
 import { teamApi, skillsApi, commandApi, hookApi, ruleApi } from '../../services/api';
 import { useToast } from '../../composables/useToast';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   teamId: string;
@@ -61,7 +64,7 @@ async function loadAssignments() {
     const data = await teamApi.getAssignments(props.teamId, props.agentId);
     assignments.value = data.assignments || [];
   } catch {
-    showToast('Failed to load assignments', 'error');
+    showToast(t('agentAssignmentEditor.loadError'), 'error');
   } finally {
     isLoading.value = false;
   }
@@ -103,9 +106,9 @@ async function addAssignment(entityType: EntityType, entityId: string, entityNam
     }
     openDropdown.value = null;
     emit('updated');
-    showToast(`Added ${entityType}: ${entityName}`, 'success');
+    showToast(t('agentAssignmentEditor.added', { type: entityType, name: entityName }), 'success');
   } catch {
-    showToast(`Failed to add ${entityType}`, 'error');
+    showToast(t('agentAssignmentEditor.addError', { type: entityType }), 'error');
   }
 }
 
@@ -114,9 +117,9 @@ async function removeAssignment(assignment: TeamAgentAssignment) {
     await teamApi.deleteAssignment(props.teamId, assignment.id);
     assignments.value = assignments.value.filter(a => a.id !== assignment.id);
     emit('updated');
-    showToast(`Removed ${assignment.entity_type}: ${assignment.entity_name || assignment.entity_id}`, 'info');
+    showToast(t('agentAssignmentEditor.removed', { type: assignment.entity_type, name: assignment.entity_name || assignment.entity_id }), 'info');
   } catch {
-    showToast(`Failed to remove ${assignment.entity_type}`, 'error');
+    showToast(t('agentAssignmentEditor.removeError', { type: assignment.entity_type }), 'error');
   }
 }
 
@@ -129,20 +132,20 @@ onMounted(() => {
 <template>
   <div class="assignment-editor">
     <div v-if="isLoading" class="loading-assignments">
-      <span>Loading assignments...</span>
+      <span>{{ t('agentAssignmentEditor.loading') }}</span>
     </div>
     <template v-else>
       <!-- Skills Section -->
       <div class="assignment-section">
         <div class="section-header">
-          <span class="section-label">Skills</span>
+          <span class="section-label">{{ t('agentAssignmentEditor.skills') }}</span>
           <span class="section-count">{{ skillAssignments.length }}</span>
-          <button class="add-pill-btn" @click="toggleDropdown('skill')" title="Add skill">
+          <button class="add-pill-btn" @click="toggleDropdown('skill')" :title="t('agentAssignmentEditor.addSkill')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
           </button>
         </div>
         <div v-if="openDropdown === 'skill'" class="dropdown-panel">
-          <div v-if="filteredSkills.length === 0" class="dropdown-empty">No more skills available</div>
+          <div v-if="filteredSkills.length === 0" class="dropdown-empty">{{ t('agentAssignmentEditor.noMoreSkills') }}</div>
           <div
             v-for="skill in filteredSkills"
             :key="skill.name"
@@ -155,25 +158,25 @@ onMounted(() => {
         <div class="pills">
           <span v-for="a in skillAssignments" :key="a.id" class="pill pill-skill">
             {{ a.entity_name || a.entity_id }}
-            <button class="pill-remove" @click="removeAssignment(a)" title="Remove">
+            <button class="pill-remove" @click="removeAssignment(a)" :title="t('common.remove')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
             </button>
           </span>
-          <span v-if="skillAssignments.length === 0" class="empty-text">No skills assigned</span>
+          <span v-if="skillAssignments.length === 0" class="empty-text">{{ t('agentAssignmentEditor.noSkills') }}</span>
         </div>
       </div>
 
       <!-- Commands Section -->
       <div class="assignment-section">
         <div class="section-header">
-          <span class="section-label">Commands</span>
+          <span class="section-label">{{ t('agentAssignmentEditor.commands') }}</span>
           <span class="section-count">{{ commandAssignments.length }}</span>
-          <button class="add-pill-btn" @click="toggleDropdown('command')" title="Add command">
+          <button class="add-pill-btn" @click="toggleDropdown('command')" :title="t('agentAssignmentEditor.addCommand')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
           </button>
         </div>
         <div v-if="openDropdown === 'command'" class="dropdown-panel">
-          <div v-if="filteredCommands.length === 0" class="dropdown-empty">No more commands available</div>
+          <div v-if="filteredCommands.length === 0" class="dropdown-empty">{{ t('agentAssignmentEditor.noMoreCommands') }}</div>
           <div
             v-for="cmd in filteredCommands"
             :key="cmd.id"
@@ -186,25 +189,25 @@ onMounted(() => {
         <div class="pills">
           <span v-for="a in commandAssignments" :key="a.id" class="pill pill-command">
             {{ a.entity_name || a.entity_id }}
-            <button class="pill-remove" @click="removeAssignment(a)" title="Remove">
+            <button class="pill-remove" @click="removeAssignment(a)" :title="t('common.remove')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
             </button>
           </span>
-          <span v-if="commandAssignments.length === 0" class="empty-text">No commands assigned</span>
+          <span v-if="commandAssignments.length === 0" class="empty-text">{{ t('agentAssignmentEditor.noCommands') }}</span>
         </div>
       </div>
 
       <!-- Hooks Section -->
       <div class="assignment-section">
         <div class="section-header">
-          <span class="section-label">Hooks</span>
+          <span class="section-label">{{ t('agentAssignmentEditor.hooks') }}</span>
           <span class="section-count">{{ hookAssignments.length }}</span>
-          <button class="add-pill-btn" @click="toggleDropdown('hook')" title="Add hook">
+          <button class="add-pill-btn" @click="toggleDropdown('hook')" :title="t('agentAssignmentEditor.addHook')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
           </button>
         </div>
         <div v-if="openDropdown === 'hook'" class="dropdown-panel">
-          <div v-if="filteredHooks.length === 0" class="dropdown-empty">No more hooks available</div>
+          <div v-if="filteredHooks.length === 0" class="dropdown-empty">{{ t('agentAssignmentEditor.noMoreHooks') }}</div>
           <div
             v-for="hook in filteredHooks"
             :key="hook.id"
@@ -217,25 +220,25 @@ onMounted(() => {
         <div class="pills">
           <span v-for="a in hookAssignments" :key="a.id" class="pill pill-hook">
             {{ a.entity_name || a.entity_id }}
-            <button class="pill-remove" @click="removeAssignment(a)" title="Remove">
+            <button class="pill-remove" @click="removeAssignment(a)" :title="t('common.remove')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
             </button>
           </span>
-          <span v-if="hookAssignments.length === 0" class="empty-text">No hooks assigned</span>
+          <span v-if="hookAssignments.length === 0" class="empty-text">{{ t('agentAssignmentEditor.noHooks') }}</span>
         </div>
       </div>
 
       <!-- Rules Section -->
       <div class="assignment-section">
         <div class="section-header">
-          <span class="section-label">Rules</span>
+          <span class="section-label">{{ t('agentAssignmentEditor.rules') }}</span>
           <span class="section-count">{{ ruleAssignments.length }}</span>
-          <button class="add-pill-btn" @click="toggleDropdown('rule')" title="Add rule">
+          <button class="add-pill-btn" @click="toggleDropdown('rule')" :title="t('agentAssignmentEditor.addRule')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
           </button>
         </div>
         <div v-if="openDropdown === 'rule'" class="dropdown-panel">
-          <div v-if="filteredRules.length === 0" class="dropdown-empty">No more rules available</div>
+          <div v-if="filteredRules.length === 0" class="dropdown-empty">{{ t('agentAssignmentEditor.noMoreRules') }}</div>
           <div
             v-for="rule in filteredRules"
             :key="rule.id"
@@ -248,11 +251,11 @@ onMounted(() => {
         <div class="pills">
           <span v-for="a in ruleAssignments" :key="a.id" class="pill pill-rule">
             {{ a.entity_name || a.entity_id }}
-            <button class="pill-remove" @click="removeAssignment(a)" title="Remove">
+            <button class="pill-remove" @click="removeAssignment(a)" :title="t('common.remove')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
             </button>
           </span>
-          <span v-if="ruleAssignments.length === 0" class="empty-text">No rules assigned</span>
+          <span v-if="ruleAssignments.length === 0" class="empty-text">{{ t('agentAssignmentEditor.noRules') }}</span>
         </div>
       </div>
     </template>

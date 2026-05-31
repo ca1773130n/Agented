@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { Handle, Position } from '@vue-flow/core'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 defineProps<{
   data: {
@@ -19,8 +22,8 @@ defineProps<{
     <div class="node-color-bar" :style="{ backgroundColor: data.color }"></div>
     <div class="node-content">
       <div class="node-name">{{ data.label }}</div>
-      <div class="node-meta">{{ data.memberCount }} member{{ data.memberCount !== 1 ? 's' : '' }}</div>
-      <div v-if="data.leaderName" class="node-leader">Lead: {{ data.leaderName }}</div>
+      <div class="node-meta">{{ t('teamOrgNode.members', { count: data.memberCount }) }}</div>
+      <div v-if="data.leaderName" class="node-leader">{{ t('teamOrgNode.lead') }} {{ data.leaderName }}</div>
       <div v-if="data.tierCounts" class="node-tiers">
         <span class="tier-badge tier-leader">L:{{ data.tierCounts.leader }}</span>
         <span class="tier-badge tier-senior">S:{{ data.tierCounts.senior }}</span>

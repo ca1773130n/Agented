@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import type { MonitoringStatus } from '../../services/api';
+
+const { t } = useI18n();
 
 defineProps<{
   monitoringStatus: MonitoringStatus | null;
@@ -15,7 +18,7 @@ const emit = defineEmits<{
 <template>
   <div class="section-header">
     <h2 class="section-title">
-      Rate Limit Monitoring
+      {{ t('monitoringHeader.title') }}
       <span v-if="monitoringRefreshing || pollNowLoading" class="inline-refresh-spinner"></span>
     </h2>
     <div class="monitoring-header-actions">
@@ -24,7 +27,7 @@ const emit = defineEmits<{
         class="monitoring-status-badge"
         :class="{ active: monitoringStatus.enabled }"
       >
-        {{ monitoringStatus.enabled ? 'Active' : 'Disabled' }}
+        {{ monitoringStatus.enabled ? t('monitoringHeader.active') : t('monitoringHeader.disabled') }}
       </span>
       <button
         v-if="monitoringStatus?.enabled"
@@ -37,7 +40,7 @@ const emit = defineEmits<{
           <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
         </svg>
         <div v-else class="btn-spinner"></div>
-        {{ pollNowLoading ? 'Checking...' : 'Check Now' }}
+        {{ pollNowLoading ? t('monitoringHeader.checking') : t('monitoringHeader.checkNow') }}
       </button>
     </div>
   </div>

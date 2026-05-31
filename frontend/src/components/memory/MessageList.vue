@@ -1,14 +1,17 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import { ChatBubble } from '@ai-accounts/vue-styled';
 import type { MemoryMessage } from '../../services/api/agentMemory';
 
 defineProps<{ messages: MemoryMessage[] }>();
+
+const { t } = useI18n();
 </script>
 
 <template>
   <div class="message-list">
     <div v-if="messages.length === 0" class="state state-empty" data-testid="message-list-empty">
-      No messages in this thread.
+      {{ t('messageList.empty') }}
     </div>
     <div v-else class="message-rows">
       <div

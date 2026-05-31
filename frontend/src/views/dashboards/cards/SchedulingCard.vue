@@ -14,6 +14,7 @@
 -->
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import {
   schedulerApi,
@@ -30,6 +31,7 @@ import StatCard from '../../../components/base/StatCard.vue';
 import ErrorState from '../../../components/base/ErrorState.vue';
 
 const emit = defineEmits<{ loaded: [slug: string] }>();
+const { t } = useI18n();
 const router = useRouter();
 
 const schedulerStatus = ref<SchedulerStatus | null>(null);
@@ -119,7 +121,7 @@ async function refreshStatus() {
     rotationStatus.value = rot;
     error.value = null;
   } catch (err) {
-    error.value = 'Failed to load scheduler/rotation status.';
+    error.value = t('schedulingCard.error.load');
   }
 }
 
@@ -138,8 +140,8 @@ async function refreshScheduledTriggers() {
 }
 
 function formatDispatchType(type: string | undefined): string {
-  if (type === 'super_agent') return 'Super Agent';
-  return 'Bot';
+  if (type === 'super_agent') return t('schedulingCard.superAgent');
+  return t('schedulingCard.bot');
 }
 
 async function refreshAll() {
@@ -174,62 +176,62 @@ onUnmounted(() => {
   stopAutoRefresh();
 });
 
-const severityRows: Array<[string, string, string]> = [
-  ['critical', 'Immediate escalation — page on-call now', '#ef4444'],
-  ['high', 'Escalate during business hours', '#f97316'],
-  ['medium', 'Create ticket, no page', '#f59e0b'],
-  ['low', 'Log only, no escalation', '#6b7280'],
-];
+const severityRows = computed<Array<[string, string, string]>>(() => [
+  ['critical', t('schedulingCard.severity.critical'), '#ef4444'],
+  ['high', t('schedulingCard.severity.high'), '#f97316'],
+  ['medium', t('schedulingCard.severity.medium'), '#f59e0b'],
+  ['low', t('schedulingCard.severity.low'), '#6b7280'],
+]);
 </script>
 
 <template>
   <section id="scheduling" class="scheduling-dashboard lane-card">
     <header class="lane-card__head">
       <div>
-        <h2 class="lane-card__title">Scheduling &amp; Rotation</h2>
-        <p class="lane-card__subtitle">Monitor agent execution scheduler and account rotation</p>
+        <h2 class="lane-card__title">{{ t('schedulingCard.title') }}</h2>
+        <p class="lane-card__subtitle">{{ t('schedulingCard.subtitle') }}</p>
       </div>
       <div class="head-actions">
         <label class="auto-refresh-toggle">
           <input type="checkbox" v-model="autoRefresh" />
-          <span>Auto-refresh (15s)</span>
+          <span>{{ t('schedulingCard.autoRefresh') }}</span>
         </label>
         <button class="refresh-btn" @click="refreshAll" :disabled="isLoading">
           <svg :class="{ spinning: isLoading }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M23 4v6h-6M1 20v-6h6"/>
             <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
           </svg>
-          Refresh
+          {{ t('schedulingCard.refresh') }}
         </button>
       </div>
     </header>
 
     <ErrorState
       v-if="error"
-      title="Connection Error"
+      :title="t('schedulingCard.connectionError')"
       :message="error"
       @retry="refreshAll"
     />
 
     <!-- Summary cards -->
     <div class="stats-grid">
-      <StatCard title="Active Sessions" :value="rotationStatus?.sessions.length ?? 0" />
-      <StatCard title="Queued" :value="schedulerStatus?.global_summary.queued ?? 0" color="var(--accent-amber)" />
-      <StatCard title="Running" :value="schedulerStatus?.global_summary.running ?? 0" color="var(--accent-emerald)" />
-      <StatCard title="Stopped" :value="schedulerStatus?.global_summary.stopped ?? 0" color="var(--accent-crimson)" />
+      <StatCard :title="t('schedulingCard.stat.activeSessions')" :value="rotationStatus?.sessions.length ?? 0" />
+      <StatCard :title="t('schedulingCard.stat.queued')" :value="schedulerStatus?.global_summary.queued ?? 0" color="var(--accent-amber)" />
+      <StatCard :title="t('schedulingCard.stat.running')" :value="schedulerStatus?.global_summary.running ?? 0" color="var(--accent-emerald)" />
+      <StatCard :title="t('schedulingCard.stat.stopped')" :value="schedulerStatus?.global_summary.stopped ?? 0" color="var(--accent-crimson)" />
     </div>
 
     <section class="dashboard-section">
-      <h2 class="section-header">Scheduler Sessions</h2>
+      <h2 class="section-header">{{ t('schedulingCard.schedulerSessions') }}</h2>
       <div v-if="!schedulerStatus || schedulerStatus.sessions.length === 0" class="empty-state">
-        <p>No scheduler sessions active</p>
+        <p>{{ t('schedulingCard.empty.schedulerSessions') }}</p>
       </div>
       <div v-else class="table-wrapper">
         <table class="data-table">
           <thead>
             <tr>
-              <th>Account ID</th><th>State</th><th>Stop Reason</th>
-              <th>Resume Estimate</th><th>Safe Polls</th><th>Updated</th>
+              <th>{{ t('schedulingCard.th.accountId') }}</th><th>{{ t('schedulingCard.th.state') }}</th><th>{{ t('schedulingCard.th.stopReason') }}</th>
+              <th>{{ t('schedulingCard.th.resumeEstimate') }}</th><th>{{ t('schedulingCard.th.safePolls') }}</th><th>{{ t('schedulingCard.th.updated') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -247,56 +249,56 @@ const severityRows: Array<[string, string, string]> = [
     </section>
 
     <section class="dashboard-section">
-      <h2 class="section-header">Active Rotation Sessions</h2>
+      <h2 class="section-header">{{ t('schedulingCard.activeRotationSessions') }}</h2>
       <div v-if="!rotationStatus || rotationStatus.sessions.length === 0" class="empty-state">
-        <p>No active rotation sessions</p>
+        <p>{{ t('schedulingCard.empty.rotationSessions') }}</p>
       </div>
       <div v-else class="rotation-cards">
         <div v-for="session in rotationStatus.sessions" :key="session.execution_id" class="rotation-card">
           <div class="rotation-card-header">
             <span class="mono execution-id">{{ session.execution_id }}</span>
-            <span class="badge" :class="session.backend_type ?? ''">{{ session.backend_type ?? 'unknown' }}</span>
+            <span class="badge" :class="session.backend_type ?? ''">{{ session.backend_type ?? t('schedulingCard.unknown') }}</span>
           </div>
           <div class="rotation-card-body">
-            <div class="rotation-field"><span class="field-label">Account</span><span class="mono">{{ getAccountName(session.account_id) }}</span></div>
-            <div class="rotation-field"><span class="field-label">Trigger</span><span class="mono">{{ session.trigger_id ?? '—' }}</span></div>
-            <div class="rotation-field"><span class="field-label">Started</span><span class="mono">{{ formatTime(session.started_at) }}</span></div>
+            <div class="rotation-field"><span class="field-label">{{ t('schedulingCard.field.account') }}</span><span class="mono">{{ getAccountName(session.account_id) }}</span></div>
+            <div class="rotation-field"><span class="field-label">{{ t('schedulingCard.field.trigger') }}</span><span class="mono">{{ session.trigger_id ?? '—' }}</span></div>
+            <div class="rotation-field"><span class="field-label">{{ t('schedulingCard.field.started') }}</span><span class="mono">{{ formatTime(session.started_at) }}</span></div>
           </div>
         </div>
       </div>
     </section>
 
     <section class="dashboard-section">
-      <h2 class="section-header">Rotation Evaluator</h2>
+      <h2 class="section-header">{{ t('schedulingCard.rotationEvaluator') }}</h2>
       <div v-if="!rotationStatus" class="empty-state">
-        <p>No evaluator data available</p>
+        <p>{{ t('schedulingCard.empty.evaluator') }}</p>
       </div>
       <div v-else class="evaluator-grid">
-        <div class="evaluator-stat"><span class="field-label">Interval</span><span class="mono">{{ rotationStatus.evaluator.evaluation_interval_seconds }}s</span></div>
-        <div class="evaluator-stat"><span class="field-label">Hysteresis Threshold</span><span class="mono">{{ rotationStatus.evaluator.hysteresis_threshold }}</span></div>
-        <div class="evaluator-stat"><span class="field-label">Active Evaluations</span><span class="mono">{{ rotationStatus.evaluator.active_evaluations }}</span></div>
+        <div class="evaluator-stat"><span class="field-label">{{ t('schedulingCard.field.interval') }}</span><span class="mono">{{ rotationStatus.evaluator.evaluation_interval_seconds }}s</span></div>
+        <div class="evaluator-stat"><span class="field-label">{{ t('schedulingCard.field.hysteresisThreshold') }}</span><span class="mono">{{ rotationStatus.evaluator.hysteresis_threshold }}</span></div>
+        <div class="evaluator-stat"><span class="field-label">{{ t('schedulingCard.field.activeEvaluations') }}</span><span class="mono">{{ rotationStatus.evaluator.active_evaluations }}</span></div>
         <div v-if="Object.keys(rotationStatus.evaluator.evaluation_states).length > 0" class="evaluator-states">
-          <h3 class="subsection-header">Evaluation States</h3>
+          <h3 class="subsection-header">{{ t('schedulingCard.evaluationStates') }}</h3>
           <div v-for="(state, execId) in rotationStatus.evaluator.evaluation_states" :key="execId" class="eval-state-row">
             <span class="mono execution-id">{{ execId }}</span>
-            <span class="field-label">Consecutive polls: <span class="mono">{{ state.consecutive_rotate_polls }}</span></span>
-            <span class="field-label">Last: <span class="mono">{{ formatTime(state.last_evaluated) }}</span></span>
+            <span class="field-label">{{ t('schedulingCard.consecutivePolls') }} <span class="mono">{{ state.consecutive_rotate_polls }}</span></span>
+            <span class="field-label">{{ t('schedulingCard.last') }} <span class="mono">{{ formatTime(state.last_evaluated) }}</span></span>
           </div>
         </div>
       </div>
     </section>
 
     <section class="dashboard-section">
-      <h2 class="section-header">Scheduled Triggers</h2>
+      <h2 class="section-header">{{ t('schedulingCard.scheduledTriggers') }}</h2>
       <div v-if="scheduledTriggers.length === 0" class="empty-state">
-        <p>No scheduled triggers configured</p>
+        <p>{{ t('schedulingCard.empty.scheduledTriggers') }}</p>
       </div>
       <div v-else class="table-wrapper">
         <table class="data-table">
           <thead>
             <tr>
-              <th>Name</th><th>Dispatch Type</th><th>Schedule</th>
-              <th>Next Run</th><th>Last Run</th><th>Status</th>
+              <th>{{ t('schedulingCard.th.name') }}</th><th>{{ t('schedulingCard.th.dispatchType') }}</th><th>{{ t('schedulingCard.th.schedule') }}</th>
+              <th>{{ t('schedulingCard.th.nextRun') }}</th><th>{{ t('schedulingCard.th.lastRun') }}</th><th>{{ t('schedulingCard.th.status') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -313,13 +315,13 @@ const severityRows: Array<[string, string, string]> = [
               </td>
               <td class="mono">
                 {{ trigger.schedule_type || '---' }}
-                <span v-if="trigger.schedule_time"> at {{ trigger.schedule_time }}</span>
+                <span v-if="trigger.schedule_time"> {{ t('schedulingCard.at') }} {{ trigger.schedule_time }}</span>
               </td>
               <td class="mono">{{ formatTime(trigger.next_run_at) }}</td>
               <td class="mono">{{ formatTime(trigger.last_run_at) }}</td>
               <td>
                 <span class="state-badge" :class="trigger.enabled === 1 ? 'running' : 'stopped'">
-                  {{ trigger.enabled === 1 ? 'enabled' : 'disabled' }}
+                  {{ trigger.enabled === 1 ? t('schedulingCard.enabled') : t('schedulingCard.disabled') }}
                 </span>
               </td>
             </tr>
@@ -329,17 +331,16 @@ const severityRows: Array<[string, string, string]> = [
     </section>
 
     <section class="dashboard-section">
-      <h2 class="section-header">Rotation Event Timeline</h2>
+      <h2 class="section-header">{{ t('schedulingCard.rotationEventTimeline') }}</h2>
       <RotationTimelineChart :events="rotationHistory" />
     </section>
 
     <!-- On-Call Policy sub-card — folded from the deleted OnCallEscalation page.
          The escalationPolicy input is NOT persisted (see TODO above). -->
-    <section class="dashboard-section on-call-policy" aria-label="On-Call Policy">
-      <h2 class="section-header">On-Call Policy</h2>
+    <section class="dashboard-section on-call-policy" :aria-label="t('schedulingCard.onCallPolicy')">
+      <h2 class="section-header">{{ t('schedulingCard.onCallPolicy') }}</h2>
       <p class="section-subtitle">
-        Static severity-threshold reference for routing failures.
-        Wire a real escalation backend to persist the policy field.
+        {{ t('schedulingCard.onCallPolicySubtitle') }}
       </p>
 
       <div class="threshold-list">
@@ -356,17 +357,17 @@ const severityRows: Array<[string, string, string]> = [
       </div>
 
       <div class="field-group">
-        <label class="field-label" for="escalation-policy-input">Escalation Policy</label>
+        <label class="field-label" for="escalation-policy-input">{{ t('schedulingCard.escalationPolicy') }}</label>
         <input
           id="escalation-policy-input"
           v-model="escalationPolicy"
           type="text"
           class="text-input"
-          placeholder="Default"
+          :placeholder="t('schedulingCard.escalationPolicyPlaceholder')"
           data-testid="on-call-policy-input"
         />
         <p class="field-hint">
-          Not yet persisted — placeholder until backend plumbing exists.
+          {{ t('schedulingCard.escalationPolicyHint') }}
         </p>
       </div>
     </section>

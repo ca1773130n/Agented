@@ -2,8 +2,11 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { Chart, registerables } from 'chart.js';
 import 'chartjs-adapter-date-fns';
+import { useI18n } from 'vue-i18n';
 import type { EffectivenessOverTimePoint } from '../../services/api';
 import { safeFormatDate } from '../../utils/datetime';
+
+const { t } = useI18n();
 
 Chart.register(...registerables);
 
@@ -48,7 +51,7 @@ function renderDoughnut() {
   doughnutInstance = new Chart(doughnutRef.value, {
     type: 'doughnut',
     data: {
-      labels: ['Accepted', 'Ignored', 'Pending'],
+      labels: [t('botEffectivenessChart.accepted'), t('botEffectivenessChart.ignored'), t('botEffectivenessChart.pending')],
       datasets: [{
         data: [props.summary.accepted, props.summary.ignored, props.summary.pending],
         backgroundColor: [colors.emerald, colors.crimson, colors.amber],
@@ -103,7 +106,7 @@ function renderLine() {
     data: {
       labels,
       datasets: [{
-        label: 'Acceptance Rate (%)',
+        label: t('botEffectivenessChart.acceptanceRatePct'),
         data: sorted.map(d => d.acceptance_rate * 100),
         borderColor: colors.violet,
         backgroundColor: colors.violetBg,
@@ -131,7 +134,7 @@ function renderLine() {
           titleFont: { family: "'Geist Mono', 'SF Mono', monospace", size: 12, weight: 'bold' },
           bodyFont: { family: "'Geist', sans-serif", size: 12 },
           callbacks: {
-            label: (context: any) => `Acceptance: ${Number(context.parsed.y).toFixed(1)}%`, // eslint-disable-line @typescript-eslint/no-explicit-any -- Chart.js tooltip callback
+            label: (context: any) => `${t('botEffectivenessChart.acceptance')}: ${Number(context.parsed.y).toFixed(1)}%`, // eslint-disable-line @typescript-eslint/no-explicit-any -- Chart.js tooltip callback
           },
         },
       },
@@ -184,7 +187,7 @@ watch(() => [props.summary, props.overTime], renderCharts, { deep: true });
       </div>
       <div class="acceptance-rate-display">
         <span class="rate-value">{{ (summary.acceptance_rate * 100).toFixed(0) }}%</span>
-        <span class="rate-label">Acceptance Rate</span>
+        <span class="rate-label">{{ t('botEffectivenessChart.acceptanceRate') }}</span>
       </div>
     </div>
     <div class="line-section">

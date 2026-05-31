@@ -8,6 +8,9 @@ import EntityLayout from '../layouts/EntityLayout.vue';
 import { useToast } from '../composables/useToast';
 import { handleApiError } from '../services/api/error-handler';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   productId?: string;
@@ -65,7 +68,7 @@ async function loadData() {
     originalDescription.value = product.value.description || '';
     return product.value;
   } catch (err) {
-    handleApiError(err, showToast, 'Failed to load product settings');
+    handleApiError(err, showToast, t('productSettings.loadError'));
     throw err;
   }
 }
@@ -83,9 +86,9 @@ async function saveSettings() {
       originalName.value = editName.value;
       originalDescription.value = editDescription.value;
     }
-    showToast('Product settings saved', 'success');
+    showToast(t('productSettings.saved'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to save settings';
+    const message = err instanceof ApiError ? err.message : t('productSettings.saveError');
     showToast(message, 'error');
   } finally {
     isSaving.value = false;
@@ -101,21 +104,21 @@ async function saveSettings() {
   <div class="settings-page">
 
     <template v-if="product">
-      <PageHeader :title="(product?.name ?? '') + ' Settings'" subtitle="Configure product settings and ownership" />
+      <PageHeader :title="(product?.name ?? '') + ' ' + t('productSettings.titleSuffix')" :subtitle="t('productSettings.subtitle')" />
 
       <!-- Product Details Section -->
       <div class="card">
         <div class="card-header">
-          <h3>Product Details</h3>
+          <h3>{{ t('productSettings.detailsTitle') }}</h3>
         </div>
         <div class="card-body">
           <div class="form-group">
-            <label class="form-label">Name</label>
-            <input v-model="editName" type="text" class="settings-input" placeholder="Product name" />
+            <label class="form-label">{{ t('productSettings.nameLabel') }}</label>
+            <input v-model="editName" type="text" class="settings-input" :placeholder="t('productSettings.namePlaceholder')" />
           </div>
           <div class="form-group">
-            <label class="form-label">Description</label>
-            <textarea v-model="editDescription" class="settings-textarea" placeholder="Product description..." rows="3"></textarea>
+            <label class="form-label">{{ t('productSettings.descriptionLabel') }}</label>
+            <textarea v-model="editDescription" class="settings-textarea" :placeholder="t('productSettings.descriptionPlaceholder')" rows="3"></textarea>
           </div>
         </div>
       </div>
@@ -123,13 +126,13 @@ async function saveSettings() {
       <!-- Owner Team Section -->
       <div class="card">
         <div class="card-header">
-          <h3>Owner Team</h3>
+          <h3>{{ t('productSettings.ownerTeamTitle') }}</h3>
         </div>
         <div class="card-body">
-          <p class="section-description">Select the team responsible for this product.</p>
+          <p class="section-description">{{ t('productSettings.ownerTeamDescription') }}</p>
 
           <div v-if="teams.length === 0" class="empty-state">
-            <p>No teams available. Create teams first.</p>
+            <p>{{ t('productSettings.noTeams') }}</p>
           </div>
 
           <div v-else class="teams-grid">
@@ -151,7 +154,7 @@ async function saveSettings() {
               </div>
               <div class="team-info">
                 <span class="team-name">{{ team.name }}</span>
-                <span class="team-members">{{ team.member_count }} members</span>
+                <span class="team-members">{{ t('productSettings.membersCount', { count: team.member_count }) }}</span>
               </div>
             </div>
           </div>
@@ -161,7 +164,7 @@ async function saveSettings() {
             class="btn btn-text"
             @click="selectedOwnerTeamId = ''"
           >
-            Clear selection
+            {{ t('productSettings.clearSelection') }}
           </button>
         </div>
       </div>
@@ -169,11 +172,11 @@ async function saveSettings() {
       <!-- Actions -->
       <div class="actions-row">
         <button class="btn btn-secondary" @click="router.push({ name: 'product-dashboard', params: { productId: productId } })">
-          Cancel
+          {{ t('common.cancel') }}
         </button>
         <button class="btn btn-primary" :disabled="isSaving" @click="saveSettings">
-          <span v-if="isSaving">Saving...</span>
-          <span v-else>Save Settings</span>
+          <span v-if="isSaving">{{ t('productSettings.saving') }}</span>
+          <span v-else>{{ t('productSettings.saveSettings') }}</span>
         </button>
       </div>
     </template>

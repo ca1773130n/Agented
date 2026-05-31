@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   phaseNumber: number;
@@ -24,7 +27,7 @@ const isCollapsed = ref(props.initialCollapsed ?? false);
       >
         <path d="M9 18l6-6-6-6" />
       </svg>
-      <span class="phase-label">Phase {{ phaseNumber }}: {{ phaseName }}</span>
+      <span class="phase-label">{{ t('phaseSwimLane.phaseLabel', { number: phaseNumber, name: phaseName }) }}</span>
       <span class="phase-count">{{ planCount }}</span>
     </div>
     <div v-show="!isCollapsed" class="swimlane-body">

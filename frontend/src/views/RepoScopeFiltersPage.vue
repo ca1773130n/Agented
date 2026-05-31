@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { triggerApi } from '../services/api';
@@ -8,6 +9,7 @@ import { scopeFiltersApi } from '../services/api/scope-filters';
 import type { ScopeFilter, ScopeFilterPattern } from '../services/api/scope-filters';
 
 const showToast = useToast();
+const { t } = useI18n();
 
 type FilterMode = 'allowlist' | 'denylist';
 type PatternType = 'repo' | 'branch' | 'author';
@@ -17,6 +19,7 @@ interface TestResult {
   type: PatternType;
   matched: boolean;
   matchedBy?: string;
+  fires: boolean;
 }
 
 const filters = ref<ScopeFilter[]>([]);
@@ -46,7 +49,7 @@ async function loadFilters() {
     const resp = await scopeFiltersApi.list();
     filters.value = resp.filters;
   } catch (err) {
-    loadError.value = err instanceof Error ? err.message : 'Failed to load scope filters';
+    loadError.value = err instanceof Error ? err.message : t('repoScopeFilters.errors.loadFilters');
   } finally {
     loading.value = false;
   }
@@ -60,7 +63,7 @@ async function loadFilterDetail(filterId: string) {
       filters.value[idx] = detail;
     }
   } catch {
-    showToast('Failed to load filter details', 'error');
+    showToast(t('repoScopeFilters.toasts.loadDetailsFailed'), 'error');
   }
 }
 
@@ -70,13 +73,13 @@ async function openCreateDialog() {
     const res = await triggerApi.list();
     triggers.value = res.triggers ?? [];
   } catch {
-    showToast('Failed to load triggers', 'error');
+    showToast(t('repoScopeFilters.toasts.loadTriggersFailed'), 'error');
   }
 }
 
 async function createFilter() {
   if (!createTriggerId.value) {
-    showToast('Select a trigger first', 'error');
+    showToast(t('repoScopeFilters.toasts.selectTriggerFirst'), 'error');
     return;
   }
   isCreating.value = true;
@@ -86,14 +89,14 @@ async function createFilter() {
       mode: createMode.value,
       enabled: true,
     });
-    showToast('Scope filter created', 'success');
+    showToast(t('repoScopeFilters.toasts.filterCreated'), 'success');
     showCreateDialog.value = false;
     createTriggerId.value = '';
     createMode.value = 'denylist';
     await loadFilters();
     await Promise.all(filters.value.map((f) => loadFilterDetail(f.id)));
   } catch {
-    showToast('Failed to create scope filter', 'error');
+    showToast(t('repoScopeFilters.toasts.createFilterFailed'), 'error');
   } finally {
     isCreating.value = false;
   }
@@ -106,7 +109,7 @@ onMounted(async () => {
 });
 
 function modeLabel(mode: FilterMode): string {
-  return mode === 'allowlist' ? 'Allowlist' : 'Denylist';
+  return mode === 'allowlist' ? t('repoScopeFilters.modes.allowlist') : t('repoScopeFilters.modes.denylist');
 }
 
 function modeColor(mode: FilterMode): string {
@@ -118,7 +121,11 @@ function typeIcon(type: PatternType): string {
 }
 
 function typeLabel(type: PatternType): string {
-  const labels: Record<PatternType, string> = { repo: 'Repository', branch: 'Branch', author: 'PR Author' };
+  const labels: Record<PatternType, string> = {
+    repo: t('repoScopeFilters.types.repo'),
+    branch: t('repoScopeFilters.types.branch'),
+    author: t('repoScopeFilters.types.author'),
+  };
   return labels[type];
 }
 
@@ -126,21 +133,21 @@ async function removePattern(filter: ScopeFilter, patternId: string) {
   try {
     await scopeFiltersApi.deletePattern(filter.id, patternId);
     await loadFilterDetail(filter.id);
-    showToast('Pattern removed', 'info');
+    showToast(t('repoScopeFilters.toasts.patternRemoved'), 'info');
   } catch {
-    showToast('Failed to remove pattern', 'error');
+    showToast(t('repoScopeFilters.toasts.removePatternFailed'), 'error');
   }
 }
 
 async function addPattern(filter: ScopeFilter) {
   if (!newPattern.value.pattern?.trim()) {
-    showToast('Pattern cannot be empty', 'error');
+    showToast(t('repoScopeFilters.toasts.patternEmpty'), 'error');
     return;
   }
   try {
     new RegExp(newPattern.value.pattern);
   } catch {
-    showToast('Invalid regex pattern', 'error');
+    showToast(t('repoScopeFilters.toasts.invalidRegex'), 'error');
     return;
   }
   try {
@@ -152,9 +159,9 @@ async function addPattern(filter: ScopeFilter) {
     await loadFilterDetail(filter.id);
     newPattern.value = { type: 'repo', pattern: '', description: '' };
     addPatternOpen.value = false;
-    showToast('Pattern added', 'success');
+    showToast(t('repoScopeFilters.toasts.patternAdded'), 'success');
   } catch {
-    showToast('Failed to add pattern', 'error');
+    showToast(t('repoScopeFilters.toasts.addPatternFailed'), 'error');
   }
 }
 
@@ -163,9 +170,14 @@ async function toggleFilter(filter: ScopeFilter) {
   try {
     await scopeFiltersApi.update(filter.id, { enabled: newEnabled });
     filter.enabled = newEnabled;
-    showToast(`Scope filter ${newEnabled ? 'enabled' : 'disabled'}`, 'info');
+    showToast(
+      newEnabled
+        ? t('repoScopeFilters.toasts.filterEnabled')
+        : t('repoScopeFilters.toasts.filterDisabled'),
+      'info',
+    );
   } catch {
-    showToast('Failed to update filter', 'error');
+    showToast(t('repoScopeFilters.toasts.updateFilterFailed'), 'error');
   }
 }
 
@@ -174,15 +186,15 @@ async function toggleMode(filter: ScopeFilter) {
   try {
     await scopeFiltersApi.update(filter.id, { mode: newMode });
     filter.mode = newMode;
-    showToast(`Switched to ${modeLabel(newMode)}`, 'info');
+    showToast(t('repoScopeFilters.toasts.switchedTo', { mode: modeLabel(newMode) }), 'info');
   } catch {
-    showToast('Failed to update filter mode', 'error');
+    showToast(t('repoScopeFilters.toasts.updateModeFailed'), 'error');
   }
 }
 
 function runTest() {
   if (!selectedFilter.value || !testInput.value.trim()) {
-    showToast('Enter a test value first', 'info');
+    showToast(t('repoScopeFilters.toasts.enterTestValue'), 'info');
     return;
   }
   const filter = selectedFilter.value;
@@ -201,19 +213,22 @@ function runTest() {
     }
   }
   const fires =
+    filter.mode === 'allowlist' ? matched : !matched;
+  const verdict =
     filter.mode === 'allowlist'
       ? matched
-        ? 'Bot FIRES (allowlist match)'
-        : 'Bot SKIPS (not in allowlist)'
+        ? t('repoScopeFilters.verdicts.firesAllowlist')
+        : t('repoScopeFilters.verdicts.skipsNotAllowlist')
       : matched
-      ? 'Bot SKIPS (denylist match)'
-      : 'Bot FIRES (not in denylist)';
+      ? t('repoScopeFilters.verdicts.skipsDenylist')
+      : t('repoScopeFilters.verdicts.firesNotDenylist');
   testResults.value = [
     {
       input: testInput.value,
       type: testType.value,
       matched,
-      matchedBy: matched ? `${fires} — matched by: ${matchedBy}` : fires,
+      fires,
+      matchedBy: matched ? t('repoScopeFilters.verdicts.matchedBy', { verdict, pattern: matchedBy }) : verdict,
     },
     ...testResults.value,
   ].slice(0, 10);
@@ -228,67 +243,67 @@ const patternCount = computed(() =>
 <template>
   <div class="page-container">
     <PageHeader
-      title="Repository Scope Filters"
-      subtitle="Define per-bot inclusion/exclusion patterns for repos, branches, and PR authors"
+      :title="t('repoScopeFilters.title')"
+      :subtitle="t('repoScopeFilters.subtitle')"
     >
       <template #actions>
-        <button class="btn-primary" @click="openCreateDialog">+ Create Filter</button>
+        <button class="btn-primary" @click="openCreateDialog">{{ t('repoScopeFilters.createFilter') }}</button>
       </template>
     </PageHeader>
 
     <!-- Summary -->
     <div class="stats-row">
       <div class="stat-card">
-        <div class="stat-label">Bots with Filters</div>
+        <div class="stat-label">{{ t('repoScopeFilters.stats.botsWithFilters') }}</div>
         <div class="stat-value">{{ filters.length }}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Total Patterns</div>
+        <div class="stat-label">{{ t('repoScopeFilters.stats.totalPatterns') }}</div>
         <div class="stat-value">{{ patternCount }}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Allowlists</div>
+        <div class="stat-label">{{ t('repoScopeFilters.stats.allowlists') }}</div>
         <div class="stat-value" style="color: var(--accent-green)">
           {{ filters.filter((f) => f.mode === 'allowlist').length }}
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Denylists</div>
+        <div class="stat-label">{{ t('repoScopeFilters.stats.denylists') }}</div>
         <div class="stat-value" style="color: var(--accent-amber)">
           {{ filters.filter((f) => f.mode === 'denylist').length }}
         </div>
       </div>
     </div>
 
-    <div v-if="loading" class="loading-state">Loading scope filters...</div>
+    <div v-if="loading" class="loading-state">{{ t('repoScopeFilters.loading') }}</div>
 
     <div v-else-if="loadError" class="error-state">
       <p>{{ loadError }}</p>
-      <button class="btn-ghost" @click="loadFilters">Retry</button>
+      <button class="btn-ghost" @click="loadFilters">{{ t('common.retry') }}</button>
     </div>
 
     <!-- Create Filter Dialog -->
     <div v-if="showCreateDialog" class="create-dialog">
-      <div class="create-dialog-header">Create Scope Filter</div>
+      <div class="create-dialog-header">{{ t('repoScopeFilters.createDialog.title') }}</div>
       <div class="create-dialog-body">
         <div class="create-field">
-          <label class="create-label">Trigger</label>
+          <label class="create-label">{{ t('repoScopeFilters.createDialog.trigger') }}</label>
           <select v-model="createTriggerId" class="filter-select">
-            <option value="">Select a trigger...</option>
-            <option v-for="t in triggers" :key="t.id" :value="t.id">{{ t.name }}</option>
+            <option value="">{{ t('repoScopeFilters.createDialog.selectTrigger') }}</option>
+            <option v-for="trig in triggers" :key="trig.id" :value="trig.id">{{ trig.name }}</option>
           </select>
         </div>
         <div class="create-field">
-          <label class="create-label">Filter Mode</label>
+          <label class="create-label">{{ t('repoScopeFilters.createDialog.filterMode') }}</label>
           <select v-model="createMode" class="filter-select">
-            <option value="denylist">Denylist (block matching)</option>
-            <option value="allowlist">Allowlist (only allow matching)</option>
+            <option value="denylist">{{ t('repoScopeFilters.createDialog.denylistOption') }}</option>
+            <option value="allowlist">{{ t('repoScopeFilters.createDialog.allowlistOption') }}</option>
           </select>
         </div>
         <div class="create-actions">
-          <button class="btn-ghost" @click="showCreateDialog = false">Cancel</button>
+          <button class="btn-ghost" @click="showCreateDialog = false">{{ t('common.cancel') }}</button>
           <button class="btn-primary" :disabled="isCreating || !createTriggerId" @click="createFilter">
-            {{ isCreating ? 'Creating...' : 'Create Filter' }}
+            {{ isCreating ? t('repoScopeFilters.creating') : t('repoScopeFilters.createFilterShort') }}
           </button>
         </div>
       </div>
@@ -310,7 +325,7 @@ const patternCount = computed(() =>
               {{ modeLabel(filter.mode) }}
             </span>
             <span class="enabled-badge" :class="{ active: filter.enabled }">
-              {{ filter.enabled ? 'Active' : 'Disabled' }}
+              {{ filter.enabled ? t('repoScopeFilters.active') : t('repoScopeFilters.disabled') }}
             </span>
           </div>
           <div class="pattern-summary">
@@ -320,12 +335,12 @@ const patternCount = computed(() =>
               </span>
             </span>
           </div>
-          <div class="filter-meta">Last modified {{ new Date(filter.updated_at).toLocaleDateString() }}</div>
+          <div class="filter-meta">{{ t('repoScopeFilters.lastModified', { date: new Date(filter.updated_at).toLocaleDateString() }) }}</div>
         </div>
 
         <div v-if="filters.length === 0" class="empty-state">
-          <p>No scope filters configured yet.</p>
-          <button class="btn-primary" style="margin-top: 12px;" @click="openCreateDialog">+ Create Filter</button>
+          <p>{{ t('repoScopeFilters.emptyFilters') }}</p>
+          <button class="btn-primary" style="margin-top: 12px;" @click="openCreateDialog">{{ t('repoScopeFilters.createFilter') }}</button>
         </div>
       </div>
 
@@ -334,42 +349,42 @@ const patternCount = computed(() =>
         <!-- Actions -->
         <div class="panel-actions-top">
           <button class="btn-ghost" @click="toggleMode(selectedFilter)">
-            Switch to {{ selectedFilter.mode === 'allowlist' ? 'Denylist' : 'Allowlist' }}
+            {{ t('repoScopeFilters.switchTo', { mode: selectedFilter.mode === 'allowlist' ? t('repoScopeFilters.modes.denylist') : t('repoScopeFilters.modes.allowlist') }) }}
           </button>
           <button :class="selectedFilter.enabled ? 'btn-ghost' : 'btn-primary'" @click="toggleFilter(selectedFilter)">
-            {{ selectedFilter.enabled ? 'Disable' : 'Enable' }}
+            {{ selectedFilter.enabled ? t('repoScopeFilters.disable') : t('repoScopeFilters.enable') }}
           </button>
         </div>
 
         <!-- Patterns -->
         <div class="patterns-section">
           <div class="section-header">
-            <h3>{{ modeLabel(selectedFilter.mode) }} Patterns</h3>
-            <button class="btn-add" @click="addPatternOpen = !addPatternOpen">+ Add Pattern</button>
+            <h3>{{ t('repoScopeFilters.patternsHeading', { mode: modeLabel(selectedFilter.mode) }) }}</h3>
+            <button class="btn-add" @click="addPatternOpen = !addPatternOpen">{{ t('repoScopeFilters.addPattern') }}</button>
           </div>
 
           <!-- Add pattern form -->
           <div v-if="addPatternOpen" class="add-pattern-form">
             <select v-model="newPattern.type" class="filter-select">
-              <option value="repo">Repository</option>
-              <option value="branch">Branch</option>
-              <option value="author">PR Author</option>
+              <option value="repo">{{ t('repoScopeFilters.types.repo') }}</option>
+              <option value="branch">{{ t('repoScopeFilters.types.branch') }}</option>
+              <option value="author">{{ t('repoScopeFilters.types.author') }}</option>
             </select>
             <input
               v-model="newPattern.pattern"
               class="text-input"
-              placeholder="Regex pattern (e.g. dependabot/.*)"
+              :placeholder="t('repoScopeFilters.regexPlaceholder')"
               type="text"
             />
             <input
               v-model="newPattern.description"
               class="text-input"
-              placeholder="Description (optional)"
+              :placeholder="t('repoScopeFilters.descriptionPlaceholder')"
               type="text"
             />
             <div class="form-actions">
-              <button class="btn-primary" @click="addPattern(selectedFilter)">Add</button>
-              <button class="btn-ghost" @click="addPatternOpen = false">Cancel</button>
+              <button class="btn-primary" @click="addPattern(selectedFilter)">{{ t('common.add') }}</button>
+              <button class="btn-ghost" @click="addPatternOpen = false">{{ t('common.cancel') }}</button>
             </div>
           </div>
 
@@ -382,37 +397,37 @@ const patternCount = computed(() =>
               <span class="pattern-type">{{ typeIcon(p.type) }} {{ typeLabel(p.type) }}</span>
               <code class="pattern-regex">{{ p.pattern }}</code>
               <span v-if="p.description" class="pattern-desc">{{ p.description }}</span>
-              <button class="remove-btn" title="Remove pattern" @click="removePattern(selectedFilter, p.id)">✕</button>
+              <button class="remove-btn" :title="t('repoScopeFilters.removePattern')" @click="removePattern(selectedFilter, p.id)">✕</button>
             </div>
             <div v-if="!selectedFilter.patterns || selectedFilter.patterns.length === 0" class="empty-patterns">
-              No patterns defined. Add a pattern to start filtering.
+              {{ t('repoScopeFilters.noPatterns') }}
             </div>
           </div>
         </div>
 
         <!-- Test sandbox -->
         <div class="test-section">
-          <h3>Test Filter</h3>
-          <p class="test-desc">Simulate whether a repo, branch, or author would trigger this bot.</p>
+          <h3>{{ t('repoScopeFilters.testFilter') }}</h3>
+          <p class="test-desc">{{ t('repoScopeFilters.testDesc') }}</p>
           <div class="test-controls">
             <select v-model="testType" class="filter-select">
-              <option value="repo">Repository</option>
-              <option value="branch">Branch</option>
-              <option value="author">Author</option>
+              <option value="repo">{{ t('repoScopeFilters.types.repo') }}</option>
+              <option value="branch">{{ t('repoScopeFilters.types.branch') }}</option>
+              <option value="author">{{ t('repoScopeFilters.types.authorShort') }}</option>
             </select>
             <input
               v-model="testInput"
               class="text-input test-input"
-              :placeholder="testType === 'repo' ? 'e.g. org/my-service' : testType === 'branch' ? 'e.g. dependabot/npm/lodash' : 'e.g. renovate[bot]'"
+              :placeholder="testType === 'repo' ? t('repoScopeFilters.testPlaceholder.repo') : testType === 'branch' ? t('repoScopeFilters.testPlaceholder.branch') : t('repoScopeFilters.testPlaceholder.author')"
               type="text"
               @keydown.enter="runTest"
             />
-            <button class="btn-primary" @click="runTest">Test</button>
+            <button class="btn-primary" @click="runTest">{{ t('repoScopeFilters.test') }}</button>
           </div>
           <div v-if="testResults.length > 0" class="test-results">
             <div v-for="(result, idx) in testResults.slice(0, 5)" :key="idx" class="test-result-row">
               <span class="test-value">{{ result.type }}: <code>{{ result.input }}</code></span>
-              <span class="test-verdict" :style="{ color: result.matchedBy?.includes('FIRES') ? 'var(--accent-green)' : 'var(--accent-amber)' }">
+              <span class="test-verdict" :style="{ color: result.fires ? 'var(--accent-green)' : 'var(--accent-amber)' }">
                 {{ result.matchedBy }}
               </span>
             </div>
@@ -421,7 +436,7 @@ const patternCount = computed(() =>
       </div>
 
       <div v-else class="panel-placeholder">
-        <p>Select a bot filter to view and edit its scope patterns.</p>
+        <p>{{ t('repoScopeFilters.panelPlaceholder') }}</p>
       </div>
     </div>
   </div>

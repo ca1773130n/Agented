@@ -7,7 +7,9 @@ import EmptyState from '../../components/base/EmptyState.vue';
 import { useToast } from '../../composables/useToast';
 import { useFocusTrap } from '../../composables/useFocusTrap';
 import { useWebMcpTool } from '../../composables/useWebMcpTool';
+import { useI18n } from 'vue-i18n';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 const pageLoading = ref(true);
@@ -75,10 +77,10 @@ async function refreshCache() {
   isRefreshing.value = true;
   try {
     await marketplaceApi.refreshCache();
-    showToast('Marketplace cache refreshed', 'success');
+    showToast(t('marketplacePlugins.toast.cacheRefreshed'), 'success');
     await performSearch(searchQuery.value.trim());
   } catch (e) {
-    showToast('Failed to refresh cache', 'error');
+    showToast(t('marketplacePlugins.toast.cacheRefreshFailed'), 'error');
   } finally {
     isRefreshing.value = false;
   }
@@ -99,12 +101,12 @@ async function installPlugin(plugin: MarketplaceSearchResult) {
       marketplace_id: plugin.marketplace_id,
       remote_plugin_name: plugin.name,
     });
-    showToast(`Installed "${plugin.name}" successfully`, 'success');
+    showToast(t('marketplacePlugins.toast.installed', { name: plugin.name }), 'success');
     plugin.installed = true;
     selectedPlugin.value = null;
     await performSearch(searchQuery.value.trim());
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to install plugin';
+    const message = err instanceof ApiError ? err.message : t('marketplacePlugins.toast.installFailed');
     showToast(message, 'error');
   } finally {
     isInstalling.value = false;
@@ -117,7 +119,7 @@ onMounted(async () => {
   try {
     await performSearch('');
   } catch (e) {
-    pageError.value = e instanceof Error ? e.message : 'Failed to load marketplace data';
+    pageError.value = e instanceof Error ? e.message : t('marketplacePlugins.loadFailed');
   } finally {
     pageLoading.value = false;
   }
@@ -126,12 +128,12 @@ onMounted(async () => {
 
 <template>
   <div class="marketplace-pane">
-    <LoadingState v-if="pageLoading" message="Loading plugins..." />
+    <LoadingState v-if="pageLoading" :message="t('marketplacePlugins.loadingPlugins')" />
 
     <div v-else-if="pageError" class="page-error">
       <p>{{ pageError }}</p>
-      <button class="btn btn-primary" @click="async () => { pageLoading = true; pageError = null; try { await performSearch(''); } catch (e) { pageError = e instanceof Error ? e.message : 'Failed to load'; } finally { pageLoading = false; } }">
-        Retry
+      <button class="btn btn-primary" @click="async () => { pageLoading = true; pageError = null; try { await performSearch(''); } catch (e) { pageError = e instanceof Error ? e.message : t('marketplacePlugins.loadFailedShort'); } finally { pageLoading = false; } }">
+        {{ t('common.retry') }}
       </button>
     </div>
 
@@ -145,10 +147,10 @@ onMounted(async () => {
         <input
           v-model="searchQuery"
           type="text"
-          placeholder="Search plugins across all marketplaces..."
+          :placeholder="t('marketplacePlugins.searchPlaceholder')"
           @input="onSearchInput"
         />
-        <button class="refresh-btn" :disabled="isRefreshing" title="Refresh marketplace data" @click="refreshCache">
+        <button class="refresh-btn" :disabled="isRefreshing" :title="t('marketplacePlugins.refreshTitle')" @click="refreshCache">
           <svg :class="{ spinning: isRefreshing }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M23 4v6h-6M1 20v-6h6"/>
             <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
@@ -161,20 +163,20 @@ onMounted(async () => {
         <div class="section-header">
           <h2>
             <template v-if="searchQuery.trim()">
-              Results for "{{ searchQuery }}" ({{ searchResults.length }})
+              {{ t('marketplacePlugins.resultsFor', { query: searchQuery, count: searchResults.length }) }}
             </template>
             <template v-else>
-              All Available Plugins ({{ searchResults.length }})
+              {{ t('marketplacePlugins.allAvailable', { count: searchResults.length }) }}
             </template>
           </h2>
         </div>
 
-        <LoadingState v-if="isSearching" message="Searching plugins..." />
+        <LoadingState v-if="isSearching" :message="t('marketplacePlugins.searching')" />
 
         <EmptyState
           v-else-if="searchResults.length === 0"
-          title="No plugins found"
-          description="Try a different search term or add more marketplace registries in Settings → Plugin Marketplaces."
+          :title="t('marketplacePlugins.emptyTitle')"
+          :description="t('marketplacePlugins.emptyDescription')"
         >
           <template #icon>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -202,9 +204,9 @@ onMounted(async () => {
               <div class="plugin-name-row">
                 <h3>{{ plugin.name }}</h3>
                 <span v-if="plugin.version" class="version-badge">v{{ plugin.version }}</span>
-                <span v-if="plugin.installed" class="installed-badge">Installed</span>
+                <span v-if="plugin.installed" class="installed-badge">{{ t('marketplacePlugins.installedBadge') }}</span>
               </div>
-              <p class="plugin-description">{{ plugin.description || 'No description' }}</p>
+              <p class="plugin-description">{{ plugin.description || t('marketplacePlugins.noDescription') }}</p>
               <span class="marketplace-badge">{{ plugin.marketplace_name }}</span>
             </div>
           </div>
@@ -240,35 +242,35 @@ onMounted(async () => {
             <button class="close-btn" @click="closeDetail">&times;</button>
           </div>
           <div class="detail-body">
-            <p class="detail-description">{{ selectedPlugin.description || 'No description available.' }}</p>
+            <p class="detail-description">{{ selectedPlugin.description || t('marketplacePlugins.noDescriptionAvailable') }}</p>
             <div class="detail-meta">
               <div class="meta-row">
-                <span class="meta-label">Marketplace</span>
+                <span class="meta-label">{{ t('marketplacePlugins.marketplace') }}</span>
                 <span class="meta-value">{{ selectedPlugin.marketplace_name }}</span>
               </div>
               <div v-if="selectedPlugin.version" class="meta-row">
-                <span class="meta-label">Version</span>
+                <span class="meta-label">{{ t('marketplacePlugins.version') }}</span>
                 <span class="meta-value">{{ selectedPlugin.version }}</span>
               </div>
               <div class="meta-row">
-                <span class="meta-label">Status</span>
+                <span class="meta-label">{{ t('marketplacePlugins.status') }}</span>
                 <span :class="['meta-value', selectedPlugin.installed ? 'installed' : 'available']">
-                  {{ selectedPlugin.installed ? 'Installed' : 'Available' }}
+                  {{ selectedPlugin.installed ? t('marketplacePlugins.installedBadge') : t('marketplacePlugins.available') }}
                 </span>
               </div>
             </div>
           </div>
           <div class="detail-footer">
-            <button class="btn" @click="closeDetail">Close</button>
+            <button class="btn" @click="closeDetail">{{ t('common.close') }}</button>
             <button
               v-if="!selectedPlugin.installed"
               class="btn btn-primary"
               :disabled="isInstalling"
               @click="installPlugin(selectedPlugin)"
             >
-              {{ isInstalling ? 'Installing...' : 'Install Plugin' }}
+              {{ isInstalling ? t('marketplacePlugins.installing') : t('marketplacePlugins.installPlugin') }}
             </button>
-            <span v-else class="already-installed">Already installed</span>
+            <span v-else class="already-installed">{{ t('marketplacePlugins.alreadyInstalled') }}</span>
           </div>
         </div>
       </div>

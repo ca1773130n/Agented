@@ -6,41 +6,41 @@
   <section id="service-health" class="lane-card service-health-card">
     <header class="lane-card__head">
       <div>
-        <h2 class="lane-card__title">Service Health</h2>
-        <p class="lane-card__subtitle">Monitor status and usage of all registered accounts</p>
+        <h2 class="lane-card__title">{{ t('serviceHealthCard.title') }}</h2>
+        <p class="lane-card__subtitle">{{ t('serviceHealthCard.subtitle') }}</p>
       </div>
       <div class="head-actions">
         <label class="auto-refresh-toggle">
           <input type="checkbox" v-model="autoRefresh" />
-          <span>Auto-refresh (10s)</span>
+          <span>{{ t('serviceHealthCard.autoRefresh') }}</span>
         </label>
         <button class="refresh-btn" @click="refresh" :disabled="isLoading">
           <svg :class="{ spinning: isLoading }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M23 4v6h-6M1 20v-6h6"/>
             <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
           </svg>
-          Refresh
+          {{ t('serviceHealthCard.refresh') }}
         </button>
       </div>
     </header>
 
     <ErrorState
       v-if="error"
-      title="Connection Error"
+      :title="t('serviceHealthCard.connectionError')"
       :message="error"
       @retry="refresh"
     />
 
     <div class="stats-grid">
-      <StatCard title="Total Accounts" :value="accounts.length" />
-      <StatCard title="Healthy" :value="healthyCount" color="var(--accent-emerald)" />
-      <StatCard title="Rate Limited" :value="rateLimitedCount" color="var(--accent-crimson)" />
+      <StatCard :title="t('serviceHealthCard.stat.totalAccounts')" :value="accounts.length" />
+      <StatCard :title="t('serviceHealthCard.stat.healthy')" :value="healthyCount" color="var(--accent-emerald)" />
+      <StatCard :title="t('serviceHealthCard.stat.rateLimited')" :value="rateLimitedCount" color="var(--accent-crimson)" />
     </div>
 
     <EmptyState
       v-if="!isLoading && accounts.length === 0"
-      title="No accounts registered"
-      description="Add accounts in AI Backends settings."
+      :title="t('serviceHealthCard.emptyTitle')"
+      :description="t('serviceHealthCard.emptyDescription')"
     />
 
     <div v-for="(group, backendType) in groupedAccounts" :key="backendType" class="backend-group">
@@ -60,6 +60,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { orchestrationApi, type AccountHealth } from '../../../services/api';
 import ServiceHealthGrid from '../../../components/monitoring/ServiceHealthGrid.vue';
 import ErrorState from '../../../components/base/ErrorState.vue';
@@ -69,6 +70,7 @@ import { useToast } from '../../../composables/useToast';
 import { useWebMcpTool } from '../../../composables/useWebMcpTool';
 
 const emit = defineEmits<{ loaded: [slug: string] }>();
+const { t } = useI18n();
 const showToast = useToast();
 
 const accounts = ref<AccountHealth[]>([]);
@@ -113,13 +115,14 @@ useWebMcpTool({
 });
 
 function formatGroupTitle(backendType: string): string {
-  const titles: Record<string, string> = {
-    claude: 'Claude Accounts',
-    opencode: 'OpenCode Accounts',
-    gemini: 'Gemini Accounts',
-    codex: 'Codex Accounts',
+  const names: Record<string, string> = {
+    claude: 'Claude',
+    opencode: 'OpenCode',
+    gemini: 'Gemini',
+    codex: 'Codex',
   };
-  return titles[backendType] || `${backendType.charAt(0).toUpperCase() + backendType.slice(1)} Accounts`;
+  const name = names[backendType] || (backendType.charAt(0).toUpperCase() + backendType.slice(1));
+  return t('serviceHealthCard.groupTitle', { name });
 }
 
 async function refresh() {
@@ -129,7 +132,7 @@ async function refresh() {
     const data = await orchestrationApi.getHealth();
     accounts.value = data.accounts || [];
   } catch {
-    error.value = 'Failed to load account data. Make sure the backend is running.';
+    error.value = t('serviceHealthCard.error.load');
   } finally {
     isLoading.value = false;
     emit('loaded', 'service-health');
@@ -139,10 +142,10 @@ async function refresh() {
 async function handleClearRateLimit(accountId: string) {
   try {
     await orchestrationApi.clearRateLimit(accountId);
-    showToast?.('Rate limit cleared successfully', 'success');
+    showToast?.(t('serviceHealthCard.toast.rateLimitCleared'), 'success');
     await refresh();
   } catch {
-    showToast?.('Failed to clear rate limit', 'error');
+    showToast?.(t('serviceHealthCard.error.clearRateLimit'), 'error');
   }
 }
 

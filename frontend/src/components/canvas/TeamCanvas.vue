@@ -26,6 +26,9 @@ import type { Team, TeamMember, TeamAgentAssignment, Agent, SuperAgent, Topology
 import { teamApi } from '../../services/api'
 import ConfirmModal from '../base/ConfirmModal.vue'
 import { useToast } from '../../composables/useToast';
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const nodeTypes: NodeTypesObject = {
   agent: markRaw(AgentNode) as NodeTypesObject[string],
@@ -123,12 +126,12 @@ const contextMenu = ref<{ visible: boolean; x: number; y: number; edgeId: string
   visible: false, x: 0, y: 0, edgeId: '',
 })
 
-const edgeTypeOptions = [
-  { type: 'command' as const, label: 'Command', color: '#00d4ff' },
-  { type: 'report' as const, label: 'Report', color: 'rgba(160, 160, 176, 0.6)' },
-  { type: 'peer' as const, label: 'Peer', color: '#22c55e' },
-  { type: 'messaging' as const, label: 'Messaging', color: 'rgba(168, 85, 247, 0.8)' },
-]
+const edgeTypeOptions = computed(() => [
+  { type: 'command' as const, label: t('teamCanvas.edgeType.command'), color: '#00d4ff' },
+  { type: 'report' as const, label: t('teamCanvas.edgeType.report'), color: 'rgba(160, 160, 176, 0.6)' },
+  { type: 'peer' as const, label: t('teamCanvas.edgeType.peer'), color: '#22c55e' },
+  { type: 'messaging' as const, label: t('teamCanvas.edgeType.messaging'), color: 'rgba(168, 85, 247, 0.8)' },
+])
 
 function onEdgeContextMenu(event: { event: MouseEvent | TouchEvent; edge: GraphEdge }) {
   event.event.preventDefault()
@@ -184,7 +187,7 @@ async function onDrop(event: DragEvent) {
       addNodes({ id, type, position, data })
       emit('members-changed')
     } catch {
-      showToast('Failed to add SuperAgent to team', 'error')
+      showToast(t('teamCanvas.toast.superAgentAddFailed'), 'error')
     }
   } else {
     // Existing agent drop logic
@@ -199,7 +202,7 @@ async function onDrop(event: DragEvent) {
       addNodes({ id, type, position, data })
       emit('members-changed')
     } catch {
-      showToast('Failed to add agent to team', 'error')
+      showToast(t('teamCanvas.toast.agentAddFailed'), 'error')
     }
   }
 }
@@ -231,9 +234,9 @@ async function onRemoveAgent(agentId: string) {
     removeNodes([agentId])
     closeDetailPanel()
     emit('members-changed')
-    showToast('Agent removed from team', 'success')
+    showToast(t('teamCanvas.toast.agentRemoved'), 'success')
   } catch {
-    showToast('Failed to remove agent', 'error')
+    showToast(t('teamCanvas.toast.agentRemoveFailed'), 'error')
   }
 }
 
@@ -420,7 +423,7 @@ async function handleExportPng() {
     a.download = `team-${props.team?.name || 'canvas'}.png`
     a.click()
   } catch {
-    showToast('Failed to export PNG', 'error')
+    showToast(t('teamCanvas.toast.exportPngFailed'), 'error')
   }
 }
 
@@ -557,7 +560,7 @@ defineExpose({ resyncFromTeam: syncFromTeam, fitView })
           :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
           @click.stop
         >
-          <div class="edge-context-title">Edge Type</div>
+          <div class="edge-context-title">{{ t('teamCanvas.edgeTypeTitle') }}</div>
           <button
             v-for="opt in edgeTypeOptions"
             :key="opt.type"
@@ -574,9 +577,9 @@ defineExpose({ resyncFromTeam: syncFromTeam, fitView })
 
     <ConfirmModal
       :open="showClearAllConfirm"
-      title="Clear Canvas"
-      message="Clear all nodes and edges from the canvas?"
-      confirm-label="Clear All"
+      :title="t('teamCanvas.clearConfirm.title')"
+      :message="t('teamCanvas.clearConfirm.message')"
+      :confirm-label="t('teamCanvas.clearConfirm.confirmLabel')"
       variant="danger"
       @confirm="confirmClearAll"
       @cancel="showClearAllConfirm = false"

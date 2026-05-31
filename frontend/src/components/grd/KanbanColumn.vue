@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { VueDraggable, type DraggableEvent } from 'vue-draggable-plus';
 import type { GrdPlan, GrdPhase } from '../../services/api';
 import KanbanCard from './KanbanCard.vue';
 import PhaseSwimLane from './PhaseSwimLane.vue';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   columnId: string;
@@ -108,7 +111,7 @@ function handleQuickAddKeydown(event: KeyboardEvent) {
           v-if="plans.length > 0"
           class="group-toggle"
           :class="{ active: groupByPhase }"
-          :title="groupByPhase ? 'Flat view' : 'Group by phase'"
+          :title="groupByPhase ? t('kanbanColumn.flatView') : t('kanbanColumn.groupByPhase')"
           @click="groupByPhase = !groupByPhase"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -137,7 +140,7 @@ function handleQuickAddKeydown(event: KeyboardEvent) {
         v-for="plan in localPlans"
         :key="plan.id"
         :plan="plan"
-        :phase-name="phaseLookup[plan.phase_id]?.name ?? 'Unknown'"
+        :phase-name="phaseLookup[plan.phase_id]?.name ?? t('kanbanColumn.unknownPhase')"
         :phase-number="phaseLookup[plan.phase_id]?.phase_number ?? 0"
       />
     </VueDraggable>
@@ -171,7 +174,7 @@ function handleQuickAddKeydown(event: KeyboardEvent) {
       </PhaseSwimLane>
       <!-- Empty state for grouped mode when no plans -->
       <div v-if="plansByPhase.length === 0" class="column-empty">
-        No plans
+        {{ t('kanbanColumn.noPlans') }}
       </div>
     </div>
 
@@ -182,7 +185,7 @@ function handleQuickAddKeydown(event: KeyboardEvent) {
           ref="quickAddInput"
           v-model="quickAddTitle"
           class="quick-add-input"
-          placeholder="Card title..."
+          :placeholder="t('kanbanColumn.cardTitlePlaceholder')"
           @keydown="handleQuickAddKeydown"
           @blur="submitQuickAdd"
         />
@@ -192,7 +195,7 @@ function handleQuickAddKeydown(event: KeyboardEvent) {
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
         </svg>
-        Add card
+        {{ t('kanbanColumn.addCard') }}
       </button>
     </div>
   </div>

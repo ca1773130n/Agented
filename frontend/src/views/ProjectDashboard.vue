@@ -15,6 +15,9 @@ import HarnessStatusSection from '../components/projects/HarnessStatusSection.vu
 import { useToast } from '../composables/useToast';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   projectId?: string;
@@ -306,9 +309,9 @@ watch(grdInitStatus, (newVal, oldVal) => {
     initPollInterval = null;
   }
   if (oldVal === 'initializing' && newVal === 'ready') {
-    showToast('GRD planning initialized successfully', 'success');
+    showToast(t('projectDashboard.grdInitSuccess'), 'success');
   } else if (oldVal === 'initializing' && newVal === 'failed') {
-    showToast('GRD planning initialization failed', 'error');
+    showToast(t('projectDashboard.grdInitFailed'), 'error');
   }
 });
 
@@ -318,7 +321,7 @@ onUnmounted(() => {
 });
 
 async function addSkill() {
-  if (!newSkillName.value.trim()) { showToast('Skill name is required', 'error'); return; }
+  if (!newSkillName.value.trim()) { showToast(t('projectDashboard.skillNameRequired'), 'error'); return; }
   isAddingSkill.value = true;
   try {
     await projectApi.addSkill(projectId.value, {
@@ -326,14 +329,14 @@ async function addSkill() {
       skill_path: newSkillPath.value.trim() || undefined,
       source: 'manual',
     });
-    showToast('Skill added successfully', 'success');
+    showToast(t('projectDashboard.skillAdded'), 'success');
     showAddSkillModal.value = false;
     newSkillName.value = '';
     newSkillPath.value = '';
     const skillsData = await projectApi.listSkills(projectId.value);
     projectSkills.value = skillsData.skills || [];
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to add skill';
+    const message = err instanceof ApiError ? err.message : t('projectDashboard.addSkillError');
     showToast(message, 'error');
   } finally {
     isAddingSkill.value = false;
@@ -343,10 +346,10 @@ async function addSkill() {
 async function removeSkill(skill: ProjectSkill) {
   try {
     await projectApi.removeSkill(projectId.value, skill.id);
-    showToast('Skill removed', 'success');
+    showToast(t('projectDashboard.skillRemoved'), 'success');
     projectSkills.value = projectSkills.value.filter(s => s.id !== skill.id);
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to remove skill';
+    const message = err instanceof ApiError ? err.message : t('projectDashboard.removeSkillError');
     showToast(message, 'error');
   }
 }
@@ -362,7 +365,7 @@ async function loadLibraryItems() {
     allCommands.value = commandsData.commands || [];
     allRules.value = rulesData.rules || [];
   } catch (err) {
-    showToast('Failed to load library items', 'error');
+    showToast(t('projectDashboard.loadLibraryError'), 'error');
   } finally {
     isLoadingLibrary.value = false;
   }
@@ -373,8 +376,8 @@ async function toggleHookForProject(hook: Hook) {
     const newProjectId = hook.project_id === projectId.value ? undefined : projectId.value;
     await hookApi.update(hook.id, { project_id: newProjectId });
     await loadLibraryItems();
-    showToast(newProjectId ? 'Hook added to project' : 'Hook removed from project', 'success');
-  } catch (err) { showToast('Failed to update hook', 'error'); }
+    showToast(newProjectId ? t('projectDashboard.hookAdded') : t('projectDashboard.hookRemoved'), 'success');
+  } catch (err) { showToast(t('projectDashboard.updateHookError'), 'error'); }
 }
 
 async function toggleCommandForProject(command: Command) {
@@ -382,8 +385,8 @@ async function toggleCommandForProject(command: Command) {
     const newProjectId = command.project_id === projectId.value ? undefined : projectId.value;
     await commandApi.update(command.id, { project_id: newProjectId });
     await loadLibraryItems();
-    showToast(newProjectId ? 'Command added to project' : 'Command removed from project', 'success');
-  } catch (err) { showToast('Failed to update command', 'error'); }
+    showToast(newProjectId ? t('projectDashboard.commandAdded') : t('projectDashboard.commandRemoved'), 'success');
+  } catch (err) { showToast(t('projectDashboard.updateCommandError'), 'error'); }
 }
 
 async function toggleRuleForProject(rule: Rule) {
@@ -391,8 +394,8 @@ async function toggleRuleForProject(rule: Rule) {
     const newProjectId = rule.project_id === projectId.value ? undefined : projectId.value;
     await ruleApi.update(rule.id, { project_id: newProjectId });
     await loadLibraryItems();
-    showToast(newProjectId ? 'Rule added to project' : 'Rule removed from project', 'success');
-  } catch (err) { showToast('Failed to update rule', 'error'); }
+    showToast(newProjectId ? t('projectDashboard.ruleAdded') : t('projectDashboard.ruleRemoved'), 'success');
+  } catch (err) { showToast(t('projectDashboard.updateRuleError'), 'error'); }
 }
 
 async function installToProject(componentType: string, componentId: string, componentName: string) {
@@ -401,12 +404,12 @@ async function installToProject(componentType: string, componentId: string, comp
   try {
     const result = await projectApi.installComponent(projectId.value, { component_type: componentType, component_id: componentId });
     if (result.installed) {
-      showToast(`Installed ${componentName} to .claude/`, 'success');
+      showToast(t('projectDashboard.installed', { name: componentName }), 'success');
       const data = await projectApi.listInstallations(projectId.value);
       installations.value = data.installations || [];
     } else if (result.error) { showToast(result.error, 'error'); }
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : `Failed to install ${componentName}`;
+    const message = err instanceof ApiError ? err.message : t('projectDashboard.installError', { name: componentName });
     showToast(message, 'error');
   } finally { isInstallingComponent.value[key] = false; }
 }
@@ -417,12 +420,12 @@ async function uninstallFromProject(componentType: string, componentId: string, 
   try {
     const result = await projectApi.uninstallComponent(projectId.value, { component_type: componentType, component_id: componentId });
     if (result.uninstalled) {
-      showToast(`Uninstalled ${componentName} from .claude/`, 'success');
+      showToast(t('projectDashboard.uninstalled', { name: componentName }), 'success');
       const data = await projectApi.listInstallations(projectId.value);
       installations.value = data.installations || [];
     } else if (result.error) { showToast(result.error, 'error'); }
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : `Failed to uninstall ${componentName}`;
+    const message = err instanceof ApiError ? err.message : t('projectDashboard.uninstallError', { name: componentName });
     showToast(message, 'error');
   } finally { isInstallingComponent.value[key] = false; }
 }
@@ -433,7 +436,7 @@ async function checkHarnessStatus() {
 }
 
 async function loadHarness() {
-  if (!project.value?.github_repo) { showToast('No GitHub repository configured', 'error'); return; }
+  if (!project.value?.github_repo) { showToast(t('projectDashboard.noGithubRepo'), 'error'); return; }
   isLoadingHarness.value = true;
   try {
     const result = await projectApi.loadHarness(projectId.value);
@@ -441,24 +444,24 @@ async function loadHarness() {
     else {
       const counts = result.counts || {};
       const summary = Object.entries(counts).filter(([, v]) => v > 0).map(([k, v]) => `${v} ${k}`).join(', ');
-      showToast(`Loaded harness settings: ${summary || 'no items'}`, 'success');
+      showToast(t('projectDashboard.harnessLoaded', { summary: summary || t('projectDashboard.noItems') }), 'success');
     }
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load harness';
+    const message = err instanceof ApiError ? err.message : t('projectDashboard.loadHarnessError');
     showToast(message, 'error');
   } finally { isLoadingHarness.value = false; }
 }
 
 async function deployHarness() {
-  if (!project.value?.github_repo) { showToast('No GitHub repository configured', 'error'); return; }
+  if (!project.value?.github_repo) { showToast(t('projectDashboard.noGithubRepo'), 'error'); return; }
   isDeployingHarness.value = true;
   try {
     const result = await projectApi.deployHarness(projectId.value);
     if (result.error) { showToast(result.error, 'error'); }
-    else if (result.pr_url) { showToast(`Created PR: ${result.pr_url}`, 'success'); }
-    else { showToast(result.message || 'Deploy completed', 'success'); }
+    else if (result.pr_url) { showToast(t('projectDashboard.prCreated', { url: result.pr_url }), 'success'); }
+    else { showToast(result.message || t('projectDashboard.deployCompleted'), 'success'); }
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to deploy harness';
+    const message = err instanceof ApiError ? err.message : t('projectDashboard.deployHarnessError');
     showToast(message, 'error');
   } finally { isDeployingHarness.value = false; }
 }
@@ -467,10 +470,10 @@ async function runTeamInProject(teamId: string) {
   teamRunning.value[teamId] = true;
   try {
     const result = await projectApi.runTeamInProject(projectId.value, teamId, { message: teamRunMessages.value[teamId] || undefined });
-    showToast(result.message || 'Team execution started', 'success');
+    showToast(result.message || t('projectDashboard.teamStarted'), 'success');
     teamRunMessages.value[teamId] = '';
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to run team';
+    const message = err instanceof ApiError ? err.message : t('projectDashboard.runTeamError');
     showToast(message, 'error');
   } finally { teamRunning.value[teamId] = false; }
 }
@@ -481,7 +484,7 @@ function openSetup(command?: string) {
 }
 
 function onSetupCompleted() {
-  showToast('Setup completed successfully', 'success');
+  showToast(t('projectDashboard.setupCompleted'), 'success');
   showSetup.value = false;
   loadData();
 }
@@ -504,36 +507,36 @@ function onSetupCompleted() {
       <div class="actions-row">
         <button class="action-btn secondary" @click="router.push({ name: 'projects' })">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-          All Projects
+          {{ t('projectDashboard.allProjects') }}
         </button>
         <button class="action-btn secondary" @click="router.push({ name: 'project-settings', params: { projectId: projectId } })">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          Edit Project
+          {{ t('projectDashboard.editProject') }}
         </button>
         <button class="action-btn planning-btn" @click="router.push({ name: 'project-planning', params: { projectId: projectId } })">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-          Planning
-          <span v-if="grdInitStatus === 'initializing'" class="init-badge init-badge--loading" title="GRD initializing...">...</span>
-          <span v-else-if="grdInitStatus === 'ready'" class="init-badge init-badge--ready" title="Planning ready">&#10003;</span>
-          <span v-else-if="grdInitStatus === 'failed'" class="init-badge init-badge--failed" title="Initialization failed">!</span>
+          {{ t('projectDashboard.planning') }}
+          <span v-if="grdInitStatus === 'initializing'" class="init-badge init-badge--loading" :title="t('projectDashboard.grdInitializing')">...</span>
+          <span v-else-if="grdInitStatus === 'ready'" class="init-badge init-badge--ready" :title="t('projectDashboard.planningReady')">&#10003;</span>
+          <span v-else-if="grdInitStatus === 'failed'" class="init-badge init-badge--failed" :title="t('projectDashboard.initFailed')">!</span>
         </button>
         <button class="action-btn secondary" @click="router.push({ name: 'project-management', params: { projectId: projectId } })">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-          Management
+          {{ t('projectDashboard.management') }}
         </button>
         <button v-if="project.github_repo" class="action-btn harness-btn" :disabled="isLoadingHarness || !harnessStatus?.exists" @click="loadHarness">
           <svg v-if="isLoadingHarness" class="spinner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-opacity="0.3"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>
           <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          {{ isLoadingHarness ? 'Loading...' : 'Load Harness' }}
+          {{ isLoadingHarness ? t('projectDashboard.loadingShort') : t('projectDashboard.loadHarness') }}
         </button>
         <button v-if="project.github_repo" class="action-btn primary" :disabled="isDeployingHarness" @click="deployHarness">
           <svg v-if="isDeployingHarness" class="spinner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-opacity="0.3"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>
           <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          {{ isDeployingHarness ? 'Deploying...' : 'Deploy Harness' }}
+          {{ isDeployingHarness ? t('projectDashboard.deploying') : t('projectDashboard.deployHarness') }}
         </button>
         <button v-if="project.github_repo || project.local_path" class="action-btn setup-btn" @click="openSetup()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-          Run Setup
+          {{ t('projectDashboard.runSetup') }}
         </button>
       </div>
 
@@ -561,11 +564,11 @@ function onSetupCompleted() {
       <!-- Project Instances (Active Agents) -->
       <div v-if="projectInstances.length > 0 || isLoadingInstances" class="card instances-card">
         <div class="card-header-sessions">
-          <h3>Active Agents</h3>
-          <span class="card-count">{{ projectInstances.length }} instance{{ projectInstances.length !== 1 ? 's' : '' }}</span>
+          <h3>{{ t('projectDashboard.activeAgents') }}</h3>
+          <span class="card-count">{{ t('projectDashboard.instanceCount', { count: projectInstances.length }) }}</span>
         </div>
-        <div v-if="isLoadingInstances" class="sessions-loading">Loading instances...</div>
-        <div v-else-if="projectInstances.length === 0" class="sessions-empty">No instances configured</div>
+        <div v-if="isLoadingInstances" class="sessions-loading">{{ t('projectDashboard.loadingInstances') }}</div>
+        <div v-else-if="projectInstances.length === 0" class="sessions-empty">{{ t('projectDashboard.noInstances') }}</div>
         <div v-else class="instance-cards">
           <div v-for="inst in projectInstances" :key="inst.id" class="instance-card">
             <div class="instance-card-header">
@@ -574,15 +577,15 @@ function onSetupCompleted() {
             </div>
             <div class="instance-card-meta">
               <span class="instance-id-label">{{ inst.id }}</span>
-              <span v-if="inst.worktree_path" class="instance-worktree" title="Worktree path">
+              <span v-if="inst.worktree_path" class="instance-worktree" :title="t('projectDashboard.worktreePath')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-                worktree active
+                {{ t('projectDashboard.worktreeActive') }}
               </span>
-              <span class="instance-mode-label">Default: {{ inst.default_chat_mode }}</span>
+              <span class="instance-mode-label">{{ t('projectDashboard.defaultMode', { mode: inst.default_chat_mode }) }}</span>
             </div>
             <button class="action-btn instance-chat-btn" @click="navToInstancePlayground(inst.id)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-              Chat
+              {{ t('projectDashboard.chat') }}
             </button>
           </div>
         </div>
@@ -591,11 +594,11 @@ function onSetupCompleted() {
       <!-- Active Sessions (grouped by Super Agent) -->
       <div v-if="activeSessions.length > 0 || isLoadingSessions" class="card sessions-card">
         <div class="card-header-sessions">
-          <h3>Active Sessions</h3>
-          <span class="card-count">{{ activeSessions.length }} active</span>
+          <h3>{{ t('projectDashboard.activeSessions') }}</h3>
+          <span class="card-count">{{ t('projectDashboard.activeCount', { count: activeSessions.length }) }}</span>
         </div>
-        <div v-if="isLoadingSessions" class="sessions-loading">Loading sessions...</div>
-        <div v-else-if="groupedSessions.length === 0" class="sessions-empty">No active sessions</div>
+        <div v-if="isLoadingSessions" class="sessions-loading">{{ t('projectDashboard.loadingSessions') }}</div>
+        <div v-else-if="groupedSessions.length === 0" class="sessions-empty">{{ t('projectDashboard.noActiveSessions') }}</div>
         <div v-else class="session-groups">
           <div v-for="group in groupedSessions" :key="group.superAgent.id" class="session-group">
             <div class="session-group-header">
@@ -603,23 +606,23 @@ function onSetupCompleted() {
               <span
                 v-if="isSaWorking(group.superAgent.id)"
                 class="sa-working-pill"
-                title="This SuperAgent is producing a response right now"
+                :title="t('projectDashboard.workingTooltip')"
               >
                 <span class="sa-working-pill__dot" />
-                Working
+                {{ t('projectDashboard.working') }}
               </span>
-              <span class="session-group-count">{{ group.sessions.length }} session{{ group.sessions.length !== 1 ? 's' : '' }}</span>
+              <span class="session-group-count">{{ t('projectDashboard.sessionCount', { count: group.sessions.length }) }}</span>
             </div>
             <div class="session-group-items">
               <div v-for="sess in group.sessions" :key="sess.id" class="session-card">
                 <div class="session-card-meta">
                   <span class="session-id-label">{{ sess.id }}</span>
-                  <span class="session-status-badge active">active</span>
+                  <span class="session-status-badge active">{{ t('projectDashboard.active') }}</span>
                   <span v-if="sess.started_at" class="session-time">{{ new Date(sess.started_at).toLocaleString() }}</span>
                 </div>
                 <button class="action-btn session-chat-btn" @click="openChat(group.superAgent.id, sess.id, group.instanceId)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-                  Chat
+                  {{ t('projectDashboard.chat') }}
                 </button>
               </div>
             </div>
@@ -659,7 +662,7 @@ function onSetupCompleted() {
            landing page. -->
       <div class="card forge-bindings-card">
         <div class="card-header-sessions">
-          <h3>Forge context bindings</h3>
+          <h3>{{ t('projectDashboard.forgeBindings') }}</h3>
         </div>
         <div class="card-body-padded">
           <ProjectForgeBindingsPanel :projectId="projectId" />
@@ -672,25 +675,25 @@ function onSetupCompleted() {
       <div v-if="showAddSkillModal" ref="addSkillModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-add-skill" tabindex="-1" @click.self="showAddSkillModal = false" @keydown.escape="showAddSkillModal = false">
         <div class="modal">
           <div class="modal-header">
-            <h3 id="modal-title-add-skill">Add Skill to Project</h3>
+            <h3 id="modal-title-add-skill">{{ t('projectDashboard.addSkillTitle') }}</h3>
             <button class="modal-close" @click="showAddSkillModal = false">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>
           <div class="modal-body">
             <div class="form-group">
-              <label for="skill-name">Skill Name *</label>
-              <input id="skill-name" v-model="newSkillName" type="text" placeholder="e.g., code-review, test-generator" />
+              <label for="skill-name">{{ t('projectDashboard.skillNameLabel') }}</label>
+              <input id="skill-name" v-model="newSkillName" type="text" :placeholder="t('projectDashboard.skillNamePlaceholder')" />
             </div>
             <div class="form-group">
-              <label for="skill-path">Skill Path (optional)</label>
-              <input id="skill-path" v-model="newSkillPath" type="text" placeholder="e.g., .claude/skills/code-review/SKILL.md" />
+              <label for="skill-path">{{ t('projectDashboard.skillPathLabel') }}</label>
+              <input id="skill-path" v-model="newSkillPath" type="text" :placeholder="t('projectDashboard.skillPathPlaceholder')" />
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn-secondary" @click="showAddSkillModal = false">Cancel</button>
+            <button class="btn-secondary" @click="showAddSkillModal = false">{{ t('common.cancel') }}</button>
             <button class="btn-primary" @click="addSkill" :disabled="isAddingSkill || !newSkillName.trim()">
-              {{ isAddingSkill ? 'Adding...' : 'Add Skill' }}
+              {{ isAddingSkill ? t('projectDashboard.adding') : t('projectDashboard.addSkill') }}
             </button>
           </div>
         </div>

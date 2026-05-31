@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter, useRoute } from 'vue-router';
 import type { Node, Edge } from '@vue-flow/core';
 import type { Workflow } from '../services/api';
@@ -20,6 +21,7 @@ import { handleApiError } from '../services/api/error-handler';
 import { useWorkflowExecution } from '../composables/useWorkflowExecution';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
+const { t } = useI18n();
 const router = useRouter();
 const route = useRoute();
 const workflowId = computed(() => route.params.workflowId as string);
@@ -66,7 +68,7 @@ const validationResults = ref<ValidationResult[]>([]);
 // Computed
 // ---------------------------------------------------------------------------
 
-const workflowName = computed(() => workflow.value?.name || 'Untitled Workflow');
+const workflowName = computed(() => workflow.value?.name || t('workflowBuilder.untitled'));
 
 const metadataEnabled = computed({
   get: () => !!metadataForm.value.enabled,
@@ -125,7 +127,7 @@ async function loadWorkflow() {
     };
     return data;
   } catch (err) {
-    handleApiError(err, showToast, 'Failed to load workflow');
+    handleApiError(err, showToast, t('workflowBuilder.errors.load'));
     throw err;
   }
 }
@@ -143,7 +145,7 @@ function onDirtyChange(dirty: boolean) {
 }
 
 function onSaved() {
-  showToast('Workflow saved successfully', 'success');
+  showToast(t('workflowBuilder.toast.saved'), 'success');
 }
 
 function onCanvasChanged(nodes: Node[], edges: Edge[]) {
@@ -179,9 +181,9 @@ async function handleSaveMetadata() {
     });
     workflow.value = { ...workflow.value!, ...metadataForm.value };
     showMetadataEditor.value = false;
-    showToast('Workflow metadata updated', 'success');
+    showToast(t('workflowBuilder.toast.metadataUpdated'), 'success');
   } catch {
-    showToast('Failed to update workflow metadata', 'error');
+    showToast(t('workflowBuilder.errors.metadataUpdate'), 'error');
   }
 }
 
@@ -198,14 +200,14 @@ async function handleRun() {
   isRunning.value = true;
   try {
     const result = await workflowExecutionApi.run(workflowId.value);
-    showToast(`Workflow execution started (${result.execution_id})`, 'success');
+    showToast(t('workflowBuilder.toast.executionStarted', { id: result.execution_id }), 'success');
     startMonitoring(workflowId.value, result.execution_id);
     showExecutionMonitor.value = true;
   } catch (e) {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to start workflow execution', 'error');
+      showToast(t('workflowBuilder.errors.executionStart'), 'error');
     }
   } finally {
     isRunning.value = false;
@@ -315,29 +317,29 @@ onUnmounted(() => {
     <!-- Metadata editor (collapsible) -->
     <div v-if="showMetadataEditor" class="metadata-editor">
       <div class="metadata-field">
-        <label>Name</label>
+        <label>{{ t('workflowBuilder.metadata.name') }}</label>
         <input v-model="metadataForm.name" type="text" />
       </div>
       <div class="metadata-field">
-        <label>Trigger Type</label>
+        <label>{{ t('workflowBuilder.metadata.triggerType') }}</label>
         <select v-model="metadataForm.trigger_type">
-          <option value="manual">Manual</option>
-          <option value="cron">Cron</option>
-          <option value="poll">Poll</option>
-          <option value="file_watch">File Watch</option>
-          <option value="completion">Completion</option>
+          <option value="manual">{{ t('workflowBuilder.triggerType.manual') }}</option>
+          <option value="cron">{{ t('workflowBuilder.triggerType.cron') }}</option>
+          <option value="poll">{{ t('workflowBuilder.triggerType.poll') }}</option>
+          <option value="file_watch">{{ t('workflowBuilder.triggerType.fileWatch') }}</option>
+          <option value="completion">{{ t('workflowBuilder.triggerType.completion') }}</option>
         </select>
       </div>
       <div class="metadata-field">
-        <label>Enabled</label>
+        <label>{{ t('workflowBuilder.metadata.enabled') }}</label>
         <label class="toggle-label">
           <input type="checkbox" v-model="metadataEnabled" />
-          <span>{{ metadataForm.enabled ? 'Enabled' : 'Disabled' }}</span>
+          <span>{{ metadataForm.enabled ? t('workflowBuilder.status.enabled') : t('workflowBuilder.status.disabled') }}</span>
         </label>
       </div>
       <div class="metadata-actions">
-        <button class="btn btn-sm" @click="showMetadataEditor = false">Cancel</button>
-        <button class="btn btn-sm btn-primary" @click="handleSaveMetadata">Save Metadata</button>
+        <button class="btn btn-sm" @click="showMetadataEditor = false">{{ t('common.cancel') }}</button>
+        <button class="btn btn-sm btn-primary" @click="handleSaveMetadata">{{ t('workflowBuilder.metadata.save') }}</button>
       </div>
     </div>
 
@@ -407,10 +409,10 @@ onUnmounted(() => {
 
     <ConfirmModal
       :open="showLeaveConfirm"
-      title="Unsaved Changes"
-      message="You have unsaved changes. Are you sure you want to leave?"
-      confirm-label="Leave"
-      cancel-label="Stay"
+      :title="t('workflowBuilder.leaveConfirm.title')"
+      :message="t('workflowBuilder.leaveConfirm.message')"
+      :confirm-label="t('workflowBuilder.leaveConfirm.confirm')"
+      :cancel-label="t('workflowBuilder.leaveConfirm.cancel')"
       variant="danger"
       @confirm="showLeaveConfirm = false; router.push({ name: 'workflows' })"
       @cancel="showLeaveConfirm = false"

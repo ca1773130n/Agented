@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import type { RuleType } from '../services/api';
 import { ruleApi, ruleConversationApi, ApiError } from '../services/api';
 import { useConversation, createConfigParser } from '../composables/useConversation';
@@ -19,6 +20,7 @@ const route = useRoute();
 const ruleId = computed(() => route.params.ruleId ? Number(route.params.ruleId) : null);
 
 const showToast = useToast();
+const { t } = useI18n();
 const isEditMode = computed(() => !!ruleId.value);
 const isLoadingEdit = ref(false);
 
@@ -50,17 +52,17 @@ useFocusTrap(exportModalRef, showExportModal);
 
 const RULE_TYPES: RuleType[] = ['pre_check', 'post_check', 'validation'];
 
-const RULE_TYPE_LABELS: Record<RuleType, string> = {
-  pre_check: 'Pre-Check',
-  post_check: 'Post-Check',
-  validation: 'Validation',
-};
+const RULE_TYPE_LABELS = computed<Record<RuleType, string>>(() => ({
+  pre_check: t('ruleDesign.ruleTypes.preCheck'),
+  post_check: t('ruleDesign.ruleTypes.postCheck'),
+  validation: t('ruleDesign.ruleTypes.validation'),
+}));
 
-const ruleTypeDescriptions: Record<RuleType, string> = {
-  pre_check: 'Runs before an action. Use to validate preconditions or setup.',
-  post_check: 'Runs after an action. Use to verify outcomes or cleanup.',
-  validation: 'Validates inputs or outputs. Use for data integrity checks.',
-};
+const ruleTypeDescriptions = computed<Record<RuleType, string>>(() => ({
+  pre_check: t('ruleDesign.ruleTypeDescriptions.preCheck'),
+  post_check: t('ruleDesign.ruleTypeDescriptions.postCheck'),
+  validation: t('ruleDesign.ruleTypeDescriptions.validation'),
+}));
 
 async function loadExistingRule() {
   if (!ruleId.value) return;
@@ -75,7 +77,7 @@ async function loadExistingRule() {
     formData.value.enabled = !!rule.enabled;
     originalFormData.value = JSON.stringify(formData.value);
   } catch (e) {
-    showToast('Failed to load rule for editing', 'error');
+    showToast(t('ruleDesign.toasts.loadFailed'), 'error');
   } finally {
     isLoadingEdit.value = false;
   }
@@ -83,7 +85,7 @@ async function loadExistingRule() {
 
 async function createRule() {
   if (!formData.value.name.trim()) {
-    showToast('Rule name is required', 'error');
+    showToast(t('ruleDesign.toasts.nameRequired'), 'error');
     return;
   }
 
@@ -99,7 +101,7 @@ async function createRule() {
         enabled: formData.value.enabled,
       });
       originalFormData.value = JSON.stringify(formData.value);
-      showToast(`Rule "${formData.value.name}" updated`, 'success');
+      showToast(t('ruleDesign.toasts.updated', { name: formData.value.name }), 'success');
       router.push({ name: 'rules' });
     } else {
       const result = await ruleApi.create({
@@ -111,14 +113,14 @@ async function createRule() {
         enabled: formData.value.enabled,
       });
       createdRuleId.value = result.rule.id;
-      showToast(`Rule "${formData.value.name}" created`, 'success');
+      showToast(t('ruleDesign.toasts.created', { name: formData.value.name }), 'success');
       showExportModal.value = true;
     }
   } catch (e) {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast(isEditMode.value ? 'Failed to update rule' : 'Failed to create rule', 'error');
+      showToast(isEditMode.value ? t('ruleDesign.toasts.updateFailed') : t('ruleDesign.toasts.createFailed'), 'error');
     }
   } finally {
     isCreating.value = false;
@@ -143,7 +145,7 @@ function exportToLibrary() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showToast('Rule exported', 'success');
+  showToast(t('ruleDesign.toasts.exported'), 'success');
 }
 
 function createAnother() {
@@ -201,11 +203,11 @@ useWebMcpTool({
   deps: [isEditMode, designMode, formData, isDirty, isCreating, isLoadingEdit, conversation.messages, conversation.canFinalize],
 });
 
-const ruleTypeBadge: Record<string, { bg: string; color: string; label: string }> = {
-  pre_check: { bg: 'rgba(0, 212, 255, 0.15)', color: '#00d4ff', label: 'Pre-Check' },
-  post_check: { bg: 'rgba(0, 255, 136, 0.15)', color: '#00ff88', label: 'Post-Check' },
-  validation: { bg: 'rgba(136, 85, 255, 0.15)', color: '#8855ff', label: 'Validation' },
-};
+const ruleTypeBadge = computed<Record<string, { bg: string; color: string; label: string }>>(() => ({
+  pre_check: { bg: 'rgba(0, 212, 255, 0.15)', color: '#00d4ff', label: t('ruleDesign.ruleTypes.preCheck') },
+  post_check: { bg: 'rgba(0, 255, 136, 0.15)', color: '#00ff88', label: t('ruleDesign.ruleTypes.postCheck') },
+  validation: { bg: 'rgba(136, 85, 255, 0.15)', color: '#8855ff', label: t('ruleDesign.ruleTypes.validation') },
+}));
 
 const RULE_ICON_PATHS = [
   'M9 11l3 3L22 4',
@@ -215,7 +217,7 @@ const RULE_ICON_PATHS = [
 async function finalizeRule() {
   const result = await conversation.finalize();
   if (result) {
-    showToast(`Rule "${(result.rule as { name: string }).name}" created successfully!`, 'success');
+    showToast(t('ruleDesign.toasts.createdSuccess', { name: (result.rule as { name: string }).name }), 'success');
     router.push({ name: 'rules' });
   }
 }
@@ -223,8 +225,8 @@ async function finalizeRule() {
 // v0.7.82 — tooltip mirrors the visible hint when disabled.
 const finalizeTooltip = computed(() =>
   conversation.canFinalize.value
-    ? 'Create the rule'
-    : "Keep chatting — Claude needs more details before the rule can be created. Tell it the rule name, what it validates, and the validation logic.",
+    ? t('ruleDesign.finalizeTooltip.ready')
+    : t('ruleDesign.finalizeTooltip.notReady'),
 );
 
 // v0.7.90 — chat is the default mode; shared start-or-resume
@@ -263,8 +265,8 @@ watch(designMode, (newMode) => {
     <div class="design-header">
       <DesignModeToggle v-model="designMode" />
       <div class="header-title">
-        <h1>{{ isEditMode ? 'Edit Rule' : 'Design a Rule' }}</h1>
-        <p>{{ designMode === 'form' ? (isEditMode ? 'Edit an existing validation or check rule' : 'Create a new validation or check rule') : 'Chat with Claude to design your validation rule' }}</p>
+        <h1>{{ isEditMode ? t('ruleDesign.editTitle') : t('ruleDesign.designTitle') }}</h1>
+        <p>{{ designMode === 'form' ? (isEditMode ? t('ruleDesign.subtitle.formEdit') : t('ruleDesign.subtitle.formCreate')) : t('ruleDesign.subtitle.chat') }}</p>
       </div>
       <!-- v0.7.82 — always-visible disabled Create button in chat
            mode with explicit hint. -->
@@ -279,15 +281,14 @@ watch(designMode, (newMode) => {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M20 6L9 17l-5-5"/>
           </svg>
-          {{ conversation.isFinalizing.value ? 'Creating...' : 'Create Rule' }}
+          {{ conversation.isFinalizing.value ? t('ruleDesign.creating') : t('ruleDesign.createRule') }}
         </button>
         <p
           v-if="!conversation.canFinalize.value"
           id="finalize-hint"
           class="finalize-hint"
         >
-          Keep chatting — once Claude has the rule name, what it
-          validates, and the validation logic, this button activates.
+          {{ t('ruleDesign.finalizeHint') }}
         </p>
       </div>
     </div>
@@ -296,15 +297,15 @@ watch(designMode, (newMode) => {
     <div v-if="designMode === 'form'" class="design-content">
       <div class="design-form">
         <div class="form-section">
-          <h3>Rule Configuration</h3>
+          <h3>{{ t('ruleDesign.ruleConfiguration') }}</h3>
 
           <div class="form-group">
-            <label for="rule-name">Name *</label>
+            <label for="rule-name">{{ t('ruleDesign.fields.nameRequired') }}</label>
             <input id="rule-name" v-model="formData.name" type="text" placeholder="my-validation-rule" />
           </div>
 
           <div class="form-group">
-            <label for="rule-type">Rule Type *</label>
+            <label for="rule-type">{{ t('ruleDesign.fields.ruleTypeRequired') }}</label>
             <select id="rule-type" v-model="formData.rule_type">
               <option v-for="ruleType in RULE_TYPES" :key="ruleType" :value="ruleType">
                 {{ RULE_TYPE_LABELS[ruleType] }}
@@ -314,79 +315,62 @@ watch(designMode, (newMode) => {
           </div>
 
           <div class="form-group">
-            <label for="rule-description">Description</label>
-            <input id="rule-description" v-model="formData.description" type="text" placeholder="What does this rule check or validate?" />
+            <label for="rule-description">{{ t('ruleDesign.fields.description') }}</label>
+            <input id="rule-description" v-model="formData.description" type="text" :placeholder="t('ruleDesign.placeholders.description')" />
           </div>
 
           <div class="form-group">
-            <label for="rule-condition">Condition</label>
+            <label for="rule-condition">{{ t('ruleDesign.fields.condition') }}</label>
             <textarea
               id="rule-condition"
               v-model="formData.condition"
               rows="6"
-              placeholder="# Condition to check
-
-Define when this rule applies:
-- Pattern to match
-- Regular expression
-- Value comparison
-
-Example:
-file_extension == '.ts' AND contains('import')"
+              :placeholder="t('ruleDesign.placeholders.condition')"
             ></textarea>
-            <p class="form-hint">Specify the condition that triggers this rule</p>
+            <p class="form-hint">{{ t('ruleDesign.hints.condition') }}</p>
           </div>
 
           <div class="form-group">
-            <label for="rule-action">Action</label>
+            <label for="rule-action">{{ t('ruleDesign.fields.action') }}</label>
             <textarea
               id="rule-action"
               v-model="formData.action"
               rows="6"
-              placeholder="# Action to take
-
-Define what happens when the condition is met:
-- block: Prevent the action
-- warn: Show a warning
-- transform: Modify the input/output
-- log: Record for auditing
-
-Example:
-warn('Consider using TypeScript strict mode')"
+              :placeholder="t('ruleDesign.placeholders.action')"
             ></textarea>
-            <p class="form-hint">Specify what action to take when the condition is met</p>
+            <p class="form-hint">{{ t('ruleDesign.hints.action') }}</p>
           </div>
 
           <div class="form-group checkbox-group">
             <label>
               <input type="checkbox" v-model="formData.enabled" />
-              Enabled
+              {{ t('ruleDesign.fields.enabled') }}
             </label>
           </div>
         </div>
 
         <div class="form-actions">
-          <button class="btn" @click="router.push({ name: 'rules' })">Cancel</button>
+          <button class="btn" @click="router.push({ name: 'rules' })">{{ t('common.cancel') }}</button>
           <button class="btn btn-primary" @click="createRule" :disabled="isCreating">
-            {{ isCreating ? (isEditMode ? 'Updating...' : 'Creating...') : (isEditMode ? 'Update Rule' : 'Create Rule') }}
+            {{ isCreating ? (isEditMode ? t('ruleDesign.updating') : t('ruleDesign.creating')) : (isEditMode ? t('ruleDesign.updateRule') : t('ruleDesign.createRule')) }}
           </button>
         </div>
       </div>
 
       <div class="design-preview">
-        <h3>Preview</h3>
+        <h3>{{ t('ruleDesign.preview') }}</h3>
         <div class="preview-card">
           <div class="preview-header">
             <span class="preview-name">{{ formData.name || 'rule-name' }}</span>
             <span class="preview-type" :class="formData.rule_type">{{ RULE_TYPE_LABELS[formData.rule_type] }}</span>
           </div>
-          <p class="preview-description">{{ formData.description || 'No description' }}</p>
+          <p class="preview-description">{{ formData.description || t('ruleDesign.noDescription') }}</p>
           <div class="preview-section" v-if="formData.condition">
-            <div class="section-label">Condition</div>
+            <div class="section-label">{{ t('ruleDesign.fields.condition') }}</div>
             <pre>{{ formData.condition.slice(0, 100) }}{{ formData.condition.length > 100 ? '...' : '' }}</pre>
           </div>
           <div class="preview-section" v-if="formData.action">
-            <div class="section-label">Action</div>
+            <div class="section-label">{{ t('ruleDesign.fields.action') }}</div>
             <pre>{{ formData.action.slice(0, 100) }}{{ formData.action.length > 100 ? '...' : '' }}</pre>
           </div>
         </div>
@@ -411,10 +395,10 @@ warn('Consider using TypeScript strict mode')"
         :selected-model="conversation.selectedModel.value"
         :use-cli-runner="conversation.useCliRunner.value"
         :assistant-icon-paths="RULE_ICON_PATHS"
-        input-placeholder="Describe your rule or answer Claude's questions..."
+        :input-placeholder="t('ruleDesign.chat.inputPlaceholder')"
         entity-label="rule"
-        banner-title="Rule Ready to Create!"
-        banner-button-label="Create Rule Now"
+        :banner-title="t('ruleDesign.chat.bannerTitle')"
+        :banner-button-label="t('ruleDesign.chat.bannerButton')"
         :detected-entity-name="conversation.detectedConfig.value?.name"
         @update:input-message="conversation.inputMessage.value = $event"
         @update:selected-backend="conversation.setBackend($event)"
@@ -429,15 +413,15 @@ warn('Consider using TypeScript strict mode')"
       <ConfigPreviewSidebar
         :has-config="!!conversation.detectedConfig.value"
         :empty-icon-paths="RULE_ICON_PATHS"
-        empty-text="Rule configuration will appear here as you chat with Claude"
+        :empty-text="t('ruleDesign.chat.emptyText')"
       >
         <template v-if="conversation.detectedConfig.value">
           <div class="config-field">
-            <div class="config-label">Name</div>
+            <div class="config-label">{{ t('ruleDesign.config.name') }}</div>
             <div class="config-value">{{ conversation.detectedConfig.value.name }}</div>
           </div>
           <div class="config-field">
-            <div class="config-label">Rule Type</div>
+            <div class="config-label">{{ t('ruleDesign.config.ruleType') }}</div>
             <div class="config-value">
               <span
                 class="rule-type-badge"
@@ -451,22 +435,22 @@ warn('Consider using TypeScript strict mode')"
             </div>
           </div>
           <div class="config-field" v-if="conversation.detectedConfig.value.description">
-            <div class="config-label">Description</div>
+            <div class="config-label">{{ t('ruleDesign.config.description') }}</div>
             <div class="config-value config-description">{{ conversation.detectedConfig.value.description }}</div>
           </div>
           <div class="config-field" v-if="conversation.detectedConfig.value.condition">
-            <div class="config-label">Condition</div>
+            <div class="config-label">{{ t('ruleDesign.config.condition') }}</div>
             <pre class="config-code">{{ conversation.detectedConfig.value.condition.slice(0, 300) }}{{ conversation.detectedConfig.value.condition.length > 300 ? '...' : '' }}</pre>
           </div>
           <div class="config-field" v-if="conversation.detectedConfig.value.action">
-            <div class="config-label">Action</div>
+            <div class="config-label">{{ t('ruleDesign.config.action') }}</div>
             <pre class="config-code">{{ conversation.detectedConfig.value.action.slice(0, 300) }}{{ conversation.detectedConfig.value.action.length > 300 ? '...' : '' }}</pre>
           </div>
           <div class="config-field">
-            <div class="config-label">Enabled</div>
+            <div class="config-label">{{ t('ruleDesign.config.enabled') }}</div>
             <div class="config-value">
               <span :class="['enabled-badge', conversation.detectedConfig.value.enabled ? 'yes' : 'no']">
-                {{ conversation.detectedConfig.value.enabled ? 'Yes' : 'No' }}
+                {{ conversation.detectedConfig.value.enabled ? t('common.yes') : t('common.no') }}
               </span>
             </div>
           </div>
@@ -483,17 +467,17 @@ warn('Consider using TypeScript strict mode')"
               <path d="M20 6L9 17l-5-5"/>
             </svg>
           </div>
-          <h2 id="modal-title-rule-created">Rule Created!</h2>
-          <p>Your rule "<strong>{{ formData.name }}</strong>" has been created successfully.</p>
+          <h2 id="modal-title-rule-created">{{ t('ruleDesign.exportModal.title') }}</h2>
+          <p>{{ t('ruleDesign.exportModal.bodyPrefix') }}"<strong>{{ formData.name }}</strong>"{{ t('ruleDesign.exportModal.bodySuffix') }}</p>
           <div class="modal-actions">
             <button class="btn" @click="exportToLibrary">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
               </svg>
-              Export to Library
+              {{ t('ruleDesign.exportModal.exportToLibrary') }}
             </button>
-            <button class="btn btn-secondary" @click="createAnother">Create Another</button>
-            <button class="btn btn-primary" @click="handleFormDone">Done</button>
+            <button class="btn btn-secondary" @click="createAnother">{{ t('ruleDesign.exportModal.createAnother') }}</button>
+            <button class="btn btn-primary" @click="handleFormDone">{{ t('common.done') }}</button>
           </div>
         </div>
       </div>

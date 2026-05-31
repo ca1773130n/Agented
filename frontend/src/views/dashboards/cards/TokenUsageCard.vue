@@ -18,16 +18,18 @@ import BudgetLimitsSection from '../../../components/monitoring/BudgetLimitsSect
 import LoadingState from '../../../components/base/LoadingState.vue';
 import { useToast } from '../../../composables/useToast';
 import { useWebMcpTool } from '../../../composables/useWebMcpTool';
+import { useI18n } from 'vue-i18n';
 
+const { t } = useI18n();
 const emit = defineEmits<{ loaded: [slug: string] }>();
 const showToast = useToast();
 
 // Period selection
 type PeriodOption = '7d' | '30d' | 'month' | 'custom';
 const selectedPeriod = ref<PeriodOption>('7d');
-const periodOptions: { key: PeriodOption; label: string }[] = [
-  { key: '7d', label: 'Last 7 Days' }, { key: '30d', label: 'Last 30 Days' },
-  { key: 'month', label: 'This Month' }, { key: 'custom', label: 'Custom Range' },
+const periodOptions: { key: PeriodOption; labelKey: string }[] = [
+  { key: '7d', labelKey: 'tokenUsageCard.period.last7Days' }, { key: '30d', labelKey: 'tokenUsageCard.period.last30Days' },
+  { key: 'month', labelKey: 'tokenUsageCard.period.thisMonth' }, { key: 'custom', labelKey: 'tokenUsageCard.period.customRange' },
 ];
 const customStartDate = ref('');
 const customEndDate = ref('');
@@ -110,7 +112,7 @@ function toLocalDateString(d: Date): string {
 const customDateError = computed(() => {
   if (selectedPeriod.value !== 'custom') return '';
   if (!customStartDate.value || !customEndDate.value) return '';
-  if (customStartDate.value > customEndDate.value) return 'Start date must be before or equal to end date';
+  if (customStartDate.value > customEndDate.value) return t('tokenUsageCard.errors.startBeforeEnd');
   return '';
 });
 
@@ -144,7 +146,11 @@ const cacheHitRate = computed(() => {
 });
 
 const periodLabel = computed(() => {
-  const labels: Record<string, string> = { '7d': 'Last 7 Days', '30d': 'Last 30 Days', month: 'This Month' };
+  const labels: Record<string, string> = {
+    '7d': t('tokenUsageCard.period.last7Days'),
+    '30d': t('tokenUsageCard.period.last30Days'),
+    month: t('tokenUsageCard.period.thisMonth'),
+  };
   return labels[selectedPeriod.value] || `${dateRange.value.start_date} – ${dateRange.value.end_date}`;
 });
 
@@ -187,8 +193,8 @@ function checkAndNotifyThresholds() {
     const prev = levels.indexOf(previousThresholdState.value[key] || 'normal');
     const curr = levels.indexOf(w.threshold_level || 'normal');
     if (curr > prev) {
-      if (w.threshold_level === 'critical') showToast(`Rate limit CRITICAL: ${w.account_name} at ${Math.round(w.percentage)}% (${w.window_type})`, 'error');
-      else if (w.threshold_level === 'warning') showToast(`Rate limit warning: ${w.account_name} at ${Math.round(w.percentage)}% (${w.window_type})`, 'info');
+      if (w.threshold_level === 'critical') showToast(t('tokenUsageCard.toast.rateLimitCritical', { account: w.account_name, percent: Math.round(w.percentage), window: w.window_type }), 'error');
+      else if (w.threshold_level === 'warning') showToast(t('tokenUsageCard.toast.rateLimitWarning', { account: w.account_name, percent: Math.round(w.percentage), window: w.window_type }), 'info');
     }
     previousThresholdState.value[key] = w.threshold_level || 'normal';
   }
@@ -233,9 +239,9 @@ async function pollNow(silent = false) {
     monitoringStatus.value = status;
     checkAndNotifyThresholds();
     if (status.windows) await loadTrendHistories(status.windows);
-    if (!silent) showToast('Monitoring data refreshed', 'success');
+    if (!silent) showToast(t('tokenUsageCard.toast.monitoringRefreshed'), 'success');
   } catch {
-    if (!silent) showToast('Failed to poll monitoring data', 'error');
+    if (!silent) showToast(t('tokenUsageCard.toast.monitoringPollFailed'), 'error');
   }
   finally { pollNowLoading.value = false; }
 }
@@ -278,7 +284,7 @@ async function loadData() {
     entityData.value = entityRes.entities || [];
     budgetLimits.value = limitsRes.limits || [];
   } catch (err) {
-    showToast('Failed to load usage data', 'error');
+    showToast(t('tokenUsageCard.toast.usageLoadFailed'), 'error');
     summaryData.value = []; entityData.value = []; budgetLimits.value = [];
   } finally {
     isLoading.value = false;
@@ -290,7 +296,7 @@ async function loadEntityData() {
   try {
     const { start_date, end_date } = dateRange.value;
     entityData.value = (await budgetApi.getUsageByEntity({ entity_type: activeEntityTab.value, start_date, end_date })).entities || [];
-  } catch (err) { showToast('Failed to load entity data', 'error'); entityData.value = []; }
+  } catch (err) { showToast(t('tokenUsageCard.toast.entityLoadFailed'), 'error'); entityData.value = []; }
 }
 
 async function loadAgentsTeamsAndTriggers() {
@@ -319,10 +325,10 @@ async function loadAllTimeSpend() {
 function openAddLimit() { budgetFormMode.value = 'create'; selectedLimit.value = null; showBudgetForm.value = true; }
 function openEditLimit(limit: BudgetLimit) { budgetFormMode.value = 'edit'; selectedLimit.value = limit; showBudgetForm.value = true; }
 async function handleDeleteLimit(limit: BudgetLimit) {
-  try { await budgetApi.deleteLimit(limit.entity_type, limit.entity_id); showToast('Budget limit deleted', 'success'); await loadData(); }
-  catch { showToast('Failed to delete budget limit', 'error'); }
+  try { await budgetApi.deleteLimit(limit.entity_type, limit.entity_id); showToast(t('tokenUsageCard.toast.budgetDeleted'), 'success'); await loadData(); }
+  catch { showToast(t('tokenUsageCard.toast.budgetDeleteFailed'), 'error'); }
 }
-function handleBudgetSaved() { showBudgetForm.value = false; showToast('Budget limit saved', 'success'); loadData(); }
+function handleBudgetSaved() { showBudgetForm.value = false; showToast(t('tokenUsageCard.toast.budgetSaved'), 'success'); loadData(); }
 function handleBudgetCancelled() { showBudgetForm.value = false; }
 
 function getDefaultProjectionWindow(accountId: number): string | null {
@@ -381,17 +387,17 @@ onUnmounted(() => {
   <section id="token-usage" class="token-usage-dashboard lane-card">
     <header class="lane-card__head">
       <div>
-        <h2 class="lane-card__title">Token Usage</h2>
-        <p class="lane-card__subtitle">Monitor AI spending across agents and teams</p>
+        <h2 class="lane-card__title">{{ t('tokenUsageCard.title') }}</h2>
+        <p class="lane-card__subtitle">{{ t('tokenUsageCard.subtitle') }}</p>
       </div>
       <div class="period-selector">
-        <button v-for="option in periodOptions" :key="option.key" class="period-btn" :class="{ active: selectedPeriod === option.key }" @click="selectedPeriod = option.key">{{ option.label }}</button>
+        <button v-for="option in periodOptions" :key="option.key" class="period-btn" :class="{ active: selectedPeriod === option.key }" @click="selectedPeriod = option.key">{{ t(option.labelKey) }}</button>
       </div>
     </header>
 
     <div v-if="selectedPeriod === 'custom'" class="custom-range">
-      <div class="date-input-group"><label>Start Date</label><input type="date" v-model="customStartDate"></div>
-      <div class="date-input-group"><label>End Date</label><input type="date" v-model="customEndDate"></div>
+      <div class="date-input-group"><label>{{ t('tokenUsageCard.startDate') }}</label><input type="date" v-model="customStartDate"></div>
+      <div class="date-input-group"><label>{{ t('tokenUsageCard.endDate') }}</label><input type="date" v-model="customEndDate"></div>
     </div>
     <div v-if="customDateError" class="date-error">{{ customDateError }}</div>
     <div v-if="selectedPeriod !== 'custom'" class="period-range-display">{{ dateRange.start_date }} &mdash; {{ dateRange.end_date }}</div>
@@ -408,40 +414,40 @@ onUnmounted(() => {
           <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
         </svg>
         <span>
-          <strong>{{ w.threshold_level === 'critical' ? 'Critical' : 'Warning' }}:</strong>
-          {{ w.account_name || 'Account ' + w.account_id }} is at {{ Math.round(w.percentage) }}% of {{ w.window_type }} rate limit.
-          <template v-if="w.eta?.status === 'projected'"> Limit reached in {{ w.eta.message }}.</template>
+          <strong>{{ w.threshold_level === 'critical' ? t('tokenUsageCard.alert.critical') : t('tokenUsageCard.alert.warning') }}:</strong>
+          {{ t('tokenUsageCard.alert.atPercent', { account: w.account_name || t('tokenUsageCard.alert.accountFallback', { id: w.account_id }), percent: Math.round(w.percentage), window: w.window_type }) }}
+          <template v-if="w.eta?.status === 'projected'"> {{ t('tokenUsageCard.alert.limitReachedIn', { eta: w.eta.message }) }}</template>
         </span>
       </div>
     </div>
 
     <CredentialStatusBanner />
 
-    <LoadingState v-if="isLoading" message="Loading usage data..." />
+    <LoadingState v-if="isLoading" :message="t('tokenUsageCard.loadingUsage')" />
 
     <TokenBreakdownCard v-show="!isLoading" :total-input-tokens="totalInputTokens" :total-output-tokens="totalOutputTokens" :total-cache-read-tokens="totalCacheReadTokens" :total-cache-creation-tokens="totalCacheCreationTokens" :total-all-tokens="totalAllTokens" :cache-hit-rate="cacheHitRate" :period-label="periodLabel" :total-spend="totalSpend" :total-sessions="totalSessions" :total-turns="totalTurns" :total-executions="totalExecutions" :session-stats="sessionStats" :all-time-spend="allTimeSpend" />
     <MonitoringSection v-show="!isLoading" :monitoring-status="monitoringStatus" :monitoring-loading="monitoringLoading" :poll-now-loading="pollNowLoading" :monitoring-refreshing="monitoringRefreshing" :trend-histories="trendHistories" :expanded-cards="expandedCards" :selected-rate-windows="selectedRateWindows" :selected-projection-window="selectedProjectionWindow" :chart-time-range-start="chartTimeRangeStart" :chart-time-range-end="chartTimeRangeEnd" :rotation-sessions="rotationStatus?.sessions ?? []" :rotation-evaluator="rotationStatus?.evaluator ?? undefined" @poll-now="pollNow" @toggle-card="toggleCard" @update:selected-rate-windows="Object.assign(selectedRateWindows, $event)" @update:selected-projection-window="Object.assign(selectedProjectionWindow, $event)" />
 
     <div class="section" v-if="!isLoading">
       <div class="section-header">
-        <h2 class="section-title">Cost Trend</h2>
+        <h2 class="section-title">{{ t('tokenUsageCard.costTrend') }}</h2>
         <div class="chart-type-toggle">
-          <button class="toggle-btn" :class="{ active: chartType === 'bar' }" @click="chartType = 'bar'" title="Bar Chart">
+          <button class="toggle-btn" :class="{ active: chartType === 'bar' }" @click="chartType = 'bar'" :title="t('tokenUsageCard.barChart')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="6" width="4" height="15" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/></svg>
           </button>
-          <button class="toggle-btn" :class="{ active: chartType === 'line' }" @click="chartType = 'line'" title="Line Chart">
+          <button class="toggle-btn" :class="{ active: chartType === 'line' }" @click="chartType = 'line'" :title="t('tokenUsageCard.lineChart')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 8 13 13 9 9 2 16"/><polyline points="16 8 22 8 22 14"/></svg>
           </button>
         </div>
       </div>
       <div class="chart-wrapper">
-        <TokenUsageChart :data="summaryData" :chart-type="chartType" title="Daily Cost" />
-        <div v-if="summaryData.length === 0" class="empty-chart-overlay"><p>No usage data for the selected period</p></div>
+        <TokenUsageChart :data="summaryData" :chart-type="chartType" :title="t('tokenUsageCard.dailyCost')" />
+        <div v-if="summaryData.length === 0" class="empty-chart-overlay"><p>{{ t('tokenUsageCard.noUsageForPeriod') }}</p></div>
       </div>
     </div>
 
     <EntitySpendSection v-show="!isLoading" :entity-data="entityData" :active-entity-tab="activeEntityTab" @update:active-entity-tab="activeEntityTab = $event" />
-    <div class="opencode-note" v-show="!isLoading"><span class="note-icon">i</span><span>OpenCode backend executions do not report token usage. Only Claude backend usage is tracked.</span></div>
+    <div class="opencode-note" v-show="!isLoading"><span class="note-icon">i</span><span>{{ t('tokenUsageCard.opencodeNote') }}</span></div>
     <BudgetLimitsSection v-show="!isLoading" :budget-limits="budgetLimits" :agents="agents" :teams="teams" :triggers="triggers" @open-add-limit="openAddLimit" @open-edit-limit="openEditLimit" @delete-limit="handleDeleteLimit" />
 
     <BudgetLimitForm v-if="showBudgetForm" :mode="budgetFormMode" :existing-limit="selectedLimit" :agents="agents" :teams="teams" :triggers="triggers" @saved="handleBudgetSaved" @cancelled="handleBudgetCancelled" />

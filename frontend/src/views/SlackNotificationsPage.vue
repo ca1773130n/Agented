@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { integrationApi, ApiError } from '../services/api';
 import type { Integration } from '../services/api';
+const { t } = useI18n();
 const showToast = useToast();
 
 interface NotificationChannel {
@@ -27,14 +29,14 @@ interface NotificationLog {
   message: string;
 }
 
-const eventTypes = [
-  { value: 'execution_started', label: 'Execution Started' },
-  { value: 'execution_success', label: 'Execution Succeeded' },
-  { value: 'execution_failed', label: 'Execution Failed' },
-  { value: 'execution_timeout', label: 'Execution Timed Out' },
-  { value: 'daily_digest', label: 'Daily Digest' },
-  { value: 'weekly_digest', label: 'Weekly Digest' },
-];
+const eventTypes = computed(() => [
+  { value: 'execution_started', label: t('slackNotifications.events.executionStarted') },
+  { value: 'execution_success', label: t('slackNotifications.events.executionSucceeded') },
+  { value: 'execution_failed', label: t('slackNotifications.events.executionFailed') },
+  { value: 'execution_timeout', label: t('slackNotifications.events.executionTimedOut') },
+  { value: 'daily_digest', label: t('slackNotifications.events.dailyDigest') },
+  { value: 'weekly_digest', label: t('slackNotifications.events.weeklyDigest') },
+]);
 
 const loading = ref(true);
 const error = ref('');
@@ -88,9 +90,9 @@ async function fetchChannels() {
     }
   } catch (err) {
     if (err instanceof ApiError) {
-      error.value = `Failed to load Slack integrations: ${err.message}`;
+      error.value = t('slackNotifications.error.loadFailedWithMsg', { message: err.message });
     } else {
-      error.value = 'Failed to load Slack integrations';
+      error.value = t('slackNotifications.error.loadFailed');
     }
   } finally {
     loading.value = false;
@@ -113,12 +115,12 @@ async function handleTestSend() {
   try {
     const result = await integrationApi.test(selectedChannel.value.id);
     if (result.success) {
-      showToast(`Test message sent to ${selectedChannel.value.slackChannel}`, 'success');
+      showToast(t('slackNotifications.toast.testSent', { channel: selectedChannel.value.slackChannel }), 'success');
     } else {
-      showToast(result.message || 'Test send failed', 'error');
+      showToast(result.message || t('slackNotifications.toast.testFailed'), 'error');
     }
   } catch (err) {
-    showToast(err instanceof ApiError ? err.message : 'Test send failed', 'error');
+    showToast(err instanceof ApiError ? err.message : t('slackNotifications.toast.testFailed'), 'error');
   } finally {
     isTestingSend.value = false;
   }
@@ -130,9 +132,9 @@ async function handleSave() {
   try {
     const data = channelToIntegration(selectedChannel.value);
     await integrationApi.update(selectedChannel.value.id, data);
-    showToast('Notification channel saved', 'success');
+    showToast(t('slackNotifications.toast.channelSaved'), 'success');
   } catch (err) {
-    showToast(err instanceof ApiError ? err.message : 'Failed to save channel', 'error');
+    showToast(err instanceof ApiError ? err.message : t('slackNotifications.toast.saveFailed'), 'error');
   } finally {
     isSaving.value = false;
   }
@@ -141,7 +143,7 @@ async function handleSave() {
 async function addChannel() {
   const nc: NotificationChannel = {
     id: '',
-    name: 'New Channel',
+    name: t('slackNotifications.newChannelName'),
     slackChannel: '#channel-name',
     webhookUrl: '',
     enabled: false,
@@ -154,9 +156,9 @@ async function addChannel() {
     const createdChannel = integrationToChannel(created);
     channels.value.push(createdChannel);
     selectedChannel.value = createdChannel;
-    showToast('New Slack channel created', 'success');
+    showToast(t('slackNotifications.toast.channelCreated'), 'success');
   } catch (err) {
-    showToast(err instanceof ApiError ? err.message : 'Failed to create channel', 'error');
+    showToast(err instanceof ApiError ? err.message : t('slackNotifications.toast.createFailed'), 'error');
   }
 }
 
@@ -173,32 +175,32 @@ function formatDate(ts: string): string {
   <div class="slack-notifications">
 
     <PageHeader
-      title="Slack Execution Notifications"
-      subtitle="Route bot execution results, failures, and summaries to configurable Slack channels."
+      :title="t('slackNotifications.title')"
+      :subtitle="t('slackNotifications.subtitle')"
     />
 
     <!-- Loading state -->
     <div v-if="loading" class="card" style="padding: 48px; text-align: center;">
-      <div style="color: var(--text-tertiary); font-size: 0.875rem;">Loading Slack integrations...</div>
+      <div style="color: var(--text-tertiary); font-size: 0.875rem;">{{ t('slackNotifications.loading') }}</div>
     </div>
 
     <!-- Error state -->
     <div v-else-if="error" class="card" style="padding: 48px; text-align: center;">
       <div style="color: #ef4444; font-size: 0.875rem; margin-bottom: 12px;">{{ error }}</div>
-      <button class="btn btn-ghost" @click="fetchChannels">Retry</button>
+      <button class="btn btn-ghost" @click="fetchChannels">{{ t('common.retry') }}</button>
     </div>
 
     <!-- Empty state -->
     <div v-else-if="channels.length === 0 && !loading" class="card" style="padding: 48px; text-align: center;">
-      <div style="color: var(--text-tertiary); font-size: 0.875rem; margin-bottom: 12px;">No Slack notification channels configured yet.</div>
-      <button class="btn btn-primary" @click="addChannel">+ Add Channel</button>
+      <div style="color: var(--text-tertiary); font-size: 0.875rem; margin-bottom: 12px;">{{ t('slackNotifications.empty') }}</div>
+      <button class="btn btn-primary" @click="addChannel">{{ t('slackNotifications.addChannel') }}</button>
     </div>
 
     <div v-else class="layout">
       <!-- Channel list -->
       <aside class="sidebar card">
         <div class="sidebar-header">
-          <span>Channels</span>
+          <span>{{ t('slackNotifications.channels') }}</span>
           <button class="btn-add" @click="addChannel">+</button>
         </div>
         <div
@@ -211,7 +213,7 @@ function formatDate(ts: string): string {
           <div class="channel-row">
             <span class="channel-name">{{ ch.name }}</span>
             <span class="status-pill" :class="ch.enabled ? 'pill-on' : 'pill-off'">
-              {{ ch.enabled ? 'ON' : 'OFF' }}
+              {{ ch.enabled ? t('slackNotifications.on') : t('slackNotifications.off') }}
             </span>
           </div>
           <div class="channel-slack">{{ ch.slackChannel }}</div>
@@ -222,40 +224,40 @@ function formatDate(ts: string): string {
       <div v-if="selectedChannel" class="editor">
         <!-- Tabs -->
         <div class="tabs">
-          <button :class="['tab', { active: activeTab === 'config' }]" @click="activeTab = 'config'">Configuration</button>
-          <button :class="['tab', { active: activeTab === 'logs' }]" @click="activeTab = 'logs'">Delivery Logs</button>
+          <button :class="['tab', { active: activeTab === 'config' }]" @click="activeTab = 'config'">{{ t('slackNotifications.tabs.configuration') }}</button>
+          <button :class="['tab', { active: activeTab === 'logs' }]" @click="activeTab = 'logs'">{{ t('slackNotifications.tabs.deliveryLogs') }}</button>
         </div>
 
         <template v-if="activeTab === 'config'">
           <div class="card">
-            <div class="card-header">Channel Settings</div>
+            <div class="card-header">{{ t('slackNotifications.channelSettings') }}</div>
             <div class="card-body">
               <div class="field-row">
                 <div class="field">
-                  <label class="field-label">Channel Name</label>
-                  <input v-model="selectedChannel.name" class="input" placeholder="Engineering Alerts" />
+                  <label class="field-label">{{ t('slackNotifications.fields.channelName') }}</label>
+                  <input v-model="selectedChannel.name" class="input" :placeholder="t('slackNotifications.placeholders.channelName')" />
                 </div>
                 <div class="field">
-                  <label class="field-label">Slack Channel</label>
+                  <label class="field-label">{{ t('slackNotifications.fields.slackChannel') }}</label>
                   <input v-model="selectedChannel.slackChannel" class="input" placeholder="#channel-name" />
                 </div>
               </div>
               <div class="field">
-                <label class="field-label">Webhook URL</label>
+                <label class="field-label">{{ t('slackNotifications.fields.webhookUrl') }}</label>
                 <input v-model="selectedChannel.webhookUrl" class="input" placeholder="https://hooks.slack.com/services/..." type="password" />
               </div>
               <div class="field">
-                <label class="field-label">Enable Channel</label>
+                <label class="field-label">{{ t('slackNotifications.fields.enableChannel') }}</label>
                 <label class="toggle-label">
                   <input type="checkbox" v-model="selectedChannel.enabled" />
-                  <span>{{ selectedChannel.enabled ? 'Active' : 'Disabled' }}</span>
+                  <span>{{ selectedChannel.enabled ? t('slackNotifications.active') : t('slackNotifications.disabled') }}</span>
                 </label>
               </div>
             </div>
           </div>
 
           <div class="card">
-            <div class="card-header">Notification Events</div>
+            <div class="card-header">{{ t('slackNotifications.notificationEvents') }}</div>
             <div class="card-body">
               <div class="event-grid">
                 <label v-for="evt in eventTypes" :key="evt.value" class="event-check">
@@ -271,10 +273,10 @@ function formatDate(ts: string): string {
           </div>
 
           <div class="card">
-            <div class="card-header">Message Template</div>
+            <div class="card-header">{{ t('slackNotifications.messageTemplate') }}</div>
             <div class="card-body">
               <div class="template-hint">
-                Available variables: <code>{{'{'}}{{'bot_name'}}{{'}'}}</code>, <code>{{'{'}}{{'status'}}{{'}'}}</code>,
+                {{ t('slackNotifications.availableVariables') }} <code>{{'{'}}{{'bot_name'}}{{'}'}}</code>, <code>{{'{'}}{{'status'}}{{'}'}}</code>,
                 <code>{{'{'}}{{'error_summary'}}{{'}'}}</code>, <code>{{'{'}}{{'execution_url'}}{{'}'}}</code>,
                 <code>{{'{'}}{{'summary_table'}}{{'}'}}</code>
               </div>
@@ -284,10 +286,10 @@ function formatDate(ts: string): string {
 
           <div class="actions">
             <button class="btn btn-ghost" :disabled="isTestingSend" @click="handleTestSend">
-              {{ isTestingSend ? 'Sending...' : 'Send Test Message' }}
+              {{ isTestingSend ? t('slackNotifications.sending') : t('slackNotifications.sendTestMessage') }}
             </button>
             <button class="btn btn-primary" :disabled="isSaving" @click="handleSave">
-              {{ isSaving ? 'Saving...' : 'Save Channel' }}
+              {{ isSaving ? t('slackNotifications.saving') : t('slackNotifications.saveChannel') }}
             </button>
           </div>
         </template>
@@ -295,11 +297,11 @@ function formatDate(ts: string): string {
         <template v-else>
           <div class="card">
             <div class="card-header">
-              <span>Recent Deliveries</span>
+              <span>{{ t('slackNotifications.recentDeliveries') }}</span>
               <span class="badge-count">{{ logs.length }}</span>
             </div>
             <div v-if="logs.length === 0" style="padding: 32px; text-align: center; color: var(--text-tertiary); font-size: 0.82rem;">
-              No delivery logs available yet.
+              {{ t('slackNotifications.noLogs') }}
             </div>
             <div v-else class="log-list">
               <div v-for="log in logs" :key="log.id" class="log-row">

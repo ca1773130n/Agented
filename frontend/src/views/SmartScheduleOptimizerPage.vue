@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { schedulerApi, ApiError } from '../services/api';
 import type { SchedulerStatus } from '../services/api';
 import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 type RiskLevel = 'low' | 'medium' | 'high';
@@ -69,9 +71,9 @@ async function loadData() {
     const sessions = sessionsResp.sessions ?? status.sessions ?? [];
     botSchedules.value = sessions.map((s) => ({
       botId: `acct-${s.account_id}`,
-      botName: s.account_name ?? `Account ${s.account_id}`,
+      botName: s.account_name ?? t('smartScheduleOptimizer.accountFallback', { account: s.account_id }),
       cron: s.state,
-      provider: s.account_name ?? `Account ${s.account_id}`,
+      provider: s.account_name ?? t('smartScheduleOptimizer.accountFallback', { account: s.account_id }),
       avgDurationMs: 0,
       riskLevel: (s.state === 'stopped' ? 'high' : s.state === 'queued' ? 'medium' : 'low') as RiskLevel,
       lastConflicts: s.stop_reason ? 1 : 0,
@@ -81,20 +83,20 @@ async function loadData() {
     if (status.global_summary) {
       const gs = status.global_summary;
       rateLimitPatterns.value = [{
-        provider: 'All',
+        provider: t('smartScheduleOptimizer.allProviders'),
         peakHours: [],
         peakDays: [],
         avgQueueDepth: gs.running ?? 0,
         recommendation: gs.stopped > 0
-          ? `${gs.stopped} session(s) stopped due to rate limits. Consider staggering schedules.`
-          : 'Concurrency is within normal limits.',
+          ? t('smartScheduleOptimizer.recommendation.stopped', { count: gs.stopped })
+          : t('smartScheduleOptimizer.recommendation.normal'),
       }];
     }
   } catch (err) {
     if (err instanceof ApiError) {
-      error.value = `API Error (${err.status}): ${err.message}`;
+      error.value = t('smartScheduleOptimizer.error.apiError', { status: err.status, message: err.message });
     } else {
-      error.value = err instanceof Error ? err.message : 'Unknown error';
+      error.value = err instanceof Error ? err.message : t('smartScheduleOptimizer.error.unknown');
     }
   } finally {
     loading.value = false;
@@ -146,7 +148,7 @@ function formatCron(cron: string): string {
   if (parts.length < 5) return cron;
   const [min, hour, , , dayOfWeek] = parts;
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const dayName = dayOfWeek === '*' ? 'Daily' : days[parseInt(dayOfWeek)] || dayOfWeek;
+  const dayName = dayOfWeek === '*' ? t('smartScheduleOptimizer.daily') : days[parseInt(dayOfWeek)] || dayOfWeek;
   return `${dayName} ${hour.padStart(2, '0')}:${min.padStart(2, '0')} UTC`;
 }
 
@@ -157,10 +159,10 @@ async function runOptimizer() {
     const status = await schedulerApi.getStatus();
     schedulerStatus.value = status;
     optStatus.value = 'done';
-    showToast('Optimization analysis complete', 'success');
+    showToast(t('smartScheduleOptimizer.toast.analysisComplete'), 'success');
   } catch (err) {
     optStatus.value = 'idle';
-    showToast(err instanceof ApiError ? err.message : 'Optimization failed', 'error');
+    showToast(err instanceof ApiError ? err.message : t('smartScheduleOptimizer.toast.optimizationFailed'), 'error');
   }
 }
 
@@ -171,12 +173,12 @@ function applySuggestion(s: ScheduleSuggestion) {
     bot.riskLevel = s.suggestedRisk;
     bot.lastConflicts = 0;
   }
-  showToast(`Schedule updated for ${s.botName}`, 'success');
+  showToast(t('smartScheduleOptimizer.toast.scheduleUpdated', { name: s.botName }), 'success');
 }
 
 function dismissSuggestion(s: ScheduleSuggestion) {
   suggestions.value = suggestions.value.filter((sg) => sg.botId !== s.botId);
-  showToast('Suggestion dismissed', 'info');
+  showToast(t('smartScheduleOptimizer.toast.suggestionDismissed'), 'info');
 }
 
 const totalConflicts = computed(() => botSchedules.value.reduce((s, b) => s + b.lastConflicts, 0));
@@ -192,49 +194,49 @@ const FEATURE_ENABLED = false;
   <div class="page-container">
     <NotEnabledBanner
       v-if="!FEATURE_ENABLED"
-      feature="Smart schedule optimizer"
-      detail="The backend that analyzes API contention patterns and recomputes schedules has not shipped yet. Applying suggestions is disabled."
+      :feature="t('smartScheduleOptimizer.banner.feature')"
+      :detail="t('smartScheduleOptimizer.banner.detail')"
       testid="smart-schedule-not-enabled"
     />
 
     <PageHeader
-      title="Smart Schedule Optimizer"
-      subtitle="AI-powered scheduling that analyzes API rate limit patterns and execution history to avoid peak contention"
+      :title="t('smartScheduleOptimizer.title')"
+      :subtitle="t('smartScheduleOptimizer.subtitle')"
     />
 
     <!-- Loading state -->
     <div v-if="loading" class="empty-detail">
       <div class="empty-icon">⏳</div>
-      <div class="empty-text">Loading scheduler data...</div>
+      <div class="empty-text">{{ t('smartScheduleOptimizer.loading') }}</div>
     </div>
 
     <!-- Error state -->
     <div v-else-if="error" class="empty-detail">
       <div class="empty-icon">⚠️</div>
       <div class="empty-text">{{ error }}</div>
-      <button class="btn-primary" style="margin-top: 12px" @click="loadData">Retry</button>
+      <button class="btn-primary" style="margin-top: 12px" @click="loadData">{{ t('common.retry') }}</button>
     </div>
 
     <template v-else>
       <div class="stats-row">
         <div class="stat-card">
-          <div class="stat-label">Bots with Schedules</div>
+          <div class="stat-label">{{ t('smartScheduleOptimizer.stats.botsWithSchedules') }}</div>
           <div class="stat-value">{{ botSchedules.length }}</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">High-Risk Schedules</div>
+          <div class="stat-label">{{ t('smartScheduleOptimizer.stats.highRiskSchedules') }}</div>
           <div class="stat-value" :style="{ color: highRiskCount > 0 ? 'var(--accent-red)' : 'var(--accent-green)' }">
             {{ highRiskCount }}
           </div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Rate Limit Conflicts (30d)</div>
+          <div class="stat-label">{{ t('smartScheduleOptimizer.stats.rateLimitConflicts') }}</div>
           <div class="stat-value" :style="{ color: totalConflicts > 0 ? 'var(--accent-amber)' : 'var(--accent-green)' }">
             {{ totalConflicts }}
           </div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Suggestions Available</div>
+          <div class="stat-label">{{ t('smartScheduleOptimizer.stats.suggestionsAvailable') }}</div>
           <div class="stat-value" :style="{ color: suggestions.length > 0 ? 'var(--accent-blue)' : 'var(--text-muted)' }">
             {{ suggestions.length }}
           </div>
@@ -244,8 +246,8 @@ const FEATURE_ENABLED = false;
       <!-- Rate limit heatmap -->
       <div class="section-card">
         <div class="section-header">
-          <h3 class="section-title">Provider Rate Limit Heatmap</h3>
-          <span class="section-hint">Historical API queue depth by day / hour (UTC)</span>
+          <h3 class="section-title">{{ t('smartScheduleOptimizer.heatmap.title') }}</h3>
+          <span class="section-hint">{{ t('smartScheduleOptimizer.heatmap.hint') }}</span>
         </div>
         <div class="heatmap-grid">
           <div class="heatmap-corner"></div>
@@ -257,31 +259,31 @@ const FEATURE_ENABLED = false;
               :key="`${day}-${hour}`"
               class="heatmap-cell"
               :style="{ background: heatColor(heatmapData.find(s => s.day === day && s.hour === hour)?.load ?? 20) }"
-              :title="`${day} ${hour}:00 UTC — Load: ${Math.round(heatmapData.find(s => s.day === day && s.hour === hour)?.load ?? 20)}%`"
+              :title="t('smartScheduleOptimizer.heatmap.cellTitle', { day, hour, load: Math.round(heatmapData.find(s => s.day === day && s.hour === hour)?.load ?? 20) })"
             ></div>
           </template>
         </div>
         <div class="heatmap-legend">
-          <span class="legend-item"><span class="legend-swatch" style="background: color-mix(in srgb, var(--accent-green) 30%, transparent)"></span> Low</span>
-          <span class="legend-item"><span class="legend-swatch" style="background: var(--accent-amber)"></span> Medium</span>
-          <span class="legend-item"><span class="legend-swatch" style="background: var(--accent-red)"></span> High</span>
+          <span class="legend-item"><span class="legend-swatch" style="background: color-mix(in srgb, var(--accent-green) 30%, transparent)"></span> {{ t('smartScheduleOptimizer.legend.low') }}</span>
+          <span class="legend-item"><span class="legend-swatch" style="background: var(--accent-amber)"></span> {{ t('smartScheduleOptimizer.legend.medium') }}</span>
+          <span class="legend-item"><span class="legend-swatch" style="background: var(--accent-red)"></span> {{ t('smartScheduleOptimizer.legend.high') }}</span>
         </div>
       </div>
 
       <!-- Provider patterns -->
       <div class="section-card">
         <div class="section-header">
-          <h3 class="section-title">Provider Rate Limit Patterns</h3>
+          <h3 class="section-title">{{ t('smartScheduleOptimizer.patterns.title') }}</h3>
         </div>
         <div v-if="rateLimitPatterns.length === 0" class="empty-detail" style="padding: 20px">
-          <div class="empty-text">No rate limit pattern data available.</div>
+          <div class="empty-text">{{ t('smartScheduleOptimizer.patterns.empty') }}</div>
         </div>
         <div v-else class="patterns-grid">
           <div v-for="p in rateLimitPatterns" :key="p.provider" class="pattern-card">
             <div class="pattern-provider">{{ p.provider }}</div>
-            <div class="pattern-stat">Peak days: <strong>{{ p.peakDays.length > 0 ? p.peakDays.join(', ') : 'N/A' }}</strong></div>
-            <div class="pattern-stat">Peak hours: <strong>{{ p.peakHours.length > 0 ? p.peakHours.map(h => `${h}:00`).join(', ') + ' UTC' : 'N/A' }}</strong></div>
-            <div class="pattern-stat">Active sessions: <strong>{{ p.avgQueueDepth }}</strong></div>
+            <div class="pattern-stat">{{ t('smartScheduleOptimizer.patterns.peakDays') }} <strong>{{ p.peakDays.length > 0 ? p.peakDays.join(', ') : t('smartScheduleOptimizer.na') }}</strong></div>
+            <div class="pattern-stat">{{ t('smartScheduleOptimizer.patterns.peakHours') }} <strong>{{ p.peakHours.length > 0 ? p.peakHours.map(h => `${h}:00`).join(', ') + ' UTC' : t('smartScheduleOptimizer.na') }}</strong></div>
+            <div class="pattern-stat">{{ t('smartScheduleOptimizer.patterns.activeSessions') }} <strong>{{ p.avgQueueDepth }}</strong></div>
             <div class="pattern-rec">💡 {{ p.recommendation }}</div>
           </div>
         </div>
@@ -290,29 +292,29 @@ const FEATURE_ENABLED = false;
       <!-- Current schedules -->
       <div class="section-card">
         <div class="section-header">
-          <h3 class="section-title">Current Bot Schedules</h3>
+          <h3 class="section-title">{{ t('smartScheduleOptimizer.currentSchedules.title') }}</h3>
           <button
             class="btn-primary"
             :disabled="optStatus === 'analyzing' || !FEATURE_ENABLED"
-            :title="!FEATURE_ENABLED ? 'Smart schedule optimizer is not yet enabled in this deployment' : undefined"
+            :title="!FEATURE_ENABLED ? t('smartScheduleOptimizer.notEnabledTitleDeployment') : undefined"
             data-testid="smart-schedule-run-submit"
             @click="runOptimizer"
           >
-            {{ optStatus === 'analyzing' ? '⏳ Analyzing…' : '⚡ Run Optimizer' }}
+            {{ optStatus === 'analyzing' ? t('smartScheduleOptimizer.analyzing') : t('smartScheduleOptimizer.runOptimizer') }}
           </button>
         </div>
         <div v-if="botSchedules.length === 0" class="empty-detail" style="padding: 30px">
-          <div class="empty-text">No active scheduler sessions found.</div>
+          <div class="empty-text">{{ t('smartScheduleOptimizer.currentSchedules.empty') }}</div>
         </div>
         <table v-else class="bench-table">
           <thead>
             <tr>
-              <th>Bot</th>
-              <th>Current Schedule</th>
-              <th>Provider</th>
-              <th>Avg Duration</th>
-              <th>Risk</th>
-              <th>Conflicts (30d)</th>
+              <th>{{ t('smartScheduleOptimizer.table.bot') }}</th>
+              <th>{{ t('smartScheduleOptimizer.table.currentSchedule') }}</th>
+              <th>{{ t('smartScheduleOptimizer.table.provider') }}</th>
+              <th>{{ t('smartScheduleOptimizer.table.avgDuration') }}</th>
+              <th>{{ t('smartScheduleOptimizer.table.risk') }}</th>
+              <th>{{ t('smartScheduleOptimizer.table.conflicts') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -333,8 +335,8 @@ const FEATURE_ENABLED = false;
       <!-- Suggestions -->
       <div v-if="suggestions.length > 0" class="section-card">
         <div class="section-header">
-          <h3 class="section-title">✨ Optimization Suggestions</h3>
-          <span class="section-hint">AI-generated schedule improvements</span>
+          <h3 class="section-title">{{ t('smartScheduleOptimizer.suggestions.title') }}</h3>
+          <span class="section-hint">{{ t('smartScheduleOptimizer.suggestions.hint') }}</span>
         </div>
         <div class="suggestions-list">
           <div v-for="s in suggestions" :key="s.botId" class="suggestion-card">
@@ -344,30 +346,30 @@ const FEATURE_ENABLED = false;
                 <button
                   class="btn-apply"
                   :disabled="!FEATURE_ENABLED"
-                  :title="!FEATURE_ENABLED ? 'Smart schedule optimizer is not yet enabled' : ''"
+                  :title="!FEATURE_ENABLED ? t('smartScheduleOptimizer.notEnabledTitle') : ''"
                   @click="applySuggestion(s)"
-                >Apply</button>
+                >{{ t('smartScheduleOptimizer.apply') }}</button>
                 <button
                   class="btn-dismiss"
                   :disabled="!FEATURE_ENABLED"
-                  :title="!FEATURE_ENABLED ? 'Smart schedule optimizer is not yet enabled' : ''"
+                  :title="!FEATURE_ENABLED ? t('smartScheduleOptimizer.notEnabledTitle') : ''"
                   @click="dismissSuggestion(s)"
-                >Dismiss</button>
+                >{{ t('common.dismiss') }}</button>
               </div>
             </div>
             <div class="schedule-compare">
               <div class="schedule-item">
-                <div class="schedule-label" :style="{ color: riskColor(s.currentRisk) }">Current {{ riskBadge(s.currentRisk) }}</div>
+                <div class="schedule-label" :style="{ color: riskColor(s.currentRisk) }">{{ t('smartScheduleOptimizer.current') }} {{ riskBadge(s.currentRisk) }}</div>
                 <code class="mono">{{ s.currentCron }}</code>
                 <div class="cron-human">{{ formatCron(s.currentCron) }}</div>
               </div>
               <div class="arrow">→</div>
               <div class="schedule-item">
-                <div class="schedule-label" :style="{ color: riskColor(s.suggestedRisk) }">Suggested {{ riskBadge(s.suggestedRisk) }}</div>
+                <div class="schedule-label" :style="{ color: riskColor(s.suggestedRisk) }">{{ t('smartScheduleOptimizer.suggested') }} {{ riskBadge(s.suggestedRisk) }}</div>
                 <code class="mono">{{ s.suggestedCron }}</code>
                 <div class="cron-human">{{ formatCron(s.suggestedCron) }}</div>
               </div>
-              <div class="conflict-reduction">-{{ s.estimatedConflictReduction }}% conflicts</div>
+              <div class="conflict-reduction">{{ t('smartScheduleOptimizer.conflictReduction', { percent: s.estimatedConflictReduction }) }}</div>
             </div>
             <div class="rationale">{{ s.rationale }}</div>
           </div>
@@ -376,7 +378,7 @@ const FEATURE_ENABLED = false;
 
       <div v-else-if="optStatus === 'done'" class="empty-detail">
         <div class="empty-icon">✅</div>
-        <div class="empty-text">All schedules are already well-optimized</div>
+        <div class="empty-text">{{ t('smartScheduleOptimizer.allOptimized') }}</div>
       </div>
     </template>
   </div>

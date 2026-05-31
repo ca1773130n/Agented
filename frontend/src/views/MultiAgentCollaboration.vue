@@ -4,6 +4,8 @@ import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { superAgentApi, teamApi, ApiError } from '../services/api';
 import type { SuperAgent, Team } from '../services/api';
+import { useI18n } from 'vue-i18n';
+const { t } = useI18n();
 const showToast = useToast();
 
 interface AgentSpec {
@@ -65,17 +67,17 @@ onMounted(async () => {
 
     // Set trigger context from team info if available
     if (teams.value.length > 0) {
-      session.value.trigger = `Team collaboration across ${teams.value.length} team(s)`;
+      session.value.trigger = t('multiAgentCollaboration.triggerContextTeams', { count: teams.value.length });
     } else {
-      session.value.trigger = 'No teams configured';
+      session.value.trigger = t('multiAgentCollaboration.noTeamsConfigured');
     }
 
     session.value.id = `session-${Date.now()}`;
   } catch (err) {
     if (err instanceof ApiError) {
-      loadError.value = `Failed to load data: ${err.message}`;
+      loadError.value = t('multiAgentCollaboration.loadFailedWithReason', { reason: err.message });
     } else {
-      loadError.value = 'An unexpected error occurred while loading data.';
+      loadError.value = t('multiAgentCollaboration.loadError');
     }
   } finally {
     isLoading.value = false;
@@ -84,7 +86,7 @@ onMounted(async () => {
 
 async function runCollaboration() {
   if (session.value.agents.filter(a => a.enabled).length === 0) {
-    showToast('Enable at least one agent', 'error');
+    showToast(t('multiAgentCollaboration.toast.enableAtLeastOne'), 'error');
     return;
   }
   isRunning.value = true;
@@ -114,10 +116,10 @@ async function runCollaboration() {
       activeAgents.filter(a => a.output).map(a => `### ${a.name}\n${a.output}`).join('\n\n') +
       `\n\n---\n**Summary**: ${completed.length} agent(s) completed, ${failed.length} failed. Strategy: ${session.value.mergeStrategy}.`;
     session.value.status = 'complete';
-    showToast('Collaboration complete', 'success');
+    showToast(t('multiAgentCollaboration.toast.complete'), 'success');
   } catch {
     session.value.status = 'idle';
-    showToast('Collaboration failed', 'error');
+    showToast(t('multiAgentCollaboration.toast.failed'), 'error');
   } finally {
     isRunning.value = false;
   }
@@ -132,13 +134,13 @@ function agentStatusColor(s: AgentSpec['status']) {
   <div class="mac-page">
 
     <PageHeader
-      title="Multi-Agent Collaboration Mode"
-      subtitle="Run multiple specialized agents on the same task in parallel, then merge their outputs into a unified report."
+      :title="t('multiAgentCollaboration.title')"
+      :subtitle="t('multiAgentCollaboration.subtitle')"
     />
 
     <!-- Loading state -->
     <div v-if="isLoading" class="card" style="padding: 48px; text-align: center;">
-      <span style="color: var(--text-tertiary); font-size: 0.85rem;">Loading agents and teams...</span>
+      <span style="color: var(--text-tertiary); font-size: 0.85rem;">{{ t('multiAgentCollaboration.loading') }}</span>
     </div>
 
     <!-- Error state -->
@@ -148,7 +150,7 @@ function agentStatusColor(s: AgentSpec['status']) {
 
     <!-- Empty state -->
     <div v-else-if="session.agents.length === 0" class="card" style="padding: 48px; text-align: center;">
-      <span style="color: var(--text-tertiary); font-size: 0.85rem;">No super agents found. Create agents to enable collaboration.</span>
+      <span style="color: var(--text-tertiary); font-size: 0.85rem;">{{ t('multiAgentCollaboration.empty') }}</span>
     </div>
 
     <div v-else class="layout">
@@ -156,13 +158,13 @@ function agentStatusColor(s: AgentSpec['status']) {
       <div class="agents-panel">
         <div class="card agents-card">
           <div class="agents-header">
-            <span>Participating Agents</span>
+            <span>{{ t('multiAgentCollaboration.participatingAgents') }}</span>
             <div class="merge-select">
-              <label class="merge-label">Merge strategy:</label>
+              <label class="merge-label">{{ t('multiAgentCollaboration.mergeStrategy') }}</label>
               <select v-model="session.mergeStrategy" class="select-input">
-                <option value="weighted">Weighted (by severity)</option>
-                <option value="union">Union (all findings)</option>
-                <option value="priority">Priority (first agent wins)</option>
+                <option value="weighted">{{ t('multiAgentCollaboration.strategy.weighted') }}</option>
+                <option value="union">{{ t('multiAgentCollaboration.strategy.union') }}</option>
+                <option value="priority">{{ t('multiAgentCollaboration.strategy.priority') }}</option>
               </select>
             </div>
           </div>
@@ -183,12 +185,12 @@ function agentStatusColor(s: AgentSpec['status']) {
         </div>
 
         <div class="card trigger-card">
-          <div class="trigger-header">Trigger Context</div>
+          <div class="trigger-header">{{ t('multiAgentCollaboration.triggerContext') }}</div>
           <div class="trigger-body">{{ session.trigger }}</div>
         </div>
 
         <div v-if="teams.length > 0" class="card trigger-card">
-          <div class="trigger-header">Teams ({{ teams.length }})</div>
+          <div class="trigger-header">{{ t('multiAgentCollaboration.teamsCount', { count: teams.length }) }}</div>
           <div class="trigger-body" style="display: flex; flex-direction: column; gap: 4px;">
             <div v-for="team in teams" :key="team.id" style="font-size: 0.78rem; color: var(--text-secondary);">
               {{ team.name }}
@@ -203,7 +205,7 @@ function agentStatusColor(s: AgentSpec['status']) {
             @click="runCollaboration"
           >
             <span v-if="isRunning" class="spinner">&#9203;</span>
-            {{ isRunning ? 'Agents collaborating...' : 'Run Collaboration' }}
+            {{ isRunning ? t('multiAgentCollaboration.collaborating') : t('multiAgentCollaboration.runCollaboration') }}
           </button>
         </div>
       </div>
@@ -217,8 +219,8 @@ function agentStatusColor(s: AgentSpec['status']) {
               <span :class="['output-status', `os-${agent.status}`]">{{ agent.status }}</span>
             </div>
             <div class="output-body">
-              <span v-if="agent.status === 'running'" class="running-indicator">Analyzing...</span>
-              <span v-else-if="!agent.output" class="idle-text">Waiting to run</span>
+              <span v-if="agent.status === 'running'" class="running-indicator">{{ t('multiAgentCollaboration.analyzing') }}</span>
+              <span v-else-if="!agent.output" class="idle-text">{{ t('multiAgentCollaboration.waitingToRun') }}</span>
               <span v-else class="output-text">{{ agent.output }}</span>
             </div>
           </div>
@@ -226,8 +228,8 @@ function agentStatusColor(s: AgentSpec['status']) {
 
         <div v-if="session.mergedOutput" class="card merged-card">
           <div class="merged-header">
-            <span>Merged Report</span>
-            <button class="btn btn-ghost btn-sm" @click="showToast('Copied to clipboard', 'success')">Copy</button>
+            <span>{{ t('multiAgentCollaboration.mergedReport') }}</span>
+            <button class="btn btn-ghost btn-sm" @click="showToast(t('multiAgentCollaboration.toast.copied'), 'success')">{{ t('multiAgentCollaboration.copy') }}</button>
           </div>
           <pre class="merged-output">{{ session.mergedOutput }}</pre>
         </div>

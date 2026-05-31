@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import {
   agentMemoryApi,
@@ -9,6 +10,7 @@ import {
 import { useFocusRefresh } from '../composables/useFocusRefresh';
 import MessageList from '../components/memory/MessageList.vue';
 
+const { t } = useI18n();
 const route = useRoute();
 const agentId = computed(() => route.params.id as string);
 const threadId = computed(() => route.params.thread_id as string);
@@ -22,14 +24,14 @@ async function load() {
   loading.value = true;
   error.value = null;
   try {
-    const [t, m] = await Promise.all([
+    const [threadData, m] = await Promise.all([
       agentMemoryApi.getThread(agentId.value, threadId.value),
       agentMemoryApi.getMessages(agentId.value, threadId.value),
     ]);
-    thread.value = t;
+    thread.value = threadData;
     messages.value = m.messages;
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Failed to load thread';
+    error.value = e instanceof Error ? e.message : t('threadDetail.loadFailed');
   } finally {
     loading.value = false;
   }
@@ -57,11 +59,11 @@ useFocusRefresh(refreshMessages);
       :to="{ name: 'agent-memory', params: { id: agentId } }"
       class="back-link"
     >
-      ← Back to Memory
+      {{ t('threadDetail.backToMemory') }}
     </RouterLink>
 
     <div v-if="loading" class="state state-loading" data-testid="thread-detail-loading">
-      Loading thread…
+      {{ t('threadDetail.loading') }}
     </div>
     <div
       v-else-if="error"
@@ -69,15 +71,15 @@ useFocusRefresh(refreshMessages);
       data-testid="thread-detail-error"
     >
       {{ error }}
-      <button @click="load" class="retry-btn">Retry</button>
+      <button @click="load" class="retry-btn">{{ t('common.retry') }}</button>
     </div>
     <template v-else-if="thread">
       <header class="thread-header">
-        <h1>{{ thread.title || '(untitled)' }}</h1>
+        <h1>{{ thread.title || t('threadDetail.untitled') }}</h1>
         <div class="thread-meta">
           <span>{{ thread.resource_type }}:{{ thread.resource_id }}</span>
-          <span>Created {{ thread.created_at }}</span>
-          <span>{{ messages.length }} messages</span>
+          <span>{{ t('threadDetail.created', { date: thread.created_at }) }}</span>
+          <span>{{ t('threadDetail.messagesCount', { count: messages.length }) }}</span>
         </div>
       </header>
       <MessageList :messages="messages" />

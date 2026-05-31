@@ -7,7 +7,10 @@
  */
 
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { ValidationResult } from '../../composables/useWorkflowValidation'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   results: ValidationResult[]
@@ -59,7 +62,7 @@ const warningCount = computed(
           >
             <circle cx="8" cy="8" r="7" />
           </svg>
-          {{ errorCount }} error{{ errorCount > 1 ? 's' : '' }}
+          {{ t('workflowValidationPanel.errorCount', errorCount) }}
         </span>
         <span v-if="warningCount > 0" class="count-badge warning">
           <svg
@@ -76,14 +79,14 @@ const warningCount = computed(
               d="M7.13 1.66L1.09 12a1 1 0 00.87 1.5h12.08a1 1 0 00.87-1.5L8.87 1.66a1 1 0 00-1.74 0z"
             />
           </svg>
-          {{ warningCount }} warning{{ warningCount > 1 ? 's' : '' }}
+          {{ t('workflowValidationPanel.warningCount', warningCount) }}
         </span>
       </div>
       <div class="header-actions">
         <span class="collapse-toggle">{{ isCollapsed ? '\u25B2' : '\u25BC' }}</span>
         <button
           class="close-btn"
-          title="Close validation panel"
+          :title="t('workflowValidationPanel.closePanel')"
           @click.stop="$emit('close')"
         >
           <svg
@@ -156,7 +159,7 @@ const warningCount = computed(
           v-if="result.nodeIds?.length"
           class="result-hint"
         >
-          Click to highlight
+          {{ t('workflowValidationPanel.clickToHighlight') }}
         </span>
       </div>
     </div>

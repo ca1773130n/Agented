@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+
 defineProps<{
   searchQuery: string;
   sortField: string;
@@ -31,13 +35,13 @@ function toggleSortOrder(current: 'asc' | 'desc') {
         type="text"
         class="search-input"
         :value="searchQuery"
-        :placeholder="placeholder ?? 'Search...'"
+        :placeholder="placeholder ?? t('common.search')"
         @input="emit('update:searchQuery', ($event.target as HTMLInputElement).value)"
       />
       <button
         v-if="searchQuery"
         class="clear-btn"
-        aria-label="Clear search"
+        :aria-label="t('listSearchSort.clearSearch')"
         @click="emit('update:searchQuery', '')"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -46,7 +50,7 @@ function toggleSortOrder(current: 'asc' | 'desc') {
       </button>
     </div>
     <div class="sort-group">
-      <label class="sort-label">Sort:</label>
+      <label class="sort-label">{{ t('listSearchSort.sortLabel') }}</label>
       <select
         class="sort-select"
         :value="sortField"
@@ -56,8 +60,8 @@ function toggleSortOrder(current: 'asc' | 'desc') {
       </select>
       <button
         class="sort-order-btn"
-        :aria-label="sortOrder === 'asc' ? 'Sort ascending' : 'Sort descending'"
-        :title="sortOrder === 'asc' ? 'Ascending' : 'Descending'"
+        :aria-label="sortOrder === 'asc' ? t('listSearchSort.sortAscending') : t('listSearchSort.sortDescending')"
+        :title="sortOrder === 'asc' ? t('listSearchSort.ascending') : t('listSearchSort.descending')"
         @click="toggleSortOrder(sortOrder)"
       >
         <svg v-if="sortOrder === 'asc'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -69,7 +73,7 @@ function toggleSortOrder(current: 'asc' | 'desc') {
       </button>
     </div>
     <span v-if="searchQuery" class="result-count">
-      Showing {{ resultCount }} of {{ totalCount }}
+      {{ t('listSearchSort.showingResults', { count: resultCount, total: totalCount }) }}
     </span>
   </div>
 </template>

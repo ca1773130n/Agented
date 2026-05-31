@@ -3,8 +3,10 @@ import { ref, onMounted } from 'vue';
 import type { PromptSnippet, CreateSnippetRequest, UpdateSnippetRequest } from '../services/api';
 import { promptSnippetApi, ApiError } from '../services/api';
 import { useToast } from '../composables/useToast';
+import { useI18n } from 'vue-i18n';
 
 const showToast = useToast();
+const { t } = useI18n();
 
 const snippets = ref<PromptSnippet[]>([]);
 const isLoading = ref(true);
@@ -28,7 +30,7 @@ async function loadSnippets() {
     const data = await promptSnippetApi.list();
     snippets.value = data.snippets || [];
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load snippets';
+    const message = err instanceof ApiError ? err.message : t('promptSnippetLibrary.loadError');
     showToast(message, 'error');
   } finally {
     isLoading.value = false;
@@ -67,7 +69,7 @@ async function saveSnippet() {
         description: formDescription.value.trim() || undefined,
       };
       await promptSnippetApi.update(editingSnippet.value.id, data);
-      showToast('Snippet updated', 'success');
+      showToast(t('promptSnippetLibrary.updated'), 'success');
     } else {
       const data: CreateSnippetRequest = {
         name: formName.value.trim(),
@@ -75,12 +77,12 @@ async function saveSnippet() {
         description: formDescription.value.trim() || undefined,
       };
       await promptSnippetApi.create(data);
-      showToast('Snippet created', 'success');
+      showToast(t('promptSnippetLibrary.created'), 'success');
     }
     closeModal();
     await loadSnippets();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to save snippet';
+    const message = err instanceof ApiError ? err.message : t('promptSnippetLibrary.saveError');
     showToast(message, 'error');
   } finally {
     isSaving.value = false;
@@ -97,12 +99,12 @@ async function executeDelete() {
   if (!pendingDeleteId.value) return;
   try {
     await promptSnippetApi.delete(pendingDeleteId.value);
-    showToast('Snippet deleted', 'success');
+    showToast(t('promptSnippetLibrary.deleted'), 'success');
     showDeleteConfirm.value = false;
     pendingDeleteId.value = null;
     await loadSnippets();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to delete snippet';
+    const message = err instanceof ApiError ? err.message : t('promptSnippetLibrary.deleteError');
     showToast(message, 'error');
   }
 }
@@ -123,21 +125,21 @@ onMounted(loadSnippets);
   <div class="snippets-page">
     <header class="page-header">
       <div class="header-left">
-        <h1>Prompt Snippets</h1>
-        <p class="page-subtitle">Reusable prompt fragments that can be included in any bot template</p>
+        <h1>{{ t('promptSnippetLibrary.title') }}</h1>
+        <p class="page-subtitle">{{ t('promptSnippetLibrary.subtitle') }}</p>
       </div>
       <button class="create-btn" @click="openCreateModal">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
           <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
         </svg>
-        Create Snippet
+        {{ t('promptSnippetLibrary.createSnippet') }}
       </button>
     </header>
 
     <!-- Snippet List -->
     <div v-if="isLoading" class="loading-state">
       <div class="spinner"></div>
-      <span>Loading snippets...</span>
+      <span>{{ t('promptSnippetLibrary.loading') }}</span>
     </div>
 
     <div v-else-if="snippets.length === 0" class="empty-state">
@@ -146,18 +148,18 @@ onMounted(loadSnippets);
           <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
         </svg>
       </div>
-      <p>No snippets yet. Create your first reusable prompt fragment.</p>
-      <button class="create-btn" @click="openCreateModal">Create Snippet</button>
+      <p>{{ t('promptSnippetLibrary.emptyText') }}</p>
+      <button class="create-btn" @click="openCreateModal">{{ t('promptSnippetLibrary.createSnippet') }}</button>
     </div>
 
     <div v-else class="snippet-table-wrapper">
       <table class="snippet-table">
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Content</th>
-            <th>Description</th>
-            <th>Actions</th>
+            <th>{{ t('promptSnippetLibrary.colName') }}</th>
+            <th>{{ t('promptSnippetLibrary.colContent') }}</th>
+            <th>{{ t('promptSnippetLibrary.colDescription') }}</th>
+            <th>{{ t('promptSnippetLibrary.colActions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -172,13 +174,13 @@ onMounted(loadSnippets);
               {{ snippet.description || '-' }}
             </td>
             <td class="snippet-actions">
-              <button class="action-btn edit-btn" title="Edit" @click="openEditModal(snippet)">
+              <button class="action-btn edit-btn" :title="t('common.edit')" @click="openEditModal(snippet)">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                   <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
                   <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
                 </svg>
               </button>
-              <button class="action-btn delete-btn" title="Delete" @click="confirmDelete(snippet)">
+              <button class="action-btn delete-btn" :title="t('common.delete')" @click="confirmDelete(snippet)">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                   <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
                 </svg>
@@ -194,12 +196,12 @@ onMounted(loadSnippets);
       <div v-if="showModal" class="modal-overlay" tabindex="-1" @click.self="closeModal" @keydown.escape="closeModal">
         <div class="modal-content">
           <div class="modal-header">
-            <h2>{{ editingSnippet ? 'Edit Snippet' : 'Create Snippet' }}</h2>
+            <h2>{{ editingSnippet ? t('promptSnippetLibrary.editTitle') : t('promptSnippetLibrary.createTitle') }}</h2>
             <button class="modal-close" @click="closeModal">&times;</button>
           </div>
           <div class="modal-body">
             <div class="form-group">
-              <label for="snippet-name">Name</label>
+              <label for="snippet-name">{{ t('promptSnippetLibrary.nameLabel') }}</label>
               <input
                 id="snippet-name"
                 v-model="formName"
@@ -207,40 +209,40 @@ onMounted(loadSnippets);
                 placeholder="my-snippet-name"
                 pattern="[\w][\w-]*"
               />
-              <span class="form-hint">Letters, numbers, underscores, hyphens. Used as <code>{{ snippetRef('name') }}</code> in prompts.</span>
+              <span class="form-hint">{{ t('promptSnippetLibrary.nameHintPrefix') }} <code>{{ snippetRef('name') }}</code> {{ t('promptSnippetLibrary.nameHintSuffix') }}</span>
             </div>
             <div class="form-group">
-              <label for="snippet-content">Content</label>
+              <label for="snippet-content">{{ t('promptSnippetLibrary.contentLabel') }}</label>
               <textarea
                 id="snippet-content"
                 v-model="formContent"
                 rows="8"
-                placeholder="Enter the snippet content..."
+                :placeholder="t('promptSnippetLibrary.contentPlaceholder')"
                 class="mono-textarea"
               ></textarea>
             </div>
             <div class="form-group">
-              <label for="snippet-description">Description <span class="optional">(optional)</span></label>
+              <label for="snippet-description">{{ t('promptSnippetLibrary.descriptionLabel') }} <span class="optional">{{ t('promptSnippetLibrary.optional') }}</span></label>
               <input
                 id="snippet-description"
                 v-model="formDescription"
                 type="text"
-                placeholder="Brief description of what this snippet does"
+                :placeholder="t('promptSnippetLibrary.descriptionPlaceholder')"
               />
             </div>
           </div>
           <div class="modal-footer">
-            <button class="cancel-btn" @click="closeModal">Cancel</button>
+            <button class="cancel-btn" @click="closeModal">{{ t('common.cancel') }}</button>
             <button
               class="save-btn"
               :disabled="!formName.trim() || !formContent.trim() || isSaving"
               @click="saveSnippet"
             >
               <template v-if="isSaving">
-                <span class="spinner-sm"></span> Saving...
+                <span class="spinner-sm"></span> {{ t('promptSnippetLibrary.saving') }}
               </template>
               <template v-else>
-                {{ editingSnippet ? 'Update' : 'Create' }}
+                {{ editingSnippet ? t('promptSnippetLibrary.update') : t('common.create') }}
               </template>
             </button>
           </div>
@@ -253,15 +255,15 @@ onMounted(loadSnippets);
       <div v-if="showDeleteConfirm" class="modal-overlay" tabindex="-1" @click.self="showDeleteConfirm = false" @keydown.escape="showDeleteConfirm = false">
         <div class="modal-content modal-sm">
           <div class="modal-header">
-            <h2>Delete Snippet</h2>
+            <h2>{{ t('promptSnippetLibrary.deleteTitle') }}</h2>
             <button class="modal-close" @click="showDeleteConfirm = false">&times;</button>
           </div>
           <div class="modal-body">
-            <p>Are you sure you want to delete <strong>{{ pendingDeleteName }}</strong>? Any prompts using <code>{{ snippetRef(pendingDeleteName) }}</code> will have unresolved references.</p>
+            <p>{{ t('promptSnippetLibrary.deleteConfirmPrefix') }} <strong>{{ pendingDeleteName }}</strong>{{ t('promptSnippetLibrary.deleteConfirmMid') }} <code>{{ snippetRef(pendingDeleteName) }}</code> {{ t('promptSnippetLibrary.deleteConfirmSuffix') }}</p>
           </div>
           <div class="modal-footer">
-            <button class="cancel-btn" @click="showDeleteConfirm = false">Cancel</button>
-            <button class="delete-confirm-btn" @click="executeDelete">Delete</button>
+            <button class="cancel-btn" @click="showDeleteConfirm = false">{{ t('common.cancel') }}</button>
+            <button class="delete-confirm-btn" @click="executeDelete">{{ t('common.delete') }}</button>
           </div>
         </div>
       </div>

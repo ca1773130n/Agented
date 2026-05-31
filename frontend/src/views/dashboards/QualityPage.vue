@@ -5,12 +5,14 @@
 -->
 <script setup lang="ts">
 import { ref, nextTick, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import PageHeader from '../../components/base/PageHeader.vue';
 import SecurityCard from './cards/SecurityCard.vue';
 import PrReviewCard from './cards/PrReviewCard.vue';
 import AnomalyDetectionCard from './cards/AnomalyDetectionCard.vue';
 
+const { t } = useI18n();
 const route = useRoute();
 const loaded = ref<Set<string>>(new Set());
 
@@ -34,7 +36,7 @@ onMounted(maybeScroll);
 
 <template>
   <div class="lane-page quality-lane">
-    <PageHeader title="Quality" subtitle="Security, PR review, and anomaly detection" />
+    <PageHeader :title="t('quality.title')" :subtitle="t('quality.subtitle')" />
     <div class="lane-cards">
       <SecurityCard @loaded="onCardLoaded" />
       <PrReviewCard @loaded="onCardLoaded" />

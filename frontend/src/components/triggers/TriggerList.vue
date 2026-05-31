@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import type { Trigger, TriggerSource } from '../../services/api';
+
+const { t } = useI18n();
 
 defineProps<{
   triggers: Trigger[];
@@ -41,10 +44,10 @@ function getTriggerIconClass(triggerSource: TriggerSource | string): string {
 
 function formatTriggerSource(source: TriggerSource | string): string {
   switch (source) {
-    case 'webhook': return 'JSON Webhook';
-    case 'github': return 'GitHub Webhook';
-    case 'manual': return 'Manual';
-    case 'scheduled': return 'Scheduled';
+    case 'webhook': return t('triggerList.source.webhook');
+    case 'github': return t('triggerList.source.github');
+    case 'manual': return t('triggerList.source.manual');
+    case 'scheduled': return t('triggerList.source.scheduled');
     default: return source;
   }
 }
@@ -65,23 +68,23 @@ function isBackendInstalled(_backendType: string): boolean {
           <circle cx="15" cy="10" r="1.5" fill="currentColor"/>
           <path d="M9 15h6"/>
         </svg>
-        Trigger Registry
+        {{ t('triggerList.registry') }}
       </h3>
       <button class="btn btn-primary" @click="emit('addTrigger')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-        Add Trigger
+        {{ t('triggerList.addTrigger') }}
       </button>
     </div>
 
     <div v-if="isLoading" class="loading-state">
       <div class="loading-spinner"></div>
-      <span>Loading triggers...</span>
+      <span>{{ t('triggerList.loading') }}</span>
     </div>
 
     <div v-else-if="triggers.length === 0" class="empty-state">
       <div class="empty-icon">&#9671;</div>
-      <p>No triggers configured</p>
-      <span>Add a trigger to get started</span>
+      <p>{{ t('triggerList.emptyTitle') }}</p>
+      <span>{{ t('triggerList.emptyHint') }}</span>
     </div>
 
     <div v-else class="trigger-list">
@@ -97,8 +100,8 @@ function isBackendInstalled(_backendType: string): boolean {
         <div class="trigger-info">
           <div class="trigger-name-row">
             <span class="trigger-name">{{ trigger.name }}</span>
-            <span v-if="trigger.is_predefined" class="badge predefined">System</span>
-            <span v-if="!trigger.enabled" class="badge disabled-badge">Disabled</span>
+            <span v-if="trigger.is_predefined" class="badge predefined">{{ t('triggerList.badgeSystem') }}</span>
+            <span v-if="!trigger.enabled" class="badge disabled-badge">{{ t('triggerList.badgeDisabled') }}</span>
           </div>
           <div class="trigger-meta">
             <span class="badge trigger-badge" :class="trigger.trigger_source">{{ formatTriggerSource(trigger.trigger_source) }}</span>
@@ -108,17 +111,17 @@ function isBackendInstalled(_backendType: string): boolean {
             </span>
             <span class="meta-item">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-              {{ trigger.path_count || 0 }} paths
+              {{ t('triggerList.pathsCount', { count: trigger.path_count || 0 }) }}
             </span>
             <span class="badge backend-badge" :class="isBackendInstalled(trigger.backend_type) ? 'available' : 'unavailable'">{{ trigger.backend_type }}</span>
           </div>
         </div>
         <div class="trigger-actions" @click.stop>
-          <button class="btn-icon" :class="trigger.enabled ? 'btn-disable' : 'btn-enable'" :title="trigger.enabled ? 'Disable' : 'Enable'" @click="emit('toggleEnabled', trigger.id, trigger.enabled ? 0 : 1)">
+          <button class="btn-icon" :class="trigger.enabled ? 'btn-disable' : 'btn-enable'" :title="trigger.enabled ? t('triggerList.disable') : t('triggerList.enable')" @click="emit('toggleEnabled', trigger.id, trigger.enabled ? 0 : 1)">
             <svg v-if="trigger.enabled" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 11-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
             <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10,8 16,12 10,16"/></svg>
           </button>
-          <button v-if="!trigger.is_predefined" class="btn-icon btn-delete" title="Delete" @click="emit('deleteTrigger', trigger.id)">
+          <button v-if="!trigger.is_predefined" class="btn-icon btn-delete" :title="t('common.delete')" @click="emit('deleteTrigger', trigger.id)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3,6 5,6 21,6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
           </button>
         </div>

@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Chart, registerables, type ChartDataset } from 'chart.js';
 import 'chartjs-adapter-date-fns';
 import type { RotationEvent } from '../../services/api';
 import { safeFormatDateTime } from '../../utils/datetime';
+
+const { t } = useI18n();
 
 Chart.register(...registerables);
 
@@ -86,7 +89,7 @@ function buildChart() {
           },
           title: {
             display: true,
-            text: 'Time',
+            text: t('rotationTimelineChart.axisTime'),
             color: '#a1a1aa',
             font: { family: "'Geist', sans-serif", size: 11 },
           },
@@ -104,7 +107,7 @@ function buildChart() {
           labels: accountLabels,
           title: {
             display: true,
-            text: 'Account',
+            text: t('rotationTimelineChart.axisAccount'),
             color: '#a1a1aa',
             font: { family: "'Geist', sans-serif", size: 11 },
           },
@@ -138,12 +141,12 @@ function buildChart() {
               if (!raw?.meta) return '';
               const event = raw.meta;
               return [
-                `From: ${event.from_account_name}`,
-                `To: ${event.to_account_name}`,
-                `Reason: ${event.reason || 'N/A'}`,
-                `Status: ${event.rotation_status}`,
-                `Urgency: ${event.urgency}`,
-                event.utilization_at_rotation != null ? `Utilization: ${event.utilization_at_rotation}%` : '',
+                t('rotationTimelineChart.tooltipFrom', { value: event.from_account_name }),
+                t('rotationTimelineChart.tooltipTo', { value: event.to_account_name }),
+                t('rotationTimelineChart.tooltipReason', { value: event.reason || t('rotationTimelineChart.notAvailable') }),
+                t('rotationTimelineChart.tooltipStatus', { value: event.rotation_status }),
+                t('rotationTimelineChart.tooltipUrgency', { value: event.urgency }),
+                event.utilization_at_rotation != null ? t('rotationTimelineChart.tooltipUtilization', { value: event.utilization_at_rotation }) : '',
               ].filter(Boolean);
             },
           },
@@ -177,7 +180,7 @@ watch(() => props.events, buildChart, { deep: true });
 <template>
   <div class="rotation-timeline-container">
     <div v-if="!events.length" class="timeline-empty">
-      No rotation events recorded yet
+      {{ t('rotationTimelineChart.empty') }}
     </div>
     <canvas v-else ref="chartCanvas"></canvas>
   </div>

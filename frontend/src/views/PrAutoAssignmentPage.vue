@@ -4,7 +4,9 @@ import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { prAssignmentApi } from '../services/api/pr-assignment';
 import type { OwnershipRule, AssignmentLog } from '../services/api/pr-assignment';
+import { useI18n } from 'vue-i18n';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 const rules = ref<OwnershipRule[]>([]);
@@ -32,7 +34,7 @@ async function loadData() {
     minConfidence.value = parseInt(settingsRes.pr_assignment_min_confidence, 10) || 70;
     maxReviewers.value = parseInt(settingsRes.pr_assignment_max_reviewers, 10) || 2;
   } catch {
-    showToast('Failed to load PR assignment data', 'error');
+    showToast(t('prAutoAssignment.toasts.loadFailed'), 'error');
   } finally {
     loading.value = false;
   }
@@ -45,9 +47,9 @@ async function saveSettings() {
       pr_assignment_min_confidence: String(minConfidence.value),
       pr_assignment_max_reviewers: String(maxReviewers.value),
     });
-    showToast('Settings saved', 'success');
+    showToast(t('prAutoAssignment.toasts.settingsSaved'), 'success');
   } catch {
-    showToast('Failed to save settings', 'error');
+    showToast(t('prAutoAssignment.toasts.settingsSaveFailed'), 'error');
   }
 }
 
@@ -68,9 +70,9 @@ async function addRule() {
     newPattern.value = '';
     newTeam.value = '';
     newReviewers.value = '';
-    showToast('Ownership rule added', 'success');
+    showToast(t('prAutoAssignment.toasts.ruleAdded'), 'success');
   } catch {
-    showToast('Failed to add rule', 'error');
+    showToast(t('prAutoAssignment.toasts.ruleAddFailed'), 'error');
   }
 }
 
@@ -78,9 +80,9 @@ async function deleteRule(id: string) {
   try {
     await prAssignmentApi.deleteRule(id);
     rules.value = rules.value.filter((r) => r.id !== id);
-    showToast('Rule removed', 'success');
+    showToast(t('prAutoAssignment.toasts.ruleRemoved'), 'success');
   } catch {
-    showToast('Failed to delete rule', 'error');
+    showToast(t('prAutoAssignment.toasts.ruleDeleteFailed'), 'error');
   }
 }
 
@@ -100,50 +102,50 @@ onMounted(loadData);
 <template>
   <div class="pr-auto-assignment">
     <PageHeader
-      title="AI-Powered PR Auto-Assignment"
-      subtitle="Automatically assign reviewers based on file ownership rules and contributor expertise"
+      :title="t('prAutoAssignment.title')"
+      :subtitle="t('prAutoAssignment.subtitle')"
     />
 
     <div class="page-content">
       <div class="top-bar">
         <label class="toggle-row">
-          <span>Auto-assignment enabled</span>
+          <span>{{ t('prAutoAssignment.autoAssignmentEnabled') }}</span>
           <button
             class="toggle-btn"
             :class="{ active: enabled }"
             @click="enabled = !enabled"
           >
-            {{ enabled ? 'ON' : 'OFF' }}
+            {{ enabled ? t('prAutoAssignment.on') : t('prAutoAssignment.off') }}
           </button>
         </label>
         <div class="config-row">
           <label>
-            Min confidence
+            {{ t('prAutoAssignment.minConfidence') }}
             <input v-model.number="minConfidence" type="number" min="0" max="100" class="num-input" />%
           </label>
           <label>
-            Max reviewers
+            {{ t('prAutoAssignment.maxReviewers') }}
             <input v-model.number="maxReviewers" type="number" min="1" max="10" class="num-input" />
           </label>
-          <button class="btn-primary" @click="saveSettings">Save Settings</button>
+          <button class="btn-primary" @click="saveSettings">{{ t('prAutoAssignment.saveSettings') }}</button>
         </div>
       </div>
 
       <section class="section">
-        <h2 class="section-title">Ownership Rules</h2>
+        <h2 class="section-title">{{ t('prAutoAssignment.ownershipRules') }}</h2>
         <div class="add-rule-form">
-          <input v-model="newPattern" placeholder="File pattern (e.g. backend/**)" class="input" />
-          <input v-model="newTeam" placeholder="Team name" class="input" />
-          <input v-model="newReviewers" placeholder="Reviewers (comma-separated)" class="input" />
-          <button class="btn-primary" @click="addRule">Add Rule</button>
+          <input v-model="newPattern" :placeholder="t('prAutoAssignment.patternPlaceholder')" class="input" />
+          <input v-model="newTeam" :placeholder="t('prAutoAssignment.teamPlaceholder')" class="input" />
+          <input v-model="newReviewers" :placeholder="t('prAutoAssignment.reviewersPlaceholder')" class="input" />
+          <button class="btn-primary" @click="addRule">{{ t('prAutoAssignment.addRule') }}</button>
         </div>
         <table class="rules-table">
           <thead>
             <tr>
-              <th>Pattern</th>
-              <th>Team</th>
-              <th>Reviewers</th>
-              <th>Priority</th>
+              <th>{{ t('prAutoAssignment.table.pattern') }}</th>
+              <th>{{ t('prAutoAssignment.table.team') }}</th>
+              <th>{{ t('prAutoAssignment.table.reviewers') }}</th>
+              <th>{{ t('prAutoAssignment.table.priority') }}</th>
               <th></th>
             </tr>
           </thead>
@@ -156,7 +158,7 @@ onMounted(loadData);
               </td>
               <td>{{ rule.priority }}</td>
               <td>
-                <button class="btn-danger-sm" @click="deleteRule(rule.id)">Remove</button>
+                <button class="btn-danger-sm" @click="deleteRule(rule.id)">{{ t('common.remove') }}</button>
               </td>
             </tr>
           </tbody>
@@ -164,9 +166,9 @@ onMounted(loadData);
       </section>
 
       <section class="section">
-        <h2 class="section-title">Recent Assignments</h2>
-        <div v-if="loading" class="empty-state">Loading…</div>
-        <div v-else-if="recentAssignments.length === 0" class="empty-state">No recent assignments.</div>
+        <h2 class="section-title">{{ t('prAutoAssignment.recentAssignments') }}</h2>
+        <div v-if="loading" class="empty-state">{{ t('prAutoAssignment.loading') }}</div>
+        <div v-else-if="recentAssignments.length === 0" class="empty-state">{{ t('prAutoAssignment.noAssignments') }}</div>
         <div v-else class="assignment-list">
           <div v-for="a in recentAssignments" :key="a.id" class="assignment-card">
             <div class="assignment-header">
@@ -175,11 +177,11 @@ onMounted(loadData);
               <span
                 class="confidence-badge"
                 :style="{ color: confidenceColor(a.confidence) }"
-              >{{ a.confidence }}% confidence</span>
+              >{{ t('prAutoAssignment.confidenceBadge', { score: a.confidence }) }}</span>
             </div>
             <div class="assignment-body">
               <div class="assigned-to">
-                <span class="label">Assigned to:</span>
+                <span class="label">{{ t('prAutoAssignment.assignedTo') }}</span>
                 <span v-for="r in a.assignedTo" :key="r" class="reviewer-tag">@{{ r }}</span>
               </div>
               <p class="reason">{{ a.reason }}</p>

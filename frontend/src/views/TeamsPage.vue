@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick } from 'vue';
+import { ref, computed, onMounted, watch, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { Team, Agent, TopologyType, GeneratedTeamConfig } from '../services/api';
 import { teamApi, agentApi, userSkillsApi, ApiError } from '../services/api';
 import TopologyPicker from '../components/teams/TopologyPicker.vue';
@@ -22,6 +23,7 @@ import { useWebMcpTool } from '../composables/useWebMcpTool';
 
 // v0.7.28: card uses <router-link>; the imperative router instance
 // is no longer needed.
+const { t } = useI18n();
 const showToast = useToast();
 
 const teams = ref<Team[]>([]);
@@ -40,10 +42,10 @@ const { searchQuery, sortField, sortOrder, filteredAndSorted, hasActiveFilter, r
 
 const pagination = usePagination({ defaultPageSize: 25, storageKey: 'teams-pagination' });
 
-const sortOptions = [
-  { value: 'name', label: 'Name' },
-  { value: 'created_at', label: 'Date Created' },
-];
+const sortOptions = computed(() => [
+  { value: 'name', label: t('teams.sortName') },
+  { value: 'created_at', label: t('teams.sortDateCreated') },
+]);
 
 // Form state
 const newTeam = ref({ name: '', description: '', color: '#00d4ff', leader_id: '' });
@@ -115,29 +117,29 @@ useWebMcpTool({
   },
 });
 
-function getTopologyLabel(t?: TopologyType): string {
-  if (!t) return '';
+function getTopologyLabel(topo?: TopologyType): string {
+  if (!topo) return '';
   const labels: Record<TopologyType, string> = {
-    sequential: 'Sequential',
-    parallel: 'Parallel',
-    coordinator: 'Coordinator',
-    generator_critic: 'Gen/Critic',
-    hierarchical: 'Hierarchical',
-    human_in_loop: 'Human-in-Loop',
-    composite: 'Composite',
+    sequential: t('teams.topologyLabels.sequential'),
+    parallel: t('teams.topologyLabels.parallel'),
+    coordinator: t('teams.topologyLabels.coordinator'),
+    generator_critic: t('teams.topologyLabels.generatorCritic'),
+    hierarchical: t('teams.topologyLabels.hierarchical'),
+    human_in_loop: t('teams.topologyLabels.humanInLoop'),
+    composite: t('teams.topologyLabels.composite'),
   };
-  return labels[t] || t;
+  return labels[topo] || topo;
 }
 
-function getTriggerLabel(t?: string): string {
-  if (!t) return '';
+function getTriggerLabel(trig?: string): string {
+  if (!trig) return '';
   const labels: Record<string, string> = {
-    webhook: 'Webhook',
+    webhook: t('teams.triggerLabels.webhook'),
     github: 'GitHub',
-    manual: 'Manual',
-    scheduled: 'Scheduled',
+    manual: t('teams.triggerLabels.manual'),
+    scheduled: t('teams.triggerLabels.scheduled'),
   };
-  return labels[t] || t;
+  return labels[trig] || trig;
 }
 
 async function loadTeams() {
@@ -148,7 +150,7 @@ async function loadTeams() {
     teams.value = data.teams || [];
     if (data.total_count != null) pagination.totalCount.value = data.total_count;
   } catch (e) {
-    loadError.value = e instanceof ApiError ? e.message : 'Failed to load teams';
+    loadError.value = e instanceof ApiError ? e.message : t('teams.toast.loadFailed');
     showToast(loadError.value, 'error');
   } finally {
     isLoading.value = false;
@@ -173,11 +175,11 @@ const isCreatingTeam = ref(false);
 async function createTeam() {
   if (isCreatingTeam.value) return;
   if (!newTeam.value.name.trim()) {
-    showToast('Team name is required', 'error');
+    showToast(t('teams.toast.teamNameRequired'), 'error');
     return;
   }
   if (!selectedTopology.value) {
-    showToast('Topology is required', 'error');
+    showToast(t('teams.toast.topologyRequired'), 'error');
     return;
   }
   isCreatingTeam.value = true;
@@ -196,10 +198,10 @@ async function createTeam() {
           topology_config: topologyConfig.value,
         });
       } catch {
-        showToast('Team created but topology could not be saved', 'info');
+        showToast(t('teams.toast.topologyNotSaved'), 'info');
       }
     }
-    showToast('Team created successfully', 'success');
+    showToast(t('teams.toast.createdSuccess'), 'success');
     showCreateModal.value = false;
     newTeam.value = { name: '', description: '', color: '#00d4ff', leader_id: '' };
     selectedTopology.value = 'coordinator';
@@ -209,7 +211,7 @@ async function createTeam() {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to create team', 'error');
+      showToast(t('teams.toast.createFailed'), 'error');
     }
   } finally {
     isCreatingTeam.value = false;
@@ -226,7 +228,7 @@ async function deleteTeam() {
   deletingId.value = teamToDelete.value.id;
   try {
     await teamApi.delete(teamToDelete.value.id);
-    showToast(`Team "${teamToDelete.value.name}" deleted`, 'success');
+    showToast(t('teams.toast.deleted', { name: teamToDelete.value.name }), 'success');
     showDeleteConfirm.value = false;
     teamToDelete.value = null;
     await loadTeams();
@@ -234,7 +236,7 @@ async function deleteTeam() {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to delete team', 'error');
+      showToast(t('teams.toast.deleteFailed'), 'error');
     }
   } finally {
     deletingId.value = null;
@@ -249,7 +251,7 @@ function openGenerateModal() {
 
 async function generateTeamConfig() {
   if (!generateDescription.value.trim() || generateDescription.value.trim().length < 10) {
-    showToast('Please provide a description of at least 10 characters', 'error');
+    showToast(t('teams.toast.descriptionTooShort'), 'error');
     return;
   }
 
@@ -268,7 +270,7 @@ async function generateTeamConfig() {
       showConfigReview.value = true;
     }
   } catch (e) {
-    showToast('Failed to generate team configuration', 'error');
+    showToast(t('teams.toast.generateFailed'), 'error');
   } finally {
     isGenerating.value = false;
   }
@@ -286,7 +288,7 @@ async function saveGeneratedConfig(config: GeneratedTeamConfig) {
 
     const teamId = result.team?.id;
     if (!teamId) {
-      showToast('Team creation failed', 'error');
+      showToast(t('teams.toast.creationFailed'), 'error');
       return;
     }
 
@@ -298,7 +300,7 @@ async function saveGeneratedConfig(config: GeneratedTeamConfig) {
           topology_config: JSON.stringify(config.topology_config || {}),
         });
       } catch {
-        showToast('Team created but topology could not be saved', 'info');
+        showToast(t('teams.toast.topologyNotSaved'), 'info');
       }
     }
 
@@ -312,11 +314,11 @@ async function saveGeneratedConfig(config: GeneratedTeamConfig) {
           const agentResult = await agentApi.create({
             name: agentCfg.name,
             role: agentCfg.role || 'member',
-            description: `Auto-created for team "${config.name}"`,
+            description: t('teams.autoCreatedForTeam', { name: config.name }),
           });
           agentId = agentResult.agent_id;
         } catch {
-          showToast(`Could not create agent "${agentCfg.name}" — skipping`, 'info');
+          showToast(t('teams.toast.agentCreateSkipped', { name: agentCfg.name }), 'info');
           continue;
         }
       }
@@ -361,7 +363,7 @@ async function saveGeneratedConfig(config: GeneratedTeamConfig) {
       }
     }
 
-    showToast('Team created from generated configuration', 'success');
+    showToast(t('teams.toast.createdFromGenerated'), 'success');
     showConfigReview.value = false;
     generatedConfig.value = null;
     generatedWarnings.value = [];
@@ -370,7 +372,7 @@ async function saveGeneratedConfig(config: GeneratedTeamConfig) {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to save generated team', 'error');
+      showToast(t('teams.toast.saveGeneratedFailed'), 'error');
     }
     // Don't close review on error - let user retry
   } finally {
@@ -397,7 +399,7 @@ onMounted(() => {
       <div v-if="showConfigReview && generatedConfig" ref="configReviewOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-config-review" tabindex="-1" @click.self="cancelConfigReview" @keydown.escape="cancelConfigReview">
         <div class="modal modal-xlarge">
           <div class="modal-header">
-            <h2 id="modal-title-config-review">Review Generated Team Configuration</h2>
+            <h2 id="modal-title-config-review">{{ t('teams.reviewGeneratedConfig') }}</h2>
             <button class="modal-close" @click="cancelConfigReview">&times;</button>
           </div>
           <div class="modal-body">
@@ -411,17 +413,17 @@ onMounted(() => {
         </div>
       </div>
     </Teleport>
-    <PageHeader title="Teams" subtitle="Manage your organization's teams and their members">
+    <PageHeader :title="t('teams.title')" :subtitle="t('teams.subtitle')">
       <template #actions>
         <button class="btn btn-ai" @click="openGenerateModal">
           <span class="ai-badge">AI</span>
-          Generate Team
+          {{ t('teams.generateTeam') }}
         </button>
         <button class="btn btn-primary" @click="showCreateModal = true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 5v14M5 12h14"/>
           </svg>
-          Create Team
+          {{ t('teams.createTeam') }}
         </button>
       </template>
     </PageHeader>
@@ -434,24 +436,24 @@ onMounted(() => {
       :sort-options="sortOptions"
       :result-count="resultCount"
       :total-count="totalCount"
-      placeholder="Search teams..."
+      :placeholder="t('teams.searchPlaceholder')"
     />
 
-    <LoadingState v-if="isLoading" message="Loading teams..." />
+    <LoadingState v-if="isLoading" :message="t('teams.loading')" />
 
-    <ErrorState v-else-if="loadError" title="Failed to load teams" :message="loadError" @retry="loadTeams" />
+    <ErrorState v-else-if="loadError" :title="t('teams.loadErrorTitle')" :message="loadError" @retry="loadTeams" />
 
-    <EmptyState v-else-if="teams.length === 0" title="No teams yet" description="Create your first team to organize your people">
+    <EmptyState v-else-if="teams.length === 0" :title="t('teams.emptyTitle')" :description="t('teams.emptyDescription')">
       <template #actions>
         <button class="btn btn-ai" @click="openGenerateModal">
           <span class="ai-badge">AI</span>
-          Generate Team
+          {{ t('teams.generateTeam') }}
         </button>
-        <button class="btn btn-primary" @click="showCreateModal = true">Create Your First Team</button>
+        <button class="btn btn-primary" @click="showCreateModal = true">{{ t('teams.createFirstTeam') }}</button>
       </template>
     </EmptyState>
 
-    <EmptyState v-else-if="filteredAndSorted.length === 0 && hasActiveFilter" title="No matching teams" description="Try a different search term" />
+    <EmptyState v-else-if="filteredAndSorted.length === 0 && hasActiveFilter" :title="t('teams.noMatchTitle')" :description="t('teams.noMatchDescription')" />
 
     <div v-else class="teams-grid">
       <router-link
@@ -475,7 +477,7 @@ onMounted(() => {
             <span class="team-id">{{ team.id }}</span>
           </div>
           <div class="member-badge">
-            {{ team.member_count }} {{ team.member_count === 1 ? 'member' : 'members' }}
+            {{ t('teams.memberCount', { count: team.member_count }) }}
           </div>
         </div>
 
@@ -485,16 +487,16 @@ onMounted(() => {
           <span v-if="team.topology" class="topology-badge" :class="'topo-' + team.topology">
             {{ getTopologyLabel(team.topology) }}
           </span>
-          <span v-else class="topology-badge topo-none">No topology</span>
+          <span v-else class="topology-badge topo-none">{{ t('teams.noTopology') }}</span>
           <span v-if="team.trigger_source" class="trigger-badge" :class="'trigger-' + team.trigger_source">
             {{ getTriggerLabel(team.trigger_source) }}
           </span>
-          <span v-else class="trigger-badge trigger-none">No trigger</span>
-          <span v-if="team.enabled !== undefined" class="enabled-dot" :class="{ active: team.enabled === 1 }" :title="team.enabled === 1 ? 'Enabled' : 'Disabled'"></span>
+          <span v-else class="trigger-badge trigger-none">{{ t('teams.noTrigger') }}</span>
+          <span v-if="team.enabled !== undefined" class="enabled-dot" :class="{ active: team.enabled === 1 }" :title="team.enabled === 1 ? t('teams.enabled') : t('teams.disabled')"></span>
         </div>
 
         <div v-if="team.leader_name" class="team-leader">
-          <span class="leader-label">Leader:</span>
+          <span class="leader-label">{{ t('teams.leaderLabel') }}</span>
           <span class="leader-name">{{ team.leader_name }}</span>
         </div>
 
@@ -504,7 +506,7 @@ onMounted(() => {
             <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
             </svg>
-            {{ deletingId === team.id ? 'Deleting...' : 'Delete' }}
+            {{ deletingId === team.id ? t('teams.deleting') : t('common.delete') }}
           </button>
         </div>
       </router-link>
@@ -528,18 +530,18 @@ onMounted(() => {
       <div v-if="showCreateModal" ref="createModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-create-team" tabindex="-1" @click.self="showCreateModal = false" @keydown.escape="showCreateModal = false">
         <div class="modal modal-create">
           <div class="modal-header">
-            <h2 id="modal-title-create-team">Create Team</h2>
+            <h2 id="modal-title-create-team">{{ t('teams.createTeam') }}</h2>
             <button class="modal-close" @click="showCreateModal = false">&times;</button>
           </div>
           <div class="modal-body">
             <div class="create-form">
               <div class="form-row">
                 <div class="form-group form-group-grow">
-                  <label>Team Name <span class="required">*</span></label>
-                  <input v-model="newTeam.name" type="text" placeholder="e.g., Platform Team" class="form-input" />
+                  <label>{{ t('teams.teamName') }} <span class="required">*</span></label>
+                  <input v-model="newTeam.name" type="text" :placeholder="t('teams.teamNamePlaceholder')" class="form-input" />
                 </div>
                 <div class="form-group form-group-color">
-                  <label>Color</label>
+                  <label>{{ t('teams.color') }}</label>
                   <div class="color-picker">
                     <input v-model="newTeam.color" type="color" />
                     <span class="color-hex">{{ newTeam.color }}</span>
@@ -548,14 +550,14 @@ onMounted(() => {
               </div>
 
               <div class="form-group">
-                <label>Description</label>
-                <textarea v-model="newTeam.description" placeholder="Describe the team's purpose..." class="form-textarea" rows="2"></textarea>
+                <label>{{ t('teams.description') }}</label>
+                <textarea v-model="newTeam.description" :placeholder="t('teams.descriptionPlaceholder')" class="form-textarea" rows="2"></textarea>
               </div>
 
               <div class="form-group">
-                <label>Leader (Agent) <span class="required">*</span></label>
+                <label>{{ t('teams.leaderAgent') }} <span class="required">*</span></label>
                 <select v-model="newTeam.leader_id" class="form-select">
-                  <option value="">Select a leader agent...</option>
+                  <option value="">{{ t('teams.selectLeaderAgent') }}</option>
                   <option v-for="agent in agents" :key="agent.id" :value="agent.id">
                     {{ agent.name }}
                   </option>
@@ -563,7 +565,7 @@ onMounted(() => {
               </div>
 
               <div class="form-group">
-                <label>Topology <span class="required">*</span></label>
+                <label>{{ t('teams.topology') }} <span class="required">*</span></label>
                 <TopologyPicker
                   v-model="selectedTopology"
                   :team-members="[]"
@@ -573,13 +575,13 @@ onMounted(() => {
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" @click="showCreateModal = false">Cancel</button>
+            <button class="btn btn-secondary" @click="showCreateModal = false">{{ t('common.cancel') }}</button>
             <button
               class="btn btn-primary"
               :disabled="!newTeam.name.trim() || !selectedTopology || isCreatingTeam"
               @click="createTeam"
             >
-              {{ isCreatingTeam ? 'Creating…' : 'Create Team' }}
+              {{ isCreatingTeam ? t('teams.creating') : t('teams.createTeam') }}
             </button>
           </div>
         </div>
@@ -593,17 +595,17 @@ onMounted(() => {
           <div class="modal-header">
             <h2 id="modal-title-generate-team">
               <span class="ai-badge ai-badge-header">AI</span>
-              Generate Team Configuration
+              {{ t('teams.generateTeamConfig') }}
             </h2>
             <button v-if="!isGenerating" class="modal-close" @click="showGenerateModal = false">&times;</button>
           </div>
           <div class="modal-body">
             <div class="form-group">
-              <label>Describe the team you want to create</label>
+              <label>{{ t('teams.describeTeam') }}</label>
               <textarea
                 v-model="generateDescription"
                 :disabled="isGenerating"
-                placeholder="Describe the team you want to create, e.g., 'A code review team with a senior reviewer that checks code quality and a security specialist that scans for vulnerabilities, running in a sequential pipeline'"
+                :placeholder="t('teams.describeTeamPlaceholder')"
                 rows="5"
                 class="generate-textarea"
               ></textarea>
@@ -612,12 +614,12 @@ onMounted(() => {
               v-if="isGenerating"
               :log="generateLog"
               :is-streaming="isGenerating"
-              :phase="generatePhase || 'Generating team configuration...'"
-              hint="Streaming Claude CLI verbose output"
+              :phase="generatePhase || t('teams.generatingPhase')"
+              :hint="t('teams.streamingHint')"
             />
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" :disabled="isGenerating" @click="showGenerateModal = false">Cancel</button>
+            <button class="btn btn-secondary" :disabled="isGenerating" @click="showGenerateModal = false">{{ t('common.cancel') }}</button>
             <button
               class="btn btn-ai"
               :disabled="isGenerating || generateDescription.trim().length < 10"
@@ -625,7 +627,7 @@ onMounted(() => {
             >
               <span v-if="isGenerating" class="btn-loading"></span>
               <span class="ai-badge">AI</span>
-              {{ isGenerating ? 'Generating...' : 'Generate' }}
+              {{ isGenerating ? t('teams.generating') : t('teams.generate') }}
             </button>
           </div>
         </div>
@@ -634,10 +636,10 @@ onMounted(() => {
 
     <ConfirmModal
       :open="showDeleteConfirm"
-      title="Delete Team"
-      :message="`Are you sure you want to delete \u201C${teamToDelete?.name}\u201D? This action cannot be undone.`"
-      confirm-label="Delete"
-      cancel-label="Cancel"
+      :title="t('teams.deleteTeamTitle')"
+      :message="t('teams.deleteConfirmMessage', { name: teamToDelete?.name })"
+      :confirm-label="t('common.delete')"
+      :cancel-label="t('common.cancel')"
       variant="danger"
       @confirm="deleteTeam"
       @cancel="showDeleteConfirm = false"

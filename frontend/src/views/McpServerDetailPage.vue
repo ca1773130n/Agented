@@ -9,6 +9,8 @@ import { useToast } from '../composables/useToast';
 import { handleApiError } from '../services/api/error-handler';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
+import { useI18n } from 'vue-i18n';
+const { t } = useI18n();
 const route = useRoute();
 const mcpServerId = computed(() => route.params.mcpServerId as string);
 
@@ -95,11 +97,11 @@ async function assignToProject() {
   if (!selectedProjectToAssign.value) return;
   try {
     await mcpServerApi.assignToProject(selectedProjectToAssign.value, mcpServerId.value);
-    showToast('Server assigned to project', 'success');
+    showToast(t('mcpServerDetail.toast.assigned'), 'success');
     showAssignModal.value = false;
     selectedProjectToAssign.value = '';
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to assign server';
+    const message = err instanceof ApiError ? err.message : t('mcpServerDetail.toast.assignFailed');
     showToast(message, 'error');
   }
 }
@@ -111,10 +113,10 @@ async function toggleEnabled() {
     await mcpServerApi.update(mcpServerId.value, {
       enabled: server.value.enabled ? 0 : 1,
     } as Partial<McpServer>);
-    showToast(server.value.enabled ? 'Server disabled' : 'Server enabled', 'success');
+    showToast(server.value.enabled ? t('mcpServerDetail.toast.serverDisabled') : t('mcpServerDetail.toast.serverEnabled'), 'success');
     await loadServer();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to update server';
+    const message = err instanceof ApiError ? err.message : t('mcpServerDetail.toast.updateFailed');
     showToast(message, 'error');
   }
 }
@@ -126,12 +128,12 @@ async function testConnection() {
     const result = await mcpServerApi.testConnection(mcpServerId.value);
     testResult.value = result;
     if (result.success) {
-      showToast('Connection successful', 'success');
+      showToast(t('mcpServerDetail.toast.connectionSuccessful'), 'success');
     } else {
-      showToast(result.message || 'Connection failed', 'error');
+      showToast(result.message || t('mcpServerDetail.toast.connectionFailed'), 'error');
     }
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Connection test failed';
+    const message = err instanceof ApiError ? err.message : t('mcpServerDetail.toast.connectionTestFailed');
     testResult.value = { success: false, message };
     showToast(message, 'error');
   } finally {
@@ -161,7 +163,7 @@ async function loadServer() {
     loadAssignments();
     return data;
   } catch (err) {
-    handleApiError(err, showToast, 'Failed to load MCP server');
+    handleApiError(err, showToast, t('mcpServerDetail.toast.loadFailed'));
     throw err;
   }
 }
@@ -182,11 +184,11 @@ async function saveServerInfo() {
       documentation_url: editForm.value.documentation_url || undefined,
       npm_package: editForm.value.npm_package || undefined,
     } as Partial<McpServer>);
-    showToast('Server updated successfully', 'success');
+    showToast(t('mcpServerDetail.toast.updated'), 'success');
     isEditingInfo.value = false;
     await loadServer();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to update server';
+    const message = err instanceof ApiError ? err.message : t('mcpServerDetail.toast.updateFailed');
     showToast(message, 'error');
   } finally {
     isSaving.value = false;
@@ -205,7 +207,7 @@ function getServerTypeBadgeClass(serverType: string) {
 </script>
 
 <template>
-  <EntityLayout :load-entity="loadServer" entity-label="MCP server">
+  <EntityLayout :load-entity="loadServer" :entity-label="t('mcpServerDetail.entityLabel')">
     <template #default="{ reload: _reload }">
   <div class="mcp-server-detail-page">
 
@@ -216,27 +218,27 @@ function getServerTypeBadgeClass(serverType: string) {
           <div class="header-meta">
             <span v-if="server.display_name" class="name-badge">{{ server.name }}</span>
             <span :class="['type-badge', getServerTypeBadgeClass(server.server_type)]">{{ server.server_type }}</span>
-            <span v-if="server.is_preset" class="preset-badge">Preset</span>
+            <span v-if="server.is_preset" class="preset-badge">{{ t('mcpServerDetail.preset') }}</span>
             <span v-if="server.category" class="category-badge">{{ server.category }}</span>
           </div>
           <button class="btn btn-secondary" :disabled="isTesting" @click="testConnection">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
               <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
             </svg>
-            {{ isTesting ? 'Testing...' : 'Test Connection' }}
+            {{ isTesting ? t('mcpServerDetail.testing') : t('mcpServerDetail.testConnection') }}
           </button>
           <button
             :class="['btn', server.enabled ? 'btn-active' : 'btn-inactive']"
             @click="toggleEnabled"
           >
-            {{ server.enabled ? 'Enabled' : 'Disabled' }}
+            {{ server.enabled ? t('mcpServerDetail.enabled') : t('mcpServerDetail.disabled') }}
           </button>
           <button v-if="!server.is_preset" class="btn btn-secondary" @click="isEditingInfo = true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
             </svg>
-            Edit
+            {{ t('common.edit') }}
           </button>
         </template>
       </PageHeader>
@@ -257,54 +259,54 @@ function getServerTypeBadgeClass(serverType: string) {
       <!-- Configuration Card -->
       <div class="config-card">
         <div class="config-card-header">
-          <h3>Configuration</h3>
+          <h3>{{ t('mcpServerDetail.configuration') }}</h3>
         </div>
         <div class="config-card-body">
           <div class="config-grid">
             <div v-if="server.command" class="config-field">
-              <span class="config-label">Command</span>
+              <span class="config-label">{{ t('mcpServerDetail.config.command') }}</span>
               <code class="config-code">{{ server.command }}</code>
             </div>
             <div v-if="server.args" class="config-field">
-              <span class="config-label">Args</span>
+              <span class="config-label">{{ t('mcpServerDetail.config.args') }}</span>
               <code class="config-code">{{ server.args }}</code>
             </div>
             <div v-if="server.url" class="config-field">
-              <span class="config-label">URL</span>
+              <span class="config-label">{{ t('mcpServerDetail.config.url') }}</span>
               <code class="config-code">{{ server.url }}</code>
             </div>
             <div v-if="server.env_json" class="config-field">
               <div class="config-label-row">
-                <span class="config-label">Environment Variables</span>
+                <span class="config-label">{{ t('mcpServerDetail.config.environmentVariables') }}</span>
                 <button class="reveal-btn" @click="showSecrets = !showSecrets">
-                  {{ showSecrets ? 'Hide' : 'Reveal' }}
+                  {{ showSecrets ? t('mcpServerDetail.hide') : t('mcpServerDetail.reveal') }}
                 </button>
               </div>
               <pre class="config-code-block">{{ showSecrets ? server.env_json : maskSecretValue(server.env_json) }}</pre>
             </div>
             <div v-if="server.headers_json" class="config-field">
               <div class="config-label-row">
-                <span class="config-label">Headers</span>
+                <span class="config-label">{{ t('mcpServerDetail.config.headers') }}</span>
                 <button class="reveal-btn" @click="showSecrets = !showSecrets">
-                  {{ showSecrets ? 'Hide' : 'Reveal' }}
+                  {{ showSecrets ? t('mcpServerDetail.hide') : t('mcpServerDetail.reveal') }}
                 </button>
               </div>
               <pre class="config-code-block">{{ showSecrets ? server.headers_json : maskSecretValue(server.headers_json) }}</pre>
             </div>
             <div class="config-field">
-              <span class="config-label">Timeout</span>
+              <span class="config-label">{{ t('mcpServerDetail.config.timeout') }}</span>
               <span class="config-value">{{ server.timeout_ms }}ms</span>
             </div>
             <div v-if="server.npm_package" class="config-field">
-              <span class="config-label">NPM Package</span>
+              <span class="config-label">{{ t('mcpServerDetail.config.npmPackage') }}</span>
               <code class="config-code">{{ server.npm_package }}</code>
             </div>
             <div v-if="server.documentation_url" class="config-field">
-              <span class="config-label">Documentation</span>
+              <span class="config-label">{{ t('mcpServerDetail.config.documentation') }}</span>
               <a :href="server.documentation_url" target="_blank" class="config-link">{{ server.documentation_url }}</a>
             </div>
             <div v-if="!server.command && !server.url && !server.npm_package" class="config-empty">
-              No configuration details available.
+              {{ t('mcpServerDetail.config.noDetails') }}
             </div>
           </div>
         </div>
@@ -321,7 +323,7 @@ function getServerTypeBadgeClass(serverType: string) {
           </div>
           <div class="stat-info">
             <span class="stat-value">{{ server.server_type }}</span>
-            <span class="stat-label">Transport</span>
+            <span class="stat-label">{{ t('mcpServerDetail.stats.transport') }}</span>
           </div>
         </div>
         <div class="stat-card">
@@ -333,7 +335,7 @@ function getServerTypeBadgeClass(serverType: string) {
           </div>
           <div class="stat-info">
             <span class="stat-value">{{ (server.timeout_ms / 1000).toFixed(0) }}s</span>
-            <span class="stat-label">Timeout</span>
+            <span class="stat-label">{{ t('mcpServerDetail.config.timeout') }}</span>
           </div>
         </div>
         <div class="stat-card">
@@ -344,8 +346,8 @@ function getServerTypeBadgeClass(serverType: string) {
             </svg>
           </div>
           <div class="stat-info">
-            <span class="stat-value">{{ server.enabled ? 'Enabled' : 'Disabled' }}</span>
-            <span class="stat-label">Status</span>
+            <span class="stat-value">{{ server.enabled ? t('mcpServerDetail.enabled') : t('mcpServerDetail.disabled') }}</span>
+            <span class="stat-label">{{ t('mcpServerDetail.stats.status') }}</span>
           </div>
         </div>
       </div>
@@ -353,17 +355,17 @@ function getServerTypeBadgeClass(serverType: string) {
       <!-- Project Assignments -->
       <div class="config-card">
         <div class="config-card-header">
-          <h3>Project Assignments</h3>
+          <h3>{{ t('mcpServerDetail.projectAssignments') }}</h3>
           <button class="btn btn-sm btn-secondary" @click="showAssignModal = true">
-            Assign to Project
+            {{ t('mcpServerDetail.assignToProject') }}
           </button>
         </div>
         <div class="config-card-body">
           <div v-if="allProjects.length === 0" class="config-empty">
-            No projects available.
+            {{ t('mcpServerDetail.noProjects') }}
           </div>
           <div v-else class="project-list">
-            <p class="assignment-hint">Use "Assign to Project" to link this server to a project's MCP configuration.</p>
+            <p class="assignment-hint">{{ t('mcpServerDetail.assignmentHint') }}</p>
           </div>
         </div>
       </div>
@@ -374,14 +376,14 @@ function getServerTypeBadgeClass(serverType: string) {
       <div v-if="showAssignModal" ref="assignModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-assign-project" tabindex="-1" @click.self="showAssignModal = false" @keydown.escape="showAssignModal = false">
         <div class="modal modal-small">
           <div class="modal-header">
-            <h2 id="modal-title-assign-project">Assign to Project</h2>
+            <h2 id="modal-title-assign-project">{{ t('mcpServerDetail.assignToProject') }}</h2>
             <button class="modal-close" @click="showAssignModal = false">&times;</button>
           </div>
           <div class="modal-body">
             <div class="form-group">
-              <label>Project</label>
+              <label>{{ t('mcpServerDetail.project') }}</label>
               <select v-model="selectedProjectToAssign">
-                <option value="" disabled>Select a project...</option>
+                <option value="" disabled>{{ t('mcpServerDetail.selectProject') }}</option>
                 <option v-for="proj in allProjects" :key="proj.id" :value="proj.id">
                   {{ proj.name }}
                 </option>
@@ -389,9 +391,9 @@ function getServerTypeBadgeClass(serverType: string) {
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn" @click="showAssignModal = false">Cancel</button>
+            <button class="btn" @click="showAssignModal = false">{{ t('common.cancel') }}</button>
             <button class="btn btn-primary" :disabled="!selectedProjectToAssign" @click="assignToProject">
-              Assign
+              {{ t('mcpServerDetail.assign') }}
             </button>
           </div>
         </div>
@@ -403,24 +405,24 @@ function getServerTypeBadgeClass(serverType: string) {
       <div v-if="isEditingInfo" ref="editModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-edit-mcp-info" tabindex="-1" @click.self="isEditingInfo = false" @keydown.escape="isEditingInfo = false">
         <div class="modal">
           <div class="modal-header">
-            <h2 id="modal-title-edit-mcp-info">Edit MCP Server</h2>
+            <h2 id="modal-title-edit-mcp-info">{{ t('mcpServerDetail.editModal.title') }}</h2>
             <button class="modal-close" @click="isEditingInfo = false">&times;</button>
           </div>
           <div class="modal-body">
             <div class="form-group">
-              <label>Server Name *</label>
-              <input v-model="editForm.name" type="text" placeholder="Server name" />
+              <label>{{ t('mcpServerDetail.form.serverNameRequired') }}</label>
+              <input v-model="editForm.name" type="text" :placeholder="t('mcpServerDetail.form.serverNamePlaceholder')" />
             </div>
             <div class="form-group">
-              <label>Display Name</label>
-              <input v-model="editForm.display_name" type="text" placeholder="Human-friendly display name" />
+              <label>{{ t('mcpServerDetail.form.displayName') }}</label>
+              <input v-model="editForm.display_name" type="text" :placeholder="t('mcpServerDetail.form.displayNamePlaceholder')" />
             </div>
             <div class="form-group">
-              <label>Description</label>
-              <textarea v-model="editForm.description" placeholder="Describe the server..."></textarea>
+              <label>{{ t('mcpServerDetail.form.description') }}</label>
+              <textarea v-model="editForm.description" :placeholder="t('mcpServerDetail.form.descriptionPlaceholder')"></textarea>
             </div>
             <div class="form-group">
-              <label>Server Type</label>
+              <label>{{ t('mcpServerDetail.form.serverType') }}</label>
               <select v-model="editForm.server_type">
                 <option value="stdio">stdio</option>
                 <option value="sse">sse</option>
@@ -428,34 +430,34 @@ function getServerTypeBadgeClass(serverType: string) {
               </select>
             </div>
             <div v-if="editForm.server_type === 'stdio'" class="form-group">
-              <label>Command</label>
-              <input v-model="editForm.command" type="text" placeholder="Command to run" />
+              <label>{{ t('mcpServerDetail.config.command') }}</label>
+              <input v-model="editForm.command" type="text" :placeholder="t('mcpServerDetail.form.commandPlaceholder')" />
             </div>
             <div v-if="editForm.server_type === 'stdio'" class="form-group">
-              <label>Args</label>
-              <input v-model="editForm.args" type="text" placeholder="Command arguments" />
+              <label>{{ t('mcpServerDetail.config.args') }}</label>
+              <input v-model="editForm.args" type="text" :placeholder="t('mcpServerDetail.form.argsPlaceholder')" />
             </div>
             <div v-if="editForm.server_type !== 'stdio'" class="form-group">
-              <label>URL</label>
-              <input v-model="editForm.url" type="text" placeholder="Server URL" />
+              <label>{{ t('mcpServerDetail.config.url') }}</label>
+              <input v-model="editForm.url" type="text" :placeholder="t('mcpServerDetail.form.urlPlaceholder')" />
             </div>
             <div class="form-group">
-              <label>Timeout (ms)</label>
+              <label>{{ t('mcpServerDetail.form.timeoutMs') }}</label>
               <input v-model.number="editForm.timeout_ms" type="number" placeholder="30000" />
             </div>
             <div class="form-group">
-              <label>NPM Package</label>
+              <label>{{ t('mcpServerDetail.config.npmPackage') }}</label>
               <input v-model="editForm.npm_package" type="text" placeholder="e.g., @modelcontextprotocol/server-filesystem" />
             </div>
             <div class="form-group">
-              <label>Documentation URL</label>
+              <label>{{ t('mcpServerDetail.form.documentationUrl') }}</label>
               <input v-model="editForm.documentation_url" type="text" placeholder="https://..." />
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn" @click="isEditingInfo = false">Cancel</button>
+            <button class="btn" @click="isEditingInfo = false">{{ t('common.cancel') }}</button>
             <button class="btn btn-primary" :disabled="isSaving" @click="saveServerInfo">
-              {{ isSaving ? 'Saving...' : 'Save Changes' }}
+              {{ isSaving ? t('mcpServerDetail.saving') : t('mcpServerDetail.saveChanges') }}
             </button>
           </div>
         </div>

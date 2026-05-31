@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+
 interface SketchClassificationData {
   phase?: string;
   domains?: string[];
@@ -34,20 +38,20 @@ function getComplexityIcon(complexity: string): string {
 
 <template>
   <div class="sketch-classification">
-    <h4 class="panel-title">Classification</h4>
-    <div v-if="!classification" class="placeholder-text">Not yet classified</div>
+    <h4 class="panel-title">{{ t('sketchClassification.title') }}</h4>
+    <div v-if="!classification" class="placeholder-text">{{ t('sketchClassification.notClassified') }}</div>
     <div v-else class="classification-details">
       <div class="detail-row">
-        <span class="detail-label">Phase</span>
+        <span class="detail-label">{{ t('sketchClassification.phase') }}</span>
         <span
           class="phase-badge"
           :style="{ backgroundColor: getPhaseColor(classification.phase || '') }"
         >
-          {{ classification.phase || 'unknown' }}
+          {{ classification.phase || t('sketchClassification.unknown') }}
         </span>
       </div>
       <div v-if="classification.domains && classification.domains.length" class="detail-row">
-        <span class="detail-label">Domains</span>
+        <span class="detail-label">{{ t('sketchClassification.domains') }}</span>
         <span class="domain-tags">
           <span
             v-for="(domain, idx) in classification.domains"
@@ -57,14 +61,14 @@ function getComplexityIcon(complexity: string): string {
         </span>
       </div>
       <div class="detail-row">
-        <span class="detail-label">Complexity</span>
+        <span class="detail-label">{{ t('sketchClassification.complexity') }}</span>
         <span class="complexity-indicator" :class="`complexity-${classification.complexity || 'unknown'}`">
           <span class="complexity-icon">{{ getComplexityIcon(classification.complexity || '') }}</span>
-          {{ classification.complexity || 'unknown' }}
+          {{ classification.complexity || t('sketchClassification.unknown') }}
         </span>
       </div>
       <div class="detail-row">
-        <span class="detail-label">Confidence</span>
+        <span class="detail-label">{{ t('sketchClassification.confidence') }}</span>
         <div class="confidence-bar-wrapper">
           <div
             class="confidence-bar"
@@ -74,7 +78,7 @@ function getComplexityIcon(complexity: string): string {
         </div>
       </div>
       <div v-if="classification.source" class="detail-row">
-        <span class="detail-label">Source</span>
+        <span class="detail-label">{{ t('sketchClassification.source') }}</span>
         <span class="source-label">{{ classification.source }}</span>
       </div>
     </div>

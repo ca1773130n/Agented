@@ -3,7 +3,9 @@ import { ref, computed, onMounted } from 'vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { prReviewApi } from '../services/api/triggers';
+import { useI18n } from 'vue-i18n';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 type FindingCategory = 'security' | 'style' | 'performance' | 'correctness' | 'docs';
@@ -41,7 +43,7 @@ onMounted(async () => {
     signals.value = data.signals;
     suggestions.value = data.suggestions;
   } catch {
-    showToast('Failed to load learning loop data', 'error');
+    showToast(t('prReviewLearningLoop.toasts.loadFailed'), 'error');
   } finally {
     isLoading.value = false;
   }
@@ -102,17 +104,21 @@ function impactColor(impact: 'high' | 'medium' | 'low'): string {
 }
 
 function suggestionTypeLabel(type: RefinementSuggestion['type']): string {
-  return type === 'suppress' ? 'Suppress Finding' : type === 'promote' ? 'Promote Coverage' : 'Reword Output';
+  return type === 'suppress'
+    ? t('prReviewLearningLoop.suggestionTypes.suppress')
+    : type === 'promote'
+    ? t('prReviewLearningLoop.suggestionTypes.promote')
+    : t('prReviewLearningLoop.suggestionTypes.reword');
 }
 
 function applySuggestion(sug: RefinementSuggestion) {
   sug.appliedAt = new Date().toISOString();
-  showToast(`Refinement applied: ${suggestionTypeLabel(sug.type)}`, 'success');
+  showToast(t('prReviewLearningLoop.toasts.refinementApplied', { type: suggestionTypeLabel(sug.type) }), 'success');
 }
 
 function dismissSuggestion(sug: RefinementSuggestion) {
   suggestions.value = suggestions.value.filter((s) => s.id !== sug.id);
-  showToast('Suggestion dismissed', 'info');
+  showToast(t('prReviewLearningLoop.toasts.suggestionDismissed'), 'info');
 }
 
 const overallAcceptRate = computed(() => {
@@ -125,59 +131,59 @@ const overallAcceptRate = computed(() => {
 <template>
   <div class="page-container">
     <PageHeader
-      title="PR Review Learning Loop"
-      subtitle="Track developer acceptance signals to refine bot prompt coverage over time"
+      :title="t('prReviewLearningLoop.title')"
+      :subtitle="t('prReviewLearningLoop.subtitle')"
     />
 
     <!-- Loading state -->
     <div v-if="isLoading" class="card" style="padding: 48px; text-align: center;">
-      <div style="color: var(--text-secondary); font-size: 0.875rem;">Loading learning loop data...</div>
+      <div style="color: var(--text-secondary); font-size: 0.875rem;">{{ t('prReviewLearningLoop.loading') }}</div>
     </div>
 
     <!-- Empty state -->
     <div v-else-if="!hasData" class="card" style="padding: 48px; text-align: center;">
-      <div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;">No PR annotation data available yet.</div>
-      <div style="color: var(--text-secondary); font-size: 0.82rem;">Learning loop signals will appear here once PR reviews generate finding patterns. Configure a PR review trigger to get started.</div>
+      <div style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 8px;">{{ t('prReviewLearningLoop.emptyTitle') }}</div>
+      <div style="color: var(--text-secondary); font-size: 0.82rem;">{{ t('prReviewLearningLoop.emptyDescription') }}</div>
     </div>
 
     <template v-else>
     <!-- Summary Cards -->
     <div class="stats-row">
       <div class="stat-card">
-        <div class="stat-label">Overall Accept Rate</div>
+        <div class="stat-label">{{ t('prReviewLearningLoop.stats.overallAcceptRate') }}</div>
         <div class="stat-value" :style="{ color: overallAcceptRate >= 60 ? 'var(--accent-green)' : 'var(--accent-amber)' }">
           {{ overallAcceptRate }}%
         </div>
-        <div class="stat-sub">across all finding patterns</div>
+        <div class="stat-sub">{{ t('prReviewLearningLoop.stats.overallAcceptRateSub') }}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Patterns Tracked</div>
+        <div class="stat-label">{{ t('prReviewLearningLoop.stats.patternsTracked') }}</div>
         <div class="stat-value">{{ signals.length }}</div>
-        <div class="stat-sub">distinct finding types</div>
+        <div class="stat-sub">{{ t('prReviewLearningLoop.stats.patternsTrackedSub') }}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Refinements Pending</div>
+        <div class="stat-label">{{ t('prReviewLearningLoop.stats.refinementsPending') }}</div>
         <div class="stat-value" :style="{ color: pendingSuggestions.length > 0 ? 'var(--accent-amber)' : 'var(--text-secondary)' }">
           {{ pendingSuggestions.length }}
         </div>
-        <div class="stat-sub">suggestions from signal analysis</div>
+        <div class="stat-sub">{{ t('prReviewLearningLoop.stats.refinementsPendingSub') }}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Low-Value Patterns</div>
+        <div class="stat-label">{{ t('prReviewLearningLoop.stats.lowValuePatterns') }}</div>
         <div class="stat-value" :style="{ color: 'var(--accent-red)' }">
           {{ signals.filter((s) => s.acceptRate < LOW_ACCEPTANCE_THRESHOLD).length }}
         </div>
-        <div class="stat-sub">{{ '<' }}{{ Math.round(LOW_ACCEPTANCE_THRESHOLD * 100) }}% accept rate</div>
+        <div class="stat-sub">{{ t('prReviewLearningLoop.stats.lowValuePatternsSub', { pct: Math.round(LOW_ACCEPTANCE_THRESHOLD * 100) }) }}</div>
       </div>
     </div>
 
     <!-- Refinement Suggestions -->
     <section v-if="pendingSuggestions.length > 0" class="card suggestions-section">
       <div class="section-header">
-        <h2>Refinement Suggestions</h2>
-        <span class="badge-count">{{ pendingSuggestions.length }} pending</span>
+        <h2>{{ t('prReviewLearningLoop.refinementSuggestions') }}</h2>
+        <span class="badge-count">{{ t('prReviewLearningLoop.pendingCount', { count: pendingSuggestions.length }) }}</span>
       </div>
-      <p class="section-desc">Automated suggestions based on 30-day acceptance signal analysis.</p>
+      <p class="section-desc">{{ t('prReviewLearningLoop.suggestionsDesc') }}</p>
       <div class="suggestions-list">
         <div v-for="sug in pendingSuggestions" :key="sug.id" class="suggestion-card">
           <div class="suggestion-header">
@@ -188,13 +194,13 @@ const overallAcceptRate = computed(() => {
               {{ sug.category }}
             </span>
             <span class="impact-badge" :style="{ background: impactColor(sug.impact) + '22', color: impactColor(sug.impact) }">
-              {{ sug.impact }} impact
+              {{ t('prReviewLearningLoop.impactBadge', { impact: sug.impact }) }}
             </span>
           </div>
           <p class="suggestion-desc">{{ sug.description }}</p>
           <div class="suggestion-actions">
-            <button class="btn-primary" @click="applySuggestion(sug)">Apply</button>
-            <button class="btn-ghost" @click="dismissSuggestion(sug)">Dismiss</button>
+            <button class="btn-primary" @click="applySuggestion(sug)">{{ t('prReviewLearningLoop.apply') }}</button>
+            <button class="btn-ghost" @click="dismissSuggestion(sug)">{{ t('common.dismiss') }}</button>
           </div>
         </div>
       </div>
@@ -203,20 +209,20 @@ const overallAcceptRate = computed(() => {
     <!-- Signal Table -->
     <section class="card">
       <div class="section-header">
-        <h2>Finding Signal Breakdown</h2>
+        <h2>{{ t('prReviewLearningLoop.signalBreakdown') }}</h2>
         <div class="filters">
           <select v-model="filterCategory" class="filter-select">
-            <option value="all">All categories</option>
-            <option value="security">Security</option>
-            <option value="style">Style</option>
-            <option value="performance">Performance</option>
-            <option value="correctness">Correctness</option>
-            <option value="docs">Docs</option>
+            <option value="all">{{ t('prReviewLearningLoop.categories.all') }}</option>
+            <option value="security">{{ t('prReviewLearningLoop.categories.security') }}</option>
+            <option value="style">{{ t('prReviewLearningLoop.categories.style') }}</option>
+            <option value="performance">{{ t('prReviewLearningLoop.categories.performance') }}</option>
+            <option value="correctness">{{ t('prReviewLearningLoop.categories.correctness') }}</option>
+            <option value="docs">{{ t('prReviewLearningLoop.categories.docs') }}</option>
           </select>
           <select v-model="sortBy" class="filter-select">
-            <option value="acceptRate">Sort: Accept Rate</option>
-            <option value="volume">Sort: Volume</option>
-            <option value="lastSeen">Sort: Last Seen</option>
+            <option value="acceptRate">{{ t('prReviewLearningLoop.sort.acceptRate') }}</option>
+            <option value="volume">{{ t('prReviewLearningLoop.sort.volume') }}</option>
+            <option value="lastSeen">{{ t('prReviewLearningLoop.sort.lastSeen') }}</option>
           </select>
         </div>
       </div>
@@ -224,14 +230,14 @@ const overallAcceptRate = computed(() => {
         <table class="data-table">
           <thead>
             <tr>
-              <th>Pattern</th>
-              <th>Category</th>
-              <th>Accept Rate</th>
-              <th>Volume</th>
-              <th>Accepted</th>
-              <th>Dismissed</th>
-              <th>Trend</th>
-              <th>Last Seen</th>
+              <th>{{ t('prReviewLearningLoop.table.pattern') }}</th>
+              <th>{{ t('prReviewLearningLoop.table.category') }}</th>
+              <th>{{ t('prReviewLearningLoop.table.acceptRate') }}</th>
+              <th>{{ t('prReviewLearningLoop.table.volume') }}</th>
+              <th>{{ t('prReviewLearningLoop.table.accepted') }}</th>
+              <th>{{ t('prReviewLearningLoop.table.dismissed') }}</th>
+              <th>{{ t('prReviewLearningLoop.table.trend') }}</th>
+              <th>{{ t('prReviewLearningLoop.table.lastSeen') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -298,14 +304,14 @@ const overallAcceptRate = computed(() => {
 
     <!-- Applied Refinements -->
     <section v-if="appliedSuggestions.length > 0" class="card applied-section">
-      <h2>Applied Refinements</h2>
+      <h2>{{ t('prReviewLearningLoop.appliedRefinements') }}</h2>
       <div class="applied-list">
         <div v-for="sug in appliedSuggestions" :key="sug.id" class="applied-item">
           <span class="applied-icon">✓</span>
           <div>
             <div class="applied-type">{{ suggestionTypeLabel(sug.type) }} — {{ sug.category }}</div>
             <div class="applied-desc">{{ sug.description }}</div>
-            <div class="applied-date">Applied {{ new Date(sug.appliedAt!).toLocaleDateString() }}</div>
+            <div class="applied-date">{{ t('prReviewLearningLoop.appliedDate', { date: new Date(sug.appliedAt!).toLocaleDateString() }) }}</div>
           </div>
         </div>
       </div>

@@ -17,8 +17,11 @@
  * keychain entry / file path that was actually checked.
  */
 import { onMounted, ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { monitoringApi, type CredentialStatusRow } from '../../services/api';
 import { useToast } from '../../composables/useToast';
+
+const { t } = useI18n();
 
 const props = withDefaults(
   defineProps<{
@@ -73,9 +76,9 @@ async function copy(text: string) {
     } else if (!fallbackCopy(text)) {
       throw new Error('clipboard unavailable');
     }
-    showToast('Command copied to clipboard', 'success');
+    showToast(t('credentialStatusBanner.copied'), 'success');
   } catch {
-    showToast('Copy failed — select and copy manually', 'error');
+    showToast(t('credentialStatusBanner.copyFailed'), 'error');
   }
 }
 
@@ -109,10 +112,9 @@ function fallbackCopy(text: string): boolean {
     <div class="banner-head" @click="expanded = !expanded">
       <span class="banner-icon" aria-hidden="true">⚠</span>
       <span class="banner-title">
-        {{ missing.length }} account{{ missing.length === 1 ? '' : 's' }}
-        missing OAuth credentials —
+        {{ missing.length === 1 ? t('credentialStatusBanner.missingTitle', { count: missing.length }) : t('credentialStatusBanner.missingTitlePlural', { count: missing.length }) }}
         <span class="banner-subtitle">
-          the rate-limit graph won't show data for them until you log in
+          {{ t('credentialStatusBanner.subtitle') }}
         </span>
       </span>
       <button
@@ -130,10 +132,10 @@ function fallbackCopy(text: string): boolean {
         <div class="cred-row-head">
           <span class="cred-account">
             <span class="cred-backend">{{ r.backend_type }}</span>
-            <span class="cred-name">{{ r.account_name || `Account ${r.account_id}` }}</span>
+            <span class="cred-name">{{ r.account_name || t('credentialStatusBanner.accountFallback', { id: r.account_id }) }}</span>
           </span>
           <span v-if="r.expected_location" class="cred-location" :title="r.expected_location">
-            checked: <code>{{ r.expected_location }}</code>
+            {{ t('credentialStatusBanner.checked') }} <code>{{ r.expected_location }}</code>
           </span>
         </div>
         <div v-if="r.remediation" class="cred-fix">
@@ -141,10 +143,10 @@ function fallbackCopy(text: string): boolean {
           <button
             class="cred-copy"
             type="button"
-            :aria-label="`Copy login command for ${r.account_name || r.account_id}`"
+            :aria-label="t('credentialStatusBanner.copyAriaLabel', { account: r.account_name || r.account_id })"
             @click="copy(r.remediation!)"
           >
-            Copy
+            {{ t('credentialStatusBanner.copy') }}
           </button>
         </div>
       </li>

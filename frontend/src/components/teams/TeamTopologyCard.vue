@@ -4,6 +4,9 @@ import type { Team, TopologyType } from '../../services/api';
 import { teamApi, ApiError } from '../../services/api';
 import TopologyPicker from './TopologyPicker.vue';
 import { useToast } from '../../composables/useToast';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   team: Team;
@@ -20,18 +23,18 @@ const editTopology = ref<TopologyType | null>(null);
 const editTopologyConfig = ref('{}');
 const isSavingTopology = ref(false);
 
-function getTopologyLabel(t?: TopologyType): string {
-  if (!t) return 'None';
+function getTopologyLabel(topo?: TopologyType): string {
+  if (!topo) return t('teamTopologyCard.none');
   const labels: Record<TopologyType, string> = {
-    sequential: 'Sequential Pipeline',
-    parallel: 'Parallel Fan-out',
-    coordinator: 'Coordinator / Dispatcher',
-    generator_critic: 'Generator / Critic',
-    hierarchical: 'Hierarchical Delegation',
-    human_in_loop: 'Human-in-the-Loop',
-    composite: 'Composite Pattern',
+    sequential: t('teamTopologyCard.sequential'),
+    parallel: t('teamTopologyCard.parallel'),
+    coordinator: t('teamTopologyCard.coordinator'),
+    generator_critic: t('teamTopologyCard.generatorCritic'),
+    hierarchical: t('teamTopologyCard.hierarchical'),
+    human_in_loop: t('teamTopologyCard.humanInLoop'),
+    composite: t('teamTopologyCard.composite'),
   };
-  return labels[t] || t;
+  return labels[topo] || topo;
 }
 
 function startEditTopology() {
@@ -47,11 +50,11 @@ async function saveTopology() {
       topology: editTopology.value,
       topology_config: editTopologyConfig.value,
     });
-    showToast('Topology updated', 'success');
+    showToast(t('teamTopologyCard.updated'), 'success');
     editingTopology.value = false;
     emit('updated');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to update topology';
+    const message = err instanceof ApiError ? err.message : t('teamTopologyCard.updateError');
     showToast(message, 'error');
   } finally {
     isSavingTopology.value = false;
@@ -63,12 +66,12 @@ async function saveTopology() {
   <div class="card">
     <div class="card-header">
       <div class="header-left">
-        <h3>Topology</h3>
+        <h3>{{ t('teamTopologyCard.title') }}</h3>
         <span v-if="team.topology" class="card-count">{{ getTopologyLabel(team.topology) }}</span>
-        <span v-else class="card-count">Not configured</span>
+        <span v-else class="card-count">{{ t('teamTopologyCard.notConfigured') }}</span>
       </div>
       <button class="add-btn" @click="editingTopology ? (editingTopology = false) : startEditTopology()">
-        {{ editingTopology ? 'Cancel' : 'Edit' }}
+        {{ editingTopology ? t('common.cancel') : t('common.edit') }}
       </button>
     </div>
     <div v-if="editingTopology" class="card-body">
@@ -80,13 +83,13 @@ async function saveTopology() {
       />
       <div class="card-actions">
         <button class="action-btn primary compact" :disabled="isSavingTopology" @click="saveTopology">
-          {{ isSavingTopology ? 'Saving...' : 'Save Topology' }}
+          {{ isSavingTopology ? t('teamTopologyCard.saving') : t('teamTopologyCard.saveTopology') }}
         </button>
       </div>
     </div>
     <div v-else-if="!team.topology" class="empty-state">
-      <p>No topology configured</p>
-      <span>Set a topology to define how agents collaborate</span>
+      <p>{{ t('teamTopologyCard.emptyTitle') }}</p>
+      <span>{{ t('teamTopologyCard.emptyHint') }}</span>
     </div>
   </div>
 </template>

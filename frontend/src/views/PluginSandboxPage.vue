@@ -3,7 +3,9 @@ import { ref, onMounted } from 'vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
+import { useI18n } from 'vue-i18n';
 
+const { t } = useI18n();
 const showToast = useToast();
 const isLoading = ref(true);
 const isStarting = ref(false);
@@ -103,7 +105,7 @@ async function loadData() {
 
 async function startSandbox() {
   if (!selectedPlugin.value) {
-    showToast('Select a plugin to sandbox', 'error');
+    showToast(t('pluginSandbox.toasts.selectPlugin'), 'error');
     return;
   }
   isStarting.value = true;
@@ -119,7 +121,7 @@ async function startSandbox() {
       }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    showToast('Sandbox started', 'success');
+    showToast(t('pluginSandbox.toasts.started'), 'success');
     await loadData();
   } catch {
     const plugin = availablePlugins.value.find(p => p.id === selectedPlugin.value);
@@ -136,7 +138,7 @@ async function startSandbox() {
       exit_code: null,
       log_tail: '[INFO] Starting sandbox container...\n[INFO] Applying resource limits...',
     });
-    showToast('Sandbox started (demo mode)', 'success');
+    showToast(t('pluginSandbox.toasts.startedDemo'), 'success');
   } finally {
     isStarting.value = false;
   }
@@ -147,6 +149,12 @@ function statusColor(status: SandboxRun['status']): string {
   if (status === 'running') return '#60a5fa';
   if (status === 'killed') return '#fbbf24';
   return '#f87171';
+}
+
+function networkLabel(network: SandboxRun['network']): string {
+  if (network === 'none') return t('pluginSandbox.network.none');
+  if (network === 'restricted') return t('pluginSandbox.network.restricted');
+  return t('pluginSandbox.network.full');
 }
 
 function networkIcon(network: SandboxRun['network']): string {
@@ -176,17 +184,16 @@ onMounted(loadData);
 
     <NotEnabledBanner
       v-if="!FEATURE_ENABLED"
-      feature="Plugin execution sandboxing"
-      detail="The backend that runs plugins in isolated containers has not shipped yet. Starting sandbox runs is disabled."
+      :feature="t('pluginSandbox.notEnabled.feature')"
+      :detail="t('pluginSandbox.notEnabled.detail')"
       testid="plugin-sandbox-not-enabled"
     />
 
     <div class="page-header">
       <div>
-        <h1 class="page-title">Plugin Execution Sandboxing</h1>
+        <h1 class="page-title">{{ t('pluginSandbox.title') }}</h1>
         <p class="page-subtitle">
-          Run third-party plugins in isolated containers with configurable CPU, memory, and network
-          restrictions. Test community plugins safely before enabling them for all bots.
+          {{ t('pluginSandbox.subtitle') }}
         </p>
       </div>
     </div>
@@ -194,12 +201,12 @@ onMounted(loadData);
     <div class="main-grid">
       <!-- Left: sandbox config -->
       <div class="config-card">
-        <h2 class="section-title">New Sandbox Run</h2>
+        <h2 class="section-title">{{ t('pluginSandbox.newRun') }}</h2>
 
         <div class="form-group">
-          <label class="form-label">Plugin</label>
+          <label class="form-label">{{ t('pluginSandbox.plugin') }}</label>
           <select v-model="selectedPlugin" class="form-select">
-            <option value="" disabled>Select a plugin...</option>
+            <option value="" disabled>{{ t('pluginSandbox.selectPluginOption') }}</option>
             <option v-for="p in availablePlugins" :key="p.id" :value="p.id">
               {{ p.name }} v{{ p.version }} ({{ p.author }})
             </option>
@@ -208,17 +215,17 @@ onMounted(loadData);
 
         <div class="resource-row">
           <div class="form-group">
-            <label class="form-label">CPU Limit (cores)</label>
+            <label class="form-label">{{ t('pluginSandbox.cpuLimit') }}</label>
             <input v-model="cpuLimit" class="form-input" type="number" step="0.25" min="0.1" max="4" />
           </div>
           <div class="form-group">
-            <label class="form-label">Memory (MB)</label>
+            <label class="form-label">{{ t('pluginSandbox.memory') }}</label>
             <input v-model="memLimit" class="form-input" type="number" step="64" min="64" max="2048" />
           </div>
         </div>
 
         <div class="form-group">
-          <label class="form-label">Network Policy</label>
+          <label class="form-label">{{ t('pluginSandbox.networkPolicy') }}</label>
           <div class="network-picker">
             <button
               v-for="opt in (['none', 'restricted', 'full'] as const)"
@@ -227,31 +234,31 @@ onMounted(loadData);
               :class="{ active: networkPolicy === opt }"
               @click="networkPolicy = opt"
             >
-              {{ networkIcon(opt) }} {{ opt }}
+              {{ networkIcon(opt) }} {{ networkLabel(opt) }}
             </button>
           </div>
           <p class="policy-hint">
-            <span v-if="networkPolicy === 'none'">No network access — most secure</span>
-            <span v-else-if="networkPolicy === 'restricted'">Allow outbound to whitelisted hosts only</span>
-            <span v-else>Unrestricted — use only for trusted plugins</span>
+            <span v-if="networkPolicy === 'none'">{{ t('pluginSandbox.policyHint.none') }}</span>
+            <span v-else-if="networkPolicy === 'restricted'">{{ t('pluginSandbox.policyHint.restricted') }}</span>
+            <span v-else>{{ t('pluginSandbox.policyHint.full') }}</span>
           </p>
         </div>
 
         <button
           class="start-btn"
           :disabled="isStarting || !FEATURE_ENABLED"
-          :title="!FEATURE_ENABLED ? 'Plugin execution sandboxing is not yet enabled in this deployment' : undefined"
+          :title="!FEATURE_ENABLED ? t('pluginSandbox.notEnabledTitle') : undefined"
           data-testid="plugin-sandbox-start-submit"
           @click="startSandbox"
         >
-          {{ isStarting ? 'Starting...' : 'Run in Sandbox' }}
+          {{ isStarting ? t('pluginSandbox.starting') : t('pluginSandbox.runInSandbox') }}
         </button>
       </div>
 
       <!-- Right: run history -->
       <div class="runs-card">
-        <h2 class="section-title">Sandbox Runs</h2>
-        <LoadingState v-if="isLoading" message="Loading runs..." />
+        <h2 class="section-title">{{ t('pluginSandbox.sandboxRuns') }}</h2>
+        <LoadingState v-if="isLoading" :message="t('pluginSandbox.loadingRuns')" />
         <div v-else>
           <div v-for="run in sandboxRuns" :key="run.id" class="run-item">
             <div class="run-header" @click="toggleLog(run.id)">
@@ -260,7 +267,7 @@ onMounted(loadData);
                 <div>
                   <span class="run-plugin">{{ run.plugin_name }} v{{ run.plugin_version }}</span>
                   <div class="run-limits">
-                    CPU {{ run.cpu_limit }} · {{ run.mem_limit }} · net {{ run.network }}
+                    {{ t('pluginSandbox.runLimits', { cpu: run.cpu_limit, mem: run.mem_limit, net: run.network }) }}
                     {{ networkIcon(run.network) }}
                   </div>
                 </div>
@@ -275,7 +282,7 @@ onMounted(loadData);
               <pre>{{ run.log_tail }}</pre>
             </div>
           </div>
-          <p v-if="sandboxRuns.length === 0" class="empty-msg">No sandbox runs yet.</p>
+          <p v-if="sandboxRuns.length === 0" class="empty-msg">{{ t('pluginSandbox.noRuns') }}</p>
         </div>
       </div>
     </div>

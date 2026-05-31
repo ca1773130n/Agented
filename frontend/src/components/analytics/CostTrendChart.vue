@@ -2,8 +2,11 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { Chart, registerables } from 'chart.js';
 import 'chartjs-adapter-date-fns';
+import { useI18n } from 'vue-i18n';
 import type { CostDataPoint } from '../../services/api';
 import { safeFormatDate } from '../../utils/datetime';
+
+const { t } = useI18n();
 
 Chart.register(...registerables);
 
@@ -62,7 +65,7 @@ function renderChart() {
     for (const p of entityMap.get(entityId)!) pointMap.set(p.period, p.total_cost_usd);
     const color = useMultiLine ? entityColors[idx % entityColors.length] : colors.violet;
     return {
-      label: useMultiLine ? entityId : 'Cost (USD)',
+      label: useMultiLine ? entityId : t('costTrendChart.costUsd'),
       data: periods.map(period => pointMap.get(period) ?? 0),
       borderColor: color,
       backgroundColor: `${color}1A`,

@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { InlineComment } from '../../services/api';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   comments: InlineComment[];
@@ -24,12 +27,12 @@ function formatRelativeTime(dateStr: string): string {
   const then = new Date(dateStr).getTime();
   const diffMs = now - then;
   const diffSec = Math.floor(diffMs / 1000);
-  if (diffSec < 60) return 'just now';
+  if (diffSec < 60) return t('inlineComment.justNow');
   const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffMin < 60) return t('inlineComment.minutesAgo', { n: diffMin });
   const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  return `${Math.floor(diffHr / 24)}d ago`;
+  if (diffHr < 24) return t('inlineComment.hoursAgo', { n: diffHr });
+  return t('inlineComment.daysAgo', { n: Math.floor(diffHr / 24) });
 }
 
 function handleSubmit() {
@@ -68,7 +71,7 @@ function startAdding() {
       class="add-comment-btn"
       :class="{ 'has-comments': lineComments.length > 0 }"
       @click="startAdding"
-      title="Add comment"
+      :title="t('inlineComment.addComment')"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
         <path d="M12 5v14M5 12h14"/>
@@ -91,7 +94,7 @@ function startAdding() {
         v-model="newCommentText"
         type="text"
         class="comment-input"
-        placeholder="Add a comment..."
+        :placeholder="t('inlineComment.placeholder')"
         autofocus
         @keydown="handleKeyDown"
       />

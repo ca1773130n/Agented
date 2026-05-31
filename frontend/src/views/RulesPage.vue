@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, watch, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import type { Rule, RuleType } from '../services/api';
 import { ruleApi, ApiError } from '../services/api';
 import AiStreamingLog from '../components/ai/AiStreamingLog.vue';
@@ -26,6 +27,7 @@ const route = useRoute();
 const highlightId = computed(() => (route.query.highlightId as string) || null);
 
 const showToast = useToast();
+const { t } = useI18n();
 
 // AI Generate state
 const showGenerateModal = ref(false);
@@ -139,11 +141,11 @@ async function saveDetail() {
       action: editForm.action,
       enabled: editForm.enabled,
     });
-    showToast('Rule updated successfully', 'success');
+    showToast(t('rules.toasts.updated'), 'success');
     closeDetail();
     await loadRules();
   } catch (err: unknown) {
-    showToast(err instanceof Error ? err.message : 'Failed to update rule', 'error');
+    showToast(err instanceof Error ? err.message : t('rules.toasts.updateFailed'), 'error');
   } finally {
     isSaving.value = false;
   }
@@ -155,11 +157,11 @@ const RULE_TYPES: RuleType[] = [
   'validation',
 ];
 
-const RULE_TYPE_LABELS: Record<RuleType, string> = {
-  pre_check: 'Pre-Check',
-  post_check: 'Post-Check',
-  validation: 'Validation',
-};
+const RULE_TYPE_LABELS = computed<Record<RuleType, string>>(() => ({
+  pre_check: t('rules.ruleTypes.preCheck'),
+  post_check: t('rules.ruleTypes.postCheck'),
+  validation: t('rules.ruleTypes.validation'),
+}));
 
 const filteredRules = computed(() => {
   return rules.value.filter(r => {
@@ -178,10 +180,10 @@ const { searchQuery, sortField, sortOrder, filteredAndSorted, resultCount, total
 
 const pagination = usePagination({ defaultPageSize: 25, storageKey: 'rules-pagination' });
 
-const listSortOptions = [
-  { value: 'name', label: 'Name' },
-  { value: 'created_at', label: 'Date Created' },
-];
+const listSortOptions = computed(() => [
+  { value: 'name', label: t('rules.sort.name') },
+  { value: 'created_at', label: t('rules.sort.dateCreated') },
+]);
 
 useWebMcpPageTools({
   page: 'RulesPage',
@@ -222,7 +224,7 @@ async function loadRules() {
     rules.value = data.rules || [];
     if (data.total_count != null) pagination.totalCount.value = data.total_count;
   } catch (e) {
-    loadError.value = e instanceof ApiError ? e.message : 'Failed to load rules';
+    loadError.value = e instanceof ApiError ? e.message : t('rules.toasts.loadFailed');
     showToast(loadError.value, 'error');
   } finally {
     isLoading.value = false;
@@ -252,7 +254,7 @@ async function deleteRule() {
   deletingId.value = ruleToDelete.value.id;
   try {
     await ruleApi.delete(ruleToDelete.value.id);
-    showToast(`Rule "${ruleToDelete.value.name}" deleted`, 'success');
+    showToast(t('rules.toasts.deleted', { name: ruleToDelete.value.name }), 'success');
     showDeleteConfirm.value = false;
     ruleToDelete.value = null;
     await loadRules();
@@ -260,7 +262,7 @@ async function deleteRule() {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to delete rule', 'error');
+      showToast(t('rules.toasts.deleteFailed'), 'error');
     }
   } finally {
     deletingId.value = null;
@@ -273,7 +275,7 @@ async function toggleEnabled(rule: Rule) {
     await ruleApi.update(rule.id, { enabled: !rule.enabled });
     await loadRules();
   } catch (e) {
-    showToast('Failed to update rule', 'error');
+    showToast(t('rules.toasts.updateFailed'), 'error');
   } finally {
     togglingId.value = null;
   }
@@ -296,7 +298,7 @@ const isCreating = ref(false);
 async function createRule() {
   if (isCreating.value) return;
   if (!formData.value.name.trim()) {
-    showToast('Rule name is required', 'error');
+    showToast(t('rules.toasts.nameRequired'), 'error');
     return;
   }
   isCreating.value = true;
@@ -310,14 +312,14 @@ async function createRule() {
       enabled: formData.value.enabled,
       project_id: formData.value.project_id || undefined,
     });
-    showToast(`Rule "${formData.value.name}" created`, 'success');
+    showToast(t('rules.toasts.created', { name: formData.value.name }), 'success');
     showCreateModal.value = false;
     await loadRules();
   } catch (e) {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to create rule', 'error');
+      showToast(t('rules.toasts.createFailed'), 'error');
     }
   } finally {
     isCreating.value = false;
@@ -335,7 +337,7 @@ function getTypeColor(ruleType: RuleType): string {
 
 async function generateRule() {
   if (!generateDescription.value.trim() || generateDescription.value.trim().length < 10) {
-    showToast('Please provide a description of at least 10 characters', 'error');
+    showToast(t('rules.toasts.descriptionTooShort'), 'error');
     return;
   }
   isGenerating.value = true;
@@ -352,10 +354,10 @@ async function generateRule() {
       formData.value.action = result.config.action || '';
       showGenerateModal.value = false;
       showCreateModal.value = true;
-      showToast('Rule configuration generated! Review and save.', 'success');
+      showToast(t('rules.toasts.generated'), 'success');
     }
   } catch {
-    showToast('Failed to generate rule configuration', 'error');
+    showToast(t('rules.toasts.generateFailed'), 'error');
   } finally {
     isGenerating.value = false;
   }
@@ -368,24 +370,24 @@ onMounted(() => {
 
 <template>
   <PageLayout >
-    <PageHeader title="Rules" subtitle="Manage validation and check rules for your Claude Code workflows">
+    <PageHeader :title="t('rules.title')" :subtitle="t('rules.subtitle')">
       <template #actions>
         <button class="btn btn-ai" @click="showGenerateModal = true">
           <span class="ai-badge">AI</span>
-          Generate Rule
+          {{ t('rules.generateRule') }}
         </button>
         <button class="btn btn-design" @click="router.push({ name: 'rule-design' })">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M9 11l3 3L22 4"/>
             <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
           </svg>
-          Design Rule
+          {{ t('rules.designRule') }}
         </button>
         <button class="btn btn-primary" @click="openCreateModal">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 5v14M5 12h14"/>
           </svg>
-          New Rule
+          {{ t('rules.newRule') }}
         </button>
       </template>
     </PageHeader>
@@ -393,17 +395,17 @@ onMounted(() => {
     <!-- Filters -->
     <div class="filters-bar">
       <div class="filter-group">
-        <label>Rule Type:</label>
+        <label>{{ t('rules.filters.ruleType') }}</label>
         <select v-model="filterType">
-          <option value="">All Types</option>
+          <option value="">{{ t('rules.filters.allTypes') }}</option>
           <option v-for="ruleType in RULE_TYPES" :key="ruleType" :value="ruleType">{{ RULE_TYPE_LABELS[ruleType] }}</option>
         </select>
       </div>
       <div class="filter-group">
-        <label>Scope:</label>
+        <label>{{ t('rules.filters.scope') }}</label>
         <select v-model="filterProject">
-          <option value="">All</option>
-          <option value="global">Global Only</option>
+          <option value="">{{ t('rules.filters.all') }}</option>
+          <option value="global">{{ t('rules.filters.globalOnly') }}</option>
         </select>
       </div>
     </div>
@@ -416,32 +418,32 @@ onMounted(() => {
       :sort-options="listSortOptions"
       :result-count="resultCount"
       :total-count="totalCount"
-      placeholder="Search rules..."
+      :placeholder="t('rules.searchPlaceholder')"
     />
 
-    <LoadingState v-if="isLoading" message="Loading rules..." />
+    <LoadingState v-if="isLoading" :message="t('rules.loading')" />
 
     <ErrorState
       v-else-if="loadError"
-      title="Failed to load rules"
+      :title="t('rules.errorTitle')"
       :message="loadError"
       @retry="loadRules"
     />
 
     <EmptyState
       v-else-if="rules.length === 0"
-      title="No rules yet"
-      description="Create your first rule to validate and check your Claude Code workflows"
+      :title="t('rules.empty.title')"
+      :description="t('rules.empty.description')"
     >
       <template #actions>
-        <button class="btn btn-primary" @click="openCreateModal">Create Rule</button>
+        <button class="btn btn-primary" @click="openCreateModal">{{ t('rules.createRule') }}</button>
       </template>
     </EmptyState>
 
     <EmptyState
       v-else-if="filteredAndSorted.length === 0"
-      title="No matching rules"
-      description="Try a different search term or adjust your filters"
+      :title="t('rules.noMatch.title')"
+      :description="t('rules.noMatch.description')"
     />
 
     <div v-else class="rules-grid">
@@ -468,7 +470,7 @@ onMounted(() => {
             </span>
           </div>
           <div class="rule-status" :class="{ enabled: rule.enabled }">
-            {{ rule.enabled ? 'Active' : 'Disabled' }}
+            {{ rule.enabled ? t('rules.active') : t('rules.disabled') }}
           </div>
         </div>
 
@@ -476,29 +478,29 @@ onMounted(() => {
 
         <div class="rule-meta">
           <div class="meta-item">
-            <span class="meta-label">Scope:</span>
-            <span class="meta-value">{{ rule.project_id ? 'Project' : 'Global' }}</span>
+            <span class="meta-label">{{ t('rules.meta.scope') }}</span>
+            <span class="meta-value">{{ rule.project_id ? t('rules.meta.project') : t('rules.meta.global') }}</span>
           </div>
           <div v-if="rule.source_path" class="meta-item">
-            <span class="meta-label">Source:</span>
+            <span class="meta-label">{{ t('rules.meta.source') }}</span>
             <span class="meta-value source-path">{{ rule.source_path }}</span>
           </div>
         </div>
 
         <div v-if="rule.condition" class="rule-code" @click.stop>
-          <div class="code-label">Condition:</div>
+          <div class="code-label">{{ t('rules.conditionLabel') }}</div>
           <pre class="code-block">{{ rule.condition }}</pre>
         </div>
 
         <div v-if="rule.action" class="rule-code" @click.stop>
-          <div class="code-label">Action:</div>
+          <div class="code-label">{{ t('rules.actionLabel') }}</div>
           <pre class="code-block">{{ rule.action }}</pre>
         </div>
 
         <div class="rule-actions">
           <button class="btn btn-small" @click.stop="toggleEnabled(rule)" :disabled="togglingId === rule.id">
             <span v-if="togglingId === rule.id" class="btn-spinner"></span>
-            {{ togglingId === rule.id ? '...' : (rule.enabled ? 'Disable' : 'Enable') }}
+            {{ togglingId === rule.id ? '...' : (rule.enabled ? t('rules.disable') : t('rules.enable')) }}
           </button>
           <button class="btn btn-small btn-danger" @click.stop="confirmDelete(rule)" :disabled="deletingId === rule.id">
             <span v-if="deletingId === rule.id" class="btn-spinner"></span>
@@ -524,33 +526,33 @@ onMounted(() => {
     />
 
     <!-- SlideOver Detail/Edit Panel -->
-    <SlideOver :open="!!selectedRule" @close="closeDetail" :title="selectedRule?.name || 'Rule Details'" :dirty="isDirty">
+    <SlideOver :open="!!selectedRule" @close="closeDetail" :title="selectedRule?.name || t('rules.ruleDetails')" :dirty="isDirty">
       <div class="detail-form">
         <div class="form-group">
-          <label>Name</label>
-          <input v-model="editForm.name" type="text" placeholder="Rule name" />
+          <label>{{ t('rules.fields.name') }}</label>
+          <input v-model="editForm.name" type="text" :placeholder="t('rules.placeholders.name')" />
         </div>
         <div class="form-group">
-          <label>Rule Type</label>
+          <label>{{ t('rules.fields.ruleType') }}</label>
           <select v-model="editForm.rule_type">
             <option v-for="ruleType in RULE_TYPES" :key="ruleType" :value="ruleType">{{ RULE_TYPE_LABELS[ruleType] }}</option>
           </select>
         </div>
         <div class="form-group">
-          <label>Description</label>
-          <textarea v-model="editForm.description" rows="3" placeholder="Rule description"></textarea>
+          <label>{{ t('rules.fields.description') }}</label>
+          <textarea v-model="editForm.description" rows="3" :placeholder="t('rules.placeholders.description')"></textarea>
         </div>
         <div class="form-group">
-          <label>Condition</label>
-          <textarea v-model="editForm.condition" rows="4" placeholder="Rule condition expression" class="code-textarea"></textarea>
+          <label>{{ t('rules.fields.condition') }}</label>
+          <textarea v-model="editForm.condition" rows="4" :placeholder="t('rules.placeholders.conditionExpr')" class="code-textarea"></textarea>
         </div>
         <div class="form-group">
-          <label>Action</label>
-          <textarea v-model="editForm.action" rows="4" placeholder="Rule action to execute" class="code-textarea"></textarea>
+          <label>{{ t('rules.fields.action') }}</label>
+          <textarea v-model="editForm.action" rows="4" :placeholder="t('rules.placeholders.actionExec')" class="code-textarea"></textarea>
         </div>
         <div class="form-group">
           <label class="toggle-label">
-            <span>Enabled</span>
+            <span>{{ t('rules.fields.enabled') }}</span>
             <div class="toggle-switch" :class="{ active: editForm.enabled }" @click="editForm.enabled = !editForm.enabled">
               <div class="toggle-knob"></div>
             </div>
@@ -558,20 +560,20 @@ onMounted(() => {
         </div>
       </div>
       <template #footer>
-        <button class="btn btn-design-sm" @click="editInDesign">Edit in Designer</button>
-        <button class="btn" @click="closeDetail">Cancel</button>
+        <button class="btn btn-design-sm" @click="editInDesign">{{ t('rules.editInDesigner') }}</button>
+        <button class="btn" @click="closeDetail">{{ t('common.cancel') }}</button>
         <button class="btn btn-primary" @click="saveDetail" :disabled="isSaving || !editForm.name.trim()">
-          {{ isSaving ? 'Saving...' : 'Save Changes' }}
+          {{ isSaving ? t('rules.saving') : t('rules.saveChanges') }}
         </button>
       </template>
     </SlideOver>
 
     <ConfirmModal
       :open="showDeleteConfirm"
-      title="Delete Rule"
-      :message="`Are you sure you want to delete \u201C${ruleToDelete?.name}\u201D? This action cannot be undone.`"
-      confirm-label="Delete"
-      cancel-label="Cancel"
+      :title="t('rules.deleteModal.title')"
+      :message="t('rules.deleteModal.message', { name: ruleToDelete?.name })"
+      :confirm-label="t('common.delete')"
+      :cancel-label="t('common.cancel')"
       variant="danger"
       @confirm="deleteRule"
       @cancel="showDeleteConfirm = false"
@@ -581,40 +583,40 @@ onMounted(() => {
     <Teleport to="body">
       <div v-if="showCreateModal" ref="createModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-create-rule" tabindex="-1" @click.self="showCreateModal = false" @keydown.escape="showCreateModal = false">
         <div class="modal create-modal">
-          <h2 id="modal-title-create-rule">Create New Rule</h2>
+          <h2 id="modal-title-create-rule">{{ t('rules.createModal.title') }}</h2>
           <form @submit.prevent="createRule">
             <div class="form-group">
-              <label for="rule-name">Name *</label>
+              <label for="rule-name">{{ t('rules.fields.nameRequired') }}</label>
               <input id="rule-name" v-model="formData.name" type="text" placeholder="my-rule" required />
             </div>
             <div class="form-group">
-              <label for="rule-type">Rule Type *</label>
+              <label for="rule-type">{{ t('rules.fields.ruleTypeRequired') }}</label>
               <select id="rule-type" v-model="formData.rule_type" required>
                 <option v-for="ruleType in RULE_TYPES" :key="ruleType" :value="ruleType">{{ RULE_TYPE_LABELS[ruleType] }}</option>
               </select>
             </div>
             <div class="form-group">
-              <label for="rule-description">Description</label>
-              <input id="rule-description" v-model="formData.description" type="text" placeholder="Brief description of what this rule does" />
+              <label for="rule-description">{{ t('rules.fields.description') }}</label>
+              <input id="rule-description" v-model="formData.description" type="text" :placeholder="t('rules.placeholders.briefDescription')" />
             </div>
             <div class="form-group">
-              <label for="rule-condition">Condition</label>
-              <textarea id="rule-condition" v-model="formData.condition" rows="4" placeholder="Condition to evaluate (e.g., pattern match, regex)"></textarea>
+              <label for="rule-condition">{{ t('rules.fields.condition') }}</label>
+              <textarea id="rule-condition" v-model="formData.condition" rows="4" :placeholder="t('rules.placeholders.conditionEval')"></textarea>
             </div>
             <div class="form-group">
-              <label for="rule-action">Action</label>
-              <textarea id="rule-action" v-model="formData.action" rows="4" placeholder="Action to take when condition is met"></textarea>
+              <label for="rule-action">{{ t('rules.fields.action') }}</label>
+              <textarea id="rule-action" v-model="formData.action" rows="4" :placeholder="t('rules.placeholders.actionTaken')"></textarea>
             </div>
             <div class="form-group checkbox-group">
               <label>
                 <input type="checkbox" v-model="formData.enabled" />
-                Enabled
+                {{ t('rules.fields.enabled') }}
               </label>
             </div>
             <div class="modal-actions">
-              <button type="button" class="btn" @click="showCreateModal = false">Cancel</button>
+              <button type="button" class="btn" @click="showCreateModal = false">{{ t('common.cancel') }}</button>
               <button type="submit" class="btn btn-primary" :disabled="isCreating">
-                {{ isCreating ? 'Creating…' : 'Create Rule' }}
+                {{ isCreating ? t('rules.creating') : t('rules.createRule') }}
               </button>
             </div>
           </form>
@@ -625,15 +627,15 @@ onMounted(() => {
     <Teleport to="body">
       <div v-if="showGenerateModal" ref="generateModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-generate-rule" tabindex="-1" @click.self="showGenerateModal = false" @keydown.escape="showGenerateModal = false">
         <div class="modal generate-modal">
-          <h2 id="modal-title-generate-rule">Generate Rule with AI</h2>
-          <p>Describe the rule you want to create and AI will generate the configuration.</p>
+          <h2 id="modal-title-generate-rule">{{ t('rules.generateModal.title') }}</h2>
+          <p>{{ t('rules.generateModal.description') }}</p>
           <div class="form-group">
-            <label for="gen-description">Description</label>
+            <label for="gen-description">{{ t('rules.fields.description') }}</label>
             <textarea
               id="gen-description"
               v-model="generateDescription"
               rows="4"
-              placeholder="e.g., A pre-check rule that validates all API responses include proper error codes before processing"
+              :placeholder="t('rules.generateModal.placeholder')"
               :disabled="isGenerating"
             ></textarea>
           </div>
@@ -641,13 +643,13 @@ onMounted(() => {
             v-if="isGenerating"
             :log="generateLog"
             :is-streaming="isGenerating"
-            :phase="generatePhase || 'Generating rule configuration...'"
-            hint="Streaming Claude CLI output"
+            :phase="generatePhase || t('rules.generateModal.phase')"
+            :hint="t('rules.generateModal.hint')"
           />
           <div class="modal-actions">
-            <button class="btn" @click="showGenerateModal = false" :disabled="isGenerating">Cancel</button>
+            <button class="btn" @click="showGenerateModal = false" :disabled="isGenerating">{{ t('common.cancel') }}</button>
             <button class="btn btn-primary" @click="generateRule" :disabled="isGenerating || generateDescription.trim().length < 10">
-              {{ isGenerating ? 'Generating...' : 'Generate' }}
+              {{ isGenerating ? t('rules.generating') : t('rules.generate') }}
             </button>
           </div>
         </div>

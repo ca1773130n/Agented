@@ -4,6 +4,7 @@
 -->
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { analyticsApi, ApiError } from '../../../services/api';
 import type { ExecutionDataPoint } from '../../../services/api';
 import ExecutionVolumeChart from '../../../components/analytics/ExecutionVolumeChart.vue';
@@ -18,6 +19,7 @@ import {
 } from './_analyticsFilters';
 
 const emit = defineEmits<{ loaded: [slug: string] }>();
+const { t } = useI18n();
 
 const selectedRange = ref<AnalyticsDateRange>('30d');
 const selectedGroupBy = ref<AnalyticsGroupBy>('day');
@@ -40,7 +42,7 @@ async function loadData() {
     });
     executionData.value = res?.data || [];
   } catch (err) {
-    loadError.value = err instanceof ApiError ? err.message : 'Failed to load execution analytics';
+    loadError.value = err instanceof ApiError ? err.message : t('executionVolumeCard.error.load');
     executionData.value = [];
   } finally {
     isLoading.value = false;
@@ -56,8 +58,8 @@ onMounted(loadData);
   <section id="execution-volume" class="lane-card chart-card">
     <header class="lane-card__head">
       <div>
-        <h2 class="lane-card__title">Execution Volume</h2>
-        <p class="lane-card__subtitle">Success, failed, and cancelled executions</p>
+        <h2 class="lane-card__title">{{ t('executionVolumeCard.title') }}</h2>
+        <p class="lane-card__subtitle">{{ t('executionVolumeCard.subtitle') }}</p>
       </div>
       <div class="filter-controls">
         <div class="filter-group">
@@ -82,9 +84,9 @@ onMounted(loadData);
       </div>
     </header>
 
-    <LoadingState v-if="isLoading" message="Loading…" />
+    <LoadingState v-if="isLoading" :message="t('executionVolumeCard.loading')" />
     <ErrorState v-else-if="loadError" :message="loadError" @retry="loadData" />
-    <p v-else-if="isEmpty" class="empty">No execution data yet.</p>
+    <p v-else-if="isEmpty" class="empty">{{ t('executionVolumeCard.empty') }}</p>
     <ExecutionVolumeChart v-else :data="executionData" />
   </section>
 </template>

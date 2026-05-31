@@ -8,6 +8,7 @@
  *   - POST /admin/triggers/events/{event_id}/replay
  */
 import { ref, onMounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { triggerEventApi, ApiError } from '../../services/api';
 import type { TriggerEvent } from '../../services/api';
 import { safeFormatDateTime } from '../../utils/datetime';
@@ -17,6 +18,7 @@ const props = defineProps<{
   triggerId: string;
 }>();
 
+const { t } = useI18n();
 const showToast = useToast();
 
 const events = ref<TriggerEvent[]>([]);
@@ -34,7 +36,7 @@ async function loadEvents() {
     const res = await triggerEventApi.list(props.triggerId, 50);
     events.value = res.events || [];
   } catch (err) {
-    error.value = err instanceof ApiError ? err.message : 'Failed to load trigger events';
+    error.value = err instanceof ApiError ? err.message : t('triggerPayloadHistory.loadFailed');
   } finally {
     isLoading.value = false;
   }
@@ -57,13 +59,13 @@ async function confirmReplay(eventId: number) {
   try {
     const res = await triggerEventApi.replay(eventId);
     showToast(
-      res.fired ? 'Trigger replayed successfully' : 'Replay accepted but trigger did not fire',
+      res.fired ? t('triggerPayloadHistory.toast.replaySuccess') : t('triggerPayloadHistory.toast.replayNoFire'),
       res.fired ? 'success' : 'info',
     );
     confirmReplayId.value = null;
     await loadEvents();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to replay trigger event';
+    const message = err instanceof ApiError ? err.message : t('triggerPayloadHistory.toast.replayFailed');
     showToast(message, 'error');
   } finally {
     isReplaying.value = false;
@@ -112,24 +114,24 @@ watch(() => props.triggerId, loadEvents);
 <template>
   <div class="payload-history" data-testid="trigger-payload-history">
     <div class="section-header">
-      <h3>Recent Trigger Events</h3>
-      <span v-if="events.length" class="entry-count">{{ events.length }} events</span>
+      <h3>{{ t('triggerPayloadHistory.title') }}</h3>
+      <span v-if="events.length" class="entry-count">{{ t('triggerPayloadHistory.eventsCount', { count: events.length }) }}</span>
     </div>
 
     <div v-if="isLoading" class="loading-state" data-testid="loading">
       <span class="spinner"></span>
-      Loading trigger events...
+      {{ t('triggerPayloadHistory.loading') }}
     </div>
 
     <div v-else-if="error" class="error-state" data-testid="error">
       <p>{{ error }}</p>
-      <button class="retry-btn" @click="loadEvents">Retry</button>
+      <button class="retry-btn" @click="loadEvents">{{ t('common.retry') }}</button>
     </div>
 
     <div v-else-if="events.length === 0" class="empty-state" data-testid="empty">
       <div class="empty-icon">&#9671;</div>
-      <p>No trigger events yet</p>
-      <span>Events will appear here as they arrive.</span>
+      <p>{{ t('triggerPayloadHistory.emptyTitle') }}</p>
+      <span>{{ t('triggerPayloadHistory.emptyHint') }}</span>
     </div>
 
     <div v-else class="event-list">
@@ -142,7 +144,7 @@ watch(() => props.triggerId, loadEvents);
         <div class="event-header" @click="toggleExpand(event.id)">
           <div class="event-info">
             <span class="event-date">{{ formatDate(event.received_at) }}</span>
-            <span class="event-source">{{ event.matched ? 'matched' : 'unmatched' }}</span>
+            <span class="event-source">{{ event.matched ? t('triggerPayloadHistory.matched') : t('triggerPayloadHistory.unmatched') }}</span>
             <span class="status-pill" :class="statusClass(event.dispatch_status)">{{
               event.dispatch_status
             }}</span>
@@ -154,7 +156,7 @@ watch(() => props.triggerId, loadEvents);
               @click.stop="requestReplay(event.id)"
               :disabled="confirmReplayId !== null"
             >
-              Replay
+              {{ t('triggerPayloadHistory.replay') }}
             </button>
             <span class="expand-chevron" :class="{ expanded: expandedId === event.id }">▾</span>
           </div>
@@ -165,7 +167,7 @@ watch(() => props.triggerId, loadEvents);
           class="confirm-row"
           data-testid="confirm-replay"
         >
-          <span>Re-fire this payload through the trigger?</span>
+          <span>{{ t('triggerPayloadHistory.confirmPrompt') }}</span>
           <div class="confirm-actions">
             <button
               class="btn-secondary"
@@ -173,7 +175,7 @@ watch(() => props.triggerId, loadEvents);
               :disabled="isReplaying"
               @click="cancelReplay"
             >
-              Cancel
+              {{ t('common.cancel') }}
             </button>
             <button
               class="btn-primary"
@@ -181,7 +183,7 @@ watch(() => props.triggerId, loadEvents);
               :disabled="isReplaying"
               @click="confirmReplay(event.id)"
             >
-              {{ isReplaying ? 'Replaying...' : 'Confirm Replay' }}
+              {{ isReplaying ? t('triggerPayloadHistory.replaying') : t('triggerPayloadHistory.confirmReplay') }}
             </button>
           </div>
         </div>
@@ -192,14 +194,14 @@ watch(() => props.triggerId, loadEvents);
           data-testid="event-body"
         >
           <div v-if="event.dispatch_error" class="error-message">
-            <strong>Error:</strong> {{ event.dispatch_error }}
+            <strong>{{ t('triggerPayloadHistory.errorLabel') }}</strong> {{ event.dispatch_error }}
           </div>
           <div class="payload-section">
-            <h4>Payload</h4>
+            <h4>{{ t('triggerPayloadHistory.payload') }}</h4>
             <pre class="payload-json"><code>{{ formatJson(parsedPayload(event.payload)) }}</code></pre>
           </div>
           <div v-if="event.signature_header" class="headers-section">
-            <h4>Signature</h4>
+            <h4>{{ t('triggerPayloadHistory.signature') }}</h4>
             <pre class="payload-json"><code>{{ event.signature_header }}</code></pre>
           </div>
         </div>

@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { Agent, ProjectSkill, Hook, Command, Rule, ProjectInstallation } from '../../services/api';
 import { useToast } from '../../composables/useToast';
+
+const { t } = useI18n();
 
 type LibraryTab = 'agents' | 'skills' | 'hooks' | 'commands' | 'rules';
 
@@ -133,18 +136,18 @@ function toggleSelectAll() {
 async function bulkInstall() {
   const items = currentTabItems.value.filter(i => selectedItems.value.has(i.key) && !isInstalled(i.type, i.id));
   if (items.length === 0) {
-    showToast('All selected items are already installed', 'info');
+    showToast(t('projectLibraryTabs.toast.allInstalled'), 'info');
     return;
   }
   isBulkInstalling.value = true;
   let completed = 0;
-  bulkProgress.value = `Installing 0/${items.length}...`;
+  bulkProgress.value = t('projectLibraryTabs.installingProgress', { completed: 0, total: items.length });
 
   const results = await Promise.allSettled(
     items.map(async (item) => {
       emit('install', item.type, item.id, item.name);
       completed++;
-      bulkProgress.value = `Installing ${completed}/${items.length}...`;
+      bulkProgress.value = t('projectLibraryTabs.installingProgress', { completed, total: items.length });
     })
   );
 
@@ -153,25 +156,25 @@ async function bulkInstall() {
   bulkProgress.value = '';
   selectedItems.value = new Set();
   selectAll.value = false;
-  showToast(`Installed ${succeeded} components`, 'success');
+  showToast(t('projectLibraryTabs.toast.installed', { count: succeeded }), 'success');
   emit('refresh');
 }
 
 async function bulkUninstall() {
   const items = currentTabItems.value.filter(i => selectedItems.value.has(i.key) && isInstalled(i.type, i.id));
   if (items.length === 0) {
-    showToast('No selected items are installed', 'info');
+    showToast(t('projectLibraryTabs.toast.noneInstalled'), 'info');
     return;
   }
   isBulkInstalling.value = true;
   let completed = 0;
-  bulkProgress.value = `Uninstalling 0/${items.length}...`;
+  bulkProgress.value = t('projectLibraryTabs.uninstallingProgress', { completed: 0, total: items.length });
 
   const results = await Promise.allSettled(
     items.map(async (item) => {
       emit('uninstall', item.type, item.id, item.name);
       completed++;
-      bulkProgress.value = `Uninstalling ${completed}/${items.length}...`;
+      bulkProgress.value = t('projectLibraryTabs.uninstallingProgress', { completed, total: items.length });
     })
   );
 
@@ -180,7 +183,7 @@ async function bulkUninstall() {
   bulkProgress.value = '';
   selectedItems.value = new Set();
   selectAll.value = false;
-  showToast(`Uninstalled ${succeeded} components`, 'success');
+  showToast(t('projectLibraryTabs.toast.uninstalled', { count: succeeded }), 'success');
   emit('refresh');
 }
 </script>
@@ -188,10 +191,10 @@ async function bulkUninstall() {
 <template>
   <div class="card library-card">
     <div class="card-header">
-      <h3>Project Library</h3>
+      <h3>{{ t('projectLibraryTabs.title') }}</h3>
       <span class="card-count">
-        {{ allAgents.length }} agents, {{ projectSkills.length }} skills, {{ projectHooks.length }} hooks, {{ projectCommands.length }} commands, {{ projectRules.length }} rules
-        <template v-if="installations.length > 0"> &middot; {{ installations.length }} installed to .claude/</template>
+        {{ t('projectLibraryTabs.countSummary', { agents: allAgents.length, skills: projectSkills.length, hooks: projectHooks.length, commands: projectCommands.length, rules: projectRules.length }) }}
+        <template v-if="installations.length > 0"> &middot; {{ t('projectLibraryTabs.installedTo', { count: installations.length }) }}</template>
       </span>
     </div>
 
@@ -206,7 +209,7 @@ async function bulkUninstall() {
           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
           <circle cx="12" cy="7" r="4"/>
         </svg>
-        Agents ({{ allAgents.length }})
+        {{ t('projectLibraryTabs.tabs.agents', { count: allAgents.length }) }}
       </button>
       <button
         class="tab-btn"
@@ -218,7 +221,7 @@ async function bulkUninstall() {
           <path d="M2 17l10 5 10-5"/>
           <path d="M2 12l10 5 10-5"/>
         </svg>
-        Skills ({{ projectSkills.length }})
+        {{ t('projectLibraryTabs.tabs.skills', { count: projectSkills.length }) }}
       </button>
       <button
         class="tab-btn"
@@ -229,7 +232,7 @@ async function bulkUninstall() {
           <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
           <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
         </svg>
-        Hooks ({{ projectHooks.length }})
+        {{ t('projectLibraryTabs.tabs.hooks', { count: projectHooks.length }) }}
       </button>
       <button
         class="tab-btn"
@@ -240,7 +243,7 @@ async function bulkUninstall() {
           <polyline points="4 17 10 11 4 5"/>
           <line x1="12" y1="19" x2="20" y2="19"/>
         </svg>
-        Commands ({{ projectCommands.length }})
+        {{ t('projectLibraryTabs.tabs.commands', { count: projectCommands.length }) }}
       </button>
       <button
         class="tab-btn"
@@ -251,7 +254,7 @@ async function bulkUninstall() {
           <path d="M9 11l3 3L22 4"/>
           <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
         </svg>
-        Rules ({{ projectRules.length }})
+        {{ t('projectLibraryTabs.tabs.rules', { count: projectRules.length }) }}
       </button>
     </div>
 
@@ -260,7 +263,7 @@ async function bulkUninstall() {
       <div class="tab-header">
         <label class="select-all-label">
           <input type="checkbox" :checked="selectAll" @change="toggleSelectAll" class="bulk-checkbox" />
-          <span class="section-title">Agents</span>
+          <span class="section-title">{{ t('projectLibraryTabs.sections.agents') }}</span>
         </label>
         <div class="tab-header-actions">
           <button
@@ -268,18 +271,18 @@ async function bulkUninstall() {
             class="header-bulk-btn install"
             :disabled="isBulkInstalling"
             @click="bulkInstall"
-          >Install Selected ({{ selectedItems.size }})</button>
+          >{{ t('projectLibraryTabs.installSelectedCount', { count: selectedItems.size }) }}</button>
           <button
             v-if="selectedItems.size > 0"
             class="header-bulk-btn uninstall"
             :disabled="isBulkInstalling"
             @click="bulkUninstall"
-          >Uninstall Selected</button>
+          >{{ t('projectLibraryTabs.uninstallSelected') }}</button>
         </div>
       </div>
 
       <div v-if="allAgents.length === 0" class="empty-state small">
-        <p>No agents available</p>
+        <p>{{ t('projectLibraryTabs.empty.agents') }}</p>
       </div>
 
       <div v-else class="library-section">
@@ -287,7 +290,7 @@ async function bulkUninstall() {
           <svg :class="{ rotated: !collapsedSections.agents }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="9 18 15 12 9 6"/>
           </svg>
-          <span>{{ allAgents.length }} agent{{ allAgents.length !== 1 ? 's' : '' }}</span>
+          <span>{{ t('projectLibraryTabs.agentCount', { count: allAgents.length }) }}</span>
         </button>
         <div v-if="!collapsedSections.agents" class="library-items">
           <div v-for="agent in allAgents" :key="agent.id" class="library-item">
@@ -319,18 +322,18 @@ async function bulkUninstall() {
                 class="install-btn uninstall"
                 :disabled="isInstallingComponent[`agent-${agent.id}`]"
                 @click.stop="emit('uninstall', 'agent', agent.id, agent.name)"
-                title="Remove from .claude/ directory"
+                :title="t('projectLibraryTabs.uninstallTitle')"
               >
-                Uninstall
+                {{ t('projectLibraryTabs.uninstall') }}
               </button>
               <button
                 v-else
                 class="install-btn"
                 :disabled="isInstallingComponent[`agent-${agent.id}`]"
                 @click.stop="emit('install', 'agent', agent.id, agent.name)"
-                title="Install to .claude/ directory"
+                :title="t('projectLibraryTabs.installTitle')"
               >
-                Install
+                {{ t('projectLibraryTabs.install') }}
               </button>
             </div>
           </div>
@@ -343,7 +346,7 @@ async function bulkUninstall() {
       <div class="tab-header">
         <label class="select-all-label">
           <input type="checkbox" :checked="selectAll" @change="toggleSelectAll" class="bulk-checkbox" />
-          <span class="section-title">Project Skills</span>
+          <span class="section-title">{{ t('projectLibraryTabs.sections.skills') }}</span>
         </label>
         <div class="tab-header-actions">
           <button
@@ -351,25 +354,25 @@ async function bulkUninstall() {
             class="header-bulk-btn install"
             :disabled="isBulkInstalling"
             @click="bulkInstall"
-          >Install Selected ({{ selectedItems.size }})</button>
+          >{{ t('projectLibraryTabs.installSelectedCount', { count: selectedItems.size }) }}</button>
           <button
             v-if="selectedItems.size > 0"
             class="header-bulk-btn uninstall"
             :disabled="isBulkInstalling"
             @click="bulkUninstall"
-          >Uninstall Selected</button>
+          >{{ t('projectLibraryTabs.uninstallSelected') }}</button>
           <button class="btn-add-skill" @click="emit('addSkill')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="12" y1="5" x2="12" y2="19"/>
               <line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
-            Add Skill
+            {{ t('projectLibraryTabs.addSkill') }}
           </button>
         </div>
       </div>
 
       <div v-if="projectSkills.length === 0" class="empty-state small">
-        <p>No skills assigned to this project</p>
+        <p>{{ t('projectLibraryTabs.empty.skills') }}</p>
       </div>
 
       <div v-else class="skills-list">
@@ -377,7 +380,7 @@ async function bulkUninstall() {
           <svg :class="{ rotated: !collapsedSections.skills }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="9 18 15 12 9 6"/>
           </svg>
-          <span>{{ projectSkills.length }} skill{{ projectSkills.length !== 1 ? 's' : '' }}</span>
+          <span>{{ t('projectLibraryTabs.skillCount', { count: projectSkills.length }) }}</span>
         </button>
         <template v-if="!collapsedSections.skills">
         <div v-for="skill in projectSkills" :key="skill.id" class="skill-item">
@@ -411,25 +414,25 @@ async function bulkUninstall() {
               class="install-btn uninstall"
               :disabled="isInstallingComponent[`skill-${skill.skill_name}`]"
               @click.stop="emit('uninstall', 'skill', skill.skill_name, skill.skill_name)"
-              title="Remove from .claude/ directory"
+              :title="t('projectLibraryTabs.uninstallTitle')"
             >
-              Uninstall
+              {{ t('projectLibraryTabs.uninstall') }}
             </button>
             <button
               v-else
               class="install-btn"
               :disabled="isInstallingComponent[`skill-${skill.skill_name}`]"
               @click.stop="emit('install', 'skill', skill.skill_name, skill.skill_name)"
-              title="Install to .claude/ directory"
+              :title="t('projectLibraryTabs.installTitle')"
             >
-              Install
+              {{ t('projectLibraryTabs.install') }}
             </button>
           </div>
           <button
             v-if="skill.source === 'manual'"
             class="btn-remove-skill"
             @click="emit('removeSkill', skill)"
-            title="Remove skill"
+            :title="t('projectLibraryTabs.removeSkill')"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"/>
@@ -446,7 +449,7 @@ async function bulkUninstall() {
       <div class="tab-header">
         <label class="select-all-label">
           <input type="checkbox" :checked="selectAll" @change="toggleSelectAll" class="bulk-checkbox" />
-          <span class="section-title">Project Hooks</span>
+          <span class="section-title">{{ t('projectLibraryTabs.sections.hooks') }}</span>
         </label>
         <div class="tab-header-actions">
           <button
@@ -454,18 +457,18 @@ async function bulkUninstall() {
             class="header-bulk-btn install"
             :disabled="isBulkInstalling"
             @click="bulkInstall"
-          >Install Selected ({{ selectedItems.size }})</button>
+          >{{ t('projectLibraryTabs.installSelectedCount', { count: selectedItems.size }) }}</button>
           <button
             v-if="selectedItems.size > 0"
             class="header-bulk-btn uninstall"
             :disabled="isBulkInstalling"
             @click="bulkUninstall"
-          >Uninstall Selected</button>
+          >{{ t('projectLibraryTabs.uninstallSelected') }}</button>
         </div>
       </div>
 
       <div v-if="projectHooks.length === 0 && globalHooks.length === 0" class="empty-state small">
-        <p>No hooks available</p>
+        <p>{{ t('projectLibraryTabs.empty.hooks') }}</p>
       </div>
 
       <template v-else>
@@ -474,7 +477,7 @@ async function bulkUninstall() {
             <svg :class="{ rotated: !collapsedSections.hooks_project }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="9 18 15 12 9 6"/>
             </svg>
-            <span>Included in Project ({{ projectHooks.length }})</span>
+            <span>{{ t('projectLibraryTabs.includedInProject', { count: projectHooks.length }) }}</span>
           </button>
           <div v-if="!collapsedSections.hooks_project" class="library-items">
             <div v-for="hook in projectHooks" :key="hook.id" class="library-item included">
@@ -506,21 +509,21 @@ async function bulkUninstall() {
                   class="install-btn uninstall"
                   :disabled="isInstallingComponent[`hook-${hook.id}`]"
                   @click.stop="emit('uninstall', 'hook', String(hook.id), hook.name)"
-                  title="Remove from .claude/ directory"
+                  :title="t('projectLibraryTabs.uninstallTitle')"
                 >
-                  Uninstall
+                  {{ t('projectLibraryTabs.uninstall') }}
                 </button>
                 <button
                   v-else
                   class="install-btn"
                   :disabled="isInstallingComponent[`hook-${hook.id}`]"
                   @click.stop="emit('install', 'hook', String(hook.id), hook.name)"
-                  title="Install to .claude/ directory"
+                  :title="t('projectLibraryTabs.installTitle')"
                 >
-                  Install
+                  {{ t('projectLibraryTabs.install') }}
                 </button>
               </div>
-              <button class="toggle-btn included" @click="emit('toggleHook', hook)" title="Remove from project">
+              <button class="toggle-btn included" @click="emit('toggleHook', hook)" :title="t('projectLibraryTabs.removeFromProject')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M20 6L9 17l-5-5"/>
                 </svg>
@@ -534,7 +537,7 @@ async function bulkUninstall() {
             <svg :class="{ rotated: !collapsedSections.hooks_global }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="9 18 15 12 9 6"/>
             </svg>
-            <span>Available Global ({{ globalHooks.length }})</span>
+            <span>{{ t('projectLibraryTabs.availableGlobal', { count: globalHooks.length }) }}</span>
           </button>
           <div v-if="!collapsedSections.hooks_global" class="library-items">
             <div v-for="hook in globalHooks" :key="hook.id" class="library-item">
@@ -560,21 +563,21 @@ async function bulkUninstall() {
                   class="install-btn uninstall"
                   :disabled="isInstallingComponent[`hook-${hook.id}`]"
                   @click.stop="emit('uninstall', 'hook', String(hook.id), hook.name)"
-                  title="Remove from .claude/ directory"
+                  :title="t('projectLibraryTabs.uninstallTitle')"
                 >
-                  Uninstall
+                  {{ t('projectLibraryTabs.uninstall') }}
                 </button>
                 <button
                   v-else
                   class="install-btn"
                   :disabled="isInstallingComponent[`hook-${hook.id}`]"
                   @click.stop="emit('install', 'hook', String(hook.id), hook.name)"
-                  title="Install to .claude/ directory"
+                  :title="t('projectLibraryTabs.installTitle')"
                 >
-                  Install
+                  {{ t('projectLibraryTabs.install') }}
                 </button>
               </div>
-              <button class="toggle-btn" @click="emit('toggleHook', hook)" title="Include to Project">
+              <button class="toggle-btn" @click="emit('toggleHook', hook)" :title="t('projectLibraryTabs.includeToProject')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="12" y1="5" x2="12" y2="19"/>
                   <line x1="5" y1="12" x2="19" y2="12"/>
@@ -591,7 +594,7 @@ async function bulkUninstall() {
       <div class="tab-header">
         <label class="select-all-label">
           <input type="checkbox" :checked="selectAll" @change="toggleSelectAll" class="bulk-checkbox" />
-          <span class="section-title">Project Commands</span>
+          <span class="section-title">{{ t('projectLibraryTabs.sections.commands') }}</span>
         </label>
         <div class="tab-header-actions">
           <button
@@ -599,18 +602,18 @@ async function bulkUninstall() {
             class="header-bulk-btn install"
             :disabled="isBulkInstalling"
             @click="bulkInstall"
-          >Install Selected ({{ selectedItems.size }})</button>
+          >{{ t('projectLibraryTabs.installSelectedCount', { count: selectedItems.size }) }}</button>
           <button
             v-if="selectedItems.size > 0"
             class="header-bulk-btn uninstall"
             :disabled="isBulkInstalling"
             @click="bulkUninstall"
-          >Uninstall Selected</button>
+          >{{ t('projectLibraryTabs.uninstallSelected') }}</button>
         </div>
       </div>
 
       <div v-if="projectCommands.length === 0 && globalCommands.length === 0" class="empty-state small">
-        <p>No commands available</p>
+        <p>{{ t('projectLibraryTabs.empty.commands') }}</p>
       </div>
 
       <template v-else>
@@ -619,7 +622,7 @@ async function bulkUninstall() {
             <svg :class="{ rotated: !collapsedSections.commands_project }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="9 18 15 12 9 6"/>
             </svg>
-            <span>Included in Project ({{ projectCommands.length }})</span>
+            <span>{{ t('projectLibraryTabs.includedInProject', { count: projectCommands.length }) }}</span>
           </button>
           <div v-if="!collapsedSections.commands_project" class="library-items">
             <div v-for="command in projectCommands" :key="command.id" class="library-item included">
@@ -651,21 +654,21 @@ async function bulkUninstall() {
                   class="install-btn uninstall"
                   :disabled="isInstallingComponent[`command-${command.id}`]"
                   @click.stop="emit('uninstall', 'command', String(command.id), command.name)"
-                  title="Remove from .claude/ directory"
+                  :title="t('projectLibraryTabs.uninstallTitle')"
                 >
-                  Uninstall
+                  {{ t('projectLibraryTabs.uninstall') }}
                 </button>
                 <button
                   v-else
                   class="install-btn"
                   :disabled="isInstallingComponent[`command-${command.id}`]"
                   @click.stop="emit('install', 'command', String(command.id), command.name)"
-                  title="Install to .claude/ directory"
+                  :title="t('projectLibraryTabs.installTitle')"
                 >
-                  Install
+                  {{ t('projectLibraryTabs.install') }}
                 </button>
               </div>
-              <button class="toggle-btn included" @click="emit('toggleCommand', command)" title="Remove from project">
+              <button class="toggle-btn included" @click="emit('toggleCommand', command)" :title="t('projectLibraryTabs.removeFromProject')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M20 6L9 17l-5-5"/>
                 </svg>
@@ -679,7 +682,7 @@ async function bulkUninstall() {
             <svg :class="{ rotated: !collapsedSections.commands_global }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="9 18 15 12 9 6"/>
             </svg>
-            <span>Available Global ({{ globalCommands.length }})</span>
+            <span>{{ t('projectLibraryTabs.availableGlobal', { count: globalCommands.length }) }}</span>
           </button>
           <div v-if="!collapsedSections.commands_global" class="library-items">
             <div v-for="command in globalCommands" :key="command.id" class="library-item">
@@ -705,21 +708,21 @@ async function bulkUninstall() {
                   class="install-btn uninstall"
                   :disabled="isInstallingComponent[`command-${command.id}`]"
                   @click.stop="emit('uninstall', 'command', String(command.id), command.name)"
-                  title="Remove from .claude/ directory"
+                  :title="t('projectLibraryTabs.uninstallTitle')"
                 >
-                  Uninstall
+                  {{ t('projectLibraryTabs.uninstall') }}
                 </button>
                 <button
                   v-else
                   class="install-btn"
                   :disabled="isInstallingComponent[`command-${command.id}`]"
                   @click.stop="emit('install', 'command', String(command.id), command.name)"
-                  title="Install to .claude/ directory"
+                  :title="t('projectLibraryTabs.installTitle')"
                 >
-                  Install
+                  {{ t('projectLibraryTabs.install') }}
                 </button>
               </div>
-              <button class="toggle-btn" @click="emit('toggleCommand', command)" title="Include to Project">
+              <button class="toggle-btn" @click="emit('toggleCommand', command)" :title="t('projectLibraryTabs.includeToProject')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="12" y1="5" x2="12" y2="19"/>
                   <line x1="5" y1="12" x2="19" y2="12"/>
@@ -736,7 +739,7 @@ async function bulkUninstall() {
       <div class="tab-header">
         <label class="select-all-label">
           <input type="checkbox" :checked="selectAll" @change="toggleSelectAll" class="bulk-checkbox" />
-          <span class="section-title">Project Rules</span>
+          <span class="section-title">{{ t('projectLibraryTabs.sections.rules') }}</span>
         </label>
         <div class="tab-header-actions">
           <button
@@ -744,18 +747,18 @@ async function bulkUninstall() {
             class="header-bulk-btn install"
             :disabled="isBulkInstalling"
             @click="bulkInstall"
-          >Install Selected ({{ selectedItems.size }})</button>
+          >{{ t('projectLibraryTabs.installSelectedCount', { count: selectedItems.size }) }}</button>
           <button
             v-if="selectedItems.size > 0"
             class="header-bulk-btn uninstall"
             :disabled="isBulkInstalling"
             @click="bulkUninstall"
-          >Uninstall Selected</button>
+          >{{ t('projectLibraryTabs.uninstallSelected') }}</button>
         </div>
       </div>
 
       <div v-if="projectRules.length === 0 && globalRules.length === 0" class="empty-state small">
-        <p>No rules available</p>
+        <p>{{ t('projectLibraryTabs.empty.rules') }}</p>
       </div>
 
       <template v-else>
@@ -764,7 +767,7 @@ async function bulkUninstall() {
             <svg :class="{ rotated: !collapsedSections.rules_project }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="9 18 15 12 9 6"/>
             </svg>
-            <span>Included in Project ({{ projectRules.length }})</span>
+            <span>{{ t('projectLibraryTabs.includedInProject', { count: projectRules.length }) }}</span>
           </button>
           <div v-if="!collapsedSections.rules_project" class="library-items">
             <div v-for="rule in projectRules" :key="rule.id" class="library-item included">
@@ -796,21 +799,21 @@ async function bulkUninstall() {
                   class="install-btn uninstall"
                   :disabled="isInstallingComponent[`rule-${rule.id}`]"
                   @click.stop="emit('uninstall', 'rule', String(rule.id), rule.name)"
-                  title="Remove from .claude/ directory"
+                  :title="t('projectLibraryTabs.uninstallTitle')"
                 >
-                  Uninstall
+                  {{ t('projectLibraryTabs.uninstall') }}
                 </button>
                 <button
                   v-else
                   class="install-btn"
                   :disabled="isInstallingComponent[`rule-${rule.id}`]"
                   @click.stop="emit('install', 'rule', String(rule.id), rule.name)"
-                  title="Install to .claude/ directory"
+                  :title="t('projectLibraryTabs.installTitle')"
                 >
-                  Install
+                  {{ t('projectLibraryTabs.install') }}
                 </button>
               </div>
-              <button class="toggle-btn included" @click="emit('toggleRule', rule)" title="Remove from project">
+              <button class="toggle-btn included" @click="emit('toggleRule', rule)" :title="t('projectLibraryTabs.removeFromProject')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M20 6L9 17l-5-5"/>
                 </svg>
@@ -824,7 +827,7 @@ async function bulkUninstall() {
             <svg :class="{ rotated: !collapsedSections.rules_global }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="9 18 15 12 9 6"/>
             </svg>
-            <span>Available Global ({{ globalRules.length }})</span>
+            <span>{{ t('projectLibraryTabs.availableGlobal', { count: globalRules.length }) }}</span>
           </button>
           <div v-if="!collapsedSections.rules_global" class="library-items">
             <div v-for="rule in globalRules" :key="rule.id" class="library-item">
@@ -850,21 +853,21 @@ async function bulkUninstall() {
                   class="install-btn uninstall"
                   :disabled="isInstallingComponent[`rule-${rule.id}`]"
                   @click.stop="emit('uninstall', 'rule', String(rule.id), rule.name)"
-                  title="Remove from .claude/ directory"
+                  :title="t('projectLibraryTabs.uninstallTitle')"
                 >
-                  Uninstall
+                  {{ t('projectLibraryTabs.uninstall') }}
                 </button>
                 <button
                   v-else
                   class="install-btn"
                   :disabled="isInstallingComponent[`rule-${rule.id}`]"
                   @click.stop="emit('install', 'rule', String(rule.id), rule.name)"
-                  title="Install to .claude/ directory"
+                  :title="t('projectLibraryTabs.installTitle')"
                 >
-                  Install
+                  {{ t('projectLibraryTabs.install') }}
                 </button>
               </div>
-              <button class="toggle-btn" @click="emit('toggleRule', rule)" title="Include to Project">
+              <button class="toggle-btn" @click="emit('toggleRule', rule)" :title="t('projectLibraryTabs.includeToProject')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="12" y1="5" x2="12" y2="19"/>
                   <line x1="5" y1="12" x2="19" y2="12"/>
@@ -878,7 +881,7 @@ async function bulkUninstall() {
 
     <!-- Floating Bulk Action Bar -->
     <div v-if="selectedItems.size > 0" class="bulk-action-bar">
-      <span class="bulk-count">{{ selectedItems.size }} selected</span>
+      <span class="bulk-count">{{ t('projectLibraryTabs.selectedCount', { count: selectedItems.size }) }}</span>
       <span v-if="bulkProgress" class="bulk-progress">{{ bulkProgress }}</span>
       <div class="bulk-buttons">
         <button
@@ -886,14 +889,14 @@ async function bulkUninstall() {
           :disabled="isBulkInstalling"
           @click="bulkInstall"
         >
-          Install Selected
+          {{ t('projectLibraryTabs.installSelected') }}
         </button>
         <button
           class="bulk-btn uninstall"
           :disabled="isBulkInstalling"
           @click="bulkUninstall"
         >
-          Uninstall Selected
+          {{ t('projectLibraryTabs.uninstallSelected') }}
         </button>
       </div>
     </div>

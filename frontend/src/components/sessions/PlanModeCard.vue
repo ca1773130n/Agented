@@ -13,8 +13,11 @@
  * regular assistant prose.
  */
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   plan: string;
@@ -37,7 +40,7 @@ const planHtml = computed(() =>
         <path d="M9 11l3 3L22 4" />
         <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
       </svg>
-      <span>Claude has a plan</span>
+      <span>{{ t('planModeCard.header') }}</span>
     </div>
 
     <div class="pm-plan-body" v-html="planHtml" />
@@ -48,14 +51,14 @@ const planHtml = computed(() =>
         class="pm-btn pm-btn-secondary"
         @click="emit('keepPlanning')"
       >
-        Keep planning
+        {{ t('planModeCard.keepPlanning') }}
       </button>
       <button
         type="button"
         class="pm-btn pm-btn-primary"
         @click="emit('approve')"
       >
-        Approve & execute
+        {{ t('planModeCard.approveExecute') }}
       </button>
     </div>
   </div>

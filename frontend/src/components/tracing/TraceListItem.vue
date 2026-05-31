@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import type { Trace } from '../../services/api/tracing';
+
+const { t } = useI18n();
 
 defineProps<{ trace: Trace }>();
 </script>
@@ -18,7 +21,7 @@ defineProps<{ trace: Trace }>();
     >{{ trace.status }}</span>
     <span class="trace-started">{{ trace.started_at }}</span>
     <span class="trace-duration" data-testid="trace-duration">
-      {{ trace.duration_ms != null ? `${trace.duration_ms}ms` : 'running…' }}
+      {{ trace.duration_ms != null ? `${trace.duration_ms}ms` : t('traceListItem.running') }}
     </span>
   </RouterLink>
 </template>

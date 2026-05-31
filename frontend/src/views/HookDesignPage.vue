@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import type { HookEvent } from '../services/api';
 import { hookApi, hookConversationApi, ApiError } from '../services/api';
 import { useConversation, createConfigParser } from '../composables/useConversation';
@@ -15,6 +16,7 @@ import { useWebMcpTool } from '../composables/useWebMcpTool';
 
 const router = useRouter();
 const route = useRoute();
+const { t } = useI18n();
 
 const hookId = computed(() => route.params.hookId ? Number(route.params.hookId) : null);
 
@@ -63,17 +65,17 @@ const HOOK_EVENTS: HookEvent[] = [
   'Notification',
 ];
 
-const eventDescriptions: Record<HookEvent, string> = {
-  PreToolUse: 'Triggered before any tool is used. Use to validate or modify tool inputs.',
-  PostToolUse: 'Triggered after a tool completes. Use to process or validate outputs.',
-  Stop: 'Triggered when the agent stops. Use for cleanup or final actions.',
-  SubagentStop: 'Triggered when a subagent completes. Use to handle subagent results.',
-  SessionStart: 'Triggered at session start. Use for initialization.',
-  SessionEnd: 'Triggered at session end. Use for cleanup or summaries.',
-  UserPromptSubmit: 'Triggered when user submits a prompt. Use to preprocess input.',
-  PreCompact: 'Triggered before context compaction. Use to preserve important context.',
-  Notification: 'Triggered for notifications. Use to handle alerts or messages.',
-};
+const eventDescriptions = computed<Record<HookEvent, string>>(() => ({
+  PreToolUse: t('hookDesign.eventDesc.PreToolUse'),
+  PostToolUse: t('hookDesign.eventDesc.PostToolUse'),
+  Stop: t('hookDesign.eventDesc.Stop'),
+  SubagentStop: t('hookDesign.eventDesc.SubagentStop'),
+  SessionStart: t('hookDesign.eventDesc.SessionStart'),
+  SessionEnd: t('hookDesign.eventDesc.SessionEnd'),
+  UserPromptSubmit: t('hookDesign.eventDesc.UserPromptSubmit'),
+  PreCompact: t('hookDesign.eventDesc.PreCompact'),
+  Notification: t('hookDesign.eventDesc.Notification'),
+}));
 
 async function loadExistingHook() {
   if (!hookId.value) return;
@@ -87,7 +89,7 @@ async function loadExistingHook() {
     formData.value.enabled = !!hook.enabled;
     originalFormData.value = JSON.stringify(formData.value);
   } catch (e) {
-    showToast('Failed to load hook for editing', 'error');
+    showToast(t('hookDesign.toast.loadFailed'), 'error');
   } finally {
     isLoadingEdit.value = false;
   }
@@ -95,7 +97,7 @@ async function loadExistingHook() {
 
 async function createHookViaForm() {
   if (!formData.value.name.trim()) {
-    showToast('Hook name is required', 'error');
+    showToast(t('hookDesign.toast.nameRequired'), 'error');
     return;
   }
 
@@ -110,7 +112,7 @@ async function createHookViaForm() {
         enabled: formData.value.enabled,
       });
       originalFormData.value = JSON.stringify(formData.value);
-      showToast(`Hook "${formData.value.name}" updated`, 'success');
+      showToast(t('hookDesign.toast.updated', { name: formData.value.name }), 'success');
       router.push({ name: 'hooks' });
     } else {
       const result = await hookApi.create({
@@ -121,14 +123,14 @@ async function createHookViaForm() {
         enabled: formData.value.enabled,
       });
       createdHookId.value = result.hook.id;
-      showToast(`Hook "${formData.value.name}" created`, 'success');
+      showToast(t('hookDesign.toast.created', { name: formData.value.name }), 'success');
       showExportModal.value = true;
     }
   } catch (e) {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast(isEditMode.value ? 'Failed to update hook' : 'Failed to create hook', 'error');
+      showToast(isEditMode.value ? t('hookDesign.toast.updateFailed') : t('hookDesign.toast.createFailed'), 'error');
     }
   } finally {
     isCreating.value = false;
@@ -152,7 +154,7 @@ function exportToLibrary() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showToast('Hook exported', 'success');
+  showToast(t('hookDesign.toast.exported'), 'success');
 }
 
 function handleFormDone() {
@@ -230,7 +232,7 @@ const HOOK_ICON_PATHS = [
 async function finalizeHook() {
   const result = await conversation.finalize();
   if (result) {
-    showToast(`Hook "${(result.hook as { name: string }).name}" created successfully!`, 'success');
+    showToast(t('hookDesign.toast.createdSuccess', { name: (result.hook as { name: string }).name }), 'success');
     router.push({ name: 'hooks' });
   }
 }
@@ -238,8 +240,8 @@ async function finalizeHook() {
 // v0.7.82 — tooltip mirrors the visible hint when disabled.
 const finalizeTooltip = computed(() =>
   conversation.canFinalize.value
-    ? 'Create the hook'
-    : "Keep chatting — Claude needs more details before the hook can be created. Tell it which event to hook (PreToolUse, PostToolUse, …), the matcher pattern, and the command to run.",
+    ? t('hookDesign.finalize.ready')
+    : t('hookDesign.finalize.needMore'),
 );
 
 // v0.7.90 — extracted so the initial-mount path (now that chat is
@@ -290,9 +292,9 @@ watch(designMode, (newMode) => {
       <DesignModeToggle v-model="designMode" />
 
       <div class="header-title">
-        <h1>{{ isEditMode ? 'Edit Hook' : 'Design a Hook' }}</h1>
-        <p v-if="designMode === 'form'">{{ isEditMode ? 'Edit an existing hook' : 'Create a new hook with a form' }}</p>
-        <p v-else>Chat with Claude to design your hook</p>
+        <h1>{{ isEditMode ? t('hookDesign.editHook') : t('hookDesign.designHook') }}</h1>
+        <p v-if="designMode === 'form'">{{ isEditMode ? t('hookDesign.editExisting') : t('hookDesign.createWithForm') }}</p>
+        <p v-else>{{ t('hookDesign.chatToDesign') }}</p>
       </div>
 
       <!-- v0.7.82 — always-visible disabled Create button in chat
@@ -308,15 +310,14 @@ watch(designMode, (newMode) => {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M20 6L9 17l-5-5"/>
           </svg>
-          {{ conversation.isFinalizing.value ? 'Creating...' : 'Create Hook' }}
+          {{ conversation.isFinalizing.value ? t('hookDesign.creating') : t('hookDesign.createHook') }}
         </button>
         <p
           v-if="!conversation.canFinalize.value"
           id="finalize-hint"
           class="finalize-hint"
         >
-          Keep chatting — once Claude has the hook event, matcher,
-          and command, this button activates.
+          {{ t('hookDesign.finalize.hint') }}
         </p>
       </div>
     </div>
@@ -327,10 +328,10 @@ watch(designMode, (newMode) => {
     <div v-if="designMode === 'form'" class="design-content">
       <div class="design-form">
         <div class="form-section">
-          <h3>Hook Configuration</h3>
+          <h3>{{ t('hookDesign.hookConfiguration') }}</h3>
 
           <div class="form-group">
-            <label for="hook-name">Name *</label>
+            <label for="hook-name">{{ t('hookDesign.nameLabel') }}</label>
             <input
               id="hook-name"
               v-model="formData.name"
@@ -340,7 +341,7 @@ watch(designMode, (newMode) => {
           </div>
 
           <div class="form-group">
-            <label for="hook-event">Event Type *</label>
+            <label for="hook-event">{{ t('hookDesign.eventTypeLabel') }}</label>
             <select id="hook-event" v-model="formData.event">
               <option v-for="evt in HOOK_EVENTS" :key="evt" :value="evt">
                 {{ evt }}
@@ -350,60 +351,49 @@ watch(designMode, (newMode) => {
           </div>
 
           <div class="form-group">
-            <label for="hook-description">Description</label>
+            <label for="hook-description">{{ t('hookDesign.descriptionLabel') }}</label>
             <input
               id="hook-description"
               v-model="formData.description"
               type="text"
-              placeholder="What does this hook do?"
+              :placeholder="t('hookDesign.descriptionPlaceholder')"
             />
           </div>
 
           <div class="form-group">
-            <label for="hook-content">Hook Content (Markdown)</label>
+            <label for="hook-content">{{ t('hookDesign.contentLabel') }}</label>
             <textarea
               id="hook-content"
               v-model="formData.content"
               rows="12"
-              placeholder="# Hook Instructions
-
-Describe what this hook should do when triggered...
-
-## Behavior
-- Validate inputs
-- Check conditions
-- Provide feedback
-
-## Example
-When the user tries to...
-"
+              :placeholder="t('hookDesign.contentPlaceholder')"
             ></textarea>
           </div>
 
           <div class="form-group checkbox-group">
             <label>
               <input type="checkbox" v-model="formData.enabled" />
-              Enabled
+              {{ t('hookDesign.enabled') }}
             </label>
           </div>
         </div>
 
         <div class="form-actions">
-          <button class="btn" @click="router.push({ name: 'hooks' })">Cancel</button>
+          <button class="btn" @click="router.push({ name: 'hooks' })">{{ t('common.cancel') }}</button>
           <button class="btn btn-primary" @click="createHookViaForm" :disabled="isCreating">
-            {{ isCreating ? (isEditMode ? 'Updating...' : 'Creating...') : (isEditMode ? 'Update Hook' : 'Create Hook') }}
+            {{ isCreating ? (isEditMode ? t('hookDesign.updating') : t('hookDesign.creating')) : (isEditMode ? t('hookDesign.updateHook') : t('hookDesign.createHook')) }}
           </button>
         </div>
       </div>
 
       <div class="design-preview">
-        <h3>Preview</h3>
+        <h3>{{ t('hookDesign.preview') }}</h3>
         <div class="preview-card">
           <div class="preview-header-row">
             <span class="preview-name">{{ formData.name || 'hook-name' }}</span>
             <span class="preview-event" :class="formData.event.toLowerCase()">{{ formData.event }}</span>
           </div>
-          <p class="preview-description">{{ formData.description || 'No description' }}</p>
+          <p class="preview-description">{{ formData.description || t('hookDesign.noDescription') }}</p>
           <div class="preview-content-box" v-if="formData.content">
             <pre>{{ formData.content.slice(0, 200) }}{{ formData.content.length > 200 ? '...' : '' }}</pre>
           </div>
@@ -430,10 +420,10 @@ When the user tries to...
         :selected-account-id="conversation.selectedAccountId.value"
         :selected-model="conversation.selectedModel.value"
         :assistant-icon-paths="HOOK_ICON_PATHS"
-        input-placeholder="Describe your hook or answer Claude's questions..."
+        :input-placeholder="t('hookDesign.chat.inputPlaceholder')"
         entity-label="hook"
-        banner-title="Hook Ready to Create!"
-        banner-button-label="Create Hook Now"
+        :banner-title="t('hookDesign.chat.bannerTitle')"
+        :banner-button-label="t('hookDesign.chat.bannerButton')"
         :detected-entity-name="conversation.detectedConfig.value?.name"
         @update:input-message="conversation.inputMessage.value = $event"
         @update:selected-backend="conversation.setBackend($event)"
@@ -447,15 +437,15 @@ When the user tries to...
       <ConfigPreviewSidebar
         :has-config="!!conversation.detectedConfig.value"
         :empty-icon-paths="HOOK_ICON_PATHS"
-        empty-text="Hook configuration will appear here as you chat with Claude"
+        :empty-text="t('hookDesign.chat.emptyText')"
       >
         <template v-if="conversation.detectedConfig.value">
           <div class="config-field">
-            <div class="config-label">Name</div>
+            <div class="config-label">{{ t('hookDesign.config.name') }}</div>
             <div class="config-value">{{ conversation.detectedConfig.value.name }}</div>
           </div>
           <div class="config-field">
-            <div class="config-label">Event</div>
+            <div class="config-label">{{ t('hookDesign.config.event') }}</div>
             <div class="config-value">
               <span class="event-badge" :style="{ background: (eventBadgeColor[conversation.detectedConfig.value.event] || '#8855ff') + '26', color: eventBadgeColor[conversation.detectedConfig.value.event] || '#8855ff' }">
                 {{ conversation.detectedConfig.value.event }}
@@ -463,18 +453,18 @@ When the user tries to...
             </div>
           </div>
           <div class="config-field" v-if="conversation.detectedConfig.value.description">
-            <div class="config-label">Description</div>
+            <div class="config-label">{{ t('hookDesign.config.description') }}</div>
             <div class="config-value config-description">{{ conversation.detectedConfig.value.description }}</div>
           </div>
           <div class="config-field" v-if="conversation.detectedConfig.value.content">
-            <div class="config-label">Content</div>
+            <div class="config-label">{{ t('hookDesign.config.content') }}</div>
             <pre class="config-code">{{ conversation.detectedConfig.value.content.slice(0, 300) }}{{ conversation.detectedConfig.value.content.length > 300 ? '...' : '' }}</pre>
           </div>
           <div class="config-field">
-            <div class="config-label">Enabled</div>
+            <div class="config-label">{{ t('hookDesign.config.enabled') }}</div>
             <div class="config-value">
               <span :class="['enabled-badge', conversation.detectedConfig.value.enabled ? 'yes' : 'no']">
-                {{ conversation.detectedConfig.value.enabled ? 'Yes' : 'No' }}
+                {{ conversation.detectedConfig.value.enabled ? t('common.yes') : t('common.no') }}
               </span>
             </div>
           </div>
@@ -491,17 +481,21 @@ When the user tries to...
               <path d="M20 6L9 17l-5-5"/>
             </svg>
           </div>
-          <h2 id="modal-title-hook-created">Hook Created!</h2>
-          <p>Your hook "<strong>{{ formData.name }}</strong>" has been created successfully.</p>
+          <h2 id="modal-title-hook-created">{{ t('hookDesign.modal.title') }}</h2>
+          <p>
+            <i18n-t keypath="hookDesign.modal.body" tag="span">
+              <template #name><strong>{{ formData.name }}</strong></template>
+            </i18n-t>
+          </p>
           <div class="modal-actions">
             <button class="btn" @click="exportToLibrary">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
               </svg>
-              Export to Library
+              {{ t('hookDesign.modal.exportToLibrary') }}
             </button>
-            <button class="btn btn-secondary" @click="createAnother">Create Another</button>
-            <button class="btn btn-primary" @click="handleFormDone">Done</button>
+            <button class="btn btn-secondary" @click="createAnother">{{ t('hookDesign.modal.createAnother') }}</button>
+            <button class="btn btn-primary" @click="handleFormDone">{{ t('common.done') }}</button>
           </div>
         </div>
       </div>

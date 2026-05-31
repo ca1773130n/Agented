@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { TopologyType } from '../../services/api'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   inferredTopology: TopologyType | null
@@ -34,38 +37,38 @@ function topologyColorClass(t: string | null): string {
 <template>
   <div class="canvas-toolbar">
     <div class="toolbar-left">
-      <span class="toolbar-label">Visual Builder</span>
+      <span class="toolbar-label">{{ t('canvasToolbar.visualBuilder') }}</span>
       <select
         class="topology-select"
         :class="topologyColorClass(displayTopology)"
         :value="displayTopology || ''"
         @change="$emit('set-topology', ($event.target as HTMLSelectElement).value || null)"
       >
-        <option value="">No Topology</option>
-        <option value="sequential">Sequential Pipeline</option>
-        <option value="parallel">Parallel Fan-out</option>
-        <option value="coordinator">Coordinator/Dispatcher</option>
-        <option value="generator_critic">Generator/Critic</option>
-        <option value="hierarchical">Hierarchical</option>
-        <option value="human_in_loop">Human-in-Loop</option>
-        <option value="composite">Composite</option>
+        <option value="">{{ t('canvasToolbar.topology.none') }}</option>
+        <option value="sequential">{{ t('canvasToolbar.topology.sequential') }}</option>
+        <option value="parallel">{{ t('canvasToolbar.topology.parallel') }}</option>
+        <option value="coordinator">{{ t('canvasToolbar.topology.coordinator') }}</option>
+        <option value="generator_critic">{{ t('canvasToolbar.topology.generatorCritic') }}</option>
+        <option value="hierarchical">{{ t('canvasToolbar.topology.hierarchical') }}</option>
+        <option value="human_in_loop">{{ t('canvasToolbar.topology.humanInLoop') }}</option>
+        <option value="composite">{{ t('canvasToolbar.topology.composite') }}</option>
       </select>
     </div>
     <div class="toolbar-actions">
       <button
         class="toolbar-btn"
-        title="Delete selected nodes/edges"
+        :title="t('canvasToolbar.deleteSelectedTitle')"
         :disabled="!hasSelection"
         @click="$emit('delete-selected')"
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M2 4h12M5.333 4V2.667a1.333 1.333 0 011.334-1.334h2.666a1.333 1.333 0 011.334 1.334V4M12.667 4v9.333a1.333 1.333 0 01-1.334 1.334H4.667a1.333 1.333 0 01-1.334-1.334V4" />
         </svg>
-        Delete
+        {{ t('common.delete') }}
       </button>
       <button
         class="toolbar-btn"
-        title="Clear all nodes and edges"
+        :title="t('canvasToolbar.clearAllTitle')"
         :disabled="!nodeCount"
         @click="$emit('clear-all')"
       >
@@ -73,10 +76,10 @@ function topologyColorClass(t: string | null): string {
           <line x1="12" y1="4" x2="4" y2="12" />
           <line x1="4" y1="4" x2="12" y2="12" />
         </svg>
-        Clear All
+        {{ t('canvasToolbar.clearAll') }}
       </button>
       <div class="toolbar-separator"></div>
-      <button class="toolbar-btn" title="Zoom in" @click="$emit('zoom-in')">
+      <button class="toolbar-btn" :title="t('canvasToolbar.zoomIn')" @click="$emit('zoom-in')">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="7" cy="7" r="5" />
           <line x1="12" y1="12" x2="14.5" y2="14.5" />
@@ -84,7 +87,7 @@ function topologyColorClass(t: string | null): string {
           <line x1="7" y1="5" x2="7" y2="9" />
         </svg>
       </button>
-      <button class="toolbar-btn" title="Zoom out" @click="$emit('zoom-out')">
+      <button class="toolbar-btn" :title="t('canvasToolbar.zoomOut')" @click="$emit('zoom-out')">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="7" cy="7" r="5" />
           <line x1="12" y1="12" x2="14.5" y2="14.5" />
@@ -92,32 +95,32 @@ function topologyColorClass(t: string | null): string {
         </svg>
       </button>
       <div class="toolbar-separator"></div>
-      <button class="toolbar-btn" title="Auto-arrange nodes" @click="$emit('auto-layout')">
+      <button class="toolbar-btn" :title="t('canvasToolbar.autoLayoutTitle')" @click="$emit('auto-layout')">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <rect x="1" y="1" width="5" height="5" rx="1" />
           <rect x="10" y="1" width="5" height="5" rx="1" />
           <rect x="1" y="10" width="5" height="5" rx="1" />
           <rect x="10" y="10" width="5" height="5" rx="1" />
         </svg>
-        Auto Layout
+        {{ t('canvasToolbar.autoLayout') }}
       </button>
-      <button class="toolbar-btn" title="Fit all nodes in view" @click="$emit('fit-view')">
+      <button class="toolbar-btn" :title="t('canvasToolbar.fitViewTitle')" @click="$emit('fit-view')">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M1 5V2a1 1 0 011-1h3" />
           <path d="M11 1h3a1 1 0 011 1v3" />
           <path d="M15 11v3a1 1 0 01-1 1h-3" />
           <path d="M5 15H2a1 1 0 01-1-1v-3" />
         </svg>
-        Fit View
+        {{ t('canvasToolbar.fitView') }}
       </button>
-      <button class="toolbar-btn" title="Export canvas as PNG" @click="$emit('export-png')">
+      <button class="toolbar-btn" :title="t('canvasToolbar.exportPngTitle')" @click="$emit('export-png')">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <rect x="1" y="1" width="14" height="11" rx="1"/>
           <path d="M1 9l3-3 3 3 3-4 4 5"/>
         </svg>
         PNG
       </button>
-      <button class="toolbar-btn" title="Export topology as JSON" @click="$emit('export-json')">
+      <button class="toolbar-btn" :title="t('canvasToolbar.exportJsonTitle')" @click="$emit('export-json')">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M4 2H2a1 1 0 00-1 1v10a1 1 0 001 1h2"/>
           <path d="M12 2h2a1 1 0 011 1v10a1 1 0 01-1 1h-2"/>
@@ -126,13 +129,13 @@ function topologyColorClass(t: string | null): string {
         JSON
       </button>
       <div class="toolbar-separator"></div>
-      <button class="toolbar-btn primary" title="Save canvas state" @click="$emit('save')">
+      <button class="toolbar-btn primary" :title="t('canvasToolbar.saveTitle')" @click="$emit('save')">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M13 15H3a1 1 0 01-1-1V2a1 1 0 011-1h7l4 4v9a1 1 0 01-1 1z" />
           <path d="M11 15V9H5v6" />
           <path d="M5 1v4h4" />
         </svg>
-        Save
+        {{ t('common.save') }}
       </button>
     </div>
   </div>

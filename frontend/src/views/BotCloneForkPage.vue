@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import { triggerApi, teamApi } from '../services/api';
 import type { Trigger, Team } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 
+const { t } = useI18n();
 const router = useRouter();
 const showToast = useToast();
 
@@ -61,21 +63,21 @@ async function loadData() {
     triggers.value = triggersRes.triggers ?? [];
     teams.value = teamsRes.teams ?? [];
   } catch (err: unknown) {
-    loadError.value = err instanceof Error ? err.message : 'Failed to load data';
+    loadError.value = err instanceof Error ? err.message : t('botCloneFork.loadFailed');
   } finally {
     isLoading.value = false;
   }
 }
 
-function selectTrigger(t: Trigger) {
-  selectedTriggerId.value = t.id;
-  cloneConfig.value.name = `${t.name} (Copy)`;
-  cloneConfig.value.teamId = t.team_id ?? '';
+function selectTrigger(trigger: Trigger) {
+  selectedTriggerId.value = trigger.id;
+  cloneConfig.value.name = t('botCloneFork.copyName', { name: trigger.name });
+  cloneConfig.value.teamId = trigger.team_id ?? '';
 }
 
 async function handleClone() {
   if (!selectedTrigger.value || !cloneConfig.value.name.trim()) {
-    showToast('Bot name is required', 'info');
+    showToast(t('botCloneFork.toast.nameRequired'), 'info');
     return;
   }
   cloningId.value = selectedTriggerId.value;
@@ -120,14 +122,14 @@ async function handleClone() {
     }
 
     const res = await triggerApi.create(createData);
-    showToast(`"${cloneConfig.value.name}" created successfully`, 'success');
+    showToast(t('botCloneFork.toast.created', { name: cloneConfig.value.name }), 'success');
 
     // Navigate to the new trigger. The actual route is ``trigger-dashboard``
     // with a ``triggerId`` param; the previous ``trigger-detail`` ref
     // dropped users onto the not-found page after a successful clone.
     router.push({ name: 'trigger-dashboard', params: { triggerId: res.trigger_id } });
   } catch (err: unknown) {
-    showToast(err instanceof Error ? err.message : 'Clone failed', 'error');
+    showToast(err instanceof Error ? err.message : t('botCloneFork.toast.cloneFailed'), 'error');
   } finally {
     cloningId.value = null;
   }
@@ -140,20 +142,20 @@ onMounted(loadData);
   <div class="bot-clone-fork-page">
 
     <PageHeader
-      title="Bot Clone & Fork"
-      subtitle="Duplicate any bot as a starting point for a new one — optionally into a different team's workspace."
+      :title="t('botCloneFork.title')"
+      :subtitle="t('botCloneFork.subtitle')"
     />
 
     <!-- Loading state -->
     <div v-if="isLoading" class="card loading-card">
-      <div class="loading-content">Loading triggers and teams...</div>
+      <div class="loading-content">{{ t('botCloneFork.loading') }}</div>
     </div>
 
     <!-- Error state -->
     <div v-else-if="loadError" class="card error-card">
       <div class="error-content">
         <span>{{ loadError }}</span>
-        <button class="btn btn-primary" @click="loadData">Retry</button>
+        <button class="btn btn-primary" @click="loadData">{{ t('common.retry') }}</button>
       </div>
     </div>
 
@@ -161,36 +163,36 @@ onMounted(loadData);
       <!-- Source bot selector -->
       <div class="source-panel card">
         <div class="card-header">
-          <h3>Choose Source Bot</h3>
+          <h3>{{ t('botCloneFork.chooseSource') }}</h3>
         </div>
         <div class="search-wrap">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
             <circle cx="11" cy="11" r="8"/>
             <line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
-          <input v-model="searchQuery" type="text" class="search-input" placeholder="Search bots..." />
+          <input v-model="searchQuery" type="text" class="search-input" :placeholder="t('botCloneFork.searchPlaceholder')" />
         </div>
         <div class="bots-list">
           <button
-            v-for="t in filteredTriggers"
-            :key="t.id"
+            v-for="bot in filteredTriggers"
+            :key="bot.id"
             class="bot-row"
-            :class="{ selected: selectedTriggerId === t.id }"
-            @click="selectTrigger(t)"
+            :class="{ selected: selectedTriggerId === bot.id }"
+            @click="selectTrigger(bot)"
           >
             <div class="bot-info">
-              <span class="bot-name">{{ t.name }}</span>
-              <span class="bot-team">{{ t.backend_type }}</span>
+              <span class="bot-name">{{ bot.name }}</span>
+              <span class="bot-team">{{ bot.backend_type }}</span>
               <div class="bot-tags">
-                <span class="tag">{{ t.trigger_source }}</span>
-                <span v-if="t.execution_mode === 'team'" class="tag">team</span>
-                <span v-if="t.is_predefined" class="tag">predefined</span>
+                <span class="tag">{{ bot.trigger_source }}</span>
+                <span v-if="bot.execution_mode === 'team'" class="tag">{{ t('botCloneFork.tag.team') }}</span>
+                <span v-if="bot.is_predefined" class="tag">{{ t('botCloneFork.tag.predefined') }}</span>
               </div>
-              <span class="bot-stats">{{ t.path_count ?? 0 }} paths</span>
+              <span class="bot-stats">{{ t('botCloneFork.paths', { count: bot.path_count ?? 0 }) }}</span>
             </div>
-            <div class="bot-trigger">{{ triggerSourceLabel(t) }}</div>
+            <div class="bot-trigger">{{ triggerSourceLabel(bot) }}</div>
           </button>
-          <div v-if="filteredTriggers.length === 0" class="list-empty">No bots match your search</div>
+          <div v-if="filteredTriggers.length === 0" class="list-empty">{{ t('botCloneFork.noMatch') }}</div>
         </div>
       </div>
 
@@ -202,7 +204,7 @@ onMounted(loadData);
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
             </svg>
-            Clone Configuration
+            {{ t('botCloneFork.cloneConfig') }}
           </h3>
         </div>
 
@@ -211,18 +213,18 @@ onMounted(loadData);
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
           </svg>
-          <p>Select a source bot to configure the clone</p>
+          <p>{{ t('botCloneFork.selectPrompt') }}</p>
         </div>
 
         <div v-else class="clone-form">
           <!-- Source preview -->
           <div class="source-preview">
-            <div class="preview-label">Cloning from</div>
+            <div class="preview-label">{{ t('botCloneFork.cloningFrom') }}</div>
             <div class="preview-bot">
               <span class="preview-name">{{ selectedTrigger.name }}</span>
               <span class="preview-team">{{ selectedTrigger.backend_type }}</span>
             </div>
-            <p class="preview-desc">{{ selectedTrigger.trigger_source }} trigger · {{ selectedTrigger.execution_mode ?? 'direct' }} mode</p>
+            <p class="preview-desc">{{ t('botCloneFork.previewDesc', { source: selectedTrigger.trigger_source, mode: selectedTrigger.execution_mode ?? 'direct' }) }}</p>
             <div class="preview-prompt">
               <code>{{ selectedTrigger.prompt_template }}</code>
             </div>
@@ -231,50 +233,50 @@ onMounted(loadData);
           <!-- Clone options -->
           <div class="options-section">
             <div class="form-field">
-              <label>New Bot Name</label>
-              <input v-model="cloneConfig.name" type="text" class="text-input" placeholder="My Forked Bot" />
+              <label>{{ t('botCloneFork.newBotName') }}</label>
+              <input v-model="cloneConfig.name" type="text" class="text-input" :placeholder="t('botCloneFork.newBotNamePlaceholder')" />
             </div>
             <div class="form-field">
-              <label>Target Team</label>
+              <label>{{ t('botCloneFork.targetTeam') }}</label>
               <select v-model="cloneConfig.teamId" class="select-input">
-                <option value="">No team (direct)</option>
-                <option v-for="t in teams" :key="t.id" :value="t.id">{{ t.name }}</option>
+                <option value="">{{ t('botCloneFork.noTeam') }}</option>
+                <option v-for="team in teams" :key="team.id" :value="team.id">{{ team.name }}</option>
               </select>
             </div>
 
             <div class="checkbox-group">
               <label class="checkbox-label">
                 <input v-model="cloneConfig.includePrompt" type="checkbox" />
-                <span>Copy prompt template</span>
+                <span>{{ t('botCloneFork.copyPrompt') }}</span>
               </label>
               <label class="checkbox-label">
                 <input v-model="cloneConfig.includeTrigger" type="checkbox" />
-                <span>Copy trigger configuration</span>
+                <span>{{ t('botCloneFork.copyTrigger') }}</span>
               </label>
               <label class="checkbox-label">
                 <input v-model="cloneConfig.includeSchedule" type="checkbox" />
-                <span>Copy schedule settings</span>
+                <span>{{ t('botCloneFork.copySchedule') }}</span>
               </label>
             </div>
 
             <div class="clone-summary">
               <div class="summary-row">
-                <span class="summary-key">New name</span>
+                <span class="summary-key">{{ t('botCloneFork.summary.newName') }}</span>
                 <span class="summary-val">{{ cloneConfig.name || '—' }}</span>
               </div>
               <div class="summary-row">
-                <span class="summary-key">Target team</span>
-                <span class="summary-val">{{ teams.find(t => t.id === cloneConfig.teamId)?.name ?? 'None (direct)' }}</span>
+                <span class="summary-key">{{ t('botCloneFork.summary.targetTeam') }}</span>
+                <span class="summary-val">{{ teams.find(team => team.id === cloneConfig.teamId)?.name ?? t('botCloneFork.noneDirect') }}</span>
               </div>
               <div class="summary-row">
-                <span class="summary-key">Copying</span>
+                <span class="summary-key">{{ t('botCloneFork.summary.copying') }}</span>
                 <span class="summary-val">
                   {{
                     [
-                      cloneConfig.includePrompt && 'Prompt',
-                      cloneConfig.includeTrigger && 'Trigger',
-                      cloneConfig.includeSchedule && 'Schedule',
-                    ].filter(Boolean).join(' · ') || 'Config only'
+                      cloneConfig.includePrompt && t('botCloneFork.summary.prompt'),
+                      cloneConfig.includeTrigger && t('botCloneFork.summary.trigger'),
+                      cloneConfig.includeSchedule && t('botCloneFork.summary.schedule'),
+                    ].filter(Boolean).join(' · ') || t('botCloneFork.summary.configOnly')
                   }}
                 </span>
               </div>
@@ -289,7 +291,7 @@ onMounted(loadData);
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
               </svg>
-              {{ cloningId ? 'Cloning...' : 'Clone Bot' }}
+              {{ cloningId ? t('botCloneFork.cloning') : t('botCloneFork.cloneBot') }}
             </button>
           </div>
         </div>

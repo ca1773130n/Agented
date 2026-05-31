@@ -3,8 +3,11 @@ import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { Chart, registerables } from 'chart.js';
 import type { Plugin as ChartPlugin } from 'chart.js';
 import 'chartjs-adapter-date-fns';
+import { useI18n } from 'vue-i18n';
 import type { ExecutionDataPoint } from '../../services/api';
 import { safeFormatDate } from '../../utils/datetime';
+
+const { t } = useI18n();
 
 Chart.register(...registerables);
 
@@ -44,7 +47,7 @@ const baselinePlugin: ChartPlugin = {
     ctx.fillStyle = colors.textMuted;
     ctx.font = "10px 'Geist Mono', 'SF Mono', monospace";
     ctx.textAlign = 'right';
-    ctx.fillText('80% baseline', chart.chartArea.right - 4, y - 4);
+    ctx.fillText(t('successRateChart.baselineLabel'), chart.chartArea.right - 4, y - 4);
     ctx.restore();
   },
 };
@@ -73,7 +76,7 @@ function renderChart() {
       labels,
       datasets: [
         {
-          label: 'Success Rate (%)',
+          label: t('successRateChart.successRatePct'),
           data: rateData,
           borderColor: colors.cyan,
           backgroundColor: colors.cyanBg,
@@ -103,7 +106,7 @@ function renderChart() {
           titleFont: { family: "'Geist Mono', 'SF Mono', monospace", size: 12, weight: 'bold' },
           bodyFont: { family: "'Geist', sans-serif", size: 12 },
           callbacks: {
-            label: (context: any) => `Success Rate: ${Number(context.parsed.y).toFixed(1)}%`, // eslint-disable-line @typescript-eslint/no-explicit-any -- Chart.js tooltip callback
+            label: (context: any) => `${t('successRateChart.successRate')}: ${Number(context.parsed.y).toFixed(1)}%`, // eslint-disable-line @typescript-eslint/no-explicit-any -- Chart.js tooltip callback
           },
         },
       },

@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { triggerApi, agentApi, teamApi } from '../services/api/index';
+
+const { t } = useI18n();
 
 interface Node {
   id: string;
@@ -171,7 +174,12 @@ function getConnectedEdges(nodeId: string): Edge[] {
 }
 
 function typeLabel(type: string): string {
-  const map: Record<string, string> = { bot: 'Bot', trigger: 'Trigger', team: 'Team', agent: 'Agent' };
+  const map: Record<string, string> = {
+    bot: t('botDependencyGraph.type.bot'),
+    trigger: t('botDependencyGraph.type.trigger'),
+    team: t('botDependencyGraph.type.team'),
+    agent: t('botDependencyGraph.type.agent'),
+  };
   return map[type] ?? type;
 }
 
@@ -181,16 +189,16 @@ const viewBox = '0 0 800 480';
 <template>
   <div class="dep-graph">
 
-    <PageHeader title="Bot Dependency Graph" subtitle="Visualize relationships between bots, triggers, teams, and agents.">
+    <PageHeader :title="t('botDependencyGraph.title')" :subtitle="t('botDependencyGraph.subtitle')">
       <template #actions>
         <button class="btn btn-secondary" @click="showLegend = !showLegend">
-          {{ showLegend ? 'Hide' : 'Show' }} Legend
+          {{ showLegend ? t('botDependencyGraph.hideLegend') : t('botDependencyGraph.showLegend') }}
         </button>
         <div v-if="hasCircularDeps" class="circular-alert">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
           </svg>
-          Circular dependency detected
+          {{ t('botDependencyGraph.circularDetected') }}
         </div>
       </template>
     </PageHeader>
@@ -270,32 +278,32 @@ const viewBox = '0 0 800 480';
 
       <div class="side-panel">
         <div v-if="showLegend" class="card legend-card">
-          <div class="card-header-sm">Legend</div>
+          <div class="card-header-sm">{{ t('botDependencyGraph.legend') }}</div>
           <div class="legend-items">
-            <div v-for="[type, color] in [['Bot', '#3b82f6'], ['Trigger', '#f59e0b'], ['Team', '#06b6d4'], ['Agent', '#34d399']]" :key="type" class="legend-item">
+            <div v-for="[label, color] in [[t('botDependencyGraph.type.bot'), '#3b82f6'], [t('botDependencyGraph.type.trigger'), '#f59e0b'], [t('botDependencyGraph.type.team'), '#06b6d4'], [t('botDependencyGraph.type.agent'), '#34d399']]" :key="label" class="legend-item">
               <div class="legend-dot" :style="{ background: color }"></div>
-              <span>{{ type }}</span>
+              <span>{{ label }}</span>
             </div>
             <div class="legend-item">
               <div class="legend-line solid"></div>
-              <span>fires / triggers</span>
+              <span>{{ t('botDependencyGraph.legendFires') }}</span>
             </div>
             <div class="legend-item">
               <div class="legend-line dashed"></div>
-              <span>uses</span>
+              <span>{{ t('botDependencyGraph.legendUses') }}</span>
             </div>
           </div>
         </div>
 
         <div v-if="selectedNode" class="card detail-card">
-          <div class="card-header-sm">Node Details</div>
+          <div class="card-header-sm">{{ t('botDependencyGraph.nodeDetails') }}</div>
           <div class="node-detail">
             <div class="nd-type" :style="{ color: selectedNode.color, background: selectedNode.color + '15' }">
               {{ typeLabel(selectedNode.type) }}
             </div>
             <div class="nd-name">{{ selectedNode.label }}</div>
             <div class="nd-edges">
-              <div class="nd-edge-label">Connections</div>
+              <div class="nd-edge-label">{{ t('botDependencyGraph.connections') }}</div>
               <div v-for="e in getConnectedEdges(selectedNode.id)" :key="e.id" class="nd-edge-row">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10">
                   <line x1="5" y1="12" x2="19" y2="12"/>
@@ -308,19 +316,19 @@ const viewBox = '0 0 800 480';
         </div>
 
         <div class="card stats-card">
-          <div class="card-header-sm">Summary</div>
+          <div class="card-header-sm">{{ t('botDependencyGraph.summary') }}</div>
           <div class="graph-stats">
             <div class="gs-row">
-              <span class="gs-label">Nodes</span>
+              <span class="gs-label">{{ t('botDependencyGraph.nodes') }}</span>
               <span class="gs-val">{{ nodes.length }}</span>
             </div>
             <div class="gs-row">
-              <span class="gs-label">Edges</span>
+              <span class="gs-label">{{ t('botDependencyGraph.edges') }}</span>
               <span class="gs-val">{{ edges.length }}</span>
             </div>
             <div class="gs-row">
-              <span class="gs-label">Circular deps</span>
-              <span class="gs-val" style="color: #34d399">None detected</span>
+              <span class="gs-label">{{ t('botDependencyGraph.circularDeps') }}</span>
+              <span class="gs-val" style="color: #34d399">{{ t('botDependencyGraph.noneDetected') }}</span>
             </div>
           </div>
         </div>

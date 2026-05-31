@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Chart, registerables, type ChartDataset, type TooltipItem } from 'chart.js';
 import type { UsageSummaryEntry } from '../../services/api';
 import { safeFormatDate } from '../../utils/datetime';
+
+const { t } = useI18n();
 
 Chart.register(...registerables);
 
@@ -129,9 +132,9 @@ function renderChart() {
               const dataIndex = context.dataIndex;
               const entry = sorted[dataIndex];
               if (context.dataset.label === 'Cost (USD)') {
-                return `Cost: ${formatCurrency(entry.total_cost_usd)}`;
+                return t('tokenUsageChart.costTooltip', { value: formatCurrency(entry.total_cost_usd) });
               }
-              return `Executions: ${entry.execution_count}`;
+              return t('tokenUsageChart.executionsTooltip', { value: entry.execution_count });
             },
             afterBody: (contexts: TooltipItem<'bar' | 'line'>[]) => {
               const dataIndex = contexts[0]?.dataIndex;
@@ -139,7 +142,7 @@ function renderChart() {
               const entry = sorted[dataIndex];
               if (entry.execution_count > 0) {
                 const avg = entry.total_cost_usd / entry.execution_count;
-                return `Avg/execution: ${formatCurrency(avg)}`;
+                return t('tokenUsageChart.avgExecutionTooltip', { value: formatCurrency(avg) });
               }
               return '';
             },

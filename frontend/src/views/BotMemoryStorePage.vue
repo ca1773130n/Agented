@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { botMemoryApi } from '../services/api/bot-memory';
 import type { BotMemorySummary } from '../services/api/bot-memory';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 interface MemoryEntry {
@@ -115,7 +117,7 @@ function openEditModal(entry: MemoryEntry) {
 
 async function saveEntry() {
   if (!newKey.value.trim() || !newValue.value.trim()) {
-    showToast('Key and value are required', 'error');
+    showToast(t('botMemoryStore.toast.keyValueRequired'), 'error');
     return;
   }
   if (!selectedBot.value) return;
@@ -127,14 +129,14 @@ async function saveEntry() {
     });
     showToast(
       editingEntry.value
-        ? `Memory key "${newKey.value}" updated`
-        : `Memory key "${newKey.value}" added`,
+        ? t('botMemoryStore.toast.keyUpdated', { key: newKey.value })
+        : t('botMemoryStore.toast.keyAdded', { key: newKey.value }),
       'success',
     );
     showAddModal.value = false;
     await loadBotMemory(selectedBot.value.botId);
   } catch {
-    showToast('Failed to save memory entry', 'error');
+    showToast(t('botMemoryStore.toast.saveFailed'), 'error');
   }
 }
 
@@ -142,10 +144,10 @@ async function deleteEntry(key: string) {
   if (!selectedBot.value) return;
   try {
     await botMemoryApi.deleteEntry(selectedBot.value.botId, key);
-    showToast(`Memory key "${key}" deleted`, 'success');
+    showToast(t('botMemoryStore.toast.keyDeleted', { key }), 'success');
     await loadBotMemory(selectedBot.value.botId);
   } catch {
-    showToast('Failed to delete memory entry', 'error');
+    showToast(t('botMemoryStore.toast.deleteFailed'), 'error');
   }
 }
 
@@ -153,11 +155,11 @@ async function clearAllMemory() {
   if (!selectedBot.value) return;
   try {
     await botMemoryApi.clearAll(selectedBot.value.botId);
-    showToast(`All memory cleared for ${selectedBot.value.botName}`, 'success');
+    showToast(t('botMemoryStore.toast.allCleared', { bot: selectedBot.value.botName }), 'success');
     selectedBot.value.entries = [];
     selectedBot.value.usedBytes = 0;
   } catch {
-    showToast('Failed to clear memory', 'error');
+    showToast(t('botMemoryStore.toast.clearFailed'), 'error');
   }
 }
 
@@ -168,14 +170,14 @@ onMounted(loadBotList);
   <div class="bot-memory">
 
     <PageHeader
-      title="Per-Bot Persistent Memory"
-      subtitle="Each bot maintains a key-value memory store across executions for learning and continuity."
+      :title="t('botMemoryStore.title')"
+      :subtitle="t('botMemoryStore.subtitle')"
     />
 
     <div class="memory-layout">
       <!-- Bot list sidebar -->
       <div class="bot-list-panel">
-        <div class="panel-label">Select Bot</div>
+        <div class="panel-label">{{ t('botMemoryStore.selectBot') }}</div>
         <div
           v-for="bot in bots"
           :key="bot.botId"
@@ -185,7 +187,7 @@ onMounted(loadBotList);
         >
           <div class="bot-list-name">{{ bot.botName }}</div>
           <div class="bot-list-meta">
-            {{ bot.entries.length }} keys · {{ formatBytes(bot.usedBytes) }}
+            {{ t('botMemoryStore.keysCount', { count: bot.entries.length }) }} · {{ formatBytes(bot.usedBytes) }}
           </div>
         </div>
       </div>
@@ -201,21 +203,21 @@ onMounted(loadBotList);
               </div>
               <span class="usage-pct">{{ usagePercent }}%</span>
             </div>
-            <input v-model="searchQuery" type="text" class="search-input" placeholder="Search keys..." />
-            <button class="btn btn-secondary" @click="clearAllMemory">Clear All</button>
+            <input v-model="searchQuery" type="text" class="search-input" :placeholder="t('botMemoryStore.searchPlaceholder')" />
+            <button class="btn btn-secondary" @click="clearAllMemory">{{ t('botMemoryStore.clearAll') }}</button>
             <button class="btn btn-primary" @click="openAddModal">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Add Key
+              {{ t('botMemoryStore.addKey') }}
             </button>
           </div>
 
           <div class="entries-table">
             <div class="table-header">
-              <span>Key</span>
-              <span>Value</span>
-              <span>Source</span>
-              <span>Updated</span>
-              <span>Expires</span>
+              <span>{{ t('botMemoryStore.col.key') }}</span>
+              <span>{{ t('botMemoryStore.col.value') }}</span>
+              <span>{{ t('botMemoryStore.col.source') }}</span>
+              <span>{{ t('botMemoryStore.col.updated') }}</span>
+              <span>{{ t('botMemoryStore.col.expires') }}</span>
               <span></span>
             </div>
             <div v-for="entry in filteredEntries" :key="entry.key" class="table-row">
@@ -227,21 +229,21 @@ onMounted(loadBotList);
               <span class="entry-meta">{{ entry.updated_at }}</span>
               <span class="entry-meta">{{ entry.expires_at ?? '—' }}</span>
               <div class="entry-actions">
-                <button class="icon-btn" @click="openEditModal(entry)" title="Edit">
+                <button class="icon-btn" @click="openEditModal(entry)" :title="t('common.edit')">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 </button>
-                <button class="icon-btn" @click="deleteEntry(entry.key)" title="Delete">
+                <button class="icon-btn" @click="deleteEntry(entry.key)" :title="t('common.delete')">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
                 </button>
               </div>
             </div>
             <div v-if="filteredEntries.length === 0" class="empty-entries">
-              <p>No memory entries found.</p>
+              <p>{{ t('botMemoryStore.noEntries') }}</p>
             </div>
           </div>
         </template>
 
-        <div v-else class="no-selection">Select a bot to view its memory.</div>
+        <div v-else class="no-selection">{{ t('botMemoryStore.noSelection') }}</div>
       </div>
     </div>
 
@@ -249,28 +251,28 @@ onMounted(loadBotList);
     <div v-if="showAddModal" class="modal-overlay" tabindex="-1" @click.self="showAddModal = false" @keydown.escape="showAddModal = false">
       <div class="modal">
         <div class="modal-header">
-          <h3>{{ editingEntry ? 'Edit Memory Key' : 'Add Memory Key' }}</h3>
+          <h3>{{ editingEntry ? t('botMemoryStore.modal.editTitle') : t('botMemoryStore.modal.addTitle') }}</h3>
           <button class="icon-btn" @click="showAddModal = false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
         <div class="modal-body">
           <div class="field-group">
-            <label class="field-label">Key</label>
+            <label class="field-label">{{ t('botMemoryStore.field.key') }}</label>
             <input v-model="newKey" type="text" class="text-input" :disabled="!!editingEntry" placeholder="e.g. last_reviewed_prs" />
           </div>
           <div class="field-group">
-            <label class="field-label">Value (JSON or string)</label>
+            <label class="field-label">{{ t('botMemoryStore.field.value') }}</label>
             <textarea v-model="newValue" class="textarea-input" rows="4" placeholder='e.g. ["#142","#139"]'></textarea>
           </div>
           <div class="field-group">
-            <label class="field-label">Expiry Date (optional)</label>
+            <label class="field-label">{{ t('botMemoryStore.field.expiry') }}</label>
             <input v-model="newExpiry" type="date" class="text-input" />
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="showAddModal = false">Cancel</button>
-          <button class="btn btn-primary" @click="saveEntry">{{ editingEntry ? 'Update' : 'Add' }}</button>
+          <button class="btn btn-secondary" @click="showAddModal = false">{{ t('common.cancel') }}</button>
+          <button class="btn btn-primary" @click="saveEntry">{{ editingEntry ? t('botMemoryStore.modal.update') : t('common.add') }}</button>
         </div>
       </div>
     </div>

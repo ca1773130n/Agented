@@ -7,7 +7,9 @@ import EmptyState from '../../components/base/EmptyState.vue';
 import { useToast } from '../../composables/useToast';
 import { useFocusTrap } from '../../composables/useFocusTrap';
 import { useWebMcpTool } from '../../composables/useWebMcpTool';
+import { useI18n } from 'vue-i18n';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 const searchQuery = ref('');
@@ -69,7 +71,7 @@ function closeDetail() {
 }
 
 function importPackage(_item: MarketplaceSearchResult) {
-  showToast('SuperAgent import coming in a future update', 'info');
+  showToast(t('marketplaceSuperAgents.toast.importComingSoon'), 'info');
 }
 
 function onSearchInput() {
@@ -92,23 +94,23 @@ onMounted(() => {
       <input
         v-model="searchQuery"
         type="text"
-        placeholder="Search SuperAgent packages across marketplaces..."
+        :placeholder="t('marketplaceSuperAgents.searchPlaceholder')"
         @input="onSearchInput"
       />
     </div>
 
     <div class="results-section">
       <div class="section-header">
-        <h2 v-if="searchQuery.trim()">Results for "{{ searchQuery }}" ({{ results.length }})</h2>
-        <h2 v-else>Available SuperAgent Packages ({{ results.length }})</h2>
+        <h2 v-if="searchQuery.trim()">{{ t('marketplaceSuperAgents.resultsFor', { query: searchQuery, count: results.length }) }}</h2>
+        <h2 v-else>{{ t('marketplaceSuperAgents.allAvailable', { count: results.length }) }}</h2>
       </div>
 
-      <LoadingState v-if="isSearching" message="Searching..." />
+      <LoadingState v-if="isSearching" :message="t('marketplaceSuperAgents.searching')" />
 
       <EmptyState
         v-else-if="results.length === 0"
-        title="No SuperAgent packages found"
-        description="SuperAgent marketplace integration coming soon. Check back after marketplaces are configured to index SuperAgent packages."
+        :title="t('marketplaceSuperAgents.emptyTitle')"
+        :description="t('marketplaceSuperAgents.emptyDescription')"
       >
         <template #icon>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -137,7 +139,7 @@ onMounted(() => {
               <h3>{{ item.name }}</h3>
               <span v-if="item.version" class="version-badge">v{{ item.version }}</span>
             </div>
-            <p class="result-description">{{ item.description || 'No description' }}</p>
+            <p class="result-description">{{ item.description || t('marketplaceSuperAgents.noDescription') }}</p>
             <span v-if="item.marketplace_name" class="marketplace-badge">{{ item.marketplace_name }}</span>
           </div>
         </div>
@@ -173,25 +175,24 @@ onMounted(() => {
             <button class="close-btn" @click="closeDetail">&times;</button>
           </div>
           <div class="detail-body">
-            <p class="detail-description">{{ selectedItem.description || 'No description available.' }}</p>
+            <p class="detail-description">{{ selectedItem.description || t('marketplaceSuperAgents.noDescriptionAvailable') }}</p>
             <div class="detail-meta">
               <div v-if="selectedItem.marketplace_name" class="meta-row">
-                <span class="meta-label">Marketplace</span>
+                <span class="meta-label">{{ t('marketplaceSuperAgents.marketplace') }}</span>
                 <span class="meta-value">{{ selectedItem.marketplace_name }}</span>
               </div>
               <div v-if="selectedItem.version" class="meta-row">
-                <span class="meta-label">Version</span>
+                <span class="meta-label">{{ t('marketplaceSuperAgents.version') }}</span>
                 <span class="meta-value">{{ selectedItem.version }}</span>
               </div>
             </div>
             <p class="coming-soon-note">
-              Install is not yet wired for SuperAgent packages. We will surface a
-              "Coming soon" notice when you try to import. Track progress in the v0.8 milestone.
+              {{ t('marketplaceSuperAgents.comingSoonNote') }}
             </p>
           </div>
           <div class="detail-footer">
-            <button class="btn" @click="closeDetail">Close</button>
-            <button class="btn btn-primary" @click="importPackage(selectedItem)">Import (coming soon)</button>
+            <button class="btn" @click="closeDetail">{{ t('common.close') }}</button>
+            <button class="btn btn-primary" @click="importPackage(selectedItem)">{{ t('marketplaceSuperAgents.importComingSoon') }}</button>
           </div>
         </div>
       </div>

@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { skillsApi, agentApi, ApiError } from '../services/api';
 import type { SkillInfo, Agent } from '../services/api';
+
+const { t } = useI18n();
 
 const isLoading = ref(true);
 const loadError = ref<string | null>(null);
@@ -23,9 +26,9 @@ onMounted(async () => {
     agents.value = agentsResp.agents;
   } catch (err) {
     if (err instanceof ApiError) {
-      loadError.value = `Failed to load: ${err.message}`;
+      loadError.value = t('agentSkillDiscovery.loadFailedWith', { message: err.message });
     } else {
-      loadError.value = 'An unexpected error occurred while loading data.';
+      loadError.value = t('agentSkillDiscovery.loadFailed');
     }
   } finally {
     isLoading.value = false;
@@ -74,14 +77,14 @@ const filteredSkills = computed(() => {
   });
 });
 
-const categoryLabel: Record<string, string> = {
-  git: 'Git',
-  'code-review': 'Code Review',
-  security: 'Security',
-  testing: 'Testing',
-  deployment: 'Deployment',
-  general: 'General',
-};
+const categoryLabel = computed<Record<string, string>>(() => ({
+  git: t('agentSkillDiscovery.category.git'),
+  'code-review': t('agentSkillDiscovery.category.codeReview'),
+  security: t('agentSkillDiscovery.category.security'),
+  testing: t('agentSkillDiscovery.category.testing'),
+  deployment: t('agentSkillDiscovery.category.deployment'),
+  general: t('agentSkillDiscovery.category.general'),
+}));
 
 function toggleAddToPrompt(skill: SkillInfo) {
   const key = skill.name;
@@ -109,13 +112,13 @@ function agentsForSkill(skill: SkillInfo): Agent[] {
   <div class="skill-discovery">
 
     <PageHeader
-      title="Skill Auto-Discovery"
-      subtitle="Automatically detect and index skills from connected repositories and plugin registries."
+      :title="t('agentSkillDiscovery.title')"
+      :subtitle="t('agentSkillDiscovery.subtitle')"
     />
 
     <!-- Loading state -->
     <div v-if="isLoading" class="card" style="padding: 48px; text-align: center;">
-      <span style="color: var(--text-tertiary); font-size: 0.85rem;">Loading skills and agents...</span>
+      <span style="color: var(--text-tertiary); font-size: 0.85rem;">{{ t('agentSkillDiscovery.loading') }}</span>
     </div>
 
     <!-- Error state -->
@@ -132,11 +135,11 @@ function agentsForSkill(skill: SkillInfo): Agent[] {
               <circle cx="12" cy="7" r="4"/>
               <path d="M5 21v-2a7 7 0 0 1 14 0v2"/>
             </svg>
-            Agents ({{ agents.length }})
+            {{ t('agentSkillDiscovery.agents', { count: agents.length }) }}
           </h3>
         </div>
         <div v-if="agents.length === 0" class="skills-empty" style="padding: 24px;">
-          No agents configured yet.
+          {{ t('agentSkillDiscovery.noAgents') }}
         </div>
         <div v-else class="sources-list">
           <div v-for="agent in agents" :key="agent.id" class="source-row">
@@ -157,11 +160,11 @@ function agentsForSkill(skill: SkillInfo): Agent[] {
                 </svg>
                 {{ agent.backend_type || 'claude' }}
               </span>
-              <span class="source-scanned">{{ agent.description || 'No description' }}</span>
+              <span class="source-scanned">{{ agent.description || t('agentSkillDiscovery.noDescription') }}</span>
             </div>
             <div class="source-status">
               <span :class="['status-badge', agent.enabled === 1 ? 'active' : 'error']">
-                {{ agent.enabled === 1 ? 'Active' : 'Disabled' }}
+                {{ agent.enabled === 1 ? t('agentSkillDiscovery.active') : t('agentSkillDiscovery.disabled') }}
               </span>
             </div>
           </div>
@@ -175,9 +178,9 @@ function agentsForSkill(skill: SkillInfo): Agent[] {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
             </svg>
-            Discovered Skills
+            {{ t('agentSkillDiscovery.discoveredSkills') }}
           </h3>
-          <span class="skill-count-badge">{{ filteredSkills.length }} of {{ skills.length }}</span>
+          <span class="skill-count-badge">{{ t('agentSkillDiscovery.countOf', { shown: filteredSkills.length, total: skills.length }) }}</span>
         </div>
 
         <!-- Search & Filter -->
@@ -191,11 +194,11 @@ function agentsForSkill(skill: SkillInfo): Agent[] {
               v-model="searchQuery"
               type="text"
               class="search-input"
-              placeholder="Search skills by name or description..."
+              :placeholder="t('agentSkillDiscovery.searchPlaceholder')"
             />
           </div>
           <select v-model="selectedCategory" class="category-select">
-            <option value="all">All Categories</option>
+            <option value="all">{{ t('agentSkillDiscovery.allCategories') }}</option>
             <option v-for="cat in allCategories" :key="cat" :value="cat">{{ categoryLabel[cat] || cat }}</option>
           </select>
         </div>
@@ -214,7 +217,7 @@ function agentsForSkill(skill: SkillInfo): Agent[] {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="11" height="11">
                   <polyline points="20 6 9 17 4 12"/>
                 </svg>
-                Added
+                {{ t('agentSkillDiscovery.added') }}
               </span>
             </div>
             <div class="skill-name">{{ skill.name }}</div>
@@ -222,18 +225,18 @@ function agentsForSkill(skill: SkillInfo): Agent[] {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="11" height="11">
                 <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
               </svg>
-              {{ skill.source_path || 'discovered' }}
+              {{ skill.source_path || t('agentSkillDiscovery.discovered') }}
             </div>
-            <div class="skill-description">{{ skill.description || 'No description available' }}</div>
+            <div class="skill-description">{{ skill.description || t('agentSkillDiscovery.noDescriptionAvailable') }}</div>
             <div v-if="agentsForSkill(skill).length > 0" class="skill-source" style="margin-top: 4px; color: var(--accent-cyan);">
-              Used by: {{ agentsForSkill(skill).map(a => a.name).join(', ') }}
+              {{ t('agentSkillDiscovery.usedBy', { agents: agentsForSkill(skill).map(a => a.name).join(', ') }) }}
             </div>
             <div class="skill-footer">
               <span class="usage-count">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12">
                   <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
                 </svg>
-                {{ agentsForSkill(skill).length }} agent(s)
+                {{ t('agentSkillDiscovery.agentCount', { count: agentsForSkill(skill).length }) }}
               </span>
               <button
                 :class="['btn', isAdded(skill) ? 'btn-added' : 'btn-add']"
@@ -246,7 +249,7 @@ function agentsForSkill(skill: SkillInfo): Agent[] {
                 <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="12" height="12">
                   <polyline points="20 6 9 17 4 12"/>
                 </svg>
-                {{ isAdded(skill) ? 'Remove' : 'Add to Prompt' }}
+                {{ isAdded(skill) ? t('common.remove') : t('agentSkillDiscovery.addToPrompt') }}
               </button>
             </div>
           </div>
@@ -255,7 +258,7 @@ function agentsForSkill(skill: SkillInfo): Agent[] {
               <circle cx="11" cy="11" r="8"/>
               <line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
-            No skills match your search
+            {{ t('agentSkillDiscovery.noMatch') }}
           </div>
         </div>
       </div>

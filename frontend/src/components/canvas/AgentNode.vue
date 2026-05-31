@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, inject } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Handle, Position } from '@vue-flow/core'
+
+const { t } = useI18n()
 
 interface AssignmentItem {
   type: string
@@ -133,7 +136,7 @@ function pillPrefix(type: string): string {
         {{ assignment.name }}
       </span>
       <span v-if="displayAssignments.overflow > 0" class="pill pill--overflow">
-        +{{ displayAssignments.overflow }} more
+        {{ t('agentNode.moreOverflow', { count: displayAssignments.overflow }) }}
       </span>
     </div>
 

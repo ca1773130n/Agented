@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, toRef } from 'vue';
+import { useI18n } from 'vue-i18n';
 import ConfirmModal from './ConfirmModal.vue';
 import { useFocusTrap } from '../../composables/useFocusTrap';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   open: boolean;
@@ -47,7 +50,7 @@ function tryClose() {
           <div class="slideover-header">
             <h2 v-if="title" id="slideover-title">{{ title }}</h2>
             <span v-else></span>
-            <button class="btn-close" @click="tryClose" aria-label="Close panel">&times;</button>
+            <button class="btn-close" @click="tryClose" :aria-label="t('slideOver.closePanel')">&times;</button>
           </div>
           <div class="slideover-body">
             <slot />
@@ -61,10 +64,10 @@ function tryClose() {
 
     <ConfirmModal
       :open="showDiscardConfirm"
-      title="Discard Changes?"
-      message="You have unsaved changes. Are you sure you want to discard them?"
-      confirm-label="Discard"
-      cancel-label="Keep Editing"
+      :title="t('slideOver.discardTitle')"
+      :message="t('slideOver.discardMessage')"
+      :confirm-label="t('slideOver.discard')"
+      :cancel-label="t('slideOver.keepEditing')"
       variant="danger"
       @confirm="showDiscardConfirm = false; $emit('close')"
       @cancel="showDiscardConfirm = false"

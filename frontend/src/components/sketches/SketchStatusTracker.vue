@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   status: string;
@@ -7,13 +10,13 @@ const props = defineProps<{
 
 const steps = ['draft', 'classified', 'routed', 'in_progress', 'completed'];
 
-const stepLabels: Record<string, string> = {
-  draft: 'Draft',
-  classified: 'Classified',
-  routed: 'Routed',
-  in_progress: 'In Progress',
-  completed: 'Completed',
-};
+const stepLabels = computed<Record<string, string>>(() => ({
+  draft: t('sketchStatusTracker.steps.draft'),
+  classified: t('sketchStatusTracker.steps.classified'),
+  routed: t('sketchStatusTracker.steps.routed'),
+  in_progress: t('sketchStatusTracker.steps.inProgress'),
+  completed: t('sketchStatusTracker.steps.completed'),
+}));
 
 const currentIndex = computed(() => {
   const idx = steps.indexOf(props.status);
@@ -31,7 +34,7 @@ function stepClass(stepIdx: number): string {
 
 <template>
   <div class="sketch-status-tracker">
-    <h4 class="panel-title">Status</h4>
+    <h4 class="panel-title">{{ t('sketchStatusTracker.title') }}</h4>
     <div class="pipeline">
       <div
         v-for="(step, idx) in steps"
@@ -53,7 +56,7 @@ function stepClass(stepIdx: number): string {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
         <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/>
       </svg>
-      <span>Archived</span>
+      <span>{{ t('sketchStatusTracker.archived') }}</span>
     </div>
   </div>
 </template>

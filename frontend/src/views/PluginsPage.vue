@@ -20,7 +20,9 @@ import { useListFilter } from '../composables/useListFilter';
 import { usePagination } from '../composables/usePagination';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import { useWebMcpPageTools } from '../composables/useWebMcpPageTools';
+import { useI18n } from 'vue-i18n';
 
+const { t } = useI18n();
 const router = useRouter();
 const showToast = useToast();
 
@@ -47,8 +49,8 @@ const { searchQuery, sortField, sortOrder, filteredAndSorted, hasActiveFilter, r
 const pagination = usePagination({ defaultPageSize: 25, storageKey: 'plugins-pagination' });
 
 const sortOptions = [
-  { value: 'name', label: 'Name' },
-  { value: 'created_at', label: 'Date Created' },
+  { value: 'name', label: t('plugins.sort.name') },
+  { value: 'created_at', label: t('plugins.sort.dateCreated') },
 ];
 
 const newPlugin = ref({ name: '', description: '', version: '1.0.0', status: 'draft', author: '' });
@@ -108,7 +110,7 @@ async function loadPlugins() {
     plugins.value = data.plugins || [];
     if (data.total_count != null) pagination.totalCount.value = data.total_count;
   } catch (e) {
-    loadError.value = e instanceof ApiError ? e.message : 'Failed to load plugins';
+    loadError.value = e instanceof ApiError ? e.message : t('plugins.errors.load');
     showToast(loadError.value, 'error');
   } finally {
     isLoading.value = false;
@@ -125,7 +127,7 @@ watch([searchQuery, sortField, sortOrder], () => {
 
 async function createPlugin() {
   if (!newPlugin.value.name.trim()) {
-    showToast('Plugin name is required', 'error');
+    showToast(t('plugins.toasts.nameRequired'), 'error');
     return;
   }
   try {
@@ -136,7 +138,7 @@ async function createPlugin() {
       status: newPlugin.value.status,
       author: newPlugin.value.author || undefined
     });
-    showToast('Plugin created successfully', 'success');
+    showToast(t('plugins.toasts.created'), 'success');
     showCreateModal.value = false;
     newPlugin.value = { name: '', description: '', version: '1.0.0', status: 'draft', author: '' };
     await loadPlugins();
@@ -144,7 +146,7 @@ async function createPlugin() {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to create plugin', 'error');
+      showToast(t('plugins.errors.create'), 'error');
     }
   }
 }
@@ -159,7 +161,7 @@ async function deletePlugin() {
   deletingId.value = pluginToDelete.value.id;
   try {
     await pluginApi.delete(pluginToDelete.value.id);
-    showToast(`Plugin "${pluginToDelete.value.name}" deleted`, 'success');
+    showToast(t('plugins.toasts.deleted', { name: pluginToDelete.value.name }), 'success');
     showDeleteConfirm.value = false;
     pluginToDelete.value = null;
     await loadPlugins();
@@ -167,7 +169,7 @@ async function deletePlugin() {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to delete plugin', 'error');
+      showToast(t('plugins.errors.delete'), 'error');
     }
   } finally {
     deletingId.value = null;
@@ -176,7 +178,7 @@ async function deletePlugin() {
 
 async function generatePlugin() {
   if (!generateDescription.value.trim() || generateDescription.value.trim().length < 10) {
-    showToast('Please provide a description of at least 10 characters', 'error');
+    showToast(t('plugins.toasts.descriptionTooShort'), 'error');
     return;
   }
   isGenerating.value = true;
@@ -191,10 +193,10 @@ async function generatePlugin() {
       newPlugin.value.version = result.config.version || '1.0.0';
       showGenerateModal.value = false;
       showCreateModal.value = true;
-      showToast('Plugin configuration generated! Review and save.', 'success');
+      showToast(t('plugins.toasts.generated'), 'success');
     }
   } catch {
-    showToast('Failed to generate plugin configuration', 'error');
+    showToast(t('plugins.errors.generate'), 'error');
   } finally {
     isGenerating.value = false;
   }
@@ -229,14 +231,14 @@ onMounted(() => {
 
 <template>
   <div class="plugins-page">
-    <PageHeader title="Plugins" subtitle="Create and manage plugins with skills, hooks, and agents">
+    <PageHeader :title="t('plugins.title')" :subtitle="t('plugins.subtitle')">
       <template #actions>
         <button class="btn btn-explore" @click="router.push({ name: 'explore-plugins' })">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="11" cy="11" r="8"/>
             <path d="M21 21l-4.35-4.35"/>
           </svg>
-          Explore
+          {{ t('plugins.explore') }}
         </button>
         <button class="btn btn-export" @click="exportPluginId = null; showExportModal = true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -244,7 +246,7 @@ onMounted(() => {
             <polyline points="17 8 12 3 7 8"/>
             <line x1="12" y1="3" x2="12" y2="15"/>
           </svg>
-          Export
+          {{ t('plugins.export') }}
         </button>
         <button class="btn btn-import" @click="showImportModal = true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -252,23 +254,23 @@ onMounted(() => {
             <polyline points="7 10 12 15 17 10"/>
             <line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
-          Import
+          {{ t('plugins.import') }}
         </button>
         <button class="btn btn-ai" @click="showGenerateModal = true">
           <span class="ai-badge">AI</span>
-          Generate Plugin
+          {{ t('plugins.generatePlugin') }}
         </button>
         <button class="btn btn-design" @click="router.push({ name: 'plugin-design' })">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
           </svg>
-          Design Plugin
+          {{ t('plugins.designPlugin') }}
         </button>
         <button class="btn btn-primary" @click="showCreateModal = true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 5v14M5 12h14"/>
           </svg>
-          Create Plugin
+          {{ t('plugins.createPlugin') }}
         </button>
       </template>
     </PageHeader>
@@ -281,20 +283,20 @@ onMounted(() => {
       :sort-options="sortOptions"
       :result-count="resultCount"
       :total-count="totalCount"
-      placeholder="Search plugins..."
+      :placeholder="t('plugins.searchPlaceholder')"
     />
 
-    <LoadingState v-if="isLoading" message="Loading plugins..." />
+    <LoadingState v-if="isLoading" :message="t('plugins.loading')" />
 
-    <ErrorState v-else-if="loadError" title="Failed to load plugins" :message="loadError" @retry="loadPlugins" />
+    <ErrorState v-else-if="loadError" :title="t('plugins.errorTitle')" :message="loadError" @retry="loadPlugins" />
 
-    <EmptyState v-else-if="plugins.length === 0" title="No plugins yet" description="Create your first plugin to extend Agented's capabilities">
+    <EmptyState v-else-if="plugins.length === 0" :title="t('plugins.emptyTitle')" :description="t('plugins.emptyDescription')">
       <template #actions>
-        <button class="btn btn-primary" @click="showCreateModal = true">Create Your First Plugin</button>
+        <button class="btn btn-primary" @click="showCreateModal = true">{{ t('plugins.createFirst') }}</button>
       </template>
     </EmptyState>
 
-    <EmptyState v-else-if="filteredAndSorted.length === 0 && hasActiveFilter" title="No matching plugins" description="Try a different search term" />
+    <EmptyState v-else-if="filteredAndSorted.length === 0 && hasActiveFilter" :title="t('plugins.noMatchTitle')" :description="t('plugins.noMatchDescription')" />
 
     <div v-else class="plugins-grid">
       <router-link
@@ -320,11 +322,11 @@ onMounted(() => {
 
         <div class="plugin-meta">
           <div v-if="plugin.author" class="meta-item">
-            <span class="meta-label">Author:</span>
+            <span class="meta-label">{{ t('plugins.authorLabel') }}</span>
             <span class="meta-value">{{ plugin.author }}</span>
           </div>
           <div class="meta-item">
-            <span class="meta-label">Components:</span>
+            <span class="meta-label">{{ t('plugins.componentsLabel') }}</span>
             <span class="meta-value">{{ plugin.component_count }}</span>
           </div>
         </div>
@@ -336,14 +338,14 @@ onMounted(() => {
               <polyline points="17 8 12 3 7 8"/>
               <line x1="12" y1="3" x2="12" y2="15"/>
             </svg>
-            Export
+            {{ t('plugins.export') }}
           </button>
           <button class="btn btn-small btn-danger" @click.stop="confirmDelete(plugin)" :disabled="deletingId === plugin.id">
             <span v-if="deletingId === plugin.id" class="btn-spinner"></span>
             <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
             </svg>
-            {{ deletingId === plugin.id ? 'Deleting...' : 'Delete' }}
+            {{ deletingId === plugin.id ? t('plugins.deleting') : t('common.delete') }}
           </button>
         </div>
       </router-link>
@@ -367,40 +369,40 @@ onMounted(() => {
       <div v-if="showCreateModal" ref="createModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-create-plugin" tabindex="-1" @click.self="showCreateModal = false" @keydown.escape="showCreateModal = false">
         <div class="modal">
           <div class="modal-header">
-            <h2 id="modal-title-create-plugin">Create Plugin</h2>
+            <h2 id="modal-title-create-plugin">{{ t('plugins.createPlugin') }}</h2>
             <button class="modal-close" @click="showCreateModal = false">&times;</button>
           </div>
           <div class="modal-body">
             <div class="form-group">
-              <label>Plugin Name *</label>
-              <input v-model="newPlugin.name" type="text" placeholder="e.g., security-scanner" />
+              <label>{{ t('plugins.form.nameRequired') }}</label>
+              <input v-model="newPlugin.name" type="text" :placeholder="t('plugins.form.namePlaceholder')" />
             </div>
             <div class="form-group">
-              <label>Description</label>
-              <textarea v-model="newPlugin.description" placeholder="Describe the plugin..."></textarea>
+              <label>{{ t('plugins.form.description') }}</label>
+              <textarea v-model="newPlugin.description" :placeholder="t('plugins.form.descriptionPlaceholder')"></textarea>
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label>Version</label>
+                <label>{{ t('plugins.form.version') }}</label>
                 <input v-model="newPlugin.version" type="text" placeholder="1.0.0" />
               </div>
               <div class="form-group">
-                <label>Status</label>
+                <label>{{ t('plugins.form.status') }}</label>
                 <select v-model="newPlugin.status">
-                  <option value="draft">Draft</option>
-                  <option value="published">Published</option>
-                  <option value="deprecated">Deprecated</option>
+                  <option value="draft">{{ t('plugins.statusOptions.draft') }}</option>
+                  <option value="published">{{ t('plugins.statusOptions.published') }}</option>
+                  <option value="deprecated">{{ t('plugins.statusOptions.deprecated') }}</option>
                 </select>
               </div>
             </div>
             <div class="form-group">
-              <label>Author</label>
-              <input v-model="newPlugin.author" type="text" placeholder="Your name or org" />
+              <label>{{ t('plugins.form.author') }}</label>
+              <input v-model="newPlugin.author" type="text" :placeholder="t('plugins.form.authorPlaceholder')" />
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" @click="showCreateModal = false">Cancel</button>
-            <button class="btn btn-primary" @click="createPlugin">Create Plugin</button>
+            <button class="btn btn-secondary" @click="showCreateModal = false">{{ t('common.cancel') }}</button>
+            <button class="btn btn-primary" @click="createPlugin">{{ t('plugins.createPlugin') }}</button>
           </div>
         </div>
       </div>
@@ -408,10 +410,10 @@ onMounted(() => {
 
     <ConfirmModal
       :open="showDeleteConfirm"
-      title="Delete Plugin"
-      :message="`Are you sure you want to delete \u201C${pluginToDelete?.name}\u201D? This action cannot be undone.`"
-      confirm-label="Delete"
-      cancel-label="Cancel"
+      :title="t('plugins.deleteTitle')"
+      :message="t('plugins.deleteMessage', { name: pluginToDelete?.name })"
+      :confirm-label="t('common.delete')"
+      :cancel-label="t('common.cancel')"
       variant="danger"
       @confirm="deletePlugin"
       @cancel="showDeleteConfirm = false"
@@ -422,17 +424,17 @@ onMounted(() => {
       <div v-if="showGenerateModal" ref="generateModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-generate-plugin" tabindex="-1" @click.self="showGenerateModal = false" @keydown.escape="showGenerateModal = false">
         <div class="modal generate-modal">
           <div class="modal-header">
-            <h2 id="modal-title-generate-plugin">Generate Plugin with AI</h2>
+            <h2 id="modal-title-generate-plugin">{{ t('plugins.generateTitle') }}</h2>
             <button class="modal-close" @click="showGenerateModal = false">&times;</button>
           </div>
           <div class="modal-body">
-            <p>Describe the plugin you want to create and AI will generate the configuration with components.</p>
+            <p>{{ t('plugins.generateDesc') }}</p>
             <div class="form-group">
-              <label>Description</label>
+              <label>{{ t('plugins.form.description') }}</label>
               <textarea
                 v-model="generateDescription"
                 rows="4"
-                placeholder="e.g., A code quality plugin with a pre-commit hook that runs linting, a slash command for generating documentation, and a validation rule for test coverage"
+                :placeholder="t('plugins.generatePlaceholder')"
                 :disabled="isGenerating"
               ></textarea>
             </div>
@@ -440,14 +442,14 @@ onMounted(() => {
               v-if="isGenerating"
               :log="generateLog"
               :is-streaming="isGenerating"
-              :phase="generatePhase || 'Generating plugin configuration...'"
-              hint="Streaming Claude CLI output"
+              :phase="generatePhase || t('plugins.generatingPhase')"
+              :hint="t('plugins.streamingHint')"
             />
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" @click="showGenerateModal = false" :disabled="isGenerating">Cancel</button>
+            <button class="btn btn-secondary" @click="showGenerateModal = false" :disabled="isGenerating">{{ t('common.cancel') }}</button>
             <button class="btn btn-primary" @click="generatePlugin" :disabled="isGenerating || generateDescription.trim().length < 10">
-              {{ isGenerating ? 'Generating...' : 'Generate' }}
+              {{ isGenerating ? t('plugins.generating') : t('plugins.generate') }}
             </button>
           </div>
         </div>

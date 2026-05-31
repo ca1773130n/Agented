@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { BotTemplate } from '../services/api';
 import { botTemplateApi, triggerApi, ApiError } from '../services/api';
 import { useToast } from '../composables/useToast';
 import { API_BASE, getApiKey } from '../services/api/client';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 // Template gallery state
@@ -49,7 +51,7 @@ async function loadTemplates() {
     const data = await botTemplateApi.list();
     templates.value = data.templates || [];
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load templates';
+    const message = err instanceof ApiError ? err.message : t('botTemplateMarketplace.toast.loadFailed');
     showToast(message, 'error');
   } finally {
     isLoading.value = false;
@@ -60,9 +62,9 @@ async function deployTemplate(template: BotTemplate) {
   deployingId.value = template.id;
   try {
     const result = await botTemplateApi.deploy(template.id);
-    showToast(`Deployed "${result.trigger_name}" successfully`, 'success');
+    showToast(t('botTemplateMarketplace.toast.deployed', { name: result.trigger_name }), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to deploy template';
+    const message = err instanceof ApiError ? err.message : t('botTemplateMarketplace.toast.deployFailed');
     showToast(message, 'error');
   } finally {
     deployingId.value = null;
@@ -120,7 +122,7 @@ async function generateFromDescription() {
               generatedConfig.value = parsed.result;
               streamOutput.value = JSON.stringify(parsed.result, null, 2);
             } else if (parsed.type === 'error') {
-              showToast(parsed.message || 'Generation failed', 'error');
+              showToast(parsed.message || t('botTemplateMarketplace.toast.generationFailed'), 'error');
             }
           } catch {
             // Non-JSON data line, append as text
@@ -130,7 +132,7 @@ async function generateFromDescription() {
       }
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Generation failed';
+    const message = err instanceof Error ? err.message : t('botTemplateMarketplace.toast.generationFailed');
     showToast(message, 'error');
   } finally {
     isGenerating.value = false;
@@ -153,12 +155,12 @@ async function deployGeneratedBot() {
       schedule_day: config.schedule_day ? Number(config.schedule_day) : undefined,
       schedule_timezone: config.schedule_timezone,
     });
-    showToast(`Bot "${config.name || 'Generated Bot'}" created successfully`, 'success');
+    showToast(t('botTemplateMarketplace.toast.botCreated', { name: config.name || 'Generated Bot' }), 'success');
     generatedConfig.value = null;
     streamOutput.value = '';
     nlDescription.value = '';
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to create bot';
+    const message = err instanceof ApiError ? err.message : t('botTemplateMarketplace.toast.createFailed');
     showToast(message, 'error');
   } finally {
     isDeployingGenerated.value = false;
@@ -171,19 +173,19 @@ onMounted(loadTemplates);
 <template>
   <div class="marketplace-page">
     <header class="page-header">
-      <h1>Bot Templates</h1>
-      <p class="page-subtitle">Deploy pre-built bot configurations or create your own with natural language</p>
+      <h1>{{ t('botTemplateMarketplace.title') }}</h1>
+      <p class="page-subtitle">{{ t('botTemplateMarketplace.subtitle') }}</p>
     </header>
 
     <!-- Template Gallery -->
     <section class="template-gallery">
       <div v-if="isLoading" class="loading-state">
         <div class="spinner"></div>
-        <span>Loading templates...</span>
+        <span>{{ t('botTemplateMarketplace.loadingTemplates') }}</span>
       </div>
 
       <div v-else-if="templates.length === 0" class="empty-state">
-        <p>No templates available yet.</p>
+        <p>{{ t('botTemplateMarketplace.noTemplates') }}</p>
       </div>
 
       <div v-else class="template-grid">
@@ -215,10 +217,10 @@ onMounted(loadTemplates);
             @click="deployTemplate(template)"
           >
             <template v-if="deployingId === template.id">
-              <span class="spinner-sm"></span> Deploying...
+              <span class="spinner-sm"></span> {{ t('botTemplateMarketplace.deploying') }}
             </template>
             <template v-else>
-              Deploy
+              {{ t('botTemplateMarketplace.deploy') }}
             </template>
           </button>
         </div>
@@ -227,13 +229,13 @@ onMounted(loadTemplates);
 
     <!-- NL Bot Creator -->
     <section class="nl-creator">
-      <h2>Create Bot from Description</h2>
-      <p class="section-subtitle">Describe the bot you want and we will generate the configuration using AI</p>
+      <h2>{{ t('botTemplateMarketplace.nlTitle') }}</h2>
+      <p class="section-subtitle">{{ t('botTemplateMarketplace.nlSubtitle') }}</p>
 
       <div class="nl-input-area">
         <textarea
           v-model="nlDescription"
-          placeholder="Describe the bot you want to create... (e.g., 'A bot that reviews Python pull requests for security vulnerabilities and suggests fixes')"
+          :placeholder="t('botTemplateMarketplace.nlPlaceholder')"
           rows="4"
           :disabled="isGenerating"
         ></textarea>
@@ -243,26 +245,26 @@ onMounted(loadTemplates);
           @click="generateFromDescription"
         >
           <template v-if="isGenerating">
-            <span class="spinner-sm"></span> Generating...
+            <span class="spinner-sm"></span> {{ t('botTemplateMarketplace.generating') }}
           </template>
           <template v-else>
-            Generate
+            {{ t('botTemplateMarketplace.generate') }}
           </template>
         </button>
       </div>
 
       <div v-if="streamOutput" class="stream-output">
         <div class="output-header">
-          <span>Generated Configuration</span>
+          <span>{{ t('botTemplateMarketplace.generatedConfig') }}</span>
           <button
             v-if="generatedConfig && !isDeployingGenerated"
             class="deploy-generated-btn"
             @click="deployGeneratedBot"
           >
-            Deploy Generated Bot
+            {{ t('botTemplateMarketplace.deployGeneratedBot') }}
           </button>
           <span v-if="isDeployingGenerated" class="deploying-text">
-            <span class="spinner-sm"></span> Deploying...
+            <span class="spinner-sm"></span> {{ t('botTemplateMarketplace.deploying') }}
           </span>
         </div>
         <pre class="output-code"><code>{{ streamOutput }}</code></pre>

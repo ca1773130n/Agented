@@ -12,6 +12,7 @@
 -->
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import {
   teamLeaderChatApi,
   type TeamLeaderChatSession,
@@ -23,6 +24,7 @@ import ErrorState from '../base/ErrorState.vue';
 
 const props = defineProps<{ projectId: string }>();
 const showToast = useToast();
+const { t } = useI18n();
 
 const isResolving = ref(true);
 const resolveError = ref<string | null>(null);
@@ -59,7 +61,7 @@ const sseSource = ref<EventSource | null>(null);
 const scrollContainer = ref<HTMLDivElement | null>(null);
 
 const tesseraeBadge = computed(() =>
-  chatSession.value?.tesserae_enabled ? 'grounded by Tesserae' : null,
+  chatSession.value?.tesserae_enabled ? t('projectTeamLeaderChat.groundedBadge') : null,
 );
 
 async function resolveAndConnect() {
@@ -71,7 +73,7 @@ async function resolveAndConnect() {
     connectStream(session);
   } catch (err) {
     resolveError.value =
-      err instanceof ApiError ? err.message : 'Failed to open chat';
+      err instanceof ApiError ? err.message : t('projectTeamLeaderChat.openFailed');
   } finally {
     isResolving.value = false;
   }
@@ -222,7 +224,7 @@ async function send() {
       },
     );
   } catch (err) {
-    const msg = err instanceof ApiError ? err.message : 'Send failed';
+    const msg = err instanceof ApiError ? err.message : t('projectTeamLeaderChat.sendFailed');
     showToast(msg, 'error');
     isStreaming.value = false;
   } finally {
@@ -275,25 +277,25 @@ onUnmounted(closeStream);
   <section class="team-leader-chat" data-testid="project-team-leader-chat">
     <header class="head">
       <div>
-        <h3>Ask the team leader</h3>
+        <h3>{{ t('projectTeamLeaderChat.title') }}</h3>
         <p class="muted">
           <span v-if="chatSession">
-            Conversation with
+            {{ t('projectTeamLeaderChat.conversationWith') }}
             <strong>{{ chatSession.leader_name }}</strong>
             <span v-if="tesseraeBadge" class="badge ok">
               {{ tesseraeBadge }}
             </span>
           </span>
-          <span v-else-if="isResolving">Resolving team leader…</span>
+          <span v-else-if="isResolving">{{ t('projectTeamLeaderChat.resolving') }}</span>
         </p>
         <p v-if="chatSession" class="muted tiny">
-          Conversation persists across reloads —
-          backed by <code>super_agent_sessions.conversation_log</code>.
+          {{ t('projectTeamLeaderChat.persistsNote') }}
+          <code>super_agent_sessions.conversation_log</code>.
         </p>
       </div>
     </header>
 
-    <LoadingState v-if="isResolving" message="Opening chat session…" />
+    <LoadingState v-if="isResolving" :message="t('projectTeamLeaderChat.openingSession')" />
     <ErrorState
       v-else-if="resolveError"
       :message="resolveError"
@@ -306,9 +308,7 @@ onUnmounted(closeStream);
         data-testid="team-leader-chat-messages"
       >
         <p v-if="!messages.length" class="empty muted">
-          Ask the leader anything about this project — they have access
-          to the compiled Tesserae graph (code + docs + past sessions)
-          when grounded retrieval is needed.
+          {{ t('projectTeamLeaderChat.emptyHint') }}
         </p>
         <article
           v-for="(m, i) in messages"
@@ -322,7 +322,7 @@ onUnmounted(closeStream);
             class="msg__tools"
             data-testid="msg-tool-uses"
           >
-            <span class="tool-label">Queried:</span>
+            <span class="tool-label">{{ t('projectTeamLeaderChat.queriedLabel') }}</span>
             <span
               v-for="(tu, ti) in m.tool_uses"
               :key="(tu.id || tu.name) + ':' + ti"
@@ -341,13 +341,13 @@ onUnmounted(closeStream);
             v-if="m.role === 'assistant' && m.citations?.length"
             class="msg__cites"
           >
-            <span class="cite-label">Cited:</span>
+            <span class="cite-label">{{ t('projectTeamLeaderChat.citedLabel') }}</span>
             <code
               v-for="c in m.citations"
               :key="c.kind + ':' + c.value"
               class="cite-chip"
               :data-kind="c.kind"
-              :title="`Citation kind: ${c.kind}`"
+              :title="t('projectTeamLeaderChat.citationKind', { kind: c.kind })"
             >{{ c.value }}</code>
           </div>
         </article>
@@ -357,7 +357,7 @@ onUnmounted(closeStream);
       <footer class="composer">
         <textarea
           v-model="draft"
-          placeholder="Ask the team leader…"
+          :placeholder="t('projectTeamLeaderChat.inputPlaceholder')"
           :disabled="isSending"
           rows="2"
           data-testid="team-leader-chat-input"
@@ -369,7 +369,7 @@ onUnmounted(closeStream);
           data-testid="team-leader-chat-send"
           @click="send"
         >
-          Ask
+          {{ t('projectTeamLeaderChat.askButton') }}
         </button>
       </footer>
     </template>

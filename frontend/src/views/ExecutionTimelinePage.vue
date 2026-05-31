@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { executionApi } from '../services/api/triggers';
 const router = useRouter();
+const { t } = useI18n();
 
 interface ExecutionBar {
   id: string;
@@ -89,11 +91,11 @@ const nowPct = computed(() => {
 });
 
 const windowOptions = [
-  { label: '30 min', value: 30 },
-  { label: '1 hr', value: 60 },
-  { label: '3 hr', value: 180 },
-  { label: '6 hr', value: 360 },
-  { label: '24 hr', value: 1440 },
+  { labelKey: 'executionTimeline.window.30min', value: 30 },
+  { labelKey: 'executionTimeline.window.1hr', value: 60 },
+  { labelKey: 'executionTimeline.window.3hr', value: 180 },
+  { labelKey: 'executionTimeline.window.6hr', value: 360 },
+  { labelKey: 'executionTimeline.window.24hr', value: 1440 },
 ];
 
 function barLeft(bar: ExecutionBar): number {
@@ -150,16 +152,16 @@ const summary = computed(() => ({
   <div class="timeline-page">
 
     <PageHeader
-      title="Execution Timeline"
-      subtitle="Gantt-style view of all bot executions in a time window — status, overlap, duration, and bottlenecks at a glance."
+      :title="t('executionTimeline.title')"
+      :subtitle="t('executionTimeline.subtitle')"
     />
 
     <!-- Summary bar -->
     <div class="summary-row">
-      <div class="summary-chip total">{{ summary.total }} total</div>
-      <div class="summary-chip success">{{ summary.success }} succeeded</div>
-      <div class="summary-chip failed">{{ summary.failed }} failed</div>
-      <div class="summary-chip running">{{ summary.running }} running</div>
+      <div class="summary-chip total">{{ t('executionTimeline.summary.total', { count: summary.total }) }}</div>
+      <div class="summary-chip success">{{ t('executionTimeline.summary.succeeded', { count: summary.success }) }}</div>
+      <div class="summary-chip failed">{{ t('executionTimeline.summary.failed', { count: summary.failed }) }}</div>
+      <div class="summary-chip running">{{ t('executionTimeline.summary.running', { count: summary.running }) }}</div>
     </div>
 
     <!-- Controls -->
@@ -170,15 +172,15 @@ const summary = computed(() => ({
           :key="opt.value"
           :class="['window-tab', { active: windowMinutes === opt.value }]"
           @click="windowMinutes = opt.value"
-        >{{ opt.label }}</button>
+        >{{ t(opt.labelKey) }}</button>
       </div>
       <div class="status-filter">
         <select v-model="statusFilter" class="select">
-          <option value="all">All statuses</option>
-          <option value="success">Success</option>
-          <option value="failed">Failed</option>
-          <option value="running">Running</option>
-          <option value="queued">Queued</option>
+          <option value="all">{{ t('executionTimeline.status.all') }}</option>
+          <option value="success">{{ t('executionTimeline.status.success') }}</option>
+          <option value="failed">{{ t('executionTimeline.status.failed') }}</option>
+          <option value="running">{{ t('executionTimeline.status.running') }}</option>
+          <option value="queued">{{ t('executionTimeline.status.queued') }}</option>
         </select>
       </div>
     </div>
@@ -199,14 +201,14 @@ const summary = computed(() => ({
           </div>
           <!-- Now indicator -->
           <div class="now-line" :style="{ left: `${nowPct}%` }">
-            <span class="now-label">now</span>
+            <span class="now-label">{{ t('executionTimeline.now') }}</span>
           </div>
         </div>
       </div>
 
       <!-- Bot rows -->
       <div class="gantt-rows">
-        <div v-if="filteredBots.length === 0" class="gantt-empty">No executions match the current filter.</div>
+        <div v-if="filteredBots.length === 0" class="gantt-empty">{{ t('executionTimeline.noMatch') }}</div>
         <div v-for="bot in filteredBots" :key="bot.botId" class="gantt-row">
           <div class="gantt-label-col">
             <div class="gantt-bot-name">{{ bot.botName }}</div>
@@ -227,7 +229,7 @@ const summary = computed(() => ({
               @click="selectBar(bar)"
             >
               <span class="bar-icon">{{ statusIcon(bar.status) }}</span>
-              <span class="bar-dur">{{ bar.status !== 'queued' ? formatDuration(bar.durationMs) : 'pending' }}</span>
+              <span class="bar-dur">{{ bar.status !== 'queued' ? formatDuration(bar.durationMs) : t('executionTimeline.pending') }}</span>
             </div>
           </div>
         </div>
@@ -242,26 +244,26 @@ const summary = computed(() => ({
       </div>
       <div class="detail-body">
         <div class="detail-row">
-          <span class="detail-key">Bot</span>
+          <span class="detail-key">{{ t('executionTimeline.detail.bot') }}</span>
           <span class="detail-val">{{ selectedExec.botName }}</span>
         </div>
         <div class="detail-row">
-          <span class="detail-key">Status</span>
+          <span class="detail-key">{{ t('executionTimeline.detail.status') }}</span>
           <span class="detail-val status-badge" :style="{ color: barColor(selectedExec.status) }">
             {{ statusIcon(selectedExec.status) }} {{ selectedExec.status }}
           </span>
         </div>
         <div class="detail-row">
-          <span class="detail-key">Trigger</span>
+          <span class="detail-key">{{ t('executionTimeline.detail.trigger') }}</span>
           <span class="detail-val">{{ selectedExec.trigger }}</span>
         </div>
         <div class="detail-row">
-          <span class="detail-key">Duration</span>
+          <span class="detail-key">{{ t('executionTimeline.detail.duration') }}</span>
           <span class="detail-val">{{ formatDuration(selectedExec.durationMs) }}</span>
         </div>
         <div class="detail-actions">
-          <button class="btn btn-ghost" @click="router.push({ name: 'live-execution-terminal' })">View Logs</button>
-          <button class="btn btn-ghost" @click="router.push({ name: 'execution-replay-diff' })">Replay</button>
+          <button class="btn btn-ghost" @click="router.push({ name: 'live-execution-terminal' })">{{ t('executionTimeline.detail.viewLogs') }}</button>
+          <button class="btn btn-ghost" @click="router.push({ name: 'execution-replay-diff' })">{{ t('executionTimeline.detail.replay') }}</button>
         </div>
       </div>
     </div>

@@ -14,7 +14,10 @@
  * v0.7.70.
  */
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { ForgeAttachment } from '../../services/api/projects';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   attachments: ForgeAttachment[];
@@ -128,7 +131,7 @@ function chipLabel(att: ForgeAttachment): string {
     case 'file':
       return `📎 ${att.path}`;
     case 'snippet':
-      return `💬 ${att.label || 'note'}`;
+      return `💬 ${att.label || t('sessionContextTray.noteFallback')}`;
     case 'url':
       return `🔗 ${att.url}`;
     case 'entity':
@@ -152,7 +155,7 @@ function chipLabel(att: ForgeAttachment): string {
         <button
           type="button"
           class="chip-remove"
-          :aria-label="`Remove ${chipLabel(att)}`"
+          :aria-label="t('sessionContextTray.removeChip', { label: chipLabel(att) })"
           :disabled="props.disabled"
           @click="removeAt(idx)"
         >
@@ -166,37 +169,37 @@ function chipLabel(att: ForgeAttachment): string {
         type="button"
         class="action-btn"
         :disabled="props.disabled"
-        title="Attach a repo file (path relative to project root)"
+        :title="t('sessionContextTray.fileTooltip')"
         @click="showFileEditor = true"
       >
-        📎 File
+        📎 {{ t('sessionContextTray.file') }}
       </button>
       <button
         type="button"
         class="action-btn"
         :disabled="props.disabled"
-        title="Attach a free-form snippet (notes, error logs, specs)"
+        :title="t('sessionContextTray.snippetTooltip')"
         @click="showSnippetEditor = true"
       >
-        💬 Snippet
+        💬 {{ t('sessionContextTray.snippet') }}
       </button>
       <button
         type="button"
         class="action-btn"
         :disabled="props.disabled"
-        title="Attach a URL (backend fetches + summarizes)"
+        :title="t('sessionContextTray.urlTooltip')"
         @click="showUrlEditor = true"
       >
-        🔗 URL
+        🔗 {{ t('sessionContextTray.url') }}
       </button>
       <button
         type="button"
         class="action-btn"
         :disabled="props.disabled"
-        title="Reference a project entity (@product/foo, @team/bar)"
+        :title="t('sessionContextTray.entityTooltip')"
         @click="showEntityEditor = true"
       >
-        @ Entity
+        @ {{ t('sessionContextTray.entity') }}
       </button>
       <!-- v0.7.75 — slide-over showing what claude will actually see:
            compiled system prompt + prepend + overlay file keys +
@@ -205,10 +208,10 @@ function chipLabel(att: ForgeAttachment): string {
       <button
         type="button"
         class="action-btn action-btn-secondary"
-        title="Preview the compiled context that will be sent to claude"
+        :title="t('sessionContextTray.previewTooltip')"
         @click="emit('previewContext')"
       >
-        👁 Preview
+        👁 {{ t('sessionContextTray.preview') }}
       </button>
     </div>
 
@@ -218,36 +221,36 @@ function chipLabel(att: ForgeAttachment): string {
         placeholder="src/components/Foo.vue"
         @keydown.enter.prevent="addFile"
       />
-      <button type="button" @click="addFile">Add</button>
+      <button type="button" @click="addFile">{{ t('common.add') }}</button>
       <button type="button" class="ghost" @click="showFileEditor = false">
-        Cancel
+        {{ t('common.cancel') }}
       </button>
     </div>
 
     <div v-if="showSnippetEditor" class="editor" data-testid="snippet-editor">
-      <input v-model="snippetLabel" placeholder="label (optional)" />
+      <input v-model="snippetLabel" :placeholder="t('sessionContextTray.labelOptional')" />
       <textarea
         v-model="snippetText"
         rows="3"
-        placeholder="Paste text, error log, etc."
+        :placeholder="t('sessionContextTray.snippetPlaceholder')"
         @keydown.ctrl.enter.prevent="addSnippet"
         @keydown.meta.enter.prevent="addSnippet"
       ></textarea>
       <div class="editor-actions">
-        <button type="button" @click="addSnippet">Add</button>
+        <button type="button" @click="addSnippet">{{ t('common.add') }}</button>
         <button type="button" class="ghost" @click="showSnippetEditor = false">
-          Cancel
+          {{ t('common.cancel') }}
         </button>
       </div>
     </div>
 
     <div v-if="showUrlEditor" class="editor" data-testid="url-editor">
       <input v-model="urlValue" placeholder="https://example.com/spec" />
-      <input v-model="urlSummary" placeholder="optional summary" />
+      <input v-model="urlSummary" :placeholder="t('sessionContextTray.summaryOptional')" />
       <div class="editor-actions">
-        <button type="button" @click="addUrl">Add</button>
+        <button type="button" @click="addUrl">{{ t('common.add') }}</button>
         <button type="button" class="ghost" @click="showUrlEditor = false">
-          Cancel
+          {{ t('common.cancel') }}
         </button>
       </div>
     </div>
@@ -257,12 +260,12 @@ function chipLabel(att: ForgeAttachment): string {
       <textarea
         v-model="entityPayload"
         rows="3"
-        placeholder='JSON or free text (e.g. {"id":"team-1","name":"Core"})'
+        :placeholder="t('sessionContextTray.entityPayloadPlaceholder')"
       ></textarea>
       <div class="editor-actions">
-        <button type="button" @click="addEntity">Add</button>
+        <button type="button" @click="addEntity">{{ t('common.add') }}</button>
         <button type="button" class="ghost" @click="showEntityEditor = false">
-          Cancel
+          {{ t('common.cancel') }}
         </button>
       </div>
     </div>

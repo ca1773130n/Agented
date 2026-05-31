@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, toRef } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { PluginExportResponse } from '../../services/api';
 import { pluginExportApi, ApiError } from '../../services/api';
 import { useToast } from '../../composables/useToast';
 import { useFocusTrap } from '../../composables/useFocusTrap';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   show: boolean;
@@ -58,12 +61,12 @@ async function doExport() {
     });
     exportResult.value = result;
     emit('exported', result);
-    showToast(`Exported "${result.plugin_name}" as ${result.format}`, 'success');
+    showToast(t('exportPluginModal.toast.exported', { name: result.plugin_name, format: result.format }), 'success');
   } catch (e) {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to export plugin', 'error');
+      showToast(t('exportPluginModal.toast.exportFailed'), 'error');
     }
   } finally {
     isExporting.value = false;
@@ -77,7 +80,7 @@ async function copyPath() {
     copiedPath.value = true;
     setTimeout(() => { copiedPath.value = false; }, 2000);
   } catch {
-    showToast('Failed to copy path', 'error');
+    showToast(t('exportPluginModal.toast.copyFailed'), 'error');
   }
 }
 </script>
@@ -87,7 +90,7 @@ async function copyPath() {
     <div v-if="show" ref="exportModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-export-plugin" tabindex="-1" @click.self="handleClose" @keydown.escape="handleClose">
       <div class="modal export-modal">
         <div class="modal-header">
-          <h2 id="modal-title-export-plugin">Export as Plugin</h2>
+          <h2 id="modal-title-export-plugin">{{ t('exportPluginModal.title') }}</h2>
           <button class="modal-close" @click="handleClose">&times;</button>
         </div>
 
@@ -95,21 +98,21 @@ async function copyPath() {
           <!-- Export Form -->
           <template v-if="!exportResult">
             <div v-if="props.pluginId" class="context-info">
-              Exporting specific plugin
+              {{ t('exportPluginModal.exportingSpecific') }}
             </div>
             <div class="form-group">
-              <label>Team *</label>
+              <label>{{ t('exportPluginModal.teamLabel') }}</label>
               <select v-model="selectedTeamId" :disabled="isExporting">
-                <option value="" disabled>Select a team</option>
+                <option value="" disabled>{{ t('exportPluginModal.selectTeam') }}</option>
                 <option v-for="team in teams" :key="team.id" :value="team.id">
                   {{ team.name }}
                 </option>
               </select>
-              <p v-if="teams.length === 0" class="hint-text">No teams available</p>
+              <p v-if="teams.length === 0" class="hint-text">{{ t('exportPluginModal.noTeams') }}</p>
             </div>
 
             <div class="form-group">
-              <label>Export Format</label>
+              <label>{{ t('exportPluginModal.formatLabel') }}</label>
               <div class="format-cards">
                 <div
                   class="format-card"
@@ -122,8 +125,8 @@ async function copyPath() {
                     </svg>
                   </div>
                   <div class="format-text">
-                    <strong>Claude Code Plugin</strong>
-                    <span>Valid .claude-plugin directory for Claude Code</span>
+                    <strong>{{ t('exportPluginModal.claudeFormat.title') }}</strong>
+                    <span>{{ t('exportPluginModal.claudeFormat.desc') }}</span>
                   </div>
                 </div>
 
@@ -140,19 +143,19 @@ async function copyPath() {
                     </svg>
                   </div>
                   <div class="format-text">
-                    <strong>Agented Package</strong>
-                    <span>Standalone agented.json with embedded entities</span>
+                    <strong>{{ t('exportPluginModal.agentedFormat.title') }}</strong>
+                    <span>{{ t('exportPluginModal.agentedFormat.desc') }}</span>
                   </div>
                 </div>
               </div>
             </div>
 
             <div class="form-group">
-              <label>Output Directory (optional)</label>
+              <label>{{ t('exportPluginModal.outputDirLabel') }}</label>
               <input
                 v-model="outputDir"
                 type="text"
-                placeholder="Leave blank for auto-generated temp directory"
+                :placeholder="t('exportPluginModal.outputDirPlaceholder')"
                 :disabled="isExporting"
               />
             </div>
@@ -166,46 +169,46 @@ async function copyPath() {
                   <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
                   <polyline points="22 4 12 14.01 9 11.01"/>
                 </svg>
-                <h3>Export Successful</h3>
+                <h3>{{ t('exportPluginModal.successTitle') }}</h3>
               </div>
 
               <div class="result-summary">
                 <div class="result-row">
-                  <span class="result-label">Plugin</span>
+                  <span class="result-label">{{ t('exportPluginModal.pluginLabel') }}</span>
                   <span class="result-value">{{ exportResult.plugin_name }}</span>
                 </div>
                 <div class="result-row">
-                  <span class="result-label">Format</span>
+                  <span class="result-label">{{ t('exportPluginModal.formatResultLabel') }}</span>
                   <span class="result-value format-badge">{{ exportResult.format }}</span>
                 </div>
                 <div class="result-counts">
                   <div class="count-item" v-if="exportResult.agents > 0">
                     <span class="count-num">{{ exportResult.agents }}</span>
-                    <span class="count-label">Agents</span>
+                    <span class="count-label">{{ t('exportPluginModal.counts.agents') }}</span>
                   </div>
                   <div class="count-item" v-if="exportResult.skills > 0">
                     <span class="count-num">{{ exportResult.skills }}</span>
-                    <span class="count-label">Skills</span>
+                    <span class="count-label">{{ t('exportPluginModal.counts.skills') }}</span>
                   </div>
                   <div class="count-item" v-if="exportResult.commands > 0">
                     <span class="count-num">{{ exportResult.commands }}</span>
-                    <span class="count-label">Commands</span>
+                    <span class="count-label">{{ t('exportPluginModal.counts.commands') }}</span>
                   </div>
                   <div class="count-item" v-if="exportResult.hooks > 0">
                     <span class="count-num">{{ exportResult.hooks }}</span>
-                    <span class="count-label">Hooks</span>
+                    <span class="count-label">{{ t('exportPluginModal.counts.hooks') }}</span>
                   </div>
                   <div class="count-item" v-if="exportResult.rules > 0">
                     <span class="count-num">{{ exportResult.rules }}</span>
-                    <span class="count-label">Rules</span>
+                    <span class="count-label">{{ t('exportPluginModal.counts.rules') }}</span>
                   </div>
                 </div>
                 <div class="result-path">
-                  <span class="result-label">Path</span>
+                  <span class="result-label">{{ t('exportPluginModal.pathLabel') }}</span>
                   <div class="path-row">
                     <code>{{ exportResult.export_path }}</code>
                     <button class="btn btn-small btn-copy" @click="copyPath">
-                      {{ copiedPath ? 'Copied!' : 'Copy Path' }}
+                      {{ copiedPath ? t('exportPluginModal.copied') : t('exportPluginModal.copyPath') }}
                     </button>
                   </div>
                 </div>
@@ -216,7 +219,7 @@ async function copyPath() {
 
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="handleClose">
-            {{ exportResult ? 'Close' : 'Cancel' }}
+            {{ exportResult ? t('common.close') : t('common.cancel') }}
           </button>
           <button
             v-if="!exportResult"
@@ -224,7 +227,7 @@ async function copyPath() {
             :disabled="!canExport"
             @click="doExport"
           >
-            {{ isExporting ? 'Exporting...' : 'Export' }}
+            {{ isExporting ? t('exportPluginModal.exporting') : t('exportPluginModal.exportBtn') }}
           </button>
         </div>
       </div>

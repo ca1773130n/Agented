@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { defineComponent, h, ref, nextTick, onMounted } from 'vue';
 import ErrorBoundary from '../ErrorBoundary.vue';
+import en from '../../../locales/en.json';
 
 // Accesses the private <script setup> state via Vue's internal setup context.
 function getSetupState(wrapper: ReturnType<typeof mount>) {
@@ -84,9 +85,12 @@ describe('ErrorBoundary', () => {
     wrapper.unmount();
   });
 
-  it('uses default fallbackTitle "Something went wrong" when prop not provided', () => {
+  it('falls back to the i18n title "Something went wrong" when fallbackTitle prop not provided', () => {
     const wrapper = mount(ErrorBoundary);
-    expect(wrapper.props('fallbackTitle')).toBe('Something went wrong');
+    // fallbackTitle now defaults to '' so the template resolves
+    // `fallbackTitle || t('errorBoundary.title')` to the localized default.
+    expect(wrapper.props('fallbackTitle')).toBe('');
+    expect(en.errorBoundary.title).toBe('Something went wrong');
     wrapper.unmount();
   });
 

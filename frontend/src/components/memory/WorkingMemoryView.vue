@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { renderMarkdown } from '../../composables/useMarkdown';
 
 const props = withDefaults(
@@ -14,6 +15,8 @@ const props = withDefaults(
   },
 );
 
+const { t } = useI18n();
+
 const renderedHtml = computed(() => {
   if (!props.content) return '';
   return renderMarkdown(props.content);
@@ -23,13 +26,13 @@ const renderedHtml = computed(() => {
 <template>
   <div class="working-memory-view">
     <div v-if="loading" class="state state-loading" data-testid="working-memory-loading">
-      Loading working memory…
+      {{ t('workingMemory.loading') }}
     </div>
     <div v-else-if="error" class="state state-error" data-testid="working-memory-error">
       {{ error }}
     </div>
     <div v-else-if="!content" class="state state-empty" data-testid="working-memory-empty">
-      No working memory yet. The agent will populate this as it learns.
+      {{ t('workingMemory.empty') }}
     </div>
     <div
       v-else

@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Chart, registerables } from 'chart.js';
 import type { PrHistoryPoint } from '../../services/api';
 import { safeFormatDate } from '../../utils/datetime';
+
+const { t } = useI18n();
 
 Chart.register(...registerables);
 
@@ -44,7 +47,7 @@ function renderChart() {
       labels,
       datasets: [
         {
-          label: 'Created',
+          label: t('prHistoryChart.created'),
           data: sorted.map(h => h.created),
           borderColor: colors.created,
           backgroundColor: `${colors.created}20`,
@@ -54,7 +57,7 @@ function renderChart() {
           pointHoverRadius: 6,
         },
         {
-          label: 'Merged',
+          label: t('prHistoryChart.merged'),
           data: sorted.map(h => h.merged),
           borderColor: colors.merged,
           backgroundColor: `${colors.merged}20`,
@@ -64,7 +67,7 @@ function renderChart() {
           pointHoverRadius: 6,
         },
         {
-          label: 'Closed',
+          label: t('prHistoryChart.closed'),
           data: sorted.map(h => h.closed),
           borderColor: colors.closed,
           backgroundColor: `${colors.closed}20`,

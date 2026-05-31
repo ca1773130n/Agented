@@ -11,6 +11,7 @@
 -->
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import {
   EVOLUTION_STATUS_COLOR_VAR,
   EVOLUTION_STATUS_LABEL,
@@ -28,6 +29,7 @@ interface ProjectLite {
 }
 
 const emit = defineEmits<{ loaded: [slug: string] }>();
+const { t } = useI18n();
 
 const isLoading = ref(false);
 const loadError = ref<string | null>(null);
@@ -66,7 +68,7 @@ async function loadData() {
     }
   } catch (err) {
     loadError.value =
-      err instanceof Error ? err.message : 'Failed to load evolution rounds';
+      err instanceof Error ? err.message : t('harnessEvolutionCard.error.load');
     rounds.value = [];
   } finally {
     isLoading.value = false;
@@ -76,14 +78,14 @@ async function loadData() {
 
 function summarizePatch(round: EvolutionRound): string {
   const entries = round.output_patch?.entries || [];
-  if (entries.length === 0) return 'no changes';
+  if (entries.length === 0) return t('harnessEvolutionCard.noChanges');
   const counts: Record<string, number> = {};
   for (const e of entries) counts[e.op] = (counts[e.op] || 0) + 1;
   const parts: string[] = [];
-  if (counts.create) parts.push(`+${counts.create} create`);
-  if (counts.update) parts.push(`~${counts.update} update`);
-  if (counts.delete) parts.push(`-${counts.delete} delete`);
-  return parts.join(', ') || 'no changes';
+  if (counts.create) parts.push(`+${counts.create} ${t('harnessEvolutionCard.op.create')}`);
+  if (counts.update) parts.push(`~${counts.update} ${t('harnessEvolutionCard.op.update')}`);
+  if (counts.delete) parts.push(`-${counts.delete} ${t('harnessEvolutionCard.op.delete')}`);
+  return parts.join(', ') || t('harnessEvolutionCard.noChanges');
 }
 
 async function runDryRun() {
@@ -97,13 +99,13 @@ async function runDryRun() {
       { limit: 25, force: forceTrigger.value },
     );
     triggerStatus.value =
-      `Round ${result.round_id} · ${result.status}` +
+      `${t('harnessEvolutionCard.roundLabel')} ${result.round_id} · ${result.status}` +
       (result.error ? ` · ${result.error}` : '');
     if (result.status === 'failed' || result.status === 'aborted') {
-      triggerError.value = result.error || `Dry-run returned ${result.status}`;
+      triggerError.value = result.error || t('harnessEvolutionCard.error.dryRunReturned', { status: result.status });
     }
   } catch (err) {
-    triggerError.value = err instanceof Error ? err.message : 'Dry-run failed';
+    triggerError.value = err instanceof Error ? err.message : t('harnessEvolutionCard.error.dryRun');
   } finally {
     triggering.value = false;
     await loadData();
@@ -117,10 +119,10 @@ async function approve(round: EvolutionRound) {
   try {
     const result = await harnessEvolutionApi.approve(round.id);
     if (result.status !== 'applied') {
-      actionError.value = result.error || `Approve returned ${result.status}`;
+      actionError.value = result.error || t('harnessEvolutionCard.error.approveReturned', { status: result.status });
     }
   } catch (err) {
-    actionError.value = err instanceof Error ? err.message : 'Approve failed';
+    actionError.value = err instanceof Error ? err.message : t('harnessEvolutionCard.error.approve');
   } finally {
     actingRoundId.value = null;
     await loadData();
@@ -132,12 +134,12 @@ async function abort(round: EvolutionRound) {
   actingRoundId.value = round.id;
   actionError.value = null;
   try {
-    const result = await harnessEvolutionApi.abort(round.id, 'operator rejected');
+    const result = await harnessEvolutionApi.abort(round.id, t('harnessEvolutionCard.operatorRejected'));
     if (result.status !== 'aborted') {
-      actionError.value = result.error || `Abort returned ${result.status}`;
+      actionError.value = result.error || t('harnessEvolutionCard.error.abortReturned', { status: result.status });
     }
   } catch (err) {
-    actionError.value = err instanceof Error ? err.message : 'Abort failed';
+    actionError.value = err instanceof Error ? err.message : t('harnessEvolutionCard.error.abort');
   } finally {
     actingRoundId.value = null;
     await loadData();
@@ -168,19 +170,18 @@ onMounted(loadData);
   >
     <header class="lane-card__head">
       <div>
-        <h2 class="lane-card__title">Harness evolution rounds</h2>
+        <h2 class="lane-card__title">{{ t('harnessEvolutionCard.title') }}</h2>
         <p class="lane-card__subtitle">
-          Codex-proposed Forge patches per project. Approve a dry-run to
-          apply it; abort to reject.
+          {{ t('harnessEvolutionCard.subtitle') }}
         </p>
       </div>
     </header>
 
     <section class="trigger" data-testid="evolution-trigger-section">
-      <h3 class="trigger__title">Run a new round</h3>
+      <h3 class="trigger__title">{{ t('harnessEvolutionCard.runNewRound') }}</h3>
       <div class="trigger__form">
         <label class="trigger__label">
-          Project
+          {{ t('harnessEvolutionCard.project') }}
           <select
             v-model="selectedProjectId"
             class="trigger__select"
@@ -188,7 +189,7 @@ onMounted(loadData);
             :disabled="triggering"
           >
             <option v-if="projects.length === 0" value="" disabled>
-              No projects available
+              {{ t('harnessEvolutionCard.noProjects') }}
             </option>
             <option v-for="p in projects" :key="p.id" :value="p.id">
               {{ p.name }} ({{ p.id }})
@@ -201,18 +202,16 @@ onMounted(loadData);
           data-testid="evolution-trigger-dry-run"
           @click="runDryRun"
         >
-          {{ triggering ? 'Running…' : 'Dry-run' }}
+          {{ triggering ? t('harnessEvolutionCard.running') : t('harnessEvolutionCard.dryRun') }}
         </button>
-        <label class="trigger__force" :title="
-          'Skip the 24h rate-limit guard (default: one successful round per project per day).'
-        ">
+        <label class="trigger__force" :title="t('harnessEvolutionCard.forceHint')">
           <input
             type="checkbox"
             v-model="forceTrigger"
             :disabled="triggering"
             data-testid="evolution-trigger-force"
           />
-          <span>Force</span>
+          <span>{{ t('harnessEvolutionCard.force') }}</span>
         </label>
       </div>
       <p
@@ -227,15 +226,15 @@ onMounted(loadData);
         data-testid="evolution-trigger-status"
       >{{ triggerStatus }}</p>
       <p class="trigger__hint">
-        Live runs require the CLI:
+        {{ t('harnessEvolutionCard.cliHint') }}
         <code>uv run python scripts/run_harness_evolution.py &lt;project_id&gt;</code>.
       </p>
     </section>
 
-    <LoadingState v-if="isLoading" message="Loading…" />
+    <LoadingState v-if="isLoading" :message="t('harnessEvolutionCard.loading')" />
     <ErrorState v-else-if="loadError" :message="loadError" @retry="loadData" />
     <p v-else-if="isEmpty" class="empty" data-testid="harness-evolution-empty">
-      No evolution rounds yet.
+      {{ t('harnessEvolutionCard.empty') }}
     </p>
     <template v-else>
       <p v-if="actionError" class="action-error" role="alert">
@@ -259,7 +258,7 @@ onMounted(loadData);
               v-if="r.status === 'applied' && r.auto_applied"
               class="round__auto-badge"
               data-testid="auto-applied-badge"
-            >Auto-applied{{ r.auto_apply_reason?.score != null ? ` · ${r.auto_apply_reason.score}` : '' }}</span>
+            >{{ t('harnessEvolutionCard.autoApplied') }}{{ r.auto_apply_reason?.score != null ? ` · ${r.auto_apply_reason.score}` : '' }}</span>
             <code class="round__project">{{ r.project_id }}</code>
             <span class="round__when">{{ r.started_at }}</span>
           </div>
@@ -268,7 +267,7 @@ onMounted(loadData);
             <span
               v-if="r.input_execution_count"
               class="round__inputs"
-            >· {{ r.input_execution_count }} traj</span>
+            >· {{ t('harnessEvolutionCard.traj', { count: r.input_execution_count }) }}</span>
           </div>
           <p
             v-if="r.notes"
@@ -290,13 +289,13 @@ onMounted(loadData);
               :disabled="actingRoundId === r.id"
               :data-testid="`evolution-approve-${r.id}`"
               @click="approve(r)"
-            >Approve</button>
+            >{{ t('harnessEvolutionCard.approve') }}</button>
             <button
               class="btn btn-abort"
               :disabled="actingRoundId === r.id"
               :data-testid="`evolution-abort-${r.id}`"
               @click="abort(r)"
-            >Abort</button>
+            >{{ t('harnessEvolutionCard.abort') }}</button>
           </div>
         </li>
       </ul>

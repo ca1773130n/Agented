@@ -6,12 +6,14 @@
 // and disable the create/edit submit buttons so operators don't believe
 // their changes persisted.
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import LoadingState from '../components/base/LoadingState.vue';
 import EmptyState from '../components/base/EmptyState.vue';
 import { useToast } from '../composables/useToast';
 import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
 
 const showToast = useToast();
+const { t } = useI18n();
 
 // Digest delivery is not yet wired up server-side. Flipping this constant
 // off (and removing the banner) is what gates the feature when it ships.
@@ -87,9 +89,9 @@ async function saveDigest(digest: DigestConfig) {
       body: JSON.stringify(digest),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    showToast('Digest settings saved', 'success');
+    showToast(t('reportDigests.toasts.saved'), 'success');
   } catch {
-    showToast('Saved (demo mode)', 'success');
+    showToast(t('reportDigests.toasts.savedDemo'), 'success');
   } finally {
     isSaving.value = false;
   }
@@ -107,7 +109,7 @@ function resetCreateForm() {
 
 async function createDigest() {
   if (!newDigest.value.team_name.trim()) {
-    showToast('Team name is required', 'error');
+    showToast(t('reportDigests.toasts.teamNameRequired'), 'error');
     return;
   }
   isCreating.value = true;
@@ -122,9 +124,9 @@ async function createDigest() {
     digests.value.push(created);
     showCreateForm.value = false;
     resetCreateForm();
-    showToast('Digest configuration created', 'success');
+    showToast(t('reportDigests.toasts.created'), 'success');
   } catch {
-    showToast('Created (demo mode)', 'success');
+    showToast(t('reportDigests.toasts.createdDemo'), 'success');
     const suffix = Math.random().toString(36).substring(2, 8);
     digests.value.push({
       team_id: `team-${suffix}`,
@@ -143,7 +145,7 @@ async function createDigest() {
 }
 
 function formatTime(iso: string | null): string {
-  if (!iso) return 'Never';
+  if (!iso) return t('reportDigests.never');
   return new Date(iso).toLocaleString();
 }
 
@@ -155,46 +157,46 @@ onMounted(loadDigests);
 
     <NotEnabledBanner
       v-if="!FEATURE_ENABLED"
-      feature="Digest delivery"
-      detail="Creating or editing digest schedules is disabled until the backend ships digest persistence and delivery."
+      :feature="t('reportDigests.notEnabled.feature')"
+      :detail="t('reportDigests.notEnabled.detail')"
       testid="digests-not-enabled"
     />
 
     <div class="page-title-row">
       <div>
-        <h2>Report Digests</h2>
-        <p class="subtitle">Schedule AI-generated summaries delivered to email or Slack</p>
+        <h2>{{ t('reportDigests.title') }}</h2>
+        <p class="subtitle">{{ t('reportDigests.subtitle') }}</p>
       </div>
       <button
         class="btn btn-primary"
         :disabled="!FEATURE_ENABLED"
-        :title="!FEATURE_ENABLED ? 'Digest delivery is not yet enabled' : ''"
+        :title="!FEATURE_ENABLED ? t('reportDigests.notEnabledTooltipShort') : ''"
         @click="showCreateForm = !showCreateForm"
       >
-        {{ showCreateForm ? 'Cancel' : '+ Add Digest' }}
+        {{ showCreateForm ? t('common.cancel') : t('reportDigests.addDigest') }}
       </button>
     </div>
 
     <!-- Create form -->
     <div v-if="showCreateForm" class="card create-form">
-      <div class="create-form-header">New Report Digest</div>
+      <div class="create-form-header">{{ t('reportDigests.newDigest') }}</div>
       <div class="digest-fields" style="padding: 20px 24px;">
         <div class="fields-row">
           <div class="field-group">
-            <label class="field-label">Team Name</label>
+            <label class="field-label">{{ t('reportDigests.fields.teamName') }}</label>
             <input v-model="newDigest.team_name" class="field-input" placeholder="e.g. Platform" />
           </div>
           <div class="field-group">
-            <label class="field-label">Frequency</label>
+            <label class="field-label">{{ t('reportDigests.fields.frequency') }}</label>
             <select v-model="newDigest.frequency" class="field-select">
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
+              <option value="daily">{{ t('reportDigests.frequency.daily') }}</option>
+              <option value="weekly">{{ t('reportDigests.frequency.weekly') }}</option>
             </select>
           </div>
           <div class="field-group">
-            <label class="field-label">Channel</label>
+            <label class="field-label">{{ t('reportDigests.fields.channel') }}</label>
             <select v-model="newDigest.channel" class="field-select">
-              <option value="email">Email</option>
+              <option value="email">{{ t('reportDigests.channel.email') }}</option>
               <option value="slack">Slack</option>
             </select>
           </div>
@@ -202,7 +204,7 @@ onMounted(loadDigests);
         <div class="fields-row">
           <div class="field-group flex-grow">
             <label class="field-label">
-              {{ newDigest.channel === 'slack' ? 'Slack Channel' : 'Email Recipients' }}
+              {{ newDigest.channel === 'slack' ? t('reportDigests.fields.slackChannel') : t('reportDigests.fields.emailRecipients') }}
             </label>
             <input
               v-model="newDigest.recipients"
@@ -212,31 +214,31 @@ onMounted(loadDigests);
           </div>
         </div>
         <div class="create-actions">
-          <button class="btn btn-secondary btn-sm" @click="showCreateForm = false; resetCreateForm()">Cancel</button>
+          <button class="btn btn-secondary btn-sm" @click="showCreateForm = false; resetCreateForm()">{{ t('common.cancel') }}</button>
           <button
             class="btn btn-primary btn-sm"
             :disabled="isCreating || !FEATURE_ENABLED"
-            :title="!FEATURE_ENABLED ? 'Digest delivery is not yet enabled in this deployment' : undefined"
+            :title="!FEATURE_ENABLED ? t('reportDigests.notEnabledTooltip') : undefined"
             data-testid="digest-create-submit"
             @click="createDigest"
           >
-            {{ isCreating ? 'Creating...' : 'Create Digest' }}
+            {{ isCreating ? t('reportDigests.creating') : t('reportDigests.createDigest') }}
           </button>
         </div>
       </div>
     </div>
 
-    <LoadingState v-if="isLoading" message="Loading digest configurations..." />
+    <LoadingState v-if="isLoading" :message="t('reportDigests.loading')" />
 
     <template v-else>
-      <EmptyState v-if="digests.length === 0" title="No report digests configured" description="Configure digest schedules for your teams to receive automated reports.">
+      <EmptyState v-if="digests.length === 0" :title="t('reportDigests.empty.title')" :description="t('reportDigests.empty.description')">
         <template #actions>
           <button
             class="btn btn-primary"
             :disabled="!FEATURE_ENABLED"
-            :title="!FEATURE_ENABLED ? 'Digest delivery is not yet enabled' : ''"
+            :title="!FEATURE_ENABLED ? t('reportDigests.notEnabledTooltipShort') : ''"
             @click="showCreateForm = true"
-          >+ Add Digest</button>
+          >{{ t('reportDigests.addDigest') }}</button>
         </template>
       </EmptyState>
       <div class="digest-list">
@@ -248,38 +250,38 @@ onMounted(loadDigests);
                 class="status-badge"
                 :class="d.enabled ? 'active' : 'inactive'"
               >
-                {{ d.enabled ? 'Active' : 'Disabled' }}
+                {{ d.enabled ? t('reportDigests.active') : t('reportDigests.disabled') }}
               </span>
             </div>
-            <span class="last-generated">Last: {{ formatTime(d.last_generated) }}</span>
+            <span class="last-generated">{{ t('reportDigests.lastLabel', { time: formatTime(d.last_generated) }) }}</span>
           </div>
 
           <div class="digest-fields">
             <div class="field-group">
               <label class="toggle-row">
                 <input v-model="d.enabled" type="checkbox" class="toggle-input" />
-                <span class="toggle-label">Enable digest for this team</span>
+                <span class="toggle-label">{{ t('reportDigests.enableForTeam') }}</span>
               </label>
             </div>
 
             <div class="fields-row">
               <div class="field-group">
-                <label class="field-label">Frequency</label>
+                <label class="field-label">{{ t('reportDigests.fields.frequency') }}</label>
                 <select v-model="d.frequency" class="field-select">
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
+                  <option value="daily">{{ t('reportDigests.frequency.daily') }}</option>
+                  <option value="weekly">{{ t('reportDigests.frequency.weekly') }}</option>
                 </select>
               </div>
               <div class="field-group">
-                <label class="field-label">Channel</label>
+                <label class="field-label">{{ t('reportDigests.fields.channel') }}</label>
                 <select v-model="d.channel" class="field-select">
-                  <option value="email">Email</option>
+                  <option value="email">{{ t('reportDigests.channel.email') }}</option>
                   <option value="slack">Slack</option>
                 </select>
               </div>
               <div class="field-group flex-grow">
                 <label class="field-label">
-                  {{ d.channel === 'slack' ? 'Slack Channel' : 'Email Recipients' }}
+                  {{ d.channel === 'slack' ? t('reportDigests.fields.slackChannel') : t('reportDigests.fields.emailRecipients') }}
                 </label>
                 <input
                   v-model="d.recipients"
@@ -293,10 +295,10 @@ onMounted(loadDigests);
               <button
                 class="btn btn-primary btn-sm"
                 :disabled="isSaving || !FEATURE_ENABLED"
-                :title="!FEATURE_ENABLED ? 'Digest delivery is not yet enabled in this deployment' : undefined"
+                :title="!FEATURE_ENABLED ? t('reportDigests.notEnabledTooltip') : undefined"
                 @click="saveDigest(d)"
               >
-                {{ isSaving ? 'Saving...' : 'Save' }}
+                {{ isSaving ? t('reportDigests.saving') : t('common.save') }}
               </button>
             </div>
           </div>
@@ -306,8 +308,8 @@ onMounted(loadDigests);
       <!-- Preview -->
       <div class="card preview-card">
         <div class="card-header">
-          <h3>Last Generated Digest Preview</h3>
-          <span class="card-badge">Platform Team</span>
+          <h3>{{ t('reportDigests.previewTitle') }}</h3>
+          <span class="card-badge">{{ t('reportDigests.platformTeam') }}</span>
         </div>
         <pre class="preview-text">{{ previewContent }}</pre>
       </div>

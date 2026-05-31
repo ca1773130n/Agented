@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { findingsApi } from '../services/api/findings';
 import type { TriageFinding } from '../services/api/findings';
 
 const router = useRouter();
+const { t } = useI18n();
 const showToast = useToast();
 
 type Severity = 'critical' | 'high' | 'medium' | 'low';
@@ -19,11 +21,11 @@ const severityColors: Record<Severity, string> = {
   low: 'var(--accent-cyan)',
 };
 
-const columns: { key: Status; label: string; icon: string }[] = [
-  { key: 'open', label: 'Open', icon: '●' },
-  { key: 'in_progress', label: 'In Progress', icon: '◑' },
-  { key: 'resolved', label: 'Resolved', icon: '✓' },
-  { key: 'wont_fix', label: "Won't Fix", icon: '✕' },
+const columns: { key: Status; labelKey: string; icon: string }[] = [
+  { key: 'open', labelKey: 'findingsTriageBoard.column.open', icon: '●' },
+  { key: 'in_progress', labelKey: 'findingsTriageBoard.column.inProgress', icon: '◑' },
+  { key: 'resolved', labelKey: 'findingsTriageBoard.column.resolved', icon: '✓' },
+  { key: 'wont_fix', labelKey: 'findingsTriageBoard.column.wontFix', icon: '✕' },
 ];
 
 const findings = ref<TriageFinding[]>([]);
@@ -33,7 +35,7 @@ onMounted(async () => {
     const resp = await findingsApi.list();
     findings.value = resp.findings;
   } catch {
-    showToast('Failed to load findings', 'error');
+    showToast(t('findingsTriageBoard.toast.loadFailed'), 'error');
   }
 });
 
@@ -65,16 +67,16 @@ function colCount(status: Status): number {
 }
 
 function severityLabel(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
+  return t(`findingsTriageBoard.severity.${s}`, s.charAt(0).toUpperCase() + s.slice(1));
 }
 
 function relativeTime(ts: string): string {
   const diff = Date.now() - new Date(ts).getTime();
   const h = Math.floor(diff / 3_600_000);
-  if (h < 1) return 'just now';
-  if (h < 24) return `${h}h ago`;
+  if (h < 1) return t('findingsTriageBoard.time.justNow');
+  if (h < 24) return t('findingsTriageBoard.time.hoursAgo', { count: h });
   const d = Math.floor(h / 24);
-  return `${d}d ago`;
+  return t('findingsTriageBoard.time.daysAgo', { count: d });
 }
 
 function onDragStart(id: string) {
@@ -98,10 +100,10 @@ async function onDrop(status: Status) {
     finding.status = status;
     try {
       await findingsApi.update(finding.id, { status });
-      showToast(`Moved to "${columns.find((c) => c.key === status)?.label}"`, 'success');
+      showToast(t('findingsTriageBoard.toast.movedTo', { column: t(columns.find((c) => c.key === status)?.labelKey ?? '') }), 'success');
     } catch {
       finding.status = prevStatus;
-      showToast('Failed to update finding', 'error');
+      showToast(t('findingsTriageBoard.toast.updateFailed'), 'error');
     }
   }
   isDragging.value = null;
@@ -119,10 +121,10 @@ async function assignSelf(finding: TriageFinding) {
   finding.owner = 'me';
   try {
     await findingsApi.update(finding.id, { owner: 'me' });
-    showToast('Assigned to you', 'success');
+    showToast(t('findingsTriageBoard.toast.assigned'), 'success');
   } catch {
     finding.owner = prevOwner;
-    showToast('Failed to assign finding', 'error');
+    showToast(t('findingsTriageBoard.toast.assignFailed'), 'error');
   }
 }
 
@@ -132,10 +134,10 @@ async function moveStatus(finding: TriageFinding, status: Status) {
   finding.status = status;
   try {
     await findingsApi.update(finding.id, { status });
-    showToast(`Moved to "${columns.find((c) => c.key === status)?.label}"`, 'success');
+    showToast(t('findingsTriageBoard.toast.movedTo', { column: t(columns.find((c) => c.key === status)?.labelKey ?? '') }), 'success');
   } catch {
     finding.status = prevStatus;
-    showToast('Failed to update finding', 'error');
+    showToast(t('findingsTriageBoard.toast.updateFailed'), 'error');
   }
 }
 
@@ -148,51 +150,51 @@ const criticalOpen = computed(
 <template>
   <div class="ftb-page">
     <PageHeader
-      title="Findings Triage Board"
-      description="Triage, assign, and track actionable findings from all security, code review, and analysis bots."
+      :title="t('findingsTriageBoard.title')"
+      :description="t('findingsTriageBoard.description')"
     />
 
     <!-- Summary bar -->
     <div class="ftb-summary">
       <div class="summary-stat">
         <span class="stat-value" style="color: var(--accent-red)">{{ criticalOpen }}</span>
-        <span class="stat-label">Critical Open</span>
+        <span class="stat-label">{{ t('findingsTriageBoard.stats.criticalOpen') }}</span>
       </div>
       <div class="summary-stat">
         <span class="stat-value">{{ openCount }}</span>
-        <span class="stat-label">Total Open</span>
+        <span class="stat-label">{{ t('findingsTriageBoard.stats.totalOpen') }}</span>
       </div>
       <div class="summary-stat">
         <span class="stat-value">{{ findings.filter((f) => f.status === 'in_progress').length }}</span>
-        <span class="stat-label">In Progress</span>
+        <span class="stat-label">{{ t('findingsTriageBoard.stats.inProgress') }}</span>
       </div>
       <div class="summary-stat">
         <span class="stat-value" style="color: var(--accent-cyan)">{{
           findings.filter((f) => f.status === 'resolved').length
         }}</span>
-        <span class="stat-label">Resolved</span>
+        <span class="stat-label">{{ t('findingsTriageBoard.stats.resolved') }}</span>
       </div>
     </div>
 
     <!-- Filters -->
     <div class="ftb-filters">
       <select v-model="filterSeverity" class="ftb-select">
-        <option value="all">All Severities</option>
-        <option value="critical">Critical</option>
-        <option value="high">High</option>
-        <option value="medium">Medium</option>
-        <option value="low">Low</option>
+        <option value="all">{{ t('findingsTriageBoard.filter.allSeverities') }}</option>
+        <option value="critical">{{ t('findingsTriageBoard.severity.critical') }}</option>
+        <option value="high">{{ t('findingsTriageBoard.severity.high') }}</option>
+        <option value="medium">{{ t('findingsTriageBoard.severity.medium') }}</option>
+        <option value="low">{{ t('findingsTriageBoard.severity.low') }}</option>
       </select>
       <select v-model="filterBot" class="ftb-select">
-        <option value="all">All Bots</option>
+        <option value="all">{{ t('findingsTriageBoard.filter.allBots') }}</option>
         <option v-for="b in allBots" :key="b" :value="b">{{ b }}</option>
       </select>
       <select v-model="filterOwner" class="ftb-select">
-        <option value="all">All Owners</option>
+        <option value="all">{{ t('findingsTriageBoard.filter.allOwners') }}</option>
         <option v-for="o in allOwners" :key="o" :value="o">{{ o }}</option>
       </select>
       <button class="ftb-btn-outline" @click="router.push({ name: 'findings-trend-analysis' })">
-        View Trends →
+        {{ t('findingsTriageBoard.viewTrends') }}
       </button>
     </div>
 
@@ -209,7 +211,7 @@ const criticalOpen = computed(
       >
         <div class="col-header">
           <span class="col-icon">{{ col.icon }}</span>
-          <span class="col-label">{{ col.label }}</span>
+          <span class="col-label">{{ t(col.labelKey) }}</span>
           <span class="col-count">{{ colCount(col.key) }}</span>
         </div>
 
@@ -235,11 +237,11 @@ const criticalOpen = computed(
             <div v-if="finding.file_ref" class="card-file">{{ finding.file_ref }}</div>
             <div class="card-footer">
               <span v-if="finding.owner" class="card-owner">@{{ finding.owner }}</span>
-              <button v-else class="card-assign" @click.stop="assignSelf(finding)">Assign me</button>
+              <button v-else class="card-assign" @click.stop="assignSelf(finding)">{{ t('findingsTriageBoard.assignMe') }}</button>
             </div>
           </div>
 
-          <div v-if="columnFindings(col.key).length === 0" class="col-empty">No findings</div>
+          <div v-if="columnFindings(col.key).length === 0" class="col-empty">{{ t('findingsTriageBoard.noFindings') }}</div>
         </div>
       </div>
     </div>
@@ -260,19 +262,19 @@ const criticalOpen = computed(
           <h2 class="drawer-title">{{ selectedFinding.title }}</h2>
           <p class="drawer-desc">{{ selectedFinding.description }}</p>
           <dl class="drawer-meta">
-            <dt>Bot</dt>
+            <dt>{{ t('findingsTriageBoard.drawer.bot') }}</dt>
             <dd>{{ selectedFinding.bot_id ?? '—' }}</dd>
-            <dt>File</dt>
+            <dt>{{ t('findingsTriageBoard.drawer.file') }}</dt>
             <dd>{{ selectedFinding.file_ref ?? '—' }}</dd>
-            <dt>Owner</dt>
-            <dd>{{ selectedFinding.owner ?? 'Unassigned' }}</dd>
-            <dt>Reported</dt>
+            <dt>{{ t('findingsTriageBoard.drawer.owner') }}</dt>
+            <dd>{{ selectedFinding.owner ?? t('findingsTriageBoard.drawer.unassigned') }}</dd>
+            <dt>{{ t('findingsTriageBoard.drawer.reported') }}</dt>
             <dd>{{ relativeTime(selectedFinding.created_at) }}</dd>
-            <dt>Execution</dt>
+            <dt>{{ t('findingsTriageBoard.drawer.execution') }}</dt>
             <dd>{{ selectedFinding.execution_id ?? '—' }}</dd>
           </dl>
           <div class="drawer-actions">
-            <span class="drawer-label">Move to:</span>
+            <span class="drawer-label">{{ t('findingsTriageBoard.drawer.moveTo') }}</span>
             <button
               v-for="col in columns"
               :key="col.key"
@@ -280,12 +282,12 @@ const criticalOpen = computed(
               :disabled="selectedFinding.status === col.key"
               @click="moveStatus(selectedFinding!, col.key)"
             >
-              {{ col.label }}
+              {{ t(col.labelKey) }}
             </button>
           </div>
           <div class="drawer-link-row">
             <button class="ftb-btn-outline" @click="router.push({ name: 'execution-history' })">
-              View Execution →
+              {{ t('findingsTriageBoard.drawer.viewExecution') }}
             </button>
           </div>
         </div>

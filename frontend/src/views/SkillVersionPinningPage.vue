@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { versionPinsApi } from '../services/api/version-pins';
 import type { VersionPin, ComponentVersionHistory, ComponentType, PinStatus } from '../services/api/version-pins';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 // Local state
@@ -25,7 +27,7 @@ async function loadPins() {
     const res = await versionPinsApi.listPins();
     pins.value = res.pins;
   } catch (err) {
-    showToast('Failed to load version pins', 'error');
+    showToast(t('skillVersionPinning.toast.loadFailed'), 'error');
   } finally {
     loading.value = false;
   }
@@ -88,11 +90,11 @@ function typeIcon(type: ComponentType): string {
 async function applyPin(pin: VersionPin) {
   const target = upgradeTargets.value[pin.id] || pin.latest_version;
   if (!target) {
-    showToast('No target version selected', 'info');
+    showToast(t('skillVersionPinning.toast.noTarget'), 'info');
     return;
   }
   if (target === pin.pinned_version) {
-    showToast('Already on that version', 'info');
+    showToast(t('skillVersionPinning.toast.alreadyOnVersion'), 'info');
     return;
   }
   try {
@@ -102,10 +104,10 @@ async function applyPin(pin: VersionPin) {
     });
     const idx = pins.value.findIndex((p) => p.id === pin.id);
     if (idx !== -1) pins.value[idx] = updated;
-    showToast(`${pin.component_name} pinned to v${target}`, 'success');
+    showToast(t('skillVersionPinning.toast.pinned', { name: pin.component_name, version: target }), 'success');
     selectedPinId.value = null;
   } catch {
-    showToast('Failed to apply pin', 'error');
+    showToast(t('skillVersionPinning.toast.applyFailed'), 'error');
   }
 }
 
@@ -114,21 +116,21 @@ async function unpin(pin: VersionPin) {
     const updated = await versionPinsApi.unpinPin(pin.id);
     const idx = pins.value.findIndex((p) => p.id === pin.id);
     if (idx !== -1) pins.value[idx] = updated;
-    showToast(`${pin.component_name} unpinned — will follow latest`, 'info');
+    showToast(t('skillVersionPinning.toast.unpinned', { name: pin.component_name }), 'info');
     selectedPinId.value = null;
   } catch {
-    showToast('Failed to unpin', 'error');
+    showToast(t('skillVersionPinning.toast.unpinFailed'), 'error');
   }
 }
 
 async function upgradeAll() {
   try {
     const res = await versionPinsApi.upgradeAll();
-    showToast(`Upgraded ${res.upgraded} components to latest`, 'success');
+    showToast(t('skillVersionPinning.toast.upgradedAll', { count: res.upgraded }), 'success');
     versionHistory.value = {};
     await loadPins();
   } catch {
-    showToast('Failed to upgrade all', 'error');
+    showToast(t('skillVersionPinning.toast.upgradeAllFailed'), 'error');
   }
 }
 
@@ -143,30 +145,30 @@ async function selectPin(pin: VersionPin) {
 <template>
   <div class="page-container">
     <PageHeader
-      title="Skill & Plugin Version Pinning"
-      subtitle="Pin bots to specific component versions and receive alerts when newer versions are available"
+      :title="t('skillVersionPinning.title')"
+      :subtitle="t('skillVersionPinning.subtitle')"
     />
 
     <!-- Summary -->
     <div class="stats-row">
       <div class="stat-card">
-        <div class="stat-label">Total Pins</div>
+        <div class="stat-label">{{ t('skillVersionPinning.stats.totalPins') }}</div>
         <div class="stat-value">{{ pins.length }}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Up to Date</div>
+        <div class="stat-label">{{ t('skillVersionPinning.stats.upToDate') }}</div>
         <div class="stat-value" style="color: var(--accent-green)">
           {{ pins.filter((p) => p.status === 'pinned').length }}
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Outdated</div>
+        <div class="stat-label">{{ t('skillVersionPinning.stats.outdated') }}</div>
         <div class="stat-value" :style="{ color: outdatedCount > 0 ? 'var(--accent-amber)' : 'var(--accent-green)' }">
           {{ outdatedCount }}
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Unpinned</div>
+        <div class="stat-label">{{ t('skillVersionPinning.stats.unpinned') }}</div>
         <div class="stat-value" style="color: var(--text-secondary)">
           {{ pins.filter((p) => p.status === 'unpinned').length }}
         </div>
@@ -176,21 +178,21 @@ async function selectPin(pin: VersionPin) {
     <!-- Filters + bulk action -->
     <div class="controls-bar">
       <select v-model="filterStatus" class="filter-select">
-        <option value="all">All statuses</option>
-        <option value="pinned">Up to date</option>
-        <option value="outdated">Outdated</option>
-        <option value="unpinned">Unpinned</option>
+        <option value="all">{{ t('skillVersionPinning.filters.allStatuses') }}</option>
+        <option value="pinned">{{ t('skillVersionPinning.filters.upToDate') }}</option>
+        <option value="outdated">{{ t('skillVersionPinning.filters.outdated') }}</option>
+        <option value="unpinned">{{ t('skillVersionPinning.filters.unpinned') }}</option>
       </select>
       <select v-model="filterBot" class="filter-select">
-        <option value="all">All bots</option>
+        <option value="all">{{ t('skillVersionPinning.filters.allBots') }}</option>
         <option v-for="bot in bots" :key="bot.id" :value="bot.id">{{ bot.name }}</option>
       </select>
       <button v-if="outdatedCount > 0" class="btn-warning" @click="upgradeAll">
-        Upgrade All Outdated ({{ outdatedCount }})
+        {{ t('skillVersionPinning.upgradeAllOutdated', { count: outdatedCount }) }}
       </button>
     </div>
 
-    <div v-if="loading" class="loading-state">Loading version pins…</div>
+    <div v-if="loading" class="loading-state">{{ t('skillVersionPinning.loading') }}</div>
 
     <div v-else class="main-layout">
       <!-- Pin list -->
@@ -206,23 +208,23 @@ async function selectPin(pin: VersionPin) {
             <span class="type-icon">{{ typeIcon(pin.component_type) }}</span>
             <span class="component-name">{{ pin.component_name }}</span>
             <span class="status-badge" :style="{ background: statusColor(pin.status) + '22', color: statusColor(pin.status) }">
-              {{ pin.status === 'pinned' ? 'up to date' : pin.status }}
+              {{ pin.status === 'pinned' ? t('skillVersionPinning.badge.upToDate') : pin.status }}
             </span>
           </div>
           <div class="pin-bot">
-            Bot: <strong>{{ pin.bot_name || pin.bot_id || '—' }}</strong>
+            {{ t('skillVersionPinning.botLabel') }} <strong>{{ pin.bot_name || pin.bot_id || '—' }}</strong>
           </div>
           <div class="pin-versions">
-            <span class="pinned-ver">Pinned: <code>{{ pin.pinned_version ? `v${pin.pinned_version}` : '—' }}</code></span>
+            <span class="pinned-ver">{{ t('skillVersionPinning.pinnedLabel') }} <code>{{ pin.pinned_version ? `v${pin.pinned_version}` : '—' }}</code></span>
             <span v-if="pin.status === 'outdated'" class="latest-ver">
-              Latest: <code>v{{ pin.latest_version }}</code>
+              {{ t('skillVersionPinning.latestLabel') }} <code>v{{ pin.latest_version }}</code>
             </span>
           </div>
           <div v-if="pin.status === 'outdated' && pin.changelog" class="changelog-hint">
             {{ pin.changelog }}
           </div>
         </div>
-        <div v-if="filteredPins.length === 0" class="empty-state">No pins match the current filter.</div>
+        <div v-if="filteredPins.length === 0" class="empty-state">{{ t('skillVersionPinning.noPinsMatch') }}</div>
       </div>
 
       <!-- Version picker panel -->
@@ -231,7 +233,7 @@ async function selectPin(pin: VersionPin) {
           <span class="type-icon">{{ typeIcon(selectedPin.component_type) }}</span>
           <h3>{{ selectedPin.component_name }}</h3>
         </div>
-        <p class="panel-desc">Select the version to pin for <strong>{{ selectedPin.bot_name }}</strong>.</p>
+        <p class="panel-desc">{{ t('skillVersionPinning.panel.selectVersionFor') }} <strong>{{ selectedPin.bot_name }}</strong>.</p>
 
         <div class="version-list">
           <label
@@ -252,28 +254,28 @@ async function selectPin(pin: VersionPin) {
             <div class="version-info">
               <div class="version-header">
                 <span class="version-num">v{{ v.version }}</span>
-                <span v-if="v.version === selectedPin.pinned_version" class="ver-badge current-badge">current pin</span>
-                <span v-else-if="v.version === selectedPin.latest_version" class="ver-badge latest-badge">latest</span>
-                <span v-if="v.breaking" class="ver-badge breaking-badge">breaking</span>
+                <span v-if="v.version === selectedPin.pinned_version" class="ver-badge current-badge">{{ t('skillVersionPinning.verBadge.currentPin') }}</span>
+                <span v-else-if="v.version === selectedPin.latest_version" class="ver-badge latest-badge">{{ t('skillVersionPinning.verBadge.latest') }}</span>
+                <span v-if="v.breaking" class="ver-badge breaking-badge">{{ t('skillVersionPinning.verBadge.breaking') }}</span>
                 <span class="ver-date">{{ v.released_at ? new Date(v.released_at).toLocaleDateString() : '' }}</span>
               </div>
               <div class="version-summary">{{ v.summary }}</div>
             </div>
           </label>
           <div v-if="versionsForSelected.length === 0" class="no-versions">
-            Version history not available — pin will track <code>{{ selectedPin.latest_version }}</code>.
+            {{ t('skillVersionPinning.panel.historyUnavailable') }} <code>{{ selectedPin.latest_version }}</code>.
           </div>
         </div>
 
         <div class="panel-actions">
-          <button class="btn-primary" @click="applyPin(selectedPin)">Apply Pin</button>
-          <button class="btn-ghost" @click="unpin(selectedPin)">Unpin (follow latest)</button>
-          <button class="btn-ghost" @click="selectedPinId = null">Cancel</button>
+          <button class="btn-primary" @click="applyPin(selectedPin)">{{ t('skillVersionPinning.panel.applyPin') }}</button>
+          <button class="btn-ghost" @click="unpin(selectedPin)">{{ t('skillVersionPinning.panel.unpinFollowLatest') }}</button>
+          <button class="btn-ghost" @click="selectedPinId = null">{{ t('common.cancel') }}</button>
         </div>
       </div>
 
       <div v-else class="panel-placeholder">
-        <p>Select a pin to view version history and change the pinned version.</p>
+        <p>{{ t('skillVersionPinning.panel.placeholder') }}</p>
       </div>
     </div>
   </div>

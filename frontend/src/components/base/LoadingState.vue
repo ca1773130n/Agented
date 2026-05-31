@@ -1,10 +1,14 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+
 withDefaults(
   defineProps<{
     message?: string;
   }>(),
   {
-    message: 'Loading...',
+    message: '',
   },
 );
 </script>
@@ -12,7 +16,7 @@ withDefaults(
 <template>
   <div class="ds-loading-state" role="status" aria-live="polite">
     <div class="ds-spinner"></div>
-    <span class="ds-loading-message">{{ message }}</span>
+    <span class="ds-loading-message">{{ message || t('common.loading') }}</span>
   </div>
 </template>
 

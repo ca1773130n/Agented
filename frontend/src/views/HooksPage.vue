@@ -19,7 +19,9 @@ import { useFocusTrap } from '../composables/useFocusTrap';
 import { useListFilter } from '../composables/useListFilter';
 import { usePagination } from '../composables/usePagination';
 import { useWebMcpPageTools } from '../composables/useWebMcpPageTools';
+import { useI18n } from 'vue-i18n';
 
+const { t } = useI18n();
 const router = useRouter();
 const route = useRoute();
 
@@ -138,11 +140,11 @@ async function saveDetail() {
       enabled: editForm.enabled,
       source_path: editForm.source_path || undefined,
     });
-    showToast('Hook updated successfully', 'success');
+    showToast(t('hooks.toast.updated'), 'success');
     closeDetail();
     await loadHooks();
   } catch (err: unknown) {
-    showToast(err instanceof Error ? err.message : 'Failed to update hook', 'error');
+    showToast(err instanceof Error ? err.message : t('hooks.toast.updateFailed'), 'error');
   } finally {
     isSaving.value = false;
   }
@@ -177,10 +179,10 @@ const { searchQuery, sortField, sortOrder, filteredAndSorted, resultCount, total
 
 const pagination = usePagination({ defaultPageSize: 25, storageKey: 'hooks-pagination' });
 
-const listSortOptions = [
-  { value: 'name', label: 'Name' },
-  { value: 'created_at', label: 'Date Created' },
-];
+const listSortOptions = computed(() => [
+  { value: 'name', label: t('hooks.sort.name') },
+  { value: 'created_at', label: t('hooks.sort.dateCreated') },
+]);
 
 useWebMcpPageTools({
   page: 'HooksPage',
@@ -222,7 +224,7 @@ async function loadHooks() {
     hooks.value = data.hooks || [];
     if (data.total_count != null) pagination.totalCount.value = data.total_count;
   } catch (e) {
-    loadError.value = e instanceof ApiError ? e.message : 'Failed to load hooks';
+    loadError.value = e instanceof ApiError ? e.message : t('hooks.toast.loadFailed');
     showToast(loadError.value, 'error');
   } finally {
     isLoading.value = false;
@@ -243,7 +245,7 @@ async function deleteHook() {
   deletingId.value = hookToDelete.value.id;
   try {
     await hookApi.delete(hookToDelete.value.id);
-    showToast(`Hook "${hookToDelete.value.name}" deleted`, 'success');
+    showToast(t('hooks.toast.deleted', { name: hookToDelete.value.name }), 'success');
     showDeleteConfirm.value = false;
     hookToDelete.value = null;
     await loadHooks();
@@ -251,7 +253,7 @@ async function deleteHook() {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to delete hook', 'error');
+      showToast(t('hooks.toast.deleteFailed'), 'error');
     }
   } finally {
     deletingId.value = null;
@@ -264,7 +266,7 @@ async function toggleEnabled(hook: Hook) {
     await hookApi.update(hook.id, { enabled: !hook.enabled });
     await loadHooks();
   } catch (e) {
-    showToast('Failed to update hook', 'error');
+    showToast(t('hooks.toast.updateFailed'), 'error');
   } finally {
     togglingId.value = null;
   }
@@ -286,7 +288,7 @@ const isCreating = ref(false);
 async function createHook() {
   if (isCreating.value) return;
   if (!formData.value.name.trim()) {
-    showToast('Hook name is required', 'error');
+    showToast(t('hooks.toast.nameRequired'), 'error');
     return;
   }
   isCreating.value = true;
@@ -299,14 +301,14 @@ async function createHook() {
       enabled: formData.value.enabled,
       project_id: formData.value.project_id || undefined,
     });
-    showToast(`Hook "${formData.value.name}" created`, 'success');
+    showToast(t('hooks.toast.created', { name: formData.value.name }), 'success');
     showCreateModal.value = false;
     await loadHooks();
   } catch (e) {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to create hook', 'error');
+      showToast(t('hooks.toast.createFailed'), 'error');
     }
   } finally {
     isCreating.value = false;
@@ -319,7 +321,7 @@ function getEventClass(event: HookEvent): string {
 
 async function generateHook() {
   if (!generateDescription.value.trim() || generateDescription.value.trim().length < 10) {
-    showToast('Please provide a description of at least 10 characters', 'error');
+    showToast(t('hooks.toast.descriptionTooShort'), 'error');
     return;
   }
   isGenerating.value = true;
@@ -336,10 +338,10 @@ async function generateHook() {
       formData.value.enabled = result.config.enabled !== 'false';
       showGenerateModal.value = false;
       showCreateModal.value = true;
-      showToast('Hook configuration generated! Review and save.', 'success');
+      showToast(t('hooks.toast.generated'), 'success');
     }
   } catch {
-    showToast('Failed to generate hook configuration', 'error');
+    showToast(t('hooks.toast.generateFailed'), 'error');
   } finally {
     isGenerating.value = false;
   }
@@ -352,24 +354,24 @@ onMounted(() => {
 
 <template>
   <PageLayout >
-    <PageHeader title="Hooks" subtitle="Manage event hooks that trigger on specific Claude Code events">
+    <PageHeader :title="t('hooks.title')" :subtitle="t('hooks.subtitle')">
       <template #actions>
         <button class="btn btn-ai" @click="showGenerateModal = true">
           <span class="ai-badge">AI</span>
-          Generate Hook
+          {{ t('hooks.generateHook') }}
         </button>
         <button class="btn btn-design" @click="router.push({ name: 'hook-design' })">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
             <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
           </svg>
-          Design Hook
+          {{ t('hooks.designHook') }}
         </button>
         <button class="btn btn-primary" @click="openCreateModal">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 5v14M5 12h14"/>
           </svg>
-          New Hook
+          {{ t('hooks.newHook') }}
         </button>
       </template>
     </PageHeader>
@@ -377,17 +379,17 @@ onMounted(() => {
     <!-- Filters -->
     <div class="filters-bar">
       <div class="filter-group">
-        <label>Event Type:</label>
+        <label>{{ t('hooks.filters.eventType') }}</label>
         <select v-model="filterEvent">
-          <option value="">All Events</option>
+          <option value="">{{ t('hooks.filters.allEvents') }}</option>
           <option v-for="event in HOOK_EVENTS" :key="event" :value="event">{{ event }}</option>
         </select>
       </div>
       <div class="filter-group">
-        <label>Scope:</label>
+        <label>{{ t('hooks.filters.scope') }}</label>
         <select v-model="filterProject">
-          <option value="">All</option>
-          <option value="global">Global Only</option>
+          <option value="">{{ t('hooks.filters.all') }}</option>
+          <option value="global">{{ t('hooks.filters.globalOnly') }}</option>
         </select>
       </div>
     </div>
@@ -400,32 +402,32 @@ onMounted(() => {
       :sort-options="listSortOptions"
       :result-count="resultCount"
       :total-count="totalCount"
-      placeholder="Search hooks..."
+      :placeholder="t('hooks.searchPlaceholder')"
     />
 
-    <LoadingState v-if="isLoading" message="Loading hooks..." />
+    <LoadingState v-if="isLoading" :message="t('hooks.loading')" />
 
     <ErrorState
       v-else-if="loadError"
-      title="Failed to load hooks"
+      :title="t('hooks.loadErrorTitle')"
       :message="loadError"
       @retry="loadHooks"
     />
 
     <EmptyState
       v-else-if="hooks.length === 0"
-      title="No hooks yet"
-      description="Create your first hook to trigger actions on Claude Code events"
+      :title="t('hooks.empty.title')"
+      :description="t('hooks.empty.description')"
     >
       <template #actions>
-        <button class="btn btn-primary" @click="openCreateModal">Create Hook</button>
+        <button class="btn btn-primary" @click="openCreateModal">{{ t('hooks.createHook') }}</button>
       </template>
     </EmptyState>
 
     <EmptyState
       v-else-if="filteredAndSorted.length === 0"
-      title="No matching hooks"
-      description="Try a different search term or adjust your filters"
+      :title="t('hooks.noMatch.title')"
+      :description="t('hooks.noMatch.description')"
     />
 
     <div v-else class="hooks-grid">
@@ -452,7 +454,7 @@ onMounted(() => {
             </span>
           </div>
           <div class="hook-status" :class="{ enabled: hook.enabled }">
-            {{ hook.enabled ? 'Active' : 'Disabled' }}
+            {{ hook.enabled ? t('hooks.status.active') : t('hooks.status.disabled') }}
           </div>
         </div>
 
@@ -460,19 +462,19 @@ onMounted(() => {
 
         <div class="hook-meta">
           <div class="meta-item">
-            <span class="meta-label">Scope:</span>
-            <span class="meta-value">{{ hook.project_id ? 'Project' : 'Global' }}</span>
+            <span class="meta-label">{{ t('hooks.meta.scope') }}</span>
+            <span class="meta-value">{{ hook.project_id ? t('hooks.scope.project') : t('hooks.scope.global') }}</span>
           </div>
           <div v-if="hook.source_path" class="meta-item">
-            <span class="meta-label">Source:</span>
+            <span class="meta-label">{{ t('hooks.meta.source') }}</span>
             <span class="meta-value source-path">{{ hook.source_path }}</span>
           </div>
           <div v-if="hook.created_at" class="meta-item">
-            <span class="meta-label">Created:</span>
+            <span class="meta-label">{{ t('hooks.meta.created') }}</span>
             <span class="meta-value">{{ new Date(hook.created_at).toLocaleDateString() }}</span>
           </div>
           <div v-if="hook.updated_at" class="meta-item">
-            <span class="meta-label">Updated:</span>
+            <span class="meta-label">{{ t('hooks.meta.updated') }}</span>
             <span class="meta-value">{{ new Date(hook.updated_at).toLocaleDateString() }}</span>
           </div>
         </div>
@@ -480,7 +482,7 @@ onMounted(() => {
         <div class="hook-actions">
           <button class="btn btn-small" @click.stop="toggleEnabled(hook)" :disabled="togglingId === hook.id">
             <span v-if="togglingId === hook.id" class="btn-spinner"></span>
-            {{ togglingId === hook.id ? '...' : (hook.enabled ? 'Disable' : 'Enable') }}
+            {{ togglingId === hook.id ? '...' : (hook.enabled ? t('hooks.disable') : t('hooks.enable')) }}
           </button>
           <button class="btn btn-small btn-danger" @click.stop="confirmDelete(hook)" :disabled="deletingId === hook.id">
             <span v-if="deletingId === hook.id" class="btn-spinner"></span>
@@ -506,55 +508,55 @@ onMounted(() => {
     />
 
     <!-- SlideOver Detail/Edit Panel -->
-    <SlideOver :open="!!selectedHook" @close="closeDetail" :title="selectedHook?.name || 'Hook Details'" :dirty="isDirty">
+    <SlideOver :open="!!selectedHook" @close="closeDetail" :title="selectedHook?.name || t('hooks.detailTitle')" :dirty="isDirty">
       <div class="detail-form">
         <div class="form-group">
-          <label>Name</label>
-          <input v-model="editForm.name" type="text" placeholder="Hook name" />
+          <label>{{ t('hooks.form.name') }}</label>
+          <input v-model="editForm.name" type="text" :placeholder="t('hooks.form.namePlaceholder')" />
         </div>
         <div class="form-group">
-          <label>Event</label>
+          <label>{{ t('hooks.form.event') }}</label>
           <select v-model="editForm.event">
             <option v-for="event in HOOK_EVENTS" :key="event" :value="event">{{ event }}</option>
           </select>
         </div>
         <div class="form-group">
-          <label>Description</label>
-          <textarea v-model="editForm.description" rows="3" placeholder="Hook description"></textarea>
+          <label>{{ t('hooks.form.description') }}</label>
+          <textarea v-model="editForm.description" rows="3" :placeholder="t('hooks.form.descriptionPlaceholder')"></textarea>
         </div>
         <div class="form-group">
-          <label>Content</label>
-          <textarea v-model="editForm.content" rows="8" placeholder="Hook content / script" class="code-textarea"></textarea>
+          <label>{{ t('hooks.form.content') }}</label>
+          <textarea v-model="editForm.content" rows="8" :placeholder="t('hooks.form.contentScriptPlaceholder')" class="code-textarea"></textarea>
         </div>
         <div class="form-group">
           <label class="toggle-label">
-            <span>Enabled</span>
+            <span>{{ t('hooks.form.enabled') }}</span>
             <div class="toggle-switch" :class="{ active: editForm.enabled }" @click="editForm.enabled = !editForm.enabled">
               <div class="toggle-knob"></div>
             </div>
           </label>
         </div>
         <div class="form-group">
-          <label>Source Path</label>
-          <input v-model="editForm.source_path" type="text" placeholder="/path/to/hook/file" class="source-input" />
-          <p class="form-hint">File path for this hook's source (optional)</p>
+          <label>{{ t('hooks.form.sourcePath') }}</label>
+          <input v-model="editForm.source_path" type="text" :placeholder="t('hooks.form.sourcePathPlaceholder')" class="source-input" />
+          <p class="form-hint">{{ t('hooks.form.sourcePathHint') }}</p>
         </div>
       </div>
       <template #footer>
-        <button class="btn btn-design-sm" @click="editInDesign">Edit in Designer</button>
-        <button class="btn" @click="closeDetail">Cancel</button>
+        <button class="btn btn-design-sm" @click="editInDesign">{{ t('hooks.editInDesigner') }}</button>
+        <button class="btn" @click="closeDetail">{{ t('common.cancel') }}</button>
         <button class="btn btn-primary" @click="saveDetail" :disabled="isSaving || !editForm.name.trim()">
-          {{ isSaving ? 'Saving...' : 'Save Changes' }}
+          {{ isSaving ? t('hooks.saving') : t('hooks.saveChanges') }}
         </button>
       </template>
     </SlideOver>
 
     <ConfirmModal
       :open="showDeleteConfirm"
-      title="Delete Hook"
-      :message="`Are you sure you want to delete \u201C${hookToDelete?.name}\u201D? This action cannot be undone.`"
-      confirm-label="Delete"
-      cancel-label="Cancel"
+      :title="t('hooks.deleteModal.title')"
+      :message="t('hooks.deleteModal.message', { name: hookToDelete?.name })"
+      :confirm-label="t('common.delete')"
+      :cancel-label="t('common.cancel')"
       variant="danger"
       @confirm="deleteHook"
       @cancel="showDeleteConfirm = false"
@@ -564,36 +566,36 @@ onMounted(() => {
     <Teleport to="body">
       <div v-if="showCreateModal" ref="createModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-create-hook" tabindex="-1" @click.self="showCreateModal = false" @keydown.escape="showCreateModal = false">
         <div class="modal create-modal">
-          <h2 id="modal-title-create-hook">Create New Hook</h2>
+          <h2 id="modal-title-create-hook">{{ t('hooks.createModal.title') }}</h2>
           <form @submit.prevent="createHook">
             <div class="form-group">
-              <label for="hook-name">Name *</label>
+              <label for="hook-name">{{ t('hooks.form.nameRequired') }}</label>
               <input id="hook-name" v-model="formData.name" type="text" placeholder="my-hook" required />
             </div>
             <div class="form-group">
-              <label for="hook-event">Event Type *</label>
+              <label for="hook-event">{{ t('hooks.form.eventTypeRequired') }}</label>
               <select id="hook-event" v-model="formData.event" required>
                 <option v-for="event in HOOK_EVENTS" :key="event" :value="event">{{ event }}</option>
               </select>
             </div>
             <div class="form-group">
-              <label for="hook-description">Description</label>
-              <input id="hook-description" v-model="formData.description" type="text" placeholder="Brief description of what this hook does" />
+              <label for="hook-description">{{ t('hooks.form.description') }}</label>
+              <input id="hook-description" v-model="formData.description" type="text" :placeholder="t('hooks.form.briefDescriptionPlaceholder')" />
             </div>
             <div class="form-group">
-              <label for="hook-content">Content (Markdown)</label>
-              <textarea id="hook-content" v-model="formData.content" rows="6" placeholder="# Hook Content\n\nDescribe what this hook should do..."></textarea>
+              <label for="hook-content">{{ t('hooks.form.contentMarkdown') }}</label>
+              <textarea id="hook-content" v-model="formData.content" rows="6" :placeholder="t('hooks.form.contentPlaceholder')"></textarea>
             </div>
             <div class="form-group checkbox-group">
               <label>
                 <input type="checkbox" v-model="formData.enabled" />
-                Enabled
+                {{ t('hooks.form.enabled') }}
               </label>
             </div>
             <div class="modal-actions">
-              <button type="button" class="btn" @click="showCreateModal = false">Cancel</button>
+              <button type="button" class="btn" @click="showCreateModal = false">{{ t('common.cancel') }}</button>
               <button type="submit" class="btn btn-primary" :disabled="isCreating">
-                {{ isCreating ? 'Creating…' : 'Create Hook' }}
+                {{ isCreating ? t('hooks.creating') : t('hooks.createHook') }}
               </button>
             </div>
           </form>
@@ -604,15 +606,15 @@ onMounted(() => {
     <Teleport to="body">
       <div v-if="showGenerateModal" ref="generateModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-generate-hook" tabindex="-1" @click.self="showGenerateModal = false" @keydown.escape="showGenerateModal = false">
         <div class="modal generate-modal">
-          <h2 id="modal-title-generate-hook">Generate Hook with AI</h2>
-          <p>Describe the hook you want to create and AI will generate the configuration.</p>
+          <h2 id="modal-title-generate-hook">{{ t('hooks.generateModal.title') }}</h2>
+          <p>{{ t('hooks.generateModal.description') }}</p>
           <div class="form-group">
-            <label for="gen-description">Description</label>
+            <label for="gen-description">{{ t('hooks.form.description') }}</label>
             <textarea
               id="gen-description"
               v-model="generateDescription"
               rows="4"
-              placeholder="e.g., A PreToolUse hook that blocks dangerous shell commands like rm -rf / or format disk operations"
+              :placeholder="t('hooks.generateModal.placeholder')"
               :disabled="isGenerating"
             ></textarea>
           </div>
@@ -620,13 +622,13 @@ onMounted(() => {
             v-if="isGenerating"
             :log="generateLog"
             :is-streaming="isGenerating"
-            :phase="generatePhase || 'Generating hook configuration...'"
-            hint="Streaming Claude CLI output"
+            :phase="generatePhase || t('hooks.generateModal.generatingPhase')"
+            :hint="t('hooks.generateModal.streamingHint')"
           />
           <div class="modal-actions">
-            <button class="btn" @click="showGenerateModal = false" :disabled="isGenerating">Cancel</button>
+            <button class="btn" @click="showGenerateModal = false" :disabled="isGenerating">{{ t('common.cancel') }}</button>
             <button class="btn btn-primary" @click="generateHook" :disabled="isGenerating || generateDescription.trim().length < 10">
-              {{ isGenerating ? 'Generating...' : 'Generate' }}
+              {{ isGenerating ? t('hooks.generating') : t('common.create') }}
             </button>
           </div>
         </div>

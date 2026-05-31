@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Chart, registerables } from 'chart.js';
 import type { SnapshotHistoryEntry } from '../../services/api';
+
+const { t } = useI18n();
 
 Chart.register(...registerables);
 
@@ -106,7 +109,7 @@ function renderChart() {
           },
           filter: (tooltipItem) => tooltipItem.datasetIndex === 0,
           callbacks: {
-            label: (context) => `Usage: ${(context.parsed.y ?? 0).toFixed(1)}%`,
+            label: (context) => t('rateLimitTrendChart.usageTooltip', { value: (context.parsed.y ?? 0).toFixed(1) }),
           },
         },
       },
@@ -160,7 +163,7 @@ watch(() => props.history, renderChart, { deep: true });
 <template>
   <div class="trend-chart-container">
     <div v-if="!history || history.length === 0" class="trend-no-data">
-      No data yet
+      {{ t('rateLimitTrendChart.noData') }}
     </div>
     <canvas v-else ref="chartRef"></canvas>
   </div>

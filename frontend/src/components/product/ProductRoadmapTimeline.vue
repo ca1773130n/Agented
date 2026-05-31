@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { ProductMilestone } from '../../services/api';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   milestones: ProductMilestone[];
@@ -11,7 +14,7 @@ const sortedMilestones = computed(() =>
 );
 
 function formatDate(dateStr?: string): string {
-  if (!dateStr) return 'No date';
+  if (!dateStr) return t('productRoadmapTimeline.noDate');
   const d = new Date(dateStr);
   return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 }
@@ -36,8 +39,8 @@ function getStatusColor(status: string): { bg: string; border: string } {
   <div class="card">
     <div class="card-header">
       <div class="header-left">
-        <h3>Roadmap Timeline</h3>
-        <span class="card-count">{{ milestones.length }} milestones</span>
+        <h3>{{ t('productRoadmapTimeline.title') }}</h3>
+        <span class="card-count">{{ t('productRoadmapTimeline.milestoneCount', { count: milestones.length }) }}</span>
       </div>
     </div>
 
@@ -48,7 +51,7 @@ function getStatusColor(status: string): { bg: string; border: string } {
           <line x1="4" y1="22" x2="4" y2="15"/>
         </svg>
       </div>
-      <p>No milestones defined</p>
+      <p>{{ t('productRoadmapTimeline.empty') }}</p>
     </div>
 
     <div v-else class="timeline-grid">

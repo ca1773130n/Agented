@@ -1,11 +1,15 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+
 withDefaults(
   defineProps<{
     title?: string;
     message?: string;
   }>(),
   {
-    title: 'Something went wrong',
+    title: '',
   },
 );
 
@@ -22,9 +26,9 @@ defineEmits<{
         <path d="M12 8v4M12 16h.01" />
       </svg>
     </div>
-    <h3>{{ title }}</h3>
+    <h3>{{ title || t('errorState.title') }}</h3>
     <p v-if="message" class="ds-error-message">{{ message }}</p>
-    <button class="btn btn-primary" @click="$emit('retry')">Retry</button>
+    <button class="btn btn-primary" @click="$emit('retry')">{{ t('common.retry') }}</button>
   </div>
 </template>
 

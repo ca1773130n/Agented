@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 interface ApprovalGateNodeData {
   label: string
@@ -35,9 +38,9 @@ const timeoutDisplay = computed(() => {
 
 const approvalStatus = computed(() => {
   const status = props.data.executionStatus
-  if (status === 'pending_approval') return 'Pending'
-  if (status === 'completed') return 'Approved'
-  if (status === 'failed') return 'Rejected'
+  if (status === 'pending_approval') return t('approvalGateNode.statusPending')
+  if (status === 'completed') return t('approvalGateNode.statusApproved')
+  if (status === 'failed') return t('approvalGateNode.statusRejected')
   return null
 })
 
@@ -59,7 +62,7 @@ const statusBadgeClass = computed(() => {
     </div>
     <div class="node-body">
       <div class="approval-info">
-        <span class="timeout-display">Timeout: {{ timeoutDisplay }}</span>
+        <span class="timeout-display">{{ t('approvalGateNode.timeout') }}: {{ timeoutDisplay }}</span>
       </div>
       <div v-if="approvalStatus" :class="['approval-badge', statusBadgeClass]">
         <span class="status-dot"></span>

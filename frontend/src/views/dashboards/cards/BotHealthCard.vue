@@ -4,9 +4,11 @@
 -->
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { botHealthApi } from '../../../services/api';
 import type { BotHealthRollup } from '../../../services/api';
 
+const { t } = useI18n();
 const emit = defineEmits<{ loaded: [slug: string] }>();
 
 const rollups = ref<BotHealthRollup[]>([]);
@@ -32,10 +34,10 @@ onMounted(load);
 
 function pillLabel(status: BotHealthRollup['status_pill']): string {
   return {
-    healthy: 'Healthy',
-    degraded: 'Degraded',
-    down: 'Down',
-    no_recent_runs: 'No recent runs',
+    healthy: t('botHealthCard.status.healthy'),
+    degraded: t('botHealthCard.status.degraded'),
+    down: t('botHealthCard.status.down'),
+    no_recent_runs: t('botHealthCard.status.noRecentRuns'),
   }[status];
 }
 </script>
@@ -43,29 +45,29 @@ function pillLabel(status: BotHealthRollup['status_pill']): string {
 <template>
   <section id="bot-health" class="lane-card bot-health-card">
     <header class="lane-card__head">
-      <h2 class="lane-card__title">Bot Health</h2>
+      <h2 class="lane-card__title">{{ t('botHealthCard.title') }}</h2>
       <select
         v-model.number="windowDays"
         class="bot-health-card__window"
         data-testid="window-select"
         @change="load"
       >
-        <option :value="1">Last 24h</option>
-        <option :value="7">Last 7 days</option>
-        <option :value="30">Last 30 days</option>
-        <option :value="90">Last 90 days</option>
+        <option :value="1">{{ t('botHealthCard.window.last24h') }}</option>
+        <option :value="7">{{ t('botHealthCard.window.last7d') }}</option>
+        <option :value="30">{{ t('botHealthCard.window.last30d') }}</option>
+        <option :value="90">{{ t('botHealthCard.window.last90d') }}</option>
       </select>
     </header>
 
     <div v-if="loading" class="bot-health-card__loading" data-testid="loading">
-      Loading…
+      {{ t('common.loading') }}
     </div>
     <div v-else-if="error" class="bot-health-card__error" data-testid="error">
       {{ error }}
-      <button @click="load">Retry</button>
+      <button @click="load">{{ t('common.retry') }}</button>
     </div>
     <div v-else-if="rollups.length === 0" class="bot-health-card__empty" data-testid="empty">
-      No bots yet.
+      {{ t('botHealthCard.empty') }}
     </div>
     <div v-else class="bot-health-card__grid" data-testid="grid">
       <article
@@ -82,15 +84,15 @@ function pillLabel(status: BotHealthRollup['status_pill']): string {
         </header>
         <dl class="bh-card__metrics">
           <div>
-            <dt>Success rate</dt>
+            <dt>{{ t('botHealthCard.metrics.successRate') }}</dt>
             <dd>{{ r.success_rate === null ? '—' : `${(r.success_rate * 100).toFixed(0)}%` }}</dd>
           </div>
           <div>
-            <dt>p95 latency</dt>
+            <dt>{{ t('botHealthCard.metrics.p95Latency') }}</dt>
             <dd>{{ r.p95_duration_ms === null ? '—' : `${r.p95_duration_ms} ms` }}</dd>
           </div>
           <div>
-            <dt>Runs</dt>
+            <dt>{{ t('botHealthCard.metrics.runs') }}</dt>
             <dd>{{ r.success_count + r.fail_count }}</dd>
           </div>
         </dl>
@@ -99,7 +101,7 @@ function pillLabel(status: BotHealthRollup['status_pill']): string {
           class="bh-card__failure"
           :title="r.last_failure_at ?? ''"
         >
-          Last failure: {{ r.last_failure_message.slice(0, 120) }}
+          {{ t('botHealthCard.lastFailure', { message: r.last_failure_message.slice(0, 120) }) }}
         </p>
       </article>
     </div>

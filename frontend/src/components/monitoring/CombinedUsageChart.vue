@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Chart, registerables, type ChartDataset } from 'chart.js';
 import 'chartjs-adapter-date-fns';
 import type { SnapshotHistoryEntry } from '../../services/api';
+
+const { t } = useI18n();
 
 Chart.register(...registerables);
 
@@ -190,7 +193,7 @@ function renderChart() {
         ctx.fillStyle = 'rgba(234, 179, 8, 0.7)';
         ctx.font = "10px 'Geist Mono', 'SF Mono', monospace";
         ctx.textAlign = 'center';
-        ctx.fillText('Reset', x, yScale.top - 4);
+        ctx.fillText(t('combinedUsageChart.reset'), x, yScale.top - 4);
       }
       ctx.restore();
     },
@@ -231,7 +234,7 @@ function renderChart() {
           bodyFont: { family: "'Geist', sans-serif", size: 11 },
           callbacks: {
             label: (context) => {
-              const suffix = context.dataset.borderDash ? ' (est.)' : '';
+              const suffix = context.dataset.borderDash ? ` ${t('combinedUsageChart.estimatedSuffix')}` : '';
               return `${context.dataset.label?.replace(' (projected)', '')}${suffix}: ${(context.parsed.y ?? 0).toFixed(1)}%`;
             },
           },
@@ -289,7 +292,7 @@ watch(() => [props.windowHistories, props.timeRangeStart, props.timeRangeEnd], r
 <template>
   <div class="combined-chart-container">
     <div v-if="!windowHistories?.length" class="chart-no-data">
-      No data yet
+      {{ t('combinedUsageChart.noData') }}
     </div>
     <canvas v-else ref="chartRef"></canvas>
   </div>

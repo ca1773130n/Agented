@@ -15,7 +15,10 @@
  * v0.7.77.
  */
 import { ref, toRef, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { skillConversationApi } from '../../services/api';
+
+const { t } = useI18n();
 import type {
   SkillPackagePreview,
   SkillPackageFile,
@@ -52,7 +55,7 @@ let loadToken = 0;
 
 async function load() {
   if (!props.conversationId) {
-    errorMessage.value = 'No conversation to preview yet.';
+    errorMessage.value = t('skillCreatePreviewDrawer.noConversation');
     return;
   }
   loadToken += 1;
@@ -67,7 +70,7 @@ async function load() {
   } catch (err) {
     if (token !== loadToken || !props.open) return;
     errorMessage.value =
-      err instanceof Error ? err.message : 'Failed to render preview';
+      err instanceof Error ? err.message : t('skillCreatePreviewDrawer.renderError');
   } finally {
     if (token === loadToken) loading.value = false;
   }
@@ -174,17 +177,17 @@ function onEscape(e: KeyboardEvent) {
       >
         <header class="preview-header">
           <div>
-            <h3 id="skill-preview-title">Skill package preview</h3>
+            <h3 id="skill-preview-title">{{ t('skillCreatePreviewDrawer.title') }}</h3>
             <p class="preview-subtitle">
-              These files will be written to
+              {{ t('skillCreatePreviewDrawer.subtitlePre') }}
               <code>{{ preview?.skill_md_path?.replace(/\/SKILL\.md$/, '') ?? '.claude/skills/&lt;name&gt;' }}/</code>.
-              Click any file to inspect contents before creating.
+              {{ t('skillCreatePreviewDrawer.subtitlePost') }}
             </p>
           </div>
           <button
             type="button"
             class="preview-close"
-            aria-label="Close preview"
+            :aria-label="t('skillCreatePreviewDrawer.closePreview')"
             @click="emit('close')"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -194,7 +197,7 @@ function onEscape(e: KeyboardEvent) {
         </header>
 
         <div class="preview-body">
-          <div v-if="loading" class="preview-state">Rendering preview…</div>
+          <div v-if="loading" class="preview-state">{{ t('skillCreatePreviewDrawer.rendering') }}</div>
           <div v-else-if="errorMessage" class="preview-state preview-error">
             {{ errorMessage }}
           </div>
@@ -246,11 +249,11 @@ function onEscape(e: KeyboardEvent) {
             </div>
 
             <div v-if="!preview.files.length" class="preview-empty-note">
-              No helpers or references — this skill is SKILL.md only.
+              {{ t('skillCreatePreviewDrawer.emptyNote') }}
             </div>
 
             <div v-if="preview.warnings.length" class="preview-warnings">
-              <h4 class="preview-warnings-heading">Warnings</h4>
+              <h4 class="preview-warnings-heading">{{ t('skillCreatePreviewDrawer.warnings') }}</h4>
               <ul>
                 <li v-for="(w, i) in preview.warnings" :key="i">{{ w }}</li>
               </ul>
@@ -264,7 +267,7 @@ function onEscape(e: KeyboardEvent) {
             class="btn btn-secondary"
             @click="emit('close')"
           >
-            Cancel
+            {{ t('common.cancel') }}
           </button>
           <button
             type="button"
@@ -272,7 +275,7 @@ function onEscape(e: KeyboardEvent) {
             :disabled="!preview || props.isFinalizing"
             @click="onCreate"
           >
-            {{ props.isFinalizing ? 'Creating…' : 'Create skill package' }}
+            {{ props.isFinalizing ? t('skillCreatePreviewDrawer.creating') : t('skillCreatePreviewDrawer.create') }}
           </button>
         </footer>
       </aside>

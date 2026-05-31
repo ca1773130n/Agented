@@ -19,7 +19,10 @@
  * v0.7.75.
  */
 import { ref, toRef, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { projectApi } from '../../services/api';
+
+const { t } = useI18n();
 import type {
   ForgeAttachment,
   ForgeBundlePreview,
@@ -70,7 +73,7 @@ async function load() {
   } catch (err) {
     if (token !== loadToken || !props.open) return;
     errorMessage.value =
-      err instanceof Error ? err.message : 'Failed to load preview';
+      err instanceof Error ? err.message : t('contextPreviewDrawer.loadFailed');
   } finally {
     if (token === loadToken) loading.value = false;
   }
@@ -170,17 +173,15 @@ function onEscape(e: KeyboardEvent) {
       >
         <header class="preview-header">
           <div>
-            <h3 id="preview-title">Context preview</h3>
+            <h3 id="preview-title">{{ t('contextPreviewDrawer.title') }}</h3>
             <p class="preview-subtitle">
-              What claude will see in the system prompt + the next
-              user message, given current project bindings, session
-              overrides, and attachments.
+              {{ t('contextPreviewDrawer.subtitle') }}
             </p>
           </div>
           <button
             type="button"
             class="preview-close"
-            aria-label="Close preview"
+            :aria-label="t('contextPreviewDrawer.closeAria')"
             @click="emit('close')"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -190,25 +191,25 @@ function onEscape(e: KeyboardEvent) {
         </header>
 
         <div class="preview-body">
-          <div v-if="loading" class="preview-state">Loading preview…</div>
+          <div v-if="loading" class="preview-state">{{ t('contextPreviewDrawer.loading') }}</div>
           <div v-else-if="errorMessage" class="preview-state preview-error">
             {{ errorMessage }}
           </div>
           <div v-else-if="bundle" class="preview-sections">
             <section class="preview-section">
               <h4 class="preview-heading">
-                <code>--append-system-prompt</code> text
+                <code>--append-system-prompt</code> {{ t('contextPreviewDrawer.textSuffix') }}
               </h4>
               <p v-if="!bundle.system_prompt_text" class="preview-empty">
-                (empty — no rules / skills bound, or none enabled)
+                {{ t('contextPreviewDrawer.systemPromptEmpty') }}
               </p>
               <pre v-else class="preview-pre">{{ bundle.system_prompt_text }}</pre>
             </section>
 
             <section class="preview-section">
-              <h4 class="preview-heading">User-message prepend</h4>
+              <h4 class="preview-heading">{{ t('contextPreviewDrawer.promptPrependHeading') }}</h4>
               <p v-if="!bundle.prompt_prepend" class="preview-empty">
-                (empty — no per-prompt attachments)
+                {{ t('contextPreviewDrawer.promptPrependEmpty') }}
               </p>
               <pre v-else class="preview-pre">{{ bundle.prompt_prepend }}</pre>
             </section>
@@ -218,7 +219,7 @@ function onEscape(e: KeyboardEvent) {
               class="preview-section"
             >
               <h4 class="preview-heading">
-                Overlay files
+                {{ t('contextPreviewDrawer.overlayFiles') }}
                 <span class="preview-count">
                   {{ bundle.overlay_files.length + bundle.overlay_symlinks.length }}
                 </span>
@@ -242,7 +243,7 @@ function onEscape(e: KeyboardEvent) {
               class="preview-section"
             >
               <h4 class="preview-heading">
-                MCP servers
+                {{ t('contextPreviewDrawer.mcpServers') }}
                 <span class="preview-count">{{ bundle.mcp_servers.length }}</span>
               </h4>
               <ul class="preview-list">
@@ -257,7 +258,7 @@ function onEscape(e: KeyboardEvent) {
               class="preview-section"
             >
               <h4 class="preview-heading">
-                Resolved bindings
+                {{ t('contextPreviewDrawer.resolvedBindings') }}
                 <span class="preview-count">{{ bundle.resolved_bindings.length }}</span>
               </h4>
               <ul class="preview-list preview-list-bindings">
@@ -273,7 +274,7 @@ function onEscape(e: KeyboardEvent) {
               class="preview-section preview-section-warn"
             >
               <h4 class="preview-heading">
-                Skipped bindings
+                {{ t('contextPreviewDrawer.skippedBindings') }}
                 <span class="preview-count">{{ bundle.skipped_bindings.length }}</span>
               </h4>
               <ul class="preview-list preview-list-bindings">

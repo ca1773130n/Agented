@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = withDefaults(
   defineProps<{
@@ -69,14 +72,14 @@ function onKeydown(event: KeyboardEvent) {
         type="text"
         v-model="inputText"
         class="input-field"
-        placeholder="Type a message..."
+        :placeholder="t('sessionInput.placeholder')"
         :disabled="props.disabled"
         @keydown="onKeydown"
       />
       <button
         class="send-btn"
         :disabled="props.disabled || !inputText.trim()"
-        title="Send"
+        :title="t('sessionInput.send')"
         @click="handleSend"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

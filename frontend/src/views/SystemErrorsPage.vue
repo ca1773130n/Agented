@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { useSystemErrors } from '../composables/useSystemErrors';
 import type { SystemError } from '../services/api/types/system';
 import { safeFormatDateTime } from '../utils/datetime';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 const {
@@ -33,10 +35,10 @@ const contextExpanded = ref(false);
 
 function relativeTime(ts: string): string {
   const diff = Date.now() - new Date(ts).getTime();
-  if (diff < 60000) return 'just now';
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-  return `${Math.floor(diff / 86400000)}d ago`;
+  if (diff < 60000) return t('systemErrors.time.justNow');
+  if (diff < 3600000) return t('systemErrors.time.minutesAgo', { n: Math.floor(diff / 60000) });
+  if (diff < 86400000) return t('systemErrors.time.hoursAgo', { n: Math.floor(diff / 3600000) });
+  return t('systemErrors.time.daysAgo', { n: Math.floor(diff / 86400000) });
 }
 
 function truncate(str: string, len: number): string {
@@ -53,9 +55,9 @@ async function onUpdateStatus(status: 'new' | 'investigating' | 'fixed' | 'ignor
   if (!selectedError.value) return;
   try {
     await updateStatus(selectedError.value.id, status);
-    showToast(`Status updated to ${status}`, 'success');
+    showToast(t('systemErrors.toast.statusUpdated', { status }), 'success');
   } catch {
-    showToast('Failed to update status', 'error');
+    showToast(t('systemErrors.toast.statusFailed'), 'error');
   }
 }
 
@@ -63,9 +65,9 @@ async function onRetryFix() {
   if (!selectedError.value) return;
   try {
     await retryFix(selectedError.value.id);
-    showToast('Fix retry initiated', 'success');
+    showToast(t('systemErrors.toast.retryInitiated'), 'success');
   } catch {
-    showToast('Failed to retry fix', 'error');
+    showToast(t('systemErrors.toast.retryFailed'), 'error');
   }
 }
 
@@ -85,54 +87,54 @@ onUnmounted(() => {
 
 <template>
   <div class="system-errors-page">
-    <PageHeader title="System Errors" subtitle="Monitor and manage system errors with automated fix tracking" />
+    <PageHeader :title="t('systemErrors.title')" :subtitle="t('systemErrors.subtitle')" />
 
     <!-- Filters -->
     <div class="filters-bar">
       <div class="filter-group">
-        <label>Status</label>
+        <label>{{ t('systemErrors.filters.status') }}</label>
         <select v-model="statusFilter" @change="applyFilters">
-          <option value="">All</option>
-          <option value="new">New</option>
-          <option value="investigating">Investigating</option>
-          <option value="fixed">Fixed</option>
-          <option value="ignored">Ignored</option>
+          <option value="">{{ t('systemErrors.filters.all') }}</option>
+          <option value="new">{{ t('systemErrors.status.new') }}</option>
+          <option value="investigating">{{ t('systemErrors.status.investigating') }}</option>
+          <option value="fixed">{{ t('systemErrors.status.fixed') }}</option>
+          <option value="ignored">{{ t('systemErrors.status.ignored') }}</option>
         </select>
       </div>
       <div class="filter-group">
-        <label>Category</label>
+        <label>{{ t('systemErrors.filters.category') }}</label>
         <select v-model="categoryFilter" @change="applyFilters">
-          <option value="">All</option>
-          <option value="cli_error">CLI Error</option>
-          <option value="proxy_error">Proxy Error</option>
-          <option value="streaming_error">Streaming Error</option>
-          <option value="runtime_error">Runtime Error</option>
-          <option value="frontend_error">Frontend Error</option>
-          <option value="db_error">DB Error</option>
+          <option value="">{{ t('systemErrors.filters.all') }}</option>
+          <option value="cli_error">{{ t('systemErrors.category.cliError') }}</option>
+          <option value="proxy_error">{{ t('systemErrors.category.proxyError') }}</option>
+          <option value="streaming_error">{{ t('systemErrors.category.streamingError') }}</option>
+          <option value="runtime_error">{{ t('systemErrors.category.runtimeError') }}</option>
+          <option value="frontend_error">{{ t('systemErrors.category.frontendError') }}</option>
+          <option value="db_error">{{ t('systemErrors.category.dbError') }}</option>
         </select>
       </div>
       <div class="filter-group">
-        <label>Source</label>
+        <label>{{ t('systemErrors.filters.source') }}</label>
         <select v-model="sourceFilter" @change="applyFilters">
-          <option value="">All</option>
-          <option value="backend">Backend</option>
-          <option value="frontend">Frontend</option>
+          <option value="">{{ t('systemErrors.filters.all') }}</option>
+          <option value="backend">{{ t('systemErrors.source.backend') }}</option>
+          <option value="frontend">{{ t('systemErrors.source.frontend') }}</option>
         </select>
       </div>
       <div class="filter-group">
-        <label>Time</label>
+        <label>{{ t('systemErrors.filters.time') }}</label>
         <select v-model="timeRange" @change="applyFilters">
-          <option value="hour">Last Hour</option>
-          <option value="day">Last 24h</option>
-          <option value="week">Last Week</option>
-          <option value="all">All Time</option>
+          <option value="hour">{{ t('systemErrors.time.lastHour') }}</option>
+          <option value="day">{{ t('systemErrors.time.last24h') }}</option>
+          <option value="week">{{ t('systemErrors.time.lastWeek') }}</option>
+          <option value="all">{{ t('systemErrors.time.allTime') }}</option>
         </select>
       </div>
       <div class="filter-group search-group">
         <input
           v-model="searchQuery"
           type="text"
-          placeholder="Search errors..."
+          :placeholder="t('systemErrors.searchPlaceholder')"
           class="search-input"
           @keyup.enter="applyFilters"
         />
@@ -142,15 +144,15 @@ onUnmounted(() => {
     <!-- Loading State -->
     <div v-if="isLoading && !errors.length" class="state-container">
       <div class="spinner"></div>
-      <p class="state-message">Loading errors...</p>
+      <p class="state-message">{{ t('systemErrors.loading') }}</p>
     </div>
 
     <!-- Error State -->
     <div v-else-if="loadError" class="state-container state-error">
-      <p class="state-title">Failed to load errors</p>
+      <p class="state-title">{{ t('systemErrors.loadFailedTitle') }}</p>
       <p class="state-message">{{ loadError }}</p>
       <div class="state-action">
-        <button class="btn-retry" @click="loadErrors">Retry</button>
+        <button class="btn-retry" @click="loadErrors">{{ t('common.retry') }}</button>
       </div>
     </div>
 
@@ -162,24 +164,24 @@ onUnmounted(() => {
           <circle cx="12" cy="12" r="10"/>
         </svg>
       </div>
-      <p class="state-title">No errors found</p>
-      <p class="state-message">No system errors match your current filters.</p>
+      <p class="state-title">{{ t('systemErrors.empty.title') }}</p>
+      <p class="state-message">{{ t('systemErrors.empty.message') }}</p>
     </div>
 
     <!-- Content: table + detail -->
     <div v-else class="errors-content" :class="{ 'with-detail': selectedError }">
       <div class="errors-table-wrap">
         <div class="table-header-info">
-          <span class="total-count">{{ totalCount }} error{{ totalCount !== 1 ? 's' : '' }}</span>
+          <span class="total-count">{{ t('systemErrors.errorCount', { count: totalCount }) }}</span>
         </div>
         <table class="errors-table">
           <thead>
             <tr>
-              <th>Time</th>
-              <th>Source</th>
-              <th>Category</th>
-              <th>Message</th>
-              <th>Status</th>
+              <th>{{ t('systemErrors.table.time') }}</th>
+              <th>{{ t('systemErrors.table.source') }}</th>
+              <th>{{ t('systemErrors.table.category') }}</th>
+              <th>{{ t('systemErrors.table.message') }}</th>
+              <th>{{ t('systemErrors.table.status') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -208,44 +210,44 @@ onUnmounted(() => {
       <!-- Detail Panel -->
       <div v-if="selectedError" class="detail-panel">
         <div class="detail-header">
-          <h3>Error Detail</h3>
-          <button class="btn btn-sm" @click="clearSelection">Close</button>
+          <h3>{{ t('systemErrors.detail.title') }}</h3>
+          <button class="btn btn-sm" @click="clearSelection">{{ t('common.close') }}</button>
         </div>
 
         <div class="detail-body">
           <div class="detail-section">
             <div class="detail-row">
-              <span class="detail-label">ID</span>
+              <span class="detail-label">{{ t('systemErrors.detail.id') }}</span>
               <span class="detail-value text-mono">{{ selectedError.id }}</span>
             </div>
             <div class="detail-row">
-              <span class="detail-label">Timestamp</span>
+              <span class="detail-label">{{ t('systemErrors.detail.timestamp') }}</span>
               <span class="detail-value">{{ safeFormatDateTime(selectedError.timestamp) }}</span>
             </div>
             <div class="detail-row">
-              <span class="detail-label">Source</span>
+              <span class="detail-label">{{ t('systemErrors.detail.source') }}</span>
               <span class="source-badge" :class="selectedError.source">{{ selectedError.source }}</span>
             </div>
             <div class="detail-row">
-              <span class="detail-label">Category</span>
+              <span class="detail-label">{{ t('systemErrors.detail.category') }}</span>
               <span class="category-badge">{{ selectedError.category }}</span>
             </div>
             <div class="detail-row">
-              <span class="detail-label">Status</span>
+              <span class="detail-label">{{ t('systemErrors.detail.status') }}</span>
               <span class="status-badge" :class="selectedError.status">{{ selectedError.status }}</span>
             </div>
             <div v-if="selectedError.request_id" class="detail-row">
-              <span class="detail-label">Request ID</span>
+              <span class="detail-label">{{ t('systemErrors.detail.requestId') }}</span>
               <span class="detail-value text-mono">{{ selectedError.request_id }}</span>
             </div>
             <div class="detail-row">
-              <span class="detail-label">Hash</span>
+              <span class="detail-label">{{ t('systemErrors.detail.hash') }}</span>
               <span class="detail-value text-mono">{{ selectedError.error_hash }}</span>
             </div>
           </div>
 
           <div class="detail-section">
-            <h4>Message</h4>
+            <h4>{{ t('systemErrors.detail.message') }}</h4>
             <pre class="error-message-block">{{ selectedError.message }}</pre>
           </div>
 
@@ -254,7 +256,7 @@ onUnmounted(() => {
               <svg :class="{ rotated: stackTraceExpanded }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                 <polyline points="9,18 15,12 9,6"/>
               </svg>
-              Stack Trace
+              {{ t('systemErrors.detail.stackTrace') }}
             </button>
             <pre v-show="stackTraceExpanded" class="stack-trace-block">{{ selectedError.stack_trace }}</pre>
           </div>
@@ -264,18 +266,18 @@ onUnmounted(() => {
               <svg :class="{ rotated: contextExpanded }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                 <polyline points="9,18 15,12 9,6"/>
               </svg>
-              Context
+              {{ t('systemErrors.detail.context') }}
             </button>
             <pre v-show="contextExpanded" class="context-block">{{ selectedError.context_json }}</pre>
           </div>
 
           <!-- Fix attempts -->
           <div v-if="selectedError.fix_attempts?.length" class="detail-section">
-            <h4>Fix Attempts</h4>
+            <h4>{{ t('systemErrors.detail.fixAttempts') }}</h4>
             <div class="fix-attempts-list">
               <div v-for="fix in selectedError.fix_attempts" :key="fix.id" class="fix-attempt-item">
                 <div class="fix-row">
-                  <span class="fix-tier">Tier {{ fix.tier }}</span>
+                  <span class="fix-tier">{{ t('systemErrors.detail.tier', { tier: fix.tier }) }}</span>
                   <span class="fix-status-badge" :class="fix.status">{{ fix.status }}</span>
                 </div>
                 <div v-if="fix.action_taken" class="fix-action">{{ fix.action_taken }}</div>
@@ -291,21 +293,21 @@ onUnmounted(() => {
               class="btn btn-sm"
               @click="onUpdateStatus('investigating')"
             >
-              Investigate
+              {{ t('systemErrors.actions.investigate') }}
             </button>
             <button
               v-if="selectedError.status !== 'fixed'"
               class="btn btn-sm btn-primary"
               @click="onRetryFix()"
             >
-              Retry Fix
+              {{ t('systemErrors.actions.retryFix') }}
             </button>
             <button
               v-if="selectedError.status !== 'ignored'"
               class="btn btn-sm"
               @click="onUpdateStatus('ignored')"
             >
-              Ignore
+              {{ t('systemErrors.actions.ignore') }}
             </button>
             <button
               v-if="selectedError.status !== 'fixed'"
@@ -313,7 +315,7 @@ onUnmounted(() => {
               style="background: var(--accent-emerald-dim); color: var(--accent-emerald);"
               @click="onUpdateStatus('fixed')"
             >
-              Mark Fixed
+              {{ t('systemErrors.actions.markFixed') }}
             </button>
           </div>
         </div>

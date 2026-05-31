@@ -4,7 +4,9 @@ import PageHeader from '../components/base/PageHeader.vue';
 import { executionApi } from '../services/api';
 import type { AuthenticatedEventSource } from '../services/api';
 import { safeParseSSE } from '../composables/useEventSource';
+import { useI18n } from 'vue-i18n';
 
+const { t } = useI18n();
 const props = defineProps<{ executionId: string }>();
 
 interface LogLine {
@@ -195,8 +197,8 @@ onUnmounted(() => {
 <template>
   <div class="live-terminal-page">
     <PageHeader
-      title="Live Execution Terminal"
-      subtitle="Interactive ANSI-aware terminal view with search, collapsible sections, and mid-execution input"
+      :title="t('liveExecutionTerminal.title')"
+      :subtitle="t('liveExecutionTerminal.subtitle')"
     />
 
     <div class="terminal-wrapper">
@@ -207,27 +209,27 @@ onUnmounted(() => {
           <span class="status-badge" :class="status">{{ status }}</span>
         </div>
         <div class="toolbar">
-          <span class="stat">{{ stats.total }} lines</span>
-          <span v-if="stats.errors > 0" class="stat error">{{ stats.errors }} warnings</span>
-          <button class="tool-btn" :class="{ active: showSearch }" @click="showSearch = !showSearch" title="Search">
+          <span class="stat">{{ t('liveExecutionTerminal.linesCount', { count: stats.total }) }}</span>
+          <span v-if="stats.errors > 0" class="stat error">{{ t('liveExecutionTerminal.warningsCount', { count: stats.errors }) }}</span>
+          <button class="tool-btn" :class="{ active: showSearch }" @click="showSearch = !showSearch" :title="t('common.search')">
             &#128269;
           </button>
-          <button class="tool-btn" :class="{ active: autoScroll }" @click="autoScroll = !autoScroll" title="Auto-scroll">
+          <button class="tool-btn" :class="{ active: autoScroll }" @click="autoScroll = !autoScroll" :title="t('liveExecutionTerminal.autoScroll')">
             &#8595;
           </button>
-          <button class="tool-btn" @click="clearTerminal" title="Clear">&#10005;</button>
+          <button class="tool-btn" @click="clearTerminal" :title="t('liveExecutionTerminal.clear')">&#10005;</button>
         </div>
       </div>
 
       <div v-if="showSearch" class="search-bar">
         <input
           v-model="searchQuery"
-          placeholder="Search output..."
+          :placeholder="t('liveExecutionTerminal.searchPlaceholder')"
           class="search-input"
           autofocus
         />
         <span v-if="searchQuery" class="search-count">
-          {{ filteredLines.length }} match{{ filteredLines.length !== 1 ? 'es' : '' }}
+          {{ t('liveExecutionTerminal.matchesCount', { count: filteredLines.length }) }}
         </span>
       </div>
 
@@ -263,16 +265,16 @@ onUnmounted(() => {
         <span class="input-prompt">$</span>
         <input
           v-model="inputText"
-          placeholder="Send input to running bot..."
+          :placeholder="t('liveExecutionTerminal.inputPlaceholder')"
           class="terminal-input"
           @keydown.enter="sendInput"
         />
-        <button class="send-btn" @click="sendInput">Send</button>
+        <button class="send-btn" @click="sendInput">{{ t('liveExecutionTerminal.send') }}</button>
       </div>
 
       <div v-else class="exit-bar">
         <span class="exit-status" :class="status">
-          Process exited — status: {{ status }}
+          {{ t('liveExecutionTerminal.processExited', { status }) }}
         </span>
       </div>
     </div>

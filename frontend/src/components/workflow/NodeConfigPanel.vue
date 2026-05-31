@@ -7,6 +7,7 @@
  */
 
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { Node } from '@vue-flow/core'
 import type { WorkflowNodeData } from '../../types/workflow'
 import { agentApi } from '../../services/api/agents'
@@ -30,6 +31,8 @@ const emit = defineEmits<{
   'delete-node': [nodeId: string]
   close: []
 }>()
+
+const { t } = useI18n()
 
 // ---------------------------------------------------------------------------
 // Local config state (synced from node prop)
@@ -156,18 +159,12 @@ onUnmounted(() => {
 
 const nodeType = computed(() => props.node?.type || '')
 
+const NODE_TYPE_KEYS = ['trigger', 'skill', 'command', 'agent', 'script', 'conditional', 'transform', 'approval_gate']
+
 const nodeTypeLabel = computed(() => {
-  const labels: Record<string, string> = {
-    trigger: 'Trigger',
-    skill: 'Skill',
-    command: 'Command',
-    agent: 'Agent',
-    script: 'Script',
-    conditional: 'Conditional',
-    transform: 'Transform',
-    approval_gate: 'Approval Gate',
-  }
-  return labels[nodeType.value] || 'Unknown'
+  return NODE_TYPE_KEYS.includes(nodeType.value)
+    ? t(`nodeConfigPanel.nodeType.${nodeType.value}`)
+    : t('nodeConfigPanel.nodeType.unknown')
 })
 
 const nodeTypeIcon = computed(() => {
@@ -269,7 +266,7 @@ function handleDelete() {
           />
         </svg>
       </div>
-      <p class="empty-text">Select a node to configure</p>
+      <p class="empty-text">{{ t('nodeConfigPanel.selectNode') }}</p>
     </div>
 
     <!-- Config form -->
@@ -280,7 +277,7 @@ function handleDelete() {
           <span class="type-badge" :class="nodeType">
             {{ nodeTypeIcon }} {{ nodeTypeLabel }}
           </span>
-          <button class="close-btn" title="Close panel" @click="$emit('close')">
+          <button class="close-btn" :title="t('nodeConfigPanel.closePanel')" @click="$emit('close')">
             <svg
               width="14"
               height="14"
@@ -297,12 +294,12 @@ function handleDelete() {
           </button>
         </div>
         <div class="label-field">
-          <label class="field-label">Label</label>
+          <label class="field-label">{{ t('nodeConfigPanel.label') }}</label>
           <input
             v-model="localLabel"
             class="field-input"
             type="text"
-            placeholder="Node label"
+            :placeholder="t('nodeConfigPanel.labelPlaceholder')"
             :disabled="readOnly"
             @input="emitLabelUpdate"
           />
@@ -313,26 +310,26 @@ function handleDelete() {
 
       <!-- Type-specific config fields -->
       <div class="config-body">
-        <div class="section-title">Configuration</div>
+        <div class="section-title">{{ t('nodeConfigPanel.configuration') }}</div>
 
         <!-- ==================== TRIGGER ==================== -->
         <template v-if="nodeType === 'trigger'">
           <div class="field-group">
-            <label class="field-label">Trigger Source</label>
+            <label class="field-label">{{ t('nodeConfigPanel.trigger.source') }}</label>
             <select
               class="field-select"
               :value="(localConfig.trigger_id as string) || ''"
               :disabled="readOnly || entitiesLoading"
               @change="onTriggerSelected(($event.target as HTMLSelectElement).value)"
             >
-              <option value="">No linked trigger</option>
+              <option value="">{{ t('nodeConfigPanel.trigger.noLinked') }}</option>
               <option v-for="t in triggers" :key="t.id" :value="t.id">
                 {{ t.name }}
               </option>
             </select>
           </div>
           <div class="field-group">
-            <label class="field-label">Trigger Type</label>
+            <label class="field-label">{{ t('nodeConfigPanel.trigger.type') }}</label>
             <select
               class="field-select"
               :value="localConfig.trigger_subtype || 'manual'"
@@ -344,17 +341,17 @@ function handleDelete() {
                 )
               "
             >
-              <option value="manual">Manual</option>
-              <option value="cron">Cron Schedule</option>
-              <option value="poll">Poll</option>
-              <option value="file_watch">File Watch</option>
-              <option value="completion">Completion</option>
+              <option value="manual">{{ t('nodeConfigPanel.trigger.subtypeManual') }}</option>
+              <option value="cron">{{ t('nodeConfigPanel.trigger.subtypeCron') }}</option>
+              <option value="poll">{{ t('nodeConfigPanel.trigger.subtypePoll') }}</option>
+              <option value="file_watch">{{ t('nodeConfigPanel.trigger.subtypeFileWatch') }}</option>
+              <option value="completion">{{ t('nodeConfigPanel.trigger.subtypeCompletion') }}</option>
             </select>
           </div>
           <!-- Cron-specific fields -->
           <template v-if="showCronFields">
             <div class="field-group">
-              <label class="field-label">Cron Expression</label>
+              <label class="field-label">{{ t('nodeConfigPanel.trigger.cronExpression') }}</label>
               <input
                 class="field-input"
                 type="text"
@@ -365,7 +362,7 @@ function handleDelete() {
               />
             </div>
             <div class="field-group">
-              <label class="field-label">Timezone</label>
+              <label class="field-label">{{ t('nodeConfigPanel.trigger.timezone') }}</label>
               <select
                 class="field-select"
                 :value="(localConfig.cron_timezone as string) || 'UTC'"
@@ -381,7 +378,7 @@ function handleDelete() {
           </template>
           <!-- Poll-specific fields -->
           <div v-if="showPollFields" class="field-group">
-            <label class="field-label">Poll Interval (seconds)</label>
+            <label class="field-label">{{ t('nodeConfigPanel.trigger.pollInterval') }}</label>
             <input
               class="field-input field-number"
               type="number"
@@ -394,7 +391,7 @@ function handleDelete() {
           </div>
           <!-- File watch-specific fields -->
           <div v-if="showFileWatchFields" class="field-group">
-            <label class="field-label">Watch Path</label>
+            <label class="field-label">{{ t('nodeConfigPanel.trigger.watchPath') }}</label>
             <input
               class="field-input"
               type="text"
@@ -406,7 +403,7 @@ function handleDelete() {
           </div>
           <!-- Completion-specific fields -->
           <div v-if="showCompletionFields" class="field-group">
-            <label class="field-label">Wait For Node ID</label>
+            <label class="field-label">{{ t('nodeConfigPanel.trigger.waitForNodeId') }}</label>
             <input
               class="field-input"
               type="text"
@@ -421,14 +418,14 @@ function handleDelete() {
         <!-- ==================== SKILL ==================== -->
         <template v-if="nodeType === 'skill'">
           <div class="field-group">
-            <label class="field-label">Skill</label>
+            <label class="field-label">{{ t('nodeConfigPanel.skill.label') }}</label>
             <select
               class="field-select"
               :value="(localConfig.skill_name as string) || ''"
               :disabled="readOnly || entitiesLoading"
               @change="onSkillSelected(($event.target as HTMLSelectElement).value)"
             >
-              <option value="" disabled>Select a skill...</option>
+              <option value="" disabled>{{ t('nodeConfigPanel.skill.select') }}</option>
               <option v-for="s in skills" :key="s.name" :value="s.name">
                 {{ s.name }}{{ s.description ? ` — ${s.description}` : '' }}
               </option>
@@ -439,24 +436,24 @@ function handleDelete() {
         <!-- ==================== COMMAND ==================== -->
         <template v-if="nodeType === 'command'">
           <div class="field-group">
-            <label class="field-label">Predefined Command</label>
+            <label class="field-label">{{ t('nodeConfigPanel.command.predefined') }}</label>
             <select
               class="field-select"
               :value="(localConfig.command_id as string) || ''"
               :disabled="readOnly || entitiesLoading"
               @change="onCommandSelected(($event.target as HTMLSelectElement).value)"
             >
-              <option value="">Custom command...</option>
+              <option value="">{{ t('nodeConfigPanel.command.custom') }}</option>
               <option v-for="c in commands" :key="c.id" :value="String(c.id)">
                 {{ c.name }}{{ c.description ? ` — ${c.description}` : '' }}
               </option>
             </select>
           </div>
           <div class="field-group">
-            <label class="field-label">Command</label>
+            <label class="field-label">{{ t('nodeConfigPanel.command.command') }}</label>
             <textarea
               class="field-textarea"
-              placeholder="e.g. echo 'hello'"
+              :placeholder="t('nodeConfigPanel.command.commandPlaceholder')"
               rows="3"
               :value="(localConfig.command as string) || ''"
               :disabled="readOnly"
@@ -469,7 +466,7 @@ function handleDelete() {
             />
           </div>
           <div class="field-group">
-            <label class="field-label">Working Directory</label>
+            <label class="field-label">{{ t('nodeConfigPanel.command.workingDir') }}</label>
             <input
               class="field-input"
               type="text"
@@ -489,24 +486,24 @@ function handleDelete() {
         <!-- ==================== AGENT ==================== -->
         <template v-if="nodeType === 'agent'">
           <div class="field-group">
-            <label class="field-label">Agent</label>
+            <label class="field-label">{{ t('nodeConfigPanel.agent.label') }}</label>
             <select
               class="field-select"
               :value="(localConfig.agent_id as string) || ''"
               :disabled="readOnly || entitiesLoading"
               @change="onAgentSelected(($event.target as HTMLSelectElement).value)"
             >
-              <option value="" disabled>Select an agent...</option>
+              <option value="" disabled>{{ t('nodeConfigPanel.agent.select') }}</option>
               <option v-for="a in agents" :key="a.id" :value="a.id">
                 {{ a.name }}{{ a.description ? ` — ${a.description}` : '' }}
               </option>
             </select>
           </div>
           <div class="field-group">
-            <label class="field-label">Prompt</label>
+            <label class="field-label">{{ t('nodeConfigPanel.agent.prompt') }}</label>
             <textarea
               class="field-textarea"
-              placeholder="Instructions for the agent..."
+              :placeholder="t('nodeConfigPanel.agent.promptPlaceholder')"
               rows="4"
               :value="(localConfig.prompt as string) || ''"
               :disabled="readOnly"
@@ -523,7 +520,7 @@ function handleDelete() {
         <!-- ==================== SCRIPT ==================== -->
         <template v-if="nodeType === 'script'">
           <div class="field-group">
-            <label class="field-label">Language</label>
+            <label class="field-label">{{ t('nodeConfigPanel.script.language') }}</label>
             <select
               class="field-select"
               :value="localConfig.language || 'shell'"
@@ -541,7 +538,7 @@ function handleDelete() {
             </select>
           </div>
           <div class="field-group">
-            <label class="field-label">Script</label>
+            <label class="field-label">{{ t('nodeConfigPanel.script.script') }}</label>
             <textarea
               class="field-textarea"
               :placeholder="scriptPlaceholder"
@@ -557,7 +554,7 @@ function handleDelete() {
             />
           </div>
           <div class="field-group">
-            <label class="field-label">Timeout (seconds)</label>
+            <label class="field-label">{{ t('nodeConfigPanel.script.timeout') }}</label>
             <input
               class="field-input field-number"
               type="number"
@@ -573,7 +570,7 @@ function handleDelete() {
         <!-- ==================== CONDITIONAL ==================== -->
         <template v-if="nodeType === 'conditional'">
           <div class="field-group">
-            <label class="field-label">Condition Type</label>
+            <label class="field-label">{{ t('nodeConfigPanel.conditional.type') }}</label>
             <select
               class="field-select"
               :value="localConfig.condition_type || ''"
@@ -585,19 +582,19 @@ function handleDelete() {
                 )
               "
             >
-              <option value="" disabled>Select condition...</option>
-              <option value="has_text">Has Text</option>
-              <option value="exit_code_zero">Exit Code Zero</option>
-              <option value="contains">Contains</option>
-              <option value="expression">Expression</option>
+              <option value="" disabled>{{ t('nodeConfigPanel.conditional.select') }}</option>
+              <option value="has_text">{{ t('nodeConfigPanel.conditional.hasText') }}</option>
+              <option value="exit_code_zero">{{ t('nodeConfigPanel.conditional.exitCodeZero') }}</option>
+              <option value="contains">{{ t('nodeConfigPanel.conditional.contains') }}</option>
+              <option value="expression">{{ t('nodeConfigPanel.conditional.expression') }}</option>
             </select>
           </div>
           <div v-if="showConditionValue" class="field-group">
-            <label class="field-label">Condition Value</label>
+            <label class="field-label">{{ t('nodeConfigPanel.conditional.value') }}</label>
             <input
               class="field-input"
               type="text"
-              placeholder="Text to search for..."
+              :placeholder="t('nodeConfigPanel.conditional.valuePlaceholder')"
               :value="(localConfig.condition_value as string) || ''"
               :disabled="readOnly"
               @input="
@@ -609,7 +606,7 @@ function handleDelete() {
             />
           </div>
           <div v-if="showExpressionInput" class="field-group">
-            <label class="field-label">Expression</label>
+            <label class="field-label">{{ t('nodeConfigPanel.conditional.expressionLabel') }}</label>
             <textarea
               class="field-textarea"
               placeholder="pr.lines_changed > 500 and pr.draft == False"
@@ -618,10 +615,10 @@ function handleDelete() {
               :disabled="readOnly"
               @input="setConfigField('condition_expression', ($event.target as HTMLTextAreaElement).value)"
             />
-            <span class="field-helper">Operators: ==, !=, &gt;, &lt;, &gt;=, &lt;=, in, not in, and, or</span>
+            <span class="field-helper">{{ t('nodeConfigPanel.conditional.operators') }} ==, !=, &gt;, &lt;, &gt;=, &lt;=, in, not in, and, or</span>
           </div>
           <div class="field-group">
-            <label class="field-label">Source Field</label>
+            <label class="field-label">{{ t('nodeConfigPanel.conditional.sourceField') }}</label>
             <input
               class="field-input"
               type="text"
@@ -636,7 +633,7 @@ function handleDelete() {
         <!-- ==================== APPROVAL GATE ==================== -->
         <template v-if="nodeType === 'approval_gate'">
           <div class="field-group">
-            <label class="field-label">Timeout (seconds)</label>
+            <label class="field-label">{{ t('nodeConfigPanel.approvalGate.timeout') }}</label>
             <input
               class="field-input field-number"
               type="number"
@@ -646,13 +643,13 @@ function handleDelete() {
               :disabled="readOnly"
               @input="setConfigField('timeout_seconds', Number(($event.target as HTMLInputElement).value))"
             />
-            <span class="field-helper">Time before auto-timeout</span>
+            <span class="field-helper">{{ t('nodeConfigPanel.approvalGate.timeoutHelper') }}</span>
           </div>
           <div class="field-group">
-            <label class="field-label">Notification Message</label>
+            <label class="field-label">{{ t('nodeConfigPanel.approvalGate.notificationMessage') }}</label>
             <textarea
               class="field-textarea"
-              placeholder="Approval is required to continue this workflow..."
+              :placeholder="t('nodeConfigPanel.approvalGate.notificationPlaceholder')"
               rows="3"
               :value="(localConfig.notification_message as string) || ''"
               :disabled="readOnly"
@@ -660,11 +657,11 @@ function handleDelete() {
             />
           </div>
           <div class="field-group">
-            <label class="field-label">Required Approver</label>
+            <label class="field-label">{{ t('nodeConfigPanel.approvalGate.requiredApprover') }}</label>
             <input
               class="field-input"
               type="text"
-              placeholder="Optional: username or email"
+              :placeholder="t('nodeConfigPanel.approvalGate.requiredApproverPlaceholder')"
               :value="(localConfig.required_approver as string) || ''"
               :disabled="readOnly"
               @input="setConfigField('required_approver', ($event.target as HTMLInputElement).value)"
@@ -675,7 +672,7 @@ function handleDelete() {
         <!-- ==================== TRANSFORM ==================== -->
         <template v-if="nodeType === 'transform'">
           <div class="field-group">
-            <label class="field-label">Operation</label>
+            <label class="field-label">{{ t('nodeConfigPanel.transform.operation') }}</label>
             <select
               class="field-select"
               :value="localConfig.operation || ''"
@@ -687,16 +684,16 @@ function handleDelete() {
                 )
               "
             >
-              <option value="" disabled>Select operation...</option>
-              <option value="extract_field">Extract Field</option>
-              <option value="template">Template</option>
-              <option value="json_parse">JSON Parse</option>
-              <option value="uppercase">Uppercase</option>
-              <option value="lowercase">Lowercase</option>
+              <option value="" disabled>{{ t('nodeConfigPanel.transform.select') }}</option>
+              <option value="extract_field">{{ t('nodeConfigPanel.transform.extractField') }}</option>
+              <option value="template">{{ t('nodeConfigPanel.transform.template') }}</option>
+              <option value="json_parse">{{ t('nodeConfigPanel.transform.jsonParse') }}</option>
+              <option value="uppercase">{{ t('nodeConfigPanel.transform.uppercase') }}</option>
+              <option value="lowercase">{{ t('nodeConfigPanel.transform.lowercase') }}</option>
             </select>
           </div>
           <div v-if="showFieldPath" class="field-group">
-            <label class="field-label">Field Path</label>
+            <label class="field-label">{{ t('nodeConfigPanel.transform.fieldPath') }}</label>
             <input
               class="field-input"
               type="text"
@@ -712,21 +709,21 @@ function handleDelete() {
             />
           </div>
           <div v-if="showFieldPath" class="field-group">
-            <label class="field-label">Default Value</label>
+            <label class="field-label">{{ t('nodeConfigPanel.transform.defaultValue') }}</label>
             <input
               class="field-input"
               type="text"
-              placeholder="Fallback if field not found"
+              :placeholder="t('nodeConfigPanel.transform.defaultValuePlaceholder')"
               :value="(localConfig.default_value as string) || ''"
               :disabled="readOnly"
               @input="setConfigField('default_value', ($event.target as HTMLInputElement).value)"
             />
           </div>
           <div v-if="showTemplate" class="field-group">
-            <label class="field-label">Template</label>
+            <label class="field-label">{{ t('nodeConfigPanel.transform.templateLabel') }}</label>
             <textarea
               class="field-textarea"
-              placeholder="Template string..."
+              :placeholder="t('nodeConfigPanel.transform.templatePlaceholder')"
               rows="4"
               :value="(localConfig.template as string) || ''"
               :disabled="readOnly"
@@ -739,11 +736,11 @@ function handleDelete() {
             />
           </div>
           <div class="field-group">
-            <label class="field-label">Description</label>
+            <label class="field-label">{{ t('nodeConfigPanel.transform.description') }}</label>
             <input
               class="field-input"
               type="text"
-              placeholder="What this transform does..."
+              :placeholder="t('nodeConfigPanel.transform.descriptionPlaceholder')"
               :value="(localConfig.description as string) || ''"
               :disabled="readOnly"
               @input="setConfigField('description', ($event.target as HTMLInputElement).value)"
@@ -756,22 +753,22 @@ function handleDelete() {
 
       <!-- Error handling section -->
       <div class="config-body">
-        <div class="section-title">Error Handling</div>
+        <div class="section-title">{{ t('nodeConfigPanel.errorHandling.title') }}</div>
         <div class="field-group">
-          <label class="field-label">Error Mode</label>
+          <label class="field-label">{{ t('nodeConfigPanel.errorHandling.errorMode') }}</label>
           <select
             v-model="localErrorMode"
             class="field-select"
             :disabled="readOnly"
             @change="emitConfigUpdate()"
           >
-            <option value="stop">Stop workflow</option>
-            <option value="continue">Continue (skip)</option>
-            <option value="continue_with_error">Continue with error</option>
+            <option value="stop">{{ t('nodeConfigPanel.errorHandling.stop') }}</option>
+            <option value="continue">{{ t('nodeConfigPanel.errorHandling.continue') }}</option>
+            <option value="continue_with_error">{{ t('nodeConfigPanel.errorHandling.continueWithError') }}</option>
           </select>
         </div>
         <div class="field-group">
-          <label class="field-label">Max Retries</label>
+          <label class="field-label">{{ t('nodeConfigPanel.errorHandling.maxRetries') }}</label>
           <input
             v-model.number="localRetryMax"
             class="field-input field-number"
@@ -783,7 +780,7 @@ function handleDelete() {
           />
         </div>
         <div class="field-group">
-          <label class="field-label">Retry Backoff (seconds)</label>
+          <label class="field-label">{{ t('nodeConfigPanel.errorHandling.retryBackoff') }}</label>
           <input
             v-model.number="localRetryBackoff"
             class="field-input field-number"
@@ -819,7 +816,7 @@ function handleDelete() {
               d="M2 4h12M5.333 4V2.667a1.333 1.333 0 011.334-1.334h2.666a1.333 1.333 0 011.334 1.334V4M12.667 4v9.333a1.333 1.333 0 01-1.334 1.334H4.667a1.333 1.333 0 01-1.334-1.334V4"
             />
           </svg>
-          {{ showDeleteConfirm ? 'Click again to confirm' : 'Delete Node' }}
+          {{ showDeleteConfirm ? t('nodeConfigPanel.confirmDelete') : t('nodeConfigPanel.deleteNode') }}
         </button>
       </div>
     </template>

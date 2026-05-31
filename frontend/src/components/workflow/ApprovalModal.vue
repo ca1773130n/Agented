@@ -6,7 +6,10 @@
  * approve to continue the workflow or reject to abort downstream execution.
  */
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { workflowExecutionApi } from '../../services/api/workflows'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   visible: boolean
@@ -32,7 +35,7 @@ async function handleApprove() {
     await workflowExecutionApi.approveNode(props.executionId, props.nodeId)
     emit('approve')
   } catch (err) {
-    errorMessage.value = err instanceof Error ? err.message : 'Failed to approve'
+    errorMessage.value = err instanceof Error ? err.message : t('approvalModal.approveFailed')
   } finally {
     isSubmitting.value = false
   }
@@ -45,7 +48,7 @@ async function handleReject() {
     await workflowExecutionApi.rejectNode(props.executionId, props.nodeId)
     emit('reject')
   } catch (err) {
-    errorMessage.value = err instanceof Error ? err.message : 'Failed to reject'
+    errorMessage.value = err instanceof Error ? err.message : t('approvalModal.rejectFailed')
   } finally {
     isSubmitting.value = false
   }
@@ -72,26 +75,26 @@ function handleClose() {
       <div class="modal approval-modal">
         <div class="modal-header">
           <span class="modal-icon">&#x23F8;</span>
-          <h2 class="modal-title">Approval Required</h2>
+          <h2 class="modal-title">{{ t('approvalModal.title') }}</h2>
         </div>
 
         <div class="modal-body">
           <div class="node-info">
-            <span class="node-info-label">Node:</span>
+            <span class="node-info-label">{{ t('approvalModal.node') }}</span>
             <span class="node-info-value">{{ nodeLabel }}</span>
           </div>
           <div class="node-info">
-            <span class="node-info-label">Execution:</span>
+            <span class="node-info-label">{{ t('approvalModal.execution') }}</span>
             <span class="node-info-value mono">{{ executionId }}</span>
           </div>
 
           <div class="comment-group">
-            <label class="comment-label" for="approval-comment">Comment (optional)</label>
+            <label class="comment-label" for="approval-comment">{{ t('approvalModal.commentLabel') }}</label>
             <textarea
               id="approval-comment"
               v-model="comment"
               class="comment-input"
-              placeholder="Add a note about this approval decision..."
+              :placeholder="t('approvalModal.commentPlaceholder')"
               rows="3"
               :disabled="isSubmitting"
             />
@@ -108,21 +111,21 @@ function handleClose() {
             :disabled="isSubmitting"
             @click="handleClose"
           >
-            Cancel
+            {{ t('common.cancel') }}
           </button>
           <button
             class="btn btn-reject"
             :disabled="isSubmitting"
             @click="handleReject"
           >
-            Reject
+            {{ t('approvalModal.reject') }}
           </button>
           <button
             class="btn btn-approve"
             :disabled="isSubmitting"
             @click="handleApprove"
           >
-            Approve
+            {{ t('approvalModal.approve') }}
           </button>
         </div>
       </div>

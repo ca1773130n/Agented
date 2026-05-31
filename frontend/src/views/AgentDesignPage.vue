@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import type { Agent, EffortLevel } from '../services/api';
 import { agentApi, skillsApi, ApiError } from '../services/api';
@@ -21,6 +22,7 @@ const props = defineProps<{
   agentId?: string;
 }>();
 
+const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const agentId = computed(() => (route.params.agentId as string) || props.agentId || '');
@@ -157,7 +159,7 @@ async function loadAgent() {
     loadAvailableSkills();
     return data;
   } catch (err) {
-    handleApiError(err, showToast, 'Failed to load agent');
+    handleApiError(err, showToast, t('agentDesign.toast.loadFailed'));
     throw err;
   }
 }
@@ -191,14 +193,14 @@ async function saveChanges() {
       effort_level: editForm.value.effort_level as EffortLevel,
       backend_type: editForm.value.backend_type as Agent['backend_type'],
     });
-    showToast('Agent updated successfully', 'success');
+    showToast(t('agentDesign.toast.updated'), 'success');
     editMode.value = false;
     await loadAgent(); // Reload to get fresh data
   } catch (e) {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to update agent', 'error');
+      showToast(t('agentDesign.toast.updateFailed'), 'error');
     }
   } finally {
     isSaving.value = false;
@@ -211,10 +213,10 @@ async function runAgent() {
   lastRunSuccess.value = false;
   try {
     const result = await agentApi.run(agent.value.id);
-    showToast(`Agent started (execution: ${result.execution_id})`, 'success');
+    showToast(t('agentDesign.toast.started', { id: result.execution_id }), 'success');
     lastRunSuccess.value = true;
   } catch (e) {
-    showToast(e instanceof ApiError ? e.message : 'Failed to run agent', 'error');
+    showToast(e instanceof ApiError ? e.message : t('agentDesign.toast.runFailed'), 'error');
   } finally {
     isRunning.value = false;
   }
@@ -225,12 +227,12 @@ async function deleteAgent() {
   isDeleting.value = true;
   try {
     await agentApi.delete(agent.value.id);
-    showToast(`Agent "${agent.value.name}" deleted`, 'success');
+    showToast(t('agentDesign.toast.deleted', { name: agent.value.name }), 'success');
     showDeleteConfirm.value = false;
     clearEntityCache();
     router.push({ name: 'agents' });
   } catch (e) {
-    showToast(e instanceof ApiError ? e.message : 'Failed to delete agent', 'error');
+    showToast(e instanceof ApiError ? e.message : t('agentDesign.toast.deleteFailed'), 'error');
   } finally {
     isDeleting.value = false;
   }
@@ -243,7 +245,7 @@ async function toggleEnabled() {
     await agentApi.update(agent.value.id, { enabled: agent.value.enabled ? 0 : 1 });
     await loadAgent();
   } catch (e) {
-    showToast('Failed to update agent', 'error');
+    showToast(t('agentDesign.toast.updateFailed'), 'error');
   } finally {
     isToggling.value = false;
   }
@@ -261,18 +263,18 @@ async function toggleEnabled() {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M19 12H5M12 19l-7-7 7-7"/>
         </svg>
-        Back to Agents
+        {{ t('agentDesign.backToAgents') }}
       </button>
       <div class="header-title">
-        <h1>{{ agent?.name || 'Agent Design' }}</h1>
-        <p>View and refine your AI agent</p>
+        <h1>{{ agent?.name || t('agentDesign.title') }}</h1>
+        <p>{{ t('agentDesign.subtitle') }}</p>
       </div>
       <div class="header-actions">
         <template v-if="!editMode && agent">
           <button class="btn btn-success btn-action" @click="runAgent" :disabled="!agent.enabled || isRunning">
             <span v-if="isRunning" class="spinner-small"></span>
             <svg v-else viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            {{ isRunning ? 'Running...' : 'Run' }}
+            {{ isRunning ? t('agentDesign.running') : t('agentDesign.run') }}
           </button>
           <button v-if="lastRunSuccess" class="btn btn-action btn-view-log" @click="router.push({ name: 'execution-history' })">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -281,17 +283,17 @@ async function toggleEnabled() {
               <line x1="16" y1="13" x2="8" y2="13"/>
               <line x1="16" y1="17" x2="8" y2="17"/>
             </svg>
-            View Log
+            {{ t('agentDesign.viewLog') }}
           </button>
           <button class="btn btn-action" @click="toggleEnabled" :disabled="isToggling">
-            {{ isToggling ? '...' : (agent.enabled ? 'Disable' : 'Enable') }}
+            {{ isToggling ? '...' : (agent.enabled ? t('agentDesign.disable') : t('agentDesign.enable')) }}
           </button>
           <button class="btn btn-primary" @click="startEditing">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
               <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
             </svg>
-            Edit
+            {{ t('common.edit') }}
           </button>
           <button class="btn btn-danger btn-action" @click="showDeleteConfirm = true" :disabled="isDeleting">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -301,14 +303,14 @@ async function toggleEnabled() {
         </template>
         <template v-else-if="editMode">
           <button class="btn btn-secondary" @click="cancelEditing" :disabled="isSaving">
-            Cancel
+            {{ t('common.cancel') }}
           </button>
           <button class="btn btn-primary" @click="saveChanges" :disabled="isSaving">
             <svg v-if="!isSaving" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M20 6L9 17l-5-5"/>
             </svg>
             <span v-if="isSaving" class="spinner-small"></span>
-            {{ isSaving ? 'Saving...' : 'Save Changes' }}
+            {{ isSaving ? t('agentDesign.saving') : t('agentDesign.saveChanges') }}
           </button>
         </template>
       </div>
@@ -319,33 +321,33 @@ async function toggleEnabled() {
         <!-- Basic Info Card -->
         <div class="design-card">
           <div class="card-header">
-            <h3>Basic Information</h3>
+            <h3>{{ t('agentDesign.basicInfo') }}</h3>
           </div>
           <div class="card-body">
             <div class="form-group">
-              <label>Name</label>
+              <label>{{ t('agentDesign.name') }}</label>
               <input
                 v-if="editMode"
                 v-model="editForm.name"
                 type="text"
                 class="form-input"
-                placeholder="Agent name"
+                :placeholder="t('agentDesign.namePlaceholder')"
               />
               <p v-else class="field-value">{{ agent.name }}</p>
             </div>
             <div class="form-group">
-              <label>Description</label>
+              <label>{{ t('agentDesign.description') }}</label>
               <textarea
                 v-if="editMode"
                 v-model="editForm.description"
                 class="form-textarea"
-                placeholder="Brief description of what this agent does"
+                :placeholder="t('agentDesign.descriptionPlaceholder')"
                 rows="3"
               ></textarea>
-              <p v-else class="field-value">{{ agent.description || 'No description' }}</p>
+              <p v-else class="field-value">{{ agent.description || t('agentDesign.noDescription') }}</p>
             </div>
             <div class="form-group">
-              <label>Backend Type</label>
+              <label>{{ t('agentDesign.backendType') }}</label>
               <select v-if="editMode" v-model="editForm.backend_type" class="form-input">
                 <option value="claude">Claude</option>
                 <option value="opencode">OpenCode</option>
@@ -357,10 +359,10 @@ async function toggleEnabled() {
               </p>
             </div>
             <div class="form-group">
-              <label>Status</label>
+              <label>{{ t('agentDesign.status') }}</label>
               <p class="field-value">
                 <span class="status-badge" :class="{ enabled: agent.enabled }">
-                  {{ agent.enabled ? 'Active' : 'Disabled' }}
+                  {{ agent.enabled ? t('agentDesign.active') : t('agentDesign.disabled') }}
                 </span>
               </p>
             </div>
@@ -370,40 +372,40 @@ async function toggleEnabled() {
         <!-- Role Card -->
         <div class="design-card">
           <div class="card-header">
-            <h3>Role</h3>
+            <h3>{{ t('agentDesign.role') }}</h3>
           </div>
           <div class="card-body">
             <div class="form-group">
-              <label>Role</label>
+              <label>{{ t('agentDesign.role') }}</label>
               <textarea
                 v-if="editMode"
                 v-model="editForm.role"
                 class="form-textarea"
-                placeholder="The role this agent plays"
+                :placeholder="t('agentDesign.rolePlaceholder')"
                 rows="5"
               ></textarea>
-              <p v-else class="field-value">{{ agent.role || 'No role defined' }}</p>
+              <p v-else class="field-value">{{ agent.role || t('agentDesign.noRole') }}</p>
             </div>
           </div>
         </div>
 
         <!-- Goals Card -->
         <div class="design-card">
-          <div class="card-header"><h3>Goals</h3></div>
+          <div class="card-header"><h3>{{ t('agentDesign.goals') }}</h3></div>
           <div class="card-body">
             <div class="form-group">
-              <label>Goals</label>
+              <label>{{ t('agentDesign.goals') }}</label>
               <div v-if="editMode" class="goals-editor">
                 <div v-for="(_goal, index) in editForm.goals" :key="index" class="goal-item">
-                  <input v-model="editForm.goals[index]" type="text" class="form-input" placeholder="Enter a goal" />
+                  <input v-model="editForm.goals[index]" type="text" class="form-input" :placeholder="t('agentDesign.goalPlaceholder')" />
                   <button type="button" class="remove-goal" @click="editForm.goals.splice(index, 1)">&times;</button>
                 </div>
-                <button type="button" class="btn btn-small" @click="editForm.goals.push('')">+ Add Goal</button>
+                <button type="button" class="btn btn-small" @click="editForm.goals.push('')">{{ t('agentDesign.addGoal') }}</button>
               </div>
               <ul v-else-if="agent.goals && agent.goals.length > 0" class="goals-list">
                 <li v-for="(goal, i) in agent.goals" :key="i">{{ goal }}</li>
               </ul>
-              <p v-else class="field-value muted">No goals defined</p>
+              <p v-else class="field-value muted">{{ t('agentDesign.noGoals') }}</p>
             </div>
           </div>
         </div>
@@ -411,11 +413,11 @@ async function toggleEnabled() {
         <!-- Skills & Context Card -->
         <div class="design-card">
           <div class="card-header">
-            <h3>Skills & Context</h3>
+            <h3>{{ t('agentDesign.skillsAndContext') }}</h3>
           </div>
           <div class="card-body">
             <div class="form-group">
-              <label>Skills</label>
+              <label>{{ t('agentDesign.skills') }}</label>
               <div v-if="editMode" class="skills-input-container">
                 <div class="skills-tags-row">
                   <span v-for="(skill, index) in editForm.skills" :key="index" class="skill-tag editable">
@@ -426,7 +428,7 @@ async function toggleEnabled() {
                     v-model="skillInput"
                     type="text"
                     class="skill-input"
-                    placeholder="Type skill name and press Enter"
+                    :placeholder="t('agentDesign.skillPlaceholder')"
                     @keydown="handleSkillKeydown"
                     @focus="showSkillSuggestions = true"
                     @blur="hideSkillSuggestions()"
@@ -447,48 +449,48 @@ async function toggleEnabled() {
               <div v-else-if="agent.skills && agent.skills.length > 0" class="skills-list">
                 <span v-for="(skill, index) in agent.skills" :key="index" class="skill-tag">{{ skill }}</span>
               </div>
-              <p v-else class="field-value muted">No skills assigned</p>
+              <p v-else class="field-value muted">{{ t('agentDesign.noSkills') }}</p>
             </div>
             <div class="form-group">
-              <label>Context</label>
+              <label>{{ t('agentDesign.context') }}</label>
               <textarea
                 v-if="editMode"
                 v-model="editForm.context"
                 class="form-textarea"
-                placeholder="Additional context for the agent"
+                :placeholder="t('agentDesign.contextPlaceholder')"
                 rows="4"
               ></textarea>
-              <p v-else class="field-value">{{ agent.context || 'No context defined' }}</p>
+              <p v-else class="field-value">{{ agent.context || t('agentDesign.noContext') }}</p>
             </div>
           </div>
         </div>
 
         <!-- Configuration Card -->
         <div class="design-card">
-          <div class="card-header"><h3>Configuration</h3></div>
+          <div class="card-header"><h3>{{ t('agentDesign.configuration') }}</h3></div>
           <div class="card-body">
             <div class="form-group">
-              <label>Preferred Model</label>
-              <input v-if="editMode" v-model="editForm.preferred_model" type="text" class="form-input" placeholder="e.g. opus, sonnet" />
-              <p v-else class="field-value">{{ agent.preferred_model || 'Default' }}</p>
+              <label>{{ t('agentDesign.preferredModel') }}</label>
+              <input v-if="editMode" v-model="editForm.preferred_model" type="text" class="form-input" :placeholder="t('agentDesign.preferredModelPlaceholder')" />
+              <p v-else class="field-value">{{ agent.preferred_model || t('agentDesign.defaultModel') }}</p>
             </div>
             <div class="form-group">
-              <label>Effort Level</label>
+              <label>{{ t('agentDesign.effortLevel') }}</label>
               <select v-if="editMode" v-model="editForm.effort_level" class="form-input">
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="max">Max</option>
+                <option value="low">{{ t('agentDesign.effort.low') }}</option>
+                <option value="medium">{{ t('agentDesign.effort.medium') }}</option>
+                <option value="high">{{ t('agentDesign.effort.high') }}</option>
+                <option value="max">{{ t('agentDesign.effort.max') }}</option>
               </select>
               <p v-else class="field-value">
                 <span class="effort-badge">{{ agent.effort_level || 'medium' }}</span>
               </p>
             </div>
             <div class="form-group">
-              <label>Documents</label>
-              <textarea v-if="editMode" v-model="editForm.documents" class="form-textarea code" placeholder="JSON array of document objects" rows="4"></textarea>
+              <label>{{ t('agentDesign.documents') }}</label>
+              <textarea v-if="editMode" v-model="editForm.documents" class="form-textarea code" :placeholder="t('agentDesign.documentsPlaceholder')" rows="4"></textarea>
               <pre v-else-if="agent.documents && agent.documents.length > 0" class="system-prompt-display">{{ JSON.stringify(agent.documents, null, 2) }}</pre>
-              <p v-else class="field-value muted">No documents attached</p>
+              <p v-else class="field-value muted">{{ t('agentDesign.noDocuments') }}</p>
             </div>
           </div>
         </div>
@@ -496,7 +498,7 @@ async function toggleEnabled() {
         <!-- System Prompt Card -->
         <div class="design-card full-width">
           <div class="card-header">
-            <h3>System Prompt</h3>
+            <h3>{{ t('agentDesign.systemPrompt') }}</h3>
           </div>
           <div class="card-body">
             <div class="form-group">
@@ -504,11 +506,11 @@ async function toggleEnabled() {
                 v-if="editMode"
                 v-model="editForm.system_prompt"
                 class="form-textarea code"
-                placeholder="The system prompt that defines the agent's behavior"
+                :placeholder="t('agentDesign.systemPromptPlaceholder')"
                 rows="10"
               ></textarea>
               <pre v-else-if="agent.system_prompt" class="system-prompt-display">{{ agent.system_prompt }}</pre>
-              <p v-else class="field-value muted">No system prompt defined</p>
+              <p v-else class="field-value muted">{{ t('agentDesign.noSystemPrompt') }}</p>
             </div>
           </div>
         </div>
@@ -518,10 +520,10 @@ async function toggleEnabled() {
 
   <ConfirmModal
     :open="showDeleteConfirm"
-    title="Delete Agent"
-    :message="`Delete \u201C${agent?.name}\u201D? This cannot be undone.`"
-    confirm-label="Delete"
-    cancel-label="Cancel"
+    :title="t('agentDesign.deleteModal.title')"
+    :message="t('agentDesign.deleteModal.message', { name: agent?.name })"
+    :confirm-label="t('common.delete')"
+    :cancel-label="t('common.cancel')"
     variant="danger"
     @confirm="deleteAgent"
     @cancel="showDeleteConfirm = false"

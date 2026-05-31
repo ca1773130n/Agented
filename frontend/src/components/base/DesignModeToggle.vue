@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+
 defineProps<{
   modelValue: 'form' | 'chat';
 }>();
@@ -14,12 +18,12 @@ const emit = defineEmits<{
       class="mode-tab"
       :class="{ active: modelValue === 'form' }"
       @click="emit('update:modelValue', 'form')"
-    >Form</button>
+    >{{ t('designModeToggle.form') }}</button>
     <button
       class="mode-tab"
       :class="{ active: modelValue === 'chat' }"
       @click="emit('update:modelValue', 'chat')"
-    >AI Chat</button>
+    >{{ t('designModeToggle.aiChat') }}</button>
   </div>
 </template>
 

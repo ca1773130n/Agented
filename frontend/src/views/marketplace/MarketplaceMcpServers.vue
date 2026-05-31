@@ -7,7 +7,9 @@ import EmptyState from '../../components/base/EmptyState.vue';
 import { useToast } from '../../composables/useToast';
 import { useFocusTrap } from '../../composables/useFocusTrap';
 import { useWebMcpTool } from '../../composables/useWebMcpTool';
+import { useI18n } from 'vue-i18n';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 const searchQuery = ref('');
@@ -81,10 +83,10 @@ async function refreshCache() {
   isRefreshing.value = true;
   try {
     await marketplaceApi.refreshCache();
-    showToast('Marketplace cache refreshed', 'success');
+    showToast(t('marketplaceMcpServers.toast.cacheRefreshed'), 'success');
     await performSearch(searchQuery.value.trim());
   } catch (e) {
-    showToast('Failed to refresh cache', 'error');
+    showToast(t('marketplaceMcpServers.toast.cacheRefreshFailed'), 'error');
   } finally {
     isRefreshing.value = false;
   }
@@ -125,13 +127,13 @@ async function installServer(server: MarketplaceSearchResult) {
       env_json: installForm.value.env_json || undefined,
       timeout_ms: installForm.value.timeout_ms,
     });
-    showToast(`Installed "${server.name}" as MCP server`, 'success');
+    showToast(t('marketplaceMcpServers.toast.installed', { name: server.name }), 'success');
     server.installed = true;
     selectedServer.value = null;
     showInstallForm.value = false;
     await performSearch(searchQuery.value.trim());
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to install server';
+    const message = err instanceof ApiError ? err.message : t('marketplaceMcpServers.toast.installFailed');
     showToast(message, 'error');
   } finally {
     isInstalling.value = false;
@@ -154,10 +156,10 @@ onMounted(async () => {
       <input
         v-model="searchQuery"
         type="text"
-        placeholder="Search MCP servers across all marketplaces..."
+        :placeholder="t('marketplaceMcpServers.searchPlaceholder')"
         @input="onSearchInput"
       />
-      <button class="refresh-btn" :disabled="isRefreshing" title="Refresh marketplace data" @click="refreshCache">
+      <button class="refresh-btn" :disabled="isRefreshing" :title="t('marketplaceMcpServers.refreshTitle')" @click="refreshCache">
         <svg :class="{ spinning: isRefreshing }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M23 4v6h-6M1 20v-6h6"/>
           <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
@@ -170,20 +172,20 @@ onMounted(async () => {
       <div class="section-header">
         <h2>
           <template v-if="searchQuery.trim()">
-            Results for "{{ searchQuery }}" ({{ searchResults.length }})
+            {{ t('marketplaceMcpServers.resultsFor', { query: searchQuery, count: searchResults.length }) }}
           </template>
           <template v-else>
-            All Available Servers ({{ searchResults.length }})
+            {{ t('marketplaceMcpServers.allAvailable', { count: searchResults.length }) }}
           </template>
         </h2>
       </div>
 
-      <LoadingState v-if="isSearching" message="Searching servers..." />
+      <LoadingState v-if="isSearching" :message="t('marketplaceMcpServers.searching')" />
 
       <EmptyState
         v-else-if="searchResults.length === 0"
-        title="No servers found"
-        description="Try a different search term or add more registries in Settings → Plugin Marketplaces."
+        :title="t('marketplaceMcpServers.emptyTitle')"
+        :description="t('marketplaceMcpServers.emptyDescription')"
       >
         <template #icon>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -213,9 +215,9 @@ onMounted(async () => {
             <div class="server-name-row">
               <h3>{{ result.name }}</h3>
               <span v-if="result.version" class="version-badge">v{{ result.version }}</span>
-              <span v-if="result.installed" class="installed-badge">Installed</span>
+              <span v-if="result.installed" class="installed-badge">{{ t('marketplaceMcpServers.installedBadge') }}</span>
             </div>
-            <p class="server-description">{{ result.description || 'No description' }}</p>
+            <p class="server-description">{{ result.description || t('marketplaceMcpServers.noDescription') }}</p>
             <span class="marketplace-badge">{{ result.marketplace_name }}</span>
           </div>
         </div>
@@ -252,28 +254,28 @@ onMounted(async () => {
             <button class="close-btn" @click="closeDetail">&times;</button>
           </div>
           <div class="detail-body">
-            <p class="detail-description">{{ selectedServer.description || 'No description available.' }}</p>
+            <p class="detail-description">{{ selectedServer.description || t('marketplaceMcpServers.noDescriptionAvailable') }}</p>
             <div class="detail-meta">
               <div class="meta-row">
-                <span class="meta-label">Marketplace</span>
+                <span class="meta-label">{{ t('marketplaceMcpServers.marketplace') }}</span>
                 <span class="meta-value">{{ selectedServer.marketplace_name }}</span>
               </div>
               <div v-if="selectedServer.version" class="meta-row">
-                <span class="meta-label">Version</span>
+                <span class="meta-label">{{ t('marketplaceMcpServers.version') }}</span>
                 <span class="meta-value">{{ selectedServer.version }}</span>
               </div>
               <div class="meta-row">
-                <span class="meta-label">Status</span>
+                <span class="meta-label">{{ t('marketplaceMcpServers.status') }}</span>
                 <span :class="['meta-value', selectedServer.installed ? 'installed' : 'available']">
-                  {{ selectedServer.installed ? 'Installed' : 'Available' }}
+                  {{ selectedServer.installed ? t('marketplaceMcpServers.installedBadge') : t('marketplaceMcpServers.available') }}
                 </span>
               </div>
             </div>
 
             <div v-if="showInstallForm && !selectedServer.installed" class="install-config">
-              <h3 class="config-title">Configuration</h3>
+              <h3 class="config-title">{{ t('marketplaceMcpServers.form.configuration') }}</h3>
               <div class="form-group">
-                <label>Server Type</label>
+                <label>{{ t('marketplaceMcpServers.form.serverType') }}</label>
                 <select v-model="installForm.server_type">
                   <option value="stdio">stdio</option>
                   <option value="sse">sse</option>
@@ -281,49 +283,49 @@ onMounted(async () => {
                 </select>
               </div>
               <div v-if="installForm.server_type === 'stdio'" class="form-group">
-                <label>Command</label>
+                <label>{{ t('marketplaceMcpServers.form.command') }}</label>
                 <input v-model="installForm.command" type="text" placeholder="e.g., npx -y @modelcontextprotocol/server-filesystem" />
               </div>
               <div v-if="installForm.server_type === 'stdio'" class="form-group">
-                <label>Arguments</label>
+                <label>{{ t('marketplaceMcpServers.form.arguments') }}</label>
                 <input v-model="installForm.args" type="text" placeholder="e.g., /path/to/allowed/dir" />
               </div>
               <div v-if="installForm.server_type !== 'stdio'" class="form-group">
-                <label>URL</label>
+                <label>{{ t('marketplaceMcpServers.form.url') }}</label>
                 <input v-model="installForm.url" type="text" placeholder="e.g., http://localhost:3001/sse" />
               </div>
               <div class="form-group">
-                <label>Environment Variables (JSON)</label>
+                <label>{{ t('marketplaceMcpServers.form.envVars') }}</label>
                 <textarea v-model="installForm.env_json" placeholder='{"API_KEY": "your-key"}'></textarea>
               </div>
               <div class="form-group">
-                <label>Timeout (ms)</label>
+                <label>{{ t('marketplaceMcpServers.form.timeout') }}</label>
                 <input v-model.number="installForm.timeout_ms" type="number" placeholder="30000" />
               </div>
             </div>
           </div>
           <div class="detail-footer">
-            <button class="btn" @click="closeDetail">Close</button>
+            <button class="btn" @click="closeDetail">{{ t('common.close') }}</button>
             <template v-if="!selectedServer.installed">
               <button
                 v-if="!showInstallForm"
                 class="btn btn-primary"
                 @click="openInstallForm()"
               >
-                Install as MCP Server
+                {{ t('marketplaceMcpServers.installAsMcp') }}
               </button>
               <template v-else>
-                <button class="btn" @click="showInstallForm = false">Back</button>
+                <button class="btn" @click="showInstallForm = false">{{ t('common.back') }}</button>
                 <button
                   class="btn btn-primary"
                   :disabled="isInstalling"
                   @click="installServer(selectedServer)"
                 >
-                  {{ isInstalling ? 'Installing...' : 'Install' }}
+                  {{ isInstalling ? t('marketplaceMcpServers.installing') : t('marketplaceMcpServers.install') }}
                 </button>
               </template>
             </template>
-            <span v-else class="already-installed">Already installed</span>
+            <span v-else class="already-installed">{{ t('marketplaceMcpServers.alreadyInstalled') }}</span>
           </div>
         </div>
       </div>

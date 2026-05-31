@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 import { rbacApi, ApiError } from '../services/api';
 import type { UserRole, PermissionMatrix } from '../services/api';
 
 const showToast = useToast();
+const { t } = useI18n();
 const isLoading = ref(true);
 const loadError = ref<string | null>(null);
 
@@ -40,7 +42,7 @@ async function loadData() {
     roles.value = rolesData.roles ?? [];
     permissions.value = permsData.permissions ?? {};
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load RBAC data';
+    const message = err instanceof ApiError ? err.message : t('rbacSettings.errors.load');
     loadError.value = message;
   } finally {
     isLoading.value = false;
@@ -49,7 +51,7 @@ async function loadData() {
 
 async function handleCreate() {
   if (!newApiKey.value.trim() || !newLabel.value.trim()) {
-    showToast('API key and label are required', 'info');
+    showToast(t('rbacSettings.toasts.keyLabelRequired'), 'info');
     return;
   }
   isCreating.value = true;
@@ -66,9 +68,9 @@ async function handleCreate() {
     newLabel.value = '';
     newRole.value = 'viewer';
     showCreateForm.value = false;
-    showToast('Role created', 'success');
+    showToast(t('rbacSettings.toasts.roleCreated'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to create role';
+    const message = err instanceof ApiError ? err.message : t('rbacSettings.errors.createRole');
     showToast(message, 'error');
   } finally {
     isCreating.value = false;
@@ -82,7 +84,7 @@ async function copyKey() {
       copied.value = true;
       setTimeout(() => { copied.value = false; }, 2000);
     } catch {
-      showToast('Failed to copy — select and copy manually', 'info');
+      showToast(t('rbacSettings.toasts.copyFailed'), 'info');
     }
   }
 }
@@ -95,17 +97,17 @@ async function generateNewKey() {
       .join('');
     await rbacApi.createRole({
       api_key: key,
-      label: newLabel.value || 'New API Key',
+      label: newLabel.value || t('rbacSettings.defaultKeyLabel'),
       role: newRole.value,
     });
-    showToast('API key created', 'success');
+    showToast(t('rbacSettings.toasts.keyCreated'), 'success');
     generatedKeyDisplay.value = key;
     showCreateForm.value = false;
     newLabel.value = '';
     newRole.value = 'viewer';
     await loadData();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to create key';
+    const message = err instanceof ApiError ? err.message : t('rbacSettings.errors.createKey');
     showToast(message, 'error');
   } finally {
     isCreating.value = false;
@@ -134,9 +136,9 @@ async function saveEdit(roleId: string) {
       roles.value[idx] = updated;
     }
     editingId.value = null;
-    showToast('Role updated', 'success');
+    showToast(t('rbacSettings.toasts.roleUpdated'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to update role';
+    const message = err instanceof ApiError ? err.message : t('rbacSettings.errors.updateRole');
     showToast(message, 'error');
   } finally {
     isSavingEdit.value = false;
@@ -155,9 +157,9 @@ async function confirmRotate() {
       roles.value[idx] = result.role;
     }
     generatedKeyDisplay.value = result.role.api_key;
-    showToast('Key rotated — copy the new key now', 'success');
+    showToast(t('rbacSettings.toasts.keyRotated'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to rotate key';
+    const message = err instanceof ApiError ? err.message : t('rbacSettings.errors.rotateKey');
     showToast(message, 'error');
   } finally {
     rotatingId.value = null;
@@ -169,9 +171,9 @@ async function handleDelete(role: UserRole) {
   try {
     await rbacApi.deleteRole(role.id);
     roles.value = roles.value.filter(r => r.id !== role.id);
-    showToast('Role deleted', 'success');
+    showToast(t('rbacSettings.toasts.roleDeleted'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to delete role';
+    const message = err instanceof ApiError ? err.message : t('rbacSettings.errors.deleteRole');
     showToast(message, 'error');
   } finally {
     deletingId.value = null;
@@ -191,23 +193,23 @@ onMounted(loadData);
 
     <div class="page-title-row">
       <div>
-        <h2>Role-Based Access Control</h2>
-        <p class="subtitle">Manage API key roles and view the permission matrix</p>
+        <h2>{{ t('rbacSettings.title') }}</h2>
+        <p class="subtitle">{{ t('rbacSettings.subtitle') }}</p>
       </div>
       <button class="btn btn-primary" @click="showCreateForm = !showCreateForm">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
-        Add Role
+        {{ t('rbacSettings.addRole') }}
       </button>
     </div>
 
-    <LoadingState v-if="isLoading" message="Loading RBAC configuration..." />
+    <LoadingState v-if="isLoading" :message="t('rbacSettings.loading')" />
 
     <div v-else-if="loadError" class="card error-card">
       <div class="error-inner">
         <p>{{ loadError }}</p>
-        <button class="btn btn-ghost" @click="loadData">Retry</button>
+        <button class="btn btn-ghost" @click="loadData">{{ t('common.retry') }}</button>
       </div>
     </div>
 
@@ -215,32 +217,32 @@ onMounted(loadData);
       <!-- Create Form -->
       <div v-if="showCreateForm" class="card create-card">
         <div class="card-header">
-          <h3>Add New Role</h3>
+          <h3>{{ t('rbacSettings.addNewRole') }}</h3>
         </div>
         <div class="form-body">
           <div class="field-row-3">
             <div class="field-group">
-              <label class="field-label">API Key</label>
+              <label class="field-label">{{ t('rbacSettings.fields.apiKey') }}</label>
               <input v-model="newApiKey" type="text" class="text-input" placeholder="agnt_sk_..." />
             </div>
             <div class="field-group">
-              <label class="field-label">Label</label>
+              <label class="field-label">{{ t('rbacSettings.fields.label') }}</label>
               <input v-model="newLabel" type="text" class="text-input" placeholder="CI/CD Pipeline" />
             </div>
             <div class="field-group">
-              <label class="field-label">Role</label>
+              <label class="field-label">{{ t('rbacSettings.fields.role') }}</label>
               <select v-model="newRole" class="role-select">
                 <option v-for="r in ROLE_OPTIONS" :key="r" :value="r">{{ r }}</option>
               </select>
             </div>
           </div>
           <div class="form-actions">
-            <button class="btn btn-ghost" @click="showCreateForm = false">Cancel</button>
+            <button class="btn btn-ghost" @click="showCreateForm = false">{{ t('common.cancel') }}</button>
             <button class="btn btn-ghost" :disabled="isCreating" @click="generateNewKey">
-              {{ isCreating ? 'Generating...' : 'Generate Key' }}
+              {{ isCreating ? t('rbacSettings.generating') : t('rbacSettings.generateKey') }}
             </button>
             <button class="btn btn-primary" :disabled="isCreating || !newApiKey.trim() || !newLabel.trim()" @click="handleCreate">
-              {{ isCreating ? 'Creating...' : 'Create Role' }}
+              {{ isCreating ? t('rbacSettings.creating') : t('rbacSettings.createRole') }}
             </button>
           </div>
         </div>
@@ -248,25 +250,25 @@ onMounted(loadData);
 
       <!-- Generated key notice -->
       <div v-if="generatedKeyDisplay" class="generated-key-notice">
-        <strong>New API key created — copy it now:</strong>
+        <strong>{{ t('rbacSettings.newKeyNotice') }}</strong>
         <code class="key-display">{{ generatedKeyDisplay }}</code>
         <button class="copy-btn" :class="{ 'copy-btn--copied': copied }" @click="copyKey">
           <svg v-if="copied" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg>
-          {{ copied ? 'Copied!' : 'Copy' }}
+          {{ copied ? t('rbacSettings.copied') : t('rbacSettings.copy') }}
         </button>
-        <button class="dismiss-btn" @click="generatedKeyDisplay = null">Dismiss</button>
+        <button class="dismiss-btn" @click="generatedKeyDisplay = null">{{ t('common.dismiss') }}</button>
       </div>
 
       <!-- Permission matrix -->
       <div v-if="Object.keys(permissions).length > 0" class="card">
         <div class="card-header">
-          <h3>Permission Matrix</h3>
+          <h3>{{ t('rbacSettings.permissionMatrix') }}</h3>
         </div>
         <table class="matrix-table">
           <thead>
             <tr>
-              <th>Role</th>
-              <th>Permissions</th>
+              <th>{{ t('rbacSettings.fields.role') }}</th>
+              <th>{{ t('rbacSettings.permissions') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -274,7 +276,7 @@ onMounted(loadData);
               <td class="role-name">{{ roleName }}</td>
               <td class="perm-list">
                 <span v-for="p in perms" :key="p" class="perm-tag">{{ p }}</span>
-                <span v-if="perms.length === 0" class="no-perms">No permissions</span>
+                <span v-if="perms.length === 0" class="no-perms">{{ t('rbacSettings.noPermissions') }}</span>
               </td>
             </tr>
           </tbody>
@@ -284,19 +286,19 @@ onMounted(loadData);
       <!-- User Role Assignments -->
       <div class="card">
         <div class="card-header">
-          <h3>API Key Role Assignments</h3>
-          <span class="card-badge">{{ roles.length }} roles</span>
+          <h3>{{ t('rbacSettings.roleAssignments') }}</h3>
+          <span class="card-badge">{{ t('rbacSettings.rolesCount', { count: roles.length }) }}</span>
         </div>
         <div v-if="roles.length === 0" class="list-empty">
-          No roles configured. Add a role to map API keys to permissions.
+          {{ t('rbacSettings.noRoles') }}
         </div>
         <table v-else class="users-table">
           <thead>
             <tr>
-              <th>Label</th>
-              <th>API Key</th>
-              <th>Role</th>
-              <th>Created</th>
+              <th>{{ t('rbacSettings.fields.label') }}</th>
+              <th>{{ t('rbacSettings.fields.apiKey') }}</th>
+              <th>{{ t('rbacSettings.fields.role') }}</th>
+              <th>{{ t('rbacSettings.fields.created') }}</th>
               <th></th>
             </tr>
           </thead>
@@ -322,20 +324,20 @@ onMounted(loadData);
               <td class="date-cell">{{ role.created_at ? new Date(role.created_at).toLocaleDateString() : '-' }}</td>
               <td class="actions-cell">
                 <template v-if="editingId === role.id">
-                  <button class="btn btn-sm btn-save" :disabled="isSavingEdit" @click="saveEdit(role.id)">Save</button>
-                  <button class="btn btn-sm btn-cancel" @click="cancelEdit">Cancel</button>
+                  <button class="btn btn-sm btn-save" :disabled="isSavingEdit" @click="saveEdit(role.id)">{{ t('common.save') }}</button>
+                  <button class="btn btn-sm btn-cancel" @click="cancelEdit">{{ t('common.cancel') }}</button>
                 </template>
                 <template v-else>
-                  <button class="btn btn-sm btn-edit" @click="startEdit(role)">Edit</button>
+                  <button class="btn btn-sm btn-edit" @click="startEdit(role)">{{ t('common.edit') }}</button>
                   <button
                     class="btn btn-sm btn-rotate"
                     :disabled="rotatingId === role.id"
                     @click="rotateConfirmRole = role"
                   >
-                    {{ rotatingId === role.id ? '...' : 'Rotate' }}
+                    {{ rotatingId === role.id ? '...' : t('rbacSettings.rotate') }}
                   </button>
                   <button class="btn btn-sm btn-delete" :disabled="deletingId === role.id" @click="handleDelete(role)">
-                    {{ deletingId === role.id ? '...' : 'Delete' }}
+                    {{ deletingId === role.id ? '...' : t('common.delete') }}
                   </button>
                 </template>
               </td>
@@ -348,16 +350,15 @@ onMounted(loadData);
     <!-- Rotate confirmation -->
     <div v-if="rotateConfirmRole" class="rotate-modal-backdrop" @click.self="rotateConfirmRole = null">
       <div class="rotate-modal">
-        <h3>Rotate API key?</h3>
+        <h3>{{ t('rbacSettings.rotateModal.title') }}</h3>
         <p>
-          The current key for
+          {{ t('rbacSettings.rotateModal.bodyPrefix') }}
           <strong>{{ rotateConfirmRole.label }}</strong>
-          ({{ rotateConfirmRole.role }}) will stop working immediately. Any
-          tools or CI jobs using it will need the new key.
+          {{ t('rbacSettings.rotateModal.bodySuffix', { role: rotateConfirmRole.role }) }}
         </p>
         <div class="rotate-modal-actions">
-          <button class="btn btn-ghost" @click="rotateConfirmRole = null">Cancel</button>
-          <button class="btn btn-primary" @click="confirmRotate">Rotate now</button>
+          <button class="btn btn-ghost" @click="rotateConfirmRole = null">{{ t('common.cancel') }}</button>
+          <button class="btn btn-primary" @click="confirmRotate">{{ t('rbacSettings.rotateModal.confirm') }}</button>
         </div>
       </div>
     </div>

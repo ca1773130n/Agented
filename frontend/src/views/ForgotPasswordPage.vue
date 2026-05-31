@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { authApi } from '../services/api';
+
+const { t } = useI18n();
 
 const email = ref('');
 const submitted = ref(false);
@@ -17,7 +20,7 @@ async function onSubmit() {
     await authApi.forgotPassword(email.value.trim());
     submitted.value = true;
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Could not send reset email';
+    error.value = err instanceof Error ? err.message : t('forgotPassword.sendError');
   } finally {
     submitting.value = false;
   }
@@ -27,18 +30,17 @@ async function onSubmit() {
 <template>
   <div class="auth-page">
     <div class="auth-card">
-      <h1 class="auth-title">Reset your password</h1>
+      <h1 class="auth-title">{{ t('forgotPassword.title') }}</h1>
       <p v-if="!submitted" class="auth-subtitle">
-        Enter your email and we'll send a reset link.
+        {{ t('forgotPassword.prompt') }}
       </p>
       <p v-else class="auth-subtitle">
-        If that email is in our system, a reset link is on its way.
-        Check your inbox (and your server logs in dev mode).
+        {{ t('forgotPassword.sent') }}
       </p>
 
       <form v-if="!submitted" class="auth-form" @submit.prevent="onSubmit">
         <label class="auth-field">
-          <span class="auth-label">Email</span>
+          <span class="auth-label">{{ t('forgotPassword.email') }}</span>
           <input
             v-model="email"
             type="email"
@@ -56,13 +58,13 @@ async function onSubmit() {
           data-test="forgot-submit"
           :disabled="!canSubmit"
         >
-          {{ submitting ? 'Sending…' : 'Send reset link' }}
+          {{ submitting ? t('forgotPassword.sending') : t('forgotPassword.sendLink') }}
         </button>
       </form>
 
       <p class="auth-switch">
-        Remembered it?
-        <router-link :to="{ name: 'login' }" class="auth-link">Back to sign in</router-link>
+        {{ t('forgotPassword.remembered') }}
+        <router-link :to="{ name: 'login' }" class="auth-link">{{ t('forgotPassword.backToSignIn') }}</router-link>
       </p>
     </div>
   </div>

@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { teamApi, triggerApi, ApiError } from '../services/api';
 import type { Team, Trigger } from '../services/api';
 
+const { t } = useI18n();
 const router = useRouter();
 
 const tab = ref<'browse' | 'mine'>('browse');
@@ -31,9 +33,9 @@ onMounted(async () => {
     triggers.value = trResp.triggers;
   } catch (err) {
     if (err instanceof ApiError) {
-      loadError.value = `Failed to load: ${err.message}`;
+      loadError.value = t('crossTeamBotSharing.errors.load', { message: err.message });
     } else {
-      loadError.value = 'An unexpected error occurred while loading data.';
+      loadError.value = t('crossTeamBotSharing.errors.unexpected');
     }
   } finally {
     isLoading.value = false;
@@ -45,7 +47,7 @@ const triggersWithTeams = computed<TriggerWithTeam[]>(() => {
     const team = teams.value.find((t) => t.id === trigger.team_id);
     return {
       trigger,
-      teamName: team?.name || 'Unassigned',
+      teamName: team?.name || t('crossTeamBotSharing.unassigned'),
       teamId: trigger.team_id || null,
     };
   });
@@ -81,13 +83,13 @@ const myTeamTriggers = computed(() => {
   <div class="bot-sharing">
 
     <PageHeader
-      title="Cross-Team Bot Sharing"
-      subtitle="Browse triggers assigned to teams across your organization."
+      :title="t('crossTeamBotSharing.title')"
+      :subtitle="t('crossTeamBotSharing.subtitle')"
     />
 
     <!-- Loading state -->
     <div v-if="isLoading" class="card" style="padding: 48px; text-align: center;">
-      <span style="color: var(--text-tertiary); font-size: 0.85rem;">Loading teams and triggers...</span>
+      <span style="color: var(--text-tertiary); font-size: 0.85rem;">{{ t('crossTeamBotSharing.loading') }}</span>
     </div>
 
     <!-- Error state -->
@@ -101,13 +103,13 @@ const myTeamTriggers = computed(() => {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
-          Browse Triggers
+          {{ t('crossTeamBotSharing.tabs.browse') }}
         </button>
         <button class="tab-btn" :class="{ active: tab === 'mine' }" @click="tab = 'mine'">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <circle cx="12" cy="7" r="4"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/>
           </svg>
-          Team Assignments
+          {{ t('crossTeamBotSharing.tabs.assignments') }}
         </button>
       </div>
 
@@ -117,14 +119,14 @@ const myTeamTriggers = computed(() => {
             v-model="searchQuery"
             type="text"
             class="search-input"
-            placeholder="Search by trigger name, team, or source..."
+            :placeholder="t('crossTeamBotSharing.searchPlaceholder')"
           />
-          <span class="search-count">{{ filtered.length }} trigger{{ filtered.length !== 1 ? 's' : '' }}</span>
+          <span class="search-count">{{ t('crossTeamBotSharing.triggerCount', { count: filtered.length }) }}</span>
         </div>
 
         <!-- Empty state -->
         <div v-if="filtered.length === 0" class="card" style="padding: 48px; text-align: center;">
-          <span style="color: var(--text-tertiary); font-size: 0.85rem;">No triggers match your search.</span>
+          <span style="color: var(--text-tertiary); font-size: 0.85rem;">{{ t('crossTeamBotSharing.noMatch') }}</span>
         </div>
 
         <div v-else class="bots-grid">
@@ -144,14 +146,14 @@ const myTeamTriggers = computed(() => {
             </div>
 
             <p class="bot-desc">
-              Backend: {{ item.trigger.backend_type || 'claude' }}
-              <template v-if="item.trigger.model"> | Model: {{ item.trigger.model }}</template>
+              {{ t('crossTeamBotSharing.backendLabel') }}: {{ item.trigger.backend_type || 'claude' }}
+              <template v-if="item.trigger.model"> | {{ t('crossTeamBotSharing.modelLabel') }}: {{ item.trigger.model }}</template>
             </p>
 
             <div class="bot-tags">
               <span class="tag">{{ item.trigger.trigger_source || 'manual' }}</span>
-              <span v-if="item.trigger.enabled" class="tag">enabled</span>
-              <span v-else class="tag" style="color: #ef4444;">disabled</span>
+              <span v-if="item.trigger.enabled" class="tag">{{ t('crossTeamBotSharing.enabled') }}</span>
+              <span v-else class="tag" style="color: #ef4444;">{{ t('crossTeamBotSharing.disabled') }}</span>
               <span v-if="item.trigger.execution_mode" class="tag">{{ item.trigger.execution_mode }}</span>
             </div>
 
@@ -160,7 +162,7 @@ const myTeamTriggers = computed(() => {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                 {{ item.trigger.trigger_source || 'manual' }}
               </span>
-              <span class="stat-date">ID: {{ item.trigger.id }}</span>
+              <span class="stat-date">{{ t('crossTeamBotSharing.idLabel') }}: {{ item.trigger.id }}</span>
             </div>
           </div>
         </div>
@@ -169,7 +171,7 @@ const myTeamTriggers = computed(() => {
       <template v-else>
         <!-- Empty state for team assignments -->
         <div v-if="myTeamTriggers.length === 0" class="card" style="padding: 48px; text-align: center;">
-          <span style="color: var(--text-tertiary); font-size: 0.85rem;">No triggers are assigned to teams yet.</span>
+          <span style="color: var(--text-tertiary); font-size: 0.85rem;">{{ t('crossTeamBotSharing.noAssignments') }}</span>
         </div>
 
         <div v-for="group in myTeamTriggers" :key="group.team.id" class="card">
@@ -187,19 +189,19 @@ const myTeamTriggers = computed(() => {
             <div v-for="trigger in group.triggers" :key="trigger.id" class="my-bot-row">
               <div class="my-bot-info">
                 <span class="my-bot-name">{{ trigger.name }}</span>
-                <span class="my-bot-subs">{{ trigger.trigger_source || 'manual' }} trigger</span>
+                <span class="my-bot-subs">{{ t('crossTeamBotSharing.triggerSourceLabel', { source: trigger.trigger_source || 'manual' }) }}</span>
               </div>
               <div class="my-bot-shared">
                 <span class="shared-tag">{{ trigger.backend_type || 'claude' }}</span>
-                <span v-if="trigger.enabled" class="shared-tag">enabled</span>
-                <span v-else class="not-shared">disabled</span>
+                <span v-if="trigger.enabled" class="shared-tag">{{ t('crossTeamBotSharing.enabled') }}</span>
+                <span v-else class="not-shared">{{ t('crossTeamBotSharing.disabled') }}</span>
               </div>
               <div class="my-bot-actions">
                 <button
                   class="btn btn-sm btn-secondary"
                   @click="router.push({ name: 'trigger-dashboard', params: { triggerId: trigger.id } })"
                 >
-                  View
+                  {{ t('crossTeamBotSharing.view') }}
                 </button>
               </div>
             </div>

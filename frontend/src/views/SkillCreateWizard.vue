@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { skillConversationApi } from '../services/api';
 import { useConversation, createConfigParser } from '../composables/useConversation';
 import { AiChatPanelManaged as AiChatPanel } from '@ai-accounts/vue-styled';
@@ -11,6 +12,7 @@ import SkillCreatePreviewDrawer from '../components/skills/SkillCreatePreviewDra
 
 const router = useRouter();
 const showToast = useToast();
+const { t } = useI18n();
 
 // v0.7.77 — config shape now matches the multi-file Anthropic
 // Skills schema the backend emits via SKILL_CREATION_SYSTEM_PROMPT.
@@ -87,8 +89,8 @@ function openPreview() {
 // doesn't see a no-op nag tooltip.
 const finalizeTooltip = computed(() =>
   conversation.canFinalize.value
-    ? 'Open the preview to review and create your skill'
-    : "Keep chatting — Claude needs more details before the skill can be created. Tell it the skill's name, what triggers it, and what it should do.",
+    ? t('skillCreateWizard.finalizeTooltip.ready')
+    : t('skillCreateWizard.finalizeTooltip.notReady'),
 );
 
 async function commitFinalize(expectedConfigHash: string) {
@@ -106,7 +108,7 @@ async function commitFinalize(expectedConfigHash: string) {
     // dead conv.
     rememberConvId(null);
     showToast(
-      `Skill "${(result.skill as { skill_name: string }).skill_name}" created successfully!`,
+      t('skillCreateWizard.toasts.createdSuccess', { name: (result.skill as { skill_name: string }).skill_name }),
       'success',
     );
     router.push({ name: 'skill-detail', params: { skillId: result.skill_id as string } });
@@ -268,8 +270,8 @@ onMounted(async () => {
   <div class="wizard-page">
     <div class="wizard-header">
       <div class="header-title">
-        <h1>Design a Skill</h1>
-        <p>Chat with Claude to design your custom skill</p>
+        <h1>{{ t('skillCreateWizard.title') }}</h1>
+        <p>{{ t('skillCreateWizard.subtitle') }}</p>
       </div>
       <!-- v0.7.79 — the Create button is always visible. When the
            conversation isn't ready yet (Claude hasn't emitted the
@@ -289,16 +291,14 @@ onMounted(async () => {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M20 6L9 17l-5-5"/>
           </svg>
-          {{ conversation.isFinalizing.value ? 'Creating...' : 'Create Skill' }}
+          {{ conversation.isFinalizing.value ? t('skillCreateWizard.creating') : t('skillCreateWizard.createSkill') }}
         </button>
         <p
           v-if="!conversation.canFinalize.value"
           id="finalize-hint"
           class="finalize-hint"
         >
-          Keep chatting — once Claude has the skill's name, what
-          triggers it, and what it should do, this button activates
-          and opens a preview before anything is written.
+          {{ t('skillCreateWizard.finalizeHint') }}
         </p>
       </div>
     </div>
@@ -318,10 +318,10 @@ onMounted(async () => {
       :selected-account-id="conversation.selectedAccountId.value"
       :selected-model="conversation.selectedModel.value"
       :assistant-icon-paths="SKILL_ICON_PATHS"
-      input-placeholder="Describe your skill or answer Claude's questions..."
+      :input-placeholder="t('skillCreateWizard.chat.inputPlaceholder')"
       entity-label="skill"
-      banner-title="Skill Ready to Create!"
-      banner-button-label="Create Skill Now"
+      :banner-title="t('skillCreateWizard.chat.bannerTitle')"
+      :banner-button-label="t('skillCreateWizard.chat.bannerButton')"
       :detected-entity-name="conversation.detectedConfig.value?.skill_name"
       @update:input-message="conversation.inputMessage.value = $event"
       @update:selected-backend="conversation.setBackend($event)"

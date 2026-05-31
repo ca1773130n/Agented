@@ -5,10 +5,12 @@
 <script setup lang="ts">
 // ShipOrCut: 2026-Q3 — STUB-PROMOTE: backend handler returns `{teams:[]}` stub.
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import LoadingState from '../../../components/base/LoadingState.vue';
 import EmptyState from '../../../components/base/EmptyState.vue';
 
 const emit = defineEmits<{ loaded: [slug: string] }>();
+const { t } = useI18n();
 
 const isLoading = ref(true);
 const selectedPeriod = ref<'7d' | '30d' | 'all'>('30d');
@@ -75,8 +77,8 @@ onMounted(loadData);
           </svg>
         </div>
         <div>
-          <h2 class="lane-card__title">ROI Leaderboard</h2>
-          <p class="lane-card__subtitle">Which teams automate the most, catch the most issues, and have the highest reliability</p>
+          <h2 class="lane-card__title">{{ t('roiLeaderboardCard.title') }}</h2>
+          <p class="lane-card__subtitle">{{ t('roiLeaderboardCard.subtitle') }}</p>
         </div>
       </div>
       <div class="period-toggle">
@@ -89,22 +91,22 @@ onMounted(loadData);
       </div>
     </header>
 
-    <LoadingState v-if="isLoading" message="Loading leaderboard..." />
+    <LoadingState v-if="isLoading" :message="t('roiLeaderboardCard.loading')" />
 
     <template v-else>
-      <EmptyState v-if="teams.length === 0" title="No team data available" description="Teams will appear here once they start running automations." />
+      <EmptyState v-if="teams.length === 0" :title="t('roiLeaderboardCard.emptyTitle')" :description="t('roiLeaderboardCard.emptyDescription')" />
 
       <div class="ranking-table" v-else>
         <div class="table-head">
-          <span class="col-rank">Rank</span>
-          <span class="col-team">Team</span>
-          <span class="col-num">Bots</span>
-          <span class="col-num">Executions</span>
-          <span class="col-num">Success %</span>
-          <span class="col-num">Issues</span>
-          <span class="col-num">Hrs Saved</span>
-          <span class="col-score">Score</span>
-          <span class="col-trend">Trend</span>
+          <span class="col-rank">{{ t('roiLeaderboardCard.col.rank') }}</span>
+          <span class="col-team">{{ t('roiLeaderboardCard.col.team') }}</span>
+          <span class="col-num">{{ t('roiLeaderboardCard.col.bots') }}</span>
+          <span class="col-num">{{ t('roiLeaderboardCard.col.executions') }}</span>
+          <span class="col-num">{{ t('roiLeaderboardCard.col.successPct') }}</span>
+          <span class="col-num">{{ t('roiLeaderboardCard.col.issues') }}</span>
+          <span class="col-num">{{ t('roiLeaderboardCard.col.hrsSaved') }}</span>
+          <span class="col-score">{{ t('roiLeaderboardCard.col.score') }}</span>
+          <span class="col-trend">{{ t('roiLeaderboardCard.col.trend') }}</span>
         </div>
         <router-link
           v-for="team in teams"

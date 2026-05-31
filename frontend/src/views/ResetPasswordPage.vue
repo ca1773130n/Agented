@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { authApi } from '../services/api';
 
 const route = useRoute();
 const router = useRouter();
+const { t } = useI18n();
 
 const token = computed(() => (route.query.token as string) || '');
 const password = ref('');
@@ -25,7 +27,7 @@ async function onSubmit() {
     done.value = true;
     setTimeout(() => router.push({ name: 'login' }), 1500);
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Reset failed';
+    error.value = err instanceof Error ? err.message : t('resetPassword.resetFailed');
   } finally {
     submitting.value = false;
   }
@@ -35,20 +37,20 @@ async function onSubmit() {
 <template>
   <div class="auth-page">
     <div class="auth-card">
-      <h1 class="auth-title">Choose a new password</h1>
+      <h1 class="auth-title">{{ t('resetPassword.title') }}</h1>
       <p v-if="!token" class="auth-error" role="alert">
-        This page needs a token. Use the reset link from your email.
+        {{ t('resetPassword.needsToken') }}
       </p>
       <template v-else-if="done">
         <p class="auth-subtitle">
-          Password updated. Redirecting to sign in…
+          {{ t('resetPassword.updatedRedirecting') }}
         </p>
       </template>
       <template v-else>
-        <p class="auth-subtitle">At least 8 characters.</p>
+        <p class="auth-subtitle">{{ t('resetPassword.atLeast8') }}</p>
         <form class="auth-form" @submit.prevent="onSubmit">
           <label class="auth-field">
-            <span class="auth-label">New password</span>
+            <span class="auth-label">{{ t('resetPassword.newPassword') }}</span>
             <input
               v-model="password"
               type="password"
@@ -67,12 +69,12 @@ async function onSubmit() {
             data-test="reset-submit"
             :disabled="!canSubmit"
           >
-            {{ submitting ? 'Saving…' : 'Update password' }}
+            {{ submitting ? t('resetPassword.saving') : t('resetPassword.updatePassword') }}
           </button>
         </form>
       </template>
       <p class="auth-switch">
-        <router-link :to="{ name: 'login' }" class="auth-link">Back to sign in</router-link>
+        <router-link :to="{ name: 'login' }" class="auth-link">{{ t('resetPassword.backToSignIn') }}</router-link>
       </p>
     </div>
   </div>

@@ -4,6 +4,7 @@
 -->
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { analyticsApi, ApiError } from '../../../services/api';
 import type { EffectivenessOverTimePoint } from '../../../services/api';
 import BotEffectivenessChart from '../../../components/analytics/BotEffectivenessChart.vue';
@@ -17,6 +18,7 @@ import {
   buildDateRange,
 } from './_analyticsFilters';
 
+const { t } = useI18n();
 const emit = defineEmits<{ loaded: [slug: string] }>();
 
 const selectedRange = ref<AnalyticsDateRange>('30d');
@@ -58,7 +60,7 @@ async function loadData() {
       effectivenessOverTime.value = res.over_time || [];
     }
   } catch (err) {
-    loadError.value = err instanceof ApiError ? err.message : 'Failed to load effectiveness';
+    loadError.value = err instanceof ApiError ? err.message : t('botEffectivenessCard.loadError');
     effectivenessSummary.value = { accepted: 0, ignored: 0, pending: 0, acceptance_rate: 0 };
     effectivenessOverTime.value = [];
   } finally {
@@ -75,8 +77,8 @@ onMounted(loadData);
   <section id="bot-effectiveness" class="lane-card chart-card">
     <header class="lane-card__head">
       <div>
-        <h2 class="lane-card__title">Bot Effectiveness</h2>
-        <p class="lane-card__subtitle">PR review acceptance rate</p>
+        <h2 class="lane-card__title">{{ t('botEffectivenessCard.title') }}</h2>
+        <p class="lane-card__subtitle">{{ t('botEffectivenessCard.subtitle') }}</p>
       </div>
       <div class="filter-controls">
         <div class="filter-group">
@@ -101,9 +103,9 @@ onMounted(loadData);
       </div>
     </header>
 
-    <LoadingState v-if="isLoading" message="Loading…" />
+    <LoadingState v-if="isLoading" :message="t('common.loading')" />
     <ErrorState v-else-if="loadError" :message="loadError" @retry="loadData" />
-    <p v-else-if="isEmpty" class="empty">No PR-review data yet.</p>
+    <p v-else-if="isEmpty" class="empty">{{ t('botEffectivenessCard.empty') }}</p>
     <BotEffectivenessChart
       v-else
       :summary="effectivenessSummary"

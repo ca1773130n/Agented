@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { integrationApi, teamApi, ApiError } from '../services/api';
 import type { Integration } from '../services/api';
 import type { Team } from '../services/api';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 type ChannelType = 'slack' | 'teams' | 'email';
@@ -101,9 +103,9 @@ async function fetchData() {
     teams.value = teamsResult?.teams || [];
   } catch (err) {
     if (err instanceof ApiError) {
-      error.value = `Failed to load notification channels: ${err.message}`;
+      error.value = t('teamsNotificationChannels.loadFailedWith', { message: err.message });
     } else {
-      error.value = 'Failed to load notification channels';
+      error.value = t('teamsNotificationChannels.loadFailed');
     }
   } finally {
     loading.value = false;
@@ -112,13 +114,13 @@ async function fetchData() {
 
 onMounted(fetchData);
 
-const allEvents: { key: EventType; label: string }[] = [
-  { key: 'execution_complete', label: 'Execution Complete' },
-  { key: 'execution_failed', label: 'Execution Failed' },
-  { key: 'critical_finding', label: 'Critical Finding' },
-  { key: 'bot_disabled', label: 'Bot Auto-Disabled' },
-  { key: 'quota_exceeded', label: 'Quota Exceeded' },
-];
+const allEvents = computed<{ key: EventType; label: string }[]>(() => [
+  { key: 'execution_complete', label: t('teamsNotificationChannels.events.executionComplete') },
+  { key: 'execution_failed', label: t('teamsNotificationChannels.events.executionFailed') },
+  { key: 'critical_finding', label: t('teamsNotificationChannels.events.criticalFinding') },
+  { key: 'bot_disabled', label: t('teamsNotificationChannels.events.botDisabled') },
+  { key: 'quota_exceeded', label: t('teamsNotificationChannels.events.quotaExceeded') },
+]);
 
 function channelIcon(type: ChannelType): string {
   return type === 'slack' ? '💬' : type === 'teams' ? '🟦' : '📧';
@@ -129,7 +131,7 @@ function channelColor(type: ChannelType): string {
 }
 
 function formatDate(iso: string | null): string {
-  if (!iso) return 'Never';
+  if (!iso) return t('teamsNotificationChannels.never');
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
@@ -138,10 +140,10 @@ async function toggleChannel(ch: NotificationChannel) {
   ch.enabled = !ch.enabled;
   try {
     await integrationApi.update(ch.id, { enabled: ch.enabled });
-    showToast(`Channel ${ch.enabled ? 'enabled' : 'disabled'}`, 'info');
+    showToast(ch.enabled ? t('teamsNotificationChannels.toast.channelEnabled') : t('teamsNotificationChannels.toast.channelDisabled'), 'info');
   } catch (err) {
     ch.enabled = prev;
-    showToast(err instanceof ApiError ? err.message : 'Failed to toggle channel', 'error');
+    showToast(err instanceof ApiError ? err.message : t('teamsNotificationChannels.toast.toggleFailed'), 'error');
   }
 }
 
@@ -166,9 +168,9 @@ async function deleteChannel(id: string) {
   try {
     await integrationApi.delete(id);
     channels.value = channels.value.filter((ch) => ch.id !== id);
-    showToast('Channel removed', 'info');
+    showToast(t('teamsNotificationChannels.toast.channelRemoved'), 'info');
   } catch (err) {
-    showToast(err instanceof ApiError ? err.message : 'Failed to delete channel', 'error');
+    showToast(err instanceof ApiError ? err.message : t('teamsNotificationChannels.toast.deleteFailed'), 'error');
   }
 }
 
@@ -182,15 +184,15 @@ async function testChannel(ch: NotificationChannel) {
       message: result.message,
       testedAt: new Date().toISOString(),
     });
-    showToast(result.success ? 'Test notification delivered!' : `Delivery failed: ${result.message}`, result.success ? 'success' : 'error');
+    showToast(result.success ? t('teamsNotificationChannels.toast.testDelivered') : t('teamsNotificationChannels.toast.deliveryFailed', { message: result.message }), result.success ? 'success' : 'error');
   } catch (err) {
     testResults.value.unshift({
       channelId: ch.id,
       success: false,
-      message: err instanceof ApiError ? err.message : 'Test failed',
+      message: err instanceof ApiError ? err.message : t('teamsNotificationChannels.toast.testFailed'),
       testedAt: new Date().toISOString(),
     });
-    showToast(err instanceof ApiError ? err.message : 'Test failed', 'error');
+    showToast(err instanceof ApiError ? err.message : t('teamsNotificationChannels.toast.testFailed'), 'error');
   } finally {
     testingChannelId.value = null;
   }
@@ -198,7 +200,7 @@ async function testChannel(ch: NotificationChannel) {
 
 async function saveNewChannel() {
   if (!newChannel.value.name?.trim() || !newChannel.value.destination?.trim()) {
-    showToast('Name and destination are required', 'error');
+    showToast(t('teamsNotificationChannels.toast.nameDestRequired'), 'error');
     return;
   }
   try {
@@ -207,9 +209,9 @@ async function saveNewChannel() {
     channels.value.push(integrationToChannel(created));
     showAddModal.value = false;
     newChannel.value = { type: 'slack', name: '', destination: '', events: ['execution_failed', 'critical_finding'], botIds: [], enabled: true };
-    showToast('Notification channel added', 'success');
+    showToast(t('teamsNotificationChannels.toast.channelAdded'), 'success');
   } catch (err) {
-    showToast(err instanceof ApiError ? err.message : 'Failed to create channel', 'error');
+    showToast(err instanceof ApiError ? err.message : t('teamsNotificationChannels.toast.createFailed'), 'error');
   }
 }
 
@@ -221,37 +223,37 @@ const lastTestForChannel = (id: string) => testResults.value.find((r) => r.chann
 <template>
   <div class="page-container">
     <PageHeader
-      title="Notification Channels"
-      subtitle="Configure Slack, Microsoft Teams, and email channels to receive bot execution results and critical alerts"
+      :title="t('teamsNotificationChannels.title')"
+      :subtitle="t('teamsNotificationChannels.subtitle')"
     />
 
     <!-- Loading state -->
     <div v-if="loading" class="section-card" style="padding: 48px; text-align: center;">
-      <div style="color: var(--text-tertiary); font-size: 0.875rem;">Loading notification channels...</div>
+      <div style="color: var(--text-tertiary); font-size: 0.875rem;">{{ t('teamsNotificationChannels.loading') }}</div>
     </div>
 
     <!-- Error state -->
     <div v-else-if="error" class="section-card" style="padding: 48px; text-align: center;">
       <div style="color: #ef4444; font-size: 0.875rem; margin-bottom: 12px;">{{ error }}</div>
-      <button class="btn-primary" @click="fetchData">Retry</button>
+      <button class="btn-primary" @click="fetchData">{{ t('common.retry') }}</button>
     </div>
 
     <template v-else>
       <div class="stats-row">
         <div class="stat-card">
-          <div class="stat-label">Channels Configured</div>
+          <div class="stat-label">{{ t('teamsNotificationChannels.stats.channelsConfigured') }}</div>
           <div class="stat-value">{{ channels.length }}</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Active Channels</div>
+          <div class="stat-label">{{ t('teamsNotificationChannels.stats.activeChannels') }}</div>
           <div class="stat-value" :style="{ color: 'var(--accent-green)' }">{{ enabledCount }}</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Total Deliveries</div>
+          <div class="stat-label">{{ t('teamsNotificationChannels.stats.totalDeliveries') }}</div>
           <div class="stat-value">{{ totalDeliveries }}</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Total Failures</div>
+          <div class="stat-label">{{ t('teamsNotificationChannels.stats.totalFailures') }}</div>
           <div class="stat-value" :style="{ color: channels.reduce((s,c)=>s+c.failureCount,0) > 0 ? 'var(--accent-amber)' : 'var(--text-primary)' }">
             {{ channels.reduce((s, c) => s + c.failureCount, 0) }}
           </div>
@@ -260,22 +262,22 @@ const lastTestForChannel = (id: string) => testResults.value.find((r) => r.chann
 
       <div v-if="teams.length > 0" class="section-card" style="margin-bottom: 20px;">
         <div class="section-header">
-          <h3 class="section-title">Teams</h3>
+          <h3 class="section-title">{{ t('teamsNotificationChannels.teamsTitle') }}</h3>
         </div>
         <div style="padding: 12px 20px; font-size: 0.82rem; color: var(--text-secondary);">
-          {{ teams.length }} team{{ teams.length !== 1 ? 's' : '' }} available:
-          <span v-for="(t, i) in teams" :key="t.id">{{ t.name }}<span v-if="i < teams.length - 1">, </span></span>
+          {{ t('teamsNotificationChannels.teamsAvailable', { count: teams.length }) }}
+          <span v-for="(team, i) in teams" :key="team.id">{{ team.name }}<span v-if="i < teams.length - 1">, </span></span>
         </div>
       </div>
 
       <div class="section-card">
         <div class="section-header">
-          <h3 class="section-title">Configured Channels</h3>
-          <button class="btn-primary" @click="showAddModal = true">+ Add Channel</button>
+          <h3 class="section-title">{{ t('teamsNotificationChannels.configuredChannels') }}</h3>
+          <button class="btn-primary" @click="showAddModal = true">{{ t('teamsNotificationChannels.addChannel') }}</button>
         </div>
 
         <div v-if="channels.length === 0" style="padding: 32px 20px; text-align: center; color: var(--text-tertiary); font-size: 0.82rem;">
-          No notification channels configured yet. Click "Add Channel" to get started.
+          {{ t('teamsNotificationChannels.emptyChannels') }}
         </div>
 
         <div v-else class="channels-list">
@@ -286,8 +288,7 @@ const lastTestForChannel = (id: string) => testResults.value.find((r) => r.chann
                 <div class="channel-name">{{ ch.name }}</div>
                 <div class="channel-dest">{{ ch.destination }}</div>
                 <div class="channel-meta">
-                  {{ ch.deliveryCount }} delivered · {{ ch.failureCount }} failed ·
-                  Last: {{ formatDate(ch.lastDeliveredAt) }}
+                  {{ t('teamsNotificationChannels.channelMeta', { delivered: ch.deliveryCount, failed: ch.failureCount, last: formatDate(ch.lastDeliveredAt) }) }}
                 </div>
                 <!-- Test result -->
                 <div v-if="lastTestForChannel(ch.id)" class="test-result" :class="lastTestForChannel(ch.id)!.success ? 'ok' : 'err'">
@@ -300,7 +301,7 @@ const lastTestForChannel = (id: string) => testResults.value.find((r) => r.chann
                   :disabled="testingChannelId === ch.id"
                   @click="testChannel(ch)"
                 >
-                  {{ testingChannelId === ch.id ? 'Sending…' : 'Test' }}
+                  {{ testingChannelId === ch.id ? t('teamsNotificationChannels.sending') : t('teamsNotificationChannels.test') }}
                 </button>
                 <label class="toggle">
                   <input type="checkbox" :checked="ch.enabled" @change="toggleChannel(ch)" />
@@ -312,7 +313,7 @@ const lastTestForChannel = (id: string) => testResults.value.find((r) => r.chann
 
             <!-- Events -->
             <div class="channel-events">
-              <span class="events-label">Notify on:</span>
+              <span class="events-label">{{ t('teamsNotificationChannels.notifyOn') }}</span>
               <div class="event-tags">
                 <span
                   v-for="ev in allEvents"
@@ -328,17 +329,17 @@ const lastTestForChannel = (id: string) => testResults.value.find((r) => r.chann
 
             <!-- Bot scope -->
             <div v-if="ch.botIds.length > 0" class="channel-bots">
-              <span class="events-label">Bots:</span>
+              <span class="events-label">{{ t('teamsNotificationChannels.bots') }}</span>
               <div class="event-tags">
                 <span v-for="id in ch.botIds" :key="id" class="bot-tag">
                   {{ id }}
                 </span>
               </div>
-              <span class="bot-scope-note">All other bots excluded</span>
+              <span class="bot-scope-note">{{ t('teamsNotificationChannels.allOtherBotsExcluded') }}</span>
             </div>
             <div v-else class="channel-bots">
-              <span class="events-label">Scope:</span>
-              <span class="all-bots-note">All bots</span>
+              <span class="events-label">{{ t('teamsNotificationChannels.scope') }}</span>
+              <span class="all-bots-note">{{ t('teamsNotificationChannels.allBots') }}</span>
             </div>
           </div>
         </div>
@@ -349,43 +350,43 @@ const lastTestForChannel = (id: string) => testResults.value.find((r) => r.chann
     <div v-if="showAddModal" class="modal-overlay" tabindex="-1" @click.self="showAddModal = false" @keydown.escape="showAddModal = false">
       <div class="modal">
         <div class="modal-header">
-          <h3>Add Notification Channel</h3>
+          <h3>{{ t('teamsNotificationChannels.addModalTitle') }}</h3>
           <button class="btn-close" @click="showAddModal = false">✕</button>
         </div>
 
         <div class="form-row">
-          <label class="form-label">Channel type</label>
+          <label class="form-label">{{ t('teamsNotificationChannels.channelType') }}</label>
           <div class="type-tabs">
             <button
-              v-for="t in (['slack', 'teams', 'email'] as ChannelType[])"
-              :key="t"
+              v-for="ct in (['slack', 'teams', 'email'] as ChannelType[])"
+              :key="ct"
               class="type-tab"
-              :class="{ active: newChannel.type === t }"
-              @click="newChannel.type = t"
+              :class="{ active: newChannel.type === ct }"
+              @click="newChannel.type = ct"
             >
-              {{ channelIcon(t) }} {{ t === 'teams' ? 'Microsoft Teams' : t.charAt(0).toUpperCase() + t.slice(1) }}
+              {{ channelIcon(ct) }} {{ ct === 'teams' ? 'Microsoft Teams' : ct.charAt(0).toUpperCase() + ct.slice(1) }}
             </button>
           </div>
         </div>
 
         <div class="form-row">
-          <label class="form-label">Display name</label>
-          <input v-model="newChannel.name" class="form-input" placeholder="e.g. #security-alerts" />
+          <label class="form-label">{{ t('teamsNotificationChannels.displayName') }}</label>
+          <input v-model="newChannel.name" class="form-input" :placeholder="t('teamsNotificationChannels.displayNamePlaceholder')" />
         </div>
 
         <div class="form-row">
           <label class="form-label">
-            {{ newChannel.type === 'email' ? 'Email address' : 'Webhook URL' }}
+            {{ newChannel.type === 'email' ? t('teamsNotificationChannels.emailAddress') : t('teamsNotificationChannels.webhookUrl') }}
           </label>
           <input
             v-model="newChannel.destination"
             class="form-input"
-            :placeholder="newChannel.type === 'email' ? 'team@company.com' : 'https://hooks...'"
+            :placeholder="newChannel.type === 'email' ? t('teamsNotificationChannels.emailPlaceholder') : t('teamsNotificationChannels.webhookPlaceholder')"
           />
         </div>
 
         <div class="form-row">
-          <label class="form-label">Notify on events</label>
+          <label class="form-label">{{ t('teamsNotificationChannels.notifyOnEvents') }}</label>
           <div class="event-tags">
             <span
               v-for="ev in allEvents"
@@ -400,8 +401,8 @@ const lastTestForChannel = (id: string) => testResults.value.find((r) => r.chann
         </div>
 
         <div class="modal-footer">
-          <button class="btn-secondary" @click="showAddModal = false">Cancel</button>
-          <button class="btn-primary" @click="saveNewChannel">Add Channel</button>
+          <button class="btn-secondary" @click="showAddModal = false">{{ t('common.cancel') }}</button>
+          <button class="btn-primary" @click="saveNewChannel">{{ t('teamsNotificationChannels.addChannelBtn') }}</button>
         </div>
       </div>
     </div>

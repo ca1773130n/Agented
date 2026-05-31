@@ -12,6 +12,9 @@ import EntityLayout from '../layouts/EntityLayout.vue';
 import { useToast } from '../composables/useToast';
 import { handleApiError } from '../services/api/error-handler';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   projectId?: string;
@@ -127,7 +130,7 @@ async function loadData() {
     }
     return project.value;
   } catch (err) {
-    handleApiError(err, showToast, 'Failed to load project settings');
+    handleApiError(err, showToast, t('projectSettings.loadError'));
     throw err;
   }
 }
@@ -178,9 +181,9 @@ async function saveSettings() {
     // Update original to match current selection
     originalTeamIds.value = [...selectedTeamIds.value];
 
-    showToast('Project settings saved', 'success');
+    showToast(t('projectSettings.saved'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to save settings';
+    const message = err instanceof ApiError ? err.message : t('projectSettings.saveError');
     showToast(message, 'error');
   } finally {
     isSaving.value = false;
@@ -235,13 +238,13 @@ async function syncNow() {
   try {
     const result = await projectApi.syncRepo(projectId.value);
     if (result.status === 'ok') {
-      showToast('Repository synced successfully', 'success');
+      showToast(t('projectSettings.repoSynced'), 'success');
       await pollCloneStatus();
     } else {
-      showToast(result.error || 'Sync failed', 'error');
+      showToast(result.error || t('projectSettings.syncFailed'), 'error');
     }
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Sync failed';
+    const message = err instanceof ApiError ? err.message : t('projectSettings.syncFailed');
     showToast(message, 'error');
   } finally {
     isSyncing.value = false;
@@ -256,7 +259,7 @@ async function retryClone() {
     await projectApi.syncRepo(projectId.value);
     startClonePoll();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Retry failed';
+    const message = err instanceof ApiError ? err.message : t('projectSettings.retryFailed');
     showToast(message, 'error');
     cloneStatus.value = 'error';
   }
@@ -270,21 +273,21 @@ async function retryClone() {
   <div class="settings-page">
 
     <template v-if="project">
-      <PageHeader :title="(project?.name ?? '') + ' Settings'" subtitle="Configure project settings and team assignments" />
+      <PageHeader :title="(project?.name ?? '') + ' ' + t('projectSettings.titleSuffix')" :subtitle="t('projectSettings.subtitle')" />
 
       <!-- Project Details Section -->
       <div class="card">
         <div class="card-header">
-          <h3>Project Details</h3>
+          <h3>{{ t('projectSettings.detailsTitle') }}</h3>
         </div>
         <div class="card-body">
           <div class="form-group">
-            <label>Name</label>
-            <input v-model="editName" type="text" class="settings-input" placeholder="Project name" />
+            <label>{{ t('projectSettings.nameLabel') }}</label>
+            <input v-model="editName" type="text" class="settings-input" :placeholder="t('projectSettings.namePlaceholder')" />
           </div>
           <div class="form-group">
-            <label>Description</label>
-            <textarea v-model="editDescription" class="settings-textarea" placeholder="Project description..." rows="3"></textarea>
+            <label>{{ t('projectSettings.descriptionLabel') }}</label>
+            <textarea v-model="editDescription" class="settings-textarea" :placeholder="t('projectSettings.descriptionPlaceholder')" rows="3"></textarea>
           </div>
         </div>
       </div>
@@ -292,14 +295,14 @@ async function retryClone() {
       <!-- Product Section -->
       <div class="card">
         <div class="card-header">
-          <h3>Product Assignment</h3>
+          <h3>{{ t('projectSettings.productTitle') }}</h3>
         </div>
         <div class="card-body">
-          <p class="section-description">Assign this project to a product for organization.</p>
+          <p class="section-description">{{ t('projectSettings.productDescription') }}</p>
 
           <div class="product-select-wrapper">
             <select v-model="selectedProductId" class="product-select">
-              <option value="">No product assigned</option>
+              <option value="">{{ t('projectSettings.noProduct') }}</option>
               <option v-for="prod in products" :key="prod.id" :value="prod.id">
                 {{ prod.name }}
               </option>
@@ -310,7 +313,7 @@ async function retryClone() {
           </div>
 
           <p v-if="selectedProductId && selectedProductId !== originalProductId" class="change-hint">
-            Product assignment will be updated when you save.
+            {{ t('projectSettings.productChangeHint') }}
           </p>
         </div>
       </div>
@@ -318,15 +321,15 @@ async function retryClone() {
       <!-- Owner Team Section -->
       <div class="card">
         <div class="card-header">
-          <h3>Owner Team</h3>
-          <span v-if="selectedOwnerTeamId" class="owner-badge">Primary</span>
+          <h3>{{ t('projectSettings.ownerTeamTitle') }}</h3>
+          <span v-if="selectedOwnerTeamId" class="owner-badge">{{ t('projectSettings.primaryBadge') }}</span>
         </div>
         <div class="card-body">
-          <p class="section-description">Select the primary team responsible for this project. This team has ownership and primary responsibility.</p>
+          <p class="section-description">{{ t('projectSettings.ownerTeamDescription') }}</p>
 
           <div class="product-select-wrapper">
             <select v-model="selectedOwnerTeamId" class="product-select">
-              <option value="">No owner team assigned</option>
+              <option value="">{{ t('projectSettings.noOwnerTeam') }}</option>
               <option v-for="team in teams" :key="team.id" :value="team.id">
                 {{ team.name }}
               </option>
@@ -337,7 +340,7 @@ async function retryClone() {
           </div>
 
           <p v-if="selectedOwnerTeamId !== originalOwnerTeamId" class="change-hint">
-            Owner team will be updated when you save.
+            {{ t('projectSettings.ownerTeamChangeHint') }}
           </p>
         </div>
       </div>
@@ -345,17 +348,13 @@ async function retryClone() {
       <!-- Team Leader Section -->
       <div class="card" data-testid="project-team-leader-card">
         <div class="card-header">
-          <h3>Team Leader</h3>
-          <span v-if="selectedManagerSaId" class="owner-badge">Manager SA</span>
+          <h3>{{ t('projectSettings.teamLeaderTitle') }}</h3>
+          <span v-if="selectedManagerSaId" class="owner-badge">{{ t('projectSettings.managerSaBadge') }}</span>
         </div>
         <div class="card-body">
           <p class="section-description">
-            Pick the super-agent that acts as this project's team leader.
-            They answer operator questions on the Project Dashboard's
-            "Ask the team leader" panel, and any per-project agent
-            instances inherit their context bundle. When the project
-            has Tesserae enabled, the leader's runtime gets
-            <code>tesserae_ask</code> automatically.
+            {{ t('projectSettings.teamLeaderDescription') }}
+            <code>tesserae_ask</code> {{ t('projectSettings.teamLeaderDescriptionSuffix') }}
           </p>
 
           <div class="product-select-wrapper">
@@ -364,7 +363,7 @@ async function retryClone() {
               class="product-select"
               data-testid="project-manager-sa-select"
             >
-              <option value="">No team leader assigned</option>
+              <option value="">{{ t('projectSettings.noTeamLeader') }}</option>
               <option
                 v-for="sa in superAgents"
                 :key="sa.id"
@@ -379,7 +378,7 @@ async function retryClone() {
           </div>
 
           <p v-if="selectedManagerSaId !== originalManagerSaId" class="change-hint">
-            Team leader will be updated when you save.
+            {{ t('projectSettings.teamLeaderChangeHint') }}
           </p>
         </div>
       </div>
@@ -387,33 +386,33 @@ async function retryClone() {
       <!-- Repository Section -->
       <div v-if="project?.github_repo" class="card">
         <div class="card-header">
-          <h3>Repository</h3>
+          <h3>{{ t('projectSettings.repositoryTitle') }}</h3>
           <span class="clone-badge" :class="cloneStatus">
-            {{ cloneStatus === 'none' ? 'Not Cloned' : cloneStatus === 'cloning' ? 'Cloning...' : cloneStatus === 'cloned' ? 'Cloned' : 'Error' }}
+            {{ cloneStatus === 'none' ? t('projectSettings.notCloned') : cloneStatus === 'cloning' ? t('projectSettings.cloning') : cloneStatus === 'cloned' ? t('projectSettings.cloned') : t('projectSettings.error') }}
           </span>
         </div>
         <div class="card-body">
-          <p class="section-description">GitHub repository: <strong>{{ project.github_repo }}</strong></p>
+          <p class="section-description">{{ t('projectSettings.githubRepoLabel') }} <strong>{{ project.github_repo }}</strong></p>
 
           <!-- Cloning spinner -->
           <div v-if="cloneStatus === 'cloning'" class="clone-info">
             <span class="spinner"></span>
-            <span>Cloning repository in background...</span>
+            <span>{{ t('projectSettings.cloningInBackground') }}</span>
           </div>
 
           <!-- Error state -->
           <div v-else-if="cloneStatus === 'error'" class="clone-info clone-error-box">
             <span class="error-text">{{ cloneError }}</span>
-            <button class="btn btn-sm" @click="retryClone">Retry Clone</button>
+            <button class="btn btn-sm" @click="retryClone">{{ t('projectSettings.retryClone') }}</button>
           </div>
 
           <!-- Cloned state -->
           <div v-else-if="cloneStatus === 'cloned'" class="clone-info">
-            <span v-if="lastSyncedAt" class="sync-time">Last synced: {{ new Date(lastSyncedAt).toLocaleString() }}</span>
-            <span v-else class="sync-time">Never synced</span>
+            <span v-if="lastSyncedAt" class="sync-time">{{ t('projectSettings.lastSynced', { time: new Date(lastSyncedAt).toLocaleString() }) }}</span>
+            <span v-else class="sync-time">{{ t('projectSettings.neverSynced') }}</span>
             <button class="btn btn-sm" :disabled="isSyncing" @click="syncNow">
-              <span v-if="isSyncing">Syncing...</span>
-              <span v-else>Sync Now</span>
+              <span v-if="isSyncing">{{ t('projectSettings.syncing') }}</span>
+              <span v-else>{{ t('projectSettings.syncNow') }}</span>
             </button>
           </div>
         </div>
@@ -422,23 +421,23 @@ async function retryClone() {
       <!-- Project Path Section -->
       <div class="card">
         <div class="card-header">
-          <h3>Project Path</h3>
+          <h3>{{ t('projectSettings.projectPathTitle') }}</h3>
         </div>
         <div class="card-body">
-          <p class="section-description">Local path to the project directory for team execution. When teams run in this project's context, they use this directory as their working directory.</p>
+          <p class="section-description">{{ t('projectSettings.projectPathDescription') }}</p>
 
           <div class="form-group">
-            <label>Local Path</label>
+            <label>{{ t('projectSettings.localPathLabel') }}</label>
             <input
               v-model="editLocalPath"
               type="text"
               class="settings-input"
-              placeholder="e.g., /home/user/projects/my-app"
+              :placeholder="t('projectSettings.localPathPlaceholder')"
             />
           </div>
 
           <p v-if="editLocalPath !== originalLocalPath" class="change-hint">
-            Local path will be updated when you save.
+            {{ t('projectSettings.localPathChangeHint') }}
           </p>
         </div>
       </div>
@@ -446,15 +445,15 @@ async function retryClone() {
       <!-- Teams Section -->
       <div class="card">
         <div class="card-header">
-          <h3>Additional Teams</h3>
-          <span class="card-count">{{ totalTeamCount }} total ({{ selectedTeamIds.length }} additional)</span>
+          <h3>{{ t('projectSettings.additionalTeamsTitle') }}</h3>
+          <span class="card-count">{{ t('projectSettings.teamCount', { total: totalTeamCount, additional: selectedTeamIds.length }) }}</span>
         </div>
         <div class="card-body">
-          <p class="section-description">Select additional teams that will collaborate on this project. The owner team is shown separately above.</p>
+          <p class="section-description">{{ t('projectSettings.additionalTeamsDescription') }}</p>
 
           <div v-if="additionalTeams.length === 0" class="empty-state">
-            <p v-if="teams.length === 0">No teams available. Create teams first.</p>
-            <p v-else>All teams are assigned as owner. Add more teams to select additional collaborators.</p>
+            <p v-if="teams.length === 0">{{ t('projectSettings.noTeams') }}</p>
+            <p v-else>{{ t('projectSettings.allTeamsOwner') }}</p>
           </div>
 
           <div v-else class="teams-grid">
@@ -478,7 +477,7 @@ async function retryClone() {
               </div>
               <div class="team-info">
                 <span class="team-name">{{ team.name }}</span>
-                <span class="team-members">{{ team.member_count }} members</span>
+                <span class="team-members">{{ t('projectSettings.membersCount', { count: team.member_count }) }}</span>
               </div>
             </div>
           </div>
@@ -488,7 +487,7 @@ async function retryClone() {
       <!-- MCP Servers Section -->
       <div class="card" v-if="project">
         <div class="card-header">
-          <h3>MCP Servers</h3>
+          <h3>{{ t('projectSettings.mcpServersTitle') }}</h3>
         </div>
         <div class="card-body">
           <ProjectMcpPanel :projectId="projectId" />
@@ -498,7 +497,7 @@ async function retryClone() {
       <!-- v0.7.58 — Allowed AI accounts whitelist -->
       <div class="card" v-if="project">
         <div class="card-header">
-          <h3>Allowed AI accounts</h3>
+          <h3>{{ t('projectSettings.allowedAccountsTitle') }}</h3>
         </div>
         <div class="card-body">
           <ProjectAllowedAccountsPanel :projectId="projectId" />
@@ -509,11 +508,11 @@ async function retryClone() {
       <!-- Actions -->
       <div class="actions-row">
         <button class="btn btn-secondary" @click="router.push({ name: 'project-dashboard', params: { projectId: projectId } })">
-          Cancel
+          {{ t('common.cancel') }}
         </button>
         <button class="btn btn-primary" :disabled="isSaving" @click="saveSettings">
-          <span v-if="isSaving">Saving...</span>
-          <span v-else>Save Settings</span>
+          <span v-if="isSaving">{{ t('projectSettings.saving') }}</span>
+          <span v-else>{{ t('projectSettings.saveSettings') }}</span>
         </button>
       </div>
     </template>

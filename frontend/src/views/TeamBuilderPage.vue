@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import type { Team, TeamMember, TeamAgentAssignment, Agent, SuperAgent, TopologyType, TopologyConfig } from '../services/api';
 import { teamApi, agentApi, superAgentApi, ApiError } from '../services/api';
@@ -15,6 +16,7 @@ const props = defineProps<{
   teamId?: string;
 }>();
 
+const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const teamId = computed(() => (route.params.teamId as string) || props.teamId || '');
@@ -99,7 +101,7 @@ async function loadData() {
     localTopologyConfig.value = teamData.topology_config || '{}';
     return teamData;
   } catch (err) {
-    handleApiError(err, showToast, 'Failed to load team builder');
+    handleApiError(err, showToast, t('teamBuilder.toast.loadFailed'));
     throw err;
   }
 }
@@ -164,10 +166,10 @@ async function onSave(payload: { topology: string | null; topology_config: Topol
     await teamApi.updateTopology(teamId.value, {
       topology_config: JSON.stringify(mergedConfig),
     });
-    showToast('Team topology saved', 'success');
+    showToast(t('teamBuilder.toast.topologySaved'), 'success');
     await loadData();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to save topology';
+    const message = err instanceof ApiError ? err.message : t('teamBuilder.toast.saveTopologyFailed');
     showToast(message, 'error');
   }
 }
@@ -180,7 +182,7 @@ function onFormTopologyConfigUpdate(configStr: string) {
 // Handle form view save
 async function onFormSave() {
   if (!localTopology.value) {
-    showToast('Please select a topology before saving', 'error');
+    showToast(t('teamBuilder.toast.selectTopologyFirst'), 'error');
     return;
   }
   isFormSaving.value = true;
@@ -189,10 +191,10 @@ async function onFormSave() {
       topology: localTopology.value,
       topology_config: localTopologyConfig.value,
     });
-    showToast('Team topology saved', 'success');
+    showToast(t('teamBuilder.toast.topologySaved'), 'success');
     await loadData();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to save topology';
+    const message = err instanceof ApiError ? err.message : t('teamBuilder.toast.saveTopologyFailed');
     showToast(message, 'error');
   } finally {
     isFormSaving.value = false;
@@ -225,16 +227,16 @@ watch(viewMode, (newMode) => {
   <div class="team-builder-page">
     <!-- Header bar -->
     <div class="builder-header">
-      <h2 class="builder-title">{{ team?.name || 'Team Builder' }}</h2>
+      <h2 class="builder-title">{{ team?.name || t('teamBuilder.title') }}</h2>
       <div class="view-toggle">
         <button
           :class="{ active: viewMode === 'visual' }"
           @click="viewMode = 'visual'"
-        >Visual</button>
+        >{{ t('teamBuilder.visual') }}</button>
         <button
           :class="{ active: viewMode === 'form' }"
           @click="viewMode = 'form'"
-        >Form</button>
+        >{{ t('teamBuilder.form') }}</button>
       </div>
     </div>
 
@@ -258,7 +260,7 @@ watch(viewMode, (newMode) => {
     <!-- Form mode: existing topology picker + assignment editors -->
     <div v-else class="builder-form">
       <div class="form-section">
-        <h3>Topology</h3>
+        <h3>{{ t('teamBuilder.topology') }}</h3>
         <TopologyPicker
           v-model="localTopology"
           :team-members="members"
@@ -267,9 +269,9 @@ watch(viewMode, (newMode) => {
         />
       </div>
       <div class="form-section">
-        <h3>Agent Assignments</h3>
+        <h3>{{ t('teamBuilder.agentAssignments') }}</h3>
         <div v-if="members.filter(m => m.agent_id).length === 0" class="empty-assignments">
-          <p>No agent members to configure</p>
+          <p>{{ t('teamBuilder.noAgentMembers') }}</p>
         </div>
         <div v-for="member in members.filter(m => m.agent_id)" :key="member.agent_id" class="member-assignments">
           <AgentAssignmentEditor
@@ -283,7 +285,7 @@ watch(viewMode, (newMode) => {
       <div class="form-actions">
         <button class="save-btn" :disabled="isFormSaving" @click="onFormSave">
           <span v-if="isFormSaving" class="btn-spinner"></span>
-          {{ isFormSaving ? 'Saving...' : 'Save Changes' }}
+          {{ isFormSaving ? t('teamBuilder.saving') : t('teamBuilder.saveChanges') }}
         </button>
       </div>
     </div>

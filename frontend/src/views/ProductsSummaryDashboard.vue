@@ -12,6 +12,9 @@ import StatusBadge from '../components/base/StatusBadge.vue';
 import EmptyState from '../components/base/EmptyState.vue';
 import { useToast } from '../composables/useToast';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const router = useRouter();
 
@@ -46,11 +49,11 @@ useWebMcpTool({
 });
 
 const columns: DataTableColumn[] = [
-  { key: 'name', label: 'Name' },
-  { key: 'status', label: 'Status' },
-  { key: 'project_count', label: 'Projects' },
-  { key: 'owner_team_name', label: 'Owner Team' },
-  { key: 'updated_at', label: 'Updated' },
+  { key: 'name', label: t('productsSummaryDashboard.colName') },
+  { key: 'status', label: t('productsSummaryDashboard.colStatus') },
+  { key: 'project_count', label: t('productsSummaryDashboard.colProjects') },
+  { key: 'owner_team_name', label: t('productsSummaryDashboard.colOwnerTeam') },
+  { key: 'updated_at', label: t('productsSummaryDashboard.colUpdated') },
 ];
 
 function getStatusVariant(status: string): 'success' | 'neutral' {
@@ -68,7 +71,7 @@ async function loadData() {
     const res = await productApi.list();
     products.value = res.products || [];
   } catch {
-    showToast('Failed to load products data', 'error');
+    showToast(t('productsSummaryDashboard.loadError'), 'error');
   } finally {
     isLoading.value = false;
   }
@@ -80,29 +83,29 @@ onMounted(loadData);
 <template>
   <div class="summary-dashboard">
 
-    <PageHeader title="Products Overview" subtitle="Summary of all products across the organization">
+    <PageHeader :title="t('productsSummaryDashboard.title')" :subtitle="t('productsSummaryDashboard.subtitle')">
       <template #actions>
-        <button class="manage-btn" @click="router.push({ name: 'products' })">Manage Products</button>
+        <button class="manage-btn" @click="router.push({ name: 'products' })">{{ t('productsSummaryDashboard.manageProducts') }}</button>
       </template>
     </PageHeader>
 
-    <LoadingState v-if="isLoading" message="Loading products data..." />
+    <LoadingState v-if="isLoading" :message="t('productsSummaryDashboard.loading')" />
 
     <template v-else>
       <div class="stats-grid">
-        <StatCard title="Total Products" :value="totalProducts" />
-        <StatCard title="Active" :value="activeCount" color="#22c55e" />
-        <StatCard title="Inactive" :value="inactiveCount" color="var(--accent-amber)" />
-        <StatCard title="Total Projects" :value="totalProjectCount" color="var(--accent-cyan)" />
+        <StatCard :title="t('productsSummaryDashboard.statTotal')" :value="totalProducts" />
+        <StatCard :title="t('productsSummaryDashboard.statActive')" :value="activeCount" color="#22c55e" />
+        <StatCard :title="t('productsSummaryDashboard.statInactive')" :value="inactiveCount" color="var(--accent-amber)" />
+        <StatCard :title="t('productsSummaryDashboard.statTotalProjects')" :value="totalProjectCount" color="var(--accent-cyan)" />
       </div>
 
       <div class="entity-section">
         <div class="section-header">
-          <h2 class="section-title">All Products</h2>
-          <span class="section-count">{{ totalProducts }} total</span>
+          <h2 class="section-title">{{ t('productsSummaryDashboard.allProducts') }}</h2>
+          <span class="section-count">{{ t('productsSummaryDashboard.totalCount', { count: totalProducts }) }}</span>
         </div>
 
-        <EmptyState v-if="products.length === 0" title="No products found" description="Create your first product to get started." />
+        <EmptyState v-if="products.length === 0" :title="t('productsSummaryDashboard.emptyTitle')" :description="t('productsSummaryDashboard.emptyDescription')" />
 
         <DataTable v-else :columns="columns" :items="products" row-clickable @row-click="(item: Product) => router.push({ name: 'product-dashboard', params: { productId: item.id } })">
           <template #cell-name="{ item }">

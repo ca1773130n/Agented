@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, toRef } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { BranchTree } from '../../services/api';
+
+const { t } = useI18n();
 import { useConversationBranch } from '../../composables/useConversationBranch';
 import { safeFormatDateTime } from '../../utils/datetime';
 import MarkdownContent from '../base/MarkdownContent.vue';
@@ -53,7 +56,7 @@ function handleForkKeyDown(e: KeyboardEvent) {
 }
 
 function getBranchDisplayName(node: BranchTree, index: number): string {
-  return node.name || `Branch ${index + 1}`;
+  return node.name || t('branchNavigator.branchN', { n: index + 1 });
 }
 
 function formatDate(dateStr: string): string {
@@ -74,17 +77,17 @@ loadBranches();
     <!-- Branch Tree Sidebar -->
     <div class="branch-sidebar">
       <div class="sidebar-header">
-        <h4 class="sidebar-title">Branches</h4>
+        <h4 class="sidebar-title">{{ t('branchNavigator.branches') }}</h4>
         <span v-if="branches.length > 0" class="branch-count">{{ branches.length }}</span>
       </div>
 
       <div v-if="isLoading && branches.length === 0" class="sidebar-loading">
         <div class="spinner-small"></div>
-        Loading branches...
+        {{ t('branchNavigator.loadingBranches') }}
       </div>
 
       <div v-else-if="branches.length === 0" class="sidebar-empty">
-        No branches yet. Fork from a message to create one.
+        {{ t('branchNavigator.noBranches') }}
       </div>
 
       <!-- Tree rendering -->
@@ -100,7 +103,7 @@ loadBranches();
                 <circle cx="12" cy="12" r="3"/>
               </svg>
             </span>
-            <span class="node-name">{{ branchTree.name || 'Main' }}</span>
+            <span class="node-name">{{ branchTree.name || t('branchNavigator.main') }}</span>
             <span class="node-count">{{ branchTree.message_count }}msg</span>
           </div>
           <div v-if="branchTree.children.length > 0" class="tree-children">
@@ -132,7 +135,7 @@ loadBranches();
             :class="{ selected: selectedBranch?.id === branch.id }"
             @click="selectBranch(branch.id)"
           >
-            <span class="node-name">{{ branch.name || `Branch ${i + 1}` }}</span>
+            <span class="node-name">{{ branch.name || t('branchNavigator.branchN', { n: i + 1 }) }}</span>
             <span class="node-count">{{ branch.message_count ?? 0 }}msg</span>
           </div>
         </template>
@@ -142,22 +145,22 @@ loadBranches();
     <!-- Messages Area -->
     <div class="branch-messages">
       <div v-if="!selectedBranch" class="messages-empty">
-        Select a branch to view its messages
+        {{ t('branchNavigator.selectBranch') }}
       </div>
 
       <div v-else>
         <div class="messages-header">
-          <h4 class="messages-title">{{ selectedBranch.name || 'Branch Messages' }}</h4>
+          <h4 class="messages-title">{{ selectedBranch.name || t('branchNavigator.branchMessages') }}</h4>
           <span class="messages-date">{{ formatDate(selectedBranch.created_at) }}</span>
         </div>
 
         <div v-if="isLoading" class="messages-loading">
           <div class="spinner-small"></div>
-          Loading messages...
+          {{ t('branchNavigator.loadingMessages') }}
         </div>
 
         <div v-else-if="messages.length === 0" class="messages-empty">
-          No messages in this branch.
+          {{ t('branchNavigator.noMessages') }}
         </div>
 
         <div v-else class="message-thread">
@@ -177,12 +180,12 @@ loadBranches();
                 v-if="hoveredMessageIndex === msg.message_index"
                 class="fork-btn"
                 @click.stop="handleFork(msg.message_index)"
-                title="Fork from here"
+                :title="t('branchNavigator.forkFromHere')"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
                   <path d="M6 3v12M18 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM18 9c-3 0-6 3-6 6v3"/>
                 </svg>
-                Fork
+                {{ t('branchNavigator.fork') }}
               </button>
             </div>
 
@@ -192,12 +195,12 @@ loadBranches();
                 v-model="newBranchName"
                 type="text"
                 class="fork-input"
-                placeholder="Branch name (optional)"
+                :placeholder="t('branchNavigator.branchNamePlaceholder')"
                 autofocus
                 @keydown="handleForkKeyDown"
               />
-              <button class="fork-submit" @click="submitFork">Create</button>
-              <button class="fork-cancel" @click="cancelFork">Cancel</button>
+              <button class="fork-submit" @click="submitFork">{{ t('common.create') }}</button>
+              <button class="fork-cancel" @click="cancelFork">{{ t('common.cancel') }}</button>
             </div>
           </div>
         </div>

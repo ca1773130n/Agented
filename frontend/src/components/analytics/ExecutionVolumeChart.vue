@@ -2,8 +2,11 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { Chart, registerables } from 'chart.js';
 import 'chartjs-adapter-date-fns';
+import { useI18n } from 'vue-i18n';
 import type { ExecutionDataPoint } from '../../services/api';
 import { safeFormatDate } from '../../utils/datetime';
+
+const { t } = useI18n();
 
 Chart.register(...registerables);
 
@@ -44,7 +47,7 @@ function renderChart() {
       labels,
       datasets: [
         {
-          label: 'Success',
+          label: t('executionVolumeChart.success'),
           data: sorted.map(d => d.success_count),
           backgroundColor: `${colors.emerald}99`,
           borderColor: colors.emerald,
@@ -52,7 +55,7 @@ function renderChart() {
           borderRadius: 2,
         },
         {
-          label: 'Failed',
+          label: t('executionVolumeChart.failed'),
           data: sorted.map(d => d.failed_count),
           backgroundColor: `${colors.crimson}99`,
           borderColor: colors.crimson,
@@ -60,7 +63,7 @@ function renderChart() {
           borderRadius: 2,
         },
         {
-          label: 'Cancelled',
+          label: t('executionVolumeChart.cancelled'),
           data: sorted.map(d => d.cancelled_count),
           backgroundColor: `${colors.amber}99`,
           borderColor: colors.amber,
@@ -99,7 +102,7 @@ function renderChart() {
             afterBody: (contexts: any[]) => { // eslint-disable-line @typescript-eslint/no-explicit-any -- Chart.js tooltip callback
               const idx = contexts[0]?.dataIndex;
               if (idx == null || !sorted[idx]) return '';
-              return `Total: ${sorted[idx].total_executions}`;
+              return `${t('executionVolumeChart.total')}: ${sorted[idx].total_executions}`;
             },
           },
         },

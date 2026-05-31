@@ -3,6 +3,9 @@ import { ref, computed, watch, onMounted } from 'vue';
 import { triggerApi, utilityApi, teamApi, ApiError, CLAUDE_MODELS, OPENCODE_MODELS, type TriggerSource, type ScheduleType, type SkillInfo, type Team } from '../../services/api';
 import { useToast } from '../../composables/useToast';
 import { useFocusTrap } from '../../composables/useFocusTrap';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const emit = defineEmits<{
   (e: 'close'): void;
@@ -131,15 +134,15 @@ const timeOptions = Array.from({ length: 24 }, (_, i) => {
 });
 
 // Day of week options (for weekly)
-const weekdayOptions = [
-  { value: 0, label: 'Monday' },
-  { value: 1, label: 'Tuesday' },
-  { value: 2, label: 'Wednesday' },
-  { value: 3, label: 'Thursday' },
-  { value: 4, label: 'Friday' },
-  { value: 5, label: 'Saturday' },
-  { value: 6, label: 'Sunday' },
-];
+const weekdayOptions = computed(() => [
+  { value: 0, label: t('addTriggerModal.weekday.monday') },
+  { value: 1, label: t('addTriggerModal.weekday.tuesday') },
+  { value: 2, label: t('addTriggerModal.weekday.wednesday') },
+  { value: 3, label: t('addTriggerModal.weekday.thursday') },
+  { value: 4, label: t('addTriggerModal.weekday.friday') },
+  { value: 5, label: t('addTriggerModal.weekday.saturday') },
+  { value: 6, label: t('addTriggerModal.weekday.sunday') },
+]);
 
 // Day of month options (1-31)
 const monthDayOptions = Array.from({ length: 31 }, (_, i) => i + 1);
@@ -148,13 +151,13 @@ const monthDayOptions = Array.from({ length: 31 }, (_, i) => i + 1);
 const triggerHelpText = computed(() => {
   switch (triggerSource.value) {
     case 'webhook':
-      return 'Trigger will be activated by JSON webhooks matching the configured field path and value.';
+      return t('addTriggerModal.help.webhook');
     case 'github':
-      return 'Trigger will be activated by GitHub webhooks when PRs are opened or updated. Configure the webhook URL in your GitHub repository settings.';
+      return t('addTriggerModal.help.github');
     case 'manual':
-      return 'Trigger can only be activated manually from the dashboard.';
+      return t('addTriggerModal.help.manual');
     case 'scheduled':
-      return 'Trigger will run automatically based on the schedule you configure below.';
+      return t('addTriggerModal.help.scheduled');
     default:
       return '';
   }
@@ -162,7 +165,7 @@ const triggerHelpText = computed(() => {
 
 async function createTrigger() {
   if (!name.value.trim() || !prompt.value.trim()) {
-    showToast('Please fill in name and prompt template', 'error');
+    showToast(t('addTriggerModal.toast.nameAndPromptRequired'), 'error');
     return;
   }
 
@@ -170,7 +173,7 @@ async function createTrigger() {
   if (triggerSource.value === 'webhook') {
     // Both match_field_path and match_field_value must be provided together or neither
     if (Boolean(matchFieldPath.value.trim()) !== Boolean(matchFieldValue.value.trim())) {
-      showToast('Both Match Field Path and Match Field Value must be provided together', 'error');
+      showToast(t('addTriggerModal.toast.matchFieldPairRequired'), 'error');
       return;
     }
   }
@@ -178,7 +181,7 @@ async function createTrigger() {
   // Validate schedule-specific fields
   if (triggerSource.value === 'scheduled') {
     if (!scheduleType.value || !scheduleTime.value) {
-      showToast('Schedule type and time are required for scheduled trigger', 'error');
+      showToast(t('addTriggerModal.toast.scheduleRequired'), 'error');
       return;
     }
   }
@@ -215,10 +218,10 @@ async function createTrigger() {
     }
 
     await triggerApi.create(createData);
-    showToast('Trigger created', 'success');
+    showToast(t('addTriggerModal.toast.created'), 'success');
     emit('created');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to create trigger';
+    const message = err instanceof ApiError ? err.message : t('addTriggerModal.toast.createFailed');
     showToast(message, 'error');
   } finally {
     isSubmitting.value = false;
@@ -238,8 +241,8 @@ async function createTrigger() {
           </svg>
         </div>
         <div>
-          <h3 id="modal-title-add-trigger">Add New Trigger</h3>
-          <p class="modal-subtitle">Configure a new automation trigger</p>
+          <h3 id="modal-title-add-trigger">{{ t('addTriggerModal.title') }}</h3>
+          <p class="modal-subtitle">{{ t('addTriggerModal.subtitle') }}</p>
         </div>
         <button class="close-btn" @click="emit('close')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -255,9 +258,9 @@ async function createTrigger() {
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
               <circle cx="12" cy="7" r="4"/>
             </svg>
-            Trigger Name
+            {{ t('addTriggerModal.fields.name') }}
           </label>
-          <input type="text" v-model="name" required placeholder="My Security Trigger">
+          <input type="text" v-model="name" required :placeholder="t('addTriggerModal.placeholders.name')">
         </div>
 
         <div class="form-row">
@@ -266,13 +269,13 @@ async function createTrigger() {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
               </svg>
-              Trigger Source
+              {{ t('addTriggerModal.fields.triggerSource') }}
             </label>
             <select v-model="triggerSource">
-              <option value="webhook">JSON Webhook</option>
-              <option value="github">GitHub Webhook</option>
-              <option value="manual">Manual Only</option>
-              <option value="scheduled">Scheduled</option>
+              <option value="webhook">{{ t('addTriggerModal.source.webhook') }}</option>
+              <option value="github">{{ t('addTriggerModal.source.github') }}</option>
+              <option value="manual">{{ t('addTriggerModal.source.manual') }}</option>
+              <option value="scheduled">{{ t('addTriggerModal.source.scheduled') }}</option>
             </select>
           </div>
           <div class="form-group">
@@ -281,7 +284,7 @@ async function createTrigger() {
                 <rect x="4" y="4" width="16" height="16" rx="2"/>
                 <path d="M9 9h6M9 13h6M9 17h4"/>
               </svg>
-              Backend
+              {{ t('addTriggerModal.fields.backend') }}
             </label>
             <select v-model="backend">
               <option value="claude">Claude CLI</option>
@@ -297,10 +300,10 @@ async function createTrigger() {
               <path d="M2 17l10 5 10-5"/>
               <path d="M2 12l10 5 10-5"/>
             </svg>
-            Model
+            {{ t('addTriggerModal.fields.model') }}
           </label>
           <select v-model="model">
-            <option value="">Default</option>
+            <option value="">{{ t('addTriggerModal.modelDefault') }}</option>
             <option v-for="m in modelOptions" :key="m" :value="m">{{ m }}</option>
           </select>
           <div class="field-hint">
@@ -308,7 +311,7 @@ async function createTrigger() {
               <circle cx="12" cy="12" r="10"/>
               <path d="M12 16v-4M12 8h.01"/>
             </svg>
-            Select a model or leave as default
+            {{ t('addTriggerModal.hints.model') }}
           </div>
         </div>
 
@@ -322,11 +325,11 @@ async function createTrigger() {
                 <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
                 <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
               </svg>
-              Execution Mode
+              {{ t('addTriggerModal.fields.executionMode') }}
             </label>
             <select v-model="executionMode">
-              <option value="direct">Direct (Orchestration)</option>
-              <option value="team">Team Delegation</option>
+              <option value="direct">{{ t('addTriggerModal.execMode.direct') }}</option>
+              <option value="team">{{ t('addTriggerModal.execMode.team') }}</option>
             </select>
           </div>
           <div v-if="executionMode === 'team'" class="form-group">
@@ -337,10 +340,10 @@ async function createTrigger() {
                 <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
                 <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
               </svg>
-              Target Team
+              {{ t('addTriggerModal.fields.targetTeam') }}
             </label>
             <select v-model="teamId">
-              <option :value="null">Select a team...</option>
+              <option :value="null">{{ t('addTriggerModal.selectTeam') }}</option>
               <option v-for="t in teams" :key="t.id" :value="t.id">
                 {{ t.name }} ({{ t.id }})
               </option>
@@ -365,7 +368,7 @@ async function createTrigger() {
                   <path d="M4 4h16v16H4z"/>
                   <path d="M9 9h6M9 13h6M9 17h4"/>
                 </svg>
-                Match Field Path
+                {{ t('addTriggerModal.fields.matchFieldPath') }}
               </label>
               <input type="text" v-model="matchFieldPath" placeholder="event.type">
               <div class="field-hint">
@@ -373,7 +376,7 @@ async function createTrigger() {
                   <circle cx="12" cy="12" r="10"/>
                   <path d="M12 16v-4M12 8h.01"/>
                 </svg>
-                JSON path to check (e.g., "event.type", "action")
+                {{ t('addTriggerModal.hints.matchFieldPath') }}
               </div>
             </div>
             <div class="form-group">
@@ -382,7 +385,7 @@ async function createTrigger() {
                   <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
                   <polyline points="22 4 12 14.01 9 11.01"/>
                 </svg>
-                Match Field Value
+                {{ t('addTriggerModal.fields.matchFieldValue') }}
               </label>
               <input type="text" v-model="matchFieldValue" placeholder="security_alert">
               <div class="field-hint">
@@ -390,7 +393,7 @@ async function createTrigger() {
                   <circle cx="12" cy="12" r="10"/>
                   <path d="M12 16v-4M12 8h.01"/>
                 </svg>
-                Value that activates this trigger
+                {{ t('addTriggerModal.hints.matchFieldValue') }}
               </div>
             </div>
           </div>
@@ -401,7 +404,7 @@ async function createTrigger() {
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                   <path d="M14 2v6h6M16 13H8M16 17H8"/>
                 </svg>
-                Text Field Path
+                {{ t('addTriggerModal.fields.textFieldPath') }}
               </label>
               <input type="text" v-model="textFieldPath" placeholder="text">
               <div class="field-hint">
@@ -409,7 +412,7 @@ async function createTrigger() {
                   <circle cx="12" cy="12" r="10"/>
                   <path d="M12 16v-4M12 8h.01"/>
                 </svg>
-                JSON path for message text extraction (default: "text")
+                {{ t('addTriggerModal.hints.textFieldPath') }}
               </div>
             </div>
             <div class="form-group">
@@ -418,15 +421,15 @@ async function createTrigger() {
                   <circle cx="11" cy="11" r="8"/>
                   <path d="M21 21l-4.35-4.35"/>
                 </svg>
-                Detection Keyword (optional)
+                {{ t('addTriggerModal.fields.detectionKeyword') }}
               </label>
-              <input type="text" v-model="keyword" placeholder="Additional keyword filter">
+              <input type="text" v-model="keyword" :placeholder="t('addTriggerModal.placeholders.keyword')">
               <div class="field-hint">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                   <circle cx="12" cy="12" r="10"/>
                   <path d="M12 16v-4M12 8h.01"/>
                 </svg>
-                Additional keyword to match within extracted text
+                {{ t('addTriggerModal.hints.detectionKeyword') }}
               </div>
             </div>
           </div>
@@ -441,12 +444,12 @@ async function createTrigger() {
                   <rect x="3" y="4" width="18" height="18" rx="2"/>
                   <path d="M16 2v4M8 2v4M3 10h18"/>
                 </svg>
-                Frequency
+                {{ t('addTriggerModal.fields.frequency') }}
               </label>
               <select v-model="scheduleType">
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
+                <option value="daily">{{ t('addTriggerModal.frequency.daily') }}</option>
+                <option value="weekly">{{ t('addTriggerModal.frequency.weekly') }}</option>
+                <option value="monthly">{{ t('addTriggerModal.frequency.monthly') }}</option>
               </select>
             </div>
             <div class="form-group">
@@ -455,7 +458,7 @@ async function createTrigger() {
                   <circle cx="12" cy="12" r="10"/>
                   <polyline points="12 6 12 12 16 14"/>
                 </svg>
-                Time (KST)
+                {{ t('addTriggerModal.fields.time') }}
               </label>
               <select v-model="scheduleTime">
                 <option v-for="time in timeOptions" :key="time" :value="time">{{ time }}</option>
@@ -469,7 +472,7 @@ async function createTrigger() {
                 <rect x="3" y="4" width="18" height="18" rx="2"/>
                 <path d="M16 2v4M8 2v4M3 10h18"/>
               </svg>
-              Day of Week
+              {{ t('addTriggerModal.fields.dayOfWeek') }}
             </label>
             <select v-model="scheduleDay">
               <option v-for="day in weekdayOptions" :key="day.value" :value="day.value">{{ day.label }}</option>
@@ -482,7 +485,7 @@ async function createTrigger() {
                 <rect x="3" y="4" width="18" height="18" rx="2"/>
                 <path d="M16 2v4M8 2v4M3 10h18"/>
               </svg>
-              Day of Month
+              {{ t('addTriggerModal.fields.dayOfMonth') }}
             </label>
             <select v-model="scheduleDay">
               <option v-for="day in monthDayOptions" :key="day" :value="day">{{ day }}</option>
@@ -496,26 +499,26 @@ async function createTrigger() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M4 17l6-6-6-6M12 19h8"/>
             </svg>
-            Skills/Commands
+            {{ t('addTriggerModal.fields.skills') }}
           </label>
           <div class="skill-input-wrapper">
             <input
               type="text"
               v-model="skillSearchQuery"
-              placeholder="Search skills (e.g. /weekly-security-audit)..."
+              :placeholder="t('addTriggerModal.placeholders.skillSearch')"
               @focus="onSkillInputFocus"
               @blur="onSkillInputBlur"
               @input="showSkillDropdown = true"
               autocomplete="off"
             >
-            <button v-if="skillCommand" type="button" class="skill-clear-btn" @click="clearSkill" title="Clear skill">
+            <button v-if="skillCommand" type="button" class="skill-clear-btn" @click="clearSkill" :title="t('addTriggerModal.clearSkill')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M18 6L6 18M6 6l12 12"/>
               </svg>
             </button>
           </div>
           <div v-if="showSkillDropdown && (filteredSkills.length > 0 || isLoadingSkills)" class="skill-dropdown">
-            <div v-if="isLoadingSkills" class="skill-dropdown-loading">Scanning for skills...</div>
+            <div v-if="isLoadingSkills" class="skill-dropdown-loading">{{ t('addTriggerModal.skillScanning') }}</div>
             <div
               v-for="skill in filteredSkills"
               :key="skill.name"
@@ -527,7 +530,7 @@ async function createTrigger() {
               <span v-if="skill.description" class="skill-desc">{{ skill.description }}</span>
             </div>
             <div v-if="!isLoadingSkills && filteredSkills.length === 0" class="skill-dropdown-empty">
-              No skills found
+              {{ t('addTriggerModal.noSkills') }}
             </div>
           </div>
           <div class="field-hint">
@@ -535,7 +538,7 @@ async function createTrigger() {
               <circle cx="12" cy="12" r="10"/>
               <path d="M12 16v-4M12 8h.01"/>
             </svg>
-            Select a skill or command to prepend to the prompt at execution time
+            {{ t('addTriggerModal.hints.skills') }}
           </div>
         </div>
 
@@ -544,25 +547,25 @@ async function createTrigger() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
             </svg>
-            Prompt Template
+            {{ t('addTriggerModal.fields.promptTemplate') }}
           </label>
-          <textarea v-model="prompt" required placeholder="Your prompt template here..."></textarea>
+          <textarea v-model="prompt" required :placeholder="t('addTriggerModal.placeholders.promptTemplate')"></textarea>
           <div class="field-hint">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <circle cx="12" cy="12" r="10"/>
               <path d="M12 16v-4M12 8h.01"/>
             </svg>
-            Use <code>{paths}</code> for project paths, <code>{message}</code> for the original message
+            {{ t('addTriggerModal.hints.promptBefore') }} <code>{paths}</code> {{ t('addTriggerModal.hints.promptMiddle') }} <code>{message}</code> {{ t('addTriggerModal.hints.promptAfter') }}
           </div>
         </div>
 
         <div class="modal-actions">
-          <button type="button" class="btn btn-secondary" @click="emit('close')">Cancel</button>
+          <button type="button" class="btn btn-secondary" @click="emit('close')">{{ t('common.cancel') }}</button>
           <button type="submit" class="btn btn-primary" :disabled="isSubmitting">
             <svg v-if="isSubmitting" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
             </svg>
-            {{ isSubmitting ? 'Creating...' : 'Create Trigger' }}
+            {{ isSubmitting ? t('addTriggerModal.creating') : t('addTriggerModal.createButton') }}
           </button>
         </div>
       </form>

@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { teamApi, projectApi, ApiError } from '../../services/api';
 import { useToast } from '../../composables/useToast';
 import { useFocusTrap } from '../../composables/useFocusTrap';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   projectId: string;
@@ -46,7 +49,7 @@ async function openAssignModal() {
       color: t.color || '#666',
     }));
   } catch {
-    showToast('Failed to load teams', 'error');
+    showToast(t('projectTeamsSection.loadFailed'), 'error');
   }
 }
 
@@ -55,11 +58,11 @@ async function assignTeam() {
   isAssigning.value = true;
   try {
     await projectApi.assignTeam(props.projectId, selectedTeamId.value);
-    showToast('Team assigned successfully', 'success');
+    showToast(t('projectTeamsSection.assignSuccess'), 'success');
     showAssignModal.value = false;
     emit('refresh');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to assign team';
+    const message = err instanceof ApiError ? err.message : t('projectTeamsSection.assignFailed');
     showToast(message, 'error');
   } finally {
     isAssigning.value = false;
@@ -72,14 +75,14 @@ async function assignTeam() {
   <div class="card">
     <div class="card-header">
       <div class="header-left">
-        <h3>Assigned Teams</h3>
-        <span class="card-count">{{ totalTeamCount }} teams</span>
+        <h3>{{ t('projectTeamsSection.heading') }}</h3>
+        <span class="card-count">{{ t('projectTeamsSection.teamCount', { count: totalTeamCount }) }}</span>
       </div>
       <button class="add-btn" @click="openAssignModal">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 5v14M5 12h14"/>
         </svg>
-        Assign Team
+        {{ t('projectTeamsSection.assignTeam') }}
       </button>
     </div>
 
@@ -92,8 +95,8 @@ async function assignTeam() {
           <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
         </svg>
       </div>
-      <p>No teams assigned yet</p>
-      <button class="btn-inline-assign" @click="openAssignModal">Assign Team</button>
+      <p>{{ t('projectTeamsSection.emptyState') }}</p>
+      <button class="btn-inline-assign" @click="openAssignModal">{{ t('projectTeamsSection.assignTeam') }}</button>
     </div>
 
     <div v-else class="teams-run-list">
@@ -101,14 +104,14 @@ async function assignTeam() {
         <div class="team-run-header">
           <div class="team-color" :style="{ background: team.color }"></div>
           <span class="team-name entity-link" @click.stop="emit('navigateToTeamDashboard', team.id)">{{ team.name }}</span>
-          <span v-if="team.is_owner" class="primary-badge">Primary</span>
+          <span v-if="team.is_owner" class="primary-badge">{{ t('projectTeamsSection.primaryBadge') }}</span>
         </div>
         <div class="team-run-body">
           <input
             :value="teamRunMessages[team.id]"
             type="text"
             class="team-run-input"
-            placeholder="Optional message..."
+            :placeholder="t('projectTeamsSection.optionalMessage')"
             :disabled="teamRunning[team.id]"
             @input="($event: Event) => { const el = $event.target as HTMLInputElement; emit('update:teamRunMessages', { ...teamRunMessages, [team.id]: el.value }); }"
             @keyup.enter="emit('runTeam', team.id)"
@@ -121,7 +124,7 @@ async function assignTeam() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polygon points="5 3 19 12 5 21 5 3"/>
             </svg>
-            {{ teamRunning[team.id] ? 'Running...' : 'Run' }}
+            {{ teamRunning[team.id] ? t('projectTeamsSection.running') : t('projectTeamsSection.run') }}
           </button>
         </div>
       </div>
@@ -132,7 +135,7 @@ async function assignTeam() {
       <div v-if="showAssignModal" ref="assignModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-assign-team" tabindex="-1" @click.self="showAssignModal = false" @keydown.escape="showAssignModal = false">
         <div class="modal">
           <div class="modal-header">
-            <h3 id="modal-title-assign-team">Assign Team</h3>
+            <h3 id="modal-title-assign-team">{{ t('projectTeamsSection.assignTeam') }}</h3>
             <button class="modal-close" @click="showAssignModal = false">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M18 6L6 18M6 6l12 12"/>
@@ -140,16 +143,16 @@ async function assignTeam() {
             </button>
           </div>
           <div class="modal-body">
-            <p class="modal-description">Select a team to assign to this project.</p>
+            <p class="modal-description">{{ t('projectTeamsSection.modalDescription') }}</p>
 
             <div v-if="unassignedTeams.length === 0" class="empty-modal-state">
-              <p>No available teams to assign.</p>
-              <span>All teams are already assigned to this project.</span>
+              <p>{{ t('projectTeamsSection.noAvailableTeams') }}</p>
+              <span>{{ t('projectTeamsSection.allAssigned') }}</span>
             </div>
 
             <div v-else class="team-select-wrapper">
               <select v-model="selectedTeamId" class="team-select">
-                <option value="">Select a team...</option>
+                <option value="">{{ t('projectTeamsSection.selectPlaceholder') }}</option>
                 <option v-for="team in unassignedTeams" :key="team.id" :value="team.id">
                   {{ team.name }}
                 </option>
@@ -160,14 +163,14 @@ async function assignTeam() {
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-cancel" @click="showAssignModal = false">Cancel</button>
+            <button class="btn btn-cancel" @click="showAssignModal = false">{{ t('common.cancel') }}</button>
             <button
               class="btn btn-assign"
               :disabled="!selectedTeamId || isAssigning"
               @click="assignTeam"
             >
-              <span v-if="isAssigning">Assigning...</span>
-              <span v-else>Assign Team</span>
+              <span v-if="isAssigning">{{ t('projectTeamsSection.assigning') }}</span>
+              <span v-else>{{ t('projectTeamsSection.assignTeam') }}</span>
             </button>
           </div>
         </div>

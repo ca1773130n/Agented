@@ -5,6 +5,7 @@ import type { Project, GrdMilestone, GrdPhase, GrdPlan, ConversationMessage, Aut
 import { projectApi, grdApi } from '../services/api';
 import { useToast } from '../composables/useToast';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import MilestoneOverview from '../components/grd/MilestoneOverview.vue';
@@ -22,6 +23,7 @@ const router = useRouter();
 const projectId = computed(() => (route.params.projectId as string) || props.projectId || '');
 
 const showToast = useToast();
+const { t } = useI18n();
 
 // State
 // Sessions tab opens by default — it's the live work surface
@@ -135,16 +137,16 @@ async function loadPhasesAndPlans() {
     phases.value = phRes.phases || [];
     plans.value = plRes.plans || [];
   } catch (err) {
-    showToast('Failed to load phases and plans', 'error');
+    showToast(t('projectManagement.loadPhasesError'), 'error');
   }
 }
 
 async function handlePlanStatusChanged(planId: string, newStatus: string) {
   try {
     await grdApi.updatePlanStatus(projectId.value, planId, newStatus);
-    showToast('Plan status updated', 'success');
+    showToast(t('projectManagement.planStatusUpdated'), 'success');
   } catch (err) {
-    showToast('Failed to update plan status', 'error');
+    showToast(t('projectManagement.updatePlanStatusError'), 'error');
     // Revert: re-fetch data to reset local state
     await loadPhasesAndPlans();
   }
@@ -154,7 +156,7 @@ async function handleQuickAdd(title: string, status: string) {
   // Use first phase as default target
   const targetPhase = filteredPhases.value[0];
   if (!targetPhase) {
-    showToast('Create a milestone and phase first via the Planning tab', 'info');
+    showToast(t('projectManagement.createMilestoneFirst'), 'info');
     return;
   }
   try {
@@ -163,16 +165,16 @@ async function handleQuickAdd(title: string, status: string) {
       title,
       status,
     });
-    showToast('Card created', 'success');
+    showToast(t('projectManagement.cardCreated'), 'success');
     await loadPhasesAndPlans();
   } catch (err) {
-    showToast('Failed to create card', 'error');
+    showToast(t('projectManagement.createCardError'), 'error');
   }
 }
 
 async function handleCreatePhase(name: string, goal: string) {
   if (!selectedMilestoneId.value) {
-    showToast('No milestone selected', 'error');
+    showToast(t('projectManagement.noMilestoneSelected'), 'error');
     return;
   }
   try {
@@ -181,10 +183,10 @@ async function handleCreatePhase(name: string, goal: string) {
       name,
       goal: goal || undefined,
     });
-    showToast('Phase created', 'success');
+    showToast(t('projectManagement.phaseCreated'), 'success');
     await loadPhasesAndPlans();
   } catch (err) {
-    showToast('Failed to create phase', 'error');
+    showToast(t('projectManagement.createPhaseError'), 'error');
   }
 }
 
@@ -273,7 +275,7 @@ function handleChatDelta(data: { type: string; [key: string]: unknown }) {
     }
     case 'error': {
       chatIsProcessing.value = false;
-      showToast((data.message as string) || 'Chat error', 'error');
+      showToast((data.message as string) || t('projectManagement.chatError'), 'error');
       break;
     }
     case 'plan_changed': {
@@ -317,7 +319,7 @@ async function handleChatSend() {
   } catch (err) {
     chatMessages.value.pop(); // Remove optimistic message
     chatIsProcessing.value = false;
-    showToast('Failed to send chat message', 'error');
+    showToast(t('projectManagement.sendChatError'), 'error');
   }
 }
 
@@ -346,7 +348,7 @@ onUnmounted(() => {
          (TypeError reading 'el' on undefined). Same fix as EntityLayout.vue
          and BackendDetailPage.vue. -->
     <div v-if="project" class="project-management-page__content">
-      <PageHeader title="Project Management" :subtitle="project?.name || undefined">
+      <PageHeader :title="t('projectManagement.title')" :subtitle="project?.name || undefined">
         <template #actions>
           <select
             v-if="milestones.length > 1"
@@ -366,13 +368,13 @@ onUnmounted(() => {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
-            Chat
+            {{ t('projectManagement.chat') }}
           </button>
           <button class="btn btn-sm" @click="router.push({ name: 'project-dashboard', params: { projectId: projectId } })">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
-            Dashboard
+            {{ t('projectManagement.dashboard') }}
           </button>
         </template>
       </PageHeader>
@@ -389,7 +391,7 @@ onUnmounted(() => {
             <rect x="3" y="14" width="7" height="7" />
             <rect x="14" y="14" width="7" height="7" />
           </svg>
-          Kanban
+          {{ t('projectManagement.kanban') }}
         </button>
         <button
           class="tab-btn"
@@ -400,7 +402,7 @@ onUnmounted(() => {
             <polyline points="4 17 10 11 4 5" />
             <line x1="12" y1="19" x2="20" y2="19" />
           </svg>
-          Sessions
+          {{ t('projectManagement.sessions') }}
         </button>
       </div>
 
@@ -426,7 +428,7 @@ onUnmounted(() => {
 
           <div v-if="showChatPanel" class="chat-side-panel">
             <div class="chat-panel-header">
-              <span class="chat-panel-title">AI Manager</span>
+              <span class="chat-panel-title">{{ t('projectManagement.aiManager') }}</span>
               <button class="chat-panel-close" @click="showChatPanel = false">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                   <line x1="18" y1="6" x2="6" y2="18" />
@@ -443,7 +445,7 @@ onUnmounted(() => {
               :can-finalize="false"
               :is-finalizing="false"
               :assistant-icon-paths="['M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z']"
-              input-placeholder="Ask the AI to manage your kanban board..."
+              :input-placeholder="t('projectManagement.chatPlaceholder')"
               entity-label="project"
               banner-title=""
               banner-button-label=""

@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { slackApi, integrationApi } from '../services/api';
 import type { Integration } from '../services/api';
 import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 interface SlashCommand {
@@ -47,7 +49,7 @@ function integrationToCommand(integration: Integration): SlashCommand {
     command: (config.command as string) || integration.name,
     description: (config.description as string) || '',
     botId: integration.trigger_id || '',
-    botName: (config.bot_name as string) || integration.trigger_id || 'Unassigned',
+    botName: (config.bot_name as string) || integration.trigger_id || t('slackCommandGateway.unassigned'),
     enabled: integration.enabled,
     usageCount: 0,
   };
@@ -93,7 +95,7 @@ async function loadData() {
       });
     }
   } catch (err) {
-    showToast('Failed to load Slack data', 'error');
+    showToast(t('slackCommandGateway.toast.loadFailed'), 'error');
   } finally {
     loading.value = false;
   }
@@ -106,9 +108,9 @@ async function toggleCommand(id: string) {
   try {
     await integrationApi.update(id, { enabled: newEnabled });
     cmd.enabled = newEnabled;
-    showToast(`Command ${newEnabled ? 'enabled' : 'disabled'}`, 'success');
+    showToast(newEnabled ? t('slackCommandGateway.toast.commandEnabled') : t('slackCommandGateway.toast.commandDisabled'), 'success');
   } catch {
-    showToast('Failed to update command', 'error');
+    showToast(t('slackCommandGateway.toast.updateFailed'), 'error');
   }
 }
 
@@ -124,9 +126,9 @@ async function addCommand() {
     newCommand.value = '';
     newDescription.value = '';
     showAddCommand.value = false;
-    showToast('Command registered', 'success');
+    showToast(t('slackCommandGateway.toast.commandRegistered'), 'success');
   } catch {
-    showToast('Failed to register command', 'error');
+    showToast(t('slackCommandGateway.toast.registerFailed'), 'error');
   }
 }
 
@@ -152,14 +154,14 @@ onMounted(loadData);
   <div class="slack-gateway">
     <NotEnabledBanner
       v-if="!FEATURE_ENABLED"
-      feature="Slack command gateway"
-      detail="The backend that persists and dispatches slash commands has not shipped yet. Creating or editing commands is disabled."
+      :feature="t('slackCommandGateway.banner.feature')"
+      :detail="t('slackCommandGateway.banner.detail')"
       testid="slack-command-gateway-not-enabled"
     />
 
     <PageHeader
-      title="Slack Command Gateway"
-      subtitle="Trigger bots directly from Slack with slash commands — results stream back as threaded replies"
+      :title="t('slackCommandGateway.title')"
+      :subtitle="t('slackCommandGateway.subtitle')"
     />
 
     <div class="page-content">
@@ -167,49 +169,49 @@ onMounted(loadData);
         <div class="connection-header">
           <div class="conn-status" :class="{ connected: slackConnected }">
             <span class="status-dot" />
-            {{ slackConnected ? 'Connected' : 'Disconnected' }}
+            {{ slackConnected ? t('slackCommandGateway.connected') : t('slackCommandGateway.disconnected') }}
           </div>
           <span class="workspace-label">{{ workspace || '—' }}</span>
-          <button class="btn-secondary" @click="showToast('Reconnecting...', 'info')">
-            Reconnect
+          <button class="btn-secondary" @click="showToast(t('slackCommandGateway.toast.reconnecting'), 'info')">
+            {{ t('slackCommandGateway.reconnect') }}
           </button>
         </div>
         <p class="help-text">
-          Add the Agented Slack app to your workspace, then configure a slash command pointing to
+          {{ t('slackCommandGateway.helpTextBefore') }}
           <code>/api/slack/command</code>.
         </p>
       </section>
 
       <section class="section">
         <div class="section-header">
-          <h2 class="section-title">Registered Commands</h2>
+          <h2 class="section-title">{{ t('slackCommandGateway.registeredCommands') }}</h2>
           <button
             class="btn-primary"
             :disabled="!FEATURE_ENABLED"
-            :title="!FEATURE_ENABLED ? 'Slack command gateway is not yet enabled' : ''"
+            :title="!FEATURE_ENABLED ? t('slackCommandGateway.notEnabledTitle') : ''"
             @click="showAddCommand = !showAddCommand"
           >
-            + Add Command
+            {{ t('slackCommandGateway.addCommand') }}
           </button>
         </div>
 
         <div v-if="showAddCommand" class="add-form">
           <input v-model="newCommand" placeholder="/agented run my-bot" class="input" />
-          <input v-model="newDescription" placeholder="What does this command do?" class="input" />
+          <input v-model="newDescription" :placeholder="t('slackCommandGateway.descriptionPlaceholder')" class="input" />
           <div class="form-actions">
             <button
               class="btn-primary"
               :disabled="!FEATURE_ENABLED"
-              :title="!FEATURE_ENABLED ? 'Slack command gateway is not yet enabled in this deployment' : undefined"
+              :title="!FEATURE_ENABLED ? t('slackCommandGateway.notEnabledTitleDeployment') : undefined"
               data-testid="slack-command-save-submit"
               @click="addCommand"
-            >Save</button>
-            <button class="btn-ghost" @click="showAddCommand = false">Cancel</button>
+            >{{ t('common.save') }}</button>
+            <button class="btn-ghost" @click="showAddCommand = false">{{ t('common.cancel') }}</button>
           </div>
         </div>
 
-        <div v-if="loading" class="empty-state">Loading commands…</div>
-        <div v-else-if="commands.length === 0" class="empty-state">No Slack commands configured yet.</div>
+        <div v-if="loading" class="empty-state">{{ t('slackCommandGateway.loadingCommands') }}</div>
+        <div v-else-if="commands.length === 0" class="empty-state">{{ t('slackCommandGateway.noCommands') }}</div>
         <div v-else class="commands-list">
           <div v-for="cmd in commands" :key="cmd.id" class="command-card">
             <div class="command-main">
@@ -218,15 +220,15 @@ onMounted(loadData);
               <span class="bot-badge">{{ cmd.botName }}</span>
             </div>
             <div class="command-meta">
-              <span class="usage-count">{{ cmd.usageCount }} uses</span>
+              <span class="usage-count">{{ t('slackCommandGateway.usesCount', { count: cmd.usageCount }) }}</span>
               <button
                 class="toggle-btn"
                 :class="{ active: cmd.enabled }"
                 :disabled="!FEATURE_ENABLED"
-                :title="!FEATURE_ENABLED ? 'Slack command gateway is not yet enabled' : ''"
+                :title="!FEATURE_ENABLED ? t('slackCommandGateway.notEnabledTitle') : ''"
                 @click="toggleCommand(cmd.id)"
               >
-                {{ cmd.enabled ? 'Enabled' : 'Disabled' }}
+                {{ cmd.enabled ? t('slackCommandGateway.enabled') : t('slackCommandGateway.disabled') }}
               </button>
             </div>
           </div>
@@ -234,18 +236,18 @@ onMounted(loadData);
       </section>
 
       <section class="section">
-        <h2 class="section-title">Command Logs</h2>
-        <div v-if="loading" class="empty-state">Loading logs…</div>
-        <div v-else-if="logs.length === 0" class="empty-state">No command logs yet.</div>
+        <h2 class="section-title">{{ t('slackCommandGateway.commandLogs') }}</h2>
+        <div v-if="loading" class="empty-state">{{ t('slackCommandGateway.loadingLogs') }}</div>
+        <div v-else-if="logs.length === 0" class="empty-state">{{ t('slackCommandGateway.noLogs') }}</div>
         <table v-else class="log-table">
           <thead>
             <tr>
-              <th>User</th>
-              <th>Channel</th>
-              <th>Command</th>
-              <th>Args</th>
-              <th>Status</th>
-              <th>Time</th>
+              <th>{{ t('slackCommandGateway.table.user') }}</th>
+              <th>{{ t('slackCommandGateway.table.channel') }}</th>
+              <th>{{ t('slackCommandGateway.table.command') }}</th>
+              <th>{{ t('slackCommandGateway.table.args') }}</th>
+              <th>{{ t('slackCommandGateway.table.status') }}</th>
+              <th>{{ t('slackCommandGateway.table.time') }}</th>
             </tr>
           </thead>
           <tbody>

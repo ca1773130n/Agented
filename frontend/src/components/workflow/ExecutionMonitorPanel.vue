@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   executionId: string | null;
@@ -25,9 +28,16 @@ const statusColor = computed(() => {
   }
 });
 
-const statusLabel = computed(() => {
-  return props.executionStatus.charAt(0).toUpperCase() + props.executionStatus.slice(1);
-});
+const KNOWN_STATUSES = ['pending', 'running', 'completed', 'failed', 'cancelled', 'skipped'];
+
+function localizedStatus(status: string): string {
+  if (KNOWN_STATUSES.includes(status)) {
+    return t(`executionMonitorPanel.status.${status}`);
+  }
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+const statusLabel = computed(() => localizedStatus(props.executionStatus));
 
 const nodeEntries = computed(() => {
   return Object.entries(props.nodeStates).map(([id, status]) => ({
@@ -60,7 +70,7 @@ function nodeStatusClass(status: string): string {
 }
 
 function nodeStatusLabel(status: string): string {
-  return status.charAt(0).toUpperCase() + status.slice(1);
+  return localizedStatus(status);
 }
 
 function truncateId(id: string): string {
@@ -73,10 +83,10 @@ function truncateId(id: string): string {
     <!-- Header -->
     <div class="monitor-header">
       <div class="header-left">
-        <h3>Execution Monitor</h3>
+        <h3>{{ t('executionMonitorPanel.title') }}</h3>
         <span v-if="executionId" class="exec-id-badge" :title="executionId">{{ truncateId(executionId) }}</span>
       </div>
-      <button class="close-btn" @click="emit('close')" title="Close">
+      <button class="close-btn" @click="emit('close')" :title="t('common.close')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M18 6L6 18M6 6l12 12"/>
         </svg>
@@ -88,13 +98,13 @@ function truncateId(id: string): string {
       <div class="status-indicator" :style="{ background: statusColor }"></div>
       <span class="status-label">{{ statusLabel }}</span>
       <span class="connection-badge" :class="{ live: isMonitoring }">
-        {{ isMonitoring ? 'Live' : 'Disconnected' }}
+        {{ isMonitoring ? t('executionMonitorPanel.live') : t('executionMonitorPanel.disconnected') }}
       </span>
     </div>
 
     <!-- Progress -->
     <div v-if="totalCount > 0" class="progress-section">
-      <div class="progress-text">{{ completedCount }}/{{ totalCount }} nodes completed</div>
+      <div class="progress-text">{{ t('executionMonitorPanel.nodesCompleted', { completed: completedCount, total: totalCount }) }}</div>
       <div class="progress-bar-track">
         <div class="progress-bar-fill" :style="{ width: progressPercent + '%' }"></div>
       </div>
@@ -103,7 +113,7 @@ function truncateId(id: string): string {
     <!-- Node state list -->
     <div class="node-list">
       <div v-if="nodeEntries.length === 0" class="node-list-empty">
-        <span>Waiting for node execution data...</span>
+        <span>{{ t('executionMonitorPanel.waitingForData') }}</span>
       </div>
       <div
         v-for="entry in nodeEntries"
@@ -128,14 +138,14 @@ function truncateId(id: string): string {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="3" y="3" width="18" height="18" rx="2"/>
         </svg>
-        Cancel Execution
+        {{ t('executionMonitorPanel.cancelExecution') }}
       </button>
       <button class="btn btn-history" @click="emit('view-history')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="10"/>
           <path d="M12 6v6l4 2"/>
         </svg>
-        View History
+        {{ t('executionMonitorPanel.viewHistory') }}
       </button>
     </div>
   </div>

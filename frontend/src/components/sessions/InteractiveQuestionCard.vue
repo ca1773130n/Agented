@@ -11,7 +11,10 @@
  * for claude.
  */
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { AskUserQuestionItem } from '../../composables/useProjectSession';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   questions: AskUserQuestionItem[];
@@ -69,14 +72,14 @@ function onSubmit() {
         <line x1="12" y1="16" x2="12" y2="12" />
         <line x1="12" y1="8" x2="12.01" y2="8" />
       </svg>
-      <span>Claude is asking for your input</span>
+      <span>{{ t('interactiveQuestionCard.header') }}</span>
     </div>
 
     <div class="iq-questions">
       <section v-for="q in questions" :key="q.question" class="iq-question">
         <div class="iq-question-meta">
           <span v-if="q.header" class="iq-chip">{{ q.header }}</span>
-          <span v-if="q.multiSelect" class="iq-multi">pick all that apply</span>
+          <span v-if="q.multiSelect" class="iq-multi">{{ t('interactiveQuestionCard.pickAll') }}</span>
         </div>
         <p class="iq-prompt">{{ q.question }}</p>
         <div class="iq-options">
@@ -104,7 +107,7 @@ function onSubmit() {
 
     <div class="iq-actions">
       <button type="button" class="iq-btn iq-btn-secondary" @click="emit('cancel')">
-        Skip
+        {{ t('common.skip') }}
       </button>
       <button
         type="button"
@@ -112,7 +115,7 @@ function onSubmit() {
         :disabled="!canSubmit"
         @click="onSubmit"
       >
-        Send answer
+        {{ t('interactiveQuestionCard.sendAnswer') }}
       </button>
     </div>
   </div>

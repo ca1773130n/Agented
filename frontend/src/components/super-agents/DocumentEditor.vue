@@ -4,6 +4,9 @@ import type { SuperAgentDocument, DocumentType } from '../../services/api';
 import { superAgentDocumentApi } from '../../services/api';
 import ConfirmModal from '../base/ConfirmModal.vue';
 import { useToast } from '../../composables/useToast';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   superAgentId: string;
@@ -32,7 +35,7 @@ async function loadDocuments() {
     // Load content for active tab
     loadTabContent();
   } catch {
-    showToast('Failed to load documents', 'error');
+    showToast(t('documentEditor.loadError'), 'error');
   } finally {
     isLoading.value = false;
   }
@@ -84,9 +87,9 @@ async function saveDocument() {
       });
     }
     await loadDocuments();
-    showToast(`${activeTab.value} document saved`, 'success');
+    showToast(t('documentEditor.saved', { docType: activeTab.value }), 'success');
   } catch {
-    showToast('Failed to save document', 'error');
+    showToast(t('documentEditor.saveError'), 'error');
   } finally {
     isSaving.value = false;
   }
@@ -101,7 +104,7 @@ function hasDocument(docType: DocumentType): boolean {
 }
 
 function renderMarkdown(md: string): string {
-  if (!md) return '<p style="color:var(--text-tertiary)">No content</p>';
+  if (!md) return `<p style="color:var(--text-tertiary)">${t('documentEditor.noContent')}</p>`;
   let html = md
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -162,7 +165,7 @@ onMounted(loadDocuments);
 
     <div v-if="isLoading" class="editor-loading">
       <div class="loading-spinner"></div>
-      <span>Loading documents...</span>
+      <span>{{ t('documentEditor.loading') }}</span>
     </div>
 
     <template v-else>
@@ -171,14 +174,14 @@ onMounted(loadDocuments);
           :class="['toolbar-btn', { active: showPreview }]"
           @click="showPreview = !showPreview"
         >
-          {{ showPreview ? 'Edit' : 'Preview' }}
+          {{ showPreview ? t('common.edit') : t('documentEditor.preview') }}
         </button>
         <button
           class="toolbar-btn save-btn"
           :disabled="!isDirty || isSaving"
           @click="saveDocument"
         >
-          {{ isSaving ? 'Saving...' : 'Save' }}
+          {{ isSaving ? t('documentEditor.saving') : t('common.save') }}
         </button>
       </div>
 
@@ -187,7 +190,7 @@ onMounted(loadDocuments);
           v-if="!showPreview"
           v-model="editContent"
           class="editor-textarea"
-          :placeholder="`Write ${activeTab} document content (Markdown supported)...`"
+          :placeholder="t('documentEditor.contentPlaceholder', { docType: activeTab })"
           @input="onContentChange"
         ></textarea>
         <div v-else class="editor-preview">
@@ -198,9 +201,9 @@ onMounted(loadDocuments);
 
     <ConfirmModal
       :open="showDiscardConfirm"
-      title="Unsaved Changes"
-      message="You have unsaved changes. Discard them?"
-      confirm-label="Discard"
+      :title="t('documentEditor.unsavedTitle')"
+      :message="t('documentEditor.unsavedMessage')"
+      :confirm-label="t('documentEditor.discard')"
       variant="danger"
       @confirm="confirmDiscard"
       @cancel="cancelDiscard"

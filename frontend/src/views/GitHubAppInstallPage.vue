@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
 
+const { t } = useI18n();
 const showToast = useToast();
 const isLoading = ref(true);
 const isInstalling = ref(false);
@@ -33,11 +35,11 @@ const orgName = ref('');
 const webhookSecret = ref('');
 const allRepos = ref(false);
 
-const steps: { key: InstallStep; label: string }[] = [
-  { key: 'connect', label: 'Connect Org' },
-  { key: 'select-repos', label: 'Select Repos' },
-  { key: 'permissions', label: 'Permissions' },
-  { key: 'done', label: 'Done' },
+const steps: { key: InstallStep; labelKey: string }[] = [
+  { key: 'connect', labelKey: 'gitHubAppInstall.step.connectOrg' },
+  { key: 'select-repos', labelKey: 'gitHubAppInstall.step.selectRepos' },
+  { key: 'permissions', labelKey: 'gitHubAppInstall.step.permissions' },
+  { key: 'done', labelKey: 'gitHubAppInstall.step.done' },
 ];
 
 const stepIndex = computed(() => steps.findIndex(s => s.key === currentStep.value));
@@ -85,7 +87,7 @@ function toggleAll() {
 async function goNext() {
   if (currentStep.value === 'connect') {
     if (!orgName.value.trim()) {
-      showToast('Enter a GitHub organization name', 'error');
+      showToast(t('gitHubAppInstall.toast.enterOrg'), 'error');
       return;
     }
     await loadRepos();
@@ -105,10 +107,10 @@ async function goNext() {
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      showToast('GitHub App installed successfully', 'success');
+      showToast(t('gitHubAppInstall.toast.installed'), 'success');
       await loadInstallations();
     } catch {
-      showToast('Installation recorded (demo mode)', 'success');
+      showToast(t('gitHubAppInstall.toast.installedDemo'), 'success');
       installations.value.unshift({
         id: `install-new-${Date.now()}`,
         org: orgName.value,
@@ -143,6 +145,14 @@ function formatDate(iso: string): string {
 
 const selectedCount = computed(() => repositories.value.filter(r => r.selected).length);
 
+const permissionList = computed(() => [
+  t('gitHubAppInstall.permissions.readContents'),
+  t('gitHubAppInstall.permissions.readPullRequests'),
+  t('gitHubAppInstall.permissions.writeChecks'),
+  t('gitHubAppInstall.permissions.writeIssues'),
+  t('gitHubAppInstall.permissions.writeStatuses'),
+]);
+
 // PR-J3: `/admin/integrations/github/*` is not yet wired up server-side.
 // Flipping this constant off (and removing the banner) is what gates the
 // feature when the backend stub ships in PR-J3b.
@@ -156,31 +166,30 @@ onMounted(loadInstallations);
 
     <NotEnabledBanner
       v-if="!FEATURE_ENABLED"
-      feature="One-click GitHub App install"
-      detail="The backend that brokers the GitHub App installation handshake has not shipped yet. Starting an install is disabled."
+      :feature="t('gitHubAppInstall.notEnabled.feature')"
+      :detail="t('gitHubAppInstall.notEnabled.detail')"
       testid="github-app-install-not-enabled"
     />
 
     <div class="page-header">
       <div>
-        <h1 class="page-title">One-Click GitHub App Install</h1>
+        <h1 class="page-title">{{ t('gitHubAppInstall.title') }}</h1>
         <p class="page-subtitle">
-          Install the Agented GitHub App org-wide in minutes. Auto-provisions webhooks and
-          permissions for all selected repositories — no manual webhook setup required.
+          {{ t('gitHubAppInstall.subtitle') }}
         </p>
       </div>
       <button
         class="new-btn"
         :disabled="!FEATURE_ENABLED"
-        :title="!FEATURE_ENABLED ? 'One-click GitHub App install is not yet enabled' : ''"
+        :title="!FEATURE_ENABLED ? t('gitHubAppInstall.notEnabledTitle') : ''"
         @click="startNew"
-      >+ New Installation</button>
+      >{{ t('gitHubAppInstall.newInstallation') }}</button>
     </div>
 
     <div class="main-grid">
       <!-- Wizard -->
       <div class="wizard-card">
-        <h2 class="section-title">Setup Wizard</h2>
+        <h2 class="section-title">{{ t('gitHubAppInstall.setupWizard') }}</h2>
 
         <!-- Step progress -->
         <div class="step-progress">
@@ -191,34 +200,34 @@ onMounted(loadInstallations);
             :class="{ active: step.key === currentStep, done: i < stepIndex }"
           >
             <div class="step-dot">{{ i < stepIndex ? '✓' : i + 1 }}</div>
-            <span class="step-label">{{ step.label }}</span>
+            <span class="step-label">{{ t(step.labelKey) }}</span>
           </div>
         </div>
 
         <!-- Step: Connect -->
         <div v-if="currentStep === 'connect'" class="step-body">
-          <p class="step-desc">Enter the GitHub organization you want to connect to Agented.</p>
+          <p class="step-desc">{{ t('gitHubAppInstall.connect.desc') }}</p>
           <div class="form-group">
-            <label class="form-label">GitHub Organization</label>
-            <input v-model="orgName" class="form-input" placeholder="e.g. acme-corp" />
+            <label class="form-label">{{ t('gitHubAppInstall.connect.orgLabel') }}</label>
+            <input v-model="orgName" class="form-input" :placeholder="t('gitHubAppInstall.connect.orgPlaceholder')" />
           </div>
           <button
             class="next-btn"
             :disabled="!FEATURE_ENABLED"
-            :title="!FEATURE_ENABLED ? 'One-click GitHub App install is not yet enabled' : ''"
+            :title="!FEATURE_ENABLED ? t('gitHubAppInstall.notEnabledTitle') : ''"
             @click="goNext"
-          >Continue</button>
+          >{{ t('gitHubAppInstall.continue') }}</button>
         </div>
 
         <!-- Step: Select repos -->
         <div v-else-if="currentStep === 'select-repos'" class="step-body">
           <p class="step-desc">
-            Choose which repositories to enable. Webhooks will be auto-created for each.
+            {{ t('gitHubAppInstall.selectRepos.desc') }}
           </p>
           <div class="repo-header">
-            <span class="repo-count">{{ selectedCount }} of {{ repositories.length }} selected</span>
+            <span class="repo-count">{{ t('gitHubAppInstall.selectRepos.selectedCount', { selected: selectedCount, total: repositories.length }) }}</span>
             <button class="toggle-all-btn" @click="toggleAll">
-              {{ allRepos ? 'Deselect All' : 'Select All' }}
+              {{ allRepos ? t('gitHubAppInstall.selectRepos.deselectAll') : t('gitHubAppInstall.selectRepos.selectAll') }}
             </button>
           </div>
           <div class="repo-list">
@@ -231,66 +240,67 @@ onMounted(loadInstallations);
               <input type="checkbox" :checked="repo.selected" @change="toggleRepo(repo)" />
               <span class="repo-name">{{ repo.name }}</span>
               <span class="repo-badge" :class="{ private: repo.private }">
-                {{ repo.private ? 'Private' : 'Public' }}
+                {{ repo.private ? t('gitHubAppInstall.private') : t('gitHubAppInstall.public') }}
               </span>
             </label>
           </div>
           <button
             class="next-btn"
             :disabled="!FEATURE_ENABLED"
-            :title="!FEATURE_ENABLED ? 'One-click GitHub App install is not yet enabled' : ''"
+            :title="!FEATURE_ENABLED ? t('gitHubAppInstall.notEnabledTitle') : ''"
             @click="goNext"
-          >Continue</button>
+          >{{ t('gitHubAppInstall.continue') }}</button>
         </div>
 
         <!-- Step: Permissions -->
         <div v-else-if="currentStep === 'permissions'" class="step-body">
           <p class="step-desc">
-            Confirm the permissions the GitHub App will request, and optionally set a webhook
-            secret.
+            {{ t('gitHubAppInstall.permissions.desc') }}
           </p>
           <div class="permissions-list">
-            <div v-for="perm in ['Read: Contents', 'Read: Pull Requests', 'Write: Checks', 'Write: Issues', 'Write: Statuses']" :key="perm" class="perm-item">
+            <div v-for="perm in permissionList" :key="perm" class="perm-item">
               <span class="perm-icon">✓</span>
               <span class="perm-label">{{ perm }}</span>
             </div>
           </div>
           <div class="form-group" style="margin-top:1rem">
-            <label class="form-label">Webhook Secret (optional)</label>
+            <label class="form-label">{{ t('gitHubAppInstall.permissions.webhookSecretLabel') }}</label>
             <input
               v-model="webhookSecret"
               class="form-input"
               type="password"
-              placeholder="Leave blank to auto-generate"
+              :placeholder="t('gitHubAppInstall.permissions.webhookSecretPlaceholder')"
             />
           </div>
           <button
             class="next-btn"
             :disabled="isInstalling || !FEATURE_ENABLED"
-            :title="!FEATURE_ENABLED ? 'One-click GitHub App install is not yet enabled in this deployment' : undefined"
+            :title="!FEATURE_ENABLED ? t('gitHubAppInstall.notEnabledDeployTitle') : undefined"
             data-testid="github-app-install-submit"
             @click="goNext"
           >
-            {{ isInstalling ? 'Installing...' : 'Install App' }}
+            {{ isInstalling ? t('gitHubAppInstall.installing') : t('gitHubAppInstall.installApp') }}
           </button>
         </div>
 
         <!-- Step: Done -->
         <div v-else-if="currentStep === 'done'" class="step-body done-body">
           <div class="done-icon">✓</div>
-          <h3 class="done-title">Installation Complete</h3>
+          <h3 class="done-title">{{ t('gitHubAppInstall.done.title') }}</h3>
           <p class="done-desc">
-            The GitHub App is now installed for <strong>{{ orgName }}</strong>. Webhooks have been
-            provisioned for {{ selectedCount }} repositories.
+            <i18n-t keypath="gitHubAppInstall.done.desc" tag="span">
+              <template #org><strong>{{ orgName }}</strong></template>
+              <template #count>{{ selectedCount }}</template>
+            </i18n-t>
           </p>
-          <button class="next-btn outline" @click="startNew">Install Another</button>
+          <button class="next-btn outline" @click="startNew">{{ t('gitHubAppInstall.done.installAnother') }}</button>
         </div>
       </div>
 
       <!-- Existing installations -->
       <div class="installs-card">
-        <h2 class="section-title">Active Installations</h2>
-        <LoadingState v-if="isLoading" message="Loading installations..." />
+        <h2 class="section-title">{{ t('gitHubAppInstall.activeInstallations') }}</h2>
+        <LoadingState v-if="isLoading" :message="t('gitHubAppInstall.loadingInstallations')" />
         <div v-else>
           <div v-for="inst in installations" :key="inst.id" class="install-item">
             <div class="install-header">
@@ -300,12 +310,12 @@ onMounted(loadInstallations);
               </span>
             </div>
             <div class="install-meta">
-              <span>{{ inst.repos }} repositories</span>
+              <span>{{ t('gitHubAppInstall.repositoriesCount', { count: inst.repos }) }}</span>
               <span class="meta-sep">·</span>
-              <span>Installed {{ formatDate(inst.installed_at) }}</span>
+              <span>{{ t('gitHubAppInstall.installedOn', { date: formatDate(inst.installed_at) }) }}</span>
             </div>
           </div>
-          <p v-if="installations.length === 0" class="empty-msg">No installations yet.</p>
+          <p v-if="installations.length === 0" class="empty-msg">{{ t('gitHubAppInstall.noInstallations') }}</p>
         </div>
       </div>
     </div>

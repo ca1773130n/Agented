@@ -5,9 +5,11 @@
 // editor + test runner. See .planning/static-smell-triage.md. Ship
 // the feature or remove the route by EOQ3.
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 
+const { t } = useI18n();
 const showToast = useToast();
 const isLoading = ref(true);
 const isSaving = ref(false);
@@ -51,7 +53,7 @@ function validateJson(text: string): boolean {
     schemaError.value = '';
     return true;
   } catch (e: unknown) {
-    schemaError.value = e instanceof Error ? e.message : 'Invalid JSON';
+    schemaError.value = e instanceof Error ? e.message : t('structuredOutput.invalidJson');
     return false;
   }
 }
@@ -79,7 +81,7 @@ async function loadData() {
 
 async function saveSchema() {
   if (!validateJson(schemaText.value)) {
-    showToast('Fix JSON errors before saving', 'error');
+    showToast(t('structuredOutput.toast.fixBeforeSave'), 'error');
     return;
   }
   isSaving.value = true;
@@ -90,9 +92,9 @@ async function saveSchema() {
       body: JSON.stringify({ schema: JSON.parse(schemaText.value) }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    showToast('Schema saved', 'success');
+    showToast(t('structuredOutput.toast.schemaSaved'), 'success');
   } catch {
-    showToast('Saved (demo mode)', 'success');
+    showToast(t('structuredOutput.toast.savedDemo'), 'success');
   } finally {
     isSaving.value = false;
   }
@@ -100,7 +102,7 @@ async function saveSchema() {
 
 async function testSchema() {
   if (!validateJson(schemaText.value)) {
-    showToast('Fix JSON errors before testing', 'error');
+    showToast(t('structuredOutput.toast.fixBeforeTest'), 'error');
     return;
   }
   isTesting.value = true;
@@ -114,9 +116,9 @@ async function testSchema() {
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    showToast(data.valid ? 'Schema valid against execution output' : 'Schema validation failed', data.valid ? 'success' : 'error');
+    showToast(data.valid ? t('structuredOutput.toast.validAgainstOutput') : t('structuredOutput.toast.validationFailed'), data.valid ? 'success' : 'error');
   } catch {
-    showToast('Test completed (demo mode) — schema looks valid', 'success');
+    showToast(t('structuredOutput.toast.testDemo'), 'success');
   } finally {
     isTesting.value = false;
   }
@@ -134,26 +136,26 @@ onMounted(loadData);
 
     <div class="page-title-row">
       <div>
-        <h2>Structured Output</h2>
-        <p class="subtitle">Define a JSON schema that bot outputs must conform to</p>
+        <h2>{{ t('structuredOutput.title') }}</h2>
+        <p class="subtitle">{{ t('structuredOutput.subtitle') }}</p>
       </div>
       <div class="header-actions">
         <button class="btn btn-secondary" :disabled="isSaving" @click="saveSchema">
-          {{ isSaving ? 'Saving...' : 'Save Schema' }}
+          {{ isSaving ? t('structuredOutput.saving') : t('structuredOutput.saveSchema') }}
         </button>
       </div>
     </div>
 
-    <LoadingState v-if="isLoading" message="Loading schema configuration..." />
+    <LoadingState v-if="isLoading" :message="t('structuredOutput.loading')" />
 
     <template v-else>
       <div class="editor-grid">
         <!-- Schema editor -->
         <div class="card editor-card">
           <div class="card-header">
-            <h3>JSON Schema Editor</h3>
-            <span v-if="schemaError" class="error-badge">Invalid JSON</span>
-            <span v-else class="ok-badge">Valid</span>
+            <h3>{{ t('structuredOutput.editorTitle') }}</h3>
+            <span v-if="schemaError" class="error-badge">{{ t('structuredOutput.invalidJson') }}</span>
+            <span v-else class="ok-badge">{{ t('structuredOutput.valid') }}</span>
           </div>
           <textarea
             v-model="schemaText"
@@ -167,19 +169,19 @@ onMounted(loadData);
         <!-- Test panel -->
         <div class="card test-card">
           <div class="card-header">
-            <h3>Test Schema</h3>
+            <h3>{{ t('structuredOutput.testSchema') }}</h3>
           </div>
           <div class="field-group">
-            <label class="field-label">Execution ID (optional)</label>
+            <label class="field-label">{{ t('structuredOutput.executionIdLabel') }}</label>
             <input
               v-model="testExecutionId"
               class="field-input"
-              placeholder="exec-abc123 or leave blank for last"
+              :placeholder="t('structuredOutput.executionIdPlaceholder')"
             />
-            <p class="field-hint">Validate the schema against a past execution output</p>
+            <p class="field-hint">{{ t('structuredOutput.testHint') }}</p>
           </div>
           <button class="btn btn-primary" :disabled="isTesting" @click="testSchema">
-            {{ isTesting ? 'Testing...' : 'Test Schema' }}
+            {{ isTesting ? t('structuredOutput.testing') : t('structuredOutput.testSchema') }}
           </button>
         </div>
       </div>
@@ -187,18 +189,18 @@ onMounted(loadData);
       <!-- Recent samples -->
       <div class="card">
         <div class="card-header">
-          <h3>Recent Structured Output Samples</h3>
-          <span class="card-badge">{{ samples.length }} samples</span>
+          <h3>{{ t('structuredOutput.recentSamples') }}</h3>
+          <span class="card-badge">{{ t('structuredOutput.samplesCount', { count: samples.length }) }}</span>
         </div>
-        <div v-if="samples.length === 0" class="empty-msg">No samples yet.</div>
+        <div v-if="samples.length === 0" class="empty-msg">{{ t('structuredOutput.noSamples') }}</div>
         <table v-else class="samples-table">
           <thead>
             <tr>
-              <th>Execution</th>
-              <th>Bot</th>
-              <th>Schema Valid</th>
-              <th>Captured</th>
-              <th>Excerpt</th>
+              <th>{{ t('structuredOutput.table.execution') }}</th>
+              <th>{{ t('structuredOutput.table.bot') }}</th>
+              <th>{{ t('structuredOutput.table.schemaValid') }}</th>
+              <th>{{ t('structuredOutput.table.captured') }}</th>
+              <th>{{ t('structuredOutput.table.excerpt') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -207,7 +209,7 @@ onMounted(loadData);
               <td class="mono">{{ s.bot_id }}</td>
               <td>
                 <span class="valid-badge" :class="s.schema_valid ? 'pass' : 'fail'">
-                  {{ s.schema_valid ? 'Pass' : 'Fail' }}
+                  {{ s.schema_valid ? t('structuredOutput.pass') : t('structuredOutput.fail') }}
                 </span>
               </td>
               <td class="dimmed">{{ formatTime(s.captured_at) }}</td>

@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { SyncStatus } from '../../services/api';
 import { pluginExportApi, ApiError } from '../../services/api';
 import { useToast } from '../../composables/useToast';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   pluginId: string;
@@ -22,10 +25,10 @@ const isTogglingWatch = ref(false);
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 
 function getStatusLabel(): string {
-  if (!syncStatus.value) return 'Not configured';
-  if (syncStatus.value.status === 'synced') return 'Synced';
-  if (syncStatus.value.status === 'pending') return 'Pending';
-  return 'Not configured';
+  if (!syncStatus.value) return t('syncStatusPanel.status.notConfigured');
+  if (syncStatus.value.status === 'synced') return t('syncStatusPanel.status.synced');
+  if (syncStatus.value.status === 'pending') return t('syncStatusPanel.status.pending');
+  return t('syncStatusPanel.status.notConfigured');
 }
 
 function getStatusClass(): string {
@@ -36,18 +39,18 @@ function getStatusClass(): string {
 }
 
 function formatRelativeTime(dateStr: string | null): string {
-  if (!dateStr) return 'Never';
+  if (!dateStr) return t('syncStatusPanel.never');
   const date = new Date(dateStr);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffSec = Math.floor(diffMs / 1000);
-  if (diffSec < 60) return 'Just now';
+  if (diffSec < 60) return t('syncStatusPanel.justNow');
   const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffMin < 60) return t('syncStatusPanel.minutesAgo', { count: diffMin });
   const diffHour = Math.floor(diffMin / 60);
-  if (diffHour < 24) return `${diffHour}h ago`;
+  if (diffHour < 24) return t('syncStatusPanel.hoursAgo', { count: diffHour });
   const diffDay = Math.floor(diffHour / 24);
-  return `${diffDay}d ago`;
+  return t('syncStatusPanel.daysAgo', { count: diffDay });
 }
 
 async function loadSyncStatus() {
@@ -66,11 +69,11 @@ async function handleSync() {
   isSyncing.value = true;
   try {
     const result = await pluginExportApi.sync(props.pluginId, props.pluginDir);
-    showToast(`Synced ${result.synced} entities, skipped ${result.skipped}`, 'success');
+    showToast(t('syncStatusPanel.toast.synced', { synced: result.synced, skipped: result.skipped }), 'success');
     emit('synced');
     await loadSyncStatus();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Sync failed';
+    const message = err instanceof ApiError ? err.message : t('syncStatusPanel.toast.syncFailed');
     showToast(message, 'error');
   } finally {
     isSyncing.value = false;
@@ -86,9 +89,9 @@ async function handleToggleWatch() {
     if (syncStatus.value) {
       syncStatus.value.watching = newState;
     }
-    showToast(newState ? 'File watching enabled' : 'File watching disabled', 'success');
+    showToast(newState ? t('syncStatusPanel.toast.watchEnabled') : t('syncStatusPanel.toast.watchDisabled'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to toggle watch';
+    const message = err instanceof ApiError ? err.message : t('syncStatusPanel.toast.toggleFailed');
     showToast(message, 'error');
   } finally {
     isTogglingWatch.value = false;
@@ -111,7 +114,7 @@ onUnmounted(() => {
 <template>
   <div class="sync-status-panel">
     <div class="panel-header">
-      <h4 class="panel-title">Sync Status</h4>
+      <h4 class="panel-title">{{ t('syncStatusPanel.title') }}</h4>
       <span v-if="!isLoadingStatus" :class="['status-badge', getStatusClass()]">
         {{ getStatusLabel() }}
       </span>
@@ -119,24 +122,24 @@ onUnmounted(() => {
 
     <div v-if="isLoadingStatus" class="loading-state">
       <div class="spinner-sm"></div>
-      <span>Loading status...</span>
+      <span>{{ t('syncStatusPanel.loadingStatus') }}</span>
     </div>
 
     <template v-else>
       <div class="stats-row">
         <div class="stat-item">
-          <span class="stat-label">Entities tracked</span>
+          <span class="stat-label">{{ t('syncStatusPanel.entitiesTracked') }}</span>
           <span class="stat-value">{{ syncStatus?.entities_synced ?? 0 }}</span>
         </div>
         <div class="stat-item">
-          <span class="stat-label">Last sync</span>
+          <span class="stat-label">{{ t('syncStatusPanel.lastSync') }}</span>
           <span class="stat-value">{{ formatRelativeTime(syncStatus?.last_synced_at ?? null) }}</span>
         </div>
         <div class="stat-item">
-          <span class="stat-label">Watch</span>
+          <span class="stat-label">{{ t('syncStatusPanel.watch') }}</span>
           <span :class="['stat-value', syncStatus?.watching ? 'watch-active' : 'watch-inactive']">
             <span :class="['watch-dot', syncStatus?.watching ? 'dot-active' : 'dot-inactive']"></span>
-            {{ syncStatus?.watching ? 'Active' : 'Inactive' }}
+            {{ syncStatus?.watching ? t('syncStatusPanel.active') : t('syncStatusPanel.inactive') }}
           </span>
         </div>
       </div>
@@ -149,19 +152,19 @@ onUnmounted(() => {
         >
           <template v-if="isSyncing">
             <div class="spinner-xs"></div>
-            Syncing...
+            {{ t('syncStatusPanel.syncing') }}
           </template>
           <template v-else>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M23 4v6h-6M1 20v-6h6"/>
               <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
             </svg>
-            Sync Now
+            {{ t('syncStatusPanel.syncNow') }}
           </template>
         </button>
 
         <div class="toggle-container">
-          <span class="toggle-label">Watch for Changes</span>
+          <span class="toggle-label">{{ t('syncStatusPanel.watchForChanges') }}</span>
           <button
             :class="['toggle-switch', { active: syncStatus?.watching }]"
             :disabled="isTogglingWatch"

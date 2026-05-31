@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { repoBotDefaultsApi } from '../services/api/repo-bot-defaults';
 import type { AvailableBot, RepoBotBinding } from '../services/api/repo-bot-defaults';
 
 const showToast = useToast();
+const { t } = useI18n();
 
 const bindings = ref<RepoBotBinding[]>([]);
 const availableBots = ref<AvailableBot[]>([]);
@@ -35,9 +37,14 @@ async function toggleEnabled(binding: RepoBotBinding) {
   try {
     await repoBotDefaultsApi.toggleEnabled(binding.repo, newEnabled);
     binding.enabled = newEnabled;
-    showToast(`Default bots ${newEnabled ? 'enabled' : 'disabled'} for ${binding.repo}`, 'success');
+    showToast(
+      newEnabled
+        ? t('repoBotDefaults.toasts.enabled', { repo: binding.repo })
+        : t('repoBotDefaults.toasts.disabled', { repo: binding.repo }),
+      'success',
+    );
   } catch {
-    showToast(`Failed to update binding for ${binding.repo}`, 'error');
+    showToast(t('repoBotDefaults.toasts.updateFailed', { repo: binding.repo }), 'error');
   }
 }
 
@@ -46,9 +53,9 @@ async function removeBinding(repo: string) {
     await repoBotDefaultsApi.remove(repo);
     const idx = bindings.value.findIndex(b => b.repo === repo);
     if (idx !== -1) bindings.value.splice(idx, 1);
-    showToast('Repository binding removed', 'success');
+    showToast(t('repoBotDefaults.toasts.removed'), 'success');
   } catch {
-    showToast('Failed to remove binding', 'error');
+    showToast(t('repoBotDefaults.toasts.removeFailed'), 'error');
   }
 }
 
@@ -66,7 +73,7 @@ function toggleBotSelection(botId: string) {
 
 async function saveBinding() {
   if (!newRepo.value.trim() || newSelectedBots.value.length === 0) {
-    showToast('Enter a repository and select at least one bot', 'error');
+    showToast(t('repoBotDefaults.toasts.repoAndBotRequired'), 'error');
     return;
   }
   try {
@@ -78,9 +85,9 @@ async function saveBinding() {
     const data = await repoBotDefaultsApi.list();
     bindings.value = data.bindings;
     showAddModal.value = false;
-    showToast(`Default bots configured for ${newRepo.value.trim()}`, 'success');
+    showToast(t('repoBotDefaults.toasts.configured', { repo: newRepo.value.trim() }), 'success');
   } catch {
-    showToast('Failed to save binding', 'error');
+    showToast(t('repoBotDefaults.toasts.saveFailed'), 'error');
   }
 }
 
@@ -90,7 +97,7 @@ onMounted(async () => {
     bindings.value = data.bindings;
     availableBots.value = data.bots;
   } catch {
-    showToast('Failed to load repository bindings', 'error');
+    showToast(t('repoBotDefaults.toasts.loadFailed'), 'error');
   }
 });
 
@@ -101,13 +108,13 @@ const totalBound = computed(() => bindings.value.filter(b => b.enabled).length);
   <div class="repo-defaults">
 
     <PageHeader
-      title="Repository-Level Default Bots"
-      subtitle="Associate default bots with GitHub repos so new projects automatically inherit them."
+      :title="t('repoBotDefaults.title')"
+      :subtitle="t('repoBotDefaults.subtitle')"
     >
       <template #actions>
         <button class="btn btn-primary" @click="openAddModal">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Add Repository
+          {{ t('repoBotDefaults.addRepository') }}
         </button>
       </template>
     </PageHeader>
@@ -115,15 +122,15 @@ const totalBound = computed(() => bindings.value.filter(b => b.enabled).length);
     <div class="stats-row">
       <div class="stat-card">
         <span class="stat-value">{{ bindings.length }}</span>
-        <span class="stat-label">Repositories Configured</span>
+        <span class="stat-label">{{ t('repoBotDefaults.stats.reposConfigured') }}</span>
       </div>
       <div class="stat-card">
         <span class="stat-value">{{ totalBound }}</span>
-        <span class="stat-label">Active Bindings</span>
+        <span class="stat-label">{{ t('repoBotDefaults.stats.activeBindings') }}</span>
       </div>
       <div class="stat-card">
         <span class="stat-value">{{ bindings.reduce((s, b) => s + b.projectCount, 0) }}</span>
-        <span class="stat-label">Projects Inheriting Bots</span>
+        <span class="stat-label">{{ t('repoBotDefaults.stats.projectsInheriting') }}</span>
       </div>
     </div>
 
@@ -131,12 +138,12 @@ const totalBound = computed(() => bindings.value.filter(b => b.enabled).length);
       <div class="card-header">
         <h3>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
-          Repository Bindings
+          {{ t('repoBotDefaults.repositoryBindings') }}
         </h3>
       </div>
 
       <div v-if="bindings.length === 0" class="empty">
-        <p>No repositories configured yet. Click "Add Repository" to get started.</p>
+        <p>{{ t('repoBotDefaults.emptyBindings') }}</p>
       </div>
 
       <div v-else class="bindings-list">
@@ -144,7 +151,7 @@ const totalBound = computed(() => bindings.value.filter(b => b.enabled).length);
           <div class="binding-repo">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
             <span class="repo-name">{{ binding.repo }}</span>
-            <span class="project-count">{{ binding.projectCount }} project{{ binding.projectCount !== 1 ? 's' : '' }}</span>
+            <span class="project-count">{{ t('repoBotDefaults.projectCount', { count: binding.projectCount }) }}</span>
           </div>
 
           <div class="binding-bots">
@@ -164,9 +171,9 @@ const totalBound = computed(() => bindings.value.filter(b => b.enabled).length);
               :class="{ active: binding.enabled }"
               @click="toggleEnabled(binding)"
             >
-              {{ binding.enabled ? 'Enabled' : 'Disabled' }}
+              {{ binding.enabled ? t('repoBotDefaults.enabled') : t('repoBotDefaults.disabled') }}
             </button>
-            <button class="icon-btn" title="Remove" @click="removeBinding(binding.repo)">
+            <button class="icon-btn" :title="t('common.remove')" @click="removeBinding(binding.repo)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
             </button>
           </div>
@@ -178,17 +185,17 @@ const totalBound = computed(() => bindings.value.filter(b => b.enabled).length);
     <div v-if="showAddModal" class="modal-overlay" tabindex="-1" @click.self="showAddModal = false" @keydown.escape="showAddModal = false">
       <div class="modal">
         <div class="modal-header">
-          <h3>Add Repository Binding</h3>
+          <h3>{{ t('repoBotDefaults.modal.title') }}</h3>
           <button class="icon-btn" @click="showAddModal = false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
 
         <div class="modal-body">
-          <label class="field-label">GitHub Repository (owner/repo)</label>
+          <label class="field-label">{{ t('repoBotDefaults.modal.repoLabel') }}</label>
           <input v-model="newRepo" type="text" class="text-input" placeholder="e.g. acme/my-service" />
 
-          <label class="field-label" style="margin-top: 16px;">Default Bots</label>
+          <label class="field-label" style="margin-top: 16px;">{{ t('repoBotDefaults.modal.defaultBots') }}</label>
           <div class="bot-options">
             <label v-for="bot in availableBots" :key="bot.id" class="bot-option">
               <input
@@ -204,8 +211,8 @@ const totalBound = computed(() => bindings.value.filter(b => b.enabled).length);
         </div>
 
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="showAddModal = false">Cancel</button>
-          <button class="btn btn-primary" @click="saveBinding">Save Binding</button>
+          <button class="btn btn-secondary" @click="showAddModal = false">{{ t('common.cancel') }}</button>
+          <button class="btn btn-primary" @click="saveBinding">{{ t('repoBotDefaults.modal.saveBinding') }}</button>
         </div>
       </div>
     </div>

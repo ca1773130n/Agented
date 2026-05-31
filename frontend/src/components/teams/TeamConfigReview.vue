@@ -2,6 +2,9 @@
 import { ref, onMounted, computed } from 'vue';
 import type { GeneratedTeamConfig, GeneratedAgentConfig, TopologyType, TopologyConfig, EntityType } from '../../services/api';
 import { useToast } from '../../composables/useToast';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   config: GeneratedTeamConfig;
@@ -47,17 +50,17 @@ onMounted(() => {
   }));
 });
 
-const topologyOptions: { value: TopologyType; label: string; desc: string }[] = [
-  { value: 'sequential', label: 'Sequential Pipeline', desc: 'Agents execute in order' },
-  { value: 'parallel', label: 'Parallel Fan-out', desc: 'All agents run simultaneously' },
-  { value: 'coordinator', label: 'Coordinator', desc: 'Hub-spoke delegation' },
-  { value: 'generator_critic', label: 'Generator / Critic', desc: 'Iterative improvement' },
-];
+const topologyOptions = computed<{ value: TopologyType; label: string; desc: string }[]>(() => [
+  { value: 'sequential', label: t('teamConfigReview.topoSequential'), desc: t('teamConfigReview.topoSequentialDesc') },
+  { value: 'parallel', label: t('teamConfigReview.topoParallel'), desc: t('teamConfigReview.topoParallelDesc') },
+  { value: 'coordinator', label: t('teamConfigReview.topoCoordinator'), desc: t('teamConfigReview.topoCoordinatorDesc') },
+  { value: 'generator_critic', label: t('teamConfigReview.topoGeneratorCritic'), desc: t('teamConfigReview.topoGeneratorCriticDesc') },
+]);
 
-function getTopologyLabel(t: TopologyType | null): string {
-  if (!t) return 'None';
-  const opt = topologyOptions.find(o => o.value === t);
-  return opt ? opt.label : t;
+function getTopologyLabel(topo: TopologyType | null): string {
+  if (!topo) return t('teamConfigReview.none');
+  const opt = topologyOptions.value.find(o => o.value === topo);
+  return opt ? opt.label : topo;
 }
 
 function removeAgent(index: number) {
@@ -80,7 +83,7 @@ function getEntityTypeIcon(type: EntityType): string {
 
 function handleSave() {
   if (!editName.value.trim()) {
-    showToast('Team name is required', 'error');
+    showToast(t('teamConfigReview.nameRequired'), 'error');
     return;
   }
 
@@ -107,8 +110,8 @@ function handleSave() {
           <line x1="12" y1="9" x2="12" y2="13"/>
           <line x1="12" y1="17" x2="12.01" y2="17"/>
         </svg>
-        <span v-if="errorWarnings.length > 0">Some references could not be validated</span>
-        <span v-else>New items will be auto-created on save</span>
+        <span v-if="errorWarnings.length > 0">{{ t('teamConfigReview.refsNotValidated') }}</span>
+        <span v-else>{{ t('teamConfigReview.itemsAutoCreated') }}</span>
       </div>
       <ul v-if="errorWarnings.length > 0" class="warnings-list">
         <li v-for="(w, i) in errorWarnings" :key="'e-' + i">{{ w }}</li>
@@ -120,14 +123,14 @@ function handleSave() {
 
     <!-- Team Info Section -->
     <div class="review-section">
-      <h3 class="section-label">Team Information</h3>
+      <h3 class="section-label">{{ t('teamConfigReview.teamInfo') }}</h3>
       <div class="form-row">
         <div class="form-group flex-1">
-          <label>Name</label>
-          <input v-model="editName" type="text" placeholder="Team name" />
+          <label>{{ t('teamConfigReview.name') }}</label>
+          <input v-model="editName" type="text" :placeholder="t('teamConfigReview.namePlaceholder')" />
         </div>
         <div class="form-group color-group">
-          <label>Color</label>
+          <label>{{ t('teamConfigReview.color') }}</label>
           <div class="color-input-wrap">
             <input v-model="editColor" type="color" class="color-swatch" />
             <span class="color-hex">{{ editColor }}</span>
@@ -135,14 +138,14 @@ function handleSave() {
         </div>
       </div>
       <div class="form-group">
-        <label>Description</label>
-        <textarea v-model="editDescription" placeholder="Team description..." rows="3"></textarea>
+        <label>{{ t('teamConfigReview.description') }}</label>
+        <textarea v-model="editDescription" :placeholder="t('teamConfigReview.descriptionPlaceholder')" rows="3"></textarea>
       </div>
     </div>
 
     <!-- Topology Section -->
     <div class="review-section">
-      <h3 class="section-label">Topology</h3>
+      <h3 class="section-label">{{ t('teamConfigReview.topology') }}</h3>
       <div class="topology-selector">
         <button
           v-for="opt in topologyOptions"
@@ -164,10 +167,10 @@ function handleSave() {
 
     <!-- Agents & Assignments Section -->
     <div class="review-section">
-      <h3 class="section-label">Agents & Assignments ({{ editAgents.length }})</h3>
+      <h3 class="section-label">{{ t('teamConfigReview.agentsAndAssignments', { count: editAgents.length }) }}</h3>
 
       <div v-if="editAgents.length === 0" class="empty-agents">
-        No agents in configuration
+        {{ t('teamConfigReview.noAgents') }}
       </div>
 
       <div v-for="(agent, aIdx) in editAgents" :key="aIdx" class="agent-card" :class="{ invalid: agent.valid === false }">
@@ -178,9 +181,9 @@ function handleSave() {
                 v-model="agent.name"
                 type="text"
                 class="inline-edit agent-name-input"
-                placeholder="Agent name"
+                :placeholder="t('teamConfigReview.agentNamePlaceholder')"
               />
-              <button class="btn-icon btn-remove" @click="removeAgent(aIdx)" title="Remove agent">
+              <button class="btn-icon btn-remove" @click="removeAgent(aIdx)" :title="t('teamConfigReview.removeAgent')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="18" y1="6" x2="6" y2="18"/>
                   <line x1="6" y1="6" x2="18" y2="18"/>
@@ -191,21 +194,21 @@ function handleSave() {
               v-model="agent.role"
               type="text"
               class="inline-edit agent-role-input"
-              placeholder="Agent role"
+              :placeholder="t('teamConfigReview.agentRolePlaceholder')"
             />
           </div>
 
           <div class="agent-status">
-            <span v-if="agent.agent_id === null" class="status-new">New agent -- will need to be created</span>
-            <span v-else-if="agent.valid === false" class="status-invalid">Agent not found in system</span>
-            <span v-else class="status-valid">Existing agent</span>
+            <span v-if="agent.agent_id === null" class="status-new">{{ t('teamConfigReview.statusNew') }}</span>
+            <span v-else-if="agent.valid === false" class="status-invalid">{{ t('teamConfigReview.statusInvalid') }}</span>
+            <span v-else class="status-valid">{{ t('teamConfigReview.statusValid') }}</span>
             <span v-if="agent.agent_id" class="agent-id-display">{{ agent.agent_id }}</span>
           </div>
         </div>
 
         <!-- Assignments -->
         <div v-if="agent.assignments.length > 0" class="assignments-section">
-          <div class="assignments-label">Assignments</div>
+          <div class="assignments-label">{{ t('teamConfigReview.assignments') }}</div>
           <div class="assignment-pills">
             <div
               v-for="(asn, asIdx) in agent.assignments"
@@ -215,8 +218,8 @@ function handleSave() {
             >
               <span class="pill-type-icon">{{ getEntityTypeIcon(asn.entity_type) }}</span>
               <span class="pill-name">{{ asn.entity_name || asn.entity_id }}</span>
-              <span v-if="asn.needs_creation" class="pill-badge-new">NEW</span>
-              <button class="pill-remove" @click="removeAssignment(aIdx, asIdx)" title="Remove assignment">
+              <span v-if="asn.needs_creation" class="pill-badge-new">{{ t('teamConfigReview.new') }}</span>
+              <button class="pill-remove" @click="removeAssignment(aIdx, asIdx)" :title="t('teamConfigReview.removeAssignment')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="18" y1="6" x2="6" y2="18"/>
                   <line x1="6" y1="6" x2="18" y2="18"/>
@@ -225,20 +228,20 @@ function handleSave() {
             </div>
           </div>
         </div>
-        <div v-else class="no-assignments">No assignments</div>
+        <div v-else class="no-assignments">{{ t('teamConfigReview.noAssignments') }}</div>
       </div>
     </div>
 
     <!-- Action Buttons -->
     <div class="review-actions">
-      <button class="btn btn-secondary" @click="emit('cancel')">Cancel</button>
+      <button class="btn btn-secondary" @click="emit('cancel')">{{ t('common.cancel') }}</button>
       <button class="btn btn-primary" @click="handleSave">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
           <polyline points="17 21 17 13 7 13 7 21"/>
           <polyline points="7 3 7 8 15 8"/>
         </svg>
-        Save & Create Team
+        {{ t('teamConfigReview.saveAndCreate') }}
       </button>
     </div>
   </div>

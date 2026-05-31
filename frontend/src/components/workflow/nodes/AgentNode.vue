@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Handle, Position } from '@vue-flow/core'
+
+const { t } = useI18n()
 
 interface WorkflowAgentNodeData {
   label: string
@@ -20,11 +23,18 @@ const statusClass = computed(() =>
   props.data.executionStatus ? `status-${props.data.executionStatus}` : '',
 )
 
+const isUnconfigured = computed(() => {
+  const agentName = props.data.config?.agent_name
+  if (typeof agentName === 'string' && agentName) return false
+  const agentId = props.data.config?.agent_id
+  return !(typeof agentId === 'string' && agentId)
+})
+
 const agentDisplay = computed(() => {
   const agentName = props.data.config?.agent_name
   if (typeof agentName === 'string' && agentName) return agentName
   const agentId = props.data.config?.agent_id
-  return typeof agentId === 'string' && agentId ? agentId : 'Not configured'
+  return typeof agentId === 'string' && agentId ? agentId : t('componentsAgentNode.notConfigured')
 })
 
 const needsConfig = computed(() => {
@@ -35,14 +45,14 @@ const needsConfig = computed(() => {
 
 <template>
   <div :class="['workflow-node', 'node-agent', statusClass]">
-    <div v-if="needsConfig" class="validation-dot" title="Required configuration missing"></div>
+    <div v-if="needsConfig" class="validation-dot" :title="t('componentsAgentNode.requiredConfigMissing')"></div>
     <Handle type="target" :position="Position.Top" :style="inputHandleStyle" />
     <div class="node-header">
       <span class="node-icon">&#x1F916;</span>
       <span class="node-label">{{ data.label }}</span>
     </div>
     <div class="node-body">
-      <span :class="['agent-display', { unconfigured: agentDisplay === 'Not configured' }]">{{
+      <span :class="['agent-display', { unconfigured: isUnconfigured }]">{{
         agentDisplay
       }}</span>
     </div>

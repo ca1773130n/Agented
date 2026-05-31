@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   iteration: number;
@@ -33,12 +36,12 @@ const statusDotColor = computed(() => {
     <div class="progress-header">
       <div class="progress-left">
         <span class="status-dot" :style="{ background: statusDotColor }" />
-        <span class="progress-text">Iteration {{ iteration }} / {{ maxIterations }}</span>
+        <span class="progress-text">{{ t('ralphProgressBar.iteration', { current: iteration, max: maxIterations }) }}</span>
       </div>
       <span
         v-if="circuitBreakerTriggered"
         class="circuit-badge"
-      >CIRCUIT BREAK</span>
+      >{{ t('ralphProgressBar.circuitBreak') }}</span>
     </div>
     <div class="progress-track">
       <div

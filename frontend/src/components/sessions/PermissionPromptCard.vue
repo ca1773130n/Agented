@@ -13,7 +13,10 @@
  * inside the hook script.
  */
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { PermissionRequestPayload } from '../../composables/useProjectSession';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   request: PermissionRequestPayload;
@@ -57,7 +60,7 @@ const fullPayload = computed(() => {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
       </svg>
-      <span>Claude wants to use a tool</span>
+      <span>{{ t('permissionPromptCard.header') }}</span>
     </div>
 
     <div class="pp-body">
@@ -66,18 +69,18 @@ const fullPayload = computed(() => {
         <code v-if="previewLine" class="pp-preview">{{ previewLine }}</code>
       </div>
       <details class="pp-full">
-        <summary>Full input</summary>
+        <summary>{{ t('permissionPromptCard.fullInput') }}</summary>
         <pre class="pp-json">{{ fullPayload }}</pre>
       </details>
-      <p v-if="request.cwd" class="pp-cwd">in <code>{{ request.cwd }}</code></p>
+      <p v-if="request.cwd" class="pp-cwd">{{ t('permissionPromptCard.in') }} <code>{{ request.cwd }}</code></p>
     </div>
 
     <div class="pp-actions">
       <button type="button" class="pp-btn pp-btn-deny" @click="emit('deny')">
-        Deny
+        {{ t('permissionPromptCard.deny') }}
       </button>
       <button type="button" class="pp-btn pp-btn-allow" @click="emit('allow')">
-        Approve
+        {{ t('permissionPromptCard.approve') }}
       </button>
     </div>
   </div>

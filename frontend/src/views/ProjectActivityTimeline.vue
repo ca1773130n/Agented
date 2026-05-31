@@ -2,6 +2,9 @@
 import { ref, computed, onMounted } from 'vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { activityFeedApi } from '../services/api/activity-feed';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 type ActivityType = 'bot_run' | 'trigger_fired' | 'config_changed' | 'team_action' | 'execution_failed' | 'approval';
 
@@ -41,12 +44,12 @@ const filtered = computed(() => activities.value.filter(a => {
 }));
 
 const activityTypes: { value: ActivityType, label: string }[] = [
-  { value: 'bot_run', label: 'Bot Runs' },
-  { value: 'trigger_fired', label: 'Triggers' },
-  { value: 'config_changed', label: 'Config Changes' },
-  { value: 'team_action', label: 'Team Actions' },
-  { value: 'execution_failed', label: 'Failures' },
-  { value: 'approval', label: 'Approvals' },
+  { value: 'bot_run', label: t('projectActivityTimeline.typeBotRuns') },
+  { value: 'trigger_fired', label: t('projectActivityTimeline.typeTriggers') },
+  { value: 'config_changed', label: t('projectActivityTimeline.typeConfigChanges') },
+  { value: 'team_action', label: t('projectActivityTimeline.typeTeamActions') },
+  { value: 'execution_failed', label: t('projectActivityTimeline.typeFailures') },
+  { value: 'approval', label: t('projectActivityTimeline.typeApprovals') },
 ];
 
 function typeIcon(t: ActivityType) {
@@ -79,29 +82,29 @@ const groupedActivities = computed(() => groupByDate(filtered.value));
   <div class="activity-timeline">
 
     <PageHeader
-      title="Project Activity Timeline"
-      subtitle="Unified chronological feed of bot runs, trigger firings, config changes, and team actions."
+      :title="t('projectActivityTimeline.title')"
+      :subtitle="t('projectActivityTimeline.subtitle')"
     />
 
     <!-- Filters -->
     <div class="filters-bar card">
       <div class="filter-row">
-        <input v-model="searchText" class="search-input" placeholder="Search activities..." />
+        <input v-model="searchText" class="search-input" :placeholder="t('projectActivityTimeline.searchPlaceholder')" />
         <select v-model="filterProject" class="select-input">
-          <option value="">All projects</option>
+          <option value="">{{ t('projectActivityTimeline.allProjects') }}</option>
           <option v-for="p in projects" :key="p" :value="p">{{ p }}</option>
         </select>
         <button
           v-if="filterType || filterProject || searchText"
           class="btn btn-ghost btn-sm"
           @click="filterType = ''; filterProject = ''; searchText = '';"
-        >Clear</button>
+        >{{ t('projectActivityTimeline.clear') }}</button>
       </div>
       <div class="type-pills">
         <button
           :class="['type-pill', { active: filterType === '' }]"
           @click="filterType = ''"
-        >All</button>
+        >{{ t('projectActivityTimeline.all') }}</button>
         <button
           v-for="t in activityTypes"
           :key="t.value"
@@ -114,7 +117,7 @@ const groupedActivities = computed(() => groupByDate(filtered.value));
     <!-- Timeline -->
     <div class="timeline">
       <div v-if="filtered.length === 0" class="empty-state card">
-        <p>No activities match your filters.</p>
+        <p>{{ t('projectActivityTimeline.noActivities') }}</p>
       </div>
 
       <div v-for="group in groupedActivities" :key="group.date" class="date-group">

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { useSketchChat } from '../composables/useSketchChat';
 import { AiChatPanelManaged as AiChatPanel } from '@ai-accounts/vue-styled';
 import SketchClassification from '../components/sketches/SketchClassification.vue';
@@ -28,6 +29,7 @@ function handleNavigateTo(view: string, id?: string) {
 }
 
 const showToast = useToast();
+const { t } = useI18n();
 
 const {
   sketches,
@@ -174,7 +176,7 @@ async function loadInitialData() {
       loadError.value = error.value;
     }
   } catch (err) {
-    loadError.value = handleApiError(err, showToast, 'Failed to load sketch data');
+    loadError.value = handleApiError(err, showToast, t('sketchChat.loadFailed'));
   } finally {
     isLoading.value = false;
   }
@@ -186,7 +188,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <LoadingState v-if="isLoading" message="Loading sketches..." />
+  <LoadingState v-if="isLoading" :message="t('sketchChat.loading')" />
   <ErrorState v-else-if="loadError" :message="loadError" @retry="loadInitialData" />
   <div v-else class="sketch-chat-page">
     <!-- Left: Chat via AiChatPanel -->
@@ -200,7 +202,7 @@ onMounted(() => {
         :canFinalize="false"
         :isFinalizing="false"
         :assistantIconPaths="SKETCH_ICON_PATHS"
-        inputPlaceholder="Describe your idea or feature request..."
+        :inputPlaceholder="t('sketchChat.inputPlaceholder')"
         entityLabel="sketch"
         bannerTitle=""
         bannerButtonLabel=""
@@ -214,14 +216,14 @@ onMounted(() => {
         <template #header-extra>
           <div class="sketch-header-bar">
             <div class="header-left">
-              <h2 class="page-title">Sketch Ideation</h2>
+              <h2 class="page-title">{{ t('sketchChat.sketchIdeation') }}</h2>
               <button v-if="currentSketch" class="btn-clear" @click="handleClear">
-                New Sketch
+                {{ t('sketchChat.newSketch') }}
               </button>
             </div>
             <div class="header-right">
               <select v-model="selectedProjectId" class="project-selector">
-                <option :value="null">All Projects</option>
+                <option :value="null">{{ t('sketchChat.allProjects') }}</option>
                 <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
               </select>
             </div>
@@ -230,7 +232,7 @@ onMounted(() => {
           <!-- Classifying indicator -->
           <div v-if="isProcessing && !currentSketch?.classification_json" class="classifying-banner">
             <div class="loading-spinner small"></div>
-            <span>Classifying your sketch...</span>
+            <span>{{ t('sketchChat.classifying') }}</span>
           </div>
         </template>
 
@@ -241,18 +243,18 @@ onMounted(() => {
                 <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
               </svg>
             </div>
-            <h2>Sketch Ideation</h2>
-            <p>Describe your idea or feature request to get started.</p>
-            <p class="hint">Your sketch will be automatically classified and can be routed to a SuperAgent or Team.</p>
+            <h2>{{ t('sketchChat.sketchIdeation') }}</h2>
+            <p>{{ t('sketchChat.welcomeDescription') }}</p>
+            <p class="hint">{{ t('sketchChat.welcomeHint') }}</p>
           </div>
         </template>
       </AiChatPanel>
 
       <!-- Recent sketches list below chat -->
       <div class="sketch-list">
-        <div class="sketch-list-header">Recent Sketches</div>
+        <div class="sketch-list-header">{{ t('sketchChat.recentSketches') }}</div>
         <div v-if="sketches.length === 0" class="sketch-list-empty">
-          No sketches yet
+          {{ t('sketchChat.noSketches') }}
         </div>
         <div
           v-for="sketch in sketches"
@@ -273,7 +275,7 @@ onMounted(() => {
     <!-- Right: Info Panel -->
     <div class="info-panel" :class="{ 'info-panel-empty': !currentSketch }">
       <div v-if="!currentSketch" class="info-placeholder">
-        <p>Select or create a sketch to see details</p>
+        <p>{{ t('sketchChat.selectSketch') }}</p>
       </div>
       <div v-else class="info-content">
         <div class="info-header">
@@ -285,33 +287,33 @@ onMounted(() => {
         <SketchRouting :routing="parsedRouting" @navigateTo="(view: string, id?: string) => handleNavigateTo(view, id)" />
 
         <div v-if="showResults" class="results-panel">
-          <h4 class="results-title">Routing Results</h4>
+          <h4 class="results-title">{{ t('sketchChat.routingResults') }}</h4>
           <div v-if="parsedRouting" class="results-content">
             <div v-if="parsedRouting.target_type && parsedRouting.target_type !== 'none'" class="result-item">
-              <span class="result-label">Assigned To</span>
+              <span class="result-label">{{ t('sketchChat.assignedTo') }}</span>
               <span class="result-value">
                 {{ parsedRouting.target_type === 'super_agent' ? 'SuperAgent' : parsedRouting.target_type }}:
                 {{ parsedRouting.target_id }}
               </span>
             </div>
             <div v-if="parsedRouting.reason" class="result-item">
-              <span class="result-label">Reason</span>
+              <span class="result-label">{{ t('sketchChat.reason') }}</span>
               <span class="result-value">{{ parsedRouting.reason }}</span>
             </div>
             <div class="result-item">
-              <span class="result-label">Status</span>
+              <span class="result-label">{{ t('sketchChat.status') }}</span>
               <span :class="['result-status', getStatusClass(currentSketch!.status)]">{{ currentSketch!.status }}</span>
             </div>
           </div>
           <div v-else class="results-pending">
             <div class="loading-spinner small"></div>
-            <span>Processing...</span>
+            <span>{{ t('sketchChat.processing') }}</span>
           </div>
         </div>
 
         <!-- Team Collaboration -->
         <div v-if="delegations.length > 0" class="delegations-section">
-          <h4 class="delegations-title">Team Collaboration</h4>
+          <h4 class="delegations-title">{{ t('sketchChat.teamCollaboration') }}</h4>
           <div v-for="d in delegations" :key="d.super_agent_id" class="delegation-card">
             <div class="delegation-header">
               <span class="agent-name">{{ d.name }}</span>
@@ -324,7 +326,7 @@ onMounted(() => {
         <!-- Playground link — show as soon as routed -->
         <div v-if="playgroundLink && showResults" class="continue-link">
           <router-link :to="playgroundLink" class="playground-btn">
-            Open in Playground →
+            {{ t('sketchChat.openInPlayground') }}
           </router-link>
         </div>
       </div>

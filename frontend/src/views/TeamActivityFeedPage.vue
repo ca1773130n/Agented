@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { auditApi } from '../services/api';
 import type { AuditEvent } from '../services/api';
 import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
+
+const { t } = useI18n();
 
 type ActivityType = 'execution' | 'config_change' | 'bot_created' | 'bot_deleted' | 'trigger_added' | 'member_joined' | 'execution_failed';
 
@@ -75,16 +78,16 @@ const filteredEvents = computed(() => {
   });
 });
 
-const typeOptions: { value: ActivityType | 'all'; label: string }[] = [
-  { value: 'all', label: 'All Events' },
-  { value: 'execution', label: 'Executions' },
-  { value: 'execution_failed', label: 'Failures' },
-  { value: 'config_change', label: 'Config Changes' },
-  { value: 'bot_created', label: 'Bot Created' },
-  { value: 'bot_deleted', label: 'Bot Deleted' },
-  { value: 'trigger_added', label: 'Trigger Added' },
-  { value: 'member_joined', label: 'Member Joined' },
-];
+const typeOptions = computed<{ value: ActivityType | 'all'; label: string }[]>(() => [
+  { value: 'all', label: t('teamActivityFeed.types.all') },
+  { value: 'execution', label: t('teamActivityFeed.types.executions') },
+  { value: 'execution_failed', label: t('teamActivityFeed.types.failures') },
+  { value: 'config_change', label: t('teamActivityFeed.types.configChanges') },
+  { value: 'bot_created', label: t('teamActivityFeed.types.botCreated') },
+  { value: 'bot_deleted', label: t('teamActivityFeed.types.botDeleted') },
+  { value: 'trigger_added', label: t('teamActivityFeed.types.triggerAdded') },
+  { value: 'member_joined', label: t('teamActivityFeed.types.memberJoined') },
+]);
 
 function typeIcon(type: ActivityType): string {
   const icons: Record<ActivityType, string> = {
@@ -117,8 +120,8 @@ function formatDate(ts: string): string {
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
   const diffH = Math.floor(diffMs / 3600000);
-  if (diffH < 1) return 'just now';
-  if (diffH < 24) return `${diffH}h ago`;
+  if (diffH < 1) return t('teamActivityFeed.time.justNow');
+  if (diffH < 24) return t('teamActivityFeed.time.hoursAgo', { n: diffH });
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
@@ -138,14 +141,14 @@ const FEATURE_ENABLED = false;
 
     <NotEnabledBanner
       v-if="!FEATURE_ENABLED"
-      feature="Team activity feed"
-      detail="The team-scoped activity backend has not shipped yet. Entries shown below are placeholders only."
+      :feature="t('teamActivityFeed.banner.feature')"
+      :detail="t('teamActivityFeed.banner.detail')"
       testid="team-activity-not-enabled"
     />
 
     <PageHeader
-      title="Team Activity Feed"
-      subtitle="A real-time chronological feed of all bot runs, configuration changes, and team actions."
+      :title="t('teamActivityFeed.title')"
+      :subtitle="t('teamActivityFeed.subtitle')"
     />
 
     <!-- Filters -->
@@ -154,13 +157,13 @@ const FEATURE_ENABLED = false;
         <input
           v-model="searchText"
           class="search-input"
-          placeholder="Search events..."
+          :placeholder="t('teamActivityFeed.searchPlaceholder')"
         />
         <select v-model="filterType" class="select">
           <option v-for="opt in typeOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
         </select>
-        <input v-model="filterActor" class="input" placeholder="Filter by actor..." />
-        <span class="event-count">{{ filteredEvents.length }} events</span>
+        <input v-model="filterActor" class="input" :placeholder="t('teamActivityFeed.actorPlaceholder')" />
+        <span class="event-count">{{ t('teamActivityFeed.eventsCount', { count: filteredEvents.length }) }}</span>
       </div>
     </div>
 
@@ -199,7 +202,7 @@ const FEATURE_ENABLED = false;
       </div>
 
       <div v-if="filteredEvents.length === 0" class="empty-state">
-        No events match the current filters.
+        {{ t('teamActivityFeed.empty') }}
       </div>
     </div>
   </div>

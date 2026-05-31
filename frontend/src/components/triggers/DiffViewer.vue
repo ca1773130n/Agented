@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { OutputDiff } from '../../services/api';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   diffData: OutputDiff;
@@ -37,15 +40,15 @@ function lineClass(type: string): string {
       <span class="summary-stat removed">-{{ diffData.change_summary.removed }}</span>
       <span class="summary-stat unchanged">~{{ diffData.change_summary.unchanged }}</span>
       <span class="summary-info">
-        Original: {{ diffData.original_line_count }} lines |
-        Replay: {{ diffData.replay_line_count }} lines
+        {{ t('diffViewer.originalLines', { count: diffData.original_line_count }) }} |
+        {{ t('diffViewer.replayLines', { count: diffData.replay_line_count }) }}
       </span>
     </div>
 
     <!-- Empty State -->
     <div v-if="isEmpty" class="diff-empty">
-      <p>Outputs are identical</p>
-      <p class="diff-empty-sub">No differences found between original and replay outputs.</p>
+      <p>{{ t('diffViewer.identical') }}</p>
+      <p class="diff-empty-sub">{{ t('diffViewer.noDifferences') }}</p>
     </div>
 
     <!-- Diff Content -->
@@ -70,7 +73,7 @@ function lineClass(type: string): string {
       <!-- Show More Button -->
       <div v-if="isLargeDiff && hasMore" class="show-more">
         <button class="show-more-btn" @click="showMore">
-          Show more ({{ visibleCount }} / {{ totalLines }} lines)
+          {{ t('diffViewer.showMore', { visible: visibleCount, total: totalLines }) }}
         </button>
       </div>
     </div>

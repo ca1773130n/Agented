@@ -5,6 +5,7 @@
 -->
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import type { AuditRecord, AuditStats, ProjectInfo, Trigger } from '../../../services/api';
 import { auditApi, triggerApi, ApiError } from '../../../services/api';
@@ -21,6 +22,7 @@ import { useToast } from '../../../composables/useToast';
 import { useWebMcpTool } from '../../../composables/useWebMcpTool';
 
 const emit = defineEmits<{ loaded: [slug: string] }>();
+const { t } = useI18n();
 
 const router = useRouter();
 const showToast = useToast();
@@ -81,7 +83,7 @@ async function loadData() {
       securityTriggerStatus.value = secTrigger.execution_status;
     }
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load dashboard data';
+    const message = err instanceof ApiError ? err.message : t('securityCard.error.load');
     showToast(message, 'error');
   } finally {
     isLoading.value = false;
@@ -95,9 +97,9 @@ async function toggleAutoResolve() {
   try {
     await triggerApi.setAutoResolve('bot-security', newValue);
     securityTrigger.value.auto_resolve = newValue ? 1 : 0;
-    showToast(newValue ? 'Auto-resolve enabled' : 'Auto-resolve disabled', 'success');
+    showToast(newValue ? t('securityCard.toast.autoResolveEnabled') : t('securityCard.toast.autoResolveDisabled'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to update auto-resolve';
+    const message = err instanceof ApiError ? err.message : t('securityCard.error.autoResolve');
     showToast(message, 'error');
   }
 }
@@ -131,9 +133,9 @@ function getStatusBadgeClass(): string {
 
 function getStatusBadgeText(): string {
   if (!stats.value) return '-';
-  if (stats.value.current.status === 'pass') return 'All Clear';
-  if (stats.value.current.total_findings > 0) return `${stats.value.current.total_findings} Issues`;
-  return 'No Data';
+  if (stats.value.current.status === 'pass') return t('securityCard.allClear');
+  if (stats.value.current.total_findings > 0) return t('securityCard.issuesCount', { count: stats.value.current.total_findings });
+  return t('securityCard.noData');
 }
 
 function onScanComplete() {
@@ -145,16 +147,16 @@ function onResolveComplete() {
   showResolveModal.value = false;
 }
 
-const auditTableColumns: DataTableColumn[] = [
-  { key: 'project', label: 'Project' },
-  { key: 'audit_date', label: 'Date' },
-  { key: 'total_findings', label: 'Findings' },
-  { key: 'critical', label: 'Critical' },
-  { key: 'high', label: 'High' },
-  { key: 'medium', label: 'Medium' },
-  { key: 'low', label: 'Low' },
-  { key: 'status', label: 'Status' },
-];
+const auditTableColumns = computed<DataTableColumn[]>(() => [
+  { key: 'project', label: t('securityCard.col.project') },
+  { key: 'audit_date', label: t('securityCard.col.date') },
+  { key: 'total_findings', label: t('securityCard.col.findings') },
+  { key: 'critical', label: t('securityCard.col.critical') },
+  { key: 'high', label: t('securityCard.col.high') },
+  { key: 'medium', label: t('securityCard.col.medium') },
+  { key: 'low', label: t('securityCard.col.low') },
+  { key: 'status', label: t('securityCard.col.status') },
+]);
 
 function getAuditStatusVariant(status: string): 'success' | 'danger' | 'neutral' {
   if (status === 'pass') return 'success';
@@ -187,12 +189,12 @@ onMounted(loadData);
   <section id="security" class="security-dashboard lane-card">
     <header class="lane-card__head">
       <div>
-        <h2 class="lane-card__title">Security Scan</h2>
-        <p class="lane-card__subtitle">Findings + history across tracked projects</p>
+        <h2 class="lane-card__title">{{ t('securityCard.title') }}</h2>
+        <p class="lane-card__subtitle">{{ t('securityCard.subtitle') }}</p>
       </div>
     </header>
 
-    <LoadingState v-if="isLoading" message="Loading security data..." />
+    <LoadingState v-if="isLoading" :message="t('securityCard.loading')" />
 
     <template v-else>
       <!-- Current Security Status Card -->
@@ -206,46 +208,46 @@ onMounted(loadData);
                 </svg>
               </div>
               <div>
-                <h3>Security Status</h3>
-                <p class="status-subtitle">Based on the latest scan for each tracked project</p>
+                <h3>{{ t('securityCard.statusTitle') }}</h3>
+                <p class="status-subtitle">{{ t('securityCard.statusSubtitle') }}</p>
               </div>
             </div>
             <div class="status-actions">
               <span class="status-badge" :class="getStatusBadgeClass()">{{ getStatusBadgeText() }}</span>
-              <label v-if="securityTrigger" class="auto-resolve-toggle" title="Automatically resolve issues and create a PR for GitHub repos">
+              <label v-if="securityTrigger" class="auto-resolve-toggle" :title="t('securityCard.autoResolveTooltip')">
                 <input
                   type="checkbox"
                   :checked="securityTrigger.auto_resolve === 1"
                   @change="toggleAutoResolve"
                 />
-                <span class="toggle-label">Auto-resolve &amp; PR</span>
+                <span class="toggle-label">{{ t('securityCard.autoResolveLabel') }}</span>
               </label>
               <button class="btn btn-warning" @click="showRunScanModal = true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74"/>
                   <path d="M21 3v6h-6"/>
                 </svg>
-                Run Scan
+                {{ t('securityCard.runScan') }}
               </button>
               <button class="btn btn-primary" :disabled="!hasFindings" @click="showResolveModal = true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
                 </svg>
-                Resolve Issues
+                {{ t('securityCard.resolveIssues') }}
               </button>
             </div>
           </div>
 
           <div class="stats-grid">
-            <StatCard title="Open Findings" :value="stats?.current?.total_findings ?? '-'" />
-            <StatCard title="Critical" :value="stats?.current?.severity_totals?.critical ?? '-'" color="var(--accent-crimson)" />
-            <StatCard title="High" :value="stats?.current?.severity_totals?.high ?? '-'" color="var(--accent-amber)" />
-            <StatCard title="Medium + Low" :value="((stats?.current?.severity_totals?.medium ?? 0) + (stats?.current?.severity_totals?.low ?? 0)) || '-'" />
+            <StatCard :title="t('securityCard.stat.openFindings')" :value="stats?.current?.total_findings ?? '-'" />
+            <StatCard :title="t('securityCard.stat.critical')" :value="stats?.current?.severity_totals?.critical ?? '-'" color="var(--accent-crimson)" />
+            <StatCard :title="t('securityCard.stat.high')" :value="stats?.current?.severity_totals?.high ?? '-'" color="var(--accent-amber)" />
+            <StatCard :title="t('securityCard.stat.mediumLow')" :value="((stats?.current?.severity_totals?.medium ?? 0) + (stats?.current?.severity_totals?.low ?? 0)) || '-'" />
           </div>
 
           <div v-if="securityTriggerStatus.status === 'resolving'" class="resolving-banner">
             <div class="resolving-spinner"></div>
-            <span>Auto-resolving issues and creating pull requests...</span>
+            <span>{{ t('securityCard.resolvingBanner') }}</span>
           </div>
 
           <div v-if="securityTriggerStatus.pr_urls && securityTriggerStatus.pr_urls.length > 0" class="pr-urls-section">
@@ -254,7 +256,7 @@ onMounted(loadData);
                 <path d="M15 22v-4a4.8 4.8 0 00-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 004 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/>
                 <path d="M9 18c-4.51 2-5-2-7-2"/>
               </svg>
-              Pull Requests Created
+              {{ t('securityCard.prsCreated') }}
             </h4>
             <div class="pr-urls-list">
               <a
@@ -285,15 +287,15 @@ onMounted(loadData);
               <circle cx="12" cy="12" r="10"/>
               <path d="M12 6v6l4 2"/>
             </svg>
-            Historical Statistics
+            {{ t('securityCard.historicalStatistics') }}
           </h3>
-          <span class="card-badge">Cumulative</span>
+          <span class="card-badge">{{ t('securityCard.cumulative') }}</span>
         </div>
         <div class="stats-grid compact">
-          <StatCard title="Total Scans" :value="stats?.historical?.total_audits ?? '-'" />
-          <StatCard title="Projects Tracked" :value="(stats?.projects || []).length || '-'" />
-          <StatCard title="Total Findings" :value="stats?.historical?.total_findings ?? '-'" color="var(--accent-amber)" />
-          <StatCard title="High+ Severity" :value="((stats?.historical?.severity_totals?.critical ?? 0) + (stats?.historical?.severity_totals?.high ?? 0)) || '-'" color="var(--accent-crimson)" />
+          <StatCard :title="t('securityCard.stat.totalScans')" :value="stats?.historical?.total_audits ?? '-'" />
+          <StatCard :title="t('securityCard.stat.projectsTracked')" :value="(stats?.projects || []).length || '-'" />
+          <StatCard :title="t('securityCard.stat.totalFindings')" :value="stats?.historical?.total_findings ?? '-'" color="var(--accent-amber)" />
+          <StatCard :title="t('securityCard.stat.highPlusSeverity')" :value="((stats?.historical?.severity_totals?.critical ?? 0) + (stats?.historical?.severity_totals?.high ?? 0)) || '-'" color="var(--accent-crimson)" />
         </div>
       </div>
 
@@ -305,7 +307,7 @@ onMounted(loadData);
               <path d="M3 3v18h18"/>
               <path d="M18 17l-5-5-4 4-4-4"/>
             </svg>
-            Findings Over Time
+            {{ t('securityCard.findingsOverTime') }}
           </h3>
         </div>
         <FindingsChart :audits="auditHistory" />
@@ -318,15 +320,15 @@ onMounted(loadData);
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
             </svg>
-            Tracked Projects
+            {{ t('securityCard.trackedProjects') }}
           </h3>
-          <span class="card-badge">{{ projects.length }} total</span>
+          <span class="card-badge">{{ t('securityCard.totalCount', { count: projects.length }) }}</span>
         </div>
 
         <div v-if="projects.length === 0" class="empty-state">
           <div class="empty-icon">◇</div>
-          <p>No projects tracked yet</p>
-          <span>Add project paths to a bot to start tracking</span>
+          <p>{{ t('securityCard.noProjects') }}</p>
+          <span>{{ t('securityCard.noProjectsHint') }}</span>
         </div>
 
         <div v-else class="projects-grid">
@@ -344,15 +346,15 @@ onMounted(loadData);
               <div class="project-name" :title="project.project_path">
                 {{ project.project_name || project.project_path }}
                 <span class="project-type-badge" :class="project.project_type || 'local'">
-                  {{ project.project_type === 'github' ? 'GitHub' : 'Local' }}
+                  {{ project.project_type === 'github' ? 'GitHub' : t('securityCard.local') }}
                 </span>
               </div>
               <div class="project-meta">
                 <template v-if="project.last_status === 'not_scanned' || !project.last_audit">
-                  Not scanned yet<template v-if="project.registered_by_triggers?.length"> · Trigger: {{ project.registered_by_triggers[0] }}</template>
+                  {{ t('securityCard.notScanned') }}<template v-if="project.registered_by_triggers?.length"> · {{ t('securityCard.triggerLabel') }} {{ project.registered_by_triggers[0] }}</template>
                 </template>
                 <template v-else>
-                  {{ project.audit_count }} scan{{ project.audit_count !== 1 ? 's' : '' }} · Last: {{ formatDate(project.last_audit) }}
+                  {{ t('securityCard.scanCount', { count: project.audit_count }) }} · {{ t('securityCard.lastLabel') }} {{ formatDate(project.last_audit) }}
                 </template>
               </div>
             </div>
@@ -361,7 +363,7 @@ onMounted(loadData);
                 {{ project.last_status === 'not_scanned' || !project.last_audit ? '-' : (latestAuditByProject[project.project_path]?.total_findings ?? '-') }}
               </div>
               <div class="findings-label">
-                {{ project.last_status === 'not_scanned' || !project.last_audit ? 'pending' : 'findings' }}
+                {{ project.last_status === 'not_scanned' || !project.last_audit ? t('securityCard.pending') : t('securityCard.findings') }}
               </div>
             </div>
           </div>
@@ -376,7 +378,7 @@ onMounted(loadData);
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
               <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
             </svg>
-            Recent Audit Results
+            {{ t('securityCard.recentAuditResults') }}
           </h3>
         </div>
         <DataTable
@@ -386,7 +388,7 @@ onMounted(loadData);
           @row-click="(item: AuditRecord) => router.push({ name: 'audit-detail', params: { auditId: item.audit_id } })"
         >
           <template #empty>
-            <EmptyState title="No audit data available" />
+            <EmptyState :title="t('securityCard.noAuditData')" />
           </template>
           <template #cell-project="{ item }">
             <span class="cell-project">{{ item.project_name || item.project_path }}</span>

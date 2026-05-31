@@ -20,6 +20,7 @@ import {
   pluginApi,
   ApiError
 } from '../services/api';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import HarnessConnectionPanel from '../components/harness/HarnessConnectionPanel.vue';
@@ -31,6 +32,7 @@ const props = defineProps<{
   projectId?: string;
 }>();
 
+const { t } = useI18n();
 const showToast = useToast();
 
 // State
@@ -157,7 +159,7 @@ async function loadData() {
     // Load harness config
     await refreshConfig();
   } catch {
-    showToast('Failed to load harness data', 'error');
+    showToast(t('harnessIntegration.toast.loadFailed'), 'error');
   } finally {
     isLoading.value = false;
   }
@@ -181,11 +183,11 @@ async function loadHarness() {
     if (result.error) {
       showToast(result.error, 'error');
     } else {
-      showToast(result.message || 'Harness loaded successfully', 'success');
+      showToast(result.message || t('harnessIntegration.toast.loaded'), 'success');
       await loadData();
     }
   } catch (e) {
-    const message = e instanceof ApiError ? e.message : 'Failed to load harness';
+    const message = e instanceof ApiError ? e.message : t('harnessIntegration.toast.loadHarnessFailed');
     showToast(message, 'error');
   } finally {
     isLoadingHarness.value = false;
@@ -201,13 +203,13 @@ async function deployHarness() {
     if (result.error) {
       showToast(result.error, 'error');
     } else {
-      showToast(result.message || 'Harness deployed successfully', 'success');
+      showToast(result.message || t('harnessIntegration.toast.deployed'), 'success');
       if (result.pr_url) {
-        showToast(`PR created: ${result.pr_url}`, 'info');
+        showToast(t('harnessIntegration.toast.prCreated', { url: result.pr_url }), 'info');
       }
     }
   } catch (e) {
-    const message = e instanceof ApiError ? e.message : 'Failed to deploy harness';
+    const message = e instanceof ApiError ? e.message : t('harnessIntegration.toast.deployFailed');
     showToast(message, 'error');
   } finally {
     isDeployingHarness.value = false;
@@ -217,9 +219,9 @@ async function deployHarness() {
 // Copy config toast notification (clipboard write handled by scanner component)
 function onCopyConfig(success: boolean) {
   if (success) {
-    showToast('Configuration copied to clipboard', 'success');
+    showToast(t('harnessIntegration.toast.copied'), 'success');
   } else {
-    showToast('Failed to copy to clipboard', 'error');
+    showToast(t('harnessIntegration.toast.copyFailed'), 'error');
   }
 }
 
@@ -235,7 +237,7 @@ function onDownloadConfig() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showToast('Configuration downloaded', 'success');
+  showToast(t('harnessIntegration.toast.downloaded'), 'success');
 }
 
 // Refresh config when plugins selection changes in the scanner
@@ -264,8 +266,8 @@ onMounted(() => {
 <template>
   <div class="harness-page">
     <PageHeader
-      title="Harness Integration"
-      :subtitle="project ? `Configure harness settings for ${project.name}` : 'Build your unified harness configuration for Claude Code'"
+      :title="t('harnessIntegration.title')"
+      :subtitle="project ? t('harnessIntegration.subtitleProject', { name: project.name }) : t('harnessIntegration.subtitleGlobal')"
     >
       <template v-if="hasProject && hasGitHubRepo" #actions>
         <button
@@ -275,13 +277,13 @@ onMounted(() => {
         >
           <template v-if="isLoadingHarness">
             <div class="spinner-btn"></div>
-            Loading...
+            {{ t('common.loading') }}
           </template>
           <template v-else>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
             </svg>
-            Load from GitHub
+            {{ t('harnessIntegration.loadFromGitHub') }}
           </template>
         </button>
         <button
@@ -291,14 +293,14 @@ onMounted(() => {
         >
           <template v-if="isDeployingHarness">
             <div class="spinner-btn"></div>
-            Deploying...
+            {{ t('harnessIntegration.deploying') }}
           </template>
           <template v-else>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
               <path d="M14 2v6h6M10 9l-2 2m0 0l2 2m-2-2h8"/>
             </svg>
-            Deploy to GitHub
+            {{ t('harnessIntegration.deployToGitHub') }}
           </template>
         </button>
       </template>
@@ -314,7 +316,7 @@ onMounted(() => {
       </div>
       <div class="banner-content">
         <p>
-          Select a project to configure its harness settings, or view the global configuration below.
+          {{ t('harnessIntegration.infoBanner') }}
         </p>
       </div>
     </div>
@@ -325,7 +327,7 @@ onMounted(() => {
       :included-teams-count="includedTeams.length"
     />
 
-    <LoadingState v-if="isLoading" message="Loading harness configuration..." />
+    <LoadingState v-if="isLoading" :message="t('harnessIntegration.loadingConfig')" />
 
     <!-- Project data sections (teams, agents, commands, hooks, skills, plugins, scripts, config) -->
     <HarnessProjectScanner

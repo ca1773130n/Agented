@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type {
   MonitoringStatus,
   RotationSession,
@@ -44,6 +45,7 @@ const emit = defineEmits<{
   (e: 'select-projection-window', windowType: string): void;
 }>();
 
+const { t } = useI18n();
 const { parseWindowType } = useTokenFormatting();
 
 const rateWindow = computed<RateWindow>(() => props.selectedRateWindow || '24h');
@@ -202,12 +204,12 @@ function rateAvailable(rates: WindowSnapshot['consumption_rates']): boolean {
       <span
         v-if="sharedWith?.length"
         class="shared-creds-badge"
-        :title="'Shares credentials with: ' + sharedWith.join(', ')"
-      >Shared</span>
+        :title="t('monitoringAccountCard.sharesCredentialsWith', { accounts: sharedWith.join(', ') })"
+      >{{ t('monitoringAccountCard.shared') }}</span>
       <div v-if="rotationSession" class="session-indicator">
         <span class="session-dot"></span>
         <span class="session-label">
-          {{ rotationSession.backend_type || 'Running' }}
+          {{ rotationSession.backend_type || t('monitoringAccountCard.running') }}
           &middot; {{ rotationSession.execution_id?.slice(0, 8) }}
         </span>
       </div>
@@ -219,7 +221,7 @@ function rateAvailable(rates: WindowSnapshot['consumption_rates']): boolean {
     <!-- No data message for accounts with no monitoring data -->
     <div v-if="allWindowsNoData" class="monitoring-no-data">
       <span class="no-data-icon">!</span>
-      <span>No monitoring data available. Check if the account's OAuth token is valid.</span>
+      <span>{{ t('monitoringAccountCard.noMonitoringData') }}</span>
     </div>
 
     <!-- Gauges grid -->
@@ -245,7 +247,7 @@ function rateAvailable(rates: WindowSnapshot['consumption_rates']): boolean {
             {{ rateText(w.consumption_rates) }}
           </span>
           <span v-if="w.resets_at" class="resets-at-badge" :class="getResetUrgency(w.resets_at)">
-            <span class="resets-label">Resets in </span>
+            <span class="resets-label">{{ t('monitoringAccountCard.resetsIn') }} </span>
             <span class="resets-time">{{ getCountdownText(card.account_id, w.window_type) || formatRelativeReset(w.resets_at) }}</span>
           </span>
           <span v-if="w.eta" class="depletion-badge" :class="depletionUrgencyClass(w.eta)">
@@ -263,7 +265,7 @@ function rateAvailable(rates: WindowSnapshot['consumption_rates']): boolean {
         class="monitoring-trend-section"
       >
         <div class="trend-section-header" @click.stop>
-          <span class="trend-section-label">All Windows Usage</span>
+          <span class="trend-section-label">{{ t('monitoringAccountCard.allWindowsUsage') }}</span>
           <div class="rate-selector">
             <button
               v-for="(label, key) in rateWindowLabels"
@@ -286,7 +288,7 @@ function rateAvailable(rates: WindowSnapshot['consumption_rates']): boolean {
       <!-- Remaining time projection chart with window selector -->
       <div class="monitoring-trend-section">
         <div class="projection-header">
-          <span class="trend-section-label">Remaining Capacity</span>
+          <span class="trend-section-label">{{ t('monitoringAccountCard.remainingCapacity') }}</span>
           <div class="projection-window-selector" @click.stop>
             <button
               v-for="pw in projectionWindows"
@@ -302,13 +304,13 @@ function rateAvailable(rates: WindowSnapshot['consumption_rates']): boolean {
         <RemainingTimeChart
           v-if="projectionHistory.length >= 2"
           :history="projectionHistory"
-          :label="windowLabel(selectedProjectionWindowType || '') + ' remaining'"
+          :label="t('monitoringAccountCard.windowRemaining', { window: windowLabel(selectedProjectionWindowType || '') })"
           :resets-at="projectionResetAt"
           :time-range-start="effectiveChartStart"
           :time-range-end="effectiveChartEnd"
           :rate-per-hour="projectionRatePerHour"
         />
-        <div v-else class="trend-no-data">Not enough data yet</div>
+        <div v-else class="trend-no-data">{{ t('monitoringAccountCard.notEnoughData') }}</div>
       </div>
     </template>
   </div>

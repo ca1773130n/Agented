@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { settingsApi, ApiError } from '../services/api';
+const { t } = useI18n();
 const showToast = useToast();
 
 type SsoProtocol = 'saml' | 'oidc' | 'none';
@@ -61,14 +63,14 @@ const isTesting = ref(false);
 const testResult = ref<{ ok: boolean; message: string } | null>(null);
 const showCert = ref(false);
 
-const providers = [
+const providers = computed(() => [
   { id: 'okta', name: 'Okta', logo: '🔐', protocol: 'saml' as SsoProtocol },
   { id: 'azure', name: 'Azure AD', logo: '☁', protocol: 'saml' as SsoProtocol },
   { id: 'google', name: 'Google Workspace', logo: '🔵', protocol: 'oidc' as SsoProtocol },
   { id: 'onelogin', name: 'OneLogin', logo: '🟢', protocol: 'saml' as SsoProtocol },
   { id: 'pingid', name: 'PingID', logo: '🔷', protocol: 'saml' as SsoProtocol },
-  { id: 'custom', name: 'Custom IdP', logo: '⚙', protocol: 'saml' as SsoProtocol },
-];
+  { id: 'custom', name: t('ssoSettings.customIdp'), logo: '⚙', protocol: 'saml' as SsoProtocol },
+]);
 
 const spMetadataUrl = computed(() => `https://agented.example.com/auth/saml/metadata`);
 const acsUrl = computed(() => `https://agented.example.com/auth/saml/acs`);
@@ -106,7 +108,7 @@ async function loadSettings() {
     }
     applySettingsToConfig(ssoSettings);
   } catch (err) {
-    const msg = err instanceof ApiError ? err.message : 'Failed to load SSO settings';
+    const msg = err instanceof ApiError ? err.message : t('ssoSettings.error.loadFailed');
     loadError.value = msg;
   } finally {
     isLoading.value = false;
@@ -115,9 +117,9 @@ async function loadSettings() {
 
 onMounted(loadSettings);
 
-function selectProvider(p: typeof providers[0]) {
+function selectProvider(p: typeof providers.value[0]) {
   config.value.protocol = p.protocol;
-  showToast(`${p.name} template loaded`, 'info');
+  showToast(t('ssoSettings.toast.templateLoaded', { name: p.name }), 'info');
 }
 
 async function handleSave() {
@@ -142,9 +144,9 @@ async function handleSave() {
       ['sso_domain_whitelist', c.domainWhitelist],
     ];
     await Promise.all(pairs.map(([key, value]) => settingsApi.set(key, value)));
-    showToast('SSO configuration saved', 'success');
+    showToast(t('ssoSettings.toast.saved'), 'success');
   } catch (err) {
-    const msg = err instanceof ApiError ? err.message : 'Failed to save SSO config';
+    const msg = err instanceof ApiError ? err.message : t('ssoSettings.error.saveFailed');
     showToast(msg, 'error');
   } finally {
     isSaving.value = false;
@@ -164,10 +166,10 @@ async function testConnection() {
       await settingsApi.get(key);
     }
     testResult.value = ok
-      ? { ok: true, message: 'Connection verified. Identity provider responded successfully.' }
-      : { ok: false, message: 'Missing required fields. Fill in the IdP URL to test.' };
+      ? { ok: true, message: t('ssoSettings.test.verified') }
+      : { ok: false, message: t('ssoSettings.test.missingFields') };
   } catch (err) {
-    const msg = err instanceof ApiError ? err.message : 'Test connection failed';
+    const msg = err instanceof ApiError ? err.message : t('ssoSettings.test.failed');
     testResult.value = { ok: false, message: msg };
   } finally {
     isTesting.value = false;
@@ -175,7 +177,7 @@ async function testConnection() {
 }
 
 function copyToClipboard(text: string, label: string) {
-  navigator.clipboard.writeText(text).then(() => showToast(`${label} copied`, 'success'));
+  navigator.clipboard.writeText(text).then(() => showToast(t('ssoSettings.toast.copied', { label }), 'success'));
 }
 </script>
 
@@ -183,19 +185,19 @@ function copyToClipboard(text: string, label: string) {
   <div class="sso-page">
 
     <PageHeader
-      title="SSO / SAML Authentication"
-      subtitle="Configure enterprise single sign-on via SAML 2.0 or OIDC. Lets your team authenticate through Okta, Azure AD, Google Workspace, or any compatible identity provider."
+      :title="t('ssoSettings.title')"
+      :subtitle="t('ssoSettings.subtitle')"
     />
 
     <!-- Loading state -->
     <div v-if="isLoading" class="card" style="padding: 32px; text-align: center; color: var(--text-tertiary);">
-      Loading SSO settings...
+      {{ t('ssoSettings.loading') }}
     </div>
 
     <!-- Error state -->
     <div v-else-if="loadError" class="card" style="padding: 32px; text-align: center; color: #ef4444;">
       {{ loadError }}
-      <button class="btn btn-ghost" style="margin-top: 12px;" @click="loadSettings">Retry</button>
+      <button class="btn btn-ghost" style="margin-top: 12px;" @click="loadSettings">{{ t('common.retry') }}</button>
     </div>
 
     <!-- Main content -->
@@ -205,8 +207,8 @@ function copyToClipboard(text: string, label: string) {
     <div class="card enable-card">
       <div class="enable-row">
         <div class="enable-info">
-          <div class="enable-title">Enable Single Sign-On</div>
-          <div class="enable-sub">When enabled, users will be redirected to your identity provider to authenticate.</div>
+          <div class="enable-title">{{ t('ssoSettings.enableTitle') }}</div>
+          <div class="enable-sub">{{ t('ssoSettings.enableSub') }}</div>
         </div>
         <label class="toggle-switch">
           <input type="checkbox" v-model="config.enabled" />
@@ -218,7 +220,7 @@ function copyToClipboard(text: string, label: string) {
     <div v-if="config.enabled" class="sso-content">
       <!-- Provider quick-start -->
       <div class="card">
-        <div class="card-header">Identity Provider Quick-Start</div>
+        <div class="card-header">{{ t('ssoSettings.quickStart') }}</div>
         <div class="providers-grid">
           <button
             v-for="p in providers"
@@ -248,24 +250,24 @@ function copyToClipboard(text: string, label: string) {
 
       <!-- SAML config -->
       <div v-if="config.protocol === 'saml'" class="card config-card">
-        <div class="card-header">SAML 2.0 Configuration</div>
+        <div class="card-header">{{ t('ssoSettings.saml.configHeader') }}</div>
         <div class="form-body">
           <!-- SP metadata (read-only) -->
           <div class="form-section">
-            <div class="form-section-title">Service Provider Details (give to your IdP)</div>
+            <div class="form-section-title">{{ t('ssoSettings.saml.spDetails') }}</div>
             <div class="sp-row">
               <div class="sp-field">
-                <label class="field-label">SP Entity ID / Audience URI</label>
+                <label class="field-label">{{ t('ssoSettings.saml.spEntityId') }}</label>
                 <div class="copy-field">
                   <code class="copy-value">{{ spMetadataUrl }}</code>
-                  <button class="copy-btn" @click="copyToClipboard(spMetadataUrl, 'Entity ID')">Copy</button>
+                  <button class="copy-btn" @click="copyToClipboard(spMetadataUrl, t('ssoSettings.labels.entityId'))">{{ t('ssoSettings.copy') }}</button>
                 </div>
               </div>
               <div class="sp-field">
-                <label class="field-label">Assertion Consumer Service (ACS) URL</label>
+                <label class="field-label">{{ t('ssoSettings.saml.acsUrl') }}</label>
                 <div class="copy-field">
                   <code class="copy-value">{{ acsUrl }}</code>
-                  <button class="copy-btn" @click="copyToClipboard(acsUrl, 'ACS URL')">Copy</button>
+                  <button class="copy-btn" @click="copyToClipboard(acsUrl, t('ssoSettings.labels.acsUrl'))">{{ t('ssoSettings.copy') }}</button>
                 </div>
               </div>
             </div>
@@ -273,20 +275,20 @@ function copyToClipboard(text: string, label: string) {
 
           <!-- IdP settings -->
           <div class="form-section">
-            <div class="form-section-title">Identity Provider Settings</div>
+            <div class="form-section-title">{{ t('ssoSettings.idpSettings') }}</div>
             <div class="form-grid">
               <div class="form-field full">
-                <label class="field-label">IdP Entity ID</label>
+                <label class="field-label">{{ t('ssoSettings.saml.idpEntityId') }}</label>
                 <input v-model="config.samlEntityId" class="field-input" placeholder="https://your-idp.example.com/entity-id" />
               </div>
               <div class="form-field full">
-                <label class="field-label">IdP SSO URL (Single Sign-On URL)</label>
+                <label class="field-label">{{ t('ssoSettings.saml.idpSsoUrl') }}</label>
                 <input v-model="config.samlSsoUrl" class="field-input" placeholder="https://your-idp.example.com/saml/sso" />
               </div>
               <div class="form-field full">
                 <label class="field-label">
-                  IdP X.509 Certificate
-                  <button class="toggle-cert" @click="showCert = !showCert">{{ showCert ? 'Hide' : 'Show' }}</button>
+                  {{ t('ssoSettings.saml.idpCertificate') }}
+                  <button class="toggle-cert" @click="showCert = !showCert">{{ showCert ? t('ssoSettings.hide') : t('ssoSettings.show') }}</button>
                 </label>
                 <textarea
                   v-if="showCert"
@@ -295,14 +297,14 @@ function copyToClipboard(text: string, label: string) {
                   rows="6"
                   placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
                 ></textarea>
-                <div v-else class="cert-placeholder">{{ config.samlCertificate ? '••• certificate set •••' : 'No certificate set' }}</div>
+                <div v-else class="cert-placeholder">{{ config.samlCertificate ? t('ssoSettings.saml.certSet') : t('ssoSettings.saml.noCert') }}</div>
               </div>
               <div class="form-field">
-                <label class="field-label">Email Attribute</label>
+                <label class="field-label">{{ t('ssoSettings.saml.emailAttribute') }}</label>
                 <input v-model="config.samlAttributeEmail" class="field-input" placeholder="email" />
               </div>
               <div class="form-field">
-                <label class="field-label">Name Attribute</label>
+                <label class="field-label">{{ t('ssoSettings.saml.nameAttribute') }}</label>
                 <input v-model="config.samlAttributeName" class="field-input" placeholder="displayName" />
               </div>
             </div>
@@ -312,32 +314,32 @@ function copyToClipboard(text: string, label: string) {
 
       <!-- OIDC config -->
       <div v-if="config.protocol === 'oidc'" class="card config-card">
-        <div class="card-header">OpenID Connect Configuration</div>
+        <div class="card-header">{{ t('ssoSettings.oidc.configHeader') }}</div>
         <div class="form-body">
           <div class="form-section">
-            <div class="form-section-title">Callback URL (register with your IdP)</div>
+            <div class="form-section-title">{{ t('ssoSettings.oidc.callbackTitle') }}</div>
             <div class="copy-field">
               <code class="copy-value">{{ callbackUrl }}</code>
-              <button class="copy-btn" @click="copyToClipboard(callbackUrl, 'Callback URL')">Copy</button>
+              <button class="copy-btn" @click="copyToClipboard(callbackUrl, t('ssoSettings.labels.callbackUrl'))">{{ t('ssoSettings.copy') }}</button>
             </div>
           </div>
           <div class="form-section">
-            <div class="form-section-title">Identity Provider Settings</div>
+            <div class="form-section-title">{{ t('ssoSettings.idpSettings') }}</div>
             <div class="form-grid">
               <div class="form-field full">
-                <label class="field-label">Issuer URL / Discovery URL</label>
+                <label class="field-label">{{ t('ssoSettings.oidc.issuerUrl') }}</label>
                 <input v-model="config.oidcIssuerUrl" class="field-input" placeholder="https://accounts.google.com" />
               </div>
               <div class="form-field">
-                <label class="field-label">Client ID</label>
+                <label class="field-label">{{ t('ssoSettings.oidc.clientId') }}</label>
                 <input v-model="config.oidcClientId" class="field-input" placeholder="client_id" />
               </div>
               <div class="form-field">
-                <label class="field-label">Client Secret</label>
+                <label class="field-label">{{ t('ssoSettings.oidc.clientSecret') }}</label>
                 <input v-model="config.oidcClientSecret" class="field-input" type="password" placeholder="••••••••" />
               </div>
               <div class="form-field full">
-                <label class="field-label">Scopes</label>
+                <label class="field-label">{{ t('ssoSettings.oidc.scopes') }}</label>
                 <input v-model="config.oidcScopes" class="field-input" placeholder="openid email profile" />
               </div>
             </div>
@@ -347,29 +349,29 @@ function copyToClipboard(text: string, label: string) {
 
       <!-- Access policies -->
       <div class="card">
-        <div class="card-header">Access Policy</div>
+        <div class="card-header">{{ t('ssoSettings.accessPolicy') }}</div>
         <div class="form-body">
           <div class="form-grid">
             <div class="form-field full">
-              <label class="field-label">Allowed Email Domains (comma-separated, leave blank for any)</label>
+              <label class="field-label">{{ t('ssoSettings.allowedDomains') }}</label>
               <input v-model="config.domainWhitelist" class="field-input" placeholder="example.com, corp.example.com" />
             </div>
             <div class="form-field">
-              <label class="field-label">Default Role for New Users</label>
+              <label class="field-label">{{ t('ssoSettings.defaultRole') }}</label>
               <select v-model="config.defaultRole" class="field-select">
-                <option value="viewer">Viewer (read-only)</option>
-                <option value="member">Member</option>
-                <option value="admin">Admin</option>
+                <option value="viewer">{{ t('ssoSettings.roles.viewer') }}</option>
+                <option value="member">{{ t('ssoSettings.roles.member') }}</option>
+                <option value="admin">{{ t('ssoSettings.roles.admin') }}</option>
               </select>
             </div>
             <div class="form-field checkbox-field">
               <label class="checkbox-label">
                 <input type="checkbox" v-model="config.autoProvision" />
-                Auto-provision new users on first login
+                {{ t('ssoSettings.autoProvision') }}
               </label>
               <label class="checkbox-label">
                 <input type="checkbox" v-model="config.allowLocalLogin" />
-                Allow local username/password login as fallback
+                {{ t('ssoSettings.allowLocalLogin') }}
               </label>
             </div>
           </div>
@@ -385,10 +387,10 @@ function copyToClipboard(text: string, label: string) {
       <!-- Actions -->
       <div class="actions">
         <button class="btn btn-ghost" :disabled="isTesting" @click="testConnection">
-          {{ isTesting ? 'Testing...' : 'Test Connection' }}
+          {{ isTesting ? t('ssoSettings.testing') : t('ssoSettings.testConnection') }}
         </button>
         <button class="btn btn-primary" :disabled="isSaving" @click="handleSave">
-          {{ isSaving ? 'Saving...' : 'Save SSO Config' }}
+          {{ isSaving ? t('ssoSettings.saving') : t('ssoSettings.saveSsoConfig') }}
         </button>
       </div>
     </div>
@@ -397,8 +399,8 @@ function copyToClipboard(text: string, label: string) {
     <div v-else class="disabled-hint card">
       <div class="disabled-icon">🔒</div>
       <div class="disabled-text">
-        <div class="disabled-title">SSO is disabled</div>
-        <div class="disabled-sub">Enable SSO above to configure SAML or OIDC integration with your identity provider. Users will continue to log in with local credentials.</div>
+        <div class="disabled-title">{{ t('ssoSettings.disabledTitle') }}</div>
+        <div class="disabled-sub">{{ t('ssoSettings.disabledSub') }}</div>
       </div>
     </div>
 

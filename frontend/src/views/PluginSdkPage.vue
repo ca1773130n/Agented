@@ -3,6 +3,9 @@ import { ref, onMounted } from 'vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import { pluginApi, ApiError } from '../services/api';
 import type { Plugin } from '../services/api';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 type TabId = 'init' | 'develop' | 'test' | 'publish';
 
@@ -34,27 +37,27 @@ const loadError = ref<string | null>(null);
 const tabs = ref<Tab[]>([
   {
     id: 'init',
-    label: 'Init',
+    label: t('pluginSdk.tabs.init.label'),
     command: 'agented-sdk init my-plugin\ncd my-plugin',
-    description: 'Scaffold a new plugin project with the recommended directory structure and a sample manifest.',
+    description: t('pluginSdk.tabs.init.description'),
   },
   {
     id: 'develop',
-    label: 'Develop',
+    label: t('pluginSdk.tabs.develop.label'),
     command: 'agented-sdk dev\n# Hot-reloads on file changes — plugin is live at http://localhost:4200',
-    description: 'Start the local dev server. Your plugin hooks are served and invoked just like in production.',
+    description: t('pluginSdk.tabs.develop.description'),
   },
   {
     id: 'test',
-    label: 'Test',
+    label: t('pluginSdk.tabs.test.label'),
     command: 'agented-sdk test\nagented-sdk test --hook on_execution_complete\nagented-sdk test --coverage',
-    description: 'Run your plugin\'s test suite. Use --hook to target a specific lifecycle hook, or --coverage for a full report.',
+    description: t('pluginSdk.tabs.test.description'),
   },
   {
     id: 'publish',
-    label: 'Publish',
+    label: t('pluginSdk.tabs.publish.label'),
     command: 'agented-sdk build\nagented-sdk publish --org my-org',
-    description: 'Bundle the plugin and publish it to your Agented organisation. Requires an API key set in AGENTED_API_KEY.',
+    description: t('pluginSdk.tabs.publish.description'),
   },
 ]);
 
@@ -67,7 +70,7 @@ function pluginToDisplay(p: Plugin): DisplayPlugin {
     id: p.id,
     name: p.name,
     version: p.version || '0.0.0',
-    description: p.description || 'No description',
+    description: p.description || t('pluginSdk.noDescription'),
     triggers: ['on_execution_complete'],
     status: 'idle',
   };
@@ -88,7 +91,7 @@ async function loadPlugins() {
       ];
     }
   } catch (err) {
-    const msg = err instanceof ApiError ? err.message : 'Failed to load plugins';
+    const msg = err instanceof ApiError ? err.message : t('pluginSdk.errors.load');
     loadError.value = msg;
     // Fall back to examples on error
     displayPlugins.value = [
@@ -170,13 +173,13 @@ async function copyInstall() {
 }
 
 const manifestFields = [
-  { field: 'name', type: 'string', required: true, description: 'Unique plugin identifier (kebab-case)' },
-  { field: 'version', type: 'string', required: true, description: 'Semantic version, e.g. "1.0.0"' },
-  { field: 'description', type: 'string', required: true, description: 'Short human-readable description' },
-  { field: 'triggers', type: 'string[]', required: true, description: 'Lifecycle hooks the plugin subscribes to' },
-  { field: 'hooks', type: 'object', required: true, description: 'Map of hook names to handler file paths' },
-  { field: 'permissions', type: 'string[]', required: false, description: 'Scopes required: executions:read, bots:write, …' },
-  { field: 'config', type: 'object', required: false, description: 'User-configurable settings schema (JSON Schema)' },
+  { field: 'name', type: 'string', required: true, description: t('pluginSdk.manifest.name') },
+  { field: 'version', type: 'string', required: true, description: t('pluginSdk.manifest.version') },
+  { field: 'description', type: 'string', required: true, description: t('pluginSdk.manifest.description') },
+  { field: 'triggers', type: 'string[]', required: true, description: t('pluginSdk.manifest.triggers') },
+  { field: 'hooks', type: 'object', required: true, description: t('pluginSdk.manifest.hooks') },
+  { field: 'permissions', type: 'string[]', required: false, description: t('pluginSdk.manifest.permissions') },
+  { field: 'config', type: 'object', required: false, description: t('pluginSdk.manifest.config') },
 ];
 </script>
 
@@ -184,8 +187,8 @@ const manifestFields = [
   <div class="plugin-sdk">
 
     <PageHeader
-      title="Plugin SDK & CLI"
-      subtitle="Build, test, and publish custom plugins for Agented — locally before going live."
+      :title="t('pluginSdk.title')"
+      :subtitle="t('pluginSdk.subtitle')"
     />
 
     <!-- Installation -->
@@ -197,12 +200,12 @@ const manifestFields = [
             <polyline points="7 10 12 15 17 10"/>
             <line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
-          Installation
+          {{ t('pluginSdk.installation') }}
         </h3>
         <span class="badge-info">npm · yarn · pnpm</span>
       </div>
       <div class="install-body">
-        <p class="install-desc">Install the Agented Plugin SDK globally to get the <code>agented-sdk</code> CLI.</p>
+        <p class="install-desc">{{ t('pluginSdk.installDescBefore') }} <code>agented-sdk</code> {{ t('pluginSdk.installDescAfter') }}</p>
         <div class="code-block">
           <pre class="code-pre"><span class="code-prompt">$</span> npm install -g @agented/plugin-sdk</pre>
           <button class="btn btn-ghost-sm copy-btn" @click="copyInstall">
@@ -213,10 +216,10 @@ const manifestFields = [
             <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="color: #34d399">
               <polyline points="20 6 9 17 4 12"/>
             </svg>
-            {{ copied ? 'Copied!' : 'Copy' }}
+            {{ copied ? t('pluginSdk.copied') : t('pluginSdk.copy') }}
           </button>
         </div>
-        <p class="install-note">Requires Node.js 18+. Use <code>agented-sdk --version</code> to confirm the install.</p>
+        <p class="install-note">{{ t('pluginSdk.installNoteBefore') }} <code>agented-sdk --version</code> {{ t('pluginSdk.installNoteAfter') }}</p>
       </div>
     </div>
 
@@ -227,7 +230,7 @@ const manifestFields = [
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
           </svg>
-          Quick Start
+          {{ t('pluginSdk.quickStart') }}
         </h3>
       </div>
       <div class="tabs-nav">
@@ -258,20 +261,20 @@ const manifestFields = [
             <circle cx="12" cy="12" r="10"/>
             <polygon points="10 8 16 12 10 16 10 8"/>
           </svg>
-          Local Runner
+          {{ t('pluginSdk.localRunner') }}
         </h3>
-        <span class="badge-info">Simulated environment</span>
+        <span class="badge-info">{{ t('pluginSdk.simulatedEnvironment') }}</span>
       </div>
 
       <div v-if="isLoading" style="padding: 32px; text-align: center; color: var(--text-tertiary);">
-        Loading plugins...
+        {{ t('pluginSdk.loadingPlugins') }}
       </div>
       <div v-else-if="loadError" style="padding: 32px; text-align: center; color: #ef4444;">
         {{ loadError }}
-        <button class="btn btn-run" style="margin-top: 12px;" @click="loadPlugins">Retry</button>
+        <button class="btn btn-run" style="margin-top: 12px;" @click="loadPlugins">{{ t('common.retry') }}</button>
       </div>
       <div v-else-if="displayPlugins.length === 0" style="padding: 32px; text-align: center; color: var(--text-tertiary);">
-        No plugins found. Create a plugin to see it here.
+        {{ t('pluginSdk.noPlugins') }}
       </div>
       <div v-else class="runner-layout">
         <div class="plugin-list">
@@ -292,9 +295,9 @@ const manifestFields = [
               </div>
             </div>
             <div class="plugin-controls">
-              <span v-if="plugin.status === 'done'" class="run-status status-done">Done</span>
-              <span v-else-if="plugin.status === 'error'" class="run-status status-error">Error</span>
-              <span v-else-if="plugin.status === 'running'" class="run-status status-running">Running…</span>
+              <span v-if="plugin.status === 'done'" class="run-status status-done">{{ t('pluginSdk.status.done') }}</span>
+              <span v-else-if="plugin.status === 'error'" class="run-status status-error">{{ t('pluginSdk.status.error') }}</span>
+              <span v-else-if="plugin.status === 'running'" class="run-status status-running">{{ t('pluginSdk.status.running') }}</span>
               <button
                 class="btn btn-run"
                 :disabled="!!runningPlugin"
@@ -303,7 +306,7 @@ const manifestFields = [
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
                   <polygon points="5 3 19 12 5 21 5 3"/>
                 </svg>
-                Run Locally
+                {{ t('pluginSdk.runLocally') }}
               </button>
             </div>
           </div>
@@ -314,11 +317,11 @@ const manifestFields = [
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14" style="color: var(--accent-cyan)">
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
             </svg>
-            Simulated Output
+            {{ t('pluginSdk.simulatedOutput') }}
           </div>
           <div class="log-body">
             <div v-if="logLines.length === 0" class="log-empty">
-              Select a plugin and click "Run Locally" to see simulated output here.
+              {{ t('pluginSdk.logEmpty') }}
             </div>
             <div
               v-for="(line, idx) in logLines"
@@ -346,20 +349,19 @@ const manifestFields = [
             <line x1="16" y1="17" x2="8" y2="17"/>
             <polyline points="10 9 9 9 8 9"/>
           </svg>
-          Plugin Manifest Schema
+          {{ t('pluginSdk.manifestSchema') }}
         </h3>
         <code class="badge-code">agented.plugin.json</code>
       </div>
       <div class="schema-body">
         <p class="schema-intro">
-          Every plugin must include an <code>agented.plugin.json</code> manifest at the project root.
-          Required fields are marked with <span class="req-mark">*</span>.
+          {{ t('pluginSdk.schemaIntroBefore') }} <code>agented.plugin.json</code> {{ t('pluginSdk.schemaIntroAfter') }} <span class="req-mark">*</span>.
         </p>
         <div class="schema-table">
           <div class="schema-row schema-heading">
-            <span>Field</span>
-            <span>Type</span>
-            <span>Description</span>
+            <span>{{ t('pluginSdk.schemaHeading.field') }}</span>
+            <span>{{ t('pluginSdk.schemaHeading.type') }}</span>
+            <span>{{ t('pluginSdk.schemaHeading.description') }}</span>
           </div>
           <div
             v-for="f in manifestFields"
@@ -376,7 +378,7 @@ const manifestFields = [
         </div>
 
         <div class="manifest-example">
-          <div class="example-label">Example manifest</div>
+          <div class="example-label">{{ t('pluginSdk.exampleManifest') }}</div>
           <pre class="code-pre code-json">{
   "name": "my-plugin",
   "version": "1.0.0",

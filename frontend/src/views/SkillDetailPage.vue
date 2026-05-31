@@ -9,6 +9,9 @@ import EntityLayout from '../layouts/EntityLayout.vue';
 import { useToast } from '../composables/useToast';
 import { handleApiError } from '../services/api/error-handler';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   skillId?: number;
@@ -75,7 +78,7 @@ async function loadSkill() {
     }
     return skill.value;
   } catch (err) {
-    handleApiError(err, showToast, 'Failed to load skill');
+    handleApiError(err, showToast, t('skillDetail.toast.loadFailed'));
     throw err;
   }
 }
@@ -91,10 +94,10 @@ async function saveSkill() {
       enabled: editEnabled.value ? 1 : 0,
       selected_for_harness: editHarness.value ? 1 : 0,
     });
-    showToast('Skill updated', 'success');
+    showToast(t('skillDetail.toast.updated'), 'success');
     await loadSkill();
   } catch (e) {
-    const msg = e instanceof ApiError ? e.message : 'Failed to save skill';
+    const msg = e instanceof ApiError ? e.message : t('skillDetail.toast.saveFailed');
     showToast(msg, 'error');
   } finally {
     isSaving.value = false;
@@ -111,10 +114,10 @@ async function confirmDeleteSkill() {
   if (!skill.value) return;
   try {
     await userSkillsApi.delete(skill.value.id);
-    showToast('Skill removed', 'success');
+    showToast(t('skillDetail.toast.removed'), 'success');
     router.push({ name: 'my-skills' });
   } catch {
-    showToast('Failed to remove skill', 'error');
+    showToast(t('skillDetail.toast.removeFailed'), 'error');
   }
 }
 
@@ -127,13 +130,13 @@ async function confirmDeleteSkill() {
     <div class="skill-detail-page">
 
     <template v-if="skill">
-      <PageHeader :title="skill.skill_name || 'Skill'" :subtitle="skill.description">
+      <PageHeader :title="skill.skill_name || t('skillDetail.fallbackTitle')" :subtitle="skill.description">
         <template #actions>
           <button class="btn btn-danger" @click="deleteSkill">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
             </svg>
-            Remove
+            {{ t('common.remove') }}
           </button>
         </template>
       </PageHeader>
@@ -141,29 +144,29 @@ async function confirmDeleteSkill() {
       <div class="detail-card">
 
         <div class="form-group">
-          <label>Name</label>
+          <label>{{ t('skillDetail.fields.name') }}</label>
           <input v-model="editName" type="text" />
         </div>
 
         <div class="form-group">
-          <label>Path</label>
+          <label>{{ t('skillDetail.fields.path') }}</label>
           <input v-model="editPath" type="text" class="mono" />
         </div>
 
         <div class="form-group">
-          <label>Description</label>
+          <label>{{ t('skillDetail.fields.description') }}</label>
           <textarea v-model="editDescription" rows="4"></textarea>
         </div>
 
         <div v-if="parsedMetadata" class="metadata-section">
           <div v-if="parsedMetadata.triggers?.length" class="meta-group">
-            <label>Triggers</label>
+            <label>{{ t('skillDetail.fields.triggers') }}</label>
             <div class="meta-tags">
               <span v-for="trigger in parsedMetadata.triggers" :key="trigger" class="meta-tag">{{ trigger }}</span>
             </div>
           </div>
           <div v-if="parsedMetadata.examples?.length" class="meta-group">
-            <label>Examples</label>
+            <label>{{ t('skillDetail.fields.examples') }}</label>
             <ul class="meta-list">
               <li v-for="example in parsedMetadata.examples" :key="example">{{ example }}</li>
             </ul>
@@ -172,15 +175,15 @@ async function confirmDeleteSkill() {
 
         <div class="toggle-section">
           <label class="toggle-row">
-            <span>Enabled</span>
+            <span>{{ t('skillDetail.toggles.enabled') }}</span>
             <button class="toggle-btn" :class="{ active: editEnabled }" @click="editEnabled = !editEnabled">
               <span class="toggle-knob"></span>
             </button>
           </label>
           <label class="toggle-row">
             <div class="toggle-label">
-              <span>Include to Harness</span>
-              <span class="toggle-hint">When enabled, this skill is bundled into the harness plugin configuration for deployment</span>
+              <span>{{ t('skillDetail.toggles.includeToHarness') }}</span>
+              <span class="toggle-hint">{{ t('skillDetail.toggles.includeToHarnessHint') }}</span>
             </div>
             <button class="toggle-btn" :class="{ active: editHarness }" @click="editHarness = !editHarness">
               <span class="toggle-knob"></span>
@@ -189,9 +192,9 @@ async function confirmDeleteSkill() {
         </div>
 
         <div class="form-actions">
-          <button class="btn" @click="router.push({ name: 'my-skills' })">Cancel</button>
+          <button class="btn" @click="router.push({ name: 'my-skills' })">{{ t('common.cancel') }}</button>
           <button class="btn btn-primary" :disabled="isSaving" @click="saveSkill">
-            {{ isSaving ? 'Saving...' : 'Save Changes' }}
+            {{ isSaving ? t('skillDetail.actions.saving') : t('skillDetail.actions.saveChanges') }}
           </button>
         </div>
       </div>
@@ -199,9 +202,9 @@ async function confirmDeleteSkill() {
 
     <ConfirmModal
       :open="showDeleteConfirm"
-      title="Remove Skill"
-      message="Remove this skill from your library?"
-      confirm-label="Remove"
+      :title="t('skillDetail.deleteModal.title')"
+      :message="t('skillDetail.deleteModal.message')"
+      :confirm-label="t('common.remove')"
       variant="danger"
       @confirm="confirmDeleteSkill"
       @cancel="showDeleteConfirm = false"

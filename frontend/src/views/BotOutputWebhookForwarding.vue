@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 import { integrationApi, ApiError } from '../services/api';
 import type { Integration } from '../services/api';
+const { t } = useI18n();
 const showToast = useToast();
 
 const isLoading = ref(true);
@@ -30,17 +32,17 @@ const isTesting = ref<string | null>(null);
 const isSaving = ref(false);
 
 const eventOptions = [
-  { value: 'execution_complete', label: 'Execution Complete' },
-  { value: 'execution_failed', label: 'Execution Failed' },
-  { value: 'execution_started', label: 'Execution Started' },
-  { value: 'approval_required', label: 'Approval Required' },
+  { value: 'execution_complete', label: t('botOutputWebhookForwarding.event.executionComplete') },
+  { value: 'execution_failed', label: t('botOutputWebhookForwarding.event.executionFailed') },
+  { value: 'execution_started', label: t('botOutputWebhookForwarding.event.executionStarted') },
+  { value: 'approval_required', label: t('botOutputWebhookForwarding.event.approvalRequired') },
 ];
 
 function integrationToRule(i: Integration): ForwardingRule {
   const config = i.config ?? {};
   return {
     id: i.id,
-    botName: i.name || i.trigger_id || 'Unknown',
+    botName: i.name || i.trigger_id || t('botOutputWebhookForwarding.unknown'),
     targetUrl: (config.target_url as string) ?? (config.url as string) ?? '',
     enabled: i.enabled,
     events: (config.events as string[]) ?? ['execution_complete'],
@@ -64,7 +66,7 @@ async function loadRules() {
     if (e instanceof ApiError) {
       error.value = e.message;
     } else {
-      error.value = 'Failed to load forwarding rules';
+      error.value = t('botOutputWebhookForwarding.toast.loadFailed');
     }
     showToast(error.value, 'error');
   } finally {
@@ -83,12 +85,12 @@ async function testDelivery(rule: ForwardingRule) {
   try {
     const result = await integrationApi.test(rule.id);
     if (result.success) {
-      showToast(`Test payload delivered to ${rule.targetUrl}`, 'success');
+      showToast(t('botOutputWebhookForwarding.toast.testDelivered', { url: rule.targetUrl }), 'success');
     } else {
-      showToast(`Test failed: ${result.message}`, 'error');
+      showToast(t('botOutputWebhookForwarding.toast.testFailedMsg', { message: result.message }), 'error');
     }
   } catch {
-    showToast('Test delivery failed', 'error');
+    showToast(t('botOutputWebhookForwarding.toast.testDeliveryFailed'), 'error');
   } finally {
     isTesting.value = null;
   }
@@ -96,7 +98,7 @@ async function testDelivery(rule: ForwardingRule) {
 
 async function addRule() {
   if (!newBotName.value || !newTargetUrl.value) {
-    showToast('Bot name and target URL are required', 'error');
+    showToast(t('botOutputWebhookForwarding.toast.fieldsRequired'), 'error');
     return;
   }
   isSaving.value = true;
@@ -113,10 +115,10 @@ async function addRule() {
     newBotName.value = '';
     newTargetUrl.value = '';
     isAdding.value = false;
-    showToast('Forwarding rule added', 'success');
+    showToast(t('botOutputWebhookForwarding.toast.ruleAdded'), 'success');
     await loadRules();
   } catch {
-    showToast('Failed to add forwarding rule', 'error');
+    showToast(t('botOutputWebhookForwarding.toast.addFailed'), 'error');
   } finally {
     isSaving.value = false;
   }
@@ -126,14 +128,14 @@ async function removeRule(rule: ForwardingRule) {
   try {
     await integrationApi.delete(rule.id);
     rules.value = rules.value.filter(r => r.id !== rule.id);
-    showToast('Forwarding rule removed', 'success');
+    showToast(t('botOutputWebhookForwarding.toast.ruleRemoved'), 'success');
   } catch {
-    showToast('Failed to remove forwarding rule', 'error');
+    showToast(t('botOutputWebhookForwarding.toast.removeFailed'), 'error');
   }
 }
 
 function formatDate(ts: string | null) {
-  if (!ts) return 'Never';
+  if (!ts) return t('botOutputWebhookForwarding.never');
   return new Date(ts).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
@@ -144,38 +146,38 @@ onMounted(loadRules);
   <div class="webhook-fwd">
 
     <PageHeader
-      title="Bot Output Webhook Forwarding"
-      subtitle="POST structured bot execution output to external URLs when runs complete — integrate with any system."
+      :title="t('botOutputWebhookForwarding.title')"
+      :subtitle="t('botOutputWebhookForwarding.subtitle')"
     />
 
-    <LoadingState v-if="isLoading" message="Loading forwarding rules..." />
+    <LoadingState v-if="isLoading" :message="t('botOutputWebhookForwarding.loading')" />
 
     <div v-else-if="error" class="card error-state">
       <p class="error-text">{{ error }}</p>
-      <button class="btn btn-primary" @click="loadRules">Retry</button>
+      <button class="btn btn-primary" @click="loadRules">{{ t('common.retry') }}</button>
     </div>
 
     <template v-else>
       <div class="page-actions">
         <button class="btn btn-primary" @click="isAdding = !isAdding">
-          {{ isAdding ? 'Cancel' : '+ Add Forwarding Rule' }}
+          {{ isAdding ? t('common.cancel') : t('botOutputWebhookForwarding.addRuleButton') }}
         </button>
       </div>
 
       <div v-if="isAdding" class="card add-card">
-        <div class="add-header">New Forwarding Rule</div>
+        <div class="add-header">{{ t('botOutputWebhookForwarding.newRule') }}</div>
         <div class="add-body">
           <div class="field-group">
-            <label class="field-label">Bot Name</label>
+            <label class="field-label">{{ t('botOutputWebhookForwarding.field.botName') }}</label>
             <input v-model="newBotName" class="text-input" placeholder="bot-security" />
           </div>
           <div class="field-group">
-            <label class="field-label">Target URL</label>
+            <label class="field-label">{{ t('botOutputWebhookForwarding.field.targetUrl') }}</label>
             <input v-model="newTargetUrl" class="text-input" placeholder="https://hooks.example.com/endpoint" />
           </div>
           <div class="add-actions">
             <button class="btn btn-primary" :disabled="isSaving" @click="addRule">
-              {{ isSaving ? 'Adding...' : 'Add Rule' }}
+              {{ isSaving ? t('botOutputWebhookForwarding.adding') : t('botOutputWebhookForwarding.addRule') }}
             </button>
           </div>
         </div>
@@ -194,14 +196,14 @@ onMounted(loadRules);
               </div>
             </div>
             <div class="rule-stats">
-              <span class="stat"><span class="stat-num">{{ rule.deliveryCount }}</span> delivered</span>
-              <span v-if="rule.failureCount > 0" class="stat stat-fail"><span class="stat-num">{{ rule.failureCount }}</span> failed</span>
-              <span class="stat last-fired">Last: {{ formatDate(rule.lastFiredAt) }}</span>
+              <span class="stat"><span class="stat-num">{{ rule.deliveryCount }}</span> {{ t('botOutputWebhookForwarding.delivered') }}</span>
+              <span v-if="rule.failureCount > 0" class="stat stat-fail"><span class="stat-num">{{ rule.failureCount }}</span> {{ t('botOutputWebhookForwarding.failed') }}</span>
+              <span class="stat last-fired">{{ t('botOutputWebhookForwarding.last') }} {{ formatDate(rule.lastFiredAt) }}</span>
             </div>
           </div>
 
           <div class="rule-events">
-            <span class="events-label">Events:</span>
+            <span class="events-label">{{ t('botOutputWebhookForwarding.events') }}</span>
             <label v-for="opt in eventOptions" :key="opt.value" class="event-check">
               <input
                 type="checkbox"
@@ -218,14 +220,14 @@ onMounted(loadRules);
               :disabled="isTesting === rule.id"
               @click="testDelivery(rule)"
             >
-              {{ isTesting === rule.id ? 'Sending...' : 'Test Delivery' }}
+              {{ isTesting === rule.id ? t('botOutputWebhookForwarding.sending') : t('botOutputWebhookForwarding.testDelivery') }}
             </button>
-            <button class="btn btn-danger btn-sm" @click="removeRule(rule)">Remove</button>
+            <button class="btn btn-danger btn-sm" @click="removeRule(rule)">{{ t('common.remove') }}</button>
           </div>
         </div>
 
         <div v-if="rules.length === 0" class="empty-state card">
-          <p>No forwarding rules configured. Add one to start forwarding bot output.</p>
+          <p>{{ t('botOutputWebhookForwarding.empty') }}</p>
         </div>
       </div>
     </template>

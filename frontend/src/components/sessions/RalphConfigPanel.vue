@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { RalphConfig } from '../../services/api/grd';
+
+const { t } = useI18n();
 
 const emit = defineEmits<{
   (e: 'start', config: RalphConfig): void;
@@ -27,23 +30,23 @@ function handleSubmit() {
 
 <template>
   <div class="ralph-config">
-    <h4 class="config-title">Configure Ralph Loop</h4>
+    <h4 class="config-title">{{ t('ralphConfigPanel.title') }}</h4>
 
     <form class="config-form" @submit.prevent="handleSubmit">
       <div class="form-group">
-        <label class="form-label" for="ralph-task">Task Description</label>
+        <label class="form-label" for="ralph-task">{{ t('ralphConfigPanel.taskDescription') }}</label>
         <textarea
           id="ralph-task"
           v-model="taskDescription"
           class="form-textarea"
-          placeholder="Describe the task for Ralph to complete..."
+          :placeholder="t('ralphConfigPanel.taskPlaceholder')"
           rows="3"
           required
         />
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="ralph-max-iter">Max Iterations</label>
+        <label class="form-label" for="ralph-max-iter">{{ t('ralphConfigPanel.maxIterations') }}</label>
         <input
           id="ralph-max-iter"
           v-model.number="maxIterations"
@@ -55,7 +58,7 @@ function handleSubmit() {
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="ralph-promise">Completion Promise</label>
+        <label class="form-label" for="ralph-promise">{{ t('ralphConfigPanel.completionPromise') }}</label>
         <input
           id="ralph-promise"
           v-model="completionPromise"
@@ -66,7 +69,7 @@ function handleSubmit() {
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="ralph-threshold">No Progress Threshold</label>
+        <label class="form-label" for="ralph-threshold">{{ t('ralphConfigPanel.noProgressThreshold') }}</label>
         <input
           id="ralph-threshold"
           v-model.number="noProgressThreshold"
@@ -78,8 +81,8 @@ function handleSubmit() {
       </div>
 
       <div class="form-actions">
-        <button type="button" class="btn-cancel" @click="$emit('cancel')">Cancel</button>
-        <button type="submit" class="btn-start" :disabled="!isValid">Start Ralph Loop</button>
+        <button type="button" class="btn-cancel" @click="$emit('cancel')">{{ t('common.cancel') }}</button>
+        <button type="submit" class="btn-start" :disabled="!isValid">{{ t('ralphConfigPanel.start') }}</button>
       </div>
     </form>
   </div>

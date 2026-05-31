@@ -5,6 +5,9 @@ import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import ErrorState from '../components/base/ErrorState.vue';
 import EmptyState from '../components/base/EmptyState.vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   title: string;
@@ -26,7 +29,7 @@ async function refresh() {
     items.value = await props.loadItems();
   } catch (err: unknown) {
     const e = err as { message?: string };
-    error.value = e?.message || 'Failed to load';
+    error.value = e?.message || t('entityList.loadFailed');
   } finally {
     isLoading.value = false;
   }
@@ -45,7 +48,7 @@ onMounted(refresh);
       </template>
     </PageHeader>
 
-    <LoadingState v-if="isLoading" :message="loadingMessage || 'Loading...'" />
+    <LoadingState v-if="isLoading" :message="loadingMessage || t('common.loading')" />
 
     <ErrorState v-else-if="error" :message="error" @retry="refresh" />
 

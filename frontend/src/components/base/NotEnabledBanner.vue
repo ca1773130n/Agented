@@ -18,6 +18,10 @@
   with this refactor.
 -->
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+
 withDefaults(
   defineProps<{
     feature: string;
@@ -36,7 +40,7 @@ withDefaults(
       <line x1="12" y1="16" x2="12.01" y2="16" />
     </svg>
     <div>
-      <strong>{{ feature }} is not yet enabled in this deployment.</strong>
+      <strong>{{ t('notEnabledBanner.message', { feature }) }}</strong>
       <p v-if="detail">{{ detail }}</p>
     </div>
   </div>

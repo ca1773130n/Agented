@@ -4,6 +4,7 @@
 -->
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { WeeklyReport } from '../../../services/api';
 import { analyticsApi, ApiError } from '../../../services/api';
 import LoadingState from '../../../components/base/LoadingState.vue';
@@ -11,6 +12,7 @@ import StatCard from '../../../components/base/StatCard.vue';
 import { useToast } from '../../../composables/useToast';
 
 const emit = defineEmits<{ loaded: [slug: string] }>();
+const { t } = useI18n();
 const showToast = useToast();
 
 const isLoading = ref(true);
@@ -21,7 +23,7 @@ async function loadData() {
   try {
     report.value = await analyticsApi.fetchWeeklyReport();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load weekly report';
+    const message = err instanceof ApiError ? err.message : t('impactReportCard.error.load');
     showToast(message, 'error');
   } finally {
     isLoading.value = false;
@@ -58,7 +60,7 @@ onMounted(loadData);
 
 <template>
   <section id="impact-report" class="lane-card team-report-card">
-    <LoadingState v-if="isLoading" message="Loading weekly report..." />
+    <LoadingState v-if="isLoading" :message="t('impactReportCard.loading')" />
 
     <template v-else-if="report">
       <div class="status-card">
@@ -72,16 +74,16 @@ onMounted(loadData);
                 </svg>
               </div>
               <div>
-                <h2>Weekly Impact Report</h2>
+                <h2>{{ t('impactReportCard.title') }}</h2>
                 <p class="status-subtitle">{{ periodDisplay }}</p>
               </div>
             </div>
           </div>
 
           <div class="stats-grid">
-            <StatCard title="PRs Reviewed" :value="report.prs_reviewed" color="var(--accent-cyan)" />
-            <StatCard title="Issues Found" :value="report.issues_found" color="var(--accent-amber)" />
-            <StatCard title="Time Saved" :value="timeSavedDisplay" color="var(--accent-emerald)" />
+            <StatCard :title="t('impactReportCard.stat.prsReviewed')" :value="report.prs_reviewed" color="var(--accent-cyan)" />
+            <StatCard :title="t('impactReportCard.stat.issuesFound')" :value="report.issues_found" color="var(--accent-amber)" />
+            <StatCard :title="t('impactReportCard.stat.timeSaved')" :value="timeSavedDisplay" color="var(--accent-emerald)" />
           </div>
         </div>
       </div>
@@ -93,11 +95,11 @@ onMounted(loadData);
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
               </svg>
-              Top Performing Bots
+              {{ t('impactReportCard.topBots') }}
             </h3>
           </div>
           <div v-if="report.top_bots.length === 0" class="empty-list">
-            No execution data for this period.
+            {{ t('impactReportCard.noData') }}
           </div>
           <div v-else class="ranked-list">
             <div
@@ -113,7 +115,7 @@ onMounted(loadData);
                 <span class="ranked-id">{{ bot.trigger_id }}</span>
               </div>
               <span class="ranked-metric">
-                {{ bot.execution_count }} <span class="metric-label">runs</span>
+                {{ bot.execution_count }} <span class="metric-label">{{ t('impactReportCard.runs') }}</span>
               </span>
             </div>
           </div>
@@ -127,11 +129,11 @@ onMounted(loadData);
                 <line x1="12" y1="9" x2="12" y2="13"/>
                 <line x1="12" y1="17" x2="12.01" y2="17"/>
               </svg>
-              Bots Needing Attention
+              {{ t('impactReportCard.botsNeedingAttention') }}
             </h3>
           </div>
           <div v-if="report.bots_needing_attention.length === 0" class="empty-list">
-            All bots are performing well.
+            {{ t('impactReportCard.allWell') }}
           </div>
           <div v-else class="attention-list">
             <div
@@ -148,10 +150,10 @@ onMounted(loadData);
                   class="failure-rate-badge"
                   :class="{ high: bot.failure_rate > 0.5, moderate: bot.failure_rate > 0.2 && bot.failure_rate <= 0.5 }"
                 >
-                  {{ formatFailureRate(bot.failure_rate) }} fail
+                  {{ t('impactReportCard.failRate', { rate: formatFailureRate(bot.failure_rate) }) }}
                 </span>
                 <span class="alert-count-badge">
-                  {{ bot.alert_count }} alert{{ bot.alert_count !== 1 ? 's' : '' }}
+                  {{ t('impactReportCard.alerts', { count: bot.alert_count }) }}
                 </span>
               </div>
             </div>
@@ -166,7 +168,7 @@ onMounted(loadData);
           <path d="M3 3v18h18"/>
           <path d="M18 17l-5-5-4 4-4-4"/>
         </svg>
-        <p>No execution data for this period.</p>
+        <p>{{ t('impactReportCard.noData') }}</p>
       </div>
     </template>
   </section>

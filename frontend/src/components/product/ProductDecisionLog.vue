@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { ProductDecision } from '../../services/api';
 import { productApi, ApiError } from '../../services/api';
 import { useToast } from '../../composables/useToast';
 import { useFocusTrap } from '../../composables/useFocusTrap';
 import { safeFormatDate } from '../../utils/datetime';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   decisions: ProductDecision[];
@@ -60,11 +63,11 @@ async function submitDecision() {
       decision_type: modalDecisionType.value,
       tags,
     });
-    showToast('Decision created', 'success');
+    showToast(t('productDecisionLog.toast.created'), 'success');
     showModal.value = false;
     emit('refresh');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to create decision';
+    const message = err instanceof ApiError ? err.message : t('productDecisionLog.toast.createFailed');
     showToast(message, 'error');
   } finally {
     isSubmitting.value = false;
@@ -74,10 +77,10 @@ async function submitDecision() {
 async function updateStatus(decision: ProductDecision, newStatus: string) {
   try {
     await productApi.updateDecision(props.productId, decision.id, { status: newStatus });
-    showToast('Status updated', 'success');
+    showToast(t('productDecisionLog.toast.statusUpdated'), 'success');
     emit('refresh');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to update status';
+    const message = err instanceof ApiError ? err.message : t('productDecisionLog.toast.updateFailed');
     showToast(message, 'error');
   }
 }
@@ -116,28 +119,28 @@ function truncate(text: string, maxLen: number): string {
   <div class="card">
     <div class="card-header">
       <div class="header-left">
-        <h3>Decision Log</h3>
+        <h3>{{ t('productDecisionLog.title') }}</h3>
         <span class="card-count">{{ filteredDecisions.length }}</span>
       </div>
       <div class="header-actions">
         <select v-model="statusFilter" class="filter-select">
-          <option value="all">All</option>
-          <option value="proposed">Proposed</option>
-          <option value="approved">Approved</option>
-          <option value="rejected">Rejected</option>
-          <option value="superseded">Superseded</option>
+          <option value="all">{{ t('productDecisionLog.filter.all') }}</option>
+          <option value="proposed">{{ t('productDecisionLog.status.proposed') }}</option>
+          <option value="approved">{{ t('productDecisionLog.status.approved') }}</option>
+          <option value="rejected">{{ t('productDecisionLog.status.rejected') }}</option>
+          <option value="superseded">{{ t('productDecisionLog.status.superseded') }}</option>
         </select>
         <button class="add-btn" @click="openAddModal">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 5v14M5 12h14"/>
           </svg>
-          Add Decision
+          {{ t('productDecisionLog.addDecision') }}
         </button>
       </div>
     </div>
 
     <div v-if="filteredDecisions.length === 0" class="empty-state">
-      <p>No decisions recorded yet</p>
+      <p>{{ t('productDecisionLog.empty') }}</p>
     </div>
 
     <div v-else class="decision-list">
@@ -151,17 +154,17 @@ function truncate(text: string, maxLen: number): string {
               :value="decision.status"
               @change="updateStatus(decision, ($event.target as HTMLSelectElement).value)"
             >
-              <option value="proposed">Proposed</option>
-              <option value="approved">Approved</option>
-              <option value="rejected">Rejected</option>
-              <option value="superseded">Superseded</option>
+              <option value="proposed">{{ t('productDecisionLog.status.proposed') }}</option>
+              <option value="approved">{{ t('productDecisionLog.status.approved') }}</option>
+              <option value="rejected">{{ t('productDecisionLog.status.rejected') }}</option>
+              <option value="superseded">{{ t('productDecisionLog.status.superseded') }}</option>
             </select>
           </div>
           <p v-if="decision.rationale" class="decision-rationale">
             {{ truncate(decision.rationale, 120) }}
           </p>
           <div class="decision-meta">
-            <span v-if="decision.decided_by" class="meta-item">by {{ decision.decided_by }}</span>
+            <span v-if="decision.decided_by" class="meta-item">{{ t('productDecisionLog.by', { name: decision.decided_by }) }}</span>
             <span v-if="decision.decided_at" class="meta-item">{{ formatDate(decision.decided_at) }}</span>
             <span class="meta-item type-badge">{{ decision.decision_type }}</span>
             <span v-for="tag in parseTags(decision.tags_json)" :key="tag" class="tag-pill">{{ tag }}</span>
@@ -174,7 +177,7 @@ function truncate(text: string, maxLen: number): string {
     <div v-if="showModal" ref="modalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-add-decision" tabindex="-1" @click.self="showModal = false" @keydown.escape="showModal = false">
       <div class="modal">
         <div class="modal-header">
-          <h3 id="modal-title-add-decision">Add Decision</h3>
+          <h3 id="modal-title-add-decision">{{ t('productDecisionLog.addDecision') }}</h3>
           <button class="modal-close" @click="showModal = false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 6L6 18M6 6l12 12"/>
@@ -183,35 +186,35 @@ function truncate(text: string, maxLen: number): string {
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label class="form-label">Title <span class="required">*</span></label>
-            <input v-model="modalTitle" type="text" class="form-input" placeholder="Decision title..." />
+            <label class="form-label">{{ t('productDecisionLog.form.title') }} <span class="required">*</span></label>
+            <input v-model="modalTitle" type="text" class="form-input" :placeholder="t('productDecisionLog.form.titlePlaceholder')" />
           </div>
           <div class="form-group">
-            <label class="form-label">Description</label>
-            <textarea v-model="modalDescription" class="form-textarea" placeholder="What is this decision about?" rows="3"></textarea>
+            <label class="form-label">{{ t('productDecisionLog.form.description') }}</label>
+            <textarea v-model="modalDescription" class="form-textarea" :placeholder="t('productDecisionLog.form.descriptionPlaceholder')" rows="3"></textarea>
           </div>
           <div class="form-group">
-            <label class="form-label">Rationale</label>
-            <textarea v-model="modalRationale" class="form-textarea" placeholder="Why this decision was made..." rows="3"></textarea>
+            <label class="form-label">{{ t('productDecisionLog.form.rationale') }}</label>
+            <textarea v-model="modalRationale" class="form-textarea" :placeholder="t('productDecisionLog.form.rationalePlaceholder')" rows="3"></textarea>
           </div>
           <div class="form-group">
-            <label class="form-label">Type</label>
+            <label class="form-label">{{ t('productDecisionLog.form.type') }}</label>
             <select v-model="modalDecisionType" class="form-input">
-              <option value="technical">Technical</option>
-              <option value="strategic">Strategic</option>
-              <option value="tactical">Tactical</option>
+              <option value="technical">{{ t('productDecisionLog.type.technical') }}</option>
+              <option value="strategic">{{ t('productDecisionLog.type.strategic') }}</option>
+              <option value="tactical">{{ t('productDecisionLog.type.tactical') }}</option>
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">Tags</label>
-            <input v-model="modalTags" type="text" class="form-input" placeholder="Comma-separated tags..." />
+            <label class="form-label">{{ t('productDecisionLog.form.tags') }}</label>
+            <input v-model="modalTags" type="text" class="form-input" :placeholder="t('productDecisionLog.form.tagsPlaceholder')" />
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="showModal = false">Cancel</button>
+          <button class="btn btn-secondary" @click="showModal = false">{{ t('common.cancel') }}</button>
           <button class="btn btn-primary" :disabled="!modalTitle.trim() || isSubmitting" @click="submitDecision">
-            <span v-if="isSubmitting">Creating...</span>
-            <span v-else>Create Decision</span>
+            <span v-if="isSubmitting">{{ t('productDecisionLog.creating') }}</span>
+            <span v-else>{{ t('productDecisionLog.createDecision') }}</span>
           </button>
         </div>
       </div>

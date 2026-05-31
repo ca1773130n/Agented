@@ -10,6 +10,9 @@ import { useToast } from '../composables/useToast';
 import { handleApiError } from '../services/api/error-handler';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   pluginId?: string;
@@ -86,7 +89,7 @@ async function loadPlugin() {
     }
     return data;
   } catch (err) {
-    handleApiError(err, showToast, 'Failed to load plugin');
+    handleApiError(err, showToast, t('pluginDetail.errors.load'));
     throw err;
   }
 }
@@ -104,9 +107,9 @@ async function savePluginInfo() {
     });
     plugin.value = { ...plugin.value, ...editForm.value };
     isEditingInfo.value = false;
-    showToast('Plugin updated successfully', 'success');
+    showToast(t('pluginDetail.toasts.updated'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to update plugin';
+    const message = err instanceof ApiError ? err.message : t('pluginDetail.errors.update');
     showToast(message, 'error');
   } finally {
     isSaving.value = false;
@@ -115,7 +118,7 @@ async function savePluginInfo() {
 
 async function addComponent() {
   if (!newComponent.value.name.trim()) {
-    showToast('Component name is required', 'error');
+    showToast(t('pluginDetail.toasts.componentNameRequired'), 'error');
     return;
   }
   try {
@@ -124,12 +127,12 @@ async function addComponent() {
       type: newComponent.value.type,
       content: newComponent.value.content || undefined,
     });
-    showToast('Component added', 'success');
+    showToast(t('pluginDetail.toasts.componentAdded'), 'success');
     showAddComponentModal.value = false;
     newComponent.value = { name: '', type: 'skill', content: '' };
     await loadPlugin();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to add component';
+    const message = err instanceof ApiError ? err.message : t('pluginDetail.errors.addComponent');
     showToast(message, 'error');
   }
 }
@@ -146,10 +149,10 @@ async function confirmDeleteComponent() {
   if (!component) return;
   try {
     await pluginApi.removeComponent(pluginId.value, component.id);
-    showToast('Component deleted', 'success');
+    showToast(t('pluginDetail.toasts.componentDeleted'), 'success');
     await loadPlugin();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to delete component';
+    const message = err instanceof ApiError ? err.message : t('pluginDetail.errors.deleteComponent');
     showToast(message, 'error');
   }
 }
@@ -167,12 +170,12 @@ async function saveComponent() {
       name: editComponentForm.value.name,
       content: editComponentForm.value.content || undefined,
     });
-    showToast('Component updated', 'success');
+    showToast(t('pluginDetail.toasts.componentUpdated'), 'success');
     isEditingComponent.value = false;
     editingComponent.value = null;
     await loadPlugin();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to update component';
+    const message = err instanceof ApiError ? err.message : t('pluginDetail.errors.updateComponent');
     showToast(message, 'error');
   }
 }
@@ -219,14 +222,14 @@ function navigateToComponent(_component: PluginComponent) {
           <div class="header-meta">
             <span class="version-badge">v{{ plugin.version }}</span>
             <span :class="['status-badge', getStatusClass(plugin.status)]">{{ plugin.status }}</span>
-            <span v-if="plugin.author" class="author">by {{ plugin.author }}</span>
+            <span v-if="plugin.author" class="author">{{ t('pluginDetail.by', { author: plugin.author }) }}</span>
           </div>
           <button class="btn btn-secondary" @click="isEditingInfo = true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
             </svg>
-            Edit
+            {{ t('common.edit') }}
           </button>
         </template>
       </PageHeader>
@@ -237,31 +240,31 @@ function navigateToComponent(_component: PluginComponent) {
           :class="['tab', { active: activeTab === 'overview' }]"
           @click="activeTab = 'overview'"
         >
-          Overview
+          {{ t('pluginDetail.tabs.overview') }}
         </button>
         <button
           :class="['tab', { active: activeTab === 'skills' }]"
           @click="activeTab = 'skills'"
         >
-          Skills ({{ getComponentsByType('skill').length }})
+          {{ t('pluginDetail.tabs.skills', { count: getComponentsByType('skill').length }) }}
         </button>
         <button
           :class="['tab', { active: activeTab === 'commands' }]"
           @click="activeTab = 'commands'"
         >
-          Commands ({{ getComponentsByType('command').length }})
+          {{ t('pluginDetail.tabs.commands', { count: getComponentsByType('command').length }) }}
         </button>
         <button
           :class="['tab', { active: activeTab === 'hooks' }]"
           @click="activeTab = 'hooks'"
         >
-          Hooks ({{ getComponentsByType('hook').length }})
+          {{ t('pluginDetail.tabs.hooks', { count: getComponentsByType('hook').length }) }}
         </button>
         <button
           :class="['tab', { active: activeTab === 'agents' }]"
           @click="activeTab = 'agents'"
         >
-          Agents ({{ getComponentsByType('agent').length }})
+          {{ t('pluginDetail.tabs.agents', { count: getComponentsByType('agent').length }) }}
         </button>
       </div>
 
@@ -278,7 +281,7 @@ function navigateToComponent(_component: PluginComponent) {
               </div>
               <div class="stat-info">
                 <span class="stat-value">{{ getComponentsByType('skill').length }}</span>
-                <span class="stat-label">Skills</span>
+                <span class="stat-label">{{ t('pluginDetail.stats.skills') }}</span>
               </div>
             </div>
             <div class="stat-card">
@@ -289,7 +292,7 @@ function navigateToComponent(_component: PluginComponent) {
               </div>
               <div class="stat-info">
                 <span class="stat-value">{{ getComponentsByType('hook').length }}</span>
-                <span class="stat-label">Hooks</span>
+                <span class="stat-label">{{ t('pluginDetail.stats.hooks') }}</span>
               </div>
             </div>
             <div class="stat-card">
@@ -300,7 +303,7 @@ function navigateToComponent(_component: PluginComponent) {
               </div>
               <div class="stat-info">
                 <span class="stat-value">{{ getComponentsByType('agent').length }}</span>
-                <span class="stat-label">Agents</span>
+                <span class="stat-label">{{ t('pluginDetail.stats.agents') }}</span>
               </div>
             </div>
             <div class="stat-card">
@@ -311,19 +314,19 @@ function navigateToComponent(_component: PluginComponent) {
               </div>
               <div class="stat-info">
                 <span class="stat-value">{{ getComponentsByType('command').length }}</span>
-                <span class="stat-label">Commands</span>
+                <span class="stat-label">{{ t('pluginDetail.stats.commands') }}</span>
               </div>
             </div>
           </div>
 
           <div class="card">
             <div class="card-header">
-              <h3>All Components</h3>
+              <h3>{{ t('pluginDetail.allComponents') }}</h3>
               <button class="btn btn-small btn-primary" @click="showAddComponentModal = true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M12 5v14M5 12h14"/>
                 </svg>
-                Add Component
+                {{ t('pluginDetail.addComponent') }}
               </button>
             </div>
             <div class="card-body">
@@ -338,7 +341,7 @@ function navigateToComponent(_component: PluginComponent) {
                     <span class="component-name">{{ component.name }}</span>
                     <span class="component-type">{{ component.type }}</span>
                   </div>
-                  <button class="btn btn-icon btn-secondary" @click.stop="editComponent(component)" title="Edit component">
+                  <button class="btn btn-icon btn-secondary" @click.stop="editComponent(component)" :title="t('pluginDetail.editComponentTitle')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -351,7 +354,7 @@ function navigateToComponent(_component: PluginComponent) {
                   </button>
                 </div>
               </div>
-              <p v-else class="empty-text">No components yet. Add skills, commands, hooks, or agents to this plugin.</p>
+              <p v-else class="empty-text">{{ t('pluginDetail.emptyComponents') }}</p>
             </div>
           </div>
         </div>
@@ -359,9 +362,9 @@ function navigateToComponent(_component: PluginComponent) {
         <!-- Skills Tab -->
         <div v-if="activeTab === 'skills'" class="components-tab">
           <div class="tab-header">
-            <h3>Skills</h3>
+            <h3>{{ t('pluginDetail.stats.skills') }}</h3>
             <button class="btn btn-small btn-primary" @click="newComponent.type = 'skill'; showAddComponentModal = true">
-              Add Skill
+              {{ t('pluginDetail.addSkill') }}
             </button>
           </div>
           <div v-if="getComponentsByType('skill').length > 0" class="components-list">
@@ -375,7 +378,7 @@ function navigateToComponent(_component: PluginComponent) {
                 <h4>{{ component.name }}</h4>
                 <pre v-if="component.content" class="component-code">{{ component.content }}</pre>
               </div>
-              <button class="btn btn-icon btn-secondary" @click.stop="editComponent(component)" title="Edit component">
+              <button class="btn btn-icon btn-secondary" @click.stop="editComponent(component)" :title="t('pluginDetail.editComponentTitle')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                   <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -388,15 +391,15 @@ function navigateToComponent(_component: PluginComponent) {
               </button>
             </div>
           </div>
-          <p v-else class="empty-text">No skills defined. Skills provide reusable functionality for your plugin.</p>
+          <p v-else class="empty-text">{{ t('pluginDetail.emptySkills') }}</p>
         </div>
 
         <!-- Commands Tab -->
         <div v-if="activeTab === 'commands'" class="components-tab">
           <div class="tab-header">
-            <h3>Commands</h3>
+            <h3>{{ t('pluginDetail.stats.commands') }}</h3>
             <button class="btn btn-small btn-primary" @click="newComponent.type = 'command'; showAddComponentModal = true">
-              Add Command
+              {{ t('pluginDetail.addCommand') }}
             </button>
           </div>
           <div v-if="getComponentsByType('command').length > 0" class="components-list">
@@ -410,7 +413,7 @@ function navigateToComponent(_component: PluginComponent) {
                 <h4>{{ component.name }}</h4>
                 <pre v-if="component.content" class="component-code">{{ component.content }}</pre>
               </div>
-              <button class="btn btn-icon btn-secondary" @click.stop="editComponent(component)" title="Edit component">
+              <button class="btn btn-icon btn-secondary" @click.stop="editComponent(component)" :title="t('pluginDetail.editComponentTitle')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                   <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -423,15 +426,15 @@ function navigateToComponent(_component: PluginComponent) {
               </button>
             </div>
           </div>
-          <p v-else class="empty-text">No commands defined. Commands provide CLI functionality for your plugin.</p>
+          <p v-else class="empty-text">{{ t('pluginDetail.emptyCommands') }}</p>
         </div>
 
         <!-- Hooks Tab -->
         <div v-if="activeTab === 'hooks'" class="components-tab">
           <div class="tab-header">
-            <h3>Hooks</h3>
+            <h3>{{ t('pluginDetail.stats.hooks') }}</h3>
             <button class="btn btn-small btn-primary" @click="newComponent.type = 'hook'; showAddComponentModal = true">
-              Add Hook
+              {{ t('pluginDetail.addHook') }}
             </button>
           </div>
           <div v-if="getComponentsByType('hook').length > 0" class="components-list">
@@ -445,7 +448,7 @@ function navigateToComponent(_component: PluginComponent) {
                 <h4>{{ component.name }}</h4>
                 <pre v-if="component.content" class="component-code">{{ component.content }}</pre>
               </div>
-              <button class="btn btn-icon btn-secondary" @click.stop="editComponent(component)" title="Edit component">
+              <button class="btn btn-icon btn-secondary" @click.stop="editComponent(component)" :title="t('pluginDetail.editComponentTitle')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                   <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -458,15 +461,15 @@ function navigateToComponent(_component: PluginComponent) {
               </button>
             </div>
           </div>
-          <p v-else class="empty-text">No hooks defined. Hooks allow your plugin to respond to events.</p>
+          <p v-else class="empty-text">{{ t('pluginDetail.emptyHooks') }}</p>
         </div>
 
         <!-- Agents Tab -->
         <div v-if="activeTab === 'agents'" class="components-tab">
           <div class="tab-header">
-            <h3>Agents</h3>
+            <h3>{{ t('pluginDetail.stats.agents') }}</h3>
             <button class="btn btn-small btn-primary" @click="newComponent.type = 'agent'; showAddComponentModal = true">
-              Add Agent
+              {{ t('pluginDetail.addAgent') }}
             </button>
           </div>
           <div v-if="getComponentsByType('agent').length > 0" class="components-list">
@@ -480,7 +483,7 @@ function navigateToComponent(_component: PluginComponent) {
                 <h4>{{ component.name }}</h4>
                 <pre v-if="component.content" class="component-code">{{ component.content }}</pre>
               </div>
-              <button class="btn btn-icon btn-secondary" @click.stop="editComponent(component)" title="Edit component">
+              <button class="btn btn-icon btn-secondary" @click.stop="editComponent(component)" :title="t('pluginDetail.editComponentTitle')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                   <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -493,7 +496,7 @@ function navigateToComponent(_component: PluginComponent) {
               </button>
             </div>
           </div>
-          <p v-else class="empty-text">No agents defined. Agents provide autonomous functionality for your plugin.</p>
+          <p v-else class="empty-text">{{ t('pluginDetail.emptyAgents') }}</p>
         </div>
       </div>
     </template>
@@ -503,41 +506,41 @@ function navigateToComponent(_component: PluginComponent) {
       <div v-if="isEditingInfo" ref="editInfoModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-edit-plugin-info" tabindex="-1" @click.self="isEditingInfo = false" @keydown.escape="isEditingInfo = false">
         <div class="modal">
           <div class="modal-header">
-            <h2 id="modal-title-edit-plugin-info">Edit Plugin</h2>
+            <h2 id="modal-title-edit-plugin-info">{{ t('pluginDetail.editPlugin') }}</h2>
             <button class="modal-close" @click="isEditingInfo = false">&times;</button>
           </div>
           <div class="modal-body">
             <div class="form-group">
-              <label>Plugin Name *</label>
-              <input v-model="editForm.name" type="text" placeholder="Plugin name" />
+              <label>{{ t('pluginDetail.form.nameRequired') }}</label>
+              <input v-model="editForm.name" type="text" :placeholder="t('pluginDetail.form.namePlaceholder')" />
             </div>
             <div class="form-group">
-              <label>Description</label>
-              <textarea v-model="editForm.description" placeholder="Describe the plugin..."></textarea>
+              <label>{{ t('pluginDetail.form.description') }}</label>
+              <textarea v-model="editForm.description" :placeholder="t('pluginDetail.form.descriptionPlaceholder')"></textarea>
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label>Version</label>
+                <label>{{ t('pluginDetail.form.version') }}</label>
                 <input v-model="editForm.version" type="text" placeholder="1.0.0" />
               </div>
               <div class="form-group">
-                <label>Status</label>
+                <label>{{ t('pluginDetail.form.status') }}</label>
                 <select v-model="editForm.status">
-                  <option value="draft">Draft</option>
-                  <option value="published">Published</option>
-                  <option value="deprecated">Deprecated</option>
+                  <option value="draft">{{ t('pluginDetail.statusOptions.draft') }}</option>
+                  <option value="published">{{ t('pluginDetail.statusOptions.published') }}</option>
+                  <option value="deprecated">{{ t('pluginDetail.statusOptions.deprecated') }}</option>
                 </select>
               </div>
             </div>
             <div class="form-group">
-              <label>Author</label>
-              <input v-model="editForm.author" type="text" placeholder="Your name or org" />
+              <label>{{ t('pluginDetail.form.author') }}</label>
+              <input v-model="editForm.author" type="text" :placeholder="t('pluginDetail.form.authorPlaceholder')" />
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" @click="isEditingInfo = false">Cancel</button>
+            <button class="btn btn-secondary" @click="isEditingInfo = false">{{ t('common.cancel') }}</button>
             <button class="btn btn-primary" :disabled="isSaving" @click="savePluginInfo">
-              {{ isSaving ? 'Saving...' : 'Save Changes' }}
+              {{ isSaving ? t('pluginDetail.saving') : t('pluginDetail.saveChanges') }}
             </button>
           </div>
         </div>
@@ -549,31 +552,31 @@ function navigateToComponent(_component: PluginComponent) {
       <div v-if="showAddComponentModal" ref="addComponentModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-add-component" tabindex="-1" @click.self="showAddComponentModal = false" @keydown.escape="showAddComponentModal = false">
         <div class="modal">
           <div class="modal-header">
-            <h2 id="modal-title-add-component">Add Component</h2>
+            <h2 id="modal-title-add-component">{{ t('pluginDetail.addComponent') }}</h2>
             <button class="modal-close" @click="showAddComponentModal = false">&times;</button>
           </div>
           <div class="modal-body">
             <div class="form-group">
-              <label>Component Name *</label>
-              <input v-model="newComponent.name" type="text" placeholder="e.g., my-skill" />
+              <label>{{ t('pluginDetail.form.componentNameRequired') }}</label>
+              <input v-model="newComponent.name" type="text" :placeholder="t('pluginDetail.form.componentNamePlaceholder')" />
             </div>
             <div class="form-group">
-              <label>Type</label>
+              <label>{{ t('pluginDetail.form.type') }}</label>
               <select v-model="newComponent.type">
-                <option value="skill">Skill</option>
-                <option value="command">Command</option>
-                <option value="hook">Hook</option>
-                <option value="agent">Agent</option>
+                <option value="skill">{{ t('pluginDetail.typeOptions.skill') }}</option>
+                <option value="command">{{ t('pluginDetail.typeOptions.command') }}</option>
+                <option value="hook">{{ t('pluginDetail.typeOptions.hook') }}</option>
+                <option value="agent">{{ t('pluginDetail.typeOptions.agent') }}</option>
               </select>
             </div>
             <div class="form-group">
-              <label>Content (Optional)</label>
-              <textarea v-model="newComponent.content" placeholder="Component configuration or code..." rows="6"></textarea>
+              <label>{{ t('pluginDetail.form.contentOptional') }}</label>
+              <textarea v-model="newComponent.content" :placeholder="t('pluginDetail.form.contentPlaceholder')" rows="6"></textarea>
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" @click="showAddComponentModal = false">Cancel</button>
-            <button class="btn btn-primary" @click="addComponent">Add Component</button>
+            <button class="btn btn-secondary" @click="showAddComponentModal = false">{{ t('common.cancel') }}</button>
+            <button class="btn btn-primary" @click="addComponent">{{ t('pluginDetail.addComponent') }}</button>
           </div>
         </div>
       </div>
@@ -585,22 +588,22 @@ function navigateToComponent(_component: PluginComponent) {
            @click.self="isEditingComponent = false" @keydown.escape="isEditingComponent = false">
         <div class="modal">
           <div class="modal-header">
-            <h2 id="modal-title-edit-component">Edit Component</h2>
+            <h2 id="modal-title-edit-component">{{ t('pluginDetail.editComponent') }}</h2>
             <button class="modal-close" @click="isEditingComponent = false">&times;</button>
           </div>
           <div class="modal-body">
             <div class="form-group">
-              <label>Component Name</label>
+              <label>{{ t('pluginDetail.form.componentName') }}</label>
               <input v-model="editComponentForm.name" type="text" />
             </div>
             <div class="form-group">
-              <label>Content</label>
-              <textarea v-model="editComponentForm.content" rows="10" placeholder="Component content..."></textarea>
+              <label>{{ t('pluginDetail.form.content') }}</label>
+              <textarea v-model="editComponentForm.content" rows="10" :placeholder="t('pluginDetail.form.contentEditPlaceholder')"></textarea>
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" @click="isEditingComponent = false">Cancel</button>
-            <button class="btn btn-primary" @click="saveComponent">Save Changes</button>
+            <button class="btn btn-secondary" @click="isEditingComponent = false">{{ t('common.cancel') }}</button>
+            <button class="btn btn-primary" @click="saveComponent">{{ t('pluginDetail.saveChanges') }}</button>
           </div>
         </div>
       </div>
@@ -608,9 +611,9 @@ function navigateToComponent(_component: PluginComponent) {
 
     <ConfirmModal
       :open="showDeleteComponentConfirm"
-      title="Delete Component"
-      :message="pendingDeleteComponent ? 'Delete component \u201C' + pendingDeleteComponent.name + '\u201D?' : 'Delete this component?'"
-      confirm-label="Delete"
+      :title="t('pluginDetail.deleteComponentTitle')"
+      :message="pendingDeleteComponent ? t('pluginDetail.deleteComponentMessage', { name: pendingDeleteComponent.name }) : t('pluginDetail.deleteComponentMessageGeneric')"
+      :confirm-label="t('common.delete')"
       variant="danger"
       @confirm="confirmDeleteComponent"
       @cancel="showDeleteComponentConfirm = false"

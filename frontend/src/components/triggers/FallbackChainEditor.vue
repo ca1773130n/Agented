@@ -1,8 +1,8 @@
 <template>
   <div class="fallback-chain-editor">
     <div class="section-title-row">
-      <h3>Fallback Chain</h3>
-      <span class="info-tooltip" title="When a backend is rate-limited, the system automatically tries the next one in the chain.">
+      <h3>{{ t('fallbackChainEditor.title') }}</h3>
+      <span class="info-tooltip" :title="t('fallbackChainEditor.infoTooltip')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="10"/>
           <path d="M12 16v-4M12 8h.01"/>
@@ -12,17 +12,17 @@
 
     <div v-if="loading" class="chain-loading">
       <div class="spinner-small"></div>
-      <span>Loading chain...</span>
+      <span>{{ t('fallbackChainEditor.loading') }}</span>
     </div>
 
     <template v-else>
       <div v-if="chain.length === 0" class="chain-empty">
-        <p>No fallback chain configured. The bot uses its default backend.</p>
+        <p>{{ t('fallbackChainEditor.empty') }}</p>
         <button class="enable-btn" @click="addStep">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 5v14M5 12h14"/>
           </svg>
-          Enable Fallback
+          {{ t('fallbackChainEditor.enableFallback') }}
         </button>
       </div>
 
@@ -38,7 +38,7 @@
           @dragend="onDragEnd"
           @drop="onDrop(index)"
         >
-          <div class="drag-handle" title="Drag to reorder">
+          <div class="drag-handle" :title="t('fallbackChainEditor.dragToReorder')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="3" y1="6" x2="21" y2="6"/>
               <line x1="3" y1="12" x2="21" y2="12"/>
@@ -53,7 +53,7 @@
             :value="entry.backend_type"
             @change="updateEntryBackend(index, ($event.target as HTMLSelectElement).value)"
           >
-            <option value="" disabled>Select backend...</option>
+            <option value="" disabled>{{ t('fallbackChainEditor.selectBackend') }}</option>
             <option
               v-for="b in availableBackends"
               :key="b.id"
@@ -68,7 +68,7 @@
             :value="entry.account_id ?? ''"
             @change="updateEntryAccount(index, ($event.target as HTMLSelectElement).value)"
           >
-            <option value="">Auto-select</option>
+            <option value="">{{ t('fallbackChainEditor.autoSelect') }}</option>
             <option
               v-for="acct in accountsForBackend(entry.backend_type)"
               :key="acct.id"
@@ -78,7 +78,7 @@
             </option>
           </select>
 
-          <button class="remove-btn" title="Remove step" @click="removeStep(index)">
+          <button class="remove-btn" :title="t('fallbackChainEditor.removeStep')" @click="removeStep(index)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"/>
               <line x1="6" y1="6" x2="18" y2="18"/>
@@ -90,15 +90,15 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 5v14M5 12h14"/>
           </svg>
-          Add Step
+          {{ t('fallbackChainEditor.addStep') }}
         </button>
 
         <div class="chain-actions">
           <button class="btn-save" :disabled="saving" @click="save">
-            {{ saving ? 'Saving...' : 'Save' }}
+            {{ saving ? t('fallbackChainEditor.saving') : t('common.save') }}
           </button>
           <button class="btn-reset" :disabled="saving" @click="resetChain">
-            Reset
+            {{ t('fallbackChainEditor.reset') }}
           </button>
         </div>
       </div>
@@ -110,6 +110,9 @@
 import { ref, onMounted } from 'vue';
 import { orchestrationApi } from '../../services/api';
 import { useToast } from '../../composables/useToast';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   triggerId: string;
@@ -206,10 +209,10 @@ async function save() {
   saving.value = true;
   try {
     await orchestrationApi.setFallbackChain(props.triggerId, chain.value);
-    showToast?.('Fallback chain saved', 'success');
+    showToast?.(t('fallbackChainEditor.saved'), 'success');
     emit('saved');
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed to save fallback chain';
+    const msg = err instanceof Error ? err.message : t('fallbackChainEditor.saveFailed');
     showToast?.(msg, 'error');
     emit('error', msg);
   } finally {

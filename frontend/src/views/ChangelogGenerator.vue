@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { executionApi, analyticsApi, ApiError } from '../services/api';
 import type { Execution } from '../services/api';
+const { t } = useI18n();
 const showToast = useToast();
 
 const dateFrom = ref('2026-02-01');
@@ -16,7 +18,7 @@ const loadError = ref<string | null>(null);
 
 async function handleGenerate() {
   if (!dateFrom.value || !dateTo.value) {
-    showToast('Please select a date range', 'info');
+    showToast(t('changelogGenerator.toast.selectDateRange'), 'info');
     return;
   }
   isGenerating.value = true;
@@ -95,13 +97,13 @@ async function handleGenerate() {
     }
 
     generated.value = changelog;
-    showToast('Changelog generated from execution data', 'success');
+    showToast(t('changelogGenerator.toast.generated'), 'success');
   } catch (err) {
     if (err instanceof ApiError) {
       loadError.value = err.message;
-      showToast(`Failed to generate changelog: ${err.message}`, 'error');
+      showToast(t('changelogGenerator.toast.generateFailedMsg', { message: err.message }), 'error');
     } else {
-      showToast('Failed to generate changelog', 'error');
+      showToast(t('changelogGenerator.toast.generateFailed'), 'error');
     }
   } finally {
     isGenerating.value = false;
@@ -113,10 +115,10 @@ async function handleCopy() {
   try {
     await navigator.clipboard.writeText(generated.value);
     isCopied.value = true;
-    showToast('Changelog copied to clipboard', 'success');
+    showToast(t('changelogGenerator.toast.copied'), 'success');
     setTimeout(() => { isCopied.value = false; }, 2000);
   } catch {
-    showToast('Failed to copy', 'error');
+    showToast(t('changelogGenerator.toast.copyFailed'), 'error');
   }
 }
 
@@ -129,7 +131,7 @@ function handleDownload() {
   a.download = 'CHANGELOG.md';
   a.click();
   URL.revokeObjectURL(url);
-  showToast('CHANGELOG.md downloaded', 'success');
+  showToast(t('changelogGenerator.toast.downloaded'), 'success');
 }
 
 const lineCount = computed(() => generated.value?.split('\n').length ?? 0);
@@ -140,8 +142,8 @@ const wordCount = computed(() => generated.value?.split(/\s+/).filter(Boolean).l
   <div class="changelog-generator">
 
     <PageHeader
-      title="Changelog Generator"
-      subtitle="Generate changelogs from execution history and analytics data."
+      :title="t('changelogGenerator.title')"
+      :subtitle="t('changelogGenerator.subtitle')"
     />
 
     <div class="main-layout">
@@ -152,32 +154,32 @@ const wordCount = computed(() => generated.value?.split(/\s+/).filter(Boolean).l
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>
             </svg>
-            Configuration
+            {{ t('changelogGenerator.configuration') }}
           </h3>
         </div>
         <div class="config-body">
           <div class="field-group">
-            <label class="field-label">Date Range</label>
+            <label class="field-label">{{ t('changelogGenerator.dateRange') }}</label>
             <div class="date-row">
               <input v-model="dateFrom" type="date" class="date-input" />
-              <span class="date-sep">to</span>
+              <span class="date-sep">{{ t('changelogGenerator.to') }}</span>
               <input v-model="dateTo" type="date" class="date-input" />
             </div>
           </div>
 
           <div class="field-group">
-            <label class="field-label">Milestone (optional)</label>
+            <label class="field-label">{{ t('changelogGenerator.milestone') }}</label>
             <input v-model="milestone" type="text" class="text-input" placeholder="e.g. v0.4.0 or Sprint 24" />
           </div>
 
           <div class="field-group">
-            <label class="field-label">Include Categories</label>
+            <label class="field-label">{{ t('changelogGenerator.includeCategories') }}</label>
             <div class="category-checks">
-              <label class="check-item"><input type="checkbox" checked /> Features</label>
-              <label class="check-item"><input type="checkbox" checked /> Bug Fixes</label>
-              <label class="check-item"><input type="checkbox" checked /> Improvements</label>
-              <label class="check-item"><input type="checkbox" checked /> Security</label>
-              <label class="check-item"><input type="checkbox" /> Breaking Changes</label>
+              <label class="check-item"><input type="checkbox" checked /> {{ t('changelogGenerator.cat.features') }}</label>
+              <label class="check-item"><input type="checkbox" checked /> {{ t('changelogGenerator.cat.bugFixes') }}</label>
+              <label class="check-item"><input type="checkbox" checked /> {{ t('changelogGenerator.cat.improvements') }}</label>
+              <label class="check-item"><input type="checkbox" checked /> {{ t('changelogGenerator.cat.security') }}</label>
+              <label class="check-item"><input type="checkbox" /> {{ t('changelogGenerator.cat.breakingChanges') }}</label>
             </div>
           </div>
 
@@ -196,7 +198,7 @@ const wordCount = computed(() => generated.value?.split(/\s+/).filter(Boolean).l
             <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
             </svg>
-            {{ isGenerating ? 'Generating...' : 'Generate Changelog' }}
+            {{ isGenerating ? t('changelogGenerator.generating') : t('changelogGenerator.generateButton') }}
           </button>
         </div>
       </div>
@@ -208,10 +210,10 @@ const wordCount = computed(() => generated.value?.split(/\s+/).filter(Boolean).l
               <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
               <circle cx="12" cy="12" r="3"/>
             </svg>
-            Preview
+            {{ t('changelogGenerator.preview') }}
           </h3>
           <div v-if="generated" class="preview-actions">
-            <span class="meta-info">{{ lineCount }} lines · {{ wordCount }} words</span>
+            <span class="meta-info">{{ t('changelogGenerator.linesWords', { lines: lineCount, words: wordCount }) }}</span>
             <button class="btn btn-sm btn-secondary" :class="{ copied: isCopied }" @click="handleCopy">
               <svg v-if="!isCopied" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
@@ -219,13 +221,13 @@ const wordCount = computed(() => generated.value?.split(/\s+/).filter(Boolean).l
               <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
                 <polyline points="20 6 9 17 4 12"/>
               </svg>
-              {{ isCopied ? 'Copied!' : 'Copy' }}
+              {{ isCopied ? t('changelogGenerator.copied') : t('changelogGenerator.copy') }}
             </button>
             <button class="btn btn-sm btn-secondary" @click="handleDownload">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
               </svg>
-              Download .md
+              {{ t('changelogGenerator.downloadMd') }}
             </button>
           </div>
         </div>
@@ -235,7 +237,7 @@ const wordCount = computed(() => generated.value?.split(/\s+/).filter(Boolean).l
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>
             </svg>
-            <p>Configure parameters and click "Generate Changelog"</p>
+            <p>{{ t('changelogGenerator.previewEmpty') }}</p>
           </div>
           <pre v-else class="preview-content">{{ generated }}</pre>
         </div>

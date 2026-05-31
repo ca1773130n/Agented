@@ -5,9 +5,11 @@
 // `{"bots": []}`. See .planning/static-smell-triage.md. Ship the
 // feature or remove the route by EOQ3.
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 
+const { t } = useI18n();
 const showToast = useToast();
 const isLoading = ref(true);
 const loadError = ref<string | null>(null);
@@ -44,9 +46,9 @@ async function loadData() {
     slaEntries.value = data.entries ?? [];
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
-      loadError.value = 'Request timed out. The backend may be unreachable.';
+      loadError.value = t('botSlaUptime.error.timeout');
     } else {
-      loadError.value = err instanceof Error ? err.message : 'Failed to load SLA data';
+      loadError.value = err instanceof Error ? err.message : t('botSlaUptime.error.loadFailed');
     }
     slaEntries.value = [];
   } finally {
@@ -58,8 +60,8 @@ function toggleAlert(entry: SlaEntry) {
   entry.alert_enabled = !entry.alert_enabled;
   showToast(
     entry.alert_enabled
-      ? `SLA alerts enabled for ${entry.bot_name}`
-      : `SLA alerts disabled for ${entry.bot_name}`,
+      ? t('botSlaUptime.toast.alertsEnabled', { bot: entry.bot_name })
+      : t('botSlaUptime.toast.alertsDisabled', { bot: entry.bot_name }),
     'success',
   );
 }
@@ -84,22 +86,22 @@ function uptimeBarColor(pct: number): string {
 }
 
 function formatRelative(iso: string | null): string {
-  if (!iso) return 'Never';
+  if (!iso) return t('botSlaUptime.never');
   const diff = Date.now() - new Date(iso).getTime();
   const h = Math.round(diff / 3600000);
-  if (h < 1) return 'Just now';
-  if (h < 24) return `${h}h ago`;
-  return `${Math.round(h / 24)}d ago`;
+  if (h < 1) return t('botSlaUptime.justNow');
+  if (h < 24) return t('botSlaUptime.hoursAgo', { h });
+  return t('botSlaUptime.daysAgo', { d: Math.round(h / 24) });
 }
 
 function formatNextRun(iso: string | null): string {
-  if (!iso) return 'N/A';
+  if (!iso) return t('botSlaUptime.na');
   const diff = new Date(iso).getTime() - Date.now();
-  if (diff < 0) return `${Math.round(-diff / 3600000)}h overdue`;
+  if (diff < 0) return t('botSlaUptime.overdueBy', { h: Math.round(-diff / 3600000) });
   const h = Math.round(diff / 3600000);
-  if (h < 1) return 'Soon';
-  if (h < 24) return `In ${h}h`;
-  return `In ${Math.round(h / 24)}d`;
+  if (h < 1) return t('botSlaUptime.soon');
+  if (h < 24) return t('botSlaUptime.inHours', { h });
+  return t('botSlaUptime.inDays', { d: Math.round(h / 24) });
 }
 
 onMounted(loadData);
@@ -110,11 +112,8 @@ onMounted(loadData);
 
     <div class="page-header">
       <div>
-        <h1 class="page-title">Bot SLA & Uptime Tracking</h1>
-        <p class="page-subtitle">
-          Define expected execution frequency per bot and monitor compliance. Get alerted when a
-          scheduled bot hasn't run on time — before a missed audit or late report is noticed.
-        </p>
+        <h1 class="page-title">{{ t('botSlaUptime.title') }}</h1>
+        <p class="page-subtitle">{{ t('botSlaUptime.subtitle') }}</p>
       </div>
     </div>
 
@@ -122,19 +121,19 @@ onMounted(loadData);
     <div class="stats-row">
       <div class="stat-card">
         <span class="stat-value" style="color: #34d399">{{ healthyCount }}</span>
-        <span class="stat-label">On Schedule</span>
+        <span class="stat-label">{{ t('botSlaUptime.stat.onSchedule') }}</span>
       </div>
       <div class="stat-card">
         <span class="stat-value" style="color: #f87171">{{ overdueCount }}</span>
-        <span class="stat-label">Overdue</span>
+        <span class="stat-label">{{ t('botSlaUptime.stat.overdue') }}</span>
       </div>
       <div class="stat-card">
         <span class="stat-value">{{ avgUptime }}%</span>
-        <span class="stat-label">Avg 30d Uptime</span>
+        <span class="stat-label">{{ t('botSlaUptime.stat.avgUptime') }}</span>
       </div>
       <div class="stat-card">
         <span class="stat-value">{{ slaEntries.length }}</span>
-        <span class="stat-label">Tracked Bots</span>
+        <span class="stat-label">{{ t('botSlaUptime.stat.trackedBots') }}</span>
       </div>
     </div>
 
@@ -147,30 +146,30 @@ onMounted(loadData);
         :class="{ active: filterStatus === f }"
         @click="filterStatus = f"
       >
-        {{ f === 'all' ? 'All Bots' : f === 'healthy' ? 'On Schedule' : 'Overdue' }}
+        {{ f === 'all' ? t('botSlaUptime.filter.allBots') : f === 'healthy' ? t('botSlaUptime.stat.onSchedule') : t('botSlaUptime.stat.overdue') }}
       </button>
     </div>
 
-    <LoadingState v-if="isLoading" message="Loading SLA data..." />
+    <LoadingState v-if="isLoading" :message="t('botSlaUptime.loading')" />
 
     <div v-else-if="loadError" class="error-card">
       <p class="error-msg">{{ loadError }}</p>
-      <button class="retry-btn" @click="loadData">Retry</button>
+      <button class="retry-btn" @click="loadData">{{ t('common.retry') }}</button>
     </div>
 
     <div v-else-if="slaEntries.length === 0" class="empty-card">
-      <p>No SLA entries configured. Bot SLA tracking will appear here once bots have scheduled runs.</p>
+      <p>{{ t('botSlaUptime.empty') }}</p>
     </div>
 
     <div v-else class="entries-table">
       <div class="table-header">
-        <span>Bot</span>
-        <span>Last Run</span>
-        <span>Next Expected</span>
-        <span>7d Uptime</span>
-        <span>30d Uptime</span>
-        <span>Success Rate</span>
-        <span>Alerts</span>
+        <span>{{ t('botSlaUptime.col.bot') }}</span>
+        <span>{{ t('botSlaUptime.col.lastRun') }}</span>
+        <span>{{ t('botSlaUptime.col.nextExpected') }}</span>
+        <span>{{ t('botSlaUptime.col.uptime7d') }}</span>
+        <span>{{ t('botSlaUptime.col.uptime30d') }}</span>
+        <span>{{ t('botSlaUptime.col.successRate') }}</span>
+        <span>{{ t('botSlaUptime.col.alerts') }}</span>
       </div>
       <div
         v-for="entry in filteredEntries"
@@ -231,12 +230,12 @@ onMounted(loadData);
             :class="{ enabled: entry.alert_enabled }"
             @click="toggleAlert(entry)"
           >
-            {{ entry.alert_enabled ? 'On' : 'Off' }}
+            {{ entry.alert_enabled ? t('botSlaUptime.on') : t('botSlaUptime.off') }}
           </button>
         </div>
       </div>
 
-      <p v-if="filteredEntries.length === 0" class="empty-msg">No bots match this filter.</p>
+      <p v-if="filteredEntries.length === 0" class="empty-msg">{{ t('botSlaUptime.noMatch') }}</p>
     </div>
   </div>
 </template>

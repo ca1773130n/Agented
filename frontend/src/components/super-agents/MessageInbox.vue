@@ -5,6 +5,9 @@ import { agentMessageApi, createAuthenticatedEventSource, API_BASE } from '../..
 import SendMessageForm from './SendMessageForm.vue';
 import { useToast } from '../../composables/useToast';
 import { safeFormatDateTime } from '../../utils/datetime';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   superAgentId: string;
@@ -59,7 +62,7 @@ async function markRead(messageId: string) {
     await agentMessageApi.markRead(props.superAgentId, messageId);
     await loadInbox();
   } catch {
-    showToast('Failed to mark message as read', 'error');
+    showToast(t('messageInbox.markReadError'), 'error');
   }
 }
 
@@ -67,10 +70,10 @@ async function deleteMessage(msg: AgentMessage, event: Event) {
   event.stopPropagation();
   try {
     await agentMessageApi.delete(props.superAgentId, msg.id);
-    showToast('Message deleted', 'success');
+    showToast(t('messageInbox.deleted'), 'success');
     await loadAll();
   } catch {
-    showToast('Failed to delete message', 'error');
+    showToast(t('messageInbox.deleteError'), 'error');
   }
 }
 
@@ -157,21 +160,21 @@ onUnmounted(() => {
           :class="['toggle-btn', { active: activeView === 'inbox' }]"
           @click="activeView = 'inbox'"
         >
-          Inbox
+          {{ t('messageInbox.inbox') }}
           <span v-if="unreadCount > 0" class="unread-badge">{{ unreadCount }}</span>
         </button>
         <button
           :class="['toggle-btn', { active: activeView === 'outbox' }]"
           @click="activeView = 'outbox'"
         >
-          Outbox
+          {{ t('messageInbox.outbox') }}
         </button>
       </div>
       <button class="new-message-btn" @click="showSendForm = true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 5v14M5 12h14" />
         </svg>
-        New Message
+        {{ t('messageInbox.newMessage') }}
       </button>
     </div>
 
@@ -182,8 +185,8 @@ onUnmounted(() => {
         <line x1="12" y1="9" x2="12" y2="13"/>
         <line x1="12" y1="17" x2="12.01" y2="17"/>
       </svg>
-      <span>Live updates unavailable</span>
-      <button class="reconnect-btn" @click="connectSSE">Reconnect</button>
+      <span>{{ t('messageInbox.liveUnavailable') }}</span>
+      <button class="reconnect-btn" @click="connectSSE">{{ t('messageInbox.reconnect') }}</button>
     </div>
 
     <!-- Send form overlay -->
@@ -200,7 +203,7 @@ onUnmounted(() => {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
       </svg>
-      <p>No messages yet</p>
+      <p>{{ t('messageInbox.empty') }}</p>
     </div>
 
     <div v-else class="message-list">
@@ -215,12 +218,12 @@ onUnmounted(() => {
             {{ msg.priority }}
           </span>
           <span class="message-agent">
-            {{ activeView === 'inbox' ? `From: ${msg.from_agent_id}` : `To: ${msg.to_agent_id || 'broadcast'}` }}
+            {{ activeView === 'inbox' ? t('messageInbox.from', { agent: msg.from_agent_id }) : t('messageInbox.to', { agent: msg.to_agent_id || t('messageInbox.broadcast') }) }}
           </span>
           <span :class="['status-dot', statusClass(msg.status)]" :title="msg.status"></span>
           <button
             class="delete-msg-btn"
-            title="Delete message"
+            :title="t('messageInbox.deleteTitle')"
             @click="deleteMessage(msg, $event)"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
@@ -229,7 +232,7 @@ onUnmounted(() => {
           </button>
         </div>
         <div class="message-subject">
-          {{ msg.subject || '(no subject)' }}
+          {{ msg.subject || t('messageInbox.noSubject') }}
         </div>
         <div class="message-preview">
           {{ truncate(msg.content, 100) }}

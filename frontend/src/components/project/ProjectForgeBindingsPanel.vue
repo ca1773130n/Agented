@@ -22,6 +22,7 @@
  * v0.7.70.
  */
 import { ref, computed, onMounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import {
   projectApi,
   ruleApi,
@@ -53,6 +54,7 @@ const props = defineProps<{
   projectId: string;
 }>();
 
+const { t } = useI18n();
 const showToast = useToast();
 const bindings = ref<ForgeBinding[]>([]);
 const isLoading = ref(false);
@@ -72,14 +74,14 @@ const libraryByKind = ref<Partial<Record<ForgeBindingKind, LibraryItem[]>>>({});
 const libraryLoadingByKind = ref<Partial<Record<ForgeBindingKind, boolean>>>({});
 const libraryErrorByKind = ref<Partial<Record<ForgeBindingKind, string>>>({});
 
-const KIND_LABELS: Record<ForgeBindingKind, string> = {
-  rule: 'Rule',
-  skill: 'Skill',
-  hook: 'Hook',
-  command: 'Command',
-  mcp_server: 'MCP Server',
-  plugin: 'Plugin',
-};
+const KIND_LABELS = computed<Record<ForgeBindingKind, string>>(() => ({
+  rule: t('projectForgeBindingsPanel.kind.rule'),
+  skill: t('projectForgeBindingsPanel.kind.skill'),
+  hook: t('projectForgeBindingsPanel.kind.hook'),
+  command: t('projectForgeBindingsPanel.kind.command'),
+  mcp_server: t('projectForgeBindingsPanel.kind.mcpServer'),
+  plugin: t('projectForgeBindingsPanel.kind.plugin'),
+}));
 
 const grouped = computed(() => {
   const out: Record<string, ForgeBinding[]> = {};
@@ -102,7 +104,7 @@ async function load() {
         ? err.message
         : err instanceof Error
         ? err.message
-        : 'Failed to load bindings';
+        : t('projectForgeBindingsPanel.loadFailed');
   } finally {
     isLoading.value = false;
   }
@@ -126,7 +128,7 @@ async function loadLibrary(kind: ForgeBindingKind) {
   } catch (err) {
     libraryErrorByKind.value = {
       ...libraryErrorByKind.value,
-      [kind]: err instanceof Error ? err.message : 'load failed',
+      [kind]: err instanceof Error ? err.message : t('projectForgeBindingsPanel.loadFailedShort'),
     };
     // Do NOT cache a sentinel on error — the next kind toggle
     // back into this kind retries. The fallback text input still
@@ -231,7 +233,7 @@ function optionLabel(item: LibraryItem): string {
   // whitespace, fall back to ``(unnamed)`` so the option still
   // has visible text. Server should validate IDs, but the
   // sentinel costs nothing and removes a footgun.
-  const id = (item.asset_id || '').trim() || '(unnamed)';
+  const id = (item.asset_id || '').trim() || t('projectForgeBindingsPanel.unnamed');
   const label = (item.label || '').trim() || id;
   if (label === id) return label;
   return `${label} (${id})`;
@@ -240,7 +242,7 @@ function optionLabel(item: LibraryItem): string {
 async function addBinding() {
   const asset = newAssetId.value.trim();
   if (!asset) {
-    showToast('Asset id is required', 'error');
+    showToast(t('projectForgeBindingsPanel.toast.assetRequired'), 'error');
     return;
   }
   isSubmitting.value = true;
@@ -251,10 +253,10 @@ async function addBinding() {
     });
     bindings.value = [...bindings.value, res.binding];
     newAssetId.value = '';
-    showToast(`Bound ${res.binding.kind} ${res.binding.asset_id}`, 'success');
+    showToast(t('projectForgeBindingsPanel.toast.bound', { kind: res.binding.kind, assetId: res.binding.asset_id }), 'success');
   } catch (err) {
     showToast(
-      err instanceof Error ? err.message : 'Failed to add binding',
+      err instanceof Error ? err.message : t('projectForgeBindingsPanel.toast.addFailed'),
       'error',
     );
   } finally {
@@ -268,7 +270,7 @@ async function removeBinding(b: ForgeBinding) {
     bindings.value = bindings.value.filter((x) => x.id !== b.id);
   } catch (err) {
     showToast(
-      err instanceof Error ? err.message : 'Failed to remove binding',
+      err instanceof Error ? err.message : t('projectForgeBindingsPanel.toast.removeFailed'),
       'error',
     );
   }
@@ -285,20 +287,15 @@ onMounted(() => {
 <template>
   <div class="forge-bindings" data-testid="forge-bindings-panel">
     <p class="section-description">
-      Sticky defaults: every session created for this project
-      inherits these Forge artifacts. Rules and skills feed
-      claude's system prompt; hooks / commands / MCP servers /
-      plugins are materialized into the session's overlay. The
-      per-prompt tray can layer volatile extras on top.
+      {{ t('projectForgeBindingsPanel.description') }}
     </p>
 
-    <div v-if="isLoading" class="state">Loading…</div>
+    <div v-if="isLoading" class="state">{{ t('projectForgeBindingsPanel.loading') }}</div>
     <div v-else-if="errorMessage" class="state state-error">
       {{ errorMessage }}
     </div>
     <div v-else-if="bindings.length === 0" class="state state-empty">
-      No bindings yet. Add one below to wire Forge artifacts into
-      this project's sessions.
+      {{ t('projectForgeBindingsPanel.empty') }}
     </div>
     <div v-else class="binding-groups">
       <div
@@ -313,17 +310,17 @@ onMounted(() => {
             <span
               v-if="!b.enabled"
               class="binding-flag"
-              title="Disabled — won't be applied"
+              :title="t('projectForgeBindingsPanel.disabledTitle')"
             >
-              disabled
+              {{ t('projectForgeBindingsPanel.disabled') }}
             </span>
             <button
               type="button"
               class="btn btn-sm btn-danger"
-              title="Remove binding"
+              :title="t('projectForgeBindingsPanel.removeBindingTitle')"
               @click="removeBinding(b)"
             >
-              Remove
+              {{ t('common.remove') }}
             </button>
           </li>
         </ul>
@@ -351,8 +348,8 @@ onMounted(() => {
       >
         <option value="" disabled>
           {{ availableLibrary.length === 0
-            ? `All ${KIND_LABELS[newKind].toLowerCase()}s already bound`
-            : `Pick a ${KIND_LABELS[newKind].toLowerCase()}…` }}
+            ? t('projectForgeBindingsPanel.allBound', { kind: KIND_LABELS[newKind].toLowerCase() })
+            : t('projectForgeBindingsPanel.pickKind', { kind: KIND_LABELS[newKind].toLowerCase() }) }}
         </option>
         <!-- v0.7.75 (codex NIT 5) — option label is a single
              string, not text+span. Native ``<option>`` strips
@@ -375,10 +372,10 @@ onMounted(() => {
         type="text"
         :placeholder="
           currentLibraryLoading
-            ? 'Loading library…'
+            ? t('projectForgeBindingsPanel.loadingLibrary')
             : currentLibraryError
-              ? `Library load failed — type the asset id manually`
-              : `No ${KIND_LABELS[newKind].toLowerCase()}s in your library — type an asset id`
+              ? t('projectForgeBindingsPanel.libraryLoadFailedPlaceholder')
+              : t('projectForgeBindingsPanel.noLibraryPlaceholder', { kind: KIND_LABELS[newKind].toLowerCase() })
         "
         :disabled="isSubmitting || currentLibraryLoading"
         @keydown.enter.prevent="addBinding"
@@ -390,12 +387,11 @@ onMounted(() => {
         :disabled="isSubmitting || !newAssetId"
         @click="addBinding"
       >
-        Add binding
+        {{ t('projectForgeBindingsPanel.addBinding') }}
       </button>
     </div>
     <p v-if="currentLibraryError" class="form-hint form-hint-warn">
-      Couldn't load {{ KIND_LABELS[newKind] }} library: {{ currentLibraryError }}.
-      Type the asset id manually.
+      {{ t('projectForgeBindingsPanel.libraryLoadWarn', { kind: KIND_LABELS[newKind], error: currentLibraryError }) }}
     </p>
   </div>
 </template>

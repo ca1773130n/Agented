@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { MergedChunkResults } from '../../services/api';
+
+const { t } = useI18n();
 
 defineProps<{
   results: MergedChunkResults;
@@ -33,12 +36,12 @@ function toggleChunk(index: number) {
       </div>
       <div class="summary-text">
         <span class="summary-title">
-          Processed <strong>{{ results.total_chunks }}</strong> chunks
+          {{ t('chunkResults.processedBefore') }} <strong>{{ results.total_chunks }}</strong> {{ t('chunkResults.processedAfter') }}
         </span>
         <span class="summary-detail">
-          {{ results.unique_findings.length }} unique findings
+          {{ t('chunkResults.uniqueFindings', { count: results.unique_findings.length }) }}
           <span v-if="results.duplicate_count > 0" class="dedup-badge">
-            {{ results.duplicate_count }} duplicates removed
+            {{ t('chunkResults.duplicatesRemoved', { count: results.duplicate_count }) }}
           </span>
         </span>
       </div>
@@ -46,7 +49,7 @@ function toggleChunk(index: number) {
 
     <!-- Merged Findings -->
     <div v-if="results.unique_findings.length > 0" class="findings-section">
-      <h4 class="section-title">Merged Findings</h4>
+      <h4 class="section-title">{{ t('chunkResults.mergedFindings') }}</h4>
       <ul class="findings-list">
         <li v-for="(finding, i) in results.unique_findings" :key="i" class="finding-item">
           {{ finding }}
@@ -56,20 +59,20 @@ function toggleChunk(index: number) {
 
     <!-- Merged Output (if different from findings list) -->
     <div v-if="results.merged_output" class="merged-output-section">
-      <h4 class="section-title">Merged Output</h4>
+      <h4 class="section-title">{{ t('chunkResults.mergedOutput') }}</h4>
       <pre class="merged-output">{{ results.merged_output }}</pre>
     </div>
 
     <!-- Empty state -->
     <div v-if="results.unique_findings.length === 0 && !results.merged_output" class="empty-findings">
-      No findings produced from chunked execution.
+      {{ t('chunkResults.empty') }}
     </div>
 
     <!-- Per-Chunk Details Accordion -->
     <div v-if="results.chunk_results && results.chunk_results.length > 0" class="chunks-accordion">
       <h4 class="section-title accordion-header">
         <button class="accordion-toggle" @click="expandedChunks.size === results.chunk_results.length ? (expandedChunks = new Set()) : (expandedChunks = new Set(results.chunk_results.map((_, i) => i)))">
-          Per-Chunk Details
+          {{ t('chunkResults.perChunkDetails') }}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <path d="M6 9l6 6 6-6"/>
           </svg>
@@ -78,8 +81,8 @@ function toggleChunk(index: number) {
 
       <div v-for="(chunk, index) in results.chunk_results" :key="index" class="chunk-item">
         <button class="chunk-header" @click="toggleChunk(index)">
-          <span class="chunk-index">Chunk {{ chunk.chunk_index + 1 }}</span>
-          <span class="chunk-meta">{{ chunk.token_count }} tokens</span>
+          <span class="chunk-index">{{ t('chunkResults.chunkN', { n: chunk.chunk_index + 1 }) }}</span>
+          <span class="chunk-meta">{{ t('chunkResults.tokens', { count: chunk.token_count }) }}</span>
           <svg
             class="chunk-chevron"
             :class="{ expanded: expandedChunks.has(index) }"

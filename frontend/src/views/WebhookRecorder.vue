@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { executionApi, triggerApi, ApiError } from '../services/api';
 import type { Execution, Trigger } from '../services/api';
+const { t } = useI18n();
 const showToast = useToast();
 
 interface WebhookRecord {
@@ -54,9 +56,9 @@ async function fetchData() {
     triggers.value = triggerResult?.triggers || [];
   } catch (err) {
     if (err instanceof ApiError) {
-      error.value = `Failed to load webhook records: ${err.message}`;
+      error.value = t('webhookRecorder.errors.loadWithDetail', { message: err.message });
     } else {
-      error.value = 'Failed to load webhook records';
+      error.value = t('webhookRecorder.errors.load');
     }
   } finally {
     loading.value = false;
@@ -91,12 +93,12 @@ async function handleReplay(r: WebhookRecord) {
     const trigger = triggers.value.find(t => t.id === r.bot);
     if (trigger) {
       await triggerApi.run(trigger.id);
-      showToast(`Webhook ${r.id} replayed successfully`, 'success');
+      showToast(t('webhookRecorder.toast.replayed', { id: r.id }), 'success');
     } else {
-      showToast('Cannot replay: trigger not found', 'error');
+      showToast(t('webhookRecorder.toast.triggerNotFound'), 'error');
     }
   } catch (err) {
-    showToast(err instanceof ApiError ? err.message : 'Replay failed', 'error');
+    showToast(err instanceof ApiError ? err.message : t('webhookRecorder.toast.replayFailed'), 'error');
   } finally {
     isReplaying.value = null;
   }
@@ -117,53 +119,53 @@ function statusClass(code: number): string {
   <div class="webhook-recorder">
 
     <PageHeader
-      title="Webhook Recorder"
-      subtitle="Browse, inspect, and replay captured webhook payloads."
+      :title="t('webhookRecorder.title')"
+      :subtitle="t('webhookRecorder.subtitle')"
     />
 
     <!-- Loading state -->
     <div v-if="loading" class="card" style="padding: 48px; text-align: center;">
-      <div style="color: var(--text-tertiary); font-size: 0.875rem;">Loading webhook records...</div>
+      <div style="color: var(--text-tertiary); font-size: 0.875rem;">{{ t('webhookRecorder.loading') }}</div>
     </div>
 
     <!-- Error state -->
     <div v-else-if="error" class="card" style="padding: 48px; text-align: center;">
       <div style="color: #ef4444; font-size: 0.875rem; margin-bottom: 12px;">{{ error }}</div>
-      <button class="btn btn-ghost" @click="fetchData">Retry</button>
+      <button class="btn btn-ghost" @click="fetchData">{{ t('common.retry') }}</button>
     </div>
 
     <div v-else class="main-layout">
       <div class="left-panel">
         <div class="filters card">
-          <div class="filter-header">Filters</div>
+          <div class="filter-header">{{ t('webhookRecorder.filters.title') }}</div>
           <div class="filter-body">
             <div class="field-group">
-              <label class="field-label">Source</label>
+              <label class="field-label">{{ t('webhookRecorder.filters.source') }}</label>
               <select v-model="filterSource" class="select-input">
-                <option value="">All sources</option>
+                <option value="">{{ t('webhookRecorder.filters.allSources') }}</option>
                 <option v-for="s in sources" :key="s" :value="s">{{ s }}</option>
               </select>
             </div>
             <div class="field-group">
-              <label class="field-label">Bot</label>
+              <label class="field-label">{{ t('webhookRecorder.filters.bot') }}</label>
               <select v-model="filterBot" class="select-input">
-                <option value="">All bots</option>
+                <option value="">{{ t('webhookRecorder.filters.allBots') }}</option>
                 <option v-for="b in bots" :key="b" :value="b">{{ b }}</option>
               </select>
             </div>
             <div class="field-group">
-              <label class="field-label">Date</label>
+              <label class="field-label">{{ t('webhookRecorder.filters.date') }}</label>
               <input v-model="filterDate" type="date" class="select-input" />
             </div>
             <button class="btn btn-ghost" @click="filterSource = ''; filterBot = ''; filterDate = ''">
-              Clear filters
+              {{ t('webhookRecorder.filters.clear') }}
             </button>
           </div>
         </div>
 
         <div class="card records-card">
           <div class="records-header">
-            <span class="records-count">{{ filtered.length }} webhook{{ filtered.length !== 1 ? 's' : '' }}</span>
+            <span class="records-count">{{ t('webhookRecorder.records.count', { count: filtered.length }) }}</span>
           </div>
           <div class="records-list">
             <div
@@ -181,7 +183,7 @@ function statusClass(code: number): string {
               <div class="record-date">{{ formatDate(r.receivedAt) }}</div>
             </div>
             <div v-if="filtered.length === 0" class="records-empty">
-              No webhooks match filters
+              {{ t('webhookRecorder.records.empty') }}
             </div>
           </div>
         </div>
@@ -193,14 +195,14 @@ function statusClass(code: number): string {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40" style="color: var(--text-tertiary); opacity: 0.4">
               <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 11 19.79 19.79 0 0 1 1.61 2.18 2 2 0 0 1 3.6.01h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 7.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
             </svg>
-            <p>Select a webhook to inspect its payload</p>
+            <p>{{ t('webhookRecorder.detail.selectPrompt') }}</p>
           </div>
         </div>
 
         <div v-else class="card detail-card">
           <div class="detail-header">
             <div>
-              <div class="detail-title">{{ selectedRecord.source }} webhook</div>
+              <div class="detail-title">{{ t('webhookRecorder.detail.titleSuffix', { source: selectedRecord.source }) }}</div>
               <div class="detail-sub">{{ selectedRecord.path }} · {{ formatDate(selectedRecord.receivedAt) }}</div>
             </div>
             <div class="detail-actions">
@@ -215,17 +217,17 @@ function statusClass(code: number): string {
                 <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                   <polygon points="5 3 19 12 5 21 5 3"/>
                 </svg>
-                {{ isReplaying === selectedRecord.id ? 'Replaying...' : 'Replay' }}
+                {{ isReplaying === selectedRecord.id ? t('webhookRecorder.detail.replaying') : t('webhookRecorder.detail.replay') }}
               </button>
             </div>
           </div>
           <div class="detail-meta-row">
-            <span class="meta-chip">Method: {{ selectedRecord.method }}</span>
-            <span :class="['meta-chip', statusClass(selectedRecord.statusCode)]">Status: {{ selectedRecord.statusCode }}</span>
-            <span class="meta-chip">Bot: {{ selectedRecord.bot }}</span>
+            <span class="meta-chip">{{ t('webhookRecorder.detail.method', { method: selectedRecord.method }) }}</span>
+            <span :class="['meta-chip', statusClass(selectedRecord.statusCode)]">{{ t('webhookRecorder.detail.status', { status: selectedRecord.statusCode }) }}</span>
+            <span class="meta-chip">{{ t('webhookRecorder.detail.bot', { bot: selectedRecord.bot }) }}</span>
           </div>
           <div class="payload-section">
-            <div class="payload-label">Payload</div>
+            <div class="payload-label">{{ t('webhookRecorder.detail.payload') }}</div>
             <pre class="payload-pre">{{ JSON.stringify(selectedRecord.payload, null, 2) }}</pre>
           </div>
         </div>

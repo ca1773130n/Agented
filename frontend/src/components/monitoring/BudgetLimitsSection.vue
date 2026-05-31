@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { BudgetLimit } from '../../services/api';
 import { useTokenFormatting } from '../../composables/useTokenFormatting';
 import ConfirmModal from '../base/ConfirmModal.vue';
 
+const { t } = useI18n();
 const { formatCurrency } = useTokenFormatting();
 
 defineProps<{
@@ -44,12 +46,12 @@ function cancelDelete() {
 function getLimitStatus(limit: BudgetLimit): { label: string; color: string; bgColor: string } {
   const spend = limit.current_spend_usd || 0;
   if (limit.hard_limit_usd != null && spend >= limit.hard_limit_usd) {
-    return { label: 'Exceeded', color: '#ff3366', bgColor: 'rgba(255, 51, 102, 0.15)' };
+    return { label: t('budgetLimitsSection.status.exceeded'), color: '#ff3366', bgColor: 'rgba(255, 51, 102, 0.15)' };
   }
   if (limit.soft_limit_usd != null && spend >= limit.soft_limit_usd) {
-    return { label: 'Warning', color: '#ffaa00', bgColor: 'rgba(255, 170, 0, 0.15)' };
+    return { label: t('budgetLimitsSection.status.warning'), color: '#ffaa00', bgColor: 'rgba(255, 170, 0, 0.15)' };
   }
-  return { label: 'Within Budget', color: '#00ff88', bgColor: 'rgba(0, 255, 136, 0.15)' };
+  return { label: t('budgetLimitsSection.status.withinBudget'), color: '#00ff88', bgColor: 'rgba(0, 255, 136, 0.15)' };
 }
 
 function getBudgetProgress(limit: BudgetLimit): number {
@@ -83,32 +85,32 @@ function getEntityName(limit: BudgetLimit, agents: { id: string; name: string }[
 <template>
   <div class="section">
     <div class="section-header">
-      <h2 class="section-title">Budget Limits</h2>
+      <h2 class="section-title">{{ t('budgetLimitsSection.title') }}</h2>
       <button class="add-limit-btn" @click="emit('open-add-limit')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="12" y1="5" x2="12" y2="19"/>
           <line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
-        Add Limit
+        {{ t('budgetLimitsSection.addLimit') }}
       </button>
     </div>
 
     <div v-if="budgetLimits.length === 0" class="empty-state">
-      No budget limits configured. Click "Add Limit" to set spending guardrails.
+      {{ t('budgetLimitsSection.empty') }}
     </div>
 
     <div v-else class="limits-table-wrapper">
       <table class="limits-table">
         <thead>
           <tr>
-            <th>Entity</th>
-            <th>Type</th>
-            <th>Period</th>
-            <th>Soft Limit</th>
-            <th>Hard Limit</th>
-            <th>Current Spend</th>
-            <th>Status</th>
-            <th>Actions</th>
+            <th>{{ t('budgetLimitsSection.columns.entity') }}</th>
+            <th>{{ t('budgetLimitsSection.columns.type') }}</th>
+            <th>{{ t('budgetLimitsSection.columns.period') }}</th>
+            <th>{{ t('budgetLimitsSection.columns.softLimit') }}</th>
+            <th>{{ t('budgetLimitsSection.columns.hardLimit') }}</th>
+            <th>{{ t('budgetLimitsSection.columns.currentSpend') }}</th>
+            <th>{{ t('budgetLimitsSection.columns.status') }}</th>
+            <th>{{ t('budgetLimitsSection.columns.actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -145,13 +147,13 @@ function getEntityName(limit: BudgetLimit, agents: { id: string; name: string }[
             </td>
             <td>
               <div class="action-btns">
-                <button class="action-btn" title="Edit" @click="emit('open-edit-limit', limit)">
+                <button class="action-btn" :title="t('common.edit')" @click="emit('open-edit-limit', limit)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                     <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
                     <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
                   </svg>
                 </button>
-                <button class="action-btn danger" title="Delete" @click="requestDelete(limit)">
+                <button class="action-btn danger" :title="t('common.delete')" @click="requestDelete(limit)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                     <polyline points="3 6 5 6 21 6"/>
                     <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
@@ -165,9 +167,9 @@ function getEntityName(limit: BudgetLimit, agents: { id: string; name: string }[
     </div>
     <ConfirmModal
       :open="showDeleteConfirm"
-      title="Delete Budget Limit"
-      :message="`Are you sure you want to delete the budget limit for \u201C${pendingDeleteLimit ? getEntityName(pendingDeleteLimit, agents, teams, triggers) : ''}\u201D?`"
-      confirm-label="Delete"
+      :title="t('budgetLimitsSection.deleteConfirm.title')"
+      :message="t('budgetLimitsSection.deleteConfirm.message', { name: pendingDeleteLimit ? getEntityName(pendingDeleteLimit, agents, teams, triggers) : '' })"
+      :confirm-label="t('common.delete')"
       variant="danger"
       @confirm="confirmDelete"
       @cancel="cancelDelete"

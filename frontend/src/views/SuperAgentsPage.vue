@@ -10,11 +10,13 @@ import ErrorState from '../components/base/ErrorState.vue';
 import { useToast } from '../composables/useToast';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import { useWebMcpPageTools } from '../composables/useWebMcpPageTools';
+import { useI18n } from 'vue-i18n';
 // v0.7.92 — Ouroboros bridge dialog (PR #138 follow-up).
 import SuperAgentOuroborosDialog from '../components/super-agents/SuperAgentOuroborosDialog.vue';
 
 const router = useRouter();
 
+const { t } = useI18n();
 const showToast = useToast();
 
 const superAgents = ref<SuperAgent[]>([]);
@@ -83,7 +85,7 @@ async function loadSuperAgents() {
     const data = await superAgentApi.list();
     superAgents.value = data.super_agents || [];
   } catch (e) {
-    loadError.value = e instanceof ApiError ? e.message : 'Failed to load super agents';
+    loadError.value = e instanceof ApiError ? e.message : t('superAgents.toast.loadFailed');
     showToast(loadError.value, 'error');
   } finally {
     isLoading.value = false;
@@ -97,7 +99,7 @@ const isCreating = ref(false);
 async function createSuperAgent() {
   if (isCreating.value) return;
   if (!createForm.value.name.trim()) {
-    showToast('Name is required', 'error');
+    showToast(t('superAgents.toast.nameRequired'), 'error');
     return;
   }
   isCreating.value = true;
@@ -107,7 +109,7 @@ async function createSuperAgent() {
       description: createForm.value.description || undefined,
       backend_type: createForm.value.backend_type,
     });
-    showToast('SuperAgent created successfully', 'success');
+    showToast(t('superAgents.toast.created'), 'success');
     showCreateModal.value = false;
     createForm.value = { name: '', description: '', backend_type: 'claude' };
     // Super agent created, reload list
@@ -116,7 +118,7 @@ async function createSuperAgent() {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to create super agent', 'error');
+      showToast(t('superAgents.toast.createFailed'), 'error');
     }
   } finally {
     isCreating.value = false;
@@ -132,7 +134,7 @@ async function deleteSuperAgent() {
   if (!agentToDelete.value) return;
   try {
     await superAgentApi.delete(agentToDelete.value.id);
-    showToast(`SuperAgent "${agentToDelete.value.name}" deleted`, 'success');
+    showToast(t('superAgents.toast.deleted', { name: agentToDelete.value.name }), 'success');
     showDeleteConfirm.value = false;
     agentToDelete.value = null;
     // Super agent deleted, reload list
@@ -141,7 +143,7 @@ async function deleteSuperAgent() {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to delete super agent', 'error');
+      showToast(t('superAgents.toast.deleteFailed'), 'error');
     }
   }
 }
@@ -160,13 +162,13 @@ async function toggleEnabled(sa: SuperAgent, event: Event) {
   event.stopPropagation();
   try {
     await superAgentApi.update(sa.id, { enabled: sa.enabled ? 0 : 1 });
-    showToast(`SuperAgent "${sa.name}" ${sa.enabled ? 'disabled' : 'enabled'}`, 'success');
+    showToast(sa.enabled ? t('superAgents.toast.disabledNamed', { name: sa.name }) : t('superAgents.toast.enabledNamed', { name: sa.name }), 'success');
     await loadSuperAgents();
   } catch (e) {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to update super agent', 'error');
+      showToast(t('superAgents.toast.updateFailed'), 'error');
     }
   }
 }
@@ -196,13 +198,11 @@ function activityLabel(saId: string): { text: string; cls: string } | null {
   const status = activityStatus.value[saId];
   if (!status) return null;
   if (status.is_streaming) {
-    return { text: 'Working', cls: 'activity-pill activity-pill--working' };
+    return { text: t('superAgents.activity.working'), cls: 'activity-pill activity-pill--working' };
   }
   if (status.active_sessions > 0) {
     return {
-      text: status.active_sessions === 1
-        ? '1 active session'
-        : `${status.active_sessions} active sessions`,
+      text: t('superAgents.activity.activeSessions', { count: status.active_sessions }),
       cls: 'activity-pill activity-pill--active',
     };
   }
@@ -225,7 +225,7 @@ onUnmounted(() => {
 
 <template>
   <div class="super-agents-page">
-    <PageHeader title="SuperAgents" subtitle="Persistent session agents with identity documents and inter-agent messaging">
+    <PageHeader :title="t('superAgents.title')" :subtitle="t('superAgents.subtitle')">
       <template #actions>
         <div class="search-wrapper">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -235,45 +235,45 @@ onUnmounted(() => {
           <input
             v-model="searchQuery"
             type="text"
-            placeholder="Search super agents..."
+            :placeholder="t('superAgents.searchPlaceholder')"
             class="search-input"
           />
         </div>
         <button class="btn btn-secondary" @click="router.push({ name: 'explore-super-agents' })">
-          Explore SuperAgents
+          {{ t('superAgents.exploreSuperAgents') }}
         </button>
         <button class="btn btn-primary" @click="showCreateModal = true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 5v14M5 12h14"/>
           </svg>
-          Create SuperAgent
+          {{ t('superAgents.createSuperAgent') }}
         </button>
       </template>
     </PageHeader>
 
-    <LoadingState v-if="isLoading" message="Loading super agents..." />
+    <LoadingState v-if="isLoading" :message="t('superAgents.loading')" />
 
     <ErrorState
       v-else-if="loadError"
-      title="Failed to load super agents"
+      :title="t('superAgents.loadFailedTitle')"
       :message="loadError"
       @retry="loadSuperAgents"
     />
 
     <EmptyState
       v-else-if="superAgents.length === 0"
-      title="No super agents yet"
-      description="Create your first SuperAgent to get started"
+      :title="t('superAgents.empty.title')"
+      :description="t('superAgents.empty.description')"
     >
       <template #actions>
-        <button class="btn btn-primary" @click="showCreateModal = true">Create Your First SuperAgent</button>
+        <button class="btn btn-primary" @click="showCreateModal = true">{{ t('superAgents.createFirst') }}</button>
       </template>
     </EmptyState>
 
     <EmptyState
       v-else-if="filteredSuperAgents.length === 0"
-      title="No matching super agents"
-      description="Try a different search term"
+      :title="t('superAgents.noMatch.title')"
+      :description="t('superAgents.noMatch.description')"
     />
 
     <div v-else class="sa-grid">
@@ -295,7 +295,7 @@ onUnmounted(() => {
             <h3>{{ sa.name }}</h3>
             <div class="sa-badges">
               <span :class="['badge-backend', getBackendClass(sa.backend_type)]">{{ sa.backend_type }}</span>
-              <span :class="['badge-status', getStatusClass(sa)]">{{ sa.enabled ? 'Active' : 'Inactive' }}</span>
+              <span :class="['badge-status', getStatusClass(sa)]">{{ sa.enabled ? t('superAgents.active') : t('superAgents.inactive') }}</span>
               <span
                 v-if="activityLabel(sa.id)"
                 :class="activityLabel(sa.id)!.cls"
@@ -312,11 +312,11 @@ onUnmounted(() => {
 
         <div class="sa-meta">
           <div v-if="sa.preferred_model" class="meta-item">
-            <span class="meta-label">Model:</span>
+            <span class="meta-label">{{ t('superAgents.modelLabel') }}</span>
             <span class="meta-value">{{ sa.preferred_model }}</span>
           </div>
           <div class="meta-item">
-            <span class="meta-label">Max Sessions:</span>
+            <span class="meta-label">{{ t('superAgents.maxSessionsLabel') }}</span>
             <span class="meta-value">{{ sa.max_concurrent_sessions }}</span>
           </div>
         </div>
@@ -326,14 +326,14 @@ onUnmounted(() => {
             :class="['btn', 'btn-sm', sa.enabled ? 'btn-toggle-active' : 'btn-toggle-inactive']"
             @click.stop="toggleEnabled(sa, $event)"
           >
-            {{ sa.enabled ? 'Disable' : 'Enable' }}
+            {{ sa.enabled ? t('superAgents.disable') : t('superAgents.enable') }}
           </button>
           <button class="btn btn-sm btn-secondary" @click.stop="router.push({ name: 'super-agent-playground', params: { superAgentId: sa.id } })">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
             </svg>
-            Edit
+            {{ t('common.edit') }}
           </button>
           <button
             class="btn btn-sm btn-secondary"
@@ -344,7 +344,7 @@ onUnmounted(() => {
               <circle cx="11" cy="11" r="8"/>
               <line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
-            Inspector
+            {{ t('superAgents.inspector') }}
           </button>
           <!-- v0.7.92 — Ouroboros bridge entry point. Opens a
                dialog that POSTs to /admin/super-agents/{id}/ouroboros-runs
@@ -366,7 +366,7 @@ onUnmounted(() => {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
             </svg>
-            Delete
+            {{ t('common.delete') }}
           </button>
         </div>
       </router-link>
@@ -377,20 +377,20 @@ onUnmounted(() => {
       <div v-if="showCreateModal" ref="createModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-create-superagent" tabindex="-1" @click.self="showCreateModal = false" @keydown.escape="showCreateModal = false">
         <div class="modal">
           <div class="modal-header">
-            <h2 id="modal-title-create-superagent">Create SuperAgent</h2>
+            <h2 id="modal-title-create-superagent">{{ t('superAgents.createSuperAgent') }}</h2>
             <button class="modal-close" @click="showCreateModal = false">&times;</button>
           </div>
           <div class="modal-body">
             <div class="form-group">
-              <label>Name *</label>
-              <input v-model="createForm.name" type="text" placeholder="e.g., code-reviewer" />
+              <label>{{ t('superAgents.form.name') }}</label>
+              <input v-model="createForm.name" type="text" :placeholder="t('superAgents.form.namePlaceholder')" />
             </div>
             <div class="form-group">
-              <label>Description</label>
-              <textarea v-model="createForm.description" placeholder="Describe what this SuperAgent does..."></textarea>
+              <label>{{ t('superAgents.form.description') }}</label>
+              <textarea v-model="createForm.description" :placeholder="t('superAgents.form.descriptionPlaceholder')"></textarea>
             </div>
             <div class="form-group">
-              <label>Backend Type</label>
+              <label>{{ t('superAgents.form.backendType') }}</label>
               <select v-model="createForm.backend_type">
                 <option value="claude">Claude</option>
                 <option value="opencode">OpenCode</option>
@@ -400,9 +400,9 @@ onUnmounted(() => {
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn" @click="showCreateModal = false">Cancel</button>
+            <button class="btn" @click="showCreateModal = false">{{ t('common.cancel') }}</button>
             <button class="btn btn-primary" :disabled="isCreating" @click="createSuperAgent">
-              {{ isCreating ? 'Creating…' : 'Create' }}
+              {{ isCreating ? t('superAgents.creating') : t('common.create') }}
             </button>
           </div>
         </div>
@@ -414,15 +414,15 @@ onUnmounted(() => {
       <div v-if="showDeleteConfirm" ref="deleteModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-delete-superagent" tabindex="-1" @click.self="showDeleteConfirm = false" @keydown.escape="showDeleteConfirm = false">
         <div class="modal modal-small">
           <div class="modal-header">
-            <h2 id="modal-title-delete-superagent">Delete SuperAgent</h2>
+            <h2 id="modal-title-delete-superagent">{{ t('superAgents.deleteModal.title') }}</h2>
           </div>
           <div class="modal-body">
-            <p>Are you sure you want to delete "<strong>{{ agentToDelete?.name }}</strong>"?</p>
-            <p class="warning-text">This action cannot be undone. All documents and sessions will be removed.</p>
+            <p>{{ t('superAgents.deleteModal.confirmBefore') }}"<strong>{{ agentToDelete?.name }}</strong>"{{ t('superAgents.deleteModal.confirmAfter') }}</p>
+            <p class="warning-text">{{ t('superAgents.deleteModal.warning') }}</p>
           </div>
           <div class="modal-footer">
-            <button class="btn" @click="showDeleteConfirm = false">Cancel</button>
-            <button class="btn btn-danger" @click="deleteSuperAgent">Delete</button>
+            <button class="btn" @click="showDeleteConfirm = false">{{ t('common.cancel') }}</button>
+            <button class="btn btn-danger" @click="deleteSuperAgent">{{ t('common.delete') }}</button>
           </div>
         </div>
       </div>

@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+
 defineProps<{
   status: 'idle' | 'running' | 'waiting_input' | 'complete' | 'error';
   grdInitStatus: string;
@@ -10,64 +14,40 @@ const emit = defineEmits<{
 
 const commandGroups = [
   {
-    label: 'Project Setup',
+    labelKey: 'planningCommandBar.groups.projectSetup',
     commands: [
-      { name: 'map-codebase', label: 'Map Codebase', description: 'Analyze project structure' },
-      { name: 'new-milestone', label: 'New Milestone', description: 'Create a new milestone' },
-      {
-        name: 'long-term-roadmap',
-        label: 'Long-term Roadmap',
-        description: 'Generate strategic roadmap',
-      },
+      { name: 'map-codebase', labelKey: 'planningCommandBar.cmd.mapCodebase.label', descKey: 'planningCommandBar.cmd.mapCodebase.desc' },
+      { name: 'new-milestone', labelKey: 'planningCommandBar.cmd.newMilestone.label', descKey: 'planningCommandBar.cmd.newMilestone.desc' },
+      { name: 'long-term-roadmap', labelKey: 'planningCommandBar.cmd.longTermRoadmap.label', descKey: 'planningCommandBar.cmd.longTermRoadmap.desc' },
     ],
   },
   {
-    label: 'Phase Management',
+    labelKey: 'planningCommandBar.groups.phaseManagement',
     commands: [
-      { name: 'add-phase', label: 'Add Phase', description: 'Add a phase to milestone' },
-      { name: 'remove-phase', label: 'Remove Phase', description: 'Remove a phase' },
-      { name: 'insert-phase', label: 'Insert Phase', description: 'Insert phase at position' },
-      {
-        name: 'discuss-phase',
-        label: 'Discuss Phase',
-        description: 'AI-assisted phase discussion',
-      },
-      { name: 'plan-phase', label: 'Plan Phase', description: 'Generate execution plans' },
+      { name: 'add-phase', labelKey: 'planningCommandBar.cmd.addPhase.label', descKey: 'planningCommandBar.cmd.addPhase.desc' },
+      { name: 'remove-phase', labelKey: 'planningCommandBar.cmd.removePhase.label', descKey: 'planningCommandBar.cmd.removePhase.desc' },
+      { name: 'insert-phase', labelKey: 'planningCommandBar.cmd.insertPhase.label', descKey: 'planningCommandBar.cmd.insertPhase.desc' },
+      { name: 'discuss-phase', labelKey: 'planningCommandBar.cmd.discussPhase.label', descKey: 'planningCommandBar.cmd.discussPhase.desc' },
+      { name: 'plan-phase', labelKey: 'planningCommandBar.cmd.planPhase.label', descKey: 'planningCommandBar.cmd.planPhase.desc' },
     ],
   },
   {
-    label: 'Research & Analysis',
+    labelKey: 'planningCommandBar.groups.researchAnalysis',
     commands: [
-      { name: 'survey', label: 'Survey', description: 'Survey research landscape' },
-      { name: 'deep-dive', label: 'Deep Dive', description: 'Deep dive into topic' },
-      { name: 'feasibility', label: 'Feasibility', description: 'Assess feasibility' },
-      {
-        name: 'assess-baseline',
-        label: 'Assess Baseline',
-        description: 'Establish performance baseline',
-      },
-      { name: 'compare-methods', label: 'Compare Methods', description: 'Compare approaches' },
-      {
-        name: 'list-phase-assumptions',
-        label: 'List Assumptions',
-        description: 'Surface phase assumptions',
-      },
+      { name: 'survey', labelKey: 'planningCommandBar.cmd.survey.label', descKey: 'planningCommandBar.cmd.survey.desc' },
+      { name: 'deep-dive', labelKey: 'planningCommandBar.cmd.deepDive.label', descKey: 'planningCommandBar.cmd.deepDive.desc' },
+      { name: 'feasibility', labelKey: 'planningCommandBar.cmd.feasibility.label', descKey: 'planningCommandBar.cmd.feasibility.desc' },
+      { name: 'assess-baseline', labelKey: 'planningCommandBar.cmd.assessBaseline.label', descKey: 'planningCommandBar.cmd.assessBaseline.desc' },
+      { name: 'compare-methods', labelKey: 'planningCommandBar.cmd.compareMethods.label', descKey: 'planningCommandBar.cmd.compareMethods.desc' },
+      { name: 'list-phase-assumptions', labelKey: 'planningCommandBar.cmd.listAssumptions.label', descKey: 'planningCommandBar.cmd.listAssumptions.desc' },
     ],
   },
   {
-    label: 'Requirements',
+    labelKey: 'planningCommandBar.groups.requirements',
     commands: [
-      { name: 'requirement', label: 'Requirement', description: 'Define a requirement' },
-      {
-        name: 'plan-milestone-gaps',
-        label: 'Plan Gaps',
-        description: 'Identify milestone gaps',
-      },
-      {
-        name: 'complete-milestone',
-        label: 'Complete Milestone',
-        description: 'Mark milestone complete',
-      },
+      { name: 'requirement', labelKey: 'planningCommandBar.cmd.requirement.label', descKey: 'planningCommandBar.cmd.requirement.desc' },
+      { name: 'plan-milestone-gaps', labelKey: 'planningCommandBar.cmd.planGaps.label', descKey: 'planningCommandBar.cmd.planGaps.desc' },
+      { name: 'complete-milestone', labelKey: 'planningCommandBar.cmd.completeMilestone.label', descKey: 'planningCommandBar.cmd.completeMilestone.desc' },
     ],
   },
 ] as const;
@@ -82,24 +62,24 @@ function handleClick(commandName: string) {
 <template>
   <div class="command-bar">
     <div class="command-bar-header">
-      <h3 class="command-bar-title">Planning Commands</h3>
+      <h3 class="command-bar-title">{{ t('planningCommandBar.title') }}</h3>
       <span v-if="grdInitStatus !== 'none'" class="init-status" :class="'init-' + grdInitStatus">
         {{ grdInitStatus }}
       </span>
     </div>
 
-    <div v-for="group in commandGroups" :key="group.label" class="command-group">
-      <div class="group-label">{{ group.label }}</div>
+    <div v-for="group in commandGroups" :key="group.labelKey" class="command-group">
+      <div class="group-label">{{ t(group.labelKey) }}</div>
       <div class="command-grid">
         <button
           v-for="cmd in group.commands"
           :key="cmd.name"
           class="command-btn"
           :disabled="isDisabled(status)"
-          :title="cmd.description"
+          :title="t(cmd.descKey)"
           @click="handleClick(cmd.name)"
         >
-          {{ cmd.label }}
+          {{ t(cmd.labelKey) }}
         </button>
       </div>
     </div>

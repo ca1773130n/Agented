@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import type { AuditRecord, Trigger, ProjectInfo } from '../services/api';
 import { auditApi, triggerApi } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
@@ -19,6 +20,7 @@ const props = defineProps<{
 
 const route = useRoute();
 const router = useRouter();
+const { t } = useI18n();
 const triggerId = computed(() => (route.params.triggerId as string) || props.triggerId || '');
 
 const showToast = useToast();
@@ -47,14 +49,14 @@ useWebMcpTool({
   deps: [audits],
 });
 
-const columns: DataTableColumn[] = [
-  { key: 'project', label: 'Project' },
-  { key: 'audit_date', label: 'Date' },
-  { key: 'trigger_content', label: 'Prompt Request' },
-  { key: 'total_findings', label: 'Result' },
-  { key: 'log', label: 'Log', align: 'center' },
-  { key: 'status', label: 'Status' },
-];
+const columns = computed<DataTableColumn[]>(() => [
+  { key: 'project', label: t('genericTriggerHistory.column.project') },
+  { key: 'audit_date', label: t('genericTriggerHistory.column.date') },
+  { key: 'trigger_content', label: t('genericTriggerHistory.column.promptRequest') },
+  { key: 'total_findings', label: t('genericTriggerHistory.column.result') },
+  { key: 'log', label: t('genericTriggerHistory.column.log'), align: 'center' },
+  { key: 'status', label: t('genericTriggerHistory.column.status') },
+]);
 
 function applyFilter() {
   if (!selectedProject.value) {
@@ -79,7 +81,7 @@ async function loadData() {
     applyFilter();
     return trigger.value;
   } catch (err) {
-    handleApiError(err, showToast, 'Failed to load trigger history');
+    handleApiError(err, showToast, t('genericTriggerHistory.toast.loadFailed'));
     throw err;
   }
 }
@@ -109,12 +111,12 @@ function getStatusVariant(status: string): 'success' | 'danger' | 'neutral' {
     <template #default="{ reload: _reload }">
   <div class="trigger-history">
 
-    <PageHeader :title="(trigger?.name || 'Trigger') + ' History'" subtitle="Execution history and results">
+    <PageHeader :title="t('genericTriggerHistory.title', { name: trigger?.name || t('genericTriggerHistory.trigger') })" :subtitle="t('genericTriggerHistory.subtitle')">
       <template #actions>
         <div class="header-stats">
           <div class="stat-chip">
             <span class="stat-value">{{ audits.length }}</span>
-            <span class="stat-label">Executions</span>
+            <span class="stat-label">{{ t('genericTriggerHistory.executions') }}</span>
           </div>
         </div>
       </template>
@@ -127,16 +129,16 @@ function getStatusVariant(status: string): 'success' | 'danger' | 'neutral' {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <polygon points="22,3 2,3 10,12.46 10,19 14,21 14,12.46"/>
           </svg>
-          <label>Filter by Project</label>
+          <label>{{ t('genericTriggerHistory.filterByProject') }}</label>
           <select v-model="selectedProject">
-            <option value="">All Projects</option>
+            <option value="">{{ t('genericTriggerHistory.allProjects') }}</option>
             <option v-for="p in projects" :key="p.project_path" :value="p.project_path">
               {{ p.project_name || p.project_path }}
             </option>
           </select>
         </div>
         <div class="filter-info">
-          Showing {{ filteredAudits.length }} of {{ audits.length }} executions
+          {{ t('genericTriggerHistory.showingCount', { shown: filteredAudits.length, total: audits.length }) }}
         </div>
       </div>
 
@@ -145,7 +147,7 @@ function getStatusVariant(status: string): 'success' | 'danger' | 'neutral' {
         :items="filteredAudits"
       >
         <template #empty>
-          <EmptyState title="No execution history available" />
+          <EmptyState :title="t('genericTriggerHistory.noHistory')" />
         </template>
         <template #cell-project="{ item }">
           <span class="project-name">{{ item.project_name || item.project_path }}</span>
@@ -159,10 +161,10 @@ function getStatusVariant(status: string): 'success' | 'danger' | 'neutral' {
           </span>
         </template>
         <template #cell-total_findings="{ item }">
-          <span class="findings-total">{{ item.total_findings }} findings</span>
+          <span class="findings-total">{{ t('genericTriggerHistory.findingsCount', { count: item.total_findings }) }}</span>
         </template>
         <template #cell-log="{ item }">
-          <button class="btn-icon-sm" title="View details" @click.stop="router.push({ name: 'audit-detail', params: { auditId: item.audit_id } })">
+          <button class="btn-icon-sm" :title="t('genericTriggerHistory.viewDetails')" @click.stop="router.push({ name: 'audit-detail', params: { auditId: item.audit_id } })">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
               <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>

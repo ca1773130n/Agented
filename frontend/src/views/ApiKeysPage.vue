@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 import { rbacApi, ApiError } from '../services/api';
 import type { UserRole } from '../services/api';
+const { t } = useI18n();
 const showToast = useToast();
 
 const existingKeys = ref<UserRole[]>([]);
@@ -27,7 +29,7 @@ async function loadKeys() {
     const data = await rbacApi.listRoles();
     existingKeys.value = data.roles ?? [];
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load API keys';
+    const message = err instanceof ApiError ? err.message : t('apiKeys.loadFailed');
     loadError.value = message;
   } finally {
     isLoading.value = false;
@@ -72,9 +74,9 @@ async function generateKey() {
     if (result.role) {
       existingKeys.value.unshift(result.role);
     }
-    showToast('API key generated', 'success');
+    showToast(t('apiKeys.toast.generated'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to generate API key';
+    const message = err instanceof ApiError ? err.message : t('apiKeys.toast.generateFailed');
     showToast(message, 'error');
   } finally {
     isGenerating.value = false;
@@ -85,9 +87,9 @@ async function copyKey() {
   if (!generatedKey.value) return;
   try {
     await navigator.clipboard.writeText(generatedKey.value);
-    showToast('Copied to clipboard', 'success');
+    showToast(t('apiKeys.toast.copied'), 'success');
   } catch {
-    showToast('Failed to copy', 'error');
+    showToast(t('apiKeys.toast.copyFailed'), 'error');
   }
 }
 
@@ -96,9 +98,9 @@ async function revokeKey(key: UserRole) {
   try {
     await rbacApi.deleteRole(key.id);
     existingKeys.value = existingKeys.value.filter(k => k.id !== key.id);
-    showToast(`Key "${key.label}" revoked`, 'success');
+    showToast(t('apiKeys.toast.revoked', { label: key.label }), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to revoke key';
+    const message = err instanceof ApiError ? err.message : t('apiKeys.toast.revokeFailed');
     showToast(message, 'error');
   } finally {
     deletingId.value = null;
@@ -133,16 +135,16 @@ onMounted(loadKeys);
   <div class="api-keys-page">
 
     <PageHeader
-      title="API Keys"
-      subtitle="Generate API keys for programmatic access to Agented from CI/CD pipelines, scripts, and tools."
+      :title="t('apiKeys.title')"
+      :subtitle="t('apiKeys.subtitle')"
     />
 
-    <LoadingState v-if="isLoading" message="Loading API keys..." />
+    <LoadingState v-if="isLoading" :message="t('apiKeys.loading')" />
 
     <div v-else-if="loadError" class="card error-card">
       <div class="error-inner">
         <p>{{ loadError }}</p>
-        <button class="btn btn-ghost" @click="loadKeys">Retry</button>
+        <button class="btn btn-ghost" @click="loadKeys">{{ t('common.retry') }}</button>
       </div>
     </div>
 
@@ -154,13 +156,13 @@ onMounted(loadKeys);
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
               <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
             </svg>
-            Active API Keys
+            {{ t('apiKeys.activeKeys') }}
           </h3>
           <button class="btn btn-primary" @click="openCreateForm">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
               <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
-            Create New API Key
+            {{ t('apiKeys.createNew') }}
           </button>
         </div>
 
@@ -169,10 +171,10 @@ onMounted(loadKeys);
           <table class="keys-table">
             <thead>
               <tr>
-                <th>Label</th>
-                <th>Key Prefix</th>
-                <th>Role</th>
-                <th>Created</th>
+                <th>{{ t('apiKeys.col.label') }}</th>
+                <th>{{ t('apiKeys.col.keyPrefix') }}</th>
+                <th>{{ t('apiKeys.col.role') }}</th>
+                <th>{{ t('apiKeys.col.created') }}</th>
                 <th></th>
               </tr>
             </thead>
@@ -191,12 +193,12 @@ onMounted(loadKeys);
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
                       <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                     </svg>
-                    {{ deletingId === key.id ? '...' : 'Revoke' }}
+                    {{ deletingId === key.id ? '...' : t('apiKeys.revoke') }}
                   </button>
                 </td>
               </tr>
               <tr v-if="existingKeys.length === 0">
-                <td colspan="5" class="table-empty">No API keys found. Create one to get started.</td>
+                <td colspan="5" class="table-empty">{{ t('apiKeys.empty') }}</td>
               </tr>
             </tbody>
           </table>
@@ -211,7 +213,7 @@ onMounted(loadKeys);
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
               <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
             </svg>
-            Create New API Key
+            {{ t('apiKeys.createNew') }}
           </h3>
         </div>
 
@@ -222,14 +224,14 @@ onMounted(loadKeys);
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="color: #34d399; flex-shrink: 0;">
                 <polyline points="20 6 9 17 4 12"/>
               </svg>
-              <span class="banner-title">Your API key has been generated</span>
+              <span class="banner-title">{{ t('apiKeys.banner.title') }}</span>
             </div>
             <div class="banner-warning">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                 <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
                 <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
               </svg>
-              Save this key now -- it will not be shown again.
+              {{ t('apiKeys.banner.warning') }}
             </div>
             <div class="key-display-row">
               <code class="key-display">{{ generatedKey }}</code>
@@ -238,28 +240,28 @@ onMounted(loadKeys);
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
                   <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
                 </svg>
-                Copy
+                {{ t('apiKeys.copy') }}
               </button>
             </div>
             <div class="banner-done">
-              <button class="btn btn-ghost-sm" @click="cancelCreate">Done</button>
+              <button class="btn btn-ghost-sm" @click="cancelCreate">{{ t('common.done') }}</button>
             </div>
           </div>
 
           <!-- Form Fields -->
           <template v-else>
             <div class="form-row">
-              <label class="form-label">Key Name</label>
+              <label class="form-label">{{ t('apiKeys.keyName') }}</label>
               <input
                 v-model="newKeyName"
                 type="text"
                 class="text-input"
-                placeholder="e.g. CI/CD Pipeline, GitHub Actions"
+                :placeholder="t('apiKeys.keyNamePlaceholder')"
               />
             </div>
 
             <div class="form-row">
-              <label class="form-label">Role</label>
+              <label class="form-label">{{ t('apiKeys.col.role') }}</label>
               <div class="role-options">
                 <label
                   v-for="r in ROLE_OPTIONS"
@@ -269,13 +271,13 @@ onMounted(loadKeys);
                 >
                   <input type="radio" v-model="newKeyRole" :value="r" class="radio-input" />
                   <span class="radio-text">{{ r }}</span>
-                  <span v-if="r === 'admin'" class="perm-warn">Full access</span>
+                  <span v-if="r === 'admin'" class="perm-warn">{{ t('apiKeys.fullAccess') }}</span>
                 </label>
               </div>
             </div>
 
             <div class="form-actions">
-              <button class="btn btn-ghost-sm" @click="cancelCreate">Cancel</button>
+              <button class="btn btn-ghost-sm" @click="cancelCreate">{{ t('common.cancel') }}</button>
               <button
                 class="btn btn-primary"
                 :disabled="!canGenerate || isGenerating"
@@ -287,7 +289,7 @@ onMounted(loadKeys);
                 <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                   <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
                 </svg>
-                {{ isGenerating ? 'Generating...' : 'Generate Key' }}
+                {{ isGenerating ? t('apiKeys.generating') : t('apiKeys.generateKey') }}
               </button>
             </div>
           </template>
@@ -301,12 +303,12 @@ onMounted(loadKeys);
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
               <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
             </svg>
-            Usage Examples
+            {{ t('apiKeys.usageExamples') }}
           </h3>
         </div>
         <div class="usage-body">
           <p class="usage-desc">
-            Pass your API key in the <code class="inline-code">X-API-Key</code> header.
+            {{ t('apiKeys.usageDescBefore') }} <code class="inline-code">X-API-Key</code> {{ t('apiKeys.usageDescAfter') }}
           </p>
           <div class="code-block-wrap">
             <div class="code-block-header">
@@ -316,7 +318,7 @@ onMounted(loadKeys);
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
                   <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
                 </svg>
-                Copy
+                {{ t('apiKeys.copy') }}
               </button>
             </div>
             <pre class="code-block"><code>{{ curlExample }}</code></pre>
@@ -331,7 +333,7 @@ onMounted(loadKeys);
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             </svg>
-            Security Tips
+            {{ t('apiKeys.securityTips') }}
           </h3>
         </div>
         <div class="tips-body">
@@ -343,8 +345,8 @@ onMounted(loadKeys);
               </svg>
             </div>
             <div>
-              <div class="tip-title">Never commit keys to version control</div>
-              <div class="tip-desc">Store API keys in environment variables or secret managers such as GitHub Secrets, Vault, or AWS Secrets Manager.</div>
+              <div class="tip-title">{{ t('apiKeys.tip1.title') }}</div>
+              <div class="tip-desc">{{ t('apiKeys.tip1.desc') }}</div>
             </div>
           </div>
           <div class="tip-row">
@@ -354,8 +356,8 @@ onMounted(loadKeys);
               </svg>
             </div>
             <div>
-              <div class="tip-title">Use the minimum required role</div>
-              <div class="tip-desc">Assign the least privileged role that meets your needs. Avoid using admin keys in automated pipelines.</div>
+              <div class="tip-title">{{ t('apiKeys.tip2.title') }}</div>
+              <div class="tip-desc">{{ t('apiKeys.tip2.desc') }}</div>
             </div>
           </div>
           <div class="tip-row">
@@ -366,8 +368,8 @@ onMounted(loadKeys);
               </svg>
             </div>
             <div>
-              <div class="tip-title">Rotate keys regularly</div>
-              <div class="tip-desc">Immediately revoke any key that may have been exposed. Create a new key with the same role to replace it.</div>
+              <div class="tip-title">{{ t('apiKeys.tip3.title') }}</div>
+              <div class="tip-desc">{{ t('apiKeys.tip3.desc') }}</div>
             </div>
           </div>
         </div>

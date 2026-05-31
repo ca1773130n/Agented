@@ -4,6 +4,8 @@ import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { integrationApi, ApiError } from '../services/api';
 import type { Integration } from '../services/api';
+import { useI18n } from 'vue-i18n';
+const { t } = useI18n();
 const showToast = useToast();
 
 interface TicketingIntegration {
@@ -76,9 +78,9 @@ async function fetchIntegrations() {
       .map(rawToTicketing);
   } catch (err) {
     if (err instanceof ApiError) {
-      error.value = `Failed to load ticketing integrations: ${err.message}`;
+      error.value = t('integrationTicketing.loadFailedWithReason', { reason: err.message });
     } else {
-      error.value = 'Failed to load ticketing integrations';
+      error.value = t('integrationTicketing.loadFailed');
     }
   } finally {
     loading.value = false;
@@ -101,7 +103,7 @@ function resetCreateForm() {
 
 async function createIntegration() {
   if (!newIntegration.value.name) {
-    showToast('Name is required', 'error');
+    showToast(t('integrationTicketing.toast.nameRequired'), 'error');
     return;
   }
   isCreating.value = true;
@@ -112,9 +114,9 @@ async function createIntegration() {
     integrations.value.push(rawToTicketing(created));
     showCreateForm.value = false;
     resetCreateForm();
-    showToast('Ticketing integration created', 'success');
+    showToast(t('integrationTicketing.toast.created'), 'success');
   } catch (err) {
-    showToast(err instanceof ApiError ? err.message : 'Failed to create integration', 'error');
+    showToast(err instanceof ApiError ? err.message : t('integrationTicketing.toast.createFailed'), 'error');
   } finally {
     isCreating.value = false;
   }
@@ -129,9 +131,9 @@ async function saveIntegration(int: TicketingIntegration) {
   try {
     await integrationApi.update(int.id, ticketingToRaw(int));
     editingId.value = null;
-    showToast(`${int.name} integration saved`, 'success');
+    showToast(t('integrationTicketing.toast.saved', { name: int.name }), 'success');
   } catch (err) {
-    showToast(err instanceof ApiError ? err.message : 'Failed to save integration', 'error');
+    showToast(err instanceof ApiError ? err.message : t('integrationTicketing.toast.saveFailed'), 'error');
   } finally {
     isSaving.value = false;
   }
@@ -142,10 +144,10 @@ async function toggleIntegration(int: TicketingIntegration) {
   int.enabled = !int.enabled;
   try {
     await integrationApi.update(int.id, { enabled: int.enabled });
-    showToast(`${int.name} ${int.enabled ? 'enabled' : 'disabled'}`, 'success');
+    showToast(int.enabled ? t('integrationTicketing.toast.enabled', { name: int.name }) : t('integrationTicketing.toast.disabled', { name: int.name }), 'success');
   } catch (err) {
     int.enabled = prev;
-    showToast(err instanceof ApiError ? err.message : 'Failed to toggle integration', 'error');
+    showToast(err instanceof ApiError ? err.message : t('integrationTicketing.toast.toggleFailed'), 'error');
   }
 }
 
@@ -159,27 +161,27 @@ function severityColor(s: string): string {
   <div class="integration-ticketing">
 
     <PageHeader
-      title="Ticketing Integrations"
-      subtitle="Configure Jira and Linear to auto-create tickets from bot findings."
+      :title="t('integrationTicketing.title')"
+      :subtitle="t('integrationTicketing.subtitle')"
     >
       <template #actions>
         <button class="btn btn-primary" @click="showCreateForm = !showCreateForm">
-          {{ showCreateForm ? 'Cancel' : '+ Add Integration' }}
+          {{ showCreateForm ? t('common.cancel') : t('integrationTicketing.addIntegration') }}
         </button>
       </template>
     </PageHeader>
 
     <!-- Create form -->
     <div v-if="showCreateForm" class="card create-form">
-      <div class="create-form-header">New Ticketing Integration</div>
+      <div class="create-form-header">{{ t('integrationTicketing.newIntegration') }}</div>
       <div class="int-form">
         <div class="form-row">
           <div class="field-group">
-            <label class="field-label">Name</label>
-            <input v-model="newIntegration.name" type="text" class="text-input" placeholder="e.g. Jira Security" />
+            <label class="field-label">{{ t('integrationTicketing.fields.name') }}</label>
+            <input v-model="newIntegration.name" type="text" class="text-input" :placeholder="t('integrationTicketing.fields.namePlaceholder')" />
           </div>
           <div class="field-group">
-            <label class="field-label">Type</label>
+            <label class="field-label">{{ t('integrationTicketing.fields.type') }}</label>
             <select v-model="newIntegration.type" class="select-input">
               <option value="jira">Jira</option>
               <option value="linear">Linear</option>
@@ -188,33 +190,33 @@ function severityColor(s: string): string {
         </div>
         <div class="form-row">
           <div class="field-group">
-            <label class="field-label">Host URL</label>
+            <label class="field-label">{{ t('integrationTicketing.fields.hostUrl') }}</label>
             <input v-model="newIntegration.host" type="text" class="text-input" placeholder="https://myorg.atlassian.net" />
           </div>
           <div class="field-group">
-            <label class="field-label">API Key</label>
-            <input v-model="newIntegration.apiKey" type="password" class="text-input" placeholder="Enter API key..." />
+            <label class="field-label">{{ t('integrationTicketing.fields.apiKey') }}</label>
+            <input v-model="newIntegration.apiKey" type="password" class="text-input" :placeholder="t('integrationTicketing.fields.apiKeyPlaceholder')" />
           </div>
         </div>
         <div class="form-row">
           <div class="field-group">
-            <label class="field-label">Project Key</label>
+            <label class="field-label">{{ t('integrationTicketing.fields.projectKey') }}</label>
             <input v-model="newIntegration.project" type="text" class="text-input" placeholder="e.g. SEC" />
           </div>
           <div class="field-group">
-            <label class="field-label">Auto-create threshold</label>
+            <label class="field-label">{{ t('integrationTicketing.fields.autoCreateThreshold') }}</label>
             <select v-model="newIntegration.severityThreshold" class="select-input">
-              <option value="critical">Critical only</option>
-              <option value="high">High and above</option>
-              <option value="medium">Medium and above</option>
-              <option value="low">All findings</option>
+              <option value="critical">{{ t('integrationTicketing.threshold.criticalOnly') }}</option>
+              <option value="high">{{ t('integrationTicketing.threshold.highAndAbove') }}</option>
+              <option value="medium">{{ t('integrationTicketing.threshold.mediumAndAbove') }}</option>
+              <option value="low">{{ t('integrationTicketing.threshold.allFindings') }}</option>
             </select>
           </div>
         </div>
         <div class="form-actions">
-          <button class="btn btn-secondary" @click="showCreateForm = false; resetCreateForm()">Cancel</button>
+          <button class="btn btn-secondary" @click="showCreateForm = false; resetCreateForm()">{{ t('common.cancel') }}</button>
           <button class="btn btn-primary" :disabled="isCreating" @click="createIntegration">
-            {{ isCreating ? 'Creating...' : 'Create Integration' }}
+            {{ isCreating ? t('integrationTicketing.creating') : t('integrationTicketing.createIntegration') }}
           </button>
         </div>
       </div>
@@ -222,19 +224,19 @@ function severityColor(s: string): string {
 
     <!-- Loading state -->
     <div v-if="loading" class="card" style="padding: 48px; text-align: center;">
-      <div style="color: var(--text-tertiary); font-size: 0.875rem;">Loading ticketing integrations...</div>
+      <div style="color: var(--text-tertiary); font-size: 0.875rem;">{{ t('integrationTicketing.loading') }}</div>
     </div>
 
     <!-- Error state -->
     <div v-else-if="error" class="card" style="padding: 48px; text-align: center;">
       <div style="color: #ef4444; font-size: 0.875rem; margin-bottom: 12px;">{{ error }}</div>
-      <button class="btn btn-secondary" @click="fetchIntegrations">Retry</button>
+      <button class="btn btn-secondary" @click="fetchIntegrations">{{ t('common.retry') }}</button>
     </div>
 
     <!-- Empty state -->
     <div v-else-if="integrations.length === 0" class="card" style="padding: 48px; text-align: center;">
-      <div style="color: var(--text-tertiary); font-size: 0.875rem; margin-bottom: 12px;">No ticketing integrations configured yet.</div>
-      <button class="btn btn-primary" @click="showCreateForm = true">+ Add Integration</button>
+      <div style="color: var(--text-tertiary); font-size: 0.875rem; margin-bottom: 12px;">{{ t('integrationTicketing.empty') }}</div>
+      <button class="btn btn-primary" @click="showCreateForm = true">{{ t('integrationTicketing.addIntegration') }}</button>
     </div>
 
     <template v-else>
@@ -246,7 +248,7 @@ function severityColor(s: string): string {
             </div>
             <div class="int-title-area">
               <h3 class="int-name">{{ int.name }}</h3>
-              <span class="int-host">{{ int.host || 'Not configured' }}</span>
+              <span class="int-host">{{ int.host || t('integrationTicketing.notConfigured') }}</span>
             </div>
             <div class="int-controls">
               <label class="toggle-wrap">
@@ -256,7 +258,7 @@ function severityColor(s: string): string {
                 </span>
               </label>
               <button class="btn btn-sm btn-secondary" @click="editIntegration(int.id)">
-                {{ editingId === int.id ? 'Cancel' : 'Configure' }}
+                {{ editingId === int.id ? t('common.cancel') : t('integrationTicketing.configure') }}
               </button>
             </div>
           </div>
@@ -264,51 +266,51 @@ function severityColor(s: string): string {
           <div v-if="editingId === int.id" class="int-form">
             <div class="form-row">
               <div class="field-group">
-                <label class="field-label">Host URL</label>
+                <label class="field-label">{{ t('integrationTicketing.fields.hostUrl') }}</label>
                 <input v-model="int.host" type="text" class="text-input" placeholder="https://myorg.atlassian.net" />
               </div>
               <div class="field-group">
-                <label class="field-label">API Key</label>
-                <input v-model="int.apiKey" type="password" class="text-input" placeholder="Enter API key..." />
+                <label class="field-label">{{ t('integrationTicketing.fields.apiKey') }}</label>
+                <input v-model="int.apiKey" type="password" class="text-input" :placeholder="t('integrationTicketing.fields.apiKeyPlaceholder')" />
               </div>
             </div>
             <div class="form-row">
               <div class="field-group">
-                <label class="field-label">Project Key</label>
+                <label class="field-label">{{ t('integrationTicketing.fields.projectKey') }}</label>
                 <input v-model="int.project" type="text" class="text-input" placeholder="e.g. SEC" />
               </div>
               <div class="field-group">
-                <label class="field-label">Auto-create threshold</label>
+                <label class="field-label">{{ t('integrationTicketing.fields.autoCreateThreshold') }}</label>
                 <select v-model="int.severityThreshold" class="select-input">
-                  <option value="critical">Critical only</option>
-                  <option value="high">High and above</option>
-                  <option value="medium">Medium and above</option>
-                  <option value="low">All findings</option>
+                  <option value="critical">{{ t('integrationTicketing.threshold.criticalOnly') }}</option>
+                  <option value="high">{{ t('integrationTicketing.threshold.highAndAbove') }}</option>
+                  <option value="medium">{{ t('integrationTicketing.threshold.mediumAndAbove') }}</option>
+                  <option value="low">{{ t('integrationTicketing.threshold.allFindings') }}</option>
                 </select>
               </div>
             </div>
             <div class="form-actions">
               <button class="btn btn-primary" :disabled="isSaving" @click="saveIntegration(int)">
-                {{ isSaving ? 'Saving...' : 'Save Integration' }}
+                {{ isSaving ? t('integrationTicketing.saving') : t('integrationTicketing.saveIntegration') }}
               </button>
             </div>
           </div>
 
           <div v-else class="int-summary">
             <div class="summary-item">
-              <span class="summary-label">Project</span>
-              <span class="summary-val">{{ int.project || 'Not set' }}</span>
+              <span class="summary-label">{{ t('integrationTicketing.summary.project') }}</span>
+              <span class="summary-val">{{ int.project || t('integrationTicketing.summary.notSet') }}</span>
             </div>
             <div class="summary-item">
-              <span class="summary-label">Auto-create</span>
+              <span class="summary-label">{{ t('integrationTicketing.summary.autoCreate') }}</span>
               <span class="summary-val severity-val" :style="{ color: severityColor(int.severityThreshold) }">
-                {{ int.severityThreshold }} and above
+                {{ t('integrationTicketing.summary.severityAndAbove', { severity: int.severityThreshold }) }}
               </span>
             </div>
             <div class="summary-item">
-              <span class="summary-label">Status</span>
+              <span class="summary-label">{{ t('integrationTicketing.summary.status') }}</span>
               <span :class="['summary-val', int.enabled ? 'text-green' : 'text-muted']">
-                {{ int.enabled ? 'Active' : 'Disabled' }}
+                {{ int.enabled ? t('integrationTicketing.summary.active') : t('integrationTicketing.summary.disabled') }}
               </span>
             </div>
           </div>

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
 
+const { t } = useI18n();
 const showToast = useToast();
 const isLoading = ref(true);
 
@@ -137,7 +139,7 @@ function formatTime(iso: string): string {
 }
 
 function downloadArtifact(artifact: Artifact) {
-  showToast(`Downloading ${artifact.name}...`, 'success');
+  showToast(t('executionArtifacts.toast.downloading', { name: artifact.name }), 'success');
 }
 
 function selectArtifact(artifact: Artifact) {
@@ -157,17 +159,16 @@ onMounted(loadArtifacts);
 
     <NotEnabledBanner
       v-if="!FEATURE_ENABLED"
-      feature="Execution output artifacts"
-      detail="The backend that stores named artifact files produced by bot executions has not shipped yet. Downloads are disabled."
+      :feature="t('executionArtifacts.notEnabled.feature')"
+      :detail="t('executionArtifacts.notEnabled.detail')"
       testid="execution-artifacts-not-enabled"
     />
 
     <div class="page-header">
       <div>
-        <h1 class="page-title">Execution Output Artifacts</h1>
+        <h1 class="page-title">{{ t('executionArtifacts.title') }}</h1>
         <p class="page-subtitle">
-          Named files produced by bot executions — reports, diffs, test files, and logs — stored
-          persistently for download or downstream bot consumption.
+          {{ t('executionArtifacts.subtitle') }}
         </p>
       </div>
     </div>
@@ -176,22 +177,22 @@ onMounted(loadArtifacts);
       <input
         v-model="searchQuery"
         class="search-input"
-        placeholder="Search by name, bot, or execution ID..."
+        :placeholder="t('executionArtifacts.searchPlaceholder')"
       />
       <div class="type-filters">
         <button
-          v-for="t in ['all', 'diff', 'report', 'test_file', 'log', 'json']"
-          :key="t"
+          v-for="ft in ['all', 'diff', 'report', 'test_file', 'log', 'json']"
+          :key="ft"
           class="type-btn"
-          :class="{ active: filterType === t }"
-          @click="filterType = t"
+          :class="{ active: filterType === ft }"
+          @click="filterType = ft"
         >
-          {{ t === 'all' ? 'All' : t.replace('_', ' ') }}
+          {{ ft === 'all' ? t('executionArtifacts.allFilter') : ft.replace('_', ' ') }}
         </button>
       </div>
     </div>
 
-    <LoadingState v-if="isLoading" message="Loading artifacts..." />
+    <LoadingState v-if="isLoading" :message="t('executionArtifacts.loading')" />
     <div v-else class="artifacts-layout">
       <div class="artifacts-list">
         <div
@@ -213,13 +214,13 @@ onMounted(loadArtifacts);
           <button
             class="download-btn"
             :disabled="!FEATURE_ENABLED"
-            :title="!FEATURE_ENABLED ? 'Execution artifacts are not yet enabled' : 'Download'"
+            :title="!FEATURE_ENABLED ? t('executionArtifacts.notEnabledShort') : t('executionArtifacts.download')"
             @click.stop="downloadArtifact(artifact)"
           >
             ↓
           </button>
         </div>
-        <p v-if="filteredArtifacts.length === 0" class="empty-msg">No artifacts match your filter.</p>
+        <p v-if="filteredArtifacts.length === 0" class="empty-msg">{{ t('executionArtifacts.noMatch') }}</p>
       </div>
 
       <!-- Preview panel -->
@@ -235,18 +236,18 @@ onMounted(loadArtifacts);
           <button
             class="download-btn-full"
             :disabled="!FEATURE_ENABLED"
-            :title="!FEATURE_ENABLED ? 'Execution artifacts are not yet enabled' : undefined"
+            :title="!FEATURE_ENABLED ? t('executionArtifacts.notEnabledShort') : undefined"
             data-testid="execution-artifact-download-submit"
             @click="downloadArtifact(selectedArtifact)"
           >
-            Download
+            {{ t('executionArtifacts.download') }}
           </button>
         </div>
         <pre v-if="selectedArtifact.preview" class="preview-code">{{ selectedArtifact.preview }}</pre>
-        <p v-else class="preview-unavailable">Preview not available for this artifact type.</p>
+        <p v-else class="preview-unavailable">{{ t('executionArtifacts.previewUnavailable') }}</p>
       </div>
       <div v-else class="preview-placeholder">
-        <p>Select an artifact to preview</p>
+        <p>{{ t('executionArtifacts.selectPlaceholder') }}</p>
       </div>
     </div>
   </div>

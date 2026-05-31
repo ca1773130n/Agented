@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { triggerApi, ApiError } from '../services/api';
 import type { Trigger, DryRunResponse } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+const { t } = useI18n();
 const showToast = useToast();
 
 const triggers = ref<Trigger[]>([]);
@@ -51,7 +53,7 @@ function validateJson(): boolean {
 async function handleDryRun() {
   if (!validateJson()) return;
   if (!selectedTriggerId.value) {
-    showToast('Select a trigger to dry-run', 'info');
+    showToast(t('botDryRun.toast.selectTrigger'), 'info');
     return;
   }
 
@@ -67,12 +69,12 @@ async function handleDryRun() {
     // Build display from real response
     const trigger = triggers.value.find(t => t.id === selectedTriggerId.value);
     const steps: string[] = [
-      'Payload received and validated',
-      `Matched trigger: ${result.trigger_name}`,
-      `Prompt template rendered (backend: ${result.backend_type})`,
-      `CLI command built: ${result.cli_command.substring(0, 80)}${result.cli_command.length > 80 ? '...' : ''}`,
-      `Cost estimated (model: ${result.model})`,
-      'DRY RUN complete -- no subprocess spawned',
+      t('botDryRun.step.payloadValidated'),
+      t('botDryRun.step.matchedTrigger', { name: result.trigger_name }),
+      t('botDryRun.step.promptRendered', { backend: result.backend_type }),
+      t('botDryRun.step.cliBuilt', { command: `${result.cli_command.substring(0, 80)}${result.cli_command.length > 80 ? '...' : ''}` }),
+      t('botDryRun.step.costEstimated', { model: result.model }),
+      t('botDryRun.step.complete'),
     ];
 
     const est = result.estimated_tokens;
@@ -98,15 +100,15 @@ async function handleDryRun() {
 
     const warnings: string[] = [];
     if (trigger?.trigger_source === 'github') {
-      warnings.push('GitHub webhook would be processed (suppressed in dry run)');
+      warnings.push(t('botDryRun.warning.githubWebhook'));
     }
     if (trigger?.auto_resolve) {
-      warnings.push('Auto-resolve would run after execution (suppressed in dry run)');
+      warnings.push(t('botDryRun.warning.autoResolve'));
     }
 
     displayResult.value = { steps, output, warnings };
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Dry run failed';
+    const message = err instanceof ApiError ? err.message : t('botDryRun.toast.failed');
     showToast(message, 'error');
   } finally {
     isRunning.value = false;
@@ -120,8 +122,8 @@ onMounted(loadTriggers);
   <div class="bot-dry-run">
 
     <PageHeader
-      title="Bot Dry Run"
-      subtitle="Test your bot against a payload without any real side effects."
+      :title="t('botDryRun.title')"
+      :subtitle="t('botDryRun.subtitle')"
     />
 
     <div class="dry-run-layout">
@@ -131,26 +133,26 @@ onMounted(loadTriggers);
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
               <polygon points="5 3 19 12 5 21 5 3"/>
             </svg>
-            Dry Run Configuration
+            {{ t('botDryRun.configTitle') }}
           </h3>
           <div class="no-effects-badge">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             </svg>
-            No side effects
+            {{ t('botDryRun.noSideEffects') }}
           </div>
         </div>
         <div class="input-body">
           <div class="field-group">
-            <label class="field-label">Select Trigger / Bot</label>
+            <label class="field-label">{{ t('botDryRun.selectTriggerLabel') }}</label>
             <select v-model="selectedTriggerId" class="select-input">
-              <option value="">-- Select trigger --</option>
-              <option v-for="t in triggers" :key="t.id" :value="t.id">{{ t.name }}</option>
+              <option value="">{{ t('botDryRun.selectTriggerOption') }}</option>
+              <option v-for="trigger in triggers" :key="trigger.id" :value="trigger.id">{{ trigger.name }}</option>
             </select>
           </div>
 
           <div class="field-group">
-            <label class="field-label">Payload JSON</label>
+            <label class="field-label">{{ t('botDryRun.payloadJson') }}</label>
             <textarea
               v-model="payloadJson"
               class="text-area code-area"
@@ -173,7 +175,7 @@ onMounted(loadTriggers);
               <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                 <polygon points="5 3 19 12 5 21 5 3"/>
               </svg>
-              {{ isRunning ? 'Running dry run...' : 'Run Dry Run' }}
+              {{ isRunning ? t('botDryRun.running') : t('botDryRun.runButton') }}
             </button>
           </div>
         </div>
@@ -187,18 +189,18 @@ onMounted(loadTriggers);
               <line x1="9" y1="9" x2="15" y2="9"/>
               <line x1="9" y1="15" x2="15" y2="15"/>
             </svg>
-            Dry Run Output
+            {{ t('botDryRun.outputTitle') }}
           </h3>
           <div class="no-effects-badge">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
               <polyline points="20 6 9 17 4 12"/>
             </svg>
-            Safe -- no side effects
+            {{ t('botDryRun.safeNoEffects') }}
           </div>
         </div>
         <div class="output-body">
           <div class="steps-section">
-            <div class="steps-label">Execution Steps</div>
+            <div class="steps-label">{{ t('botDryRun.executionSteps') }}</div>
             <div class="steps-list">
               <div v-for="(step, i) in displayResult.steps" :key="i" class="step-row">
                 <span class="step-num">{{ i + 1 }}</span>
@@ -211,12 +213,12 @@ onMounted(loadTriggers);
           </div>
 
           <div class="output-section">
-            <div class="steps-label">Dry Run Output</div>
+            <div class="steps-label">{{ t('botDryRun.outputLabel') }}</div>
             <pre class="output-pre">{{ displayResult.output }}</pre>
           </div>
 
           <div v-if="displayResult.warnings.length > 0" class="would-send-section">
-            <div class="steps-label">Would Have Triggered (suppressed)</div>
+            <div class="steps-label">{{ t('botDryRun.wouldTrigger') }}</div>
             <div v-for="s in displayResult.warnings" :key="s" class="would-row">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="color: #f59e0b">
                 <circle cx="12" cy="12" r="10"/>

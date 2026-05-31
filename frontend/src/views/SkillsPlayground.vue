@@ -5,6 +5,8 @@ import { skillsApi, userSkillsApi, ApiError } from '../services/api';
 import { useToast } from '../composables/useToast';
 import { safeParseSSE } from '../composables/useEventSource';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
+import { useI18n } from 'vue-i18n';
+const { t } = useI18n();
 const showToast = useToast();
 
 const skills = ref<{ name: string; description?: string }[]>([]);
@@ -74,7 +76,7 @@ async function loadSkills() {
       description: s.description || undefined,
     }));
   } catch (e) {
-    showToast('Failed to load skills', 'error');
+    showToast(t('skillsPlayground.toast.loadFailed'), 'error');
   } finally {
     isLoading.value = false;
   }
@@ -116,7 +118,7 @@ async function runTest() {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to start test', 'error');
+      showToast(t('skillsPlayground.toast.startFailed'), 'error');
     }
     isRunning.value = false;
     testStatus.value = 'failed';
@@ -213,8 +215,8 @@ onUnmounted(() => {
   <div class="playground-page">
     <div class="page-header">
       <div class="header-content">
-        <h1>Skills Playground</h1>
-        <p class="subtitle">Test and experiment with Claude skills in a sandbox environment</p>
+        <h1>{{ t('skillsPlayground.title') }}</h1>
+        <p class="subtitle">{{ t('skillsPlayground.subtitle') }}</p>
       </div>
     </div>
 
@@ -222,7 +224,7 @@ onUnmounted(() => {
       <!-- Skill Selection Panel -->
       <div class="skill-panel">
         <div class="panel-header">
-          <h3>Available Skills</h3>
+          <h3>{{ t('skillsPlayground.availableSkills') }}</h3>
           <button class="btn-refresh" @click="loadSkills" :disabled="isLoading">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" :class="{ spinning: isLoading }">
               <path d="M1 4v6h6M23 20v-6h-6"/>
@@ -239,17 +241,17 @@ onUnmounted(() => {
           <input
             v-model="searchQuery"
             type="text"
-            placeholder="Search skills..."
+            :placeholder="t('skillsPlayground.searchPlaceholder')"
           />
         </div>
 
         <div v-if="isLoading" class="loading-state">
           <div class="spinner"></div>
-          <span>Loading skills...</span>
+          <span>{{ t('skillsPlayground.loadingSkills') }}</span>
         </div>
 
         <div v-else-if="filteredSkills.length === 0" class="empty-skills">
-          <p>No skills found</p>
+          <p>{{ t('skillsPlayground.noSkillsFound') }}</p>
         </div>
 
         <div v-else class="skills-list">
@@ -278,24 +280,24 @@ onUnmounted(() => {
       <!-- Test Panel -->
       <div class="test-panel">
         <div class="panel-header">
-          <h3>Test Execution</h3>
+          <h3>{{ t('skillsPlayground.testExecution') }}</h3>
           <div class="test-status" :class="testStatus">
             <span class="status-dot"></span>
-            <span>{{ testStatus === 'idle' ? 'Ready' : testStatus }}</span>
+            <span>{{ testStatus === 'idle' ? t('skillsPlayground.status.ready') : testStatus }}</span>
           </div>
         </div>
 
         <div class="input-section">
-          <label>Selected Skill</label>
+          <label>{{ t('skillsPlayground.selectedSkill') }}</label>
           <div class="selected-skill">
             <span v-if="selectedSkill" class="skill-badge">{{ selectedSkill }}</span>
-            <span v-else class="no-selection">Select a skill from the list</span>
+            <span v-else class="no-selection">{{ t('skillsPlayground.selectFromList') }}</span>
           </div>
 
-          <label>Test Input <span class="optional">(optional)</span></label>
+          <label>{{ t('skillsPlayground.testInput') }} <span class="optional">{{ t('skillsPlayground.optional') }}</span></label>
           <textarea
             v-model="testInput"
-            placeholder="Enter test input or prompt..."
+            :placeholder="t('skillsPlayground.inputPlaceholder')"
             rows="4"
             :disabled="isRunning"
           ></textarea>
@@ -309,7 +311,7 @@ onUnmounted(() => {
               <svg viewBox="0 0 24 24" fill="currentColor">
                 <polygon points="5 3 19 12 5 21 5 3"/>
               </svg>
-              {{ isRunning ? 'Running...' : 'Run Test' }}
+              {{ isRunning ? t('skillsPlayground.running') : t('skillsPlayground.runTest') }}
             </button>
             <button
               v-if="isRunning"
@@ -319,20 +321,20 @@ onUnmounted(() => {
               <svg viewBox="0 0 24 24" fill="currentColor">
                 <rect x="6" y="6" width="12" height="12"/>
               </svg>
-              Stop
+              {{ t('skillsPlayground.stop') }}
             </button>
             <button
               v-if="testOutput.length > 0 && !isRunning"
               class="btn"
               @click="clearOutput"
             >
-              Clear
+              {{ t('skillsPlayground.clear') }}
             </button>
           </div>
         </div>
 
         <div class="output-section">
-          <label>Output</label>
+          <label>{{ t('skillsPlayground.output') }}</label>
           <div ref="outputRef" class="output-container" :class="{ empty: testOutput.length === 0 }">
             <div v-if="testOutput.length === 0" class="output-placeholder">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -340,7 +342,7 @@ onUnmounted(() => {
                 <line x1="3" y1="9" x2="21" y2="9"/>
                 <line x1="9" y1="21" x2="9" y2="9"/>
               </svg>
-              <span>Output will appear here</span>
+              <span>{{ t('skillsPlayground.outputPlaceholder') }}</span>
             </div>
             <pre v-else><code>{{ testOutput.join('\n') }}</code></pre>
           </div>
@@ -350,7 +352,7 @@ onUnmounted(() => {
       <!-- File Browser Panel -->
       <div class="file-panel" :class="{ collapsed: !showFileBrowser }">
         <div class="panel-header">
-          <h3>Codebase</h3>
+          <h3>{{ t('skillsPlayground.codebase') }}</h3>
           <button class="btn-toggle" @click="showFileBrowser = !showFileBrowser">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path v-if="showFileBrowser" d="M15 19l-7-7 7-7"/>
@@ -370,11 +372,11 @@ onUnmounted(() => {
 
           <div v-if="isLoadingFiles" class="loading-state small">
             <div class="spinner"></div>
-            <span>Loading files...</span>
+            <span>{{ t('skillsPlayground.loadingFiles') }}</span>
           </div>
 
           <div v-else-if="playgroundFiles.length === 0" class="empty-files">
-            <p>No files found</p>
+            <p>{{ t('skillsPlayground.noFilesFound') }}</p>
           </div>
 
           <div v-else class="file-tree">

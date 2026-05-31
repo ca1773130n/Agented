@@ -5,8 +5,10 @@ import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
+import { useI18n } from 'vue-i18n';
 
 const showToast = useToast();
+const { t } = useI18n();
 
 const LANGUAGES = [
   { code: 'en', label: 'English', flag: '🇺🇸', rtl: false },
@@ -90,21 +92,21 @@ async function handleAutoTranslate(targetLang: string) {
     const sourceLang = localization.value.default_lang;
     const sourcePrompt = localization.value.prompts.find(p => p.lang_code === sourceLang);
     if (!sourcePrompt?.content) {
-      showToast('Source prompt is empty', 'error');
+      showToast(t('promptLocalization.sourceEmpty'), 'error');
       return;
     }
     await new Promise(r => setTimeout(r, 800));
     const target = localization.value.prompts.find(p => p.lang_code === targetLang);
     if (target) {
       const langObj = LANGUAGES.find(l => l.code === targetLang);
-      target.content = `[Auto-translated to ${langObj?.label ?? targetLang}]\n\n${sourcePrompt.content}`;
+      target.content = `${t('promptLocalization.autoTranslatedPrefix', { lang: langObj?.label ?? targetLang })}\n\n${sourcePrompt.content}`;
       target.auto_translated = true;
       target.last_edited_at = new Date().toISOString();
       if (activeTab.value === targetLang) editingContent.value = target.content;
     }
-    showToast(`Auto-translated to ${LANGUAGES.find(l => l.code === targetLang)?.label}`, 'success');
+    showToast(t('promptLocalization.autoTranslatedTo', { lang: LANGUAGES.find(l => l.code === targetLang)?.label }), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Translation failed';
+    const message = err instanceof ApiError ? err.message : t('promptLocalization.translationFailed');
     showToast(message, 'error');
   } finally {
     isTranslating.value = false;
@@ -119,7 +121,7 @@ async function handleSave() {
   if (cur) { cur.content = editingContent.value; cur.last_edited_at = new Date().toISOString(); }
   try {
     await new Promise(r => setTimeout(r, 400));
-    showToast('Localizations saved', 'success');
+    showToast(t('promptLocalization.localizationsSaved'), 'success');
   } finally {
     isSaving.value = false;
   }
@@ -134,7 +136,7 @@ async function loadBots() {
     const res = await triggerApi.list();
     bots.value = (res.triggers ?? []).map((b: { id: string; name: string; prompt_template?: string }) => b);
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load bots';
+    const message = err instanceof ApiError ? err.message : t('promptLocalization.loadBotsError');
     showToast(message, 'error');
   } finally {
     isLoading.value = false;
@@ -154,31 +156,31 @@ onMounted(loadBots);
 
     <NotEnabledBanner
       v-if="!FEATURE_ENABLED"
-      feature="Prompt localization"
-      detail="The backend that persists per-locale prompt variants and resolves them at execution time has not shipped yet. Saving translations is disabled."
+      :feature="t('promptLocalization.featureName')"
+      :detail="t('promptLocalization.notEnabledDetail')"
       testid="prompt-localization-not-enabled"
     />
 
     <PageHeader
-      title="Non-English Prompt Localization"
-      subtitle="Author prompt templates in multiple languages. The platform passes the correct locale to the AI provider."
+      :title="t('promptLocalization.title')"
+      :subtitle="t('promptLocalization.subtitle')"
     />
 
-    <LoadingState v-if="isLoading" message="Loading bots..." />
+    <LoadingState v-if="isLoading" :message="t('promptLocalization.loadingBots')" />
 
     <template v-else>
       <!-- Bot picker -->
       <div class="card bot-picker-card">
         <div class="bot-picker-body">
           <div class="field">
-            <label class="field-label">Select Bot</label>
+            <label class="field-label">{{ t('promptLocalization.selectBotLabel') }}</label>
             <select v-model="selectedBotId" class="select-input" @change="onBotSelect">
-              <option value="">-- Select a bot to localize --</option>
+              <option value="">{{ t('promptLocalization.selectBotPlaceholder') }}</option>
               <option v-for="b in bots" :key="b.id" :value="b.id">{{ b.name }}</option>
             </select>
           </div>
           <div v-if="localization" class="coverage-badge">
-            {{ filledCount(localization) }} / {{ LANGUAGES.length }} languages
+            {{ t('promptLocalization.coverage', { filled: filledCount(localization), total: LANGUAGES.length }) }}
           </div>
         </div>
       </div>
@@ -187,14 +189,14 @@ onMounted(loadBots);
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="36" height="36">
           <path d="M5 8l4 4-4 4M12 16h7"/>
         </svg>
-        <p>Select a bot above to manage its prompt localizations.</p>
+        <p>{{ t('promptLocalization.emptyHint') }}</p>
       </div>
 
       <template v-else>
         <div class="editor-layout">
           <!-- Language list sidebar -->
           <div class="lang-sidebar">
-            <div class="lang-sidebar-header">Languages</div>
+            <div class="lang-sidebar-header">{{ t('promptLocalization.languages') }}</div>
             <button
               v-for="lang in LANGUAGES"
               :key="lang.code"
@@ -208,8 +210,8 @@ onMounted(loadBots);
                   <circle cx="12" cy="12" r="12"/>
                 </svg>
               </span>
-              <span v-if="lang.code === localization.default_lang" class="lang-default">default</span>
-              <span v-if="localization.prompts.find(p => p.lang_code === lang.code)?.auto_translated" class="lang-auto">auto</span>
+              <span v-if="lang.code === localization.default_lang" class="lang-default">{{ t('promptLocalization.defaultBadge') }}</span>
+              <span v-if="localization.prompts.find(p => p.lang_code === lang.code)?.auto_translated" class="lang-auto">{{ t('promptLocalization.autoBadge') }}</span>
             </button>
           </div>
 
@@ -219,14 +221,14 @@ onMounted(loadBots);
               <div class="card-header">
                 <h3>
                   <span>{{ LANGUAGES.find(l => l.code === activeTab)?.flag }}</span>
-                  {{ LANGUAGES.find(l => l.code === activeTab)?.label }} Prompt
+                  {{ t('promptLocalization.languagePromptTitle', { lang: LANGUAGES.find(l => l.code === activeTab)?.label }) }}
                 </h3>
                 <div class="editor-actions">
                   <button
                     v-if="activeTab !== localization.default_lang"
                     class="btn btn-secondary btn-sm"
                     :disabled="isTranslating || !FEATURE_ENABLED"
-                    :title="!FEATURE_ENABLED ? 'Prompt localization is not yet enabled' : ''"
+                    :title="!FEATURE_ENABLED ? t('promptLocalization.notEnabledShort') : ''"
                     @click="handleAutoTranslate(activeTab)"
                   >
                     <svg v-if="isTranslating" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
@@ -235,7 +237,7 @@ onMounted(loadBots);
                     <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12">
                       <path d="M5 8l4 4-4 4M12 16h7"/>
                     </svg>
-                    {{ isTranslating ? 'Translating...' : 'Auto-Translate' }}
+                    {{ isTranslating ? t('promptLocalization.translating') : t('promptLocalization.autoTranslate') }}
                   </button>
                 </div>
               </div>
@@ -244,7 +246,7 @@ onMounted(loadBots);
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                   <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
                 </svg>
-                This is an auto-translated draft. Review and edit before using in production.
+                {{ t('promptLocalization.autoTranslatedBanner') }}
               </div>
 
               <div class="editor-body">
@@ -253,12 +255,12 @@ onMounted(loadBots);
                   class="code-editor"
                   :dir="LANGUAGES.find(l => l.code === activeTab)?.rtl ? 'rtl' : 'ltr'"
                   rows="18"
-                  :placeholder="`Enter prompt template in ${LANGUAGES.find(l => l.code === activeTab)?.label}...`"
+                  :placeholder="t('promptLocalization.editorPlaceholder', { lang: LANGUAGES.find(l => l.code === activeTab)?.label })"
                 />
                 <div class="editor-footer">
-                  <span class="char-count">{{ editingContent.length }} characters</span>
+                  <span class="char-count">{{ t('promptLocalization.charCount', { count: editingContent.length }) }}</span>
                   <span v-if="activePrompt?.last_edited_at" class="last-edited">
-                    Edited {{ new Date(activePrompt.last_edited_at).toLocaleString() }}
+                    {{ t('promptLocalization.editedAt', { time: new Date(activePrompt.last_edited_at).toLocaleString() }) }}
                   </span>
                 </div>
               </div>
@@ -268,11 +270,11 @@ onMounted(loadBots);
               <button
                 class="btn btn-primary"
                 :disabled="isSaving || !FEATURE_ENABLED"
-                :title="!FEATURE_ENABLED ? 'Prompt localization is not yet enabled in this deployment' : undefined"
+                :title="!FEATURE_ENABLED ? t('promptLocalization.notEnabledDeployment') : undefined"
                 data-testid="prompt-localization-save-submit"
                 @click="handleSave"
               >
-                {{ isSaving ? 'Saving...' : 'Save Localizations' }}
+                {{ isSaving ? t('promptLocalization.saving') : t('promptLocalization.saveLocalizations') }}
               </button>
             </div>
           </div>

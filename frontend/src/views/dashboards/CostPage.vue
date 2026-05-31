@@ -5,10 +5,12 @@
 -->
 <script setup lang="ts">
 import { ref, nextTick, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import PageHeader from '../../components/base/PageHeader.vue';
 import TokenUsageCard from './cards/TokenUsageCard.vue';
 
+const { t } = useI18n();
 const route = useRoute();
 const loaded = ref<Set<string>>(new Set());
 
@@ -32,7 +34,7 @@ onMounted(maybeScroll);
 
 <template>
   <div class="lane-page cost-lane">
-    <PageHeader title="Cost" subtitle="Token spend, budgets, and rate-limit windows" />
+    <PageHeader :title="t('cost.title')" :subtitle="t('cost.subtitle')" />
     <div class="lane-cards">
       <TokenUsageCard @loaded="onCardLoaded" />
     </div>

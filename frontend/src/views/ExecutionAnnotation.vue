@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { executionApi, ApiError } from '../services/api';
 import type { Execution } from '../services/api';
+const { t } = useI18n();
 const showToast = useToast();
 
 interface OutputSegment {
@@ -33,7 +35,9 @@ const commentingSegment = ref<string | null>(null);
 function parseSegments(exec: Execution): OutputSegment[] {
   const output = exec.stdout_log || '';
   if (!output.trim()) {
-    return [{ id: 's0', text: exec.status === 'success' ? 'Execution completed successfully (no output captured).' : `Execution ${exec.status}.${exec.error_message ? ' Error: ' + exec.error_message : ''}` }];
+    return [{ id: 's0', text: exec.status === 'success'
+      ? t('executionAnnotation.segments.completedNoOutput')
+      : t('executionAnnotation.segments.statusLine', { status: exec.status }) + (exec.error_message ? ' ' + t('executionAnnotation.segments.errorLine', { error: exec.error_message }) : '') }];
   }
   // Split by markdown headings or double newlines into segments
   const parts = output.split(/(?=^## )/m).filter(p => p.trim());
@@ -65,9 +69,9 @@ async function fetchExecutions() {
     }
   } catch (err) {
     if (err instanceof ApiError) {
-      error.value = `Failed to load executions: ${err.message}`;
+      error.value = t('executionAnnotation.errors.loadWithMessage', { message: err.message });
     } else {
-      error.value = 'Failed to load executions';
+      error.value = t('executionAnnotation.errors.load');
     }
   } finally {
     loading.value = false;
@@ -81,7 +85,7 @@ async function rateExecution(rating: 1 | -1) {
   isSubmittingRating.value = true;
   try {
     selected.value.rating = rating;
-    showToast(rating === 1 ? 'Rated thumbs up' : 'Rated thumbs down', 'success');
+    showToast(rating === 1 ? t('executionAnnotation.toast.ratedUp') : t('executionAnnotation.toast.ratedDown'), 'success');
   } finally {
     isSubmittingRating.value = false;
   }
@@ -96,7 +100,7 @@ async function addComment(seg: OutputSegment) {
   seg.comment = newComment.value;
   newComment.value = '';
   commentingSegment.value = null;
-  showToast('Comment saved', 'success');
+  showToast(t('executionAnnotation.toast.commentSaved'), 'success');
 }
 
 function formatDate(ts: string) {
@@ -115,43 +119,43 @@ const aggStats = computed(() => {
   <div class="exec-annotation">
 
     <PageHeader
-      title="Execution Annotation & Quality Feedback"
-      subtitle="Rate executions and leave inline comments on output segments to build a quality signal over time."
+      :title="t('executionAnnotation.title')"
+      :subtitle="t('executionAnnotation.subtitle')"
     />
 
     <!-- Loading state -->
     <div v-if="loading" class="card" style="padding: 48px; text-align: center;">
-      <div style="color: var(--text-tertiary); font-size: 0.875rem;">Loading executions...</div>
+      <div style="color: var(--text-tertiary); font-size: 0.875rem;">{{ t('executionAnnotation.loading') }}</div>
     </div>
 
     <!-- Error state -->
     <div v-else-if="error" class="card" style="padding: 48px; text-align: center;">
       <div style="color: #ef4444; font-size: 0.875rem; margin-bottom: 12px;">{{ error }}</div>
-      <button class="btn btn-ghost" @click="fetchExecutions">Retry</button>
+      <button class="btn btn-ghost" @click="fetchExecutions">{{ t('common.retry') }}</button>
     </div>
 
     <!-- Empty state -->
     <div v-else-if="executions.length === 0" class="card" style="padding: 48px; text-align: center;">
-      <div style="color: var(--text-tertiary); font-size: 0.875rem;">No executions available for annotation.</div>
+      <div style="color: var(--text-tertiary); font-size: 0.875rem;">{{ t('executionAnnotation.empty') }}</div>
     </div>
 
     <template v-else>
       <div class="stats-row">
         <div class="stat-chip card">
           <div class="stat-num">{{ aggStats.total }}</div>
-          <div class="stat-label">Total executions</div>
+          <div class="stat-label">{{ t('executionAnnotation.stats.total') }}</div>
         </div>
         <div class="stat-chip card">
           <div class="stat-num">{{ aggStats.rated }}</div>
-          <div class="stat-label">Rated</div>
+          <div class="stat-label">{{ t('executionAnnotation.stats.rated') }}</div>
         </div>
         <div class="stat-chip card">
           <div class="stat-num" style="color: #34d399;">{{ aggStats.positive }}</div>
-          <div class="stat-label">Thumbs up</div>
+          <div class="stat-label">{{ t('executionAnnotation.stats.thumbsUp') }}</div>
         </div>
         <div class="stat-chip card">
           <div class="stat-num" style="color: #ef4444;">{{ aggStats.negative }}</div>
-          <div class="stat-label">Thumbs down</div>
+          <div class="stat-label">{{ t('executionAnnotation.stats.thumbsDown') }}</div>
         </div>
       </div>
 
@@ -171,7 +175,7 @@ const aggStats = computed(() => {
               <span v-else-if="e.rating === -1" class="thumb thumb-down">👎</span>
             </div>
             <div class="exec-date">{{ formatDate(e.runAt) }}</div>
-            <div v-if="e.qualityScore" class="exec-score">Quality: {{ e.qualityScore }}/10</div>
+            <div v-if="e.qualityScore" class="exec-score">{{ t('executionAnnotation.quality', { score: e.qualityScore }) }}</div>
           </div>
         </aside>
 
@@ -184,7 +188,7 @@ const aggStats = computed(() => {
                 <div class="exec-time">{{ formatDate(selected.runAt) }}</div>
               </div>
               <div class="overall-rating">
-                <span class="rating-label">Overall:</span>
+                <span class="rating-label">{{ t('executionAnnotation.overall') }}</span>
                 <button
                   :class="['rate-btn', { active: selected.rating === 1 }]"
                   :disabled="isSubmittingRating"
@@ -207,7 +211,7 @@ const aggStats = computed(() => {
                   <button :class="['seg-rate-btn', { active: seg.rating === 1 }]" @click="rateSegment(seg, 1)">👍</button>
                   <button :class="['seg-rate-btn', { active: seg.rating === -1 }]" @click="rateSegment(seg, -1)">👎</button>
                   <button class="seg-comment-btn" @click="commentingSegment = commentingSegment === seg.id ? null : seg.id">
-                    💬 {{ seg.comment ? 'Edit' : 'Comment' }}
+                    💬 {{ seg.comment ? t('common.edit') : t('executionAnnotation.comment') }}
                   </button>
                 </div>
               </div>
@@ -216,10 +220,10 @@ const aggStats = computed(() => {
                 <span class="comment-text">{{ seg.comment }}</span>
               </div>
               <div v-if="commentingSegment === seg.id" class="comment-input-area">
-                <textarea v-model="newComment" class="comment-textarea" placeholder="Add your feedback..." rows="2"></textarea>
+                <textarea v-model="newComment" class="comment-textarea" :placeholder="t('executionAnnotation.feedbackPlaceholder')" rows="2"></textarea>
                 <div class="comment-input-actions">
-                  <button class="btn btn-ghost btn-sm" @click="commentingSegment = null; newComment = ''">Cancel</button>
-                  <button class="btn btn-primary btn-sm" @click="addComment(seg)">Save</button>
+                  <button class="btn btn-ghost btn-sm" @click="commentingSegment = null; newComment = ''">{{ t('common.cancel') }}</button>
+                  <button class="btn btn-primary btn-sm" @click="addComment(seg)">{{ t('common.save') }}</button>
                 </div>
               </div>
             </div>

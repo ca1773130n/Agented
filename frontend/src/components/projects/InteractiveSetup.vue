@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, onUnmounted, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { setupApi, ApiError, createAuthenticatedEventSource } from '../../services/api';
 import type { SetupQuestion, AuthenticatedEventSource } from '../../services/api';
 import { useToast } from '../../composables/useToast';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   projectId: string;
@@ -43,7 +46,7 @@ function scrollToBottom() {
 
 async function startSetup() {
   if (!command.value.trim()) {
-    showToast('Please enter a setup command', 'error');
+    showToast(t('interactiveSetup.toast.needCommand'), 'error');
     return;
   }
 
@@ -55,7 +58,7 @@ async function startSetup() {
     retryCount = 0;
     connectSSE();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to start setup';
+    const message = err instanceof ApiError ? err.message : t('interactiveSetup.toast.startFailed');
     showToast(message, 'error');
     status.value = 'error';
     errorMessage.value = message;
@@ -116,10 +119,10 @@ function connectSSE() {
     try {
       const data = JSON.parse(e.data);
       status.value = 'error';
-      errorMessage.value = data.error_message || data.message || 'Setup error';
+      errorMessage.value = data.error_message || data.message || t('interactiveSetup.setupError');
     } catch {
       status.value = 'error';
-      errorMessage.value = 'Setup error';
+      errorMessage.value = t('interactiveSetup.setupError');
     }
     closeEventSource();
   });
@@ -132,7 +135,7 @@ function connectSSE() {
         setTimeout(() => connectSSE(), 2000);
       } else {
         status.value = 'error';
-        errorMessage.value = 'Lost connection to setup stream';
+        errorMessage.value = t('interactiveSetup.lostConnection');
       }
     }
   };
@@ -170,7 +173,7 @@ async function submitAnswer() {
     selectedOptions.value = [];
     scrollToBottom();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to submit response';
+    const message = err instanceof ApiError ? err.message : t('interactiveSetup.toast.submitFailed');
     showToast(message, 'error');
   } finally {
     isSubmitting.value = false;
@@ -185,9 +188,9 @@ async function cancelSetup() {
     await setupApi.cancel(executionId.value);
     closeEventSource();
     status.value = 'error';
-    errorMessage.value = 'Setup cancelled by user';
+    errorMessage.value = t('interactiveSetup.cancelledByUser');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to cancel setup';
+    const message = err instanceof ApiError ? err.message : t('interactiveSetup.toast.cancelFailed');
     showToast(message, 'error');
   } finally {
     isCancelling.value = false;
@@ -225,7 +228,7 @@ onUnmounted(() => {
   <div class="interactive-setup">
     <!-- Header -->
     <div class="setup-header">
-      <h3>Interactive Setup</h3>
+      <h3>{{ t('interactiveSetup.title') }}</h3>
       <div class="setup-header-actions">
         <button
           v-if="status === 'running' || status === 'waiting_input'"
@@ -233,7 +236,7 @@ onUnmounted(() => {
           :disabled="isCancelling"
           class="cancel-btn"
         >
-          {{ isCancelling ? 'Cancelling...' : 'Cancel' }}
+          {{ isCancelling ? t('interactiveSetup.cancelling') : t('common.cancel') }}
         </button>
         <button @click="emit('close')" class="close-btn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -246,15 +249,15 @@ onUnmounted(() => {
 
     <!-- Command Input (shown when idle) -->
     <div v-if="status === 'idle'" class="command-input-section">
-      <label>Setup Command</label>
+      <label>{{ t('interactiveSetup.setupCommand') }}</label>
       <div class="command-row">
         <input
           v-model="command"
-          placeholder="e.g., claude setup-plugin --interactive"
+          :placeholder="t('interactiveSetup.commandPlaceholder')"
           @keyup.enter="startSetup"
         />
         <button @click="startSetup" :disabled="!command.trim()" class="start-btn">
-          Run Setup
+          {{ t('interactiveSetup.runSetup') }}
         </button>
       </div>
     </div>
@@ -272,7 +275,7 @@ onUnmounted(() => {
           v-model="userAnswer"
           type="text"
           class="question-input"
-          placeholder="Type your answer..."
+          :placeholder="t('interactiveSetup.typeAnswer')"
           @keyup.enter="submitAnswer"
           autofocus
         />
@@ -283,7 +286,7 @@ onUnmounted(() => {
           v-model="userAnswer"
           type="password"
           class="question-input"
-          placeholder="Enter value..."
+          :placeholder="t('interactiveSetup.enterValue')"
           @keyup.enter="submitAnswer"
           autofocus
         />
@@ -294,7 +297,7 @@ onUnmounted(() => {
           v-model="userAnswer"
           class="question-select"
         >
-          <option value="" disabled>Select an option...</option>
+          <option value="" disabled>{{ t('interactiveSetup.selectOption') }}</option>
           <option v-for="opt in currentQuestion.options" :key="opt" :value="opt">
             {{ opt }}
           </option>
@@ -313,7 +316,7 @@ onUnmounted(() => {
           :disabled="isSubmitting || (!userAnswer && selectedOptions.length === 0)"
           class="submit-btn"
         >
-          {{ isSubmitting ? 'Submitting...' : 'Submit' }}
+          {{ isSubmitting ? t('interactiveSetup.submitting') : t('interactiveSetup.submit') }}
         </button>
       </div>
     </div>
@@ -325,17 +328,17 @@ onUnmounted(() => {
       <span v-if="status === 'complete'" class="status-dot complete"></span>
       <span v-if="status === 'error'" class="status-dot error"></span>
       <span class="status-text">
-        {{ status === 'running' ? 'Running...' :
-           status === 'waiting_input' ? 'Waiting for input...' :
-           status === 'complete' ? (exitCode === 0 ? 'Setup complete' : `Exited with code ${exitCode}`) :
-           errorMessage || 'Error' }}
+        {{ status === 'running' ? t('interactiveSetup.running') :
+           status === 'waiting_input' ? t('interactiveSetup.waitingInput') :
+           status === 'complete' ? (exitCode === 0 ? t('interactiveSetup.complete') : t('interactiveSetup.exitedWithCode', { code: exitCode })) :
+           errorMessage || t('interactiveSetup.error') }}
       </span>
       <button
         v-if="status === 'complete' || status === 'error'"
         @click="resetSetup"
         class="reset-btn"
       >
-        Run Again
+        {{ t('interactiveSetup.runAgain') }}
       </button>
     </div>
   </div>

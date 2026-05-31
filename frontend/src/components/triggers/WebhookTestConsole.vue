@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { PreviewPromptFullResponse } from '../../services/api';
 import { triggerApi, ApiError } from '../../services/api';
 import { useToast } from '../../composables/useToast';
@@ -8,11 +9,12 @@ const props = defineProps<{
   triggerId: string;
 }>();
 
+const { t } = useI18n();
 const showToast = useToast();
 
 const defaultPayload = JSON.stringify(
   {
-    message: 'Test webhook message',
+    message: t('webhookTestConsole.defaultMessage'),
     paths: '/path/to/project',
     event: {},
   },
@@ -43,7 +45,7 @@ async function runPreview() {
     const payload = JSON.parse(payloadText.value);
     previewResult.value = await triggerApi.previewPromptFull(props.triggerId, payload);
   } catch (err) {
-    error.value = err instanceof ApiError ? err.message : 'Failed to preview prompt';
+    error.value = err instanceof ApiError ? err.message : t('webhookTestConsole.previewFailed');
     showToast(error.value, 'error');
   } finally {
     isLoading.value = false;
@@ -54,27 +56,27 @@ async function runPreview() {
 <template>
   <div class="test-console">
     <div class="section-header">
-      <h3>Webhook Payload Test Console</h3>
+      <h3>{{ t('webhookTestConsole.title') }}</h3>
     </div>
 
     <div class="dry-run-notice">
-      This is a dry-run preview. No bot execution will be triggered.
+      {{ t('webhookTestConsole.dryRunNotice') }}
     </div>
 
     <div class="console-layout">
       <!-- Left panel: JSON editor -->
       <div class="panel editor-panel">
         <div class="panel-header">
-          <span class="panel-title">Payload</span>
+          <span class="panel-title">{{ t('webhookTestConsole.payload') }}</span>
           <span class="json-indicator" :class="isValidJson ? 'valid' : 'invalid'">
-            {{ isValidJson ? 'Valid JSON' : 'Invalid JSON' }}
+            {{ isValidJson ? t('webhookTestConsole.validJson') : t('webhookTestConsole.invalidJson') }}
           </span>
         </div>
         <textarea
           v-model="payloadText"
           class="json-editor"
           spellcheck="false"
-          placeholder="Enter JSON payload..."
+          :placeholder="t('webhookTestConsole.payloadPlaceholder')"
         ></textarea>
         <div class="editor-actions">
           <button
@@ -82,7 +84,7 @@ async function runPreview() {
             :disabled="!isValidJson || isLoading"
             @click="runPreview"
           >
-            {{ isLoading ? 'Previewing...' : 'Preview' }}
+            {{ isLoading ? t('webhookTestConsole.previewing') : t('webhookTestConsole.preview') }}
           </button>
         </div>
       </div>
@@ -90,12 +92,12 @@ async function runPreview() {
       <!-- Right panel: Preview results -->
       <div class="panel results-panel">
         <div class="panel-header">
-          <span class="panel-title">Preview Results</span>
+          <span class="panel-title">{{ t('webhookTestConsole.previewResults') }}</span>
         </div>
 
         <div v-if="isLoading" class="loading-state">
           <span class="spinner"></span>
-          Generating preview...
+          {{ t('webhookTestConsole.generatingPreview') }}
         </div>
 
         <div v-else-if="error" class="error-state">
@@ -103,7 +105,7 @@ async function runPreview() {
         </div>
 
         <div v-else-if="!previewResult" class="empty-results">
-          <p>Click "Preview" to see the rendered prompt and CLI command.</p>
+          <p>{{ t('webhookTestConsole.emptyResults') }}</p>
         </div>
 
         <div v-else class="results-content">
@@ -111,7 +113,7 @@ async function runPreview() {
           <div v-if="previewResult.unresolved_placeholders.length > 0" class="warning-box">
             <span class="warning-icon">&#9888;</span>
             <div>
-              <strong>Unresolved Placeholders</strong>
+              <strong>{{ t('webhookTestConsole.unresolvedPlaceholders') }}</strong>
               <ul>
                 <li v-for="p in previewResult.unresolved_placeholders" :key="p">{{ p }}</li>
               </ul>
@@ -121,7 +123,7 @@ async function runPreview() {
           <div v-if="previewResult.unresolved_snippets.length > 0" class="warning-box">
             <span class="warning-icon">&#9888;</span>
             <div>
-              <strong>Unresolved Snippets</strong>
+              <strong>{{ t('webhookTestConsole.unresolvedSnippets') }}</strong>
               <ul>
                 <li v-for="s in previewResult.unresolved_snippets" :key="s">{{ s }}</li>
               </ul>
@@ -130,7 +132,7 @@ async function runPreview() {
 
           <!-- Backend info -->
           <div class="result-section">
-            <span class="result-label">Backend</span>
+            <span class="result-label">{{ t('webhookTestConsole.backend') }}</span>
             <div class="backend-info">
               <span class="meta-pill">{{ previewResult.backend_type }}</span>
               <span v-if="previewResult.model" class="meta-pill model">{{ previewResult.model }}</span>
@@ -139,13 +141,13 @@ async function runPreview() {
 
           <!-- Rendered prompt -->
           <div class="result-section">
-            <span class="result-label">Rendered Prompt</span>
+            <span class="result-label">{{ t('webhookTestConsole.renderedPrompt') }}</span>
             <pre class="code-block prompt-block">{{ previewResult.rendered_prompt }}</pre>
           </div>
 
           <!-- CLI Command -->
           <div class="result-section">
-            <span class="result-label">CLI Command</span>
+            <span class="result-label">{{ t('webhookTestConsole.cliCommand') }}</span>
             <pre class="code-block cli-block">{{ previewResult.cli_command }}</pre>
           </div>
         </div>

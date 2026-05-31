@@ -4,6 +4,7 @@
 -->
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { PrReview, PrReviewStats, Trigger, PrHistoryPoint } from '../../../services/api';
 import { prReviewApi, triggerApi, ApiError } from '../../../services/api';
 import PrHistoryChart from '../../../components/security/PrHistoryChart.vue';
@@ -17,6 +18,7 @@ import { useToast } from '../../../composables/useToast';
 import { useWebMcpTool } from '../../../composables/useWebMcpTool';
 
 const emit = defineEmits<{ loaded: [slug: string] }>();
+const { t } = useI18n();
 const showToast = useToast();
 
 const stats = ref<PrReviewStats | null>(null);
@@ -75,7 +77,7 @@ async function loadData() {
     prTrigger.value = botsRes.triggers?.find((t: Trigger) => t.id === 'bot-pr-review') || null;
     history.value = historyRes.history || [];
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load PR review data';
+    const message = err instanceof ApiError ? err.message : t('prReviewCard.error.load');
     showToast(message, 'error');
   } finally {
     isLoading.value = false;
@@ -87,9 +89,9 @@ async function runReview() {
   if (!prTrigger.value) return;
   try {
     await triggerApi.run('bot-pr-review');
-    showToast('PR review trigger started', 'success');
+    showToast(t('prReviewCard.toast.triggerStarted'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to start PR review';
+    const message = err instanceof ApiError ? err.message : t('prReviewCard.error.start');
     showToast(message, 'error');
   }
 }
@@ -120,15 +122,15 @@ function formatDate(dateStr: string | undefined): string {
   });
 }
 
-const prTableColumns: DataTableColumn[] = [
-  { key: 'project_name', label: 'Project' },
-  { key: 'pr_number', label: 'PR' },
-  { key: 'pr_title', label: 'Title' },
-  { key: 'pr_author', label: 'Author' },
-  { key: 'pr_status', label: 'PR Status' },
-  { key: 'review_status', label: 'Review Status' },
-  { key: 'updated_at', label: 'Updated' },
-];
+const prTableColumns = computed<DataTableColumn[]>(() => [
+  { key: 'project_name', label: t('prReviewCard.col.project') },
+  { key: 'pr_number', label: t('prReviewCard.col.pr') },
+  { key: 'pr_title', label: t('prReviewCard.col.title') },
+  { key: 'pr_author', label: t('prReviewCard.col.author') },
+  { key: 'pr_status', label: t('prReviewCard.col.prStatus') },
+  { key: 'review_status', label: t('prReviewCard.col.reviewStatus') },
+  { key: 'updated_at', label: t('prReviewCard.col.updated') },
+]);
 
 function prStatusVariant(status: string): 'info' | 'violet' | 'neutral' {
   if (status === 'open') return 'info';
@@ -145,7 +147,7 @@ function reviewStatusVariant(status: string): 'success' | 'danger' | 'violet' | 
 }
 
 function reviewStatusLabel(status: string): string {
-  if (status === 'changes_requested') return 'Changes Requested';
+  if (status === 'changes_requested') return t('prReviewCard.changesRequested');
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
@@ -156,12 +158,12 @@ onMounted(loadData);
   <section id="pr-review" class="pr-review-dashboard lane-card">
     <header class="lane-card__head">
       <div>
-        <h2 class="lane-card__title">PR Review</h2>
-        <p class="lane-card__subtitle">Pull requests across all tracked projects</p>
+        <h2 class="lane-card__title">{{ t('prReviewCard.title') }}</h2>
+        <p class="lane-card__subtitle">{{ t('prReviewCard.subtitle') }}</p>
       </div>
     </header>
 
-    <LoadingState v-if="isLoading" message="Loading PR review data..." />
+    <LoadingState v-if="isLoading" :message="t('prReviewCard.loading')" />
 
     <template v-else>
       <div class="card status-card">
@@ -177,36 +179,36 @@ onMounted(loadData);
                 </svg>
               </div>
               <div>
-                <h3>PR Review Status</h3>
-                <p class="status-subtitle">Overview of pull requests across all tracked projects</p>
+                <h3>{{ t('prReviewCard.statusTitle') }}</h3>
+                <p class="status-subtitle">{{ t('prReviewCard.statusSubtitle') }}</p>
               </div>
             </div>
             <div class="status-actions">
               <span class="status-badge" :class="stats && stats.open_prs > 0 ? 'active' : 'clear'">
-                {{ stats?.open_prs || 0 }} Open
+                {{ t('prReviewCard.openCount', { count: stats?.open_prs || 0 }) }}
               </span>
               <button class="btn btn-primary" @click="runReview" :disabled="!prTrigger?.enabled">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74"/>
                   <path d="M21 3v6h-6"/>
                 </svg>
-                Run Review
+                {{ t('prReviewCard.runReview') }}
               </button>
             </div>
           </div>
 
           <div class="stats-grid">
-            <StatCard title="Total PRs" :value="stats?.total_prs ?? '-'" />
-            <StatCard title="Open" :value="stats?.open_prs ?? '-'" color="var(--accent-cyan)" />
-            <StatCard title="Merged" :value="stats?.merged_prs ?? '-'" color="var(--accent-violet)" />
-            <StatCard title="Closed" :value="stats?.closed_prs ?? '-'" />
+            <StatCard :title="t('prReviewCard.stat.totalPrs')" :value="stats?.total_prs ?? '-'" />
+            <StatCard :title="t('prReviewCard.stat.open')" :value="stats?.open_prs ?? '-'" color="var(--accent-cyan)" />
+            <StatCard :title="t('prReviewCard.stat.merged')" :value="stats?.merged_prs ?? '-'" color="var(--accent-violet)" />
+            <StatCard :title="t('prReviewCard.stat.closed')" :value="stats?.closed_prs ?? '-'" />
           </div>
 
           <div class="stats-grid review-stats">
-            <StatCard title="Pending Review" :value="stats?.pending_reviews ?? '-'" color="var(--accent-amber)" />
-            <StatCard title="Approved" :value="stats?.approved_reviews ?? '-'" color="var(--accent-emerald)" />
-            <StatCard title="Changes Requested" :value="stats?.changes_requested ?? '-'" color="var(--accent-crimson)" />
-            <StatCard title="Fixed" :value="stats?.fixed_reviews ?? '-'" color="var(--accent-cyan)" />
+            <StatCard :title="t('prReviewCard.stat.pendingReview')" :value="stats?.pending_reviews ?? '-'" color="var(--accent-amber)" />
+            <StatCard :title="t('prReviewCard.stat.approved')" :value="stats?.approved_reviews ?? '-'" color="var(--accent-emerald)" />
+            <StatCard :title="t('prReviewCard.stat.changesRequested')" :value="stats?.changes_requested ?? '-'" color="var(--accent-crimson)" />
+            <StatCard :title="t('prReviewCard.stat.fixed')" :value="stats?.fixed_reviews ?? '-'" color="var(--accent-cyan)" />
           </div>
         </div>
       </div>
@@ -218,14 +220,14 @@ onMounted(loadData);
               <path d="M3 3v18h18"/>
               <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/>
             </svg>
-            PR Activity Over Time
+            {{ t('prReviewCard.activityTitle') }}
           </h3>
-          <span class="card-badge">Last 30 days</span>
+          <span class="card-badge">{{ t('prReviewCard.last30Days') }}</span>
         </div>
         <div v-if="history.length === 0" class="chart-empty">
           <div class="empty-icon">&#x25C7;</div>
-          <p>No PR activity data yet</p>
-          <span>Historical data will appear as PRs are tracked</span>
+          <p>{{ t('prReviewCard.noActivity') }}</p>
+          <span>{{ t('prReviewCard.noActivityHint') }}</span>
         </div>
         <PrHistoryChart v-else :history="history" />
       </div>
@@ -237,42 +239,42 @@ onMounted(loadData);
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
               <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
             </svg>
-            Pull Requests
+            {{ t('prReviewCard.pullRequests') }}
           </h3>
-          <span class="card-badge">{{ reviewTotal }} total</span>
+          <span class="card-badge">{{ t('prReviewCard.totalCount', { count: reviewTotal }) }}</span>
         </div>
 
         <div class="filters-bar">
           <div class="filter-group">
-            <label>PR Status</label>
+            <label>{{ t('prReviewCard.col.prStatus') }}</label>
             <select v-model="filterPrStatus" @change="applyFilters">
-              <option value="">All</option>
-              <option value="open">Open</option>
-              <option value="merged">Merged</option>
-              <option value="closed">Closed</option>
+              <option value="">{{ t('prReviewCard.filter.all') }}</option>
+              <option value="open">{{ t('prReviewCard.filter.open') }}</option>
+              <option value="merged">{{ t('prReviewCard.filter.merged') }}</option>
+              <option value="closed">{{ t('prReviewCard.filter.closed') }}</option>
             </select>
           </div>
           <div class="filter-group">
-            <label>Review Status</label>
+            <label>{{ t('prReviewCard.col.reviewStatus') }}</label>
             <select v-model="filterReviewStatus" @change="applyFilters">
-              <option value="">All</option>
-              <option value="pending">Pending</option>
-              <option value="reviewing">Reviewing</option>
-              <option value="approved">Approved</option>
-              <option value="changes_requested">Changes Requested</option>
-              <option value="fixed">Fixed</option>
+              <option value="">{{ t('prReviewCard.filter.all') }}</option>
+              <option value="pending">{{ t('prReviewCard.filter.pending') }}</option>
+              <option value="reviewing">{{ t('prReviewCard.filter.reviewing') }}</option>
+              <option value="approved">{{ t('prReviewCard.filter.approved') }}</option>
+              <option value="changes_requested">{{ t('prReviewCard.changesRequested') }}</option>
+              <option value="fixed">{{ t('prReviewCard.filter.fixed') }}</option>
             </select>
           </div>
           <button v-if="filterPrStatus || filterReviewStatus" class="btn-clear-filters" @click="clearFilters">
-            Clear Filters
+            {{ t('prReviewCard.clearFilters') }}
           </button>
         </div>
 
         <DataTable :columns="prTableColumns" :items="reviews">
           <template #empty>
             <EmptyState
-              title="No pull requests tracked yet"
-              description="PR data will appear here as the bot processes webhooks"
+              :title="t('prReviewCard.emptyTitle')"
+              :description="t('prReviewCard.emptyDescription')"
             />
           </template>
           <template #cell-project_name="{ item }">
@@ -312,9 +314,9 @@ onMounted(loadData);
         </DataTable>
 
         <div v-if="reviewTotal > pageSize" class="pagination">
-          <button class="page-btn" :disabled="currentPage === 1" @click="goToPage(currentPage - 1)">Prev</button>
-          <span class="page-info">Page {{ currentPage }} of {{ totalPages }}</span>
-          <button class="page-btn" :disabled="currentPage >= totalPages" @click="goToPage(currentPage + 1)">Next</button>
+          <button class="page-btn" :disabled="currentPage === 1" @click="goToPage(currentPage - 1)">{{ t('prReviewCard.prev') }}</button>
+          <span class="page-info">{{ t('prReviewCard.pageOf', { current: currentPage, total: totalPages }) }}</span>
+          <button class="page-btn" :disabled="currentPage >= totalPages" @click="goToPage(currentPage + 1)">{{ t('prReviewCard.next') }}</button>
         </div>
       </div>
     </template>

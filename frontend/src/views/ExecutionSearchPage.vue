@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { ExecutionSearchResult } from '../services/api';
 import { specializedBotApi, ApiError } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+const { t } = useI18n();
 const showToast = useToast();
 
 const query = ref('');
@@ -30,7 +32,7 @@ async function handleSearch() {
     results.value = response.results;
     total.value = response.total;
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Search failed';
+    const message = err instanceof ApiError ? err.message : t('executionSearch.searchFailed');
     showToast(message, 'error');
     results.value = [];
     total.value = 0;
@@ -69,7 +71,7 @@ function statusClass(status: string): string {
 <template>
   <div class="execution-search">
 
-    <PageHeader title="Execution Search" subtitle="Search execution logs using natural language queries" />
+    <PageHeader :title="t('executionSearch.title')" :subtitle="t('executionSearch.subtitle')" />
 
     <div class="search-controls">
       <div class="search-input-row">
@@ -77,28 +79,28 @@ function statusClass(status: string): string {
           v-model="query"
           type="text"
           class="search-input"
-          placeholder="Search execution logs..."
+          :placeholder="t('executionSearch.searchPlaceholder')"
           @keydown="handleKeydown"
         />
         <input
           v-model="triggerId"
           type="text"
           class="filter-input"
-          placeholder="Filter by trigger ID (optional)"
+          :placeholder="t('executionSearch.filterPlaceholder')"
         />
         <button class="search-btn" :disabled="isLoading || !query.trim()" @click="handleSearch">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
-          Search
+          {{ t('common.search') }}
         </button>
       </div>
     </div>
 
     <div v-if="isLoading" class="loading-state">
       <div class="spinner" />
-      <span>Searching...</span>
+      <span>{{ t('executionSearch.searching') }}</span>
     </div>
 
     <div v-else-if="!hasSearched" class="empty-state">
@@ -106,7 +108,7 @@ function statusClass(status: string): string {
         <circle cx="11" cy="11" r="8" />
         <line x1="21" y1="21" x2="16.65" y2="16.65" />
       </svg>
-      <p>Enter a search query to find execution logs</p>
+      <p>{{ t('executionSearch.enterQuery') }}</p>
     </div>
 
     <div v-else-if="results.length === 0" class="empty-state">
@@ -115,13 +117,13 @@ function statusClass(status: string): string {
         <line x1="12" y1="9" x2="12" y2="13"/>
         <line x1="12" y1="17" x2="12.01" y2="17"/>
       </svg>
-      <p>No results found for "{{ searchedQuery }}"</p>
-      <p class="hint">Try different keywords or a broader search term</p>
+      <p>{{ t('executionSearch.noResults', { query: searchedQuery }) }}</p>
+      <p class="hint">{{ t('executionSearch.tryDifferent') }}</p>
     </div>
 
     <div v-else class="results-section">
       <div class="results-header">
-        {{ total }} result{{ total !== 1 ? 's' : '' }} for "{{ searchedQuery }}"
+        {{ t('executionSearch.resultsCount', { count: total, query: searchedQuery }) }}
       </div>
 
       <div class="results-list">
@@ -137,11 +139,11 @@ function statusClass(status: string): string {
                which wraps matched terms in <mark> tags. The source data is execution
                logs stored in our own database, not user-generated HTML. -->
           <div v-if="result.stdout_match" class="result-snippet">
-            <span class="snippet-label">stdout:</span>
+            <span class="snippet-label">{{ t('executionSearch.stdout') }}</span>
             <span class="snippet-text" v-html="result.stdout_match"></span>
           </div>
           <div v-if="result.stderr_match" class="result-snippet">
-            <span class="snippet-label">stderr:</span>
+            <span class="snippet-label">{{ t('executionSearch.stderr') }}</span>
             <span class="snippet-text" v-html="result.stderr_match"></span>
           </div>
         </div>

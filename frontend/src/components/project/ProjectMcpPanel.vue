@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { McpServer, ProjectMcpServerDetail, McpSyncResult } from '../../services/api';
 import { mcpServerApi, ApiError } from '../../services/api';
 import { useToast } from '../../composables/useToast';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   projectId: string;
@@ -42,7 +45,7 @@ async function loadData() {
     }
     editingOverrides.value = overrides;
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load MCP data';
+    const message = err instanceof ApiError ? err.message : t('projectMcpPanel.toast.loadFailed');
     showToast(message, 'error');
   } finally {
     isLoading.value = false;
@@ -52,11 +55,11 @@ async function loadData() {
 async function assignServer(serverId: string) {
   try {
     await mcpServerApi.assignToProject(props.projectId, serverId);
-    showToast('MCP server assigned', 'success');
+    showToast(t('projectMcpPanel.toast.assigned'), 'success');
     showAddMenu.value = false;
     await loadData();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to assign MCP server';
+    const message = err instanceof ApiError ? err.message : t('projectMcpPanel.toast.assignFailed');
     showToast(message, 'error');
   }
 }
@@ -64,10 +67,10 @@ async function assignServer(serverId: string) {
 async function unassignServer(serverId: string) {
   try {
     await mcpServerApi.unassignFromProject(props.projectId, serverId);
-    showToast('MCP server removed', 'success');
+    showToast(t('projectMcpPanel.toast.removed'), 'success');
     await loadData();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to remove MCP server';
+    const message = err instanceof ApiError ? err.message : t('projectMcpPanel.toast.removeFailed');
     showToast(message, 'error');
   }
 }
@@ -79,7 +82,7 @@ async function toggleEnabled(server: ProjectMcpServerDetail) {
     });
     await loadData();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to toggle server';
+    const message = err instanceof ApiError ? err.message : t('projectMcpPanel.toast.toggleFailed');
     showToast(message, 'error');
   }
 }
@@ -92,14 +95,14 @@ async function saveEnvOverrides(server: ProjectMcpServerDetail) {
     await mcpServerApi.updateAssignment(props.projectId, server.mcp_server_id, {
       env_overrides_json: newOverrides,
     });
-    showToast('Env overrides saved', 'success');
+    showToast(t('projectMcpPanel.toast.envSaved'), 'success');
     await loadData();
   } catch (err) {
     if (err instanceof SyntaxError) {
-      showToast('Invalid JSON for env overrides', 'error');
+      showToast(t('projectMcpPanel.toast.invalidJson'), 'error');
       return;
     }
-    const message = err instanceof ApiError ? err.message : 'Failed to save overrides';
+    const message = err instanceof ApiError ? err.message : t('projectMcpPanel.toast.saveFailed');
     showToast(message, 'error');
   }
 }
@@ -113,10 +116,10 @@ async function syncToProject() {
     if (result.error) {
       showToast(result.error, 'error');
     } else {
-      showToast(`Synced ${result.servers || 0} servers to .mcp.json`, 'success');
+      showToast(t('projectMcpPanel.toast.synced', { count: result.servers || 0 }), 'success');
     }
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to sync';
+    const message = err instanceof ApiError ? err.message : t('projectMcpPanel.toast.syncFailed');
     showToast(message, 'error');
   } finally {
     isSyncing.value = false;
@@ -132,7 +135,7 @@ async function previewSync() {
       showToast(result.error, 'error');
     }
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to preview';
+    const message = err instanceof ApiError ? err.message : t('projectMcpPanel.toast.previewFailed');
     showToast(message, 'error');
   }
 }
@@ -150,17 +153,17 @@ onMounted(loadData);
     <!-- Header -->
     <div class="panel-header">
       <div class="panel-title">
-        <h3>MCP Servers</h3>
-        <span class="panel-count">{{ assignedServers.length }} assigned</span>
+        <h3>{{ t('projectMcpPanel.title') }}</h3>
+        <span class="panel-count">{{ t('projectMcpPanel.assignedCount', { count: assignedServers.length }) }}</span>
       </div>
       <div class="panel-actions">
-        <button class="btn btn-secondary-sm" @click="previewSync">Preview</button>
+        <button class="btn btn-secondary-sm" @click="previewSync">{{ t('projectMcpPanel.preview') }}</button>
         <button
           class="btn btn-primary-sm"
           :disabled="isSyncing"
           @click="syncToProject"
         >
-          {{ isSyncing ? 'Syncing...' : 'Sync to .mcp.json' }}
+          {{ isSyncing ? t('projectMcpPanel.syncing') : t('projectMcpPanel.syncToMcpJson') }}
         </button>
       </div>
     </div>
@@ -168,21 +171,21 @@ onMounted(loadData);
     <!-- Sync result -->
     <div v-if="syncResult" class="sync-result" :class="{ preview: showPreview }">
       <div class="sync-result-header">
-        <span class="sync-result-label">{{ showPreview ? 'Preview' : 'Sync Complete' }}</span>
+        <span class="sync-result-label">{{ showPreview ? t('projectMcpPanel.preview') : t('projectMcpPanel.syncComplete') }}</span>
         <button class="dismiss-btn" @click="dismissSyncResult">&times;</button>
       </div>
       <div v-if="syncResult.error" class="sync-error">{{ syncResult.error }}</div>
       <template v-else>
         <div v-if="syncResult.written" class="sync-info">
-          Written to: <code>{{ syncResult.written }}</code>
-          ({{ syncResult.servers }} servers)
+          {{ t('projectMcpPanel.writtenTo') }} <code>{{ syncResult.written }}</code>
+          {{ t('projectMcpPanel.serversParen', { count: syncResult.servers }) }}
         </div>
         <div v-if="syncResult.diff" class="sync-diff">
           <pre>{{ syncResult.diff }}</pre>
         </div>
         <div v-if="syncResult.would_write" class="sync-info">
-          Would write to: <code>{{ syncResult.would_write }}</code>
-          ({{ syncResult.servers_count }} servers)
+          {{ t('projectMcpPanel.wouldWriteTo') }} <code>{{ syncResult.would_write }}</code>
+          {{ t('projectMcpPanel.serversParen', { count: syncResult.servers_count }) }}
         </div>
       </template>
     </div>
@@ -190,13 +193,13 @@ onMounted(loadData);
     <!-- Loading -->
     <div v-if="isLoading" class="loading-state">
       <div class="loading-spinner"></div>
-      <span>Loading...</span>
+      <span>{{ t('projectMcpPanel.loading') }}</span>
     </div>
 
     <template v-else>
       <!-- Assigned servers list -->
       <div v-if="assignedServers.length === 0" class="empty-state">
-        <p>No MCP servers assigned to this project yet.</p>
+        <p>{{ t('projectMcpPanel.empty') }}</p>
       </div>
 
       <div v-else class="assigned-list">
@@ -222,10 +225,10 @@ onMounted(loadData);
                 <span class="badge-sm badge-category-sm">{{ server.category }}</span>
               </span>
             </div>
-            <button class="remove-btn" @click="unassignServer(server.mcp_server_id)" title="Remove from project">&times;</button>
+            <button class="remove-btn" @click="unassignServer(server.mcp_server_id)" :title="t('projectMcpPanel.removeFromProject')">&times;</button>
           </div>
           <div class="env-overrides">
-            <label class="env-label">Env Overrides (JSON)</label>
+            <label class="env-label">{{ t('projectMcpPanel.envOverrides') }}</label>
             <div class="env-row">
               <textarea
                 v-model="editingOverrides[server.mcp_server_id]"
@@ -236,7 +239,7 @@ onMounted(loadData);
               <button
                 class="btn btn-secondary-xs"
                 @click="saveEnvOverrides(server)"
-              >Save</button>
+              >{{ t('common.save') }}</button>
             </div>
           </div>
         </div>
@@ -245,7 +248,7 @@ onMounted(loadData);
       <!-- Add server -->
       <div class="add-section">
         <button class="btn btn-add" @click="showAddMenu = !showAddMenu">
-          {{ showAddMenu ? 'Cancel' : '+ Add MCP Server' }}
+          {{ showAddMenu ? t('common.cancel') : t('projectMcpPanel.addServer') }}
         </button>
         <div v-if="showAddMenu && unassignedServers.length > 0" class="add-menu">
           <div
@@ -257,12 +260,12 @@ onMounted(loadData);
             <span class="add-item-name">{{ server.display_name || server.name }}</span>
             <span class="add-item-meta">
               <span class="badge-sm badge-transport-sm">{{ server.server_type }}</span>
-              <span v-if="server.is_preset === 1" class="badge-sm badge-preset-sm">Preset</span>
+              <span v-if="server.is_preset === 1" class="badge-sm badge-preset-sm">{{ t('projectMcpPanel.preset') }}</span>
             </span>
           </div>
         </div>
         <div v-if="showAddMenu && unassignedServers.length === 0" class="add-menu-empty">
-          All available servers are already assigned.
+          {{ t('projectMcpPanel.allAssigned') }}
         </div>
       </div>
     </template>

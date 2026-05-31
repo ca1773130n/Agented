@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 import { triggerApi, analyticsApi, ApiError } from '../services/api';
 import type { Trigger } from '../services/api';
+const { t } = useI18n();
 const showToast = useToast();
 
 const isLoading = ref(true);
@@ -83,7 +85,7 @@ async function loadRecommendations() {
     if (e instanceof ApiError) {
       error.value = e.message;
     } else {
-      error.value = 'Failed to load recommendations';
+      error.value = t('botRecommendationEngine.toast.loadFailed');
     }
     showToast(error.value, 'error');
   } finally {
@@ -96,9 +98,9 @@ async function installBot(rec: BotRecommendation) {
   try {
     await triggerApi.update(rec.id, { enabled: 1 });
     rec.installed = true;
-    showToast(`${rec.name} enabled successfully`, 'success');
+    showToast(t('botRecommendationEngine.toast.enabled', { name: rec.name }), 'success');
   } catch {
-    showToast(`Failed to enable ${rec.name}`, 'error');
+    showToast(t('botRecommendationEngine.toast.enableFailed', { name: rec.name }), 'error');
   } finally {
     isInstalling.value = null;
   }
@@ -121,15 +123,15 @@ onMounted(loadRecommendations);
   <div class="rec-engine">
 
     <PageHeader
-      title="Bot Recommendation Engine"
-      subtitle="Personalized bot suggestions based on your team's repos, PRs, and incident history."
+      :title="t('botRecommendationEngine.title')"
+      :subtitle="t('botRecommendationEngine.subtitle')"
     />
 
-    <LoadingState v-if="isLoading" message="Loading recommendations..." />
+    <LoadingState v-if="isLoading" :message="t('botRecommendationEngine.loading')" />
 
     <div v-else-if="error" class="card error-state">
       <p class="error-text">{{ error }}</p>
-      <button class="btn btn-primary" @click="loadRecommendations">Retry</button>
+      <button class="btn btn-primary" @click="loadRecommendations">{{ t('common.retry') }}</button>
     </div>
 
     <template v-else>
@@ -137,7 +139,7 @@ onMounted(loadRecommendations);
         <button
           :class="['filter-pill', { active: filterCategory === '' }]"
           @click="filterCategory = ''"
-        >All</button>
+        >{{ t('botRecommendationEngine.all') }}</button>
         <button
           v-for="cat in categories"
           :key="cat"
@@ -161,14 +163,14 @@ onMounted(loadRecommendations);
                 <span class="rec-category" :style="{ background: `${categoryColor(rec.category)}18`, color: categoryColor(rec.category) }">{{ rec.category }}</span>
               </div>
               <div class="rec-actions">
-                <span class="time-saved">{{ rec.estimatedTimeSaved }} saved</span>
+                <span class="time-saved">{{ t('botRecommendationEngine.timeSaved', { time: rec.estimatedTimeSaved }) }}</span>
                 <button
                   v-if="!rec.installed"
                   class="btn btn-primary"
                   :disabled="isInstalling === rec.id"
                   @click="installBot(rec)"
-                >{{ isInstalling === rec.id ? 'Installing...' : 'Install' }}</button>
-                <span v-else class="installed-badge">Installed</span>
+                >{{ isInstalling === rec.id ? t('botRecommendationEngine.installing') : t('botRecommendationEngine.install') }}</button>
+                <span v-else class="installed-badge">{{ t('common.installed') }}</span>
               </div>
             </div>
             <div class="rec-description">{{ rec.description }}</div>
@@ -180,7 +182,7 @@ onMounted(loadRecommendations);
         </div>
 
         <div v-if="filtered.length === 0" class="empty-state card">
-          <p>No recommendations for this category yet.</p>
+          <p>{{ t('botRecommendationEngine.empty') }}</p>
         </div>
       </div>
     </template>

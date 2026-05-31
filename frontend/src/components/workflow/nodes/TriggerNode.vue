@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 interface TriggerNodeData {
   label: string
@@ -41,7 +44,7 @@ const needsConfig = computed(() => {
 
 <template>
   <div :class="['workflow-node', 'node-trigger', statusClass]">
-    <div v-if="needsConfig" class="validation-dot" title="Required configuration missing"></div>
+    <div v-if="needsConfig" class="validation-dot" :title="t('triggerNode.configMissing')"></div>
     <div class="node-header">
       <span class="node-icon">&#x26A1;</span>
       <span class="node-label">{{ data.label }}</span>
@@ -49,7 +52,7 @@ const needsConfig = computed(() => {
     </div>
     <div class="node-body">
       <span v-if="triggerName" class="trigger-name">{{ triggerName }}</span>
-      <span v-else class="node-hint">Entry point</span>
+      <span v-else class="node-hint">{{ t('triggerNode.entryPoint') }}</span>
     </div>
     <!-- Trigger nodes: output handle only (no input) -->
     <Handle type="source" :position="Position.Bottom" :style="handleStyle" />

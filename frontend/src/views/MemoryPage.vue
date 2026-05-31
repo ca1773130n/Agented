@@ -6,7 +6,9 @@ import { useFocusRefresh } from '../composables/useFocusRefresh';
 import WorkingMemoryView from '../components/memory/WorkingMemoryView.vue';
 import RecallSearch from '../components/memory/RecallSearch.vue';
 import ThreadList from '../components/memory/ThreadList.vue';
+import { useI18n } from 'vue-i18n';
 
+const { t } = useI18n();
 const route = useRoute();
 const agentId = computed(() => route.params.id as string);
 
@@ -25,7 +27,7 @@ async function loadWorkingMemory() {
     const wm = await agentMemoryApi.getWorkingMemory(agentId.value);
     wmContent.value = wm.content || null;
   } catch (e) {
-    wmError.value = e instanceof Error ? e.message : 'Failed to load working memory';
+    wmError.value = e instanceof Error ? e.message : t('memory.loadFailed');
   } finally {
     wmLoading.value = false;
   }
@@ -48,7 +50,7 @@ useFocusRefresh(refreshAll);
 <template>
   <div class="memory-page">
     <header class="page-header">
-      <h1>Agent Memory</h1>
+      <h1>{{ t('memory.title') }}</h1>
       <div class="header-meta">
         <span class="agent-ref">agent:{{ agentId }}</span>
         <button
@@ -57,13 +59,13 @@ useFocusRefresh(refreshAll);
           data-testid="refresh-btn"
           @click="refreshAll"
         >
-          Refresh
+          {{ t('memory.refresh') }}
         </button>
       </div>
     </header>
 
     <section class="region" data-testid="memory-region-working">
-      <h2>Working Memory</h2>
+      <h2>{{ t('memory.workingMemory') }}</h2>
       <WorkingMemoryView
         :content="wmContent"
         :loading="wmLoading"
@@ -72,12 +74,12 @@ useFocusRefresh(refreshAll);
     </section>
 
     <section class="region" data-testid="memory-region-recall">
-      <h2>Recall</h2>
+      <h2>{{ t('memory.recall') }}</h2>
       <RecallSearch :agent-id="agentId" />
     </section>
 
     <section class="region" data-testid="memory-region-threads">
-      <h2>Threads</h2>
+      <h2>{{ t('memory.threads') }}</h2>
       <ThreadList ref="threadListRef" :agent-id="agentId" />
     </section>
   </div>

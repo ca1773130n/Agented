@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, toRef, onMounted, computed, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { AiChatPanelManaged } from '@ai-accounts/vue-styled';
 import { useProjectSession } from '../../composables/useProjectSession';
@@ -34,6 +35,7 @@ const props = defineProps<{
 }>();
 
 const showToast = useToast();
+const { t } = useI18n();
 const session = useProjectSession(toRef(props, 'projectId'));
 
 const outputRef = ref<InstanceType<typeof SessionOutput> | null>(null);
@@ -191,7 +193,7 @@ session.onComplete((status: string, _exitCode: number) => {
   if (isDirectMode.value) {
     messages.value.push({
       role: 'system',
-      content: `Session ended (${status}).`,
+      content: t('projectSessionPanel.sessionEnded', { status }),
       timestamp: new Date().toISOString(),
     });
   } else {
@@ -200,7 +202,9 @@ session.onComplete((status: string, _exitCode: number) => {
     // already see the system bubble inside the chat.
     const isSuccess = status === 'completed';
     showToast(
-      `Session ${isSuccess ? 'completed' : 'ended'} (${status})`,
+      isSuccess
+        ? t('projectSessionPanel.toastCompleted', { status })
+        : t('projectSessionPanel.toastEnded', { status }),
       isSuccess ? 'success' : 'info',
     );
   }
@@ -259,7 +263,7 @@ async function resolvePermission(decision: 'allow' | 'deny') {
     );
   } catch (err) {
     showToast(
-      err instanceof Error ? err.message : 'Failed to send permission decision',
+      err instanceof Error ? err.message : t('projectSessionPanel.errPermission'),
       'error',
     );
   }
@@ -374,7 +378,7 @@ async function onPlanApprove() {
   pendingPlan.value = null;
   messages.value.push({
     role: 'user',
-    content: '**Plan decision** → Approved, proceeding with execution.',
+    content: t('projectSessionPanel.planApproved'),
     timestamp: new Date().toISOString(),
   });
   awaitingResponse.value = true;
@@ -387,7 +391,7 @@ async function onPlanApprove() {
     );
   } catch (err) {
     showToast(
-      err instanceof Error ? err.message : 'Failed to approve plan',
+      err instanceof Error ? err.message : t('projectSessionPanel.errApprovePlan'),
       'error',
     );
     awaitingResponse.value = false;
@@ -400,7 +404,7 @@ async function onPlanKeepPlanning() {
   pendingPlan.value = null;
   messages.value.push({
     role: 'user',
-    content: '**Plan decision** → Keep planning (do not execute yet).',
+    content: t('projectSessionPanel.planKeepPlanning'),
     timestamp: new Date().toISOString(),
   });
   awaitingResponse.value = true;
@@ -413,7 +417,7 @@ async function onPlanKeepPlanning() {
     );
   } catch (err) {
     showToast(
-      err instanceof Error ? err.message : 'Failed to send plan decision',
+      err instanceof Error ? err.message : t('projectSessionPanel.errPlanDecision'),
       'error',
     );
     awaitingResponse.value = false;
@@ -447,7 +451,7 @@ async function onQuestionAnswered(answers: Record<string, string | string[]>) {
     );
   } catch (err) {
     showToast(
-      err instanceof Error ? err.message : 'Failed to send answer',
+      err instanceof Error ? err.message : t('projectSessionPanel.errSendAnswer'),
       'error',
     );
     awaitingResponse.value = false;
@@ -459,7 +463,7 @@ function onQuestionSkipped() {
   // Skipping means we don't send a tool_result; claude will keep
   // waiting. A toast tells the user this is non-destructive.
   showToast(
-    'Skipped — claude is still waiting. Reopen the question or stop the session.',
+    t('projectSessionPanel.questionSkipped'),
     'info',
   );
 }
@@ -675,8 +679,7 @@ function handleSend(text: string) {
     clearDiagnostic();
     diagnosticTimer = setTimeout(() => {
       if (awaitingResponse.value) {
-        diagnostic.value =
-          'No output yet from claude. If this hangs, the backend may need a restart.';
+        diagnostic.value = t('projectSessionPanel.diagnostic');
       }
     }, 8000);
   }
@@ -834,7 +837,7 @@ watch(
   <div class="session-panel">
     <!-- Header bar -->
     <div class="panel-header">
-      <h3 class="panel-title">Interactive session</h3>
+      <h3 class="panel-title">{{ t('projectSessionPanel.title') }}</h3>
       <div class="header-actions">
         <SessionControls
           :session-status="activeSession?.status ?? null"
@@ -851,7 +854,7 @@ watch(
       <!-- Session list sidebar -->
       <aside class="session-sidebar">
         <div class="sidebar-header">
-          <span class="sidebar-label">History</span>
+          <span class="sidebar-label">{{ t('projectSessionPanel.history') }}</span>
           <span class="session-count">{{ session.sessions.value.length }}</span>
         </div>
         <div class="session-list">
@@ -866,13 +869,13 @@ watch(
             <div class="session-item-info">
               <span class="session-item-id">
                 {{ s.name || truncateId(s.id) }}
-                <span v-if="s.yolo_mode" class="yolo-badge" title="Yolo mode">YOLO</span>
+                <span v-if="s.yolo_mode" class="yolo-badge" :title="t('projectSessionPanel.yoloMode')">YOLO</span>
               </span>
               <span class="session-item-type">{{ s.execution_type }}</span>
             </div>
           </button>
           <div v-if="session.sessions.value.length === 0" class="sidebar-empty">
-            No sessions yet
+            {{ t('projectSessionPanel.noSessions') }}
           </div>
         </div>
       </aside>
@@ -888,7 +891,7 @@ watch(
             :messages="messages"
             :is-processing="awaitingResponse"
             :input-message="inputMessage"
-            input-placeholder="Type a message…"
+            :input-placeholder="t('projectSessionPanel.inputPlaceholder')"
             :hide-cli-runner-toggle="true"
             @update:input-message="inputMessage = $event"
             @send="handleChatSend"
@@ -896,10 +899,9 @@ watch(
           >
             <template #welcome>
               <div v-if="hydratedEmpty" class="empty-historical">
-                <p class="empty-historical-title">No recorded transcript</p>
+                <p class="empty-historical-title">{{ t('projectSessionPanel.noTranscriptTitle') }}</p>
                 <p class="empty-historical-sub">
-                  This session ended before chat persistence was enabled, so its
-                  conversation can't be replayed. Start a new session to record one.
+                  {{ t('projectSessionPanel.noTranscriptSub') }}
                 </p>
               </div>
             </template>
@@ -989,8 +991,8 @@ watch(
               <path d="M7 8h3" />
             </svg>
           </div>
-          <p class="empty-title">Select or start a session</p>
-          <p class="empty-sub">Choose a session from the sidebar or create a new one to begin.</p>
+          <p class="empty-title">{{ t('projectSessionPanel.emptyTitle') }}</p>
+          <p class="empty-sub">{{ t('projectSessionPanel.emptySub') }}</p>
         </div>
       </div>
     </div>
@@ -1001,7 +1003,7 @@ watch(
     <!-- Error banner -->
     <div v-if="session.error.value" class="error-banner">
       <span>{{ session.error.value }}</span>
-      <button class="error-dismiss" @click="session.error.value = null">Dismiss</button>
+      <button class="error-dismiss" @click="session.error.value = null">{{ t('common.dismiss') }}</button>
     </div>
 
     <SessionStartDialog

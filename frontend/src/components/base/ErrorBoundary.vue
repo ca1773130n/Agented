@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { ref, onErrorCaptured } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 withDefaults(
   defineProps<{
     fallbackTitle?: string;
   }>(),
   {
-    fallbackTitle: 'Something went wrong',
+    fallbackTitle: '',
   },
 );
 
@@ -35,9 +38,9 @@ function recover() {
         <path d="M12 8v4M12 16h.01" />
       </svg>
     </div>
-    <h3 class="error-boundary-title">{{ fallbackTitle }}</h3>
+    <h3 class="error-boundary-title">{{ fallbackTitle || t('errorBoundary.title') }}</h3>
     <p class="error-boundary-message">{{ errorMessage }}</p>
-    <button class="btn btn-primary" @click="recover">Try Again</button>
+    <button class="btn btn-primary" @click="recover">{{ t('errorBoundary.tryAgain') }}</button>
   </div>
   <div v-else :key="recoveryKey">
     <slot />

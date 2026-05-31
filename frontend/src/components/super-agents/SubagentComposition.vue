@@ -4,6 +4,9 @@ import type { RouteLocationRaw } from 'vue-router';
 import type { SuperAgent, TeamMember, Agent } from '../../services/api';
 import { superAgentApi, teamApi, agentApi } from '../../services/api';
 import { useToast } from '../../composables/useToast';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   superAgentId: string;
@@ -97,12 +100,12 @@ async function addMember() {
       agent_id: selectedAgentId.value,
       role: 'member',
     });
-    showToast('Member added', 'success');
+    showToast(t('subagentComposition.memberAdded'), 'success');
     showAddMemberModal.value = false;
     selectedAgentId.value = '';
     await loadComposition();
   } catch {
-    showToast('Failed to add member', 'error');
+    showToast(t('subagentComposition.addError'), 'error');
   } finally {
     isAddingMember.value = false;
   }
@@ -112,10 +115,10 @@ async function removeMember(member: TeamMember) {
   if (!props.teamId) return;
   try {
     await teamApi.removeMember(props.teamId, member.id);
-    showToast('Member removed', 'success');
+    showToast(t('subagentComposition.memberRemoved'), 'success');
     await loadComposition();
   } catch {
-    showToast('Failed to remove member', 'error');
+    showToast(t('subagentComposition.removeError'), 'error');
   }
 }
 
@@ -130,21 +133,21 @@ onMounted(loadComposition);
 <template>
   <div class="subagent-composition">
     <div class="section-header">
-      <h3 class="section-title">Team Composition</h3>
+      <h3 class="section-title">{{ t('subagentComposition.title') }}</h3>
       <button v-if="teamId" class="btn-add-member" @click="openAddMemberModal">
-        + Add Member
+        + {{ t('subagentComposition.addMember') }}
       </button>
     </div>
 
     <div v-if="isLoading" class="composition-loading">
       <div class="loading-spinner"></div>
-      <span>Loading composition...</span>
+      <span>{{ t('subagentComposition.loading') }}</span>
     </div>
 
     <template v-else>
       <!-- Team Members -->
       <div v-if="teamMembers.length > 0" class="composition-section">
-        <h4 class="subsection-title">Team Members</h4>
+        <h4 class="subsection-title">{{ t('subagentComposition.teamMembers') }}</h4>
         <div class="member-list">
           <component
             :is="memberLinkTarget(member) ? 'router-link' : 'div'"
@@ -162,11 +165,11 @@ onMounted(loadComposition);
             </div>
             <div class="member-info">
               <span class="member-name">{{ member.name }}</span>
-              <span class="member-role">{{ member.role || 'member' }}</span>
+              <span class="member-role">{{ member.role || t('subagentComposition.roleMember') }}</span>
             </div>
             <button
               class="remove-member-btn"
-              title="Remove from team"
+              :title="t('subagentComposition.removeFromTeam')"
               @click.stop.prevent="removeMember(member)"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
@@ -180,7 +183,7 @@ onMounted(loadComposition);
 
       <!-- Child SuperAgents -->
       <div v-if="childAgents.length > 0" class="composition-section">
-        <h4 class="subsection-title">Child SuperAgents</h4>
+        <h4 class="subsection-title">{{ t('subagentComposition.childSuperAgents') }}</h4>
         <div class="member-list">
           <component
             :is="agent.id !== superAgentId ? 'router-link' : 'div'"
@@ -204,7 +207,7 @@ onMounted(loadComposition);
                   {{ agent.backend_type }}
                 </span>
                 <span :class="['status-indicator', agent.enabled ? 'active' : 'inactive']">
-                  {{ agent.enabled ? 'Active' : 'Inactive' }}
+                  {{ agent.enabled ? t('subagentComposition.active') : t('subagentComposition.inactive') }}
                 </span>
               </div>
             </div>
@@ -220,7 +223,7 @@ onMounted(loadComposition);
           <path d="M23 21v-2a4 4 0 00-3-3.87"/>
           <path d="M16 3.13a4 4 0 010 7.75"/>
         </svg>
-        <p>No subagents assigned</p>
+        <p>{{ t('subagentComposition.empty') }}</p>
       </div>
     </template>
 
@@ -229,14 +232,14 @@ onMounted(loadComposition);
       <div v-if="showAddMemberModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-add-member" tabindex="-1" @click.self="showAddMemberModal = false" @keydown.escape="showAddMemberModal = false">
         <div class="modal modal-small">
           <div class="modal-header">
-            <h2 id="modal-title-add-member">Add Team Member</h2>
+            <h2 id="modal-title-add-member">{{ t('subagentComposition.addModalTitle') }}</h2>
             <button class="modal-close" @click="showAddMemberModal = false">&times;</button>
           </div>
           <div class="modal-body">
             <div class="form-group">
-              <label>Select Agent</label>
+              <label>{{ t('subagentComposition.selectAgent') }}</label>
               <select v-model="selectedAgentId">
-                <option value="" disabled>Choose an agent...</option>
+                <option value="" disabled>{{ t('subagentComposition.chooseAgent') }}</option>
                 <option v-for="agent in availableAgents" :key="agent.id" :value="agent.id">
                   {{ agent.name }}
                 </option>
@@ -244,9 +247,9 @@ onMounted(loadComposition);
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn" @click="showAddMemberModal = false">Cancel</button>
+            <button class="btn" @click="showAddMemberModal = false">{{ t('common.cancel') }}</button>
             <button class="btn btn-primary" :disabled="!selectedAgentId || isAddingMember" @click="addMember">
-              {{ isAddingMember ? 'Adding...' : 'Add Member' }}
+              {{ isAddingMember ? t('subagentComposition.adding') : t('subagentComposition.addMember') }}
             </button>
           </div>
         </div>

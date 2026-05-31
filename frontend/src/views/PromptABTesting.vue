@@ -4,7 +4,9 @@ import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { triggerApi, analyticsApi, ApiError } from '../services/api';
 import type { Trigger, ExecutionAnalyticsResponse } from '../services/api';
+import { useI18n } from 'vue-i18n';
 const showToast = useToast();
+const { t } = useI18n();
 
 interface Variant {
   id: 'A' | 'B';
@@ -51,7 +53,7 @@ async function loadTriggers() {
     triggers.value = res.triggers;
     await buildTestsFromTriggers();
   } catch (e) {
-    loadError.value = e instanceof ApiError ? e.message : 'Failed to load triggers';
+    loadError.value = e instanceof ApiError ? e.message : t('promptABTesting.loadError');
   } finally {
     isLoading.value = false;
   }
@@ -149,9 +151,9 @@ async function toggleTest() {
       triggerApi.update(selected.value.variants[1].triggerId, { enabled: newEnabled }),
     ]);
     selected.value.status = newEnabled ? 'running' : 'paused';
-    showToast(`Test ${selected.value.status}`, 'success');
+    showToast(t('promptABTesting.testStatus', { status: selected.value.status }), 'success');
   } catch (e) {
-    showToast(e instanceof ApiError ? e.message : 'Failed to toggle test', 'error');
+    showToast(e instanceof ApiError ? e.message : t('promptABTesting.toggleError'), 'error');
   } finally {
     isSaving.value = false;
   }
@@ -167,9 +169,9 @@ async function applyWinner() {
       prompt_template: winnerVariant.prompt,
       enabled: 0,
     });
-    showToast('Winner applied — loser variant disabled', 'success');
+    showToast(t('promptABTesting.winnerApplied'), 'success');
   } catch (e) {
-    showToast(e instanceof ApiError ? e.message : 'Failed to apply winner', 'error');
+    showToast(e instanceof ApiError ? e.message : t('promptABTesting.applyWinnerError'), 'error');
   }
 }
 
@@ -185,12 +187,12 @@ async function createVariant() {
       backend_type: base.backend_type,
       trigger_source: base.trigger_source,
     });
-    showToast('Variant created. Reload to see the new A/B test.', 'success');
+    showToast(t('promptABTesting.variantCreated'), 'success');
     showCreateDialog.value = false;
     variantPrompt.value = '';
     await loadTriggers();
   } catch (e) {
-    showToast(e instanceof ApiError ? e.message : 'Failed to create variant', 'error');
+    showToast(e instanceof ApiError ? e.message : t('promptABTesting.createVariantError'), 'error');
   } finally {
     isCreating.value = false;
   }
@@ -209,19 +211,19 @@ function scoreBar(score: number) {
   <div class="ab-testing">
 
     <PageHeader
-      title="Prompt A/B Testing"
-      subtitle="Run two prompt variants on alternating executions and compare output quality side-by-side."
+      :title="t('promptABTesting.title')"
+      :subtitle="t('promptABTesting.subtitle')"
     >
       <template #actions>
-        <button class="btn btn-primary" @click="showCreateDialog = true">+ New A/B Test</button>
+        <button class="btn btn-primary" @click="showCreateDialog = true">{{ t('promptABTesting.newTest') }}</button>
       </template>
     </PageHeader>
 
-    <div v-if="isLoading" class="loading-msg">Loading triggers and analytics...</div>
+    <div v-if="isLoading" class="loading-msg">{{ t('promptABTesting.loading') }}</div>
 
     <div v-else-if="loadError" class="error-card">
       <p class="error-text">{{ loadError }}</p>
-      <button class="btn btn-ghost" @click="loadTriggers">Retry</button>
+      <button class="btn btn-ghost" @click="loadTriggers">{{ t('common.retry') }}</button>
     </div>
 
     <div v-else-if="tests.length === 0" class="empty-card">
@@ -232,33 +234,33 @@ function scoreBar(score: number) {
           <path d="M9 14l2 2 4-4" />
         </svg>
       </div>
-      <h3 class="empty-title">No A/B Tests Yet</h3>
+      <h3 class="empty-title">{{ t('promptABTesting.emptyTitle') }}</h3>
       <p class="empty-desc">
-        Create a variant trigger to start comparing prompt performance.
-        Name your variant with a <code>[Variant B]</code> suffix and it will be automatically paired with the original.
+        {{ t('promptABTesting.emptyDescStart') }}
+        <code>[Variant B]</code> {{ t('promptABTesting.emptyDescEnd') }}
       </p>
-      <button class="btn btn-primary" @click="showCreateDialog = true">+ Create Variant</button>
+      <button class="btn btn-primary" @click="showCreateDialog = true">{{ t('promptABTesting.createVariant') }}</button>
     </div>
 
     <!-- Create dialog -->
     <div v-if="showCreateDialog" class="card create-dialog">
-      <div class="create-header">Create A/B Test Variant</div>
+      <div class="create-header">{{ t('promptABTesting.createDialogTitle') }}</div>
       <div class="create-body">
         <div class="create-field">
-          <label class="create-label">Base Trigger</label>
+          <label class="create-label">{{ t('promptABTesting.baseTriggerLabel') }}</label>
           <select v-model="baseTriggerIdForCreate" class="select">
-            <option value="">Select a trigger...</option>
-            <option v-for="t in triggers" :key="t.id" :value="t.id">{{ t.name }}</option>
+            <option value="">{{ t('promptABTesting.selectTrigger') }}</option>
+            <option v-for="tr in triggers" :key="tr.id" :value="tr.id">{{ tr.name }}</option>
           </select>
         </div>
         <div class="create-field">
-          <label class="create-label">Variant B Prompt</label>
-          <textarea v-model="variantPrompt" class="variant-textarea" rows="6" placeholder="Enter the variant prompt..."></textarea>
+          <label class="create-label">{{ t('promptABTesting.variantBPromptLabel') }}</label>
+          <textarea v-model="variantPrompt" class="variant-textarea" rows="6" :placeholder="t('promptABTesting.variantPromptPlaceholder')"></textarea>
         </div>
         <div class="create-actions">
-          <button class="btn btn-ghost" @click="showCreateDialog = false">Cancel</button>
+          <button class="btn btn-ghost" @click="showCreateDialog = false">{{ t('common.cancel') }}</button>
           <button class="btn btn-primary" :disabled="isCreating || !baseTriggerIdForCreate || !variantPrompt.trim()" @click="createVariant">
-            {{ isCreating ? 'Creating...' : 'Create Variant' }}
+            {{ isCreating ? t('promptABTesting.creating') : t('promptABTesting.createVariantBtn') }}
           </button>
         </div>
       </div>
@@ -267,16 +269,16 @@ function scoreBar(score: number) {
     <div v-if="tests.length > 0 && selected" class="layout">
       <!-- Test list -->
       <aside class="sidebar card">
-        <div class="sidebar-header">Active Tests</div>
+        <div class="sidebar-header">{{ t('promptABTesting.activeTests') }}</div>
         <div
-          v-for="t in tests"
-          :key="t.id"
+          v-for="test in tests"
+          :key="test.id"
           class="test-item"
-          :class="{ active: selected.id === t.id }"
-          @click="selected = t"
+          :class="{ active: selected.id === test.id }"
+          @click="selected = test"
         >
-          <div class="test-name">{{ t.baseTriggerName }}</div>
-          <div class="test-meta">{{ t.totalRuns }} runs · <span :class="['test-status', `s-${t.status}`]">{{ t.status }}</span></div>
+          <div class="test-name">{{ test.baseTriggerName }}</div>
+          <div class="test-meta">{{ t('promptABTesting.runsCount', { count: test.totalRuns }) }} · <span :class="['test-status', `s-${test.status}`]">{{ test.status }}</span></div>
         </div>
       </aside>
 
@@ -286,15 +288,15 @@ function scoreBar(score: number) {
           <div class="detail-top">
             <div>
               <div class="detail-bot">{{ selected.baseTriggerName }}</div>
-              <div class="detail-meta">Started {{ formatDate(selected.startedAt) }} · {{ selected.totalRuns }} total runs</div>
+              <div class="detail-meta">{{ t('promptABTesting.startedRuns', { date: formatDate(selected.startedAt), count: selected.totalRuns }) }}</div>
             </div>
             <div class="header-actions">
               <span :class="['status-badge', `s-${selected.status}`]">{{ selected.status }}</span>
               <button class="btn btn-ghost" :disabled="isSaving" @click="toggleTest">
-                {{ selected.status === 'running' ? 'Pause' : 'Resume' }}
+                {{ selected.status === 'running' ? t('promptABTesting.pause') : t('promptABTesting.resume') }}
               </button>
               <button class="btn btn-primary" :disabled="!winner" @click="applyWinner">
-                Apply Winner
+                {{ t('promptABTesting.applyWinner') }}
               </button>
             </div>
           </div>
@@ -303,31 +305,31 @@ function scoreBar(score: number) {
         <div class="compare-grid">
           <div v-for="v in selected.variants" :key="v.id" class="variant-card card" :class="{ 'is-winner': winner === v.id }">
             <div class="variant-header">
-              <div class="variant-badge">Variant {{ v.id }}</div>
-              <div v-if="winner === v.id" class="winner-badge">Leading</div>
+              <div class="variant-badge">{{ t('promptABTesting.variantLabel', { id: v.id }) }}</div>
+              <div v-if="winner === v.id" class="winner-badge">{{ t('promptABTesting.leading') }}</div>
             </div>
             <div class="variant-prompt">
-              <div class="prompt-label">Prompt</div>
+              <div class="prompt-label">{{ t('promptABTesting.promptLabel') }}</div>
               <pre class="prompt-text">{{ v.prompt }}</pre>
             </div>
             <div class="variant-metrics">
               <div class="metric">
-                <div class="metric-label">Avg Score</div>
+                <div class="metric-label">{{ t('promptABTesting.avgScore') }}</div>
                 <div class="score-bar-wrap">
                   <div class="score-bar-fill" :style="{ width: scoreBar(v.avgScore) }"></div>
                 </div>
                 <div class="metric-val">{{ v.avgScore }}/10</div>
               </div>
               <div class="metric">
-                <div class="metric-label">Avg Tokens</div>
+                <div class="metric-label">{{ t('promptABTesting.avgTokens') }}</div>
                 <div class="metric-val">{{ v.avgTokens.toLocaleString() }}</div>
               </div>
               <div class="metric">
-                <div class="metric-label">Runs</div>
+                <div class="metric-label">{{ t('promptABTesting.runs') }}</div>
                 <div class="metric-val">{{ v.runs }}</div>
               </div>
               <div class="metric">
-                <div class="metric-label">Win Rate</div>
+                <div class="metric-label">{{ t('promptABTesting.winRate') }}</div>
                 <div class="metric-val">{{ v.winRate }}%</div>
               </div>
             </div>
@@ -336,8 +338,8 @@ function scoreBar(score: number) {
 
         <div v-if="winner" class="winner-summary card">
           <div>
-            <div class="winner-title">Variant {{ winner }} is leading</div>
-            <div class="winner-sub">{{ Math.abs(selected.variants[0].avgScore - selected.variants[1].avgScore).toFixed(1) }} points higher average score with {{ selected.totalRuns }} total runs. Statistical significance improves with more data.</div>
+            <div class="winner-title">{{ t('promptABTesting.variantLeading', { id: winner }) }}</div>
+            <div class="winner-sub">{{ t('promptABTesting.winnerSummary', { points: Math.abs(selected.variants[0].avgScore - selected.variants[1].avgScore).toFixed(1), runs: selected.totalRuns }) }}</div>
           </div>
         </div>
       </div>

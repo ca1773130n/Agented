@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 import { triggerApi, executionApi, ApiError } from '../services/api';
 import type { Trigger, Execution } from '../services/api';
+const { t } = useI18n();
 const showToast = useToast();
 
 const isLoading = ref(true);
@@ -59,7 +61,7 @@ async function loadTriggers() {
     if (e instanceof ApiError) {
       error.value = e.message;
     } else {
-      error.value = 'Failed to load triggers';
+      error.value = t('dependencyImpactBot.errors.loadTriggers');
     }
     showToast(error.value, 'error');
   } finally {
@@ -69,7 +71,7 @@ async function loadTriggers() {
 
 async function handleAnalyze() {
   if (!prUrl.value.trim()) {
-    showToast('Enter a PR URL', 'info');
+    showToast(t('dependencyImpactBot.toast.enterPr'), 'info');
     return;
   }
   isAnalyzing.value = true;
@@ -79,32 +81,32 @@ async function handleAnalyze() {
 
     // Build impact analysis from real trigger and execution data
     const services: ImpactedService[] = triggersData.value.map(td => {
-      const t = td.trigger;
+      const trig = td.trigger;
       const recentExecs = td.executions;
       const failedCount = recentExecs.filter(e => e.status === 'failed').length;
       const totalCount = recentExecs.length;
 
       let impact: 'breaking' | 'potential' | 'safe' = 'safe';
-      let reason = `Trigger "${t.name}" has no recent failures.`;
+      let reason = t('dependencyImpactBot.reasons.noFailures', { name: trig.name });
 
       if (failedCount > 0 && failedCount / Math.max(totalCount, 1) > 0.5) {
         impact = 'breaking';
-        reason = `${failedCount}/${totalCount} recent executions failed — high failure rate indicates breaking dependency.`;
+        reason = t('dependencyImpactBot.reasons.breaking', { failed: failedCount, total: totalCount });
       } else if (failedCount > 0) {
         impact = 'potential';
-        reason = `${failedCount}/${totalCount} recent executions had failures — possible dependency issue.`;
+        reason = t('dependencyImpactBot.reasons.potential', { failed: failedCount, total: totalCount });
       } else if (totalCount === 0) {
         impact = 'potential';
-        reason = 'No recent executions found — unable to verify dependency compatibility.';
+        reason = t('dependencyImpactBot.reasons.noExecutions');
       }
 
       const interfaces: string[] = [];
-      if (t.match_field_path) interfaces.push(t.match_field_path);
-      if (t.text_field_path) interfaces.push(t.text_field_path as string);
+      if (trig.match_field_path) interfaces.push(trig.match_field_path);
+      if (trig.text_field_path) interfaces.push(trig.text_field_path as string);
 
       return {
-        name: t.name,
-        repo: (t.paths && t.paths.length > 0) ? (t.paths[0].github_repo_url ?? t.paths[0].local_project_path) : t.id,
+        name: trig.name,
+        repo: (trig.paths && trig.paths.length > 0) ? (trig.paths[0].github_repo_url ?? trig.paths[0].local_project_path) : trig.id,
         impact,
         reason,
         interfaces,
@@ -118,14 +120,14 @@ async function handleAnalyze() {
     const changedInterfaces = services.flatMap(s => s.interfaces).filter(Boolean);
 
     result.value = {
-      prTitle: `PR #${prNum} — Dependency Impact Analysis`,
+      prTitle: t('dependencyImpactBot.prTitle', { num: prNum }),
       prNumber: prNum,
       changedInterfaces: [...new Set(changedInterfaces)].slice(0, 5),
       impactScore,
       services,
     };
   } catch {
-    showToast('Analysis failed', 'error');
+    showToast(t('dependencyImpactBot.toast.analysisFailed'), 'error');
   } finally {
     isAnalyzing.value = false;
   }
@@ -155,15 +157,15 @@ onMounted(loadTriggers);
   <div class="dep-impact">
 
     <PageHeader
-      title="Dependency Impact Bot"
-      subtitle="Analyze which downstream services are affected by interface changes in a PR."
+      :title="t('dependencyImpactBot.title')"
+      :subtitle="t('dependencyImpactBot.subtitle')"
     />
 
-    <LoadingState v-if="isLoading" message="Loading trigger data..." />
+    <LoadingState v-if="isLoading" :message="t('dependencyImpactBot.loadingTriggers')" />
 
     <div v-else-if="error" class="card error-state">
       <p class="error-text">{{ error }}</p>
-      <button class="btn btn-primary" @click="loadTriggers">Retry</button>
+      <button class="btn btn-primary" @click="loadTriggers">{{ t('common.retry') }}</button>
     </div>
 
     <template v-else>
@@ -173,9 +175,9 @@ onMounted(loadTriggers);
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
               <circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
             </svg>
-            Analyze PR
+            {{ t('dependencyImpactBot.analyzePr') }}
           </h3>
-          <span v-if="triggersData.length > 0" class="trigger-count">{{ triggersData.length }} triggers loaded</span>
+          <span v-if="triggersData.length > 0" class="trigger-count">{{ t('dependencyImpactBot.triggersLoaded', { count: triggersData.length }) }}</span>
         </div>
         <div class="input-body">
           <div class="input-row">
@@ -193,7 +195,7 @@ onMounted(loadTriggers);
               <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                 <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
               </svg>
-              {{ isAnalyzing ? 'Analyzing...' : 'Analyze Impact' }}
+              {{ isAnalyzing ? t('dependencyImpactBot.analyzing') : t('dependencyImpactBot.analyzeImpact') }}
             </button>
           </div>
         </div>
@@ -208,7 +210,7 @@ onMounted(loadTriggers);
               <line x1="8" y1="21" x2="16" y2="21"/>
               <line x1="12" y1="17" x2="12" y2="21"/>
             </svg>
-            Active Triggers
+            {{ t('dependencyImpactBot.activeTriggers') }}
           </h3>
         </div>
         <div class="services-list">
@@ -218,10 +220,10 @@ onMounted(loadTriggers);
                 <span class="service-name">{{ td.trigger.name }}</span>
                 <span class="service-repo">{{ td.trigger.trigger_source }} / {{ td.trigger.backend_type }}</span>
               </div>
-              <div class="service-reason">{{ td.executions.length }} recent executions — {{ td.executions.filter(e => e.status === 'failed').length }} failed</div>
+              <div class="service-reason">{{ t('dependencyImpactBot.recentExecutionsSummary', { count: td.executions.length, failed: td.executions.filter(e => e.status === 'failed').length }) }}</div>
             </div>
             <div class="service-badge" :style="{ color: td.executions.some(e => e.status === 'failed') ? '#f59e0b' : '#34d399', background: td.executions.some(e => e.status === 'failed') ? 'rgba(245,158,11,0.15)' : 'rgba(52,211,153,0.15)', borderColor: td.executions.some(e => e.status === 'failed') ? 'rgba(245,158,11,0.4)' : 'rgba(52,211,153,0.4)' }">
-              {{ td.executions.some(e => e.status === 'failed') ? 'warning' : 'healthy' }}
+              {{ td.executions.some(e => e.status === 'failed') ? t('dependencyImpactBot.warning') : t('dependencyImpactBot.healthy') }}
             </div>
           </div>
         </div>
@@ -230,11 +232,11 @@ onMounted(loadTriggers);
       <template v-if="result">
         <div class="summary-row">
           <div class="summary-card card">
-            <div class="summary-label">PR</div>
+            <div class="summary-label">{{ t('dependencyImpactBot.prLabel') }}</div>
             <div class="summary-val">#{{ result.prNumber }} {{ result.prTitle }}</div>
           </div>
           <div class="summary-card card score-card" :style="{ borderColor: scoreColor(result.impactScore) + '60' }">
-            <div class="summary-label">Impact Score</div>
+            <div class="summary-label">{{ t('dependencyImpactBot.impactScore') }}</div>
             <div class="score-display" :style="{ color: scoreColor(result.impactScore) }">
               {{ result.impactScore }}
               <span class="score-max">/100</span>
@@ -244,10 +246,10 @@ onMounted(loadTriggers);
             </div>
           </div>
           <div class="summary-card card">
-            <div class="summary-label">Changed Interfaces</div>
+            <div class="summary-label">{{ t('dependencyImpactBot.changedInterfaces') }}</div>
             <div class="interfaces-list">
               <code v-for="i in result.changedInterfaces" :key="i" class="iface-tag">{{ i }}</code>
-              <span v-if="result.changedInterfaces.length === 0" class="no-ifaces">None detected</span>
+              <span v-if="result.changedInterfaces.length === 0" class="no-ifaces">{{ t('dependencyImpactBot.noneDetected') }}</span>
             </div>
           </div>
         </div>
@@ -260,12 +262,12 @@ onMounted(loadTriggers);
                 <line x1="8" y1="21" x2="16" y2="21"/>
                 <line x1="12" y1="17" x2="12" y2="21"/>
               </svg>
-              Impacted Services
+              {{ t('dependencyImpactBot.impactedServices') }}
             </h3>
             <div class="impact-legend">
-              <span class="legend-item" style="color: #ef4444">Breaking</span>
-              <span class="legend-item" style="color: #f59e0b">Potential</span>
-              <span class="legend-item" style="color: #34d399">Safe</span>
+              <span class="legend-item" style="color: #ef4444">{{ t('dependencyImpactBot.legend.breaking') }}</span>
+              <span class="legend-item" style="color: #f59e0b">{{ t('dependencyImpactBot.legend.potential') }}</span>
+              <span class="legend-item" style="color: #34d399">{{ t('dependencyImpactBot.legend.safe') }}</span>
             </div>
           </div>
           <div class="services-list">

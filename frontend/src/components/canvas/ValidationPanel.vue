@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   warnings: string[]
@@ -33,7 +36,7 @@ watch(
           <line x1="8" y1="11.5" x2="8.01" y2="11.5" />
         </svg>
       </span>
-      <span class="warning-count">{{ warnings.length }} warning{{ warnings.length > 1 ? 's' : '' }}</span>
+      <span class="warning-count">{{ warnings.length > 1 ? t('validationPanel.warningCountPlural', { count: warnings.length }) : t('validationPanel.warningCount', { count: warnings.length }) }}</span>
       <span class="collapse-toggle">{{ isCollapsed ? '\u25B2' : '\u25BC' }}</span>
     </div>
     <div v-if="!isCollapsed" class="warning-list">

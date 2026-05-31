@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+
 defineProps<{
   currentPage: number;
   totalPages: number;
@@ -25,14 +29,14 @@ function onPageSizeChange(event: Event) {
 <template>
   <div v-if="totalCount > 0" class="pagination-bar">
     <span class="pagination-range">
-      Showing {{ rangeStart }}-{{ rangeEnd }} of {{ totalCount }}
+      {{ t('paginationBar.range', { start: rangeStart, end: rangeEnd, total: totalCount }) }}
     </span>
 
     <div class="pagination-nav">
       <button
         class="pagination-btn"
         :disabled="isFirstPage"
-        aria-label="Previous page"
+        :aria-label="t('paginationBar.previousPage')"
         @click="emit('update:currentPage', currentPage - 1)"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -40,12 +44,12 @@ function onPageSizeChange(event: Event) {
         </svg>
       </button>
       <span class="pagination-indicator">
-        {{ currentPage }} of {{ totalPages }}
+        {{ t('paginationBar.pageOf', { current: currentPage, total: totalPages }) }}
       </span>
       <button
         class="pagination-btn"
         :disabled="isLastPage"
-        aria-label="Next page"
+        :aria-label="t('paginationBar.nextPage')"
         @click="emit('update:currentPage', currentPage + 1)"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -55,7 +59,7 @@ function onPageSizeChange(event: Event) {
     </div>
 
     <div class="pagination-size">
-      <label class="pagination-size-label">Per page:</label>
+      <label class="pagination-size-label">{{ t('paginationBar.perPage') }}</label>
       <select
         class="pagination-size-select"
         :value="pageSize"

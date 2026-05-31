@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { BudgetLimit } from '../../services/api';
 import { budgetApi } from '../../services/api';
 import { useFocusTrap } from '../../composables/useFocusTrap';
@@ -22,6 +23,8 @@ const emit = defineEmits<{
   (e: 'saved'): void;
   (e: 'cancelled'): void;
 }>();
+
+const { t } = useI18n();
 
 const budgetModalRef = ref<HTMLElement | null>(null);
 const alwaysOpen = ref(true);
@@ -71,26 +74,26 @@ function validate(): boolean {
   errorMessage.value = '';
 
   if (!entityId.value) {
-    fieldErrors.value.entity = 'Please select an entity';
+    fieldErrors.value.entity = t('budgetLimitForm.errors.selectEntity');
   }
 
   const soft = softLimit.value.trim() ? parseFloat(softLimit.value) : null;
   const hard = hardLimit.value.trim() ? parseFloat(hardLimit.value) : null;
 
   if (soft == null && hard == null) {
-    fieldErrors.value.limits = 'At least one limit (alert or halt threshold) must be set';
+    fieldErrors.value.limits = t('budgetLimitForm.errors.atLeastOne');
   }
 
   if (soft != null && (isNaN(soft) || soft <= 0)) {
-    fieldErrors.value.soft = 'Alert threshold must be a positive number';
+    fieldErrors.value.soft = t('budgetLimitForm.errors.alertPositive');
   }
 
   if (hard != null && (isNaN(hard) || hard <= 0)) {
-    fieldErrors.value.hard = 'Halt threshold must be a positive number';
+    fieldErrors.value.hard = t('budgetLimitForm.errors.haltPositive');
   }
 
   if (soft != null && hard != null && !isNaN(soft) && !isNaN(hard) && hard < soft) {
-    fieldErrors.value.hard = 'Halt threshold must be >= alert threshold';
+    fieldErrors.value.hard = t('budgetLimitForm.errors.haltGteAlert');
   }
 
   return Object.keys(fieldErrors.value).length === 0;
@@ -124,7 +127,7 @@ async function handleSubmit() {
     await budgetApi.setLimit(data);
     emit('saved');
   } catch (err: unknown) {
-    errorMessage.value = err instanceof Error ? err.message : 'Failed to save budget limit';
+    errorMessage.value = err instanceof Error ? err.message : t('budgetLimitForm.errors.saveFailed');
   } finally {
     isSubmitting.value = false;
   }
@@ -141,8 +144,8 @@ async function handleSubmit() {
           </svg>
         </div>
         <div>
-          <h3 id="modal-title-budget-limit">{{ mode === 'edit' ? 'Edit Budget Limit' : 'Add Budget Limit' }}</h3>
-          <p class="modal-subtitle">Set spending guardrails for an agent, team, or trigger</p>
+          <h3 id="modal-title-budget-limit">{{ mode === 'edit' ? t('budgetLimitForm.editTitle') : t('budgetLimitForm.addTitle') }}</h3>
+          <p class="modal-subtitle">{{ t('budgetLimitForm.subtitle') }}</p>
         </div>
         <button class="close-btn" @click="emit('cancelled')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -154,19 +157,19 @@ async function handleSubmit() {
       <form @submit.prevent="handleSubmit">
         <!-- Entity Type -->
         <div class="form-group">
-          <label>Entity Type</label>
+          <label>{{ t('budgetLimitForm.entityType') }}</label>
           <div class="radio-group">
             <label class="radio-option" :class="{ active: entityType === 'agent', disabled: mode === 'edit' }">
               <input type="radio" v-model="entityType" value="agent" :disabled="mode === 'edit'">
-              <span>Agent</span>
+              <span>{{ t('budgetLimitForm.agent') }}</span>
             </label>
             <label class="radio-option" :class="{ active: entityType === 'team', disabled: mode === 'edit' }">
               <input type="radio" v-model="entityType" value="team" :disabled="mode === 'edit'">
-              <span>Team</span>
+              <span>{{ t('budgetLimitForm.team') }}</span>
             </label>
             <label class="radio-option" :class="{ active: entityType === 'trigger', disabled: mode === 'edit' }">
               <input type="radio" v-model="entityType" value="trigger" :disabled="mode === 'edit'">
-              <span>Trigger</span>
+              <span>{{ t('budgetLimitForm.trigger') }}</span>
             </label>
           </div>
         </div>
@@ -174,13 +177,13 @@ async function handleSubmit() {
         <!-- Entity Picker -->
         <div class="form-group">
           <label>
-            {{ entityType === 'agent' ? 'Agent' : (entityType === 'trigger' ? 'Trigger' : 'Team') }}
+            {{ entityType === 'agent' ? t('budgetLimitForm.agent') : (entityType === 'trigger' ? t('budgetLimitForm.trigger') : t('budgetLimitForm.team')) }}
           </label>
           <div v-if="mode === 'edit'" class="entity-readonly">
             {{ entityDisplayName }}
           </div>
           <select v-else v-model="entityId" :class="{ error: fieldErrors.entity }">
-            <option value="">Select {{ entityType === 'agent' ? 'an agent' : (entityType === 'trigger' ? 'a trigger' : 'a team') }}...</option>
+            <option value="">{{ entityType === 'agent' ? t('budgetLimitForm.selectAgent') : (entityType === 'trigger' ? t('budgetLimitForm.selectTrigger') : t('budgetLimitForm.selectTeam')) }}</option>
             <option
               v-for="option in entityOptions"
               :key="option.id"
@@ -194,17 +197,17 @@ async function handleSubmit() {
 
         <!-- Period -->
         <div class="form-group">
-          <label>Period</label>
+          <label>{{ t('budgetLimitForm.period') }}</label>
           <select v-model="period">
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
+            <option value="daily">{{ t('budgetLimitForm.daily') }}</option>
+            <option value="weekly">{{ t('budgetLimitForm.weekly') }}</option>
+            <option value="monthly">{{ t('budgetLimitForm.monthly') }}</option>
           </select>
         </div>
 
         <!-- Soft Limit -->
         <div class="form-group">
-          <label>Alert Threshold</label>
+          <label>{{ t('budgetLimitForm.alertThreshold') }}</label>
           <div class="currency-input">
             <span class="currency-prefix">$</span>
             <input
@@ -212,17 +215,17 @@ async function handleSubmit() {
               v-model="softLimit"
               step="0.01"
               min="0"
-              placeholder="e.g., 10.00"
+              :placeholder="t('budgetLimitForm.alertPlaceholder')"
               :class="{ error: fieldErrors.soft }"
             >
           </div>
-          <div class="field-hint">You'll receive a warning when spending reaches this amount.</div>
+          <div class="field-hint">{{ t('budgetLimitForm.alertHint') }}</div>
           <div v-if="fieldErrors.soft" class="field-error">{{ fieldErrors.soft }}</div>
         </div>
 
         <!-- Hard Limit -->
         <div class="form-group">
-          <label>Halt Threshold</label>
+          <label>{{ t('budgetLimitForm.haltThreshold') }}</label>
           <div class="currency-input">
             <span class="currency-prefix">$</span>
             <input
@@ -230,11 +233,11 @@ async function handleSubmit() {
               v-model="hardLimit"
               step="0.01"
               min="0"
-              placeholder="e.g., 50.00"
+              :placeholder="t('budgetLimitForm.haltPlaceholder')"
               :class="{ error: fieldErrors.hard }"
             >
           </div>
-          <div class="field-hint">Executions will be blocked when spending reaches this amount.</div>
+          <div class="field-hint">{{ t('budgetLimitForm.haltHint') }}</div>
           <div v-if="fieldErrors.hard" class="field-error">{{ fieldErrors.hard }}</div>
         </div>
 
@@ -246,12 +249,12 @@ async function handleSubmit() {
 
         <!-- Actions -->
         <div class="modal-actions">
-          <button type="button" class="btn btn-secondary" @click="emit('cancelled')">Cancel</button>
+          <button type="button" class="btn btn-secondary" @click="emit('cancelled')">{{ t('common.cancel') }}</button>
           <button type="submit" class="btn btn-primary" :disabled="isSubmitting">
             <svg v-if="isSubmitting" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
             </svg>
-            {{ isSubmitting ? 'Saving...' : 'Save' }}
+            {{ isSubmitting ? t('budgetLimitForm.saving') : t('common.save') }}
           </button>
         </div>
       </form>

@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+
 defineProps<{
   teamName: string | null;
   members: Array<{ name: string; agentId: string; agentType: string }>;
@@ -20,14 +24,14 @@ function statusClass(status: string): string {
 <template>
   <div class="team-monitor">
     <div class="monitor-header">
-      <span v-if="teamName" class="team-name">Team: {{ teamName }}</span>
-      <span v-else class="team-waiting">Waiting for team creation...</span>
+      <span v-if="teamName" class="team-name">{{ t('teamMonitorPanel.team', { name: teamName }) }}</span>
+      <span v-else class="team-waiting">{{ t('teamMonitorPanel.waiting') }}</span>
     </div>
 
     <!-- Members section -->
     <div class="monitor-section">
-      <div class="section-label">Members</div>
-      <div v-if="members.length === 0" class="section-empty">No members yet</div>
+      <div class="section-label">{{ t('teamMonitorPanel.members') }}</div>
+      <div v-if="members.length === 0" class="section-empty">{{ t('teamMonitorPanel.noMembers') }}</div>
       <div v-else class="member-list">
         <span
           v-for="member in members"
@@ -42,8 +46,8 @@ function statusClass(status: string): string {
 
     <!-- Tasks section -->
     <div class="monitor-section">
-      <div class="section-label">Tasks</div>
-      <div v-if="tasks.length === 0" class="section-empty">No tasks yet</div>
+      <div class="section-label">{{ t('teamMonitorPanel.tasks') }}</div>
+      <div v-if="tasks.length === 0" class="section-empty">{{ t('teamMonitorPanel.noTasks') }}</div>
       <div v-else class="task-list">
         <div
           v-for="task in tasks"

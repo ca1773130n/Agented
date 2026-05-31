@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+
 defineProps<{
   sessionStatus: string | null;
   isStreaming: boolean;
@@ -21,38 +25,38 @@ const emit = defineEmits<{
          without first stopping the selected one. v0.7.59. -->
     <button
       class="ctrl-btn ctrl-btn--start"
-      title="New Session"
+      :title="t('sessionControls.newSession')"
       @click="emit('start')"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <line x1="12" y1="5" x2="12" y2="19" />
         <line x1="5" y1="12" x2="19" y2="12" />
       </svg>
-      <span>New Session</span>
+      <span>{{ t('sessionControls.newSession') }}</span>
     </button>
 
     <!-- Active: show Pause + Stop alongside New Session -->
     <template v-if="sessionStatus === 'active'">
       <button
         class="ctrl-btn ctrl-btn--pause"
-        title="Pause Session"
+        :title="t('sessionControls.pauseSession')"
         @click="emit('pause')"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="6" y="4" width="4" height="16" rx="1" />
           <rect x="14" y="4" width="4" height="16" rx="1" />
         </svg>
-        <span>Pause</span>
+        <span>{{ t('sessionControls.pause') }}</span>
       </button>
       <button
         class="ctrl-btn ctrl-btn--stop"
-        title="Stop Session"
+        :title="t('sessionControls.stopSession')"
         @click="emit('stop')"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="6" y="6" width="12" height="12" rx="2" />
         </svg>
-        <span>Stop</span>
+        <span>{{ t('sessionControls.stop') }}</span>
       </button>
     </template>
 
@@ -60,23 +64,23 @@ const emit = defineEmits<{
     <template v-if="sessionStatus === 'paused'">
       <button
         class="ctrl-btn ctrl-btn--resume"
-        title="Resume Session"
+        :title="t('sessionControls.resumeSession')"
         @click="emit('resume')"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="5,3 19,12 5,21" />
         </svg>
-        <span>Resume</span>
+        <span>{{ t('sessionControls.resume') }}</span>
       </button>
       <button
         class="ctrl-btn ctrl-btn--stop"
-        title="Stop Session"
+        :title="t('sessionControls.stopSession')"
         @click="emit('stop')"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="6" y="6" width="12" height="12" rx="2" />
         </svg>
-        <span>Stop</span>
+        <span>{{ t('sessionControls.stop') }}</span>
       </button>
     </template>
   </div>

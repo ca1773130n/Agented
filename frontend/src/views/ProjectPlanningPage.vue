@@ -6,6 +6,7 @@ import { projectApi, grdApi } from '../services/api';
 import { useToast } from '../composables/useToast';
 import { handleApiError } from '../services/api/error-handler';
 import { usePlanningSession } from '../composables/usePlanningSession';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import MilestoneOverview from '../components/grd/MilestoneOverview.vue';
@@ -21,6 +22,7 @@ const router = useRouter();
 const projectId = computed(() => (route.params.projectId as string) || props.projectId || '');
 
 const showToast = useToast();
+const { t } = useI18n();
 
 // State
 const project = ref<Project | null>(null);
@@ -76,7 +78,7 @@ async function loadData() {
     await loadPhasesAndPlans();
     return project.value;
   } catch (err) {
-    handleApiError(err, showToast, 'Failed to load planning data');
+    handleApiError(err, showToast, t('projectPlanning.loadError'));
     throw err;
   }
 }
@@ -90,7 +92,7 @@ async function loadPhasesAndPlans() {
     phases.value = phRes.phases || [];
     plans.value = plRes.plans || [];
   } catch {
-    showToast('Failed to load phases and plans', 'error');
+    showToast(t('projectPlanning.loadPhasesError'), 'error');
   }
 }
 
@@ -106,7 +108,7 @@ function handlePhaseCommand(phaseNumber: number, command: string) {
 
 function handleCreatePhase(name: string, goal: string) {
   if (!selectedMilestoneId.value) {
-    showToast('No milestone selected', 'error');
+    showToast(t('projectPlanning.noMilestoneSelected'), 'error');
     return;
   }
   grdApi
@@ -116,11 +118,11 @@ function handleCreatePhase(name: string, goal: string) {
       goal: goal || undefined,
     })
     .then(() => {
-      showToast('Phase created', 'success');
+      showToast(t('projectPlanning.phaseCreated'), 'success');
       loadPhasesAndPlans();
     })
     .catch(() => {
-      showToast('Failed to create phase', 'error');
+      showToast(t('projectPlanning.createPhaseError'), 'error');
     });
 }
 
@@ -152,7 +154,7 @@ watch(selectedMilestoneId, () => {
     <template #default>
       <div class="planning-page">
 
-        <PageHeader title="Planning" :subtitle="project?.name || undefined">
+        <PageHeader :title="t('projectPlanning.title')" :subtitle="project?.name || undefined">
           <template #actions>
             <select
               v-if="milestones.length > 1"
@@ -185,7 +187,7 @@ watch(selectedMilestoneId, () => {
                 <rect x="3" y="14" width="7" height="7" />
                 <rect x="14" y="14" width="7" height="7" />
               </svg>
-              Kanban
+              {{ t('projectPlanning.kanban') }}
             </button>
           </template>
         </PageHeader>

@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { ref, toRef } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { Marketplace, PluginImportResponse } from '../../services/api';
 import { pluginExportApi, ApiError } from '../../services/api';
 import { useToast } from '../../composables/useToast';
 import { useFocusTrap } from '../../composables/useFocusTrap';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   show: boolean;
@@ -54,7 +57,7 @@ function handleClose() {
 
 async function importLocal() {
   if (!localPath.value.trim()) {
-    showToast('Please provide a directory path', 'error');
+    showToast(t('importPluginModal.toast.needPath'), 'error');
     return;
   }
   isImportingLocal.value = true;
@@ -65,12 +68,12 @@ async function importLocal() {
     });
     importResult.value = result;
     emit('imported', result);
-    showToast(`Imported plugin "${result.plugin_name}"`, 'success');
+    showToast(t('importPluginModal.toast.imported', { name: result.plugin_name }), 'success');
   } catch (e) {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to import plugin', 'error');
+      showToast(t('importPluginModal.toast.importFailed'), 'error');
     }
   } finally {
     isImportingLocal.value = false;
@@ -79,7 +82,7 @@ async function importLocal() {
 
 async function importFromMarketplace() {
   if (!selectedMarketplaceId.value || !remotePluginName.value.trim()) {
-    showToast('Please select a marketplace and enter a plugin name', 'error');
+    showToast(t('importPluginModal.toast.needMarketplace'), 'error');
     return;
   }
   isImportingMarketplace.value = true;
@@ -90,12 +93,12 @@ async function importFromMarketplace() {
     });
     importResult.value = result;
     emit('imported', result);
-    showToast(`Imported plugin "${result.plugin_name}" from marketplace`, 'success');
+    showToast(t('importPluginModal.toast.importedFromMarketplace', { name: result.plugin_name }), 'success');
   } catch (e) {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to import from marketplace', 'error');
+      showToast(t('importPluginModal.toast.marketplaceFailed'), 'error');
     }
   } finally {
     isImportingMarketplace.value = false;
@@ -108,7 +111,7 @@ async function importFromMarketplace() {
     <div v-if="show" ref="importModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-import-plugin" tabindex="-1" @click.self="handleClose" @keydown.escape="handleClose">
       <div class="modal import-modal">
         <div class="modal-header">
-          <h2 id="modal-title-import-plugin">Import Plugin</h2>
+          <h2 id="modal-title-import-plugin">{{ t('importPluginModal.title') }}</h2>
           <button class="modal-close" @click="handleClose">&times;</button>
         </div>
 
@@ -121,38 +124,38 @@ async function importFromMarketplace() {
                   <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
                   <polyline points="22 4 12 14.01 9 11.01"/>
                 </svg>
-                <h3>Import Successful</h3>
+                <h3>{{ t('importPluginModal.successTitle') }}</h3>
               </div>
 
               <div class="result-summary">
                 <div class="result-row">
-                  <span class="result-label">Plugin</span>
+                  <span class="result-label">{{ t('importPluginModal.pluginLabel') }}</span>
                   <span class="result-value">{{ importResult.plugin_name }}</span>
                 </div>
                 <div class="result-row">
-                  <span class="result-label">Plugin ID</span>
+                  <span class="result-label">{{ t('importPluginModal.pluginIdLabel') }}</span>
                   <span class="result-value id-badge">{{ importResult.plugin_id }}</span>
                 </div>
                 <div class="result-counts">
                   <div class="count-item" v-if="importResult.agents_imported > 0">
                     <span class="count-num">{{ importResult.agents_imported }}</span>
-                    <span class="count-label">Agents</span>
+                    <span class="count-label">{{ t('importPluginModal.counts.agents') }}</span>
                   </div>
                   <div class="count-item" v-if="importResult.skills_imported > 0">
                     <span class="count-num">{{ importResult.skills_imported }}</span>
-                    <span class="count-label">Skills</span>
+                    <span class="count-label">{{ t('importPluginModal.counts.skills') }}</span>
                   </div>
                   <div class="count-item" v-if="importResult.commands_imported > 0">
                     <span class="count-num">{{ importResult.commands_imported }}</span>
-                    <span class="count-label">Commands</span>
+                    <span class="count-label">{{ t('importPluginModal.counts.commands') }}</span>
                   </div>
                   <div class="count-item" v-if="importResult.hooks_imported > 0">
                     <span class="count-num">{{ importResult.hooks_imported }}</span>
-                    <span class="count-label">Hooks</span>
+                    <span class="count-label">{{ t('importPluginModal.counts.hooks') }}</span>
                   </div>
                   <div class="count-item" v-if="importResult.rules_imported > 0">
                     <span class="count-num">{{ importResult.rules_imported }}</span>
-                    <span class="count-label">Rules</span>
+                    <span class="count-label">{{ t('importPluginModal.counts.rules') }}</span>
                   </div>
                 </div>
               </div>
@@ -170,7 +173,7 @@ async function importFromMarketplace() {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
                 </svg>
-                Local Directory
+                {{ t('importPluginModal.localTab') }}
               </button>
               <button
                 class="tab"
@@ -182,14 +185,14 @@ async function importFromMarketplace() {
                   <circle cx="20" cy="21" r="1"/>
                   <path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/>
                 </svg>
-                From Marketplace
+                {{ t('importPluginModal.marketplaceTab') }}
               </button>
             </div>
 
             <!-- Local Tab -->
             <div v-if="activeTab === 'local'" class="tab-content">
               <div class="form-group">
-                <label>Directory Path *</label>
+                <label>{{ t('importPluginModal.dirPathLabel') }}</label>
                 <input
                   v-model="localPath"
                   type="text"
@@ -198,11 +201,11 @@ async function importFromMarketplace() {
                 />
               </div>
               <div class="form-group">
-                <label>Plugin Name (optional)</label>
+                <label>{{ t('importPluginModal.pluginNameLabel') }}</label>
                 <input
                   v-model="localPluginName"
                   type="text"
-                  placeholder="Override auto-detected name"
+                  :placeholder="t('importPluginModal.pluginNamePlaceholder')"
                   :disabled="isImportingLocal"
                 />
               </div>
@@ -211,9 +214,9 @@ async function importFromMarketplace() {
             <!-- Marketplace Tab -->
             <div v-if="activeTab === 'marketplace'" class="tab-content">
               <div class="form-group">
-                <label>Marketplace *</label>
+                <label>{{ t('importPluginModal.marketplaceLabel') }}</label>
                 <select v-model="selectedMarketplaceId" :disabled="isImportingMarketplace">
-                  <option value="" disabled>Select a marketplace</option>
+                  <option value="" disabled>{{ t('importPluginModal.selectMarketplace') }}</option>
                   <option
                     v-for="mp in marketplaces"
                     :key="mp.id"
@@ -222,14 +225,14 @@ async function importFromMarketplace() {
                     {{ mp.name }}
                   </option>
                 </select>
-                <p v-if="marketplaces.length === 0" class="hint-text">No marketplaces configured. Add one in Settings.</p>
+                <p v-if="marketplaces.length === 0" class="hint-text">{{ t('importPluginModal.noMarketplaces') }}</p>
               </div>
               <div class="form-group">
-                <label>Plugin Name *</label>
+                <label>{{ t('importPluginModal.remotePluginNameLabel') }}</label>
                 <input
                   v-model="remotePluginName"
                   type="text"
-                  placeholder="Plugin name in the marketplace"
+                  :placeholder="t('importPluginModal.remotePluginNamePlaceholder')"
                   :disabled="isImportingMarketplace"
                 />
               </div>
@@ -239,7 +242,7 @@ async function importFromMarketplace() {
 
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="handleClose">
-            {{ importResult ? 'Close' : 'Cancel' }}
+            {{ importResult ? t('common.close') : t('common.cancel') }}
           </button>
           <template v-if="!importResult">
             <button
@@ -248,7 +251,7 @@ async function importFromMarketplace() {
               :disabled="!localPath.trim() || isImportingLocal"
               @click="importLocal"
             >
-              {{ isImportingLocal ? 'Importing...' : 'Import' }}
+              {{ isImportingLocal ? t('importPluginModal.importing') : t('importPluginModal.importBtn') }}
             </button>
             <button
               v-else
@@ -256,7 +259,7 @@ async function importFromMarketplace() {
               :disabled="!selectedMarketplaceId || !remotePluginName.trim() || isImportingMarketplace"
               @click="importFromMarketplace"
             >
-              {{ isImportingMarketplace ? 'Importing...' : 'Import' }}
+              {{ isImportingMarketplace ? t('importPluginModal.importing') : t('importPluginModal.importBtn') }}
             </button>
           </template>
         </div>

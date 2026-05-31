@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import type { Agent, SuperAgent } from '../../services/api'
+
+const { t } = useI18n()
 
 withDefaults(defineProps<{
   availableAgents: Agent[]
@@ -53,11 +56,11 @@ function getInitial(name: string): string {
 
 <template>
   <div class="canvas-sidebar">
-    <div class="sidebar-header">Agents</div>
-    <p class="sidebar-instruction">Drag agents onto the canvas to build your team</p>
+    <div class="sidebar-header">{{ t('canvasSidebar.agents') }}</div>
+    <p class="sidebar-instruction">{{ t('canvasSidebar.instruction') }}</p>
     <div class="sidebar-divider"></div>
     <div v-if="availableAgents.length === 0" class="sidebar-empty">
-      All agents are on the canvas
+      {{ t('canvasSidebar.allAgentsOnCanvas') }}
     </div>
     <div
       v-for="agent in availableAgents"
@@ -84,9 +87,9 @@ function getInitial(name: string): string {
 
     <!-- SuperAgents section -->
     <div class="sidebar-divider sa-divider"></div>
-    <div class="sidebar-header sa-header">SuperAgents</div>
+    <div class="sidebar-header sa-header">{{ t('canvasSidebar.superAgents') }}</div>
     <div v-if="availableSuperAgents.length === 0" class="sidebar-empty">
-      No SuperAgents available
+      {{ t('canvasSidebar.noSuperAgents') }}
     </div>
     <div
       v-for="sa in availableSuperAgents"

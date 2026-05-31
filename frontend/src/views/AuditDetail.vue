@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import type { AuditRecord } from '../services/api';
 import { auditApi } from '../services/api';
@@ -13,6 +14,7 @@ const props = defineProps<{
   auditId?: string;
 }>();
 
+const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const auditId = computed(() => (route.params.auditId as string) || props.auditId || '');
@@ -43,7 +45,7 @@ async function loadAudit() {
     audit.value = data;
     return data;
   } catch (err) {
-    handleApiError(err, showToast, 'Failed to load audit');
+    handleApiError(err, showToast, t('auditDetail.loadFailed'));
     throw err;
   }
 }
@@ -64,9 +66,9 @@ const triggerContentText = computed(() => {
 async function copyCommand(command: string) {
   try {
     await navigator.clipboard.writeText(command);
-    showToast('Command copied to clipboard', 'success');
+    showToast(t('auditDetail.toast.commandCopied'), 'success');
   } catch {
-    showToast('Failed to copy command', 'error');
+    showToast(t('auditDetail.toast.copyFailed'), 'error');
   }
 }
 
@@ -79,13 +81,13 @@ async function copyCommand(command: string) {
     <div class="audit-detail">
 
     <template v-if="audit">
-      <PageHeader :title="'Audit: ' + (audit.audit_id || '')" :subtitle="audit.trigger_name ? 'Trigger: ' + audit.trigger_name : undefined">
+      <PageHeader :title="t('auditDetail.titlePrefix', { id: audit.audit_id || '' })" :subtitle="audit.trigger_name ? t('auditDetail.triggerPrefix', { name: audit.trigger_name }) : undefined">
         <template #actions>
           <button class="btn btn-secondary" @click="router.back()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
               <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
-            Back
+            {{ t('common.back') }}
           </button>
         </template>
       </PageHeader>
@@ -101,7 +103,7 @@ async function copyCommand(command: string) {
           </div>
           <div class="summary-content">
             <div class="summary-value">{{ formatDateShort(audit.audit_date) }}</div>
-            <div class="summary-label">Audit Date</div>
+            <div class="summary-label">{{ t('auditDetail.auditDate') }}</div>
           </div>
         </div>
         <div class="summary-card">
@@ -114,7 +116,7 @@ async function copyCommand(command: string) {
           </div>
           <div class="summary-content">
             <div class="summary-value mono">{{ audit.group_id || '-' }}</div>
-            <div class="summary-label">Group ID</div>
+            <div class="summary-label">{{ t('auditDetail.groupId') }}</div>
           </div>
         </div>
         <div class="summary-card">
@@ -127,24 +129,24 @@ async function copyCommand(command: string) {
           </div>
           <div class="summary-content">
             <div class="summary-value">{{ audit.trigger_name || '-' }}</div>
-            <div class="summary-label">Trigger</div>
+            <div class="summary-label">{{ t('auditDetail.trigger') }}</div>
           </div>
         </div>
         <div class="summary-card severity critical">
           <div class="severity-count">{{ audit.critical || 0 }}</div>
-          <div class="severity-label">Critical</div>
+          <div class="severity-label">{{ t('auditDetail.severity.critical') }}</div>
         </div>
         <div class="summary-card severity high">
           <div class="severity-count">{{ audit.high || 0 }}</div>
-          <div class="severity-label">High</div>
+          <div class="severity-label">{{ t('auditDetail.severity.high') }}</div>
         </div>
         <div class="summary-card severity medium">
           <div class="severity-count">{{ audit.medium || 0 }}</div>
-          <div class="severity-label">Medium</div>
+          <div class="severity-label">{{ t('auditDetail.severity.medium') }}</div>
         </div>
         <div class="summary-card severity low">
           <div class="severity-count">{{ audit.low || 0 }}</div>
-          <div class="severity-label">Low</div>
+          <div class="severity-label">{{ t('auditDetail.severity.low') }}</div>
         </div>
       </div>
 
@@ -154,7 +156,7 @@ async function copyCommand(command: string) {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
           </svg>
-          <h3>Trigger Event</h3>
+          <h3>{{ t('auditDetail.triggerEvent') }}</h3>
         </div>
         <pre class="trigger-content">{{ triggerContentText }}</pre>
       </div>
@@ -165,7 +167,7 @@ async function copyCommand(command: string) {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
           </svg>
-          <h3>Findings & Resolution Guide</h3>
+          <h3>{{ t('auditDetail.findingsTitle') }}</h3>
         </div>
 
         <div v-if="!audit.findings || audit.findings.length === 0" class="all-clear">
@@ -175,8 +177,8 @@ async function copyCommand(command: string) {
               <polyline points="22 4 12 14.01 9 11.01"/>
             </svg>
           </div>
-          <div class="all-clear-title">All Clear!</div>
-          <div class="all-clear-text">No vulnerabilities found in this audit.</div>
+          <div class="all-clear-title">{{ t('auditDetail.allClear') }}</div>
+          <div class="all-clear-text">{{ t('auditDetail.noVulnerabilities') }}</div>
         </div>
 
         <div v-else class="findings-list">
@@ -198,25 +200,25 @@ async function copyCommand(command: string) {
 
             <div class="finding-meta">
               <div class="meta-item">
-                <span class="meta-label">Installed</span>
+                <span class="meta-label">{{ t('auditDetail.meta.installed') }}</span>
                 <span class="meta-value">{{ finding.installed_version || finding.current_version }}</span>
               </div>
               <div class="meta-item">
-                <span class="meta-label">Vulnerable</span>
+                <span class="meta-label">{{ t('auditDetail.meta.vulnerable') }}</span>
                 <span class="meta-value">{{ finding.vulnerable_version }}</span>
               </div>
               <div class="meta-item">
-                <span class="meta-label">CVE</span>
+                <span class="meta-label">{{ t('auditDetail.meta.cve') }}</span>
                 <span class="meta-value">
                   <a v-if="finding.cve_link" :href="finding.cve_link" target="_blank" rel="noopener noreferrer" class="cve-link">
                     {{ finding.cve }}
                   </a>
-                  <template v-else>{{ finding.cve || 'N/A' }}</template>
+                  <template v-else>{{ finding.cve || t('auditDetail.meta.na') }}</template>
                 </span>
               </div>
               <div class="meta-item">
-                <span class="meta-label">Ecosystem</span>
-                <span class="meta-value">{{ finding.ecosystem || 'Unknown' }}</span>
+                <span class="meta-label">{{ t('auditDetail.meta.ecosystem') }}</span>
+                <span class="meta-value">{{ finding.ecosystem || t('auditDetail.meta.unknown') }}</span>
               </div>
             </div>
 
@@ -229,7 +231,7 @@ async function copyCommand(command: string) {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                   <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
                 </svg>
-                <h4>Resolution Guide</h4>
+                <h4>{{ t('auditDetail.resolutionGuide') }}</h4>
               </div>
               <div v-if="finding.fix_command" class="command-box">
                 <code>{{ finding.fix_command }}</code>
@@ -238,14 +240,14 @@ async function copyCommand(command: string) {
                     <rect x="9" y="9" width="13" height="13" rx="2"/>
                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
                   </svg>
-                  Copy
+                  {{ t('auditDetail.copy') }}
                 </button>
               </div>
               <div v-if="finding.recommended_version" class="resolution-note highlight">
-                Recommended version: <strong>{{ finding.recommended_version }}</strong>
+                {{ t('auditDetail.recommendedVersion') }} <strong>{{ finding.recommended_version }}</strong>
               </div>
               <div class="resolution-note">
-                After updating, run your tests to ensure compatibility. Then re-run the security audit to verify the fix.
+                {{ t('auditDetail.afterUpdating') }}
               </div>
             </div>
           </div>

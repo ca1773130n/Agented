@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { useAuth } from '../composables/useAuth';
 
 const route = useRoute();
 const router = useRouter();
+const { t } = useI18n();
 const { signup } = useAuth();
 
 const email = ref('');
@@ -30,7 +32,7 @@ async function onSubmit() {
     router.push(next);
   } catch (err) {
     error.value =
-      err instanceof Error && err.message ? err.message : 'Signup failed';
+      err instanceof Error && err.message ? err.message : t('signup.signupFailed');
   } finally {
     submitting.value = false;
   }
@@ -40,12 +42,12 @@ async function onSubmit() {
 <template>
   <div class="signup-page">
     <div class="signup-card">
-      <h1 class="signup-title">Create an account</h1>
-      <p class="signup-subtitle">Sign up for Agented.</p>
+      <h1 class="signup-title">{{ t('signup.title') }}</h1>
+      <p class="signup-subtitle">{{ t('signup.subtitle') }}</p>
 
       <form class="signup-form" @submit.prevent="onSubmit">
         <label class="signup-field">
-          <span class="signup-label">Email</span>
+          <span class="signup-label">{{ t('signup.email') }}</span>
           <input
             v-model="email"
             type="email"
@@ -58,7 +60,7 @@ async function onSubmit() {
         </label>
 
         <label class="signup-field">
-          <span class="signup-label">Display name <em class="signup-optional">(optional)</em></span>
+          <span class="signup-label">{{ t('signup.displayName') }} <em class="signup-optional">{{ t('signup.optional') }}</em></span>
           <input
             v-model="displayName"
             type="text"
@@ -70,7 +72,7 @@ async function onSubmit() {
         </label>
 
         <label class="signup-field">
-          <span class="signup-label">Password</span>
+          <span class="signup-label">{{ t('signup.password') }}</span>
           <input
             v-model="password"
             type="password"
@@ -81,7 +83,7 @@ async function onSubmit() {
             data-test="signup-password"
             :disabled="submitting"
           />
-          <span class="signup-help">At least 8 characters.</span>
+          <span class="signup-help">{{ t('signup.atLeast8') }}</span>
         </label>
 
         <p v-if="error" class="signup-error" role="alert" data-test="signup-error">
@@ -94,12 +96,12 @@ async function onSubmit() {
           data-test="signup-submit"
           :disabled="!canSubmit"
         >
-          {{ submitting ? 'Creating account…' : 'Create account' }}
+          {{ submitting ? t('signup.creatingAccount') : t('signup.createAccount') }}
         </button>
 
         <p class="signup-switch">
-          Already have an account?
-          <router-link :to="{ name: 'login' }" class="signup-link">Sign in</router-link>
+          {{ t('signup.alreadyHaveAccount') }}
+          <router-link :to="{ name: 'login' }" class="signup-link">{{ t('signup.signIn') }}</router-link>
         </p>
       </form>
     </div>

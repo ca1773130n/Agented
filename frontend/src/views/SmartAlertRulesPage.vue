@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { monitoringApi, ApiError } from '../services/api';
 import type { MonitoringConfig, MonitoringStatus } from '../services/api';
 import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 const loading = ref(true);
@@ -55,7 +57,7 @@ async function loadData() {
     if (config.accounts) {
       rules.value = Object.entries(config.accounts).map(([accountId, acct]) => ({
         id: `ar-${accountId}`,
-        name: `Account ${accountId} monitoring`,
+        name: t('smartAlertRules.accountMonitoringName', { account: accountId }),
         enabled: acct.enabled ?? true,
         conditions: [{ type: 'severity_gte' as Condition, value: 'high' }],
         channels: [{ type: 'slack' as Channel, target: '#monitoring' }],
@@ -66,9 +68,9 @@ async function loadData() {
     }
   } catch (err) {
     if (err instanceof ApiError) {
-      error.value = `API Error (${err.status}): ${err.message}`;
+      error.value = t('smartAlertRules.error.apiError', { status: err.status, message: err.message });
     } else {
-      error.value = err instanceof Error ? err.message : 'Unknown error';
+      error.value = err instanceof Error ? err.message : t('smartAlertRules.error.unknown');
     }
   } finally {
     loading.value = false;
@@ -86,19 +88,19 @@ const formName = ref('');
 const formConditions = ref<RuleCondition[]>([{ type: 'severity_gte', value: 'high' }]);
 const formChannels = ref<NotificationChannel[]>([{ type: 'slack', target: '' }]);
 
-const conditionTypeOptions: { value: Condition; label: string }[] = [
-  { value: 'severity_gte', label: 'Severity is at least' },
-  { value: 'keyword_match', label: 'Output contains keyword' },
-  { value: 'count_gte', label: 'Finding count at least' },
-  { value: 'bot_id', label: 'From specific bot' },
-];
+const conditionTypeOptions = computed<{ value: Condition; label: string }[]>(() => [
+  { value: 'severity_gte', label: t('smartAlertRules.conditionTypes.severityGte') },
+  { value: 'keyword_match', label: t('smartAlertRules.conditionTypes.keywordMatch') },
+  { value: 'count_gte', label: t('smartAlertRules.conditionTypes.countGte') },
+  { value: 'bot_id', label: t('smartAlertRules.conditionTypes.botId') },
+]);
 
-const severityOptions: { value: Severity; label: string }[] = [
-  { value: 'critical', label: 'Critical' },
-  { value: 'high', label: 'High' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'low', label: 'Low' },
-];
+const severityOptions = computed<{ value: Severity; label: string }[]>(() => [
+  { value: 'critical', label: t('smartAlertRules.severity.critical') },
+  { value: 'high', label: t('smartAlertRules.severity.high') },
+  { value: 'medium', label: t('smartAlertRules.severity.medium') },
+  { value: 'low', label: t('smartAlertRules.severity.low') },
+]);
 
 const channelTypeOptions: { value: Channel; label: string; icon: string }[] = [
   { value: 'slack', label: 'Slack', icon: '💬' },
@@ -148,7 +150,7 @@ function removeChannel(idx: number) {
 
 async function saveRule() {
   if (!formName.value.trim()) {
-    showToast('Rule name is required.', 'error');
+    showToast(t('smartAlertRules.toast.nameRequired'), 'error');
     return;
   }
   isSaving.value = true;
@@ -165,7 +167,7 @@ async function saveRule() {
         r.conditions = formConditions.value.map(c => ({ ...c }));
         r.channels = formChannels.value.map(c => ({ ...c }));
       }
-      showToast(`Rule "${formName.value}" updated.`, 'success');
+      showToast(t('smartAlertRules.toast.updated', { name: formName.value }), 'success');
     } else {
       rules.value.unshift({
         id: `ar-${Date.now()}`,
@@ -177,11 +179,11 @@ async function saveRule() {
         lastFired: null,
         fireCount: 0,
       });
-      showToast(`Rule "${formName.value}" created.`, 'success');
+      showToast(t('smartAlertRules.toast.created', { name: formName.value }), 'success');
     }
     showEditor.value = false;
   } catch (err) {
-    showToast(err instanceof ApiError ? err.message : 'Save failed', 'error');
+    showToast(err instanceof ApiError ? err.message : t('smartAlertRules.toast.saveFailed'), 'error');
   } finally {
     isSaving.value = false;
   }
@@ -193,16 +195,16 @@ async function toggleEnabled(rule: AlertRule) {
     if (monitoringConfig.value) {
       await monitoringApi.setConfig(monitoringConfig.value);
     }
-    showToast(`Rule "${rule.name}" ${rule.enabled ? 'enabled' : 'disabled'}.`, 'success');
+    showToast(rule.enabled ? t('smartAlertRules.toast.enabled', { name: rule.name }) : t('smartAlertRules.toast.disabled', { name: rule.name }), 'success');
   } catch {
     rule.enabled = !rule.enabled;
-    showToast('Failed to update rule.', 'error');
+    showToast(t('smartAlertRules.toast.updateFailed'), 'error');
   }
 }
 
 async function deleteRule(rule: AlertRule) {
   rules.value = rules.value.filter(r => r.id !== rule.id);
-  showToast(`Rule "${rule.name}" deleted.`, 'success');
+  showToast(t('smartAlertRules.toast.deleted', { name: rule.name }), 'success');
 }
 
 function fmtDate(iso: string): string {
@@ -227,49 +229,49 @@ const FEATURE_ENABLED = false;
 
     <NotEnabledBanner
       v-if="!FEATURE_ENABLED"
-      feature="Smart alert rules"
-      detail="The backend that evaluates rule conditions and dispatches alerts has not shipped yet. Creating, editing, or deleting rules is disabled."
+      :feature="t('smartAlertRules.banner.feature')"
+      :detail="t('smartAlertRules.banner.detail')"
       testid="smart-alert-rules-not-enabled"
     />
 
     <PageHeader
-      title="Smart Alert Rules"
-      subtitle="Define conditions that fire notifications when bot findings match specific severity, keywords, or patterns."
+      :title="t('smartAlertRules.title')"
+      :subtitle="t('smartAlertRules.subtitle')"
     >
       <template #actions>
         <button
           class="btn btn-primary"
           :disabled="!FEATURE_ENABLED"
-          :title="!FEATURE_ENABLED ? 'Smart alert rules are not yet enabled' : ''"
+          :title="!FEATURE_ENABLED ? t('smartAlertRules.notEnabledTitle') : ''"
           @click="openNew"
-        >+ New Rule</button>
+        >{{ t('smartAlertRules.newRule') }}</button>
       </template>
     </PageHeader>
 
     <!-- Loading state -->
     <div v-if="loading" class="empty-state">
       <div class="empty-icon">⏳</div>
-      <p>Loading monitoring configuration...</p>
+      <p>{{ t('smartAlertRules.loading') }}</p>
     </div>
 
     <!-- Error state -->
     <div v-else-if="error" class="empty-state">
       <div class="empty-icon">⚠️</div>
       <p>{{ error }}</p>
-      <button class="btn btn-primary" @click="loadData">Retry</button>
+      <button class="btn btn-primary" @click="loadData">{{ t('common.retry') }}</button>
     </div>
 
     <template v-else>
       <div class="rules-list">
         <div v-if="rules.length === 0" class="empty-state">
           <div class="empty-icon">🔔</div>
-          <p>No alert rules defined yet. Create your first rule to get proactive notifications.</p>
+          <p>{{ t('smartAlertRules.emptyMessage') }}</p>
           <button
             class="btn btn-primary"
             :disabled="!FEATURE_ENABLED"
-            :title="!FEATURE_ENABLED ? 'Smart alert rules are not yet enabled in this deployment' : undefined"
+            :title="!FEATURE_ENABLED ? t('smartAlertRules.notEnabledTitleDeployment') : undefined"
             @click="openNew"
-          >Create Alert Rule</button>
+          >{{ t('smartAlertRules.createAlertRule') }}</button>
         </div>
 
         <div v-for="rule in rules" :key="rule.id" class="rule-card card">
@@ -277,56 +279,56 @@ const FEATURE_ENABLED = false;
             <div class="rule-title-row">
               <span class="rule-name">{{ rule.name }}</span>
               <span class="status-dot" :class="{ active: rule.enabled, inactive: !rule.enabled }">
-                {{ rule.enabled ? 'Active' : 'Disabled' }}
+                {{ rule.enabled ? t('smartAlertRules.active') : t('smartAlertRules.disabled') }}
               </span>
             </div>
             <div class="rule-actions">
               <button
                 class="btn btn-xs btn-ghost"
                 :disabled="!FEATURE_ENABLED"
-                :title="!FEATURE_ENABLED ? 'Smart alert rules are not yet enabled' : ''"
+                :title="!FEATURE_ENABLED ? t('smartAlertRules.notEnabledTitle') : ''"
                 @click="openEdit(rule)"
-              >Edit</button>
+              >{{ t('common.edit') }}</button>
               <button
                 class="btn btn-xs btn-ghost"
                 :disabled="!FEATURE_ENABLED"
-                :title="!FEATURE_ENABLED ? 'Smart alert rules are not yet enabled' : ''"
+                :title="!FEATURE_ENABLED ? t('smartAlertRules.notEnabledTitle') : ''"
                 @click="toggleEnabled(rule)"
               >
-                {{ rule.enabled ? 'Disable' : 'Enable' }}
+                {{ rule.enabled ? t('smartAlertRules.disable') : t('smartAlertRules.enable') }}
               </button>
               <button
                 class="btn btn-xs btn-ghost btn-danger"
                 :disabled="!FEATURE_ENABLED"
-                :title="!FEATURE_ENABLED ? 'Smart alert rules are not yet enabled' : ''"
+                :title="!FEATURE_ENABLED ? t('smartAlertRules.notEnabledTitle') : ''"
                 @click="deleteRule(rule)"
-              >Delete</button>
+              >{{ t('common.delete') }}</button>
             </div>
           </div>
 
           <div class="rule-body">
             <div class="rule-section">
-              <div class="section-label">Conditions (ALL must match)</div>
+              <div class="section-label">{{ t('smartAlertRules.conditionsLabel') }}</div>
               <div class="condition-tags">
                 <span v-for="(c, i) in rule.conditions" :key="i" class="condition-tag">
                   <template v-if="c.type === 'severity_gte'">
-                    Severity ≥ <span :style="{ color: severityColor(c.value), fontWeight: '700' }">{{ c.value }}</span>
+                    {{ t('smartAlertRules.tag.severityGte') }} <span :style="{ color: severityColor(c.value), fontWeight: '700' }">{{ c.value }}</span>
                   </template>
                   <template v-else-if="c.type === 'keyword_match'">
-                    Contains <span class="keyword">"{{ c.value }}"</span>
+                    {{ t('smartAlertRules.tag.contains') }} <span class="keyword">"{{ c.value }}"</span>
                   </template>
                   <template v-else-if="c.type === 'count_gte'">
-                    Finding count ≥ {{ c.value }}
+                    {{ t('smartAlertRules.tag.countGte', { count: c.value }) }}
                   </template>
                   <template v-else>
-                    Bot ID = {{ c.value }}
+                    {{ t('smartAlertRules.tag.botId', { id: c.value }) }}
                   </template>
                 </span>
               </div>
             </div>
 
             <div class="rule-section">
-              <div class="section-label">Notify via</div>
+              <div class="section-label">{{ t('smartAlertRules.notifyVia') }}</div>
               <div class="channel-tags">
                 <span v-for="(ch, i) in rule.channels" :key="i" class="channel-tag">
                   {{ channelTypeOptions.find(o => o.value === ch.type)?.icon }}
@@ -337,16 +339,16 @@ const FEATURE_ENABLED = false;
           </div>
 
           <div class="rule-footer">
-            <span class="meta">Created {{ fmtDate(rule.createdAt) }}</span>
+            <span class="meta">{{ t('smartAlertRules.footer.created', { date: fmtDate(rule.createdAt) }) }}</span>
             <span class="sep">·</span>
-            <span class="meta">Fired {{ rule.fireCount }} time{{ rule.fireCount !== 1 ? 's' : '' }}</span>
+            <span class="meta">{{ t('smartAlertRules.footer.fired', { count: rule.fireCount }) }}</span>
             <template v-if="rule.lastFired">
               <span class="sep">·</span>
-              <span class="meta">Last fired {{ fmtDate(rule.lastFired) }}</span>
+              <span class="meta">{{ t('smartAlertRules.footer.lastFired', { date: fmtDate(rule.lastFired) }) }}</span>
             </template>
             <template v-else>
               <span class="sep">·</span>
-              <span class="meta muted">Never fired</span>
+              <span class="meta muted">{{ t('smartAlertRules.footer.neverFired') }}</span>
             </template>
           </div>
         </div>
@@ -357,20 +359,20 @@ const FEATURE_ENABLED = false;
     <div v-if="showEditor" class="overlay" @click.self="showEditor = false">
       <div class="slide-panel">
         <div class="panel-header">
-          <h2 class="panel-title">{{ editingRule ? 'Edit Alert Rule' : 'New Alert Rule' }}</h2>
+          <h2 class="panel-title">{{ editingRule ? t('smartAlertRules.editAlertRule') : t('smartAlertRules.newAlertRule') }}</h2>
           <button class="close-btn" @click="showEditor = false">✕</button>
         </div>
 
         <div class="panel-body">
           <div class="field">
-            <label class="field-label">Rule Name</label>
-            <input v-model="formName" class="input" placeholder="e.g. Critical Security Findings" />
+            <label class="field-label">{{ t('smartAlertRules.fields.ruleName') }}</label>
+            <input v-model="formName" class="input" :placeholder="t('smartAlertRules.placeholders.ruleName')" />
           </div>
 
           <div class="field">
             <div class="field-header">
-              <label class="field-label">Conditions</label>
-              <button class="btn btn-xs btn-ghost" @click="addCondition">+ Add Condition</button>
+              <label class="field-label">{{ t('smartAlertRules.fields.conditions') }}</label>
+              <button class="btn btn-xs btn-ghost" @click="addCondition">{{ t('smartAlertRules.addCondition') }}</button>
             </div>
             <div class="conditions-editor">
               <div v-for="(cond, i) in formConditions" :key="i" class="condition-row">
@@ -382,7 +384,7 @@ const FEATURE_ENABLED = false;
                 <select v-if="cond.type === 'severity_gte'" v-model="cond.value" class="select select-sm">
                   <option v-for="s in severityOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
                 </select>
-                <input v-else v-model="cond.value" class="input input-sm" :placeholder="cond.type === 'count_gte' ? '5' : 'value'" />
+                <input v-else v-model="cond.value" class="input input-sm" :placeholder="cond.type === 'count_gte' ? '5' : t('smartAlertRules.placeholders.value')" />
                 <button class="btn btn-xs btn-ghost btn-icon" @click="removeCondition(i)" :disabled="formConditions.length <= 1">✕</button>
               </div>
             </div>
@@ -390,8 +392,8 @@ const FEATURE_ENABLED = false;
 
           <div class="field">
             <div class="field-header">
-              <label class="field-label">Notification Channels</label>
-              <button class="btn btn-xs btn-ghost" @click="addChannel">+ Add Channel</button>
+              <label class="field-label">{{ t('smartAlertRules.fields.notificationChannels') }}</label>
+              <button class="btn btn-xs btn-ghost" @click="addChannel">{{ t('smartAlertRules.addChannel') }}</button>
             </div>
             <div class="channels-editor">
               <div v-for="(ch, i) in formChannels" :key="i" class="channel-row">
@@ -408,15 +410,15 @@ const FEATURE_ENABLED = false;
         </div>
 
         <div class="panel-footer">
-          <button class="btn btn-ghost" @click="showEditor = false">Cancel</button>
+          <button class="btn btn-ghost" @click="showEditor = false">{{ t('common.cancel') }}</button>
           <button
             class="btn btn-primary"
             :disabled="isSaving || !formName.trim() || !FEATURE_ENABLED"
-            :title="!FEATURE_ENABLED ? 'Smart alert rules are not yet enabled in this deployment' : undefined"
+            :title="!FEATURE_ENABLED ? t('smartAlertRules.notEnabledTitleDeployment') : undefined"
             data-testid="smart-alert-save-submit"
             @click="saveRule"
           >
-            {{ isSaving ? 'Saving...' : editingRule ? 'Update Rule' : 'Create Rule' }}
+            {{ isSaving ? t('smartAlertRules.saving') : editingRule ? t('smartAlertRules.updateRule') : t('smartAlertRules.createRule') }}
           </button>
         </div>
       </div>

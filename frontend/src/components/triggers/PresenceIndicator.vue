@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import type { ViewerInfo } from '../../services/api';
+
+const { t } = useI18n();
 
 defineProps<{
   viewers: ViewerInfo[];
@@ -39,7 +42,7 @@ function getColor(viewerId: string): string {
         </span>
       </TransitionGroup>
     </div>
-    <span class="viewer-count">{{ viewers.length }} watching</span>
+    <span class="viewer-count">{{ t('presenceIndicator.watching', { count: viewers.length }) }}</span>
   </div>
 </template>
 

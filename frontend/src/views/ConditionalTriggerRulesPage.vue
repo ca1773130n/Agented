@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
@@ -7,6 +8,7 @@ import {
   triggerConditionsApi,
   type TriggerConditionRule,
 } from '../services/api/trigger-conditions';
+const { t } = useI18n();
 const route = useRoute();
 const showToast = useToast();
 
@@ -17,24 +19,24 @@ const triggerId = ref<string>((route.query.trigger_id as string) || '');
 type Operator = 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than' | 'matches';
 
 const fieldOptions = [
-  { value: 'pr.lines_changed', label: 'PR Lines Changed' },
-  { value: 'pr.files_changed', label: 'PR Files Changed' },
-  { value: 'pr.author', label: 'PR Author' },
-  { value: 'pr.label', label: 'PR Label' },
-  { value: 'pr.base_branch', label: 'PR Base Branch' },
-  { value: 'file.path', label: 'File Path' },
-  { value: 'commit.message', label: 'Commit Message' },
-  { value: 'repo.name', label: 'Repository Name' },
-  { value: 'event.action', label: 'Event Action' },
+  { value: 'pr.lines_changed', label: t('conditionalTriggerRules.field.prLinesChanged') },
+  { value: 'pr.files_changed', label: t('conditionalTriggerRules.field.prFilesChanged') },
+  { value: 'pr.author', label: t('conditionalTriggerRules.field.prAuthor') },
+  { value: 'pr.label', label: t('conditionalTriggerRules.field.prLabel') },
+  { value: 'pr.base_branch', label: t('conditionalTriggerRules.field.prBaseBranch') },
+  { value: 'file.path', label: t('conditionalTriggerRules.field.filePath') },
+  { value: 'commit.message', label: t('conditionalTriggerRules.field.commitMessage') },
+  { value: 'repo.name', label: t('conditionalTriggerRules.field.repoName') },
+  { value: 'event.action', label: t('conditionalTriggerRules.field.eventAction') },
 ];
 
 const operatorOptions: { value: Operator; label: string }[] = [
-  { value: 'equals', label: '= equals' },
-  { value: 'not_equals', label: '≠ not equals' },
-  { value: 'contains', label: '⊃ contains' },
-  { value: 'greater_than', label: '> greater than' },
-  { value: 'less_than', label: '< less than' },
-  { value: 'matches', label: '~ matches (glob)' },
+  { value: 'equals', label: t('conditionalTriggerRules.operator.equals') },
+  { value: 'not_equals', label: t('conditionalTriggerRules.operator.notEquals') },
+  { value: 'contains', label: t('conditionalTriggerRules.operator.contains') },
+  { value: 'greater_than', label: t('conditionalTriggerRules.operator.greaterThan') },
+  { value: 'less_than', label: t('conditionalTriggerRules.operator.lessThan') },
+  { value: 'matches', label: t('conditionalTriggerRules.operator.matches') },
 ];
 
 const rules = ref<TriggerConditionRule[]>([]);
@@ -55,7 +57,7 @@ async function loadRules() {
       selectedRule.value = { ...rules.value[0], conditions: [...rules.value[0].conditions] };
     }
   } catch (err: any) {
-    showToast(err?.message || 'Failed to load rules', 'error');
+    showToast(err?.message || t('conditionalTriggerRules.toast.loadFailed'), 'error');
   } finally {
     isLoading.value = false;
   }
@@ -83,7 +85,7 @@ function removeCondition(id: string) {
 
 async function addRule() {
   if (!triggerId.value) {
-    showToast('Select a trigger first (add ?trigger_id=... to the URL)', 'error');
+    showToast(t('conditionalTriggerRules.toast.selectTriggerFirst'), 'error');
     return;
   }
   isSaving.value = true;
@@ -98,9 +100,9 @@ async function addRule() {
     rules.value.push(res.rule);
     selectedRule.value = { ...res.rule, conditions: [...res.rule.conditions] };
     testResult.value = null;
-    showToast('Rule created', 'success');
+    showToast(t('conditionalTriggerRules.toast.created'), 'success');
   } catch (err: any) {
-    showToast(err?.message || 'Failed to create rule', 'error');
+    showToast(err?.message || t('conditionalTriggerRules.toast.createFailed'), 'error');
   } finally {
     isSaving.value = false;
   }
@@ -122,10 +124,10 @@ async function handleSave() {
       const idx = rules.value.findIndex(r => r.id === updated.id);
       if (idx !== -1) rules.value[idx] = updated;
       selectedRule.value = { ...updated, conditions: [...updated.conditions] };
-      showToast('Rule saved', 'success');
+      showToast(t('conditionalTriggerRules.toast.saved'), 'success');
     }
   } catch (err: any) {
-    showToast(err?.message || 'Failed to save rule', 'error');
+    showToast(err?.message || t('conditionalTriggerRules.toast.saveFailed'), 'error');
   } finally {
     isSaving.value = false;
   }
@@ -139,9 +141,9 @@ async function handleDelete() {
     rules.value = rules.value.filter(r => r.id !== selectedRule.value!.id);
     selectedRule.value = rules.value[0] ? { ...rules.value[0] } : null;
     testResult.value = null;
-    showToast('Rule deleted', 'success');
+    showToast(t('conditionalTriggerRules.toast.deleted'), 'success');
   } catch (err: any) {
-    showToast(err?.message || 'Failed to delete rule', 'error');
+    showToast(err?.message || t('conditionalTriggerRules.toast.deleteFailed'), 'error');
   } finally {
     isDeleting.value = false;
   }
@@ -159,8 +161,14 @@ async function testRule() {
     testResult.value = {
       matched: allFilled,
       reason: allFilled
-        ? `${conditionCount} condition${conditionCount > 1 ? 's' : ''} evaluated — rule would ${selectedRule.value.enabled ? 'ALLOW' : 'BLOCK'} execution (${selectedRule.value.logic})`
-        : 'Some conditions have empty values — fill all values before testing',
+        ? t('conditionalTriggerRules.testResult.evaluated', {
+            count: conditionCount,
+            verdict: selectedRule.value.enabled
+              ? t('conditionalTriggerRules.allow')
+              : t('conditionalTriggerRules.block'),
+            logic: selectedRule.value.logic,
+          })
+        : t('conditionalTriggerRules.testResult.emptyValues'),
     };
   } finally {
     isTestingRule.value = false;
@@ -174,21 +182,21 @@ onMounted(loadRules);
   <div class="conditional-rules">
 
     <PageHeader
-      title="Conditional Trigger Rules Engine"
-      subtitle="Add filter conditions to triggers so bots only run when specific criteria are met — reducing noise and wasted tokens."
+      :title="t('conditionalTriggerRules.title')"
+      :subtitle="t('conditionalTriggerRules.subtitle')"
     />
 
-    <div v-if="isLoading" class="loading-state">Loading rules…</div>
+    <div v-if="isLoading" class="loading-state">{{ t('conditionalTriggerRules.loading') }}</div>
 
     <div v-else class="layout">
       <!-- Rule list -->
       <aside class="sidebar card">
         <div class="sidebar-header">
-          <span>Rules</span>
+          <span>{{ t('conditionalTriggerRules.rules') }}</span>
           <button class="btn-add" :disabled="isSaving" @click="addRule">+</button>
         </div>
         <div v-if="rules.length === 0" class="empty-sidebar">
-          No rules yet.<br/>Click + to add one.
+          {{ t('conditionalTriggerRules.noRules') }}<br/>{{ t('conditionalTriggerRules.clickToAdd') }}
         </div>
         <div
           v-for="rule in rules"
@@ -200,7 +208,7 @@ onMounted(loadRules);
           <div class="rule-row">
             <span class="rule-name">{{ rule.name }}</span>
             <span class="rule-pill" :class="rule.enabled ? 'pill-on' : 'pill-off'">
-              {{ rule.enabled ? 'ON' : 'OFF' }}
+              {{ rule.enabled ? t('conditionalTriggerRules.on') : t('conditionalTriggerRules.off') }}
             </span>
           </div>
           <div class="rule-bot">{{ rule.trigger_id }}</div>
@@ -210,35 +218,35 @@ onMounted(loadRules);
       <!-- Editor -->
       <div v-if="selectedRule" class="editor">
         <div class="card">
-          <div class="card-header">Rule Settings</div>
+          <div class="card-header">{{ t('conditionalTriggerRules.ruleSettings') }}</div>
           <div class="card-body">
             <div class="field-row">
               <div class="field">
-                <label class="field-label">Rule Name</label>
+                <label class="field-label">{{ t('conditionalTriggerRules.ruleName') }}</label>
                 <input v-model="selectedRule.name" class="input" />
               </div>
               <div class="field">
-                <label class="field-label">Trigger ID</label>
+                <label class="field-label">{{ t('conditionalTriggerRules.triggerId') }}</label>
                 <input :value="selectedRule.trigger_id" class="input" disabled />
               </div>
             </div>
             <div class="field">
-              <label class="field-label">Description</label>
+              <label class="field-label">{{ t('conditionalTriggerRules.description') }}</label>
               <input v-model="selectedRule.description" class="input" />
             </div>
             <div class="field-row">
               <div class="field">
-                <label class="field-label">Condition Logic</label>
+                <label class="field-label">{{ t('conditionalTriggerRules.conditionLogic') }}</label>
                 <select v-model="selectedRule.logic" class="select">
-                  <option value="AND">ALL must match (AND)</option>
-                  <option value="OR">ANY must match (OR)</option>
+                  <option value="AND">{{ t('conditionalTriggerRules.logicAnd') }}</option>
+                  <option value="OR">{{ t('conditionalTriggerRules.logicOr') }}</option>
                 </select>
               </div>
               <div class="field">
-                <label class="field-label">Enabled</label>
+                <label class="field-label">{{ t('conditionalTriggerRules.enabled') }}</label>
                 <label class="toggle-label">
                   <input type="checkbox" v-model="selectedRule.enabled" />
-                  <span>{{ selectedRule.enabled ? 'Active' : 'Disabled' }}</span>
+                  <span>{{ selectedRule.enabled ? t('conditionalTriggerRules.active') : t('conditionalTriggerRules.disabled') }}</span>
                 </label>
               </div>
             </div>
@@ -247,7 +255,7 @@ onMounted(loadRules);
 
         <div class="card">
           <div class="card-header">
-            <span>Conditions</span>
+            <span>{{ t('conditionalTriggerRules.conditions') }}</span>
             <span class="logic-badge">{{ selectedRule.logic }}</span>
           </div>
           <div class="conditions-body">
@@ -264,7 +272,7 @@ onMounted(loadRules);
                 <select v-model="cond.operator" class="select cond-op-select">
                   <option v-for="op in operatorOptions" :key="op.value" :value="op.value">{{ op.label }}</option>
                 </select>
-                <input v-model="cond.value" class="input cond-value" placeholder="value" />
+                <input v-model="cond.value" class="input cond-value" :placeholder="t('conditionalTriggerRules.valuePlaceholder')" />
                 <button class="btn-remove" @click="removeCondition(cond.id)" :disabled="selectedRule.conditions.length <= 1">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                     <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -272,7 +280,7 @@ onMounted(loadRules);
                 </button>
               </div>
             </div>
-            <button class="btn-add-cond" @click="addCondition">+ Add Condition</button>
+            <button class="btn-add-cond" @click="addCondition">{{ t('conditionalTriggerRules.addCondition') }}</button>
           </div>
         </div>
 
@@ -286,19 +294,19 @@ onMounted(loadRules);
 
         <div class="actions">
           <button class="btn btn-danger" :disabled="isDeleting" @click="handleDelete">
-            {{ isDeleting ? 'Deleting...' : 'Delete Rule' }}
+            {{ isDeleting ? t('conditionalTriggerRules.deleting') : t('conditionalTriggerRules.deleteRule') }}
           </button>
           <button class="btn btn-ghost" :disabled="isTestingRule" @click="testRule">
-            {{ isTestingRule ? 'Testing...' : 'Test Rule' }}
+            {{ isTestingRule ? t('conditionalTriggerRules.testing') : t('conditionalTriggerRules.testRule') }}
           </button>
           <button class="btn btn-primary" :disabled="isSaving" @click="handleSave">
-            {{ isSaving ? 'Saving...' : 'Save Rule' }}
+            {{ isSaving ? t('conditionalTriggerRules.saving') : t('conditionalTriggerRules.saveRule') }}
           </button>
         </div>
       </div>
 
       <div v-else class="editor empty-editor">
-        <p>Select a rule from the list or create a new one.</p>
+        <p>{{ t('conditionalTriggerRules.emptyEditor') }}</p>
       </div>
     </div>
   </div>

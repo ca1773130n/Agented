@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { TeamMember, TeamAgentAssignment } from '../../services/api'
 import { teamApi } from '../../services/api'
 import { useToast } from '../../composables/useToast'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   agentId: string
@@ -42,9 +45,9 @@ async function onTierChange(event: Event) {
   try {
     await teamApi.updateMember(props.teamId, props.memberId, { tier })
     emit('tier-changed', props.memberId, tier)
-    showToast(`Tier updated to ${tier}`, 'success')
+    showToast(t('agentDetailPanel.tierUpdated', { tier }), 'success')
   } catch {
-    showToast('Failed to update tier', 'error')
+    showToast(t('agentDetailPanel.tierUpdateFailed'), 'error')
   }
 }
 </script>
@@ -52,8 +55,8 @@ async function onTierChange(event: Event) {
 <template>
   <div class="detail-panel">
     <div class="panel-header">
-      <h3>Agent Details</h3>
-      <button class="close-btn" @click="emit('close')" title="Close">
+      <h3>{{ t('agentDetailPanel.title') }}</h3>
+      <button class="close-btn" @click="emit('close')" :title="t('common.close')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M18 6L6 18M6 6l12 12"/>
         </svg>
@@ -62,34 +65,34 @@ async function onTierChange(event: Event) {
 
     <div v-if="member" class="panel-body">
       <div class="info-row">
-        <span class="info-label">Name</span>
+        <span class="info-label">{{ t('agentDetailPanel.name') }}</span>
         <span class="info-value">{{ member.name }}</span>
       </div>
       <div class="info-row">
-        <span class="info-label">Role</span>
+        <span class="info-label">{{ t('agentDetailPanel.role') }}</span>
         <span class="info-value">{{ member.role || 'member' }}</span>
       </div>
       <div class="info-row" v-if="member">
-        <span class="info-label">Tier</span>
+        <span class="info-label">{{ t('agentDetailPanel.tier') }}</span>
         <select
           class="tier-select"
           :value="member.tier || 'member'"
           @change="onTierChange"
         >
-          <option value="leader">Leader</option>
-          <option value="senior">Senior</option>
-          <option value="member">Member</option>
+          <option value="leader">{{ t('agentDetailPanel.tierLeader') }}</option>
+          <option value="senior">{{ t('agentDetailPanel.tierSenior') }}</option>
+          <option value="member">{{ t('agentDetailPanel.tierMember') }}</option>
         </select>
       </div>
       <div class="info-row" v-if="member.agent_id">
-        <span class="info-label">Agent ID</span>
+        <span class="info-label">{{ t('agentDetailPanel.agentId') }}</span>
         <span class="info-value mono">{{ member.agent_id }}</span>
       </div>
 
       <div class="assignments-section">
-        <span class="info-label">Assignments</span>
+        <span class="info-label">{{ t('agentDetailPanel.assignments') }}</span>
         <div v-if="agentAssignments.length === 0" class="no-assignments">
-          No assignments
+          {{ t('agentDetailPanel.noAssignments') }}
         </div>
         <div v-else class="assignment-list">
           <span
@@ -106,12 +109,12 @@ async function onTierChange(event: Event) {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
         </svg>
-        Remove from Team
+        {{ t('agentDetailPanel.removeFromTeam') }}
       </button>
     </div>
 
     <div v-else class="panel-body">
-      <p class="no-member">Agent not found in team members</p>
+      <p class="no-member">{{ t('agentDetailPanel.agentNotFound') }}</p>
     </div>
   </div>
 </template>

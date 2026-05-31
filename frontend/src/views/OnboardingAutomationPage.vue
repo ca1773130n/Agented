@@ -5,7 +5,9 @@ import { useToast } from '../composables/useToast';
 import { onboardingApi } from '../services/api/onboarding';
 import type { OnboardingStep, OnboardingRun } from '../services/api/onboarding';
 import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
+import { useI18n } from 'vue-i18n';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 const ONBOARDING_TRIGGER_ID = 'bot-onboarding';
@@ -60,9 +62,9 @@ async function saveConfig() {
         delay_minutes: s.delay_minutes,
       })),
     });
-    showToast('Onboarding automation saved', 'success');
+    showToast(t('onboardingAutomation.toasts.saved'), 'success');
   } catch {
-    showToast('Failed to save onboarding config', 'error');
+    showToast(t('onboardingAutomation.toasts.saveFailed'), 'error');
   } finally {
     saving.value = false;
   }
@@ -110,53 +112,53 @@ const FEATURE_ENABLED = false;
   <div class="onboarding-page">
     <NotEnabledBanner
       v-if="!FEATURE_ENABLED"
-      feature="Onboarding automation"
-      detail="The backend that listens for GitHub member events and runs onboarding tasks has not shipped yet. Saving config and triggering runs is disabled."
+      :feature="t('onboardingAutomation.notEnabled.feature')"
+      :detail="t('onboardingAutomation.notEnabled.detail')"
       testid="onboarding-automation-not-enabled"
     />
 
     <PageHeader
-      title="New Engineer Onboarding Automation"
-      subtitle="Automatically run onboarding tasks when a new GitHub org member is added"
+      :title="t('onboardingAutomation.title')"
+      :subtitle="t('onboardingAutomation.subtitle')"
     />
 
     <div class="page-content">
       <section class="section trigger-config">
-        <h2 class="section-title">Trigger Configuration</h2>
+        <h2 class="section-title">{{ t('onboardingAutomation.triggerConfig') }}</h2>
         <div class="config-row">
           <label class="config-label">
-            Trigger event
+            {{ t('onboardingAutomation.triggerEvent') }}
             <select v-model="triggerEvent" class="select">
-              <option value="github.member.added">GitHub — org member added</option>
-              <option value="github.team.member.added">GitHub — team member added</option>
-              <option value="manual">Manual only</option>
+              <option value="github.member.added">{{ t('onboardingAutomation.events.orgMemberAdded') }}</option>
+              <option value="github.team.member.added">{{ t('onboardingAutomation.events.teamMemberAdded') }}</option>
+              <option value="manual">{{ t('onboardingAutomation.events.manualOnly') }}</option>
             </select>
           </label>
           <label class="toggle-label">
-            Enabled
+            {{ t('onboardingAutomation.enabled') }}
             <button
               class="toggle-btn"
               :class="{ active: triggerEnabled }"
               :disabled="!FEATURE_ENABLED"
-              :title="!FEATURE_ENABLED ? 'Onboarding automation is not yet enabled' : ''"
+              :title="!FEATURE_ENABLED ? t('onboardingAutomation.notEnabledTitle') : ''"
               @click="triggerEnabled = !triggerEnabled"
             >
-              {{ triggerEnabled ? 'ON' : 'OFF' }}
+              {{ triggerEnabled ? t('onboardingAutomation.on') : t('onboardingAutomation.off') }}
             </button>
           </label>
           <button
             class="btn-primary"
             :disabled="!FEATURE_ENABLED"
-            :title="!FEATURE_ENABLED ? 'Onboarding automation is not yet enabled in this deployment' : undefined"
+            :title="!FEATURE_ENABLED ? t('onboardingAutomation.notEnabledTitleDeployment') : undefined"
             data-testid="onboarding-save-submit"
             @click="saveConfig"
-          >Save</button>
+          >{{ t('common.save') }}</button>
         </div>
       </section>
 
       <section class="section">
-        <h2 class="section-title">Onboarding Steps</h2>
-        <p class="section-hint">Steps execute in order. Disabled steps are skipped.</p>
+        <h2 class="section-title">{{ t('onboardingAutomation.onboardingSteps') }}</h2>
+        <p class="section-hint">{{ t('onboardingAutomation.stepsHint') }}</p>
         <div class="steps-list">
           <div v-for="step in steps" :key="step.id" class="step-card" :class="{ disabled: !step.enabled }">
             <div class="step-order">{{ step.step_order }}</div>
@@ -168,25 +170,25 @@ const FEATURE_ENABLED = false;
               <div class="step-desc">{{ step.description }}</div>
               <div class="step-meta">
                 <span class="type-badge">{{ step.type }}</span>
-                <span class="delay">+{{ step.delay_minutes }}m delay</span>
+                <span class="delay">{{ t('onboardingAutomation.delay', { minutes: step.delay_minutes }) }}</span>
               </div>
             </div>
             <button
               class="step-toggle"
               :class="{ active: step.enabled }"
               :disabled="!FEATURE_ENABLED"
-              :title="!FEATURE_ENABLED ? 'Onboarding automation is not yet enabled' : ''"
+              :title="!FEATURE_ENABLED ? t('onboardingAutomation.notEnabledTitle') : ''"
               @click="toggleStep(step.id)"
             >
-              {{ step.enabled ? 'Enabled' : 'Disabled' }}
+              {{ step.enabled ? t('onboardingAutomation.stepEnabled') : t('onboardingAutomation.stepDisabled') }}
             </button>
           </div>
         </div>
       </section>
 
       <section class="section">
-        <h2 class="section-title">Recent Onboarding Runs</h2>
-        <div v-if="recentRuns.length === 0" class="empty-runs">No runs yet.</div>
+        <h2 class="section-title">{{ t('onboardingAutomation.recentRuns') }}</h2>
+        <div v-if="recentRuns.length === 0" class="empty-runs">{{ t('onboardingAutomation.noRuns') }}</div>
         <div v-else class="runs-list">
           <div v-for="run in recentRuns" :key="run.execution_id" class="run-card">
             <div class="run-info">

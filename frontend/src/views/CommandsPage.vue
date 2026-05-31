@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, watch, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter, useRoute } from 'vue-router';
 import type { Command } from '../services/api';
 import { commandApi, ApiError } from '../services/api';
@@ -20,6 +21,7 @@ import { useListFilter } from '../composables/useListFilter';
 import { usePagination } from '../composables/usePagination';
 import { useWebMcpPageTools } from '../composables/useWebMcpPageTools';
 
+const { t } = useI18n();
 const router = useRouter();
 const route = useRoute();
 
@@ -126,7 +128,7 @@ async function saveDetail() {
   if (editForm.arguments && editForm.arguments.trim()) {
     const validation = validateArguments(editForm.arguments);
     if (!validation.valid) {
-      showToast(validation.error || 'Invalid JSON in arguments field', 'error');
+      showToast(validation.error || t('commands.toast.invalidJson'), 'error');
       return;
     }
   }
@@ -139,11 +141,11 @@ async function saveDetail() {
       arguments: editForm.arguments,
       enabled: editForm.enabled,
     });
-    showToast('Command updated successfully', 'success');
+    showToast(t('commands.toast.updated'), 'success');
     closeDetail();
     await loadCommands();
   } catch (err: unknown) {
-    showToast(err instanceof Error ? err.message : 'Failed to update command', 'error');
+    showToast(err instanceof Error ? err.message : t('commands.toast.updateFailed'), 'error');
   } finally {
     isSaving.value = false;
   }
@@ -166,8 +168,8 @@ const { searchQuery, sortField, sortOrder, filteredAndSorted, resultCount, total
 const pagination = usePagination({ defaultPageSize: 25, storageKey: 'commands-pagination' });
 
 const listSortOptions = [
-  { value: 'name', label: 'Name' },
-  { value: 'created_at', label: 'Date Created' },
+  { value: 'name', label: t('commands.sort.name') },
+  { value: 'created_at', label: t('commands.sort.dateCreated') },
 ];
 
 useWebMcpPageTools({
@@ -208,7 +210,7 @@ async function loadCommands() {
     commands.value = data.commands || [];
     if (data.total_count != null) pagination.totalCount.value = data.total_count;
   } catch (e) {
-    loadError.value = e instanceof ApiError ? e.message : 'Failed to load commands';
+    loadError.value = e instanceof ApiError ? e.message : t('commands.toast.loadFailed');
     showToast(loadError.value, 'error');
   } finally {
     isLoading.value = false;
@@ -229,7 +231,7 @@ async function deleteCommand() {
   deletingId.value = commandToDelete.value.id;
   try {
     await commandApi.delete(commandToDelete.value.id);
-    showToast(`Command "${commandToDelete.value.name}" deleted`, 'success');
+    showToast(t('commands.toast.deleted', { name: commandToDelete.value.name }), 'success');
     showDeleteConfirm.value = false;
     commandToDelete.value = null;
     await loadCommands();
@@ -237,7 +239,7 @@ async function deleteCommand() {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to delete command', 'error');
+      showToast(t('commands.toast.deleteFailed'), 'error');
     }
   } finally {
     deletingId.value = null;
@@ -250,7 +252,7 @@ async function toggleEnabled(command: Command) {
     await commandApi.update(command.id, { enabled: !command.enabled });
     await loadCommands();
   } catch (e) {
-    showToast('Failed to update command', 'error');
+    showToast(t('commands.toast.updateFailed'), 'error');
   } finally {
     togglingId.value = null;
   }
@@ -275,13 +277,13 @@ const isCreating = ref(false);
 async function createCommand() {
   if (isCreating.value) return;
   if (!formData.value.name.trim()) {
-    showToast('Command name is required', 'error');
+    showToast(t('commands.toast.nameRequired'), 'error');
     return;
   }
   if (formData.value.arguments && formData.value.arguments.trim()) {
     const validation = validateArguments(formData.value.arguments);
     if (!validation.valid) {
-      showToast(validation.error || 'Invalid JSON in arguments field', 'error');
+      showToast(validation.error || t('commands.toast.invalidJson'), 'error');
       return;
     }
   }
@@ -295,14 +297,14 @@ async function createCommand() {
       enabled: formData.value.enabled,
       project_id: formData.value.project_id || undefined,
     });
-    showToast(`Command "${formData.value.name}" created`, 'success');
+    showToast(t('commands.toast.created', { name: formData.value.name }), 'success');
     showCreateModal.value = false;
     await loadCommands();
   } catch (e) {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to create command', 'error');
+      showToast(t('commands.toast.createFailed'), 'error');
     }
   } finally {
     isCreating.value = false;
@@ -323,16 +325,16 @@ function validateArguments(argsStr: string | undefined): { valid: boolean; error
   if (!argsStr || !argsStr.trim()) return { valid: true, args: [] };
   try {
     const parsed = JSON.parse(argsStr);
-    if (!Array.isArray(parsed)) return { valid: false, error: 'Arguments must be a JSON array', args: [] };
+    if (!Array.isArray(parsed)) return { valid: false, error: t('commands.toast.argsMustBeArray'), args: [] };
     return { valid: true, args: parsed };
   } catch (e) {
-    return { valid: false, error: 'Invalid JSON: ' + (e instanceof Error ? e.message : 'parse error'), args: [] };
+    return { valid: false, error: t('commands.toast.invalidJsonDetail', { detail: e instanceof Error ? e.message : 'parse error' }), args: [] };
   }
 }
 
 async function generateCommand() {
   if (!generateDescription.value.trim() || generateDescription.value.trim().length < 10) {
-    showToast('Please provide a description of at least 10 characters', 'error');
+    showToast(t('commands.toast.descriptionTooShort'), 'error');
     return;
   }
   isGenerating.value = true;
@@ -350,10 +352,10 @@ async function generateCommand() {
         : JSON.stringify(result.config.arguments || []);
       showGenerateModal.value = false;
       showCreateModal.value = true;
-      showToast('Command configuration generated! Review and save.', 'success');
+      showToast(t('commands.toast.configGenerated'), 'success');
     }
   } catch {
-    showToast('Failed to generate command configuration', 'error');
+    showToast(t('commands.toast.generateFailed'), 'error');
   } finally {
     isGenerating.value = false;
   }
@@ -366,24 +368,24 @@ onMounted(() => {
 
 <template>
   <PageLayout >
-    <PageHeader title="Commands" subtitle="Manage slash commands for Claude Code interactions">
+    <PageHeader :title="t('commands.title')" :subtitle="t('commands.subtitle')">
       <template #actions>
         <button class="btn btn-ai" @click="showGenerateModal = true">
           <span class="ai-badge">AI</span>
-          Generate Command
+          {{ t('commands.generateCommand') }}
         </button>
         <button class="btn btn-design" @click="router.push({ name: 'command-design' })">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="4 17 10 11 4 5"/>
             <line x1="12" y1="19" x2="20" y2="19"/>
           </svg>
-          Design Command
+          {{ t('commands.designCommand') }}
         </button>
         <button class="btn btn-primary" @click="openCreateModal">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 5v14M5 12h14"/>
           </svg>
-          New Command
+          {{ t('commands.newCommand') }}
         </button>
       </template>
     </PageHeader>
@@ -391,10 +393,10 @@ onMounted(() => {
     <!-- Filters -->
     <div class="filters-bar">
       <div class="filter-group">
-        <label>Scope:</label>
+        <label>{{ t('commands.scope') }}</label>
         <select v-model="filterProject">
-          <option value="">All</option>
-          <option value="global">Global Only</option>
+          <option value="">{{ t('commands.scopeAll') }}</option>
+          <option value="global">{{ t('commands.scopeGlobalOnly') }}</option>
         </select>
       </div>
     </div>
@@ -407,32 +409,32 @@ onMounted(() => {
       :sort-options="listSortOptions"
       :result-count="resultCount"
       :total-count="totalCount"
-      placeholder="Search commands..."
+      :placeholder="t('commands.searchPlaceholder')"
     />
 
-    <LoadingState v-if="isLoading" message="Loading commands..." />
+    <LoadingState v-if="isLoading" :message="t('commands.loading')" />
 
     <ErrorState
       v-else-if="loadError"
-      title="Failed to load commands"
+      :title="t('commands.loadErrorTitle')"
       :message="loadError"
       @retry="loadCommands"
     />
 
     <EmptyState
       v-else-if="commands.length === 0"
-      title="No commands yet"
-      description="Create your first slash command to extend Claude Code"
+      :title="t('commands.emptyTitle')"
+      :description="t('commands.emptyDescription')"
     >
       <template #actions>
-        <button class="btn btn-primary" @click="openCreateModal">Create Command</button>
+        <button class="btn btn-primary" @click="openCreateModal">{{ t('commands.createCommand') }}</button>
       </template>
     </EmptyState>
 
     <EmptyState
       v-else-if="filteredAndSorted.length === 0"
-      title="No matching commands"
-      description="Try a different search term or adjust your filters"
+      :title="t('commands.noMatchTitle')"
+      :description="t('commands.noMatchDescription')"
     />
 
     <div v-else class="commands-grid">
@@ -456,7 +458,7 @@ onMounted(() => {
             <h3>/{{ command.name }}</h3>
           </div>
           <div class="command-status" :class="{ enabled: command.enabled }">
-            {{ command.enabled ? 'Active' : 'Disabled' }}
+            {{ command.enabled ? t('commands.active') : t('commands.disabled') }}
           </div>
         </div>
 
@@ -464,18 +466,18 @@ onMounted(() => {
 
         <div class="command-meta">
           <div class="meta-item">
-            <span class="meta-label">Scope:</span>
-            <span class="meta-value">{{ command.project_id ? 'Project' : 'Global' }}</span>
+            <span class="meta-label">{{ t('commands.meta.scope') }}</span>
+            <span class="meta-value">{{ command.project_id ? t('commands.meta.project') : t('commands.meta.global') }}</span>
           </div>
           <div v-if="command.arguments && command.arguments.trim()" class="meta-item">
-            <span class="meta-label">Args:</span>
+            <span class="meta-label">{{ t('commands.meta.args') }}</span>
             <template v-if="validateArguments(command.arguments).valid">
               <span class="meta-value args-list">{{ parseArguments(command.arguments).join(', ') }}</span>
             </template>
-            <span v-else class="meta-value args-error">Invalid JSON</span>
+            <span v-else class="meta-value args-error">{{ t('commands.invalidJson') }}</span>
           </div>
           <div v-if="command.source_path" class="meta-item">
-            <span class="meta-label">Source:</span>
+            <span class="meta-label">{{ t('commands.meta.source') }}</span>
             <span class="meta-value source-path">{{ command.source_path }}</span>
           </div>
         </div>
@@ -483,7 +485,7 @@ onMounted(() => {
         <div class="command-actions">
           <button class="btn btn-small" @click.stop="toggleEnabled(command)" :disabled="togglingId === command.id">
             <span v-if="togglingId === command.id" class="btn-spinner"></span>
-            {{ togglingId === command.id ? '...' : (command.enabled ? 'Disable' : 'Enable') }}
+            {{ togglingId === command.id ? '...' : (command.enabled ? t('commands.disable') : t('commands.enable')) }}
           </button>
           <button class="btn btn-small btn-danger" @click.stop="confirmDelete(command)" :disabled="deletingId === command.id">
             <span v-if="deletingId === command.id" class="btn-spinner"></span>
@@ -509,27 +511,27 @@ onMounted(() => {
     />
 
     <!-- SlideOver Detail/Edit Panel -->
-    <SlideOver :open="!!selectedCommand" @close="closeDetail" :title="selectedCommand ? '/' + selectedCommand.name : 'Command Details'" :dirty="isDirty">
+    <SlideOver :open="!!selectedCommand" @close="closeDetail" :title="selectedCommand ? '/' + selectedCommand.name : t('commands.detailTitle')" :dirty="isDirty">
       <div class="detail-form">
         <div class="form-group">
-          <label>Name (without /)</label>
-          <input v-model="editForm.name" type="text" placeholder="Command name" />
+          <label>{{ t('commands.field.nameWithoutSlash') }}</label>
+          <input v-model="editForm.name" type="text" :placeholder="t('commands.field.namePlaceholder')" />
         </div>
         <div class="form-group">
-          <label>Description</label>
-          <textarea v-model="editForm.description" rows="3" placeholder="Command description"></textarea>
+          <label>{{ t('commands.field.description') }}</label>
+          <textarea v-model="editForm.description" rows="3" :placeholder="t('commands.field.descriptionPlaceholder')"></textarea>
         </div>
         <div class="form-group">
-          <label>Content</label>
-          <textarea v-model="editForm.content" rows="8" placeholder="Command content / script" class="code-textarea"></textarea>
+          <label>{{ t('commands.field.content') }}</label>
+          <textarea v-model="editForm.content" rows="8" :placeholder="t('commands.field.contentPlaceholder')" class="code-textarea"></textarea>
         </div>
         <div class="form-group">
-          <label>Arguments</label>
-          <textarea v-model="editForm.arguments" rows="4" placeholder="JSON array of argument definitions" class="code-textarea"></textarea>
+          <label>{{ t('commands.field.arguments') }}</label>
+          <textarea v-model="editForm.arguments" rows="4" :placeholder="t('commands.field.argumentsPlaceholder')" class="code-textarea"></textarea>
         </div>
         <div class="form-group">
           <label class="toggle-label">
-            <span>Enabled</span>
+            <span>{{ t('commands.enabled') }}</span>
             <div class="toggle-switch" :class="{ active: editForm.enabled }" @click="editForm.enabled = !editForm.enabled">
               <div class="toggle-knob"></div>
             </div>
@@ -537,20 +539,20 @@ onMounted(() => {
         </div>
       </div>
       <template #footer>
-        <button class="btn btn-design-sm" @click="editInDesign">Edit in Designer</button>
-        <button class="btn" @click="closeDetail">Cancel</button>
+        <button class="btn btn-design-sm" @click="editInDesign">{{ t('commands.editInDesigner') }}</button>
+        <button class="btn" @click="closeDetail">{{ t('common.cancel') }}</button>
         <button class="btn btn-primary" @click="saveDetail" :disabled="isSaving || !editForm.name.trim()">
-          {{ isSaving ? 'Saving...' : 'Save Changes' }}
+          {{ isSaving ? t('commands.saving') : t('commands.saveChanges') }}
         </button>
       </template>
     </SlideOver>
 
     <ConfirmModal
       :open="showDeleteConfirm"
-      title="Delete Command"
-      :message="`Are you sure you want to delete \u201C/${commandToDelete?.name}\u201D? This action cannot be undone.`"
-      confirm-label="Delete"
-      cancel-label="Cancel"
+      :title="t('commands.deleteTitle')"
+      :message="t('commands.deleteMessage', { name: commandToDelete?.name })"
+      :confirm-label="t('common.delete')"
+      :cancel-label="t('common.cancel')"
       variant="danger"
       @confirm="deleteCommand"
       @cancel="showDeleteConfirm = false"
@@ -560,22 +562,22 @@ onMounted(() => {
     <Teleport to="body">
       <div v-if="showCreateModal" ref="createModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-create-command" tabindex="-1" @click.self="showCreateModal = false" @keydown.escape="showCreateModal = false">
         <div class="modal create-modal">
-          <h2 id="modal-title-create-command">Create New Command</h2>
+          <h2 id="modal-title-create-command">{{ t('commands.createModalTitle') }}</h2>
           <form @submit.prevent="createCommand">
             <div class="form-group">
-              <label for="command-name">Name * (without /)</label>
+              <label for="command-name">{{ t('commands.field.nameRequiredWithoutSlash') }}</label>
               <input id="command-name" v-model="formData.name" type="text" placeholder="my-command" required />
             </div>
             <div class="form-group">
-              <label for="command-description">Description</label>
-              <input id="command-description" v-model="formData.description" type="text" placeholder="Brief description of what this command does" />
+              <label for="command-description">{{ t('commands.field.description') }}</label>
+              <input id="command-description" v-model="formData.description" type="text" :placeholder="t('commands.field.briefDescriptionPlaceholder')" />
             </div>
             <div class="form-group">
-              <label for="command-content">Content (Markdown)</label>
+              <label for="command-content">{{ t('commands.field.contentMarkdown') }}</label>
               <textarea id="command-content" v-model="formData.content" rows="6" placeholder="# Command Content\n\nDescribe what this command should do..."></textarea>
             </div>
             <div class="form-group">
-              <label for="command-arguments">Arguments (JSON array)</label>
+              <label for="command-arguments">{{ t('commands.field.argumentsJsonArray') }}</label>
               <textarea
                 id="command-arguments"
                 v-model="formData.arguments"
@@ -590,13 +592,13 @@ onMounted(() => {
             <div class="form-group checkbox-group">
               <label>
                 <input type="checkbox" v-model="formData.enabled" />
-                Enabled
+                {{ t('commands.enabled') }}
               </label>
             </div>
             <div class="modal-actions">
-              <button type="button" class="btn" @click="showCreateModal = false">Cancel</button>
+              <button type="button" class="btn" @click="showCreateModal = false">{{ t('common.cancel') }}</button>
               <button type="submit" class="btn btn-primary" :disabled="isCreating">
-                {{ isCreating ? 'Creating…' : 'Create Command' }}
+                {{ isCreating ? t('commands.creating') : t('commands.createCommand') }}
               </button>
             </div>
           </form>
@@ -607,15 +609,15 @@ onMounted(() => {
     <Teleport to="body">
       <div v-if="showGenerateModal" ref="generateModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-generate-command" tabindex="-1" @click.self="showGenerateModal = false" @keydown.escape="showGenerateModal = false">
         <div class="modal generate-modal">
-          <h2 id="modal-title-generate-command">Generate Command with AI</h2>
-          <p>Describe the slash command you want to create and AI will generate the configuration.</p>
+          <h2 id="modal-title-generate-command">{{ t('commands.generateModalTitle') }}</h2>
+          <p>{{ t('commands.generateModalBody') }}</p>
           <div class="form-group">
-            <label for="gen-description">Description</label>
+            <label for="gen-description">{{ t('commands.field.description') }}</label>
             <textarea
               id="gen-description"
               v-model="generateDescription"
               rows="4"
-              placeholder="e.g., A slash command that generates unit tests for a given file, with optional coverage threshold argument"
+              :placeholder="t('commands.generatePlaceholder')"
               :disabled="isGenerating"
             ></textarea>
           </div>
@@ -623,13 +625,13 @@ onMounted(() => {
             v-if="isGenerating"
             :log="generateLog"
             :is-streaming="isGenerating"
-            :phase="generatePhase || 'Generating command configuration...'"
-            hint="Streaming Claude CLI output"
+            :phase="generatePhase || t('commands.generatingConfig')"
+            :hint="t('commands.streamingHint')"
           />
           <div class="modal-actions">
-            <button class="btn" @click="showGenerateModal = false" :disabled="isGenerating">Cancel</button>
+            <button class="btn" @click="showGenerateModal = false" :disabled="isGenerating">{{ t('common.cancel') }}</button>
             <button class="btn btn-primary" @click="generateCommand" :disabled="isGenerating || generateDescription.trim().length < 10">
-              {{ isGenerating ? 'Generating...' : 'Generate' }}
+              {{ isGenerating ? t('commands.generating') : t('commands.generate') }}
             </button>
           </div>
         </div>

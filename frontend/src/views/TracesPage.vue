@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { tracingApi, type Trace, type TraceStats } from '../services/api/tracing';
 import TraceListItem from '../components/tracing/TraceListItem.vue';
+
+const { t } = useI18n();
 
 const traces = ref<Trace[]>([]);
 const total = ref(0);
@@ -32,7 +35,7 @@ async function load() {
     traces.value = result.traces;
     total.value = result.total;
   } catch (e) {
-    loadError.value = e instanceof Error ? e.message : 'Failed to load traces';
+    loadError.value = e instanceof Error ? e.message : t('traces.loadFailed');
   } finally {
     isLoading.value = false;
   }
@@ -59,7 +62,7 @@ const filteredTraces = computed(() => {
   if (!searchQuery.value) return traces.value;
   const q = searchQuery.value.toLowerCase();
   return traces.value.filter(
-    (t) => t.name.toLowerCase().includes(q) || t.entity_id.toLowerCase().includes(q),
+    (tr) => tr.name.toLowerCase().includes(q) || tr.entity_id.toLowerCase().includes(q),
   );
 });
 
@@ -75,42 +78,42 @@ function prevPage() { offset.value = Math.max(0, offset.value - limit); load(); 
 <template>
   <div class="traces-page">
     <header class="page-header">
-      <h1>Traces</h1>
+      <h1>{{ t('traces.title') }}</h1>
       <div v-if="stats" class="stats-header" data-testid="stats-header">
-        <span>Total: {{ stats.total_traces }}</span>
-        <span>Completed: {{ stats.completed }}</span>
-        <span>Errors: {{ stats.errors }}</span>
+        <span>{{ t('traces.statTotal', { count: stats.total_traces }) }}</span>
+        <span>{{ t('traces.statCompleted', { count: stats.completed }) }}</span>
+        <span>{{ t('traces.statErrors', { count: stats.errors }) }}</span>
       </div>
     </header>
 
     <div class="filter-bar">
       <select v-model="statusFilter" data-testid="status-filter">
-        <option value="all">All statuses</option>
-        <option value="running">Running</option>
-        <option value="completed">Completed</option>
-        <option value="error">Error</option>
+        <option value="all">{{ t('traces.statusOptions.all') }}</option>
+        <option value="running">{{ t('traces.statusOptions.running') }}</option>
+        <option value="completed">{{ t('traces.statusOptions.completed') }}</option>
+        <option value="error">{{ t('traces.statusOptions.error') }}</option>
       </select>
       <select v-model="entityTypeFilter" data-testid="entity-type-filter">
-        <option value="all">All entities</option>
-        <option value="agent">Agent</option>
-        <option value="super_agent">Super Agent</option>
-        <option value="team">Team</option>
+        <option value="all">{{ t('traces.entityOptions.all') }}</option>
+        <option value="agent">{{ t('traces.entityOptions.agent') }}</option>
+        <option value="super_agent">{{ t('traces.entityOptions.superAgent') }}</option>
+        <option value="team">{{ t('traces.entityOptions.team') }}</option>
       </select>
       <input
         v-model="searchQuery"
         type="search"
-        placeholder="Filter by name or entity id..."
+        :placeholder="t('traces.searchPlaceholder')"
         data-testid="search-filter"
       />
     </div>
 
-    <div v-if="isLoading" data-testid="loading-state">Loading…</div>
+    <div v-if="isLoading" data-testid="loading-state">{{ t('traces.loading') }}</div>
     <div v-else-if="loadError" data-testid="error-state" class="error-state">
       {{ loadError }}
-      <button @click="load">Retry</button>
+      <button @click="load">{{ t('common.retry') }}</button>
     </div>
     <div v-else-if="traces.length === 0" data-testid="empty-state" class="empty-state">
-      No traces yet.
+      {{ t('traces.empty') }}
     </div>
     <div v-else class="trace-list">
       <TraceListItem
@@ -121,9 +124,9 @@ function prevPage() { offset.value = Math.max(0, offset.value - limit); load(); 
     </div>
 
     <footer v-if="!isLoading && total > limit" class="pagination">
-      <button :disabled="offset === 0" @click="prevPage">Previous</button>
-      <span>{{ offset + 1 }}–{{ Math.min(offset + limit, total) }} of {{ total }}</span>
-      <button :disabled="offset + limit >= total" @click="nextPage">Next</button>
+      <button :disabled="offset === 0" @click="prevPage">{{ t('traces.previous') }}</button>
+      <span>{{ t('traces.pageRange', { start: offset + 1, end: Math.min(offset + limit, total), total }) }}</span>
+      <button :disabled="offset + limit >= total" @click="nextPage">{{ t('traces.next') }}</button>
     </footer>
   </div>
 </template>

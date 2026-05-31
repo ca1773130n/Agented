@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { backendManagementApi, ApiError } from '../../services/api';
 
 const props = defineProps<{
@@ -11,6 +12,8 @@ const emit = defineEmits<{
   (e: 'close'): void;
   (e: 'connected'): void;
 }>();
+
+const { t } = useI18n();
 
 // State
 const status = ref<'loading' | 'authenticated' | 'not_authenticated' | 'error'>('loading');
@@ -36,7 +39,7 @@ async function checkAuth() {
       status.value = 'not_authenticated';
     }
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to check auth status';
+    const message = err instanceof ApiError ? err.message : t('backendConnect.checkFailed');
     errorMessage.value = message;
     status.value = 'error';
   }
@@ -62,7 +65,7 @@ onMounted(checkAuth);
   <div class="backend-connect">
     <!-- Header -->
     <div class="connect-header">
-      <h3>Authentication Status</h3>
+      <h3>{{ t('backendConnect.title') }}</h3>
       <div class="connect-header-actions">
         <button @click="emit('close')" class="close-btn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -78,7 +81,7 @@ onMounted(checkAuth);
       <!-- Loading -->
       <div v-if="status === 'loading'" class="status-section">
         <div class="spinner"></div>
-        <span class="status-text-dim">Checking credentials...</span>
+        <span class="status-text-dim">{{ t('backendConnect.checking') }}</span>
       </div>
 
       <!-- Error -->
@@ -94,28 +97,28 @@ onMounted(checkAuth);
           <div v-for="acct in accounts" :key="acct.account_id" class="account-row">
             <div class="account-status-dot" :class="acct.authenticated ? 'ok' : 'missing'"></div>
             <div class="account-info">
-              <span class="account-name">{{ acct.name || 'Account' }}</span>
+              <span class="account-name">{{ acct.name || t('backendConnect.account') }}</span>
               <span v-if="acct.email" class="account-email">{{ acct.email }}</span>
             </div>
             <span class="auth-badge" :class="acct.authenticated ? 'ok' : 'missing'">
-              {{ acct.authenticated ? 'Authenticated' : 'No Token' }}
+              {{ acct.authenticated ? t('backendConnect.authenticated') : t('backendConnect.noToken') }}
             </span>
           </div>
         </div>
 
         <div v-else class="no-accounts">
-          No accounts configured for this backend.
+          {{ t('backendConnect.noAccounts') }}
         </div>
 
         <!-- Instructions for unauthenticated accounts -->
         <div v-if="accounts.some(a => !a.authenticated)" class="instructions-section">
-          <div class="instructions-header">How to authenticate</div>
+          <div class="instructions-header">{{ t('backendConnect.howToAuthenticate') }}</div>
           <p class="instructions-text">{{ loginInstruction }}</p>
           <div class="terminal-example">
             <code>$ {{ cliCommands[backendType] || backendType }}</code>
           </div>
           <p class="instructions-hint">
-            After authenticating in your terminal, click "Refresh" to verify.
+            {{ t('backendConnect.refreshHint') }}
           </p>
         </div>
       </template>
@@ -128,10 +131,10 @@ onMounted(checkAuth);
         @click="checkAuth"
         class="btn-refresh"
       >
-        Refresh
+        {{ t('backendConnect.refresh') }}
       </button>
       <button @click="handleDone" class="btn-done">
-        Done
+        {{ t('common.done') }}
       </button>
     </div>
   </div>

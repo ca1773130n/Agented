@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
 
+const { t } = useI18n();
 const showToast = useToast();
 const isLoading = ref(true);
 const isScanning = ref(false);
@@ -76,7 +78,7 @@ async function loadHistory() {
 
 async function runAnalysis() {
   if (!prUrl.value.trim()) {
-    showToast('Enter a PR URL or number', 'error');
+    showToast(t('crossRepoImpactBot.toast.enterPr'), 'error');
     return;
   }
   isScanning.value = true;
@@ -87,10 +89,10 @@ async function runAnalysis() {
       body: JSON.stringify({ pr_url: prUrl.value }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    showToast('Analysis started', 'success');
+    showToast(t('crossRepoImpactBot.toast.analysisStarted'), 'success');
     await loadHistory();
   } catch {
-    showToast('Analysis queued (demo mode)', 'success');
+    showToast(t('crossRepoImpactBot.toast.analysisQueued'), 'success');
   } finally {
     isScanning.value = false;
     prUrl.value = '';
@@ -99,7 +101,7 @@ async function runAnalysis() {
 
 function notifyTeam(repo: DownstreamRepo) {
   repo.notified = true;
-  showToast(`Notified ${repo.owner}/${repo.name}`, 'success');
+  showToast(t('crossRepoImpactBot.toast.notified', { repo: `${repo.owner}/${repo.name}` }), 'success');
 }
 
 function impactColor(impact: DownstreamRepo['impact']): string {
@@ -129,17 +131,16 @@ onMounted(loadHistory);
 
     <NotEnabledBanner
       v-if="!FEATURE_ENABLED"
-      feature="Cross-repo impact analysis bot"
-      detail="The backend that scans downstream repos for impacted callers has not shipped yet. Running impact scans is disabled."
+      :feature="t('crossRepoImpactBot.notEnabled.feature')"
+      :detail="t('crossRepoImpactBot.notEnabled.detail')"
       testid="cross-repo-impact-not-enabled"
     />
 
     <div class="page-header">
       <div>
-        <h1 class="page-title">Cross-Repo Impact Analysis Bot</h1>
+        <h1 class="page-title">{{ t('crossRepoImpactBot.title') }}</h1>
         <p class="page-subtitle">
-          When a PR changes a shared library or API contract, automatically identify downstream
-          repos affected and post impact warnings to their teams before the change ships.
+          {{ t('crossRepoImpactBot.subtitle') }}
         </p>
       </div>
     </div>
@@ -150,25 +151,25 @@ onMounted(loadHistory);
         <input
           v-model="prUrl"
           class="pr-input"
-          placeholder="GitHub PR URL or e.g. acme-corp/api-gateway#247"
+          :placeholder="t('crossRepoImpactBot.prPlaceholder')"
         />
         <button
           class="run-btn"
           :disabled="isScanning || !FEATURE_ENABLED"
-          :title="!FEATURE_ENABLED ? 'Cross-repo impact analysis bot is not yet enabled in this deployment' : undefined"
+          :title="!FEATURE_ENABLED ? t('crossRepoImpactBot.disabledTitle') : undefined"
           data-testid="cross-repo-impact-run-submit"
           @click="runAnalysis"
         >
-          {{ isScanning ? 'Scanning...' : 'Analyze Impact' }}
+          {{ isScanning ? t('crossRepoImpactBot.scanning') : t('crossRepoImpactBot.analyzeImpact') }}
         </button>
       </div>
     </div>
 
-    <LoadingState v-if="isLoading" message="Loading analyses..." />
+    <LoadingState v-if="isLoading" :message="t('crossRepoImpactBot.loadingAnalyses')" />
     <div v-else class="analysis-layout">
       <!-- Left: history list -->
       <div class="history-panel">
-        <h2 class="section-title">Recent Analyses</h2>
+        <h2 class="section-title">{{ t('crossRepoImpactBot.recentAnalyses') }}</h2>
         <div
           v-for="a in analyses"
           :key="a.id"
@@ -182,11 +183,11 @@ onMounted(loadHistory);
           </div>
           <p class="analysis-title">{{ a.pr_title }}</p>
           <div class="analysis-footer">
-            <span class="downstream-count">{{ a.downstream_repos.length }} repos affected</span>
+            <span class="downstream-count">{{ t('crossRepoImpactBot.reposAffected', { count: a.downstream_repos.length }) }}</span>
             <span class="analysis-time">{{ formatTime(a.run_at) }}</span>
           </div>
         </div>
-        <p v-if="analyses.length === 0" class="empty-msg">No analyses yet.</p>
+        <p v-if="analyses.length === 0" class="empty-msg">{{ t('crossRepoImpactBot.noAnalyses') }}</p>
       </div>
 
       <!-- Right: detail -->
@@ -197,12 +198,12 @@ onMounted(loadHistory);
             <p class="detail-meta">{{ selected.source_repo }} · PR #{{ selected.pr_number }} · {{ formatTime(selected.run_at) }}</p>
           </div>
           <div v-if="breakingCount > 0" class="breaking-badge">
-            {{ breakingCount }} breaking
+            {{ t('crossRepoImpactBot.breakingCount', { count: breakingCount }) }}
           </div>
         </div>
 
         <div class="contracts-section">
-          <h3 class="sub-title">Changed Contracts</h3>
+          <h3 class="sub-title">{{ t('crossRepoImpactBot.changedContracts') }}</h3>
           <div class="contracts-list">
             <span v-for="c in selected.changed_contracts" :key="c" class="contract-chip">
               {{ c }}
@@ -211,7 +212,7 @@ onMounted(loadHistory);
         </div>
 
         <div class="repos-section">
-          <h3 class="sub-title">Downstream Repositories</h3>
+          <h3 class="sub-title">{{ t('crossRepoImpactBot.downstreamRepositories') }}</h3>
           <div v-for="repo in selected.downstream_repos" :key="repo.name" class="repo-card">
             <div class="repo-card-header">
               <div class="repo-left">
@@ -226,12 +227,12 @@ onMounted(loadHistory);
                   v-if="!repo.notified"
                   class="notify-btn"
                   :disabled="!FEATURE_ENABLED"
-                  :title="!FEATURE_ENABLED ? 'Cross-repo impact analysis bot is not yet enabled' : ''"
+                  :title="!FEATURE_ENABLED ? t('crossRepoImpactBot.notEnabledShort') : ''"
                   @click="notifyTeam(repo)"
                 >
-                  Notify Team
+                  {{ t('crossRepoImpactBot.notifyTeam') }}
                 </button>
-                <span v-else class="notified-badge">Notified ✓</span>
+                <span v-else class="notified-badge">{{ t('crossRepoImpactBot.notifiedBadge') }}</span>
               </div>
             </div>
             <p class="repo-reason">{{ repo.reason }}</p>
@@ -239,7 +240,7 @@ onMounted(loadHistory);
         </div>
       </div>
       <div v-else class="detail-placeholder">
-        <p>Select an analysis to view downstream impact</p>
+        <p>{{ t('crossRepoImpactBot.selectPlaceholder') }}</p>
       </div>
     </div>
   </div>

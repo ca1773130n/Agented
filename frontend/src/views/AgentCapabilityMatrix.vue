@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import LoadingState from '../components/base/LoadingState.vue';
 import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
+
+const { t } = useI18n();
 
 const isLoading = ref(true);
 
@@ -107,12 +110,12 @@ onMounted(loadData);
 
     <NotEnabledBanner
       v-if="!FEATURE_ENABLED"
-      feature="Agent capability matrix"
-      detail="The backend handler that aggregates agent tool / skill / permission coverage has not shipped yet. The matrix below shows placeholder structure only."
+      :feature="t('agentCapabilityMatrix.featureName')"
+      :detail="t('agentCapabilityMatrix.notEnabledDetail')"
       testid="capability-matrix-not-enabled"
     />
 
-    <LoadingState v-if="isLoading" message="Loading capability matrix..." />
+    <LoadingState v-if="isLoading" :message="t('agentCapabilityMatrix.loading')" />
 
     <template v-else>
       <div class="page-header">
@@ -124,28 +127,28 @@ onMounted(loadData);
             </svg>
           </div>
           <div>
-            <h1>Agent Capability Matrix</h1>
-            <p>Which agents have which skills, tools, and permissions — gaps highlighted</p>
+            <h1>{{ t('agentCapabilityMatrix.title') }}</h1>
+            <p>{{ t('agentCapabilityMatrix.description') }}</p>
           </div>
         </div>
         <div class="summary-badges">
-          <span class="badge badge-tool">{{ allCapabilities.filter(c => c.category === 'tool').length }} Tools</span>
-          <span class="badge badge-skill">{{ allCapabilities.filter(c => c.category === 'skill').length }} Skills</span>
-          <span class="badge badge-perm">{{ allCapabilities.filter(c => c.category === 'permission').length }} Permissions</span>
+          <span class="badge badge-tool">{{ t('agentCapabilityMatrix.toolsCount', { count: allCapabilities.filter(c => c.category === 'tool').length }) }}</span>
+          <span class="badge badge-skill">{{ t('agentCapabilityMatrix.skillsCount', { count: allCapabilities.filter(c => c.category === 'skill').length }) }}</span>
+          <span class="badge badge-perm">{{ t('agentCapabilityMatrix.permissionsCount', { count: allCapabilities.filter(c => c.category === 'permission').length }) }}</span>
         </div>
       </div>
 
       <div class="card filters-card">
         <div class="filters-row">
-          <input v-model="searchQuery" type="text" class="search-input" placeholder="Search capabilities..." />
+          <input v-model="searchQuery" type="text" class="search-input" :placeholder="t('agentCapabilityMatrix.searchPlaceholder')" />
           <select v-model="filterCategory" class="filter-select">
-            <option value="all">All categories</option>
-            <option value="tool">Tools</option>
-            <option value="skill">Skills</option>
-            <option value="permission">Permissions</option>
+            <option value="all">{{ t('agentCapabilityMatrix.allCategories') }}</option>
+            <option value="tool">{{ t('agentCapabilityMatrix.tools') }}</option>
+            <option value="skill">{{ t('agentCapabilityMatrix.skills') }}</option>
+            <option value="permission">{{ t('agentCapabilityMatrix.permissions') }}</option>
           </select>
           <select v-model="filterTeam" class="filter-select">
-            <option v-for="t in teams" :key="t" :value="t">{{ t === 'all' ? 'All teams' : t }}</option>
+            <option v-for="team in teams" :key="team" :value="team">{{ team === 'all' ? t('agentCapabilityMatrix.allTeams') : team }}</option>
           </select>
         </div>
       </div>
@@ -155,8 +158,8 @@ onMounted(loadData);
           <table class="matrix-table">
             <thead>
               <tr>
-                <th class="cap-header">Capability</th>
-                <th class="cat-header">Type</th>
+                <th class="cap-header">{{ t('agentCapabilityMatrix.colCapability') }}</th>
+                <th class="cat-header">{{ t('agentCapabilityMatrix.colType') }}</th>
                 <th v-for="agent in filteredAgents" :key="agent.id" class="agent-header">
                   <div class="agent-col">
                     <span class="agent-name">{{ agent.name }}</span>
@@ -164,12 +167,12 @@ onMounted(loadData);
                     <span class="status-dot" :class="agent.status">{{ agent.status }}</span>
                   </div>
                 </th>
-                <th class="coverage-header">Coverage</th>
+                <th class="coverage-header">{{ t('agentCapabilityMatrix.colCoverage') }}</th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="filteredCapabilities.length === 0">
-                <td colspan="4" style="padding: 32px; text-align: center; color: var(--text-secondary);">No capabilities match the current filter.</td>
+                <td colspan="4" style="padding: 32px; text-align: center; color: var(--text-secondary);">{{ t('agentCapabilityMatrix.noMatch') }}</td>
               </tr>
               <tr v-for="cap in filteredCapabilities" :key="cap.name" :class="{ 'gap-row': capabilityCount(cap.name) === 0 }">
                 <td class="cap-cell">
@@ -207,9 +210,9 @@ onMounted(loadData);
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
-          <h3>Capability Gaps ({{ gapCapabilities.length }})</h3>
+          <h3>{{ t('agentCapabilityMatrix.gapsHeading', { count: gapCapabilities.length }) }}</h3>
         </div>
-        <p class="gap-subtitle">No agent currently covers these capabilities:</p>
+        <p class="gap-subtitle">{{ t('agentCapabilityMatrix.gapsSubtitle') }}</p>
         <div class="gap-list">
           <div v-for="cap in gapCapabilities" :key="cap.name" class="gap-item">
             <span class="cat-badge" :style="{ color: categoryColor(cap.category), borderColor: categoryColor(cap.category) }">{{ cap.category }}</span>

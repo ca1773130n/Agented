@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import type { AuditRecord, ProjectInfo } from '../services/api';
 import { safeFormatDate } from '../utils/datetime';
@@ -21,6 +22,7 @@ const props = withDefaults(defineProps<{
   initialProjectFilter: null,
 });
 
+const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 
@@ -55,31 +57,30 @@ const filteredAudits = computed(() => {
 });
 
 const pageTitle = computed(() => {
-  if (props.triggerId === 'bot-security') return 'Security Scan History';
-  return 'Audit Logs';
+  if (props.triggerId === 'bot-security') return t('auditHistory.securityTitle');
+  return t('auditHistory.title');
 });
 
 const pageSubtitle = computed(() => {
-  if (props.triggerId === 'bot-security') return 'Security scan history and results';
-  return 'Security scan history and results';
+  return t('auditHistory.subtitle');
 });
 
 const columns = computed<DataTableColumn[]>(() => {
   const cols: DataTableColumn[] = [
-    { key: 'project', label: 'Project' },
+    { key: 'project', label: t('auditHistory.col.project') },
   ];
   if (!props.triggerId) {
-    cols.push({ key: 'trigger_name', label: 'Trigger' });
+    cols.push({ key: 'trigger_name', label: t('auditHistory.col.trigger') });
   }
   cols.push(
-    { key: 'group_id', label: 'Group ID' },
-    { key: 'audit_date', label: 'Date' },
-    { key: 'total_findings', label: 'Findings' },
-    { key: 'critical', label: 'Critical' },
-    { key: 'high', label: 'High' },
-    { key: 'medium', label: 'Medium' },
-    { key: 'low', label: 'Low' },
-    { key: 'status', label: 'Status' },
+    { key: 'group_id', label: t('auditHistory.col.groupId') },
+    { key: 'audit_date', label: t('auditHistory.col.date') },
+    { key: 'total_findings', label: t('auditHistory.col.findings') },
+    { key: 'critical', label: t('auditHistory.col.critical') },
+    { key: 'high', label: t('auditHistory.col.high') },
+    { key: 'medium', label: t('auditHistory.col.medium') },
+    { key: 'low', label: t('auditHistory.col.low') },
+    { key: 'status', label: t('auditHistory.col.status') },
   );
   return cols;
 });
@@ -96,7 +97,7 @@ async function loadData() {
     audits.value = historyRes.audits || [];
     projects.value = projectsRes.projects || [];
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load audit data';
+    const message = err instanceof ApiError ? err.message : t('auditHistory.loadFailed');
     showToast(message, 'error');
   } finally {
     isLoading.value = false;
@@ -138,11 +139,11 @@ onMounted(loadData);
         <div class="header-stats">
           <div class="stat-chip">
             <span class="stat-value">{{ audits.length }}</span>
-            <span class="stat-label">Total Audits</span>
+            <span class="stat-label">{{ t('auditHistory.totalAudits') }}</span>
           </div>
           <div class="stat-chip">
             <span class="stat-value">{{ projects.length }}</span>
-            <span class="stat-label">Projects</span>
+            <span class="stat-label">{{ t('auditHistory.projects') }}</span>
           </div>
         </div>
       </template>
@@ -155,20 +156,20 @@ onMounted(loadData);
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <polygon points="22,3 2,3 10,12.46 10,19 14,21 14,12.46"/>
           </svg>
-          <label>Filter by Project</label>
+          <label>{{ t('auditHistory.filterByProject') }}</label>
           <select v-model="selectedProject">
-            <option value="">All Projects</option>
+            <option value="">{{ t('auditHistory.allProjects') }}</option>
             <option v-for="p in projects" :key="p.project_path" :value="p.project_path">
               {{ p.project_name || p.project_path }}
             </option>
           </select>
         </div>
         <div class="filter-info">
-          Showing {{ filteredAudits.length }} of {{ audits.length }} audits
+          {{ t('auditHistory.showing', { shown: filteredAudits.length, total: audits.length }) }}
         </div>
       </div>
 
-      <LoadingState v-if="isLoading" message="Loading audit history..." />
+      <LoadingState v-if="isLoading" :message="t('auditHistory.loading')" />
 
       <DataTable
         v-else
@@ -178,7 +179,7 @@ onMounted(loadData);
         @row-click="(item: AuditRecord) => router.push({ name: 'audit-detail', params: { auditId: item.audit_id } })"
       >
         <template #empty>
-          <EmptyState title="No audit data available" />
+          <EmptyState :title="t('auditHistory.noData')" />
         </template>
         <template #cell-project="{ item }">
           <span class="project-name">{{ item.project_name || item.project_path }}</span>

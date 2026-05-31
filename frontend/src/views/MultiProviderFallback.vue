@@ -4,6 +4,8 @@ import { orchestrationApi, triggerApi, listGroupedBackends } from '../services/a
 import type { AccountHealth, FallbackChainEntry, Trigger, AIBackend } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { useI18n } from 'vue-i18n';
+const { t } = useI18n();
 const showToast = useToast();
 
 // Loading / error state
@@ -36,7 +38,7 @@ const chainEntriesWithHealth = computed(() => {
       ...entry,
       chain_order: index,
       backendName: backend?.name ?? entry.backend_type,
-      accountName: health?.account_name ?? 'Default',
+      accountName: health?.account_name ?? t('multiProviderFallback.defaultAccount'),
       status: health
         ? health.is_rate_limited ? 'rate_limited' as const : 'healthy' as const
         : 'unknown' as const,
@@ -73,24 +75,24 @@ async function loadData() {
     if (triggersRes.status === 'fulfilled') {
       triggers.value = triggersRes.value.triggers ?? [];
     } else {
-      errors.push('triggers');
+      errors.push(t('multiProviderFallback.dataKinds.triggers'));
     }
     if (backendsRes.status === 'fulfilled') {
       backends.value = backendsRes.value.backends ?? [];
     } else {
-      errors.push('backends');
+      errors.push(t('multiProviderFallback.dataKinds.backends'));
     }
     if (healthRes.status === 'fulfilled') {
       accountHealth.value = healthRes.value.accounts ?? [];
     } else {
-      errors.push('account health');
+      errors.push(t('multiProviderFallback.dataKinds.accountHealth'));
     }
 
     if (errors.length === 3) {
-      loadError.value = 'Failed to load data. The backend may be unreachable.';
+      loadError.value = t('multiProviderFallback.loadFailedAll');
     } else {
       if (errors.length > 0) {
-        loadError.value = `Partial load — could not fetch: ${errors.join(', ')}`;
+        loadError.value = t('multiProviderFallback.partialLoad', { items: errors.join(', ') });
       }
       // Auto-select first trigger and load its chain
       if (triggers.value.length > 0) {
@@ -98,7 +100,7 @@ async function loadData() {
       }
     }
   } catch (err: unknown) {
-    loadError.value = err instanceof Error ? err.message : 'Failed to load data';
+    loadError.value = err instanceof Error ? err.message : t('multiProviderFallback.loadFailed');
   } finally {
     isLoading.value = false;
   }
@@ -153,9 +155,9 @@ async function handleSave() {
     } else {
       await orchestrationApi.setFallbackChain(selectedTriggerId.value, chainEntries.value);
     }
-    showToast('Fallback chain saved', 'success');
+    showToast(t('multiProviderFallback.toast.chainSaved'), 'success');
   } catch (err: unknown) {
-    showToast(err instanceof Error ? err.message : 'Failed to save', 'error');
+    showToast(err instanceof Error ? err.message : t('multiProviderFallback.toast.saveFailed'), 'error');
   } finally {
     isSaving.value = false;
   }
@@ -166,9 +168,9 @@ async function refreshHealth() {
   try {
     const res = await orchestrationApi.getHealth();
     accountHealth.value = res.accounts ?? [];
-    showToast('Health status refreshed', 'success');
+    showToast(t('multiProviderFallback.toast.healthRefreshed'), 'success');
   } catch {
-    showToast('Failed to refresh health', 'error');
+    showToast(t('multiProviderFallback.toast.refreshFailed'), 'error');
   } finally {
     isRefreshingHealth.value = false;
   }
@@ -177,10 +179,10 @@ async function refreshHealth() {
 async function clearRateLimit(accountId: string) {
   try {
     await orchestrationApi.clearRateLimit(accountId);
-    showToast('Rate limit cleared', 'success');
+    showToast(t('multiProviderFallback.toast.rateLimitCleared'), 'success');
     await refreshHealth();
   } catch {
-    showToast('Failed to clear rate limit', 'error');
+    showToast(t('multiProviderFallback.toast.clearFailed'), 'error');
   }
 }
 
@@ -194,9 +196,9 @@ function statusColor(status: string) {
 
 function statusLabel(status: string) {
   return {
-    healthy: 'healthy',
-    rate_limited: 'rate limited',
-    unknown: 'unknown',
+    healthy: t('multiProviderFallback.status.healthy'),
+    rate_limited: t('multiProviderFallback.status.rateLimited'),
+    unknown: t('multiProviderFallback.status.unknown'),
   }[status] ?? status;
 }
 
@@ -207,39 +209,39 @@ onMounted(loadData);
   <div class="mpf-page">
 
     <PageHeader
-      title="Multi-Provider Fallback Chains"
-      subtitle="Configure ordered fallback sequences so bot executions automatically retry with the next provider on failure."
+      :title="t('multiProviderFallback.title')"
+      :subtitle="t('multiProviderFallback.subtitle')"
     />
 
     <!-- Loading state -->
     <div v-if="isLoading" class="card loading-card">
-      <div class="loading-content">Loading fallback chain data...</div>
+      <div class="loading-content">{{ t('multiProviderFallback.loading') }}</div>
     </div>
 
     <!-- Fatal error state (all calls failed) -->
     <div v-else-if="loadError && triggers.length === 0" class="card error-card">
       <div class="error-content">
         <span>{{ loadError }}</span>
-        <button class="btn btn-ghost" @click="loadData">Retry</button>
+        <button class="btn btn-ghost" @click="loadData">{{ t('common.retry') }}</button>
       </div>
     </div>
 
     <!-- Empty state -->
     <div v-else-if="triggers.length === 0" class="card empty-card">
-      <div class="empty-content">No triggers found. Create a trigger first to configure fallback chains.</div>
+      <div class="empty-content">{{ t('multiProviderFallback.empty') }}</div>
     </div>
 
     <div v-else class="layout">
       <!-- Partial-load warning banner -->
       <div v-if="loadError" class="partial-warning" style="grid-column: 1 / -1;">
         <span>{{ loadError }}</span>
-        <button class="btn btn-ghost" @click="loadData" style="padding: 4px 10px; font-size: 0.75rem;">Retry</button>
+        <button class="btn btn-ghost" @click="loadData" style="padding: 4px 10px; font-size: 0.75rem;">{{ t('common.retry') }}</button>
       </div>
       <!-- Trigger list sidebar -->
       <aside class="sidebar card">
         <div class="sidebar-header">
-          <span>Triggers</span>
-          <button class="btn-refresh" :disabled="isRefreshingHealth" @click="refreshHealth" title="Refresh health">
+          <span>{{ t('multiProviderFallback.triggers') }}</span>
+          <button class="btn-refresh" :disabled="isRefreshingHealth" @click="refreshHealth" :title="t('multiProviderFallback.refreshHealth')">
             <svg :class="{ spinning: isRefreshingHealth }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
               <path d="M1 4v6h6M23 20v-6h-6"/>
               <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
@@ -262,12 +264,12 @@ onMounted(loadData);
       <div class="chain-editor">
         <div class="card provider-order-card">
           <div class="card-header">
-            Provider Fallback Order
+            {{ t('multiProviderFallback.providerFallbackOrder') }}
             <span v-if="selectedTrigger" class="header-tag">{{ selectedTrigger.name }}</span>
           </div>
 
           <div v-if="chainEntriesWithHealth.length === 0" class="empty-chain">
-            No fallback chain configured for this trigger. Add providers below.
+            {{ t('multiProviderFallback.emptyChain') }}
           </div>
 
           <div v-else class="provider-list">
@@ -284,14 +286,14 @@ onMounted(loadData);
               <div class="provider-status">
                 <span class="status-dot" :style="{ background: statusColor(p.status) }"></span>
                 <span class="status-text">{{ statusLabel(p.status) }}</span>
-                <span v-if="p.cooldownSeconds" class="latency">{{ p.cooldownSeconds }}s cooldown</span>
-                <span class="latency">{{ p.totalExecutions }} runs</span>
+                <span v-if="p.cooldownSeconds" class="latency">{{ t('multiProviderFallback.cooldown', { seconds: p.cooldownSeconds }) }}</span>
+                <span class="latency">{{ t('multiProviderFallback.runs', { count: p.totalExecutions }) }}</span>
                 <button
                   v-if="p.status === 'rate_limited' && p.account_id"
                   class="btn-clear"
                   @click="clearRateLimit(p.account_id!)"
-                  title="Clear rate limit"
-                >Clear</button>
+                  :title="t('multiProviderFallback.clearRateLimit')"
+                >{{ t('multiProviderFallback.clear') }}</button>
               </div>
               <div class="provider-actions">
                 <button class="order-btn" :disabled="i === 0" @click="moveEntry(i, -1)">↑</button>
@@ -304,39 +306,39 @@ onMounted(loadData);
 
         <!-- Add provider -->
         <div class="card add-card">
-          <div class="card-header">Add Provider to Chain</div>
+          <div class="card-header">{{ t('multiProviderFallback.addProviderToChain') }}</div>
           <div class="add-body">
             <div class="add-row">
               <select v-model="addBackendType" class="select-input">
-                <option value="">-- Select backend --</option>
+                <option value="">{{ t('multiProviderFallback.selectBackend') }}</option>
                 <option v-for="bt in availableBackendTypes" :key="bt" :value="bt">{{ bt }}</option>
               </select>
               <select v-model="addAccountId" class="select-input" :disabled="!addBackendType">
-                <option :value="null">Default account</option>
+                <option :value="null">{{ t('multiProviderFallback.defaultAccountOption') }}</option>
                 <option
                   v-for="acc in accountsForBackend(addBackendType)"
                   :key="acc.account_id"
                   :value="acc.account_id"
                 >{{ acc.account_name }}{{ acc.plan ? ` (${acc.plan})` : '' }}</option>
               </select>
-              <button class="btn btn-primary" :disabled="!addBackendType" @click="addEntry">Add</button>
+              <button class="btn btn-primary" :disabled="!addBackendType" @click="addEntry">{{ t('common.add') }}</button>
             </div>
           </div>
         </div>
 
         <!-- Health overview -->
         <div class="card health-card">
-          <div class="card-header">Account Health</div>
-          <div v-if="accountHealth.length === 0" class="health-empty">No account health data available.</div>
+          <div class="card-header">{{ t('multiProviderFallback.accountHealth') }}</div>
+          <div v-if="accountHealth.length === 0" class="health-empty">{{ t('multiProviderFallback.noHealthData') }}</div>
           <div v-else class="health-list">
             <div v-for="a in accountHealth" :key="a.account_id" class="health-row">
               <span class="status-dot" :style="{ background: a.is_rate_limited ? '#ef4444' : '#34d399' }"></span>
               <span class="health-name">{{ a.account_name }}</span>
               <span class="health-type">{{ a.backend_type }}</span>
-              <span class="health-plan">{{ a.plan ?? 'no plan' }}</span>
-              <span class="health-runs">{{ a.total_executions }} runs</span>
+              <span class="health-plan">{{ a.plan ?? t('multiProviderFallback.noPlan') }}</span>
+              <span class="health-runs">{{ t('multiProviderFallback.runs', { count: a.total_executions }) }}</span>
               <span v-if="a.is_rate_limited" class="health-limited">
-                rate limited{{ a.cooldown_remaining_seconds ? ` (${a.cooldown_remaining_seconds}s)` : '' }}
+                {{ a.cooldown_remaining_seconds ? t('multiProviderFallback.rateLimitedCooldown', { seconds: a.cooldown_remaining_seconds }) : t('multiProviderFallback.status.rateLimited') }}
               </span>
             </div>
           </div>
@@ -344,7 +346,7 @@ onMounted(loadData);
 
         <div class="actions">
           <button class="btn btn-primary" :disabled="isSaving" @click="handleSave">
-            {{ isSaving ? 'Saving...' : 'Save Chain' }}
+            {{ isSaving ? t('multiProviderFallback.saving') : t('multiProviderFallback.saveChain') }}
           </button>
         </div>
       </div>

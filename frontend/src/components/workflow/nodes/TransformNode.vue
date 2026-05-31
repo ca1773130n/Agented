@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 interface TransformNodeData {
   label: string
@@ -20,9 +23,14 @@ const statusClass = computed(() =>
   props.data.executionStatus ? `status-${props.data.executionStatus}` : '',
 )
 
+const isUnconfigured = computed(() => {
+  const op = props.data.config?.operation
+  return !(typeof op === 'string' && op)
+})
+
 const operation = computed(() => {
   const op = props.data.config?.operation
-  return typeof op === 'string' && op ? op : 'Not configured'
+  return typeof op === 'string' && op ? op : t('transformNode.notConfigured')
 })
 
 const needsConfig = computed(() => {
@@ -33,14 +41,14 @@ const needsConfig = computed(() => {
 
 <template>
   <div :class="['workflow-node', 'node-transform', statusClass]">
-    <div v-if="needsConfig" class="validation-dot" title="Required configuration missing"></div>
+    <div v-if="needsConfig" class="validation-dot" :title="t('transformNode.configMissing')"></div>
     <Handle type="target" :position="Position.Top" :style="inputHandleStyle" />
     <div class="node-header">
       <span class="node-icon">&#x21C4;</span>
       <span class="node-label">{{ data.label }}</span>
     </div>
     <div class="node-body">
-      <span :class="['operation', { unconfigured: operation === 'Not configured' }]">{{
+      <span :class="['operation', { unconfigured: isUnconfigured }]">{{
         operation
       }}</span>
     </div>

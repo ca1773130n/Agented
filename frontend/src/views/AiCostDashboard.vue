@@ -1,18 +1,20 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { triggerApi, teamApi, ApiError } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import StatCard from '../components/base/StatCard.vue';
 import { useToast } from '../composables/useToast';
+const { t } = useI18n();
 const showToast = useToast();
 
 type Period = '7d' | '30d' | '90d';
 const selectedPeriod = ref<Period>('30d');
-const periodOptions: { key: Period; label: string }[] = [
-  { key: '7d', label: '7 Days' },
-  { key: '30d', label: '30 Days' },
-  { key: '90d', label: '90 Days' },
-];
+const periodOptions = computed<{ key: Period; label: string }[]>(() => [
+  { key: '7d', label: t('aiCostDashboard.period.7d') },
+  { key: '30d', label: t('aiCostDashboard.period.30d') },
+  { key: '90d', label: t('aiCostDashboard.period.90d') },
+]);
 
 const activeView = ref<'provider' | 'team' | 'bot'>('provider');
 
@@ -85,7 +87,7 @@ async function loadData() {
       bots: Math.max(1, 5 - idx),
     })).sort((a: { cost: number }, b: { cost: number }) => b.cost - a.cost);
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load cost data';
+    const message = err instanceof ApiError ? err.message : t('aiCostDashboard.loadFailed');
     showToast(message, 'error');
   } finally {
     isLoading.value = false;
@@ -104,8 +106,8 @@ onMounted(loadData);
   <div class="cost-dashboard">
 
     <PageHeader
-      title="AI Cost Dashboard"
-      subtitle="Estimated token usage and cost per provider, team, and bot."
+      :title="t('aiCostDashboard.title')"
+      :subtitle="t('aiCostDashboard.subtitle')"
     >
       <template #actions>
         <div class="period-tabs">
@@ -128,10 +130,10 @@ onMounted(loadData);
     <template v-else>
       <!-- Summary stats -->
       <div class="stats-row">
-        <StatCard title="Estimated Total Cost" :value="totalEstimatedCost" trend="neutral" />
-        <StatCard title="Total Tokens" :value="fmtTokens(costByProvider.reduce((s, p) => s + p.tokens, 0))" trend="neutral" />
-        <StatCard title="Top Provider" :value="costByProvider.sort((a, b) => b.pct - a.pct)[0]?.name ?? '-'" trend="neutral" />
-        <StatCard title="Bots Tracked" :value="String(costByBot.length)" trend="neutral" />
+        <StatCard :title="t('aiCostDashboard.stat.estimatedTotal')" :value="totalEstimatedCost" trend="neutral" />
+        <StatCard :title="t('aiCostDashboard.stat.totalTokens')" :value="fmtTokens(costByProvider.reduce((s, p) => s + p.tokens, 0))" trend="neutral" />
+        <StatCard :title="t('aiCostDashboard.stat.topProvider')" :value="costByProvider.sort((a, b) => b.pct - a.pct)[0]?.name ?? '-'" trend="neutral" />
+        <StatCard :title="t('aiCostDashboard.stat.botsTracked')" :value="String(costByBot.length)" trend="neutral" />
       </div>
 
       <!-- Provider breakdown -->
@@ -142,7 +144,7 @@ onMounted(loadData);
               <rect x="2" y="3" width="20" height="14" rx="2"/>
               <path d="M8 21h8M12 17v4"/>
             </svg>
-            Cost by Provider
+            {{ t('aiCostDashboard.costByProvider') }}
           </h3>
         </div>
         <div class="provider-grid">
@@ -153,11 +155,11 @@ onMounted(loadData);
               <span class="provider-model">{{ p.model }}</span>
             </div>
             <div class="provider-cost">{{ fmtCost(p.cost) }}</div>
-            <div class="provider-tokens">{{ fmtTokens(p.tokens) }} tokens</div>
+            <div class="provider-tokens">{{ t('aiCostDashboard.tokens', { value: fmtTokens(p.tokens) }) }}</div>
             <div class="provider-bar-track">
               <div class="provider-bar-fill" :style="{ width: `${p.pct}%`, background: p.color }" />
             </div>
-            <div class="provider-pct">{{ p.pct }}% of total</div>
+            <div class="provider-pct">{{ t('aiCostDashboard.pctOfTotal', { pct: p.pct }) }}</div>
           </div>
         </div>
       </div>
@@ -165,8 +167,8 @@ onMounted(loadData);
       <!-- View tabs -->
       <div class="view-tabs-row">
         <div class="view-tabs">
-          <button :class="['vtab', { active: activeView === 'bot' }]" @click="activeView = 'bot'">By Bot</button>
-          <button :class="['vtab', { active: activeView === 'team' }]" @click="activeView = 'team'">By Team</button>
+          <button :class="['vtab', { active: activeView === 'bot' }]" @click="activeView = 'bot'">{{ t('aiCostDashboard.byBot') }}</button>
+          <button :class="['vtab', { active: activeView === 'team' }]" @click="activeView = 'team'">{{ t('aiCostDashboard.byTeam') }}</button>
         </div>
       </div>
 
@@ -178,18 +180,18 @@ onMounted(loadData);
               <circle cx="12" cy="8" r="4"/>
               <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
             </svg>
-            Cost by Bot
+            {{ t('aiCostDashboard.costByBot') }}
           </h3>
         </div>
-        <div v-if="costByBot.length === 0" class="empty-section">No bot data available.</div>
+        <div v-if="costByBot.length === 0" class="empty-section">{{ t('aiCostDashboard.noBotData') }}</div>
         <div v-else class="table-wrap">
           <table class="data-table">
             <thead>
               <tr>
-                <th>Bot</th>
-                <th class="right">Executions</th>
-                <th class="right">Est. Cost</th>
-                <th class="right">Trend</th>
+                <th>{{ t('aiCostDashboard.col.bot') }}</th>
+                <th class="right">{{ t('aiCostDashboard.col.executions') }}</th>
+                <th class="right">{{ t('aiCostDashboard.col.estCost') }}</th>
+                <th class="right">{{ t('aiCostDashboard.col.trend') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -217,18 +219,18 @@ onMounted(loadData);
               <circle cx="9" cy="7" r="4"/>
               <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
             </svg>
-            Cost by Team
+            {{ t('aiCostDashboard.costByTeam') }}
           </h3>
         </div>
-        <div v-if="costByTeam.length === 0" class="empty-section">No team data available.</div>
+        <div v-if="costByTeam.length === 0" class="empty-section">{{ t('aiCostDashboard.noTeamData') }}</div>
         <div v-else class="table-wrap">
           <table class="data-table">
             <thead>
               <tr>
-                <th>Team</th>
-                <th class="right">Active Bots</th>
-                <th class="right">Est. Cost</th>
-                <th>Share</th>
+                <th>{{ t('aiCostDashboard.col.team') }}</th>
+                <th class="right">{{ t('aiCostDashboard.col.activeBots') }}</th>
+                <th class="right">{{ t('aiCostDashboard.col.estCost') }}</th>
+                <th>{{ t('aiCostDashboard.col.share') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -251,7 +253,7 @@ onMounted(loadData);
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="13" height="13">
           <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
-        Cost estimates are based on approximate token counts and public pricing. Actual charges may vary by provider plan.
+        {{ t('aiCostDashboard.disclaimer') }}
       </p>
     </template>
   </div>

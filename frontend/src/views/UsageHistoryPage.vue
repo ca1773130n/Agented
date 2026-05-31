@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { HistoryStatsPeriod } from '../services/api';
 import { budgetApi } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
@@ -9,6 +10,7 @@ import EmptyState from '../components/base/EmptyState.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
+const { t } = useI18n();
 const selectedPeriod = ref<'weekly' | 'monthly'>('weekly');
 const monthsBack = ref<number>(6);
 const periods = ref<HistoryStatsPeriod[]>([]);
@@ -68,15 +70,15 @@ useWebMcpTool({
   deps: [isLoading, selectedPeriod, monthsBack, periods, totalCost, totalInputTokens, totalOutputTokens, totalExecutions],
 });
 
-const columns: DataTableColumn[] = [
-  { key: 'period_start', label: 'Period' },
-  { key: 'total_cost_usd', label: 'Cost' },
-  { key: 'total_input_tokens', label: 'Input Tokens' },
-  { key: 'total_output_tokens', label: 'Output Tokens' },
-  { key: 'execution_count', label: 'Executions' },
-  { key: 'avg_rate_limit_pct', label: 'Avg Rate %' },
-  { key: 'max_rate_limit_pct', label: 'Max Rate %' },
-];
+const columns = computed<DataTableColumn[]>(() => [
+  { key: 'period_start', label: t('usageHistory.columns.period') },
+  { key: 'total_cost_usd', label: t('usageHistory.columns.cost') },
+  { key: 'total_input_tokens', label: t('usageHistory.columns.inputTokens') },
+  { key: 'total_output_tokens', label: t('usageHistory.columns.outputTokens') },
+  { key: 'execution_count', label: t('usageHistory.columns.executions') },
+  { key: 'avg_rate_limit_pct', label: t('usageHistory.columns.avgRate') },
+  { key: 'max_rate_limit_pct', label: t('usageHistory.columns.maxRate') },
+]);
 
 function formatPeriodLabel(periodStart: string): string {
   if (selectedPeriod.value === 'monthly' && /^\d{4}-\d{2}$/.test(periodStart)) {
@@ -100,7 +102,7 @@ onMounted(loadData);
 <template>
   <div class="usage-history-page">
 
-    <PageHeader title="Usage History" subtitle="Historical token usage, cost, and rate limit statistics">
+    <PageHeader :title="t('usageHistory.title')" :subtitle="t('usageHistory.subtitle')">
       <template #actions>
         <div class="header-controls">
           <div class="period-toggle">
@@ -108,12 +110,12 @@ onMounted(loadData);
               class="period-btn"
               :class="{ active: selectedPeriod === 'weekly' }"
               @click="selectedPeriod = 'weekly'; debouncedLoadData()"
-            >Weekly</button>
+            >{{ t('usageHistory.weekly') }}</button>
             <button
               class="period-btn"
               :class="{ active: selectedPeriod === 'monthly' }"
               @click="selectedPeriod = 'monthly'; debouncedLoadData()"
-            >Monthly</button>
+            >{{ t('usageHistory.monthly') }}</button>
           </div>
           <div class="months-toggle">
             <button
@@ -122,41 +124,41 @@ onMounted(loadData);
               class="period-btn"
               :class="{ active: monthsBack === m }"
               @click="monthsBack = m; debouncedLoadData()"
-            >{{ m }}mo</button>
+            >{{ t('usageHistory.monthsShort', { count: m }) }}</button>
           </div>
         </div>
       </template>
     </PageHeader>
 
-    <LoadingState v-if="isLoading" message="Loading history..." />
+    <LoadingState v-if="isLoading" :message="t('usageHistory.loading')" />
 
     <div v-if="!isLoading" class="summary-cards">
       <div class="summary-card">
-        <div class="card-label">Total Cost</div>
+        <div class="card-label">{{ t('usageHistory.totalCost') }}</div>
         <div class="card-value highlight">{{ formatCurrency(totalCost) }}</div>
       </div>
       <div class="summary-card">
-        <div class="card-label">Input Tokens</div>
+        <div class="card-label">{{ t('usageHistory.inputTokens') }}</div>
         <div class="card-value">{{ formatTokenCount(totalInputTokens) }}</div>
       </div>
       <div class="summary-card">
-        <div class="card-label">Output Tokens</div>
+        <div class="card-label">{{ t('usageHistory.outputTokens') }}</div>
         <div class="card-value">{{ formatTokenCount(totalOutputTokens) }}</div>
       </div>
       <div class="summary-card">
-        <div class="card-label">Executions</div>
+        <div class="card-label">{{ t('usageHistory.executions') }}</div>
         <div class="card-value">{{ totalExecutions }}</div>
       </div>
     </div>
 
     <EmptyState
       v-if="!isLoading && periods.length === 0"
-      title="No usage data found"
-      description="No usage data found for the selected range."
+      :title="t('usageHistory.emptyTitle')"
+      :description="t('usageHistory.emptyDescription')"
     />
 
     <div v-if="!isLoading && periods.length > 0" class="section">
-      <h2 class="section-title">{{ selectedPeriod === 'weekly' ? 'Weekly' : 'Monthly' }} Breakdown</h2>
+      <h2 class="section-title">{{ selectedPeriod === 'weekly' ? t('usageHistory.weeklyBreakdown') : t('usageHistory.monthlyBreakdown') }}</h2>
       <DataTable :columns="columns" :items="periods">
         <template #cell-period_start="{ item }">
           <span class="period-cell">{{ formatPeriodLabel(item.period_start) }}</span>

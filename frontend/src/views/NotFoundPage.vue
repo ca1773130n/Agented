@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 
+const { t } = useI18n();
 const router = useRouter();
 
 const currentPath = computed(() => window.location.pathname);
@@ -11,10 +13,9 @@ const currentPath = computed(() => window.location.pathname);
   <div class="not-found-page">
     <div class="not-found-content">
       <div class="not-found-code">404</div>
-      <h1 class="not-found-title">Page Not Found</h1>
+      <h1 class="not-found-title">{{ t('notFound.title') }}</h1>
       <p class="not-found-message">
-        The page you're looking for doesn't exist or has been moved.
-        Check the URL or head back to the dashboard.
+        {{ t('notFound.message') }}
       </p>
       <div class="not-found-path">
         <code>{{ currentPath }}</code>
@@ -24,7 +25,7 @@ const currentPath = computed(() => window.location.pathname);
           <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
           <polyline points="9 22 9 12 15 12 15 22"/>
         </svg>
-        Go to Dashboard
+        {{ t('notFound.goToDashboard') }}
       </button>
     </div>
   </div>

@@ -3,6 +3,9 @@ import { ref, computed, onMounted } from 'vue';
 import type { SuperAgent, AgentMessagePriority, AgentMessageType } from '../../services/api';
 import { agentMessageApi, superAgentApi } from '../../services/api';
 import { useToast } from '../../composables/useToast';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   superAgentId: string;
@@ -53,10 +56,10 @@ async function handleSubmit() {
       subject: subject.value || undefined,
       content: content.value.trim(),
     });
-    showToast('Message sent', 'success');
+    showToast(t('sendMessageForm.sent'), 'success');
     emit('sent');
   } catch {
-    showToast('Failed to send message', 'error');
+    showToast(t('sendMessageForm.sendError'), 'error');
   } finally {
     isSending.value = false;
   }
@@ -67,12 +70,12 @@ onMounted(loadAgents);
 
 <template>
   <div class="send-message-form">
-    <h3 class="form-title">New Message</h3>
+    <h3 class="form-title">{{ t('sendMessageForm.title') }}</h3>
 
     <div class="form-group">
-      <label class="form-label">Recipient</label>
+      <label class="form-label">{{ t('sendMessageForm.recipient') }}</label>
       <select v-model="toAgentId" class="form-select">
-        <option value="">Broadcast to all</option>
+        <option value="">{{ t('sendMessageForm.broadcastToAll') }}</option>
         <option v-for="agent in agents" :key="agent.id" :value="agent.id">
           {{ agent.name }} ({{ agent.id }})
         </option>
@@ -80,49 +83,49 @@ onMounted(loadAgents);
     </div>
 
     <div class="form-group">
-      <label class="form-label">Subject</label>
+      <label class="form-label">{{ t('sendMessageForm.subject') }}</label>
       <input
         v-model="subject"
         type="text"
         class="form-input"
-        placeholder="Optional subject"
+        :placeholder="t('sendMessageForm.subjectPlaceholder')"
       />
     </div>
 
     <div class="form-group">
-      <label class="form-label">Content <span class="required">*</span></label>
+      <label class="form-label">{{ t('sendMessageForm.content') }} <span class="required">*</span></label>
       <textarea
         v-model="content"
         class="form-textarea"
-        placeholder="Write your message..."
+        :placeholder="t('sendMessageForm.contentPlaceholder')"
         rows="4"
       ></textarea>
     </div>
 
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">Priority</label>
+        <label class="form-label">{{ t('sendMessageForm.priority') }}</label>
         <select v-model="priority" class="form-select">
-          <option value="low">Low</option>
-          <option value="normal">Normal</option>
-          <option value="high">High</option>
+          <option value="low">{{ t('sendMessageForm.priorityLow') }}</option>
+          <option value="normal">{{ t('sendMessageForm.priorityNormal') }}</option>
+          <option value="high">{{ t('sendMessageForm.priorityHigh') }}</option>
         </select>
       </div>
 
       <div class="form-group">
-        <label class="form-label">Type</label>
+        <label class="form-label">{{ t('sendMessageForm.type') }}</label>
         <select v-model="messageType" class="form-select">
-          <option value="message">Message</option>
-          <option value="request">Request</option>
-          <option value="artifact">Artifact</option>
+          <option value="message">{{ t('sendMessageForm.typeMessage') }}</option>
+          <option value="request">{{ t('sendMessageForm.typeRequest') }}</option>
+          <option value="artifact">{{ t('sendMessageForm.typeArtifact') }}</option>
         </select>
       </div>
     </div>
 
     <div class="form-actions">
-      <button class="btn-cancel" @click="emit('cancel')">Cancel</button>
+      <button class="btn-cancel" @click="emit('cancel')">{{ t('common.cancel') }}</button>
       <button class="btn-send" :disabled="!canSend" @click="handleSubmit">
-        {{ isSending ? 'Sending...' : 'Send' }}
+        {{ isSending ? t('sendMessageForm.sending') : t('sendMessageForm.send') }}
       </button>
     </div>
   </div>

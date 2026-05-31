@@ -7,7 +7,9 @@ import LoadingState from '../../components/base/LoadingState.vue';
 import EmptyState from '../../components/base/EmptyState.vue';
 import { useToast } from '../../composables/useToast';
 import { useWebMcpTool } from '../../composables/useWebMcpTool';
+import { useI18n } from 'vue-i18n';
 
+const { t } = useI18n();
 const router = useRouter();
 const showToast = useToast();
 
@@ -93,10 +95,10 @@ async function refreshCache() {
   isRefreshing.value = true;
   try {
     await marketplaceApi.refreshCache();
-    showToast('Marketplace cache refreshed', 'success');
+    showToast(t('marketplaceSkills.toast.cacheRefreshed'), 'success');
     await performSearch(searchQuery.value.trim());
   } catch (e) {
-    showToast('Failed to refresh cache', 'error');
+    showToast(t('marketplaceSkills.toast.cacheRefreshFailed'), 'error');
   } finally {
     isRefreshing.value = false;
   }
@@ -104,7 +106,7 @@ async function refreshCache() {
 
 async function installSkillsShSkill(skill: SkillsShResult) {
   if (!skill.install_cmd && !skill.source) {
-    showToast('No install source available for this skill', 'error');
+    showToast(t('marketplaceSkills.toast.noInstallSource'), 'error');
     return;
   }
   const source = skill.install_cmd
@@ -113,11 +115,11 @@ async function installSkillsShSkill(skill: SkillsShResult) {
   installingSkill.value = skill.name;
   try {
     await skillsShApi.install(source);
-    showToast(`Installed "${skill.name}" from skills.sh`, 'success');
+    showToast(t('marketplaceSkills.toast.installedFromSkillsSh', { name: skill.name }), 'success');
     skill.installed = true;
     await performSearch(searchQuery.value.trim());
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to install skill';
+    const message = err instanceof ApiError ? err.message : t('marketplaceSkills.toast.installFailed');
     showToast(message, 'error');
   } finally {
     installingSkill.value = null;
@@ -134,10 +136,10 @@ async function installMarketplaceSkill(skill: MarketplaceSearchResult) {
       skill_path: skill.source || '',
       description: skill.description || '',
     });
-    showToast(`Added "${skill.name}" to your library`, 'success');
+    showToast(t('marketplaceSkills.toast.addedToLibrary', { name: skill.name }), 'success');
     skill.installed = true;
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to add skill';
+    const message = err instanceof ApiError ? err.message : t('marketplaceSkills.toast.addFailed');
     showToast(message, 'error');
   } finally {
     installingMarketplaceSkill.value = null;
@@ -179,10 +181,10 @@ onMounted(async () => {
       <input
         v-model="searchQuery"
         type="text"
-        placeholder="Search skills across marketplaces and skills.sh..."
+        :placeholder="t('marketplaceSkills.searchPlaceholder')"
         @input="onSearchInput"
       />
-      <button class="refresh-btn" :disabled="isRefreshing" title="Refresh marketplace data" @click="refreshCache">
+      <button class="refresh-btn" :disabled="isRefreshing" :title="t('marketplaceSkills.refreshTitle')" @click="refreshCache">
         <svg :class="{ spinning: isRefreshing }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M23 4v6h-6M1 20v-6h6"/>
           <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
@@ -195,20 +197,20 @@ onMounted(async () => {
       <div class="section-header">
         <h2>
           <template v-if="searchQuery.trim()">
-            From Marketplace — "{{ searchQuery }}" ({{ searchResults.length }})
+            {{ t('marketplaceSkills.fromMarketplaceQuery', { query: searchQuery, count: searchResults.length }) }}
           </template>
           <template v-else>
-            From Marketplace ({{ searchResults.length }})
+            {{ t('marketplaceSkills.fromMarketplace', { count: searchResults.length }) }}
           </template>
         </h2>
       </div>
 
-      <LoadingState v-if="isSearching" message="Searching skills..." />
+      <LoadingState v-if="isSearching" :message="t('marketplaceSkills.searching')" />
 
       <EmptyState
         v-else-if="searchResults.length === 0"
-        title="No marketplace skills found"
-        description="Try a different search term or add more registries in Settings → Plugin Marketplaces."
+        :title="t('marketplaceSkills.emptyMarketplaceTitle')"
+        :description="t('marketplaceSkills.emptyMarketplaceDescription')"
       >
         <template #icon>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -235,9 +237,9 @@ onMounted(async () => {
             <div class="skill-name-row">
               <h3>{{ skill.name }}</h3>
               <span v-if="skill.version" class="version-badge">v{{ skill.version }}</span>
-              <span v-if="skill.installed" class="installed-badge">Installed</span>
+              <span v-if="skill.installed" class="installed-badge">{{ t('marketplaceSkills.installedBadge') }}</span>
             </div>
-            <p class="skill-description">{{ skill.description || 'No description' }}</p>
+            <p class="skill-description">{{ skill.description || t('marketplaceSkills.noDescription') }}</p>
             <span class="marketplace-badge">{{ skill.marketplace_name }}</span>
           </div>
           <div class="skill-actions">
@@ -247,9 +249,9 @@ onMounted(async () => {
               :disabled="installingMarketplaceSkill === `${skill.marketplace_id}-${skill.name}`"
               @click="installMarketplaceSkill(skill)"
             >
-              {{ installingMarketplaceSkill === `${skill.marketplace_id}-${skill.name}` ? 'Adding...' : 'Add' }}
+              {{ installingMarketplaceSkill === `${skill.marketplace_id}-${skill.name}` ? t('marketplaceSkills.adding') : t('common.add') }}
             </button>
-            <span v-else class="installed-label">Added</span>
+            <span v-else class="installed-label">{{ t('marketplaceSkills.added') }}</span>
           </div>
         </div>
       </div>
@@ -263,27 +265,27 @@ onMounted(async () => {
             <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
           </svg>
           <template v-if="searchQuery.trim()">
-            From skills.sh — "{{ searchQuery }}" ({{ skillsShResults.length }})
+            {{ t('marketplaceSkills.fromSkillsShQuery', { query: searchQuery, count: skillsShResults.length }) }}
           </template>
           <template v-else>
-            From skills.sh ({{ skillsShResults.length }})
+            {{ t('marketplaceSkills.fromSkillsSh', { count: skillsShResults.length }) }}
           </template>
         </h2>
-        <span v-if="!skillsShAvailable" class="unavailable-badge">npx not available</span>
+        <span v-if="!skillsShAvailable" class="unavailable-badge">{{ t('marketplaceSkills.npxUnavailable') }}</span>
       </div>
 
-      <LoadingState v-if="isSearchingSkillsSh" message="Searching skills.sh..." />
+      <LoadingState v-if="isSearchingSkillsSh" :message="t('marketplaceSkills.searchingSkillsSh')" />
 
       <EmptyState
         v-else-if="!skillsShAvailable"
-        title="npx not available"
-        description="skills.sh integration requires npx (Node.js). Install Node.js to browse community skills."
+        :title="t('marketplaceSkills.npxUnavailable')"
+        :description="t('marketplaceSkills.npxUnavailableDescription')"
       />
 
       <EmptyState
         v-else-if="skillsShResults.length === 0"
-        title="No skills.sh skills found"
-        description="Try a different search term."
+        :title="t('marketplaceSkills.emptySkillsShTitle')"
+        :description="t('marketplaceSkills.emptySkillsShDescription')"
       >
         <template #icon>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -308,7 +310,7 @@ onMounted(async () => {
             <div class="skill-name-row">
               <h3>{{ skill.name }}</h3>
               <span v-if="skill.installs" class="installs-badge">{{ formatInstalls(skill.installs) }}</span>
-              <span v-if="skill.installed" class="installed-badge">Installed</span>
+              <span v-if="skill.installed" class="installed-badge">{{ t('marketplaceSkills.installedBadge') }}</span>
             </div>
             <div class="skill-meta-row">
               <span v-if="skill.source" class="marketplace-badge skills-sh-badge">{{ skill.source }}</span>
@@ -322,9 +324,9 @@ onMounted(async () => {
               :disabled="installingSkill === skill.name"
               @click.stop="installSkillsShSkill(skill)"
             >
-              {{ installingSkill === skill.name ? 'Installing...' : 'Install' }}
+              {{ installingSkill === skill.name ? t('marketplaceSkills.installing') : t('marketplaceSkills.install') }}
             </button>
-            <span v-else class="installed-label">Installed</span>
+            <span v-else class="installed-label">{{ t('marketplaceSkills.installedBadge') }}</span>
           </div>
         </div>
       </div>
@@ -332,9 +334,9 @@ onMounted(async () => {
 
     <!-- Registry admin pointer (replaces the deleted inline panel) -->
     <div class="registry-pointer">
-      <span>Add or manage marketplace registries in</span>
+      <span>{{ t('marketplaceSkills.registryPointer') }}</span>
       <button type="button" class="link-btn" @click="goToRegistrySettings">
-        Settings → Plugin Marketplaces
+        {{ t('marketplaceSkills.registryLink') }}
       </button>
     </div>
   </div>

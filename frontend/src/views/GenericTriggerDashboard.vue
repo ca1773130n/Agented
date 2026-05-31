@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import type { AuditRecord, Trigger, Execution } from '../services/api';
 import { auditApi, triggerApi, executionApi, ApiError } from '../services/api';
 import ExecutionLogViewer from '../components/triggers/ExecutionLogViewer.vue';
@@ -18,6 +19,7 @@ const props = defineProps<{
 
 const route = useRoute();
 const router = useRouter();
+const { t } = useI18n();
 const triggerId = computed(() => (route.params.triggerId as string) || props.triggerId || '');
 
 const showToast = useToast();
@@ -74,7 +76,7 @@ async function loadData() {
     }
     return trigger.value;
   } catch (err) {
-    handleApiError(err, showToast, 'Failed to load trigger dashboard');
+    handleApiError(err, showToast, t('genericTriggerDashboard.toast.loadFailed'));
     throw err;
   }
 }
@@ -108,7 +110,7 @@ async function runTrigger() {
   isRunning.value = true;
   try {
     const result = await triggerApi.run(triggerId.value);
-    showToast(`${trigger.value.name} started`, 'success');
+    showToast(t('genericTriggerDashboard.toast.started', { name: trigger.value.name }), 'success');
 
     // Show live log for the new execution
     if (result.execution_id) {
@@ -120,7 +122,7 @@ async function runTrigger() {
     // Refresh data to get the running execution
     setTimeout(loadData, 1000);
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to run trigger';
+    const message = err instanceof ApiError ? err.message : t('genericTriggerDashboard.toast.runFailed');
     showToast(message, 'error');
   } finally {
     isRunning.value = false;
@@ -128,7 +130,7 @@ async function runTrigger() {
 }
 
 function onExecutionComplete(status: string) {
-  showToast(`Execution ${status}`, status === 'success' ? 'success' : 'error');
+  showToast(t('genericTriggerDashboard.toast.executionStatus', { status }), status === 'success' ? 'success' : 'error');
   stopStatusPolling();
   runningExecution.value = null;
   loadData();
@@ -199,11 +201,11 @@ function getExecutionStatusClass(status?: string): string {
             <h2>{{ trigger.name }}</h2>
             <div class="status-meta">
               <span class="meta-pill" :class="trigger.enabled ? 'enabled' : 'disabled'">
-                {{ trigger.enabled ? 'Enabled' : 'Disabled' }}
+                {{ trigger.enabled ? t('genericTriggerDashboard.enabled') : t('genericTriggerDashboard.disabled') }}
               </span>
               <span class="meta-pill backend">{{ trigger.backend_type }}</span>
               <span class="meta-pill" :class="getExecutionStatusClass(trigger.execution_status?.status)">
-                {{ trigger.execution_status?.status || 'idle' }}
+                {{ trigger.execution_status?.status || t('genericTriggerDashboard.idle') }}
               </span>
             </div>
           </div>
@@ -216,21 +218,21 @@ function getExecutionStatusClass(status?: string): string {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polygon points="5,3 19,12 5,21"/>
           </svg>
-          {{ runningExecution ? 'Running...' : (isRunning ? 'Starting...' : 'Run Trigger') }}
+          {{ runningExecution ? t('genericTriggerDashboard.running') : (isRunning ? t('genericTriggerDashboard.starting') : t('genericTriggerDashboard.runTrigger')) }}
         </button>
         <button class="action-btn secondary" @click="router.push({ name: 'execution-history' })">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
             <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
           </svg>
-          Execution History
+          {{ t('genericTriggerDashboard.executionHistory') }}
         </button>
         <button class="action-btn secondary" @click="router.push({ name: 'trigger-history', params: { triggerId } })">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <circle cx="12" cy="12" r="10"/>
             <polyline points="12,6 12,12 16,14"/>
           </svg>
-          Audit History
+          {{ t('genericTriggerDashboard.auditHistory') }}
         </button>
       </div>
 
@@ -240,11 +242,11 @@ function getExecutionStatusClass(status?: string): string {
           <div class="header-with-status">
             <h3>
               <span class="live-indicator" v-if="runningExecution"></span>
-              {{ runningExecution ? 'Live Execution' : 'Execution Logs' }}
+              {{ runningExecution ? t('genericTriggerDashboard.liveExecution') : t('genericTriggerDashboard.executionLogs') }}
             </h3>
             <span class="execution-id-badge">{{ currentExecutionId }}</span>
           </div>
-          <button class="btn-icon-sm" @click="closeLiveLog" title="Close">
+          <button class="btn-icon-sm" @click="closeLiveLog" :title="t('common.close')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 6L6 18M6 6l12 12"/>
             </svg>
@@ -262,25 +264,25 @@ function getExecutionStatusClass(status?: string): string {
       <!-- Recent Executions -->
       <div class="card">
         <div class="card-header">
-          <h3>Recent Executions</h3>
-          <span class="card-count">{{ recentExecutions.length }} latest</span>
+          <h3>{{ t('genericTriggerDashboard.recentExecutions') }}</h3>
+          <span class="card-count">{{ t('genericTriggerDashboard.latest', { count: recentExecutions.length }) }}</span>
         </div>
 
         <div v-if="recentExecutions.length === 0" class="empty-state">
           <div class="empty-icon">&#9671;</div>
-          <p>No executions yet</p>
-          <span>Run the bot to see results here</span>
+          <p>{{ t('genericTriggerDashboard.noExecutions') }}</p>
+          <span>{{ t('genericTriggerDashboard.noExecutionsHint') }}</span>
         </div>
 
         <div v-else class="table-wrapper">
           <table class="data-table">
             <thead>
               <tr>
-                <th>Started</th>
-                <th>Duration</th>
-                <th>Trigger</th>
-                <th>Status</th>
-                <th>Actions</th>
+                <th>{{ t('genericTriggerDashboard.table.started') }}</th>
+                <th>{{ t('genericTriggerDashboard.table.duration') }}</th>
+                <th>{{ t('genericTriggerDashboard.table.trigger') }}</th>
+                <th>{{ t('genericTriggerDashboard.table.status') }}</th>
+                <th>{{ t('genericTriggerDashboard.table.actions') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -293,7 +295,7 @@ function getExecutionStatusClass(status?: string): string {
                 <td class="cell-duration">
                   <span v-if="execution.status === 'running'" class="running-text">
                     <span class="spinner-tiny"></span>
-                    Running...
+                    {{ t('genericTriggerDashboard.running') }}
                   </span>
                   <span v-else>{{ formatDuration(execution.duration_ms) }}</span>
                 </td>
@@ -309,7 +311,7 @@ function getExecutionStatusClass(status?: string): string {
                   </span>
                 </td>
                 <td class="cell-log">
-                  <button class="btn-icon-sm" title="View logs" @click="viewExecutionLogs(execution)">
+                  <button class="btn-icon-sm" :title="t('genericTriggerDashboard.viewLogs')" @click="viewExecutionLogs(execution)">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                       <circle cx="12" cy="12" r="3"/>
@@ -325,19 +327,19 @@ function getExecutionStatusClass(status?: string): string {
       <!-- Recent Audit Results -->
       <div v-if="recentAudits.length > 0" class="card">
         <div class="card-header">
-          <h3>Recent Audit Results</h3>
-          <span class="card-count">{{ recentAudits.length }} latest</span>
+          <h3>{{ t('genericTriggerDashboard.recentAuditResults') }}</h3>
+          <span class="card-count">{{ t('genericTriggerDashboard.latest', { count: recentAudits.length }) }}</span>
         </div>
 
         <div class="table-wrapper">
           <table class="data-table">
             <thead>
               <tr>
-                <th>Project</th>
-                <th>Date</th>
-                <th>Findings</th>
-                <th>Status</th>
-                <th>Details</th>
+                <th>{{ t('genericTriggerDashboard.table.project') }}</th>
+                <th>{{ t('genericTriggerDashboard.table.date') }}</th>
+                <th>{{ t('genericTriggerDashboard.table.findings') }}</th>
+                <th>{{ t('genericTriggerDashboard.table.status') }}</th>
+                <th>{{ t('genericTriggerDashboard.table.details') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -351,11 +353,11 @@ function getExecutionStatusClass(status?: string): string {
                 </td>
                 <td class="cell-date">{{ formatDate(audit.audit_date) }}</td>
                 <td class="cell-result">
-                  <span class="findings-total">{{ audit.total_findings }} findings</span>
+                  <span class="findings-total">{{ t('genericTriggerDashboard.findingsCount', { count: audit.total_findings }) }}</span>
                 </td>
                 <td><span class="status-pill" :class="audit.status">{{ audit.status }}</span></td>
                 <td class="cell-log">
-                  <button class="btn-icon-sm" title="View details" @click="router.push({ name: 'audit-detail', params: { auditId: audit.audit_id } })">
+                  <button class="btn-icon-sm" :title="t('genericTriggerDashboard.viewDetails')" @click="router.push({ name: 'audit-detail', params: { auditId: audit.audit_id } })">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                       <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
                       <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
@@ -371,28 +373,28 @@ function getExecutionStatusClass(status?: string): string {
       <!-- Trigger Config Summary -->
       <div class="card">
         <div class="card-header">
-          <h3>Configuration</h3>
+          <h3>{{ t('genericTriggerDashboard.configuration') }}</h3>
         </div>
         <div class="config-grid">
           <div class="config-item">
-            <span class="config-label">Detection Keyword</span>
+            <span class="config-label">{{ t('genericTriggerDashboard.config.detectionKeyword') }}</span>
             <span class="config-value mono">{{ trigger.detection_keyword }}</span>
           </div>
           <div class="config-item">
-            <span class="config-label">Group ID</span>
+            <span class="config-label">{{ t('genericTriggerDashboard.config.groupId') }}</span>
             <span class="config-value mono">{{ trigger.group_id }}</span>
           </div>
           <div class="config-item">
-            <span class="config-label">Project Paths</span>
-            <span class="config-value">{{ trigger.path_count || 0 }} configured</span>
+            <span class="config-label">{{ t('genericTriggerDashboard.config.projectPaths') }}</span>
+            <span class="config-value">{{ t('genericTriggerDashboard.config.configuredCount', { count: trigger.path_count || 0 }) }}</span>
           </div>
           <div class="config-item">
-            <span class="config-label">Backend</span>
+            <span class="config-label">{{ t('genericTriggerDashboard.config.backend') }}</span>
             <span class="config-value">{{ trigger.backend_type }}</span>
           </div>
         </div>
         <div v-if="trigger.paths && trigger.paths.length > 0" class="config-paths">
-          <span class="config-label">Registered Paths</span>
+          <span class="config-label">{{ t('genericTriggerDashboard.config.registeredPaths') }}</span>
           <div class="path-chips">
             <span v-for="p in trigger.paths" :key="p.local_project_path" class="path-chip">
               {{ p.local_project_path }}
@@ -412,7 +414,7 @@ function getExecutionStatusClass(status?: string): string {
               <circle cx="12" cy="12" r="10"/>
               <polyline points="12,6 12,12 16,14"/>
             </svg>
-            Version History
+            {{ t('genericTriggerDashboard.versionHistory') }}
           </button>
           <button
             class="tool-tab"
@@ -423,7 +425,7 @@ function getExecutionStatusClass(status?: string): string {
               <polyline points="4,17 10,11 4,5"/>
               <line x1="12" y1="19" x2="20" y2="19"/>
             </svg>
-            Test Console
+            {{ t('genericTriggerDashboard.testConsole') }}
           </button>
         </div>
         <div v-if="activeToolTab === 'history'" class="tool-panel">

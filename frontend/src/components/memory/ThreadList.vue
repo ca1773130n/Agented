@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { agentMemoryApi, type MemoryThread } from '../../services/api/agentMemory';
 
 const props = defineProps<{ agentId: string }>();
+
+const { t } = useI18n();
 
 const threads = ref<MemoryThread[]>([]);
 const total = ref(0);
@@ -23,7 +26,7 @@ async function load() {
     threads.value = resp.threads;
     total.value = resp.total;
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Failed to load threads';
+    error.value = e instanceof Error ? e.message : t('threadList.loadFailed');
   } finally {
     loading.value = false;
   }
@@ -45,14 +48,14 @@ defineExpose({ refresh });
 <template>
   <div class="thread-list">
     <div v-if="loading" class="state state-loading" data-testid="thread-list-loading">
-      Loading threads…
+      {{ t('threadList.loading') }}
     </div>
     <div v-else-if="error" class="state state-error" data-testid="thread-list-error">
       {{ error }}
-      <button @click="load" class="retry-btn">Retry</button>
+      <button @click="load" class="retry-btn">{{ t('common.retry') }}</button>
     </div>
     <div v-else-if="threads.length === 0" class="state state-empty" data-testid="thread-list-empty">
-      No threads yet.
+      {{ t('threadList.empty') }}
     </div>
     <ul v-else class="thread-rows">
       <li
@@ -65,16 +68,16 @@ defineExpose({ refresh });
           :to="{ name: 'agent-memory-thread-detail', params: { id: agentId, thread_id: thread.id } }"
           class="thread-link"
         >
-          <span class="thread-title">{{ thread.title || '(untitled)' }}</span>
+          <span class="thread-title">{{ thread.title || t('threadList.untitled') }}</span>
           <span class="thread-resource">{{ thread.resource_type }}:{{ thread.resource_id }}</span>
           <span class="thread-updated">{{ thread.updated_at }}</span>
         </RouterLink>
       </li>
     </ul>
     <footer v-if="!loading && total > limit" class="pagination">
-      <button :disabled="offset === 0" @click="prevPage">Previous</button>
-      <span>{{ offset + 1 }}–{{ Math.min(offset + limit, total) }} of {{ total }}</span>
-      <button :disabled="offset + limit >= total" @click="nextPage">Next</button>
+      <button :disabled="offset === 0" @click="prevPage">{{ t('threadList.previous') }}</button>
+      <span>{{ t('threadList.pageRange', { from: offset + 1, to: Math.min(offset + limit, total), total }) }}</span>
+      <button :disabled="offset + limit >= total" @click="nextPage">{{ t('threadList.next') }}</button>
     </footer>
   </div>
 </template>

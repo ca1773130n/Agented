@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { prReviewApi, ApiError } from '../services/api';
 import type { PrReview } from '../services/api';
+const { t } = useI18n();
 const showToast = useToast();
 
 interface PRAnnotation {
@@ -57,9 +59,9 @@ async function fetchReviews() {
     annotations.value = (result?.reviews || []).map(prReviewToAnnotation);
   } catch (err) {
     if (err instanceof ApiError) {
-      error.value = `Failed to load PR reviews: ${err.message}`;
+      error.value = t('gitHubPRAnnotation.loadErrorDetail', { message: err.message });
     } else {
-      error.value = 'Failed to load PR reviews';
+      error.value = t('gitHubPRAnnotation.loadError');
     }
   } finally {
     loading.value = false;
@@ -73,9 +75,9 @@ async function handlePost(ann: PRAnnotation) {
   try {
     await prReviewApi.update(Number(ann.id), { review_status: 'approved' });
     ann.status = 'posted';
-    showToast(`Annotations posted to ${ann.pr}`, 'success');
+    showToast(t('gitHubPRAnnotation.toast.posted', { pr: ann.pr }), 'success');
   } catch (err) {
-    showToast(err instanceof ApiError ? err.message : 'Failed to post annotations', 'error');
+    showToast(err instanceof ApiError ? err.message : t('gitHubPRAnnotation.toast.postFailed'), 'error');
   } finally {
     isPosting.value = false;
   }
@@ -94,29 +96,29 @@ function statusClass(s: PRAnnotation['status']) {
   <div class="pr-annotation">
 
     <PageHeader
-      title="GitHub PR Annotation Integration"
-      subtitle="Post bot review findings as inline comments directly on GitHub pull request diffs."
+      :title="t('gitHubPRAnnotation.title')"
+      :subtitle="t('gitHubPRAnnotation.subtitle')"
     />
 
     <!-- Loading state -->
     <div v-if="loading" class="card" style="padding: 48px; text-align: center;">
-      <div style="color: var(--text-tertiary); font-size: 0.875rem;">Loading PR reviews...</div>
+      <div style="color: var(--text-tertiary); font-size: 0.875rem;">{{ t('gitHubPRAnnotation.loading') }}</div>
     </div>
 
     <!-- Error state -->
     <div v-else-if="error" class="card" style="padding: 48px; text-align: center;">
       <div style="color: #ef4444; font-size: 0.875rem; margin-bottom: 12px;">{{ error }}</div>
-      <button class="btn btn-primary" @click="fetchReviews">Retry</button>
+      <button class="btn btn-primary" @click="fetchReviews">{{ t('common.retry') }}</button>
     </div>
 
     <!-- Empty state -->
     <div v-else-if="annotations.length === 0" class="card" style="padding: 48px; text-align: center;">
-      <div style="color: var(--text-tertiary); font-size: 0.875rem;">No PR reviews available for annotation.</div>
+      <div style="color: var(--text-tertiary); font-size: 0.875rem;">{{ t('gitHubPRAnnotation.empty') }}</div>
     </div>
 
     <div v-else class="layout">
       <div class="pr-list card">
-        <div class="list-header">Recent PR Reviews</div>
+        <div class="list-header">{{ t('gitHubPRAnnotation.recentReviews') }}</div>
         <div
           v-for="ann in annotations"
           :key="ann.id"
@@ -134,14 +136,14 @@ function statusClass(s: PRAnnotation['status']) {
           </div>
           <div class="pr-stats">
             <span :class="['sev-badge', `sev-${ann.severity}`]">{{ ann.severity }}</span>
-            <span class="comment-count">{{ ann.comments }} fixes</span>
+            <span class="comment-count">{{ t('gitHubPRAnnotation.fixesCount', { count: ann.comments }) }}</span>
           </div>
         </div>
       </div>
 
       <div class="detail-panel">
         <div v-if="!selected" class="card empty-state">
-          <p>Select a PR to view its annotation details</p>
+          <p>{{ t('gitHubPRAnnotation.selectPr') }}</p>
         </div>
 
         <div v-else class="card pr-detail">
@@ -155,24 +157,23 @@ function statusClass(s: PRAnnotation['status']) {
               :disabled="isPosting || selected.status === 'posted'"
               @click="handlePost(selected)"
             >
-              {{ isPosting ? 'Posting...' : selected.status === 'posted' ? 'Posted' : 'Post to GitHub' }}
+              {{ isPosting ? t('gitHubPRAnnotation.posting') : selected.status === 'posted' ? t('gitHubPRAnnotation.posted') : t('gitHubPRAnnotation.postToGitHub') }}
             </button>
           </div>
 
           <div class="comments-list">
             <div v-if="selected.reviewComment" class="comment-card sev-info">
               <div class="comment-location">
-                <span class="comment-file">Review Comment</span>
+                <span class="comment-file">{{ t('gitHubPRAnnotation.reviewComment') }}</span>
               </div>
               <div class="comment-body">{{ selected.reviewComment }}</div>
             </div>
             <div v-if="!selected.reviewComment" class="comment-card sev-info">
               <div class="comment-location">
-                <span class="comment-file">Status</span>
+                <span class="comment-file">{{ t('gitHubPRAnnotation.statusLabel') }}</span>
               </div>
               <div class="comment-body">
-                This PR review has {{ selected.comments }} fixes applied.
-                Status: {{ selected.status }}.
+                {{ t('gitHubPRAnnotation.statusBody', { count: selected.comments, status: selected.status }) }}
               </div>
             </div>
           </div>

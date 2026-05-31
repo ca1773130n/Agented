@@ -15,7 +15,10 @@
  * v0.7.74.
  */
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { GoalIterationCompletedPayload } from '../../composables/useProjectSession';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   goal: string;
@@ -28,9 +31,12 @@ const props = defineProps<{
 }>();
 
 const progressLabel = computed(() => {
-  if (props.endedReason) return 'done';
-  if (props.judging) return 'judging…';
-  return `iter ${props.iteration}/${props.maxIterations}`;
+  if (props.endedReason) return t('goalLoopStatusBanner.done');
+  if (props.judging) return t('goalLoopStatusBanner.judging');
+  return t('goalLoopStatusBanner.iter', {
+    current: props.iteration,
+    max: props.maxIterations,
+  });
 });
 
 const verdictTone = computed(() => {
@@ -49,10 +55,10 @@ const verdictTone = computed(() => {
 const endedLabel = computed(() => {
   if (!props.endedReason) return null;
   const reasons: Record<string, string> = {
-    met: 'goal met',
-    iteration_cap: 'iteration cap reached',
-    wall_time_cap: 'wall-time cap reached',
-    stopped: 'stopped',
+    met: t('goalLoopStatusBanner.reasonMet'),
+    iteration_cap: t('goalLoopStatusBanner.reasonIterationCap'),
+    wall_time_cap: t('goalLoopStatusBanner.reasonWallTimeCap'),
+    stopped: t('goalLoopStatusBanner.reasonStopped'),
   };
   return reasons[props.endedReason] ?? props.endedReason;
 });
@@ -61,7 +67,7 @@ const endedLabel = computed(() => {
 <template>
   <div class="goal-banner" :data-tone="verdictTone">
     <div class="goal-banner-line goal-banner-head">
-      <span class="goal-banner-label">goal</span>
+      <span class="goal-banner-label">{{ t('goalLoopStatusBanner.goalLabel') }}</span>
       <span class="goal-banner-goal">{{ props.goal }}</span>
       <span class="goal-banner-progress">{{ progressLabel }}</span>
     </div>

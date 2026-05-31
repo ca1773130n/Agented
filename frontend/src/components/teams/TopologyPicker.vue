@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import type { TopologyType, TopologyConfig, TeamMember } from '../../services/api';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   modelValue: TopologyType | null;
@@ -28,50 +31,50 @@ const agentMembers = computed(() =>
   (props.teamMembers || []).filter(m => m.agent_id)
 );
 
-const topologies = [
+const topologies = computed(() => [
   {
     type: 'sequential' as TopologyType,
-    name: 'Sequential Pipeline',
-    description: 'Agents execute in order, each receiving the previous agent\'s output.',
+    name: t('topologyPicker.sequentialName'),
+    description: t('topologyPicker.sequentialDesc'),
     icon: 'sequential',
   },
   {
     type: 'parallel' as TopologyType,
-    name: 'Parallel Fan-out',
-    description: 'All agents execute simultaneously with the same input.',
+    name: t('topologyPicker.parallelName'),
+    description: t('topologyPicker.parallelDesc'),
     icon: 'parallel',
   },
   {
     type: 'coordinator' as TopologyType,
-    name: 'Coordinator / Dispatcher',
-    description: 'A coordinator agent delegates work to worker agents.',
+    name: t('topologyPicker.coordinatorName'),
+    description: t('topologyPicker.coordinatorDesc'),
     icon: 'coordinator',
   },
   {
     type: 'generator_critic' as TopologyType,
-    name: 'Generator / Critic',
-    description: 'A generator creates output, a critic reviews it, repeating until approved.',
+    name: t('topologyPicker.generatorCriticName'),
+    description: t('topologyPicker.generatorCriticDesc'),
     icon: 'generator_critic',
   },
   {
     type: 'hierarchical' as TopologyType,
-    name: 'Hierarchical',
-    description: 'A lead agent manages tiers of sub-agents in a tree structure.',
+    name: t('topologyPicker.hierarchicalName'),
+    description: t('topologyPicker.hierarchicalDesc'),
     icon: 'hierarchical',
   },
   {
     type: 'human_in_loop' as TopologyType,
-    name: 'Human-in-the-Loop',
-    description: 'Agents execute with human approval gates at configured checkpoints.',
+    name: t('topologyPicker.humanInLoopName'),
+    description: t('topologyPicker.humanInLoopDesc'),
     icon: 'human_in_loop',
   },
   {
     type: 'composite' as TopologyType,
-    name: 'Composite',
-    description: 'Combines multiple sub-topologies into a single team workflow.',
+    name: t('topologyPicker.compositeName'),
+    description: t('topologyPicker.compositeDesc'),
     icon: 'composite',
   },
-];
+]);
 
 function selectTopology(type: TopologyType) {
   if (props.modelValue === type) {
@@ -315,31 +318,31 @@ watch(() => props.teamMembers, () => {
 
     <!-- Configuration Panel -->
     <div v-if="modelValue && agentMembers.length > 0" class="config-panel">
-      <h4 class="config-title">Configuration</h4>
+      <h4 class="config-title">{{ t('topologyPicker.configuration') }}</h4>
 
       <!-- Sequential Config: sortable agent list -->
       <div v-if="modelValue === 'sequential'" class="config-section">
-        <p class="config-hint">Define the execution order by reordering agents.</p>
+        <p class="config-hint">{{ t('topologyPicker.sequentialHint') }}</p>
         <div v-if="config.order && config.order.length > 0" class="order-list">
           <div v-for="(agentId, idx) in config.order" :key="agentId" class="order-item">
             <span class="order-num">{{ idx + 1 }}</span>
             <span class="order-name">{{ getAgentName(agentId) }}</span>
             <div class="order-actions">
-              <button class="order-btn" :disabled="idx === 0" @click="moveAgent(idx, -1)" title="Move up">
+              <button class="order-btn" :disabled="idx === 0" @click="moveAgent(idx, -1)" :title="t('topologyPicker.moveUp')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 15l-6-6-6 6"/></svg>
               </button>
-              <button class="order-btn" :disabled="idx === (config.order?.length || 0) - 1" @click="moveAgent(idx, 1)" title="Move down">
+              <button class="order-btn" :disabled="idx === (config.order?.length || 0) - 1" @click="moveAgent(idx, 1)" :title="t('topologyPicker.moveDown')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
               </button>
             </div>
           </div>
         </div>
-        <p v-else class="config-empty">No agent members to order.</p>
+        <p v-else class="config-empty">{{ t('topologyPicker.noAgentsToOrder') }}</p>
       </div>
 
       <!-- Parallel Config: checkboxes -->
       <div v-else-if="modelValue === 'parallel'" class="config-section">
-        <p class="config-hint">Select which agents participate in parallel execution.</p>
+        <p class="config-hint">{{ t('topologyPicker.parallelHint') }}</p>
         <div class="checkbox-list">
           <label v-for="member in agentMembers" :key="member.agent_id" class="checkbox-item">
             <input
@@ -355,16 +358,16 @@ watch(() => props.teamMembers, () => {
       <!-- Coordinator Config -->
       <div v-else-if="modelValue === 'coordinator'" class="config-section">
         <div class="config-field">
-          <label>Coordinator</label>
+          <label>{{ t('topologyPicker.coordinator') }}</label>
           <select :value="config.coordinator" @change="setCoordinator(($event.target as HTMLSelectElement).value)" class="config-select">
-            <option value="">-- Select coordinator --</option>
+            <option value="">{{ t('topologyPicker.selectCoordinator') }}</option>
             <option v-for="member in agentMembers" :key="member.agent_id" :value="member.agent_id">
               {{ member.name }}
             </option>
           </select>
         </div>
         <div class="config-field">
-          <label>Workers</label>
+          <label>{{ t('topologyPicker.workers') }}</label>
           <div class="checkbox-list">
             <label v-for="member in agentMembers" :key="member.agent_id" class="checkbox-item"
               :class="{ disabled: member.agent_id === config.coordinator }">
@@ -383,25 +386,25 @@ watch(() => props.teamMembers, () => {
       <!-- Generator/Critic Config -->
       <div v-else-if="modelValue === 'generator_critic'" class="config-section">
         <div class="config-field">
-          <label>Generator</label>
+          <label>{{ t('topologyPicker.generator') }}</label>
           <select :value="config.generator" @change="setGenerator(($event.target as HTMLSelectElement).value)" class="config-select">
-            <option value="">-- Select generator --</option>
+            <option value="">{{ t('topologyPicker.selectGenerator') }}</option>
             <option v-for="member in agentMembers" :key="member.agent_id" :value="member.agent_id">
               {{ member.name }}
             </option>
           </select>
         </div>
         <div class="config-field">
-          <label>Critic</label>
+          <label>{{ t('topologyPicker.critic') }}</label>
           <select :value="config.critic" @change="setCritic(($event.target as HTMLSelectElement).value)" class="config-select">
-            <option value="">-- Select critic --</option>
+            <option value="">{{ t('topologyPicker.selectCritic') }}</option>
             <option v-for="member in agentMembers" :key="member.agent_id" :value="member.agent_id">
               {{ member.name }}
             </option>
           </select>
         </div>
         <div class="config-field">
-          <label>Max Iterations</label>
+          <label>{{ t('topologyPicker.maxIterations') }}</label>
           <input
             type="number"
             :value="config.max_iterations"
@@ -416,16 +419,16 @@ watch(() => props.teamMembers, () => {
       <!-- Hierarchical Config -->
       <div v-else-if="modelValue === 'hierarchical'" class="config-section">
         <div class="config-field">
-          <label>Lead</label>
+          <label>{{ t('topologyPicker.lead') }}</label>
           <select :value="config.lead" @change="setLead(($event.target as HTMLSelectElement).value)" class="config-select">
-            <option value="">-- Select lead --</option>
+            <option value="">{{ t('topologyPicker.selectLead') }}</option>
             <option v-for="member in agentMembers" :key="member.agent_id" :value="member.agent_id">
               {{ member.name }}
             </option>
           </select>
         </div>
         <div class="config-field">
-          <label>Workers</label>
+          <label>{{ t('topologyPicker.workers') }}</label>
           <div class="checkbox-list">
             <label v-for="member in agentMembers" :key="member.agent_id" class="checkbox-item"
               :class="{ disabled: member.agent_id === config.lead }">
@@ -443,40 +446,40 @@ watch(() => props.teamMembers, () => {
 
       <!-- Human-in-the-Loop Config -->
       <div v-else-if="modelValue === 'human_in_loop'" class="config-section">
-        <p class="config-hint">Define the execution order and mark agents that require human approval before proceeding.</p>
+        <p class="config-hint">{{ t('topologyPicker.humanInLoopHint') }}</p>
         <div v-if="config.order && config.order.length > 0" class="order-list">
           <div v-for="(agentId, idx) in config.order" :key="agentId" class="order-item">
             <span class="order-num">{{ idx + 1 }}</span>
             <span class="order-name">{{ getAgentName(agentId) }}</span>
-            <label class="approval-toggle" :title="'Toggle approval gate after this agent'">
+            <label class="approval-toggle" :title="t('topologyPicker.approvalGateTitle')">
               <input
                 type="checkbox"
                 :checked="config.approval_nodes?.includes(agentId)"
                 @change="toggleApprovalNode(agentId)"
               />
-              <span class="approval-label">Approval</span>
+              <span class="approval-label">{{ t('topologyPicker.approval') }}</span>
             </label>
             <div class="order-actions">
-              <button class="order-btn" :disabled="idx === 0" @click="moveAgent(idx, -1)" title="Move up">
+              <button class="order-btn" :disabled="idx === 0" @click="moveAgent(idx, -1)" :title="t('topologyPicker.moveUp')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 15l-6-6-6 6"/></svg>
               </button>
-              <button class="order-btn" :disabled="idx === (config.order?.length || 0) - 1" @click="moveAgent(idx, 1)" title="Move down">
+              <button class="order-btn" :disabled="idx === (config.order?.length || 0) - 1" @click="moveAgent(idx, 1)" :title="t('topologyPicker.moveDown')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
               </button>
             </div>
           </div>
         </div>
-        <p v-else class="config-empty">No agent members to order.</p>
+        <p v-else class="config-empty">{{ t('topologyPicker.noAgentsToOrder') }}</p>
       </div>
 
       <!-- Composite Config -->
       <div v-else-if="modelValue === 'composite'" class="config-section">
-        <p class="config-hint">Composite topology configuration is managed via the visual canvas editor.</p>
+        <p class="config-hint">{{ t('topologyPicker.compositeHint') }}</p>
       </div>
     </div>
 
     <div v-else-if="modelValue && agentMembers.length === 0" class="config-panel">
-      <p class="config-empty">Add agent members to the team to configure topology.</p>
+      <p class="config-empty">{{ t('topologyPicker.addMembersHint') }}</p>
     </div>
   </div>
 </template>

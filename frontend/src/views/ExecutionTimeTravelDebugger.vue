@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { executionApi } from '../services/api';
 import type { Execution } from '../services/api';
+
+const { t } = useI18n();
 
 interface ExecutionFrame {
   index: number;
   timestamp: string;
   type: 'trigger' | 'context' | 'prompt' | 'api_call' | 'response' | 'output' | 'complete';
-  label: string;
+  labelKey: string;
   content: string;
   durationMs?: number;
   tokenCount?: number;
@@ -27,7 +30,7 @@ function buildFrames(exec: Execution): ExecutionFrame[] {
       index: 0,
       timestamp: exec.started_at,
       type: 'trigger',
-      label: 'Trigger Received',
+      labelKey: 'executionTimeTravelDebugger.frames.triggerReceived',
       content: `trigger_type: ${exec.trigger_type}\ntrigger_name: ${exec.trigger_name}\nstarted_at: ${exec.started_at}`,
       durationMs: 0,
     },
@@ -35,7 +38,7 @@ function buildFrames(exec: Execution): ExecutionFrame[] {
       index: 1,
       timestamp: exec.started_at,
       type: 'context',
-      label: 'Context Injected',
+      labelKey: 'executionTimeTravelDebugger.frames.contextInjected',
       content: firstNLines || '(no stdout recorded)',
       durationMs: undefined,
     },
@@ -43,7 +46,7 @@ function buildFrames(exec: Execution): ExecutionFrame[] {
       index: 2,
       timestamp: exec.started_at,
       type: 'prompt',
-      label: 'Final Prompt Built',
+      labelKey: 'executionTimeTravelDebugger.frames.finalPromptBuilt',
       content: promptText,
       durationMs: undefined,
       tokenCount: estimatedTokens,
@@ -52,7 +55,7 @@ function buildFrames(exec: Execution): ExecutionFrame[] {
       index: 3,
       timestamp: exec.started_at,
       type: 'api_call',
-      label: 'API Call Sent',
+      labelKey: 'executionTimeTravelDebugger.frames.apiCallSent',
       content: `backend_type: ${exec.backend_type}\ncommand: ${exec.command || '(none)'}`,
       durationMs: undefined,
     },
@@ -60,7 +63,7 @@ function buildFrames(exec: Execution): ExecutionFrame[] {
       index: 4,
       timestamp: exec.started_at,
       type: 'response',
-      label: 'Model Response Received',
+      labelKey: 'executionTimeTravelDebugger.frames.modelResponseReceived',
       content: truncatedStdout || '(no output recorded)',
       durationMs: exec.duration_ms,
     },
@@ -68,7 +71,7 @@ function buildFrames(exec: Execution): ExecutionFrame[] {
       index: 5,
       timestamp: exec.started_at,
       type: 'output',
-      label: 'Output Formatted',
+      labelKey: 'executionTimeTravelDebugger.frames.outputFormatted',
       content: `stdout line count: ${lineCount}`,
       durationMs: undefined,
     },
@@ -76,7 +79,7 @@ function buildFrames(exec: Execution): ExecutionFrame[] {
       index: 6,
       timestamp: exec.finished_at || exec.started_at,
       type: 'complete',
-      label: 'Execution Complete',
+      labelKey: 'executionTimeTravelDebugger.frames.executionComplete',
       content: `status: ${exec.status}\nduration_ms: ${exec.duration_ms ?? 'N/A'}\nfinished_at: ${exec.finished_at || 'N/A'}`,
       durationMs: exec.duration_ms,
     },
@@ -172,14 +175,14 @@ function frameTypeColor(type: ExecutionFrame['type']) {
   <div class="time-travel">
 
     <PageHeader
-      title="Execution Time-Travel Debugger"
-      subtitle="Step through a recorded execution frame by frame, inspecting prompts, context, and model responses at each stage."
+      :title="t('executionTimeTravelDebugger.title')"
+      :subtitle="t('executionTimeTravelDebugger.subtitle')"
     />
 
     <div class="layout">
       <!-- Execution selector -->
       <aside class="sidebar card">
-        <div class="sidebar-header">Executions</div>
+        <div class="sidebar-header">{{ t('executionTimeTravelDebugger.executions') }}</div>
         <div
           v-for="e in executions"
           :key="e.execution_id"
@@ -192,7 +195,7 @@ function frameTypeColor(type: ExecutionFrame['type']) {
         </div>
 
         <div class="frames-nav">
-          <div class="frames-header">Frames ({{ frames.length }})</div>
+          <div class="frames-header">{{ t('executionTimeTravelDebugger.framesCount', { count: frames.length }) }}</div>
           <div
             v-for="f in frames"
             :key="f.index"
@@ -201,7 +204,7 @@ function frameTypeColor(type: ExecutionFrame['type']) {
             @click="goTo(f.index)"
           >
             <span class="frame-type-dot" :style="{ background: frameTypeColor(f.type) }"></span>
-            <span class="frame-label">{{ f.label }}</span>
+            <span class="frame-label">{{ t(f.labelKey) }}</span>
           </div>
         </div>
       </aside>
@@ -229,10 +232,10 @@ function frameTypeColor(type: ExecutionFrame['type']) {
           </div>
           <div class="progress-meta">
             <template v-if="frames.length > 0">
-              Frame {{ currentFrame + 1 }} / {{ frames.length }} · {{ currentFrameData?.timestamp }}
+              {{ t('executionTimeTravelDebugger.frameProgress', { current: currentFrame + 1, total: frames.length }) }} · {{ currentFrameData?.timestamp }}
             </template>
             <template v-else>
-              No execution selected
+              {{ t('executionTimeTravelDebugger.noExecutionSelected') }}
             </template>
           </div>
         </div>
@@ -241,16 +244,16 @@ function frameTypeColor(type: ExecutionFrame['type']) {
         <div v-if="currentFrameData" class="card frame-card">
           <div class="frame-header">
             <span class="frame-type-pill" :style="{ background: `${frameTypeColor(currentFrameData.type)}18`, color: frameTypeColor(currentFrameData.type) }">{{ currentFrameData.type.replace('_', ' ') }}</span>
-            <span class="frame-label-big">{{ currentFrameData.label }}</span>
+            <span class="frame-label-big">{{ t(currentFrameData.labelKey) }}</span>
             <div class="frame-metrics">
               <span v-if="currentFrameData.durationMs !== undefined" class="frame-metric">+{{ currentFrameData.durationMs }}ms</span>
-              <span v-if="currentFrameData.tokenCount" class="frame-metric">{{ currentFrameData.tokenCount.toLocaleString() }} tokens</span>
+              <span v-if="currentFrameData.tokenCount" class="frame-metric">{{ t('executionTimeTravelDebugger.tokens', { count: currentFrameData.tokenCount.toLocaleString() }) }}</span>
             </div>
           </div>
           <pre class="frame-content">{{ currentFrameData.content }}</pre>
         </div>
         <div v-else class="card frame-card empty-state">
-          <p>Select an execution to begin debugging.</p>
+          <p>{{ t('executionTimeTravelDebugger.selectToDebug') }}</p>
         </div>
       </div>
     </div>

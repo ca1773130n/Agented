@@ -3,7 +3,9 @@ import { ref, onMounted } from 'vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
+import { useI18n } from 'vue-i18n';
 
+const { t } = useI18n();
 const showToast = useToast();
 const isLoading = ref(true);
 const isSaving = ref(false);
@@ -30,9 +32,9 @@ const config = ref<NotificationConfig>({
 });
 
 const eventLabels: Record<EventKey, string> = {
-  bot_completion: 'Bot Completion',
-  bot_failure: 'Bot Failure',
-  findings: 'Security Findings',
+  bot_completion: t('notificationHub.events.botCompletion'),
+  bot_failure: t('notificationHub.events.botFailure'),
+  findings: t('notificationHub.events.findings'),
 };
 
 const previewMessage = `{
@@ -68,9 +70,9 @@ async function saveConfig() {
       body: JSON.stringify(config.value),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    showToast('Configuration saved', 'success');
+    showToast(t('notificationHub.toasts.configSaved'), 'success');
   } catch {
-    showToast('Saved (demo mode)', 'success');
+    showToast(t('notificationHub.toasts.savedDemo'), 'success');
   } finally {
     isSaving.value = false;
   }
@@ -81,9 +83,9 @@ async function testNotification() {
   try {
     const res = await fetch('/admin/notifications/test', { method: 'POST' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    showToast('Test notification sent', 'success');
+    showToast(t('notificationHub.toasts.testSent'), 'success');
   } catch {
-    showToast('Test notification sent (demo mode)', 'success');
+    showToast(t('notificationHub.toasts.testSentDemo'), 'success');
   } finally {
     isTesting.value = false;
   }
@@ -102,57 +104,57 @@ onMounted(loadConfig);
 
     <NotEnabledBanner
       v-if="!FEATURE_ENABLED"
-      feature="Notification hub"
-      detail="The backend that persists delivery channels and event routing has not shipped yet. Saving and test sends are disabled."
+      :feature="t('notificationHub.notEnabled.feature')"
+      :detail="t('notificationHub.notEnabled.detail')"
       testid="notification-hub-not-enabled"
     />
 
     <div class="page-title-row">
       <div>
-        <h2>Notification Hub</h2>
-        <p class="subtitle">Configure delivery channels and event routing for bot notifications</p>
+        <h2>{{ t('notificationHub.title') }}</h2>
+        <p class="subtitle">{{ t('notificationHub.subtitle') }}</p>
       </div>
       <div class="header-actions">
         <button
           class="btn btn-secondary"
           :disabled="isTesting || !FEATURE_ENABLED"
-          :title="!FEATURE_ENABLED ? 'Notification hub is not yet enabled' : ''"
+          :title="!FEATURE_ENABLED ? t('notificationHub.notEnabledTitle') : ''"
           @click="testNotification"
         >
-          {{ isTesting ? 'Sending...' : 'Test Notification' }}
+          {{ isTesting ? t('notificationHub.sending') : t('notificationHub.testNotification') }}
         </button>
         <button
           class="btn btn-primary"
           :disabled="isSaving || !FEATURE_ENABLED"
-          :title="!FEATURE_ENABLED ? 'Notification hub is not yet enabled in this deployment' : undefined"
+          :title="!FEATURE_ENABLED ? t('notificationHub.notEnabledTitleDeployment') : undefined"
           data-testid="notification-hub-save-submit"
           @click="saveConfig"
         >
-          {{ isSaving ? 'Saving...' : 'Save Config' }}
+          {{ isSaving ? t('notificationHub.saving') : t('notificationHub.saveConfig') }}
         </button>
       </div>
     </div>
 
-    <LoadingState v-if="isLoading" message="Loading configuration..." />
+    <LoadingState v-if="isLoading" :message="t('notificationHub.loading')" />
 
     <template v-else>
       <div class="config-grid">
         <!-- Channels -->
         <div class="card">
           <div class="card-header">
-            <h3>Delivery Channels</h3>
+            <h3>{{ t('notificationHub.deliveryChannels') }}</h3>
           </div>
           <div class="field-group">
-            <label class="field-label">Slack Channel</label>
+            <label class="field-label">{{ t('notificationHub.slackChannel') }}</label>
             <input
               v-model="config.slack_channel"
               class="field-input"
               type="text"
-              placeholder="#alerts or webhook URL"
+              :placeholder="t('notificationHub.slackPlaceholder')"
             />
           </div>
           <div class="field-group">
-            <label class="field-label">Microsoft Teams Webhook</label>
+            <label class="field-label">{{ t('notificationHub.teamsWebhook') }}</label>
             <input
               v-model="config.teams_webhook"
               class="field-input"
@@ -163,7 +165,7 @@ onMounted(loadConfig);
           <div class="field-group">
             <label class="toggle-row">
               <input v-model="config.rich_format" type="checkbox" class="toggle-input" />
-              <span class="toggle-label">Rich message format (cards + attachments)</span>
+              <span class="toggle-label">{{ t('notificationHub.richFormat') }}</span>
             </label>
           </div>
         </div>
@@ -171,7 +173,7 @@ onMounted(loadConfig);
         <!-- Event routing -->
         <div class="card">
           <div class="card-header">
-            <h3>Event Routing</h3>
+            <h3>{{ t('notificationHub.eventRouting') }}</h3>
           </div>
           <div
             v-for="(_enabled, key) in config.events"
@@ -194,8 +196,8 @@ onMounted(loadConfig);
       <!-- Preview -->
       <div class="card preview-card">
         <div class="card-header">
-          <h3>Message Preview</h3>
-          <span class="card-badge">Slack format</span>
+          <h3>{{ t('notificationHub.messagePreview') }}</h3>
+          <span class="card-badge">{{ t('notificationHub.slackFormat') }}</span>
         </div>
         <pre class="preview-code">{{ previewMessage }}</pre>
       </div>

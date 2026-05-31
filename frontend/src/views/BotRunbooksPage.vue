@@ -5,8 +5,10 @@
 // backend. See .planning/static-smell-triage.md. Ship the feature or
 // remove the route by EOQ3.
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
+const { t } = useI18n();
 const showToast = useToast();
 
 const isLoading = ref(true);
@@ -112,10 +114,10 @@ async function saveRunbook() {
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     Object.assign(selectedBot.value, editForm.value);
-    showToast('Runbook saved', 'success');
+    showToast(t('botRunbooks.toast.saved'), 'success');
   } catch {
     Object.assign(selectedBot.value, { ...editForm.value, runbook_id: editForm.value.runbook_id ?? `rb-${Date.now()}`, last_updated: new Date().toISOString() });
-    showToast('Runbook saved', 'success');
+    showToast(t('botRunbooks.toast.saved'), 'success');
   } finally {
     isSaving.value = false;
     isEditing.value = false;
@@ -123,7 +125,7 @@ async function saveRunbook() {
 }
 
 function formatDate(iso: string | null): string {
-  if (!iso) return 'Never';
+  if (!iso) return t('botRunbooks.never');
   return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
@@ -137,20 +139,20 @@ onMounted(() => {
 <template>
   <div class="runbooks-page">
 
-    <LoadingState v-if="isLoading" message="Loading runbooks..." />
+    <LoadingState v-if="isLoading" :message="t('botRunbooks.loading')" />
 
     <template v-else>
       <div class="page-layout">
         <!-- Bot List Sidebar -->
         <div class="bot-sidebar">
-          <div class="sidebar-title">Bots</div>
+          <div class="sidebar-title">{{ t('botRunbooks.bots') }}</div>
           <div v-for="bot in bots" :key="bot.bot_id"
             class="bot-item"
             :class="{ selected: selectedBotId === bot.bot_id }"
             @click="selectedBotId = bot.bot_id; isEditing = false">
             <div class="bot-item-name">{{ bot.bot_name }}</div>
             <span class="runbook-status" :class="bot.runbook_id ? 'has' : 'missing'">
-              {{ bot.runbook_id ? 'Runbook' : 'No runbook' }}
+              {{ bot.runbook_id ? t('botRunbooks.runbook') : t('botRunbooks.noRunbook') }}
             </span>
           </div>
         </div>
@@ -163,9 +165,9 @@ onMounted(() => {
               <div class="runbook-view-header">
                 <div>
                   <h2>{{ selectedBot.title }}</h2>
-                  <p class="runbook-meta">Last updated: {{ formatDate(selectedBot.last_updated) }} · On-call: {{ selectedBot.on_call_contact }}</p>
+                  <p class="runbook-meta">{{ t('botRunbooks.lastUpdated') }} {{ formatDate(selectedBot.last_updated) }} · {{ t('botRunbooks.onCall') }} {{ selectedBot.on_call_contact }}</p>
                 </div>
-                <button class="btn btn-ghost" @click="startEdit">Edit</button>
+                <button class="btn btn-ghost" @click="startEdit">{{ t('common.edit') }}</button>
               </div>
 
               <p class="runbook-desc">{{ selectedBot.description }}</p>
@@ -178,7 +180,7 @@ onMounted(() => {
               </div>
 
               <div v-if="Object.keys(selectedBot.severity_actions).length > 0" class="card severity-card">
-                <h3>Severity Action Matrix</h3>
+                <h3>{{ t('botRunbooks.severityMatrix') }}</h3>
                 <div class="severity-grid">
                   <div v-for="(action, sev) in selectedBot.severity_actions" :key="sev" class="severity-row">
                     <span class="sev-badge" :class="sev as string">{{ sev }}</span>
@@ -197,10 +199,10 @@ onMounted(() => {
                     <path d="M14 2v6h6M12 18v-6M9 15h6"/>
                   </svg>
                 </div>
-                <h3>No runbook for {{ selectedBot.bot_name }}</h3>
-                <p>Add a runbook so on-call engineers know exactly what to do when this bot fires a critical issue.</p>
+                <h3>{{ t('botRunbooks.noRunbookFor', { bot: selectedBot.bot_name }) }}</h3>
+                <p>{{ t('botRunbooks.emptyHint') }}</p>
                 <button class="btn btn-primary" @click="editForm = JSON.parse(JSON.stringify(selectedBot)); isEditing = true">
-                  Create Runbook
+                  {{ t('botRunbooks.createRunbook') }}
                 </button>
               </div>
             </template>
@@ -208,34 +210,34 @@ onMounted(() => {
             <!-- Edit Form -->
             <template v-if="isEditing">
               <div class="edit-header">
-                <h2>{{ selectedBot.runbook_id ? 'Edit Runbook' : 'Create Runbook' }} — {{ selectedBot.bot_name }}</h2>
+                <h2>{{ selectedBot.runbook_id ? t('botRunbooks.editRunbook') : t('botRunbooks.createRunbook') }} — {{ selectedBot.bot_name }}</h2>
                 <div class="edit-actions">
-                  <button class="btn btn-ghost" @click="isEditing = false">Cancel</button>
+                  <button class="btn btn-ghost" @click="isEditing = false">{{ t('common.cancel') }}</button>
                   <button class="btn btn-primary" :disabled="isSaving" @click="saveRunbook">
-                    {{ isSaving ? 'Saving...' : 'Save Runbook' }}
+                    {{ isSaving ? t('botRunbooks.saving') : t('botRunbooks.saveRunbook') }}
                   </button>
                 </div>
               </div>
 
               <div class="form-group">
-                <label>Title</label>
+                <label>{{ t('botRunbooks.field.title') }}</label>
                 <input v-model="editForm.title" type="text" class="form-input" placeholder="e.g. Security Audit Bot — Incident Runbook" />
               </div>
 
               <div class="form-group">
-                <label>Description</label>
-                <textarea v-model="editForm.description" class="form-input form-textarea" rows="2" placeholder="What is this runbook for?"></textarea>
+                <label>{{ t('botRunbooks.field.description') }}</label>
+                <textarea v-model="editForm.description" class="form-input form-textarea" rows="2" :placeholder="t('botRunbooks.field.descriptionPlaceholder')"></textarea>
               </div>
 
               <div class="form-group">
-                <label>On-Call Contact</label>
-                <input v-model="editForm.on_call_contact" type="text" class="form-input" placeholder="#slack-channel or email" />
+                <label>{{ t('botRunbooks.field.onCallContact') }}</label>
+                <input v-model="editForm.on_call_contact" type="text" class="form-input" :placeholder="t('botRunbooks.field.onCallPlaceholder')" />
               </div>
 
               <div class="sections-edit">
                 <div class="sections-header">
-                  <h3>Sections</h3>
-                  <button class="btn btn-ghost btn-sm" @click="addSection">+ Add Section</button>
+                  <h3>{{ t('botRunbooks.sections') }}</h3>
+                  <button class="btn btn-ghost btn-sm" @click="addSection">{{ t('botRunbooks.addSection') }}</button>
                 </div>
                 <div v-for="(section, i) in editForm.sections" :key="i" class="card section-edit-card">
                   <div class="section-edit-header">
@@ -243,12 +245,12 @@ onMounted(() => {
                     <button class="btn-remove" @click="removeSection(i)">✕</button>
                   </div>
                   <div class="form-group">
-                    <label>Section Title</label>
-                    <input v-model="section.title" type="text" class="form-input" :placeholder="`Step ${i + 1} title`" />
+                    <label>{{ t('botRunbooks.field.sectionTitle') }}</label>
+                    <input v-model="section.title" type="text" class="form-input" :placeholder="t('botRunbooks.field.sectionTitlePlaceholder', { num: i + 1 })" />
                   </div>
                   <div class="form-group">
-                    <label>Content</label>
-                    <textarea v-model="section.content" class="form-input form-textarea" rows="3" placeholder="Instructions..."></textarea>
+                    <label>{{ t('botRunbooks.field.content') }}</label>
+                    <textarea v-model="section.content" class="form-input form-textarea" rows="3" :placeholder="t('botRunbooks.field.contentPlaceholder')"></textarea>
                   </div>
                 </div>
               </div>
@@ -256,7 +258,7 @@ onMounted(() => {
           </template>
 
           <div v-else class="empty-select">
-            <p>Select a bot from the left to view or create its runbook.</p>
+            <p>{{ t('botRunbooks.selectBotHint') }}</p>
           </div>
         </div>
       </div>

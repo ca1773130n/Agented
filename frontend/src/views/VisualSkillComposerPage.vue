@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { userSkillsApi, skillSetsApi } from '../services/api';
 import type { UserSkill } from '../services/api';
 import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 interface Skill {
@@ -72,7 +74,7 @@ const categoryColors: Record<string, string> = {
 };
 
 const composedSlots = ref<ComposerSlot[]>([]);
-const composerName = ref('My PR Review Agent');
+const composerName = ref(t('visualSkillComposer.defaultName'));
 
 const composedSkills = computed(() =>
   composedSlots.value
@@ -89,7 +91,7 @@ const conflictWarnings = computed(() => {
       for (const conflictId of skill.conflicts) {
         if (composedSlots.value.some(s => s.skillId === conflictId)) {
           const conflictSkill = availableSkills.value.find(s => s.id === conflictId);
-          warnings.push(`"${skill.name}" conflicts with "${conflictSkill?.name}"`);
+          warnings.push(t('visualSkillComposer.conflictWarning', { skill: skill.name, other: conflictSkill?.name ?? '' }));
         }
       }
     }
@@ -129,7 +131,7 @@ function moveDown(idx: number) {
 
 async function saveComposition() {
   if (!composerName.value.trim()) {
-    showToast('Please enter a skill set name', 'error');
+    showToast(t('visualSkillComposer.toast.nameRequired'), 'error');
     return;
   }
   saving.value = true;
@@ -141,7 +143,7 @@ async function saveComposition() {
         name: composerName.value.trim(),
         skill_ids: skillIds,
       });
-      showToast(`"${composerName.value}" updated with ${skillIds.length} skills`, 'success');
+      showToast(t('visualSkillComposer.toast.updated', { name: composerName.value, count: skillIds.length }), 'success');
     } else {
       // Create new
       const res = await skillSetsApi.create({
@@ -149,10 +151,10 @@ async function saveComposition() {
         skill_ids: skillIds,
       });
       savedSetId.value = res.skill_set.id;
-      showToast(`"${composerName.value}" saved with ${skillIds.length} skills`, 'success');
+      showToast(t('visualSkillComposer.toast.saved', { name: composerName.value, count: skillIds.length }), 'success');
     }
   } catch {
-    showToast('Failed to save skill set', 'error');
+    showToast(t('visualSkillComposer.toast.saveFailed'), 'error');
   } finally {
     saving.value = false;
   }
@@ -174,22 +176,22 @@ const FEATURE_ENABLED = false;
 
     <NotEnabledBanner
       v-if="!FEATURE_ENABLED"
-      feature="Visual skill composer"
-      detail="The backend that persists composed skill stacks has not shipped yet. Saving the composer state is disabled."
+      :feature="t('visualSkillComposer.notEnabled.feature')"
+      :detail="t('visualSkillComposer.notEnabled.detail')"
       testid="visual-skill-composer-not-enabled"
     />
 
     <PageHeader
-      title="Visual Skill Composer"
-      subtitle="Combine and order skills to build coherent agent personas with a visual composer."
+      :title="t('visualSkillComposer.title')"
+      :subtitle="t('visualSkillComposer.subtitle')"
     />
 
     <div class="composer-layout">
       <!-- Left: Available skills -->
       <div class="panel available-panel">
         <div class="panel-header">
-          <h3>Available Skills</h3>
-          <span class="count-badge">{{ availableToAdd.length }} remaining</span>
+          <h3>{{ t('visualSkillComposer.availableSkills') }}</h3>
+          <span class="count-badge">{{ t('visualSkillComposer.remaining', { count: availableToAdd.length }) }}</span>
         </div>
         <div class="skills-library">
           <div
@@ -198,7 +200,7 @@ const FEATURE_ENABLED = false;
             class="skill-library-item"
             :class="{ disabled: !FEATURE_ENABLED }"
             :style="{ borderLeftColor: categoryColors[skill.category] }"
-            :title="!FEATURE_ENABLED ? 'Visual skill composer is not yet enabled in this deployment' : undefined"
+            :title="!FEATURE_ENABLED ? t('visualSkillComposer.disabledTooltip') : undefined"
             @click="FEATURE_ENABLED && addSkill(skill)"
           >
             <div class="skill-lib-top">
@@ -210,11 +212,11 @@ const FEATURE_ENABLED = false;
             <p class="skill-lib-desc">{{ skill.description }}</p>
             <button class="add-skill-btn" :disabled="!FEATURE_ENABLED">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Add
+              {{ t('common.add') }}
             </button>
           </div>
           <div v-if="availableToAdd.length === 0" class="all-added">
-            All skills have been added to the composition.
+            {{ t('visualSkillComposer.allAdded') }}
           </div>
         </div>
       </div>
@@ -223,15 +225,15 @@ const FEATURE_ENABLED = false;
       <div class="panel composer-panel">
         <div class="panel-header">
           <div class="name-field">
-            <input v-model="composerName" type="text" class="name-input" placeholder="Skill set name..." />
+            <input v-model="composerName" type="text" class="name-input" :placeholder="t('visualSkillComposer.namePlaceholder')" />
           </div>
           <button
             class="btn btn-primary"
             :disabled="!FEATURE_ENABLED"
-            :title="!FEATURE_ENABLED ? 'Visual skill composer is not yet enabled in this deployment' : undefined"
+            :title="!FEATURE_ENABLED ? t('visualSkillComposer.disabledTooltip') : undefined"
             data-testid="visual-skill-composer-save-submit"
             @click="saveComposition"
-          >Save Skill Set</button>
+          >{{ t('visualSkillComposer.saveSkillSet') }}</button>
         </div>
 
         <div v-if="conflictWarnings.length > 0" class="conflict-banner">
@@ -262,7 +264,7 @@ const FEATURE_ENABLED = false;
               <button
                 class="ctrl-btn"
                 :disabled="!FEATURE_ENABLED || idx === 0"
-                :title="!FEATURE_ENABLED ? 'Visual skill composer is not yet enabled in this deployment' : 'Move up'"
+                :title="!FEATURE_ENABLED ? t('visualSkillComposer.disabledTooltip') : t('visualSkillComposer.moveUp')"
                 @click="moveUp(idx)"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="18 15 12 9 6 15"/></svg>
@@ -270,7 +272,7 @@ const FEATURE_ENABLED = false;
               <button
                 class="ctrl-btn"
                 :disabled="!FEATURE_ENABLED || idx === composedSkills.length - 1"
-                :title="!FEATURE_ENABLED ? 'Visual skill composer is not yet enabled in this deployment' : 'Move down'"
+                :title="!FEATURE_ENABLED ? t('visualSkillComposer.disabledTooltip') : t('visualSkillComposer.moveDown')"
                 @click="moveDown(idx)"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="6 9 12 15 18 9"/></svg>
@@ -278,7 +280,7 @@ const FEATURE_ENABLED = false;
               <button
                 class="ctrl-btn remove-btn"
                 :disabled="!FEATURE_ENABLED"
-                :title="!FEATURE_ENABLED ? 'Visual skill composer is not yet enabled in this deployment' : 'Remove'"
+                :title="!FEATURE_ENABLED ? t('visualSkillComposer.disabledTooltip') : t('common.remove')"
                 @click="removeSkill(skill.id)"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -288,13 +290,13 @@ const FEATURE_ENABLED = false;
 
           <div v-if="composedSkills.length === 0" class="empty-composition">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32" style="color: var(--text-muted)"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-            <p>No skills added yet. Click skills on the left to add them.</p>
+            <p>{{ t('visualSkillComposer.emptyComposition') }}</p>
           </div>
         </div>
 
         <div class="prompt-preview">
-          <div class="preview-label">Prompt injection preview</div>
-          <pre class="preview-code"># Skills: {{ composerName || 'Unnamed Set' }}
+          <div class="preview-label">{{ t('visualSkillComposer.previewLabel') }}</div>
+          <pre class="preview-code"># Skills: {{ composerName || t('visualSkillComposer.unnamedSet') }}
 {{ composedSkills.map((s, i) => `${i + 1}. [${s.name}]: ${s.description}`).join('\n') }}</pre>
         </div>
       </div>

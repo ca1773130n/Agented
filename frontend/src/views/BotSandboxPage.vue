@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 const isLoading = ref(true);
@@ -82,7 +84,7 @@ async function loadData() {
 
 async function createSandbox() {
   if (!form.value.bot_id || !form.value.repo_url) {
-    showToast('Bot and repo URL are required', 'error');
+    showToast(t('botSandbox.toast.fieldsRequired'), 'error');
     return;
   }
   isCreating.value = true;
@@ -95,7 +97,7 @@ async function createSandbox() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const sandbox = await res.json();
     sandboxes.value.unshift(sandbox);
-    showToast('Sandbox created', 'success');
+    showToast(t('botSandbox.toast.created'), 'success');
   } catch {
     sandboxes.value.unshift({
       id: `sb-${Date.now()}`,
@@ -109,7 +111,7 @@ async function createSandbox() {
       last_run: null,
       run_count: 0,
     });
-    showToast('Sandbox created', 'success');
+    showToast(t('botSandbox.toast.created'), 'success');
   } finally {
     isCreating.value = false;
     showCreateForm.value = false;
@@ -132,7 +134,7 @@ async function runSandbox(sandbox: Sandbox) {
     sandbox.status = 'ready';
     sandbox.run_count++;
     sandbox.last_run = new Date().toISOString();
-    showToast('Sandbox run complete', 'success');
+    showToast(t('botSandbox.toast.runComplete'), 'success');
   } catch {
     // Demo log output
     runLog.value = [
@@ -150,7 +152,7 @@ async function runSandbox(sandbox: Sandbox) {
     sandbox.status = 'ready';
     sandbox.run_count++;
     sandbox.last_run = new Date().toISOString();
-    showToast('Sandbox run complete', 'success');
+    showToast(t('botSandbox.toast.runComplete'), 'success');
   } finally {
     isRunning.value = false;
   }
@@ -161,10 +163,10 @@ async function deleteSandbox(id: string) {
     await fetch(`/admin/sandboxes/${id}`, { method: 'DELETE' });
     sandboxes.value = sandboxes.value.filter(s => s.id !== id);
     if (selectedSandbox.value?.id === id) selectedSandbox.value = null;
-    showToast('Sandbox deleted', 'success');
+    showToast(t('botSandbox.toast.deleted'), 'success');
   } catch {
     sandboxes.value = sandboxes.value.filter(s => s.id !== id);
-    showToast('Sandbox deleted', 'success');
+    showToast(t('botSandbox.toast.deleted'), 'success');
   }
 }
 
@@ -173,7 +175,7 @@ function statusColor(status: Sandbox['status']): string {
 }
 
 function formatDate(iso: string | null): string {
-  if (!iso) return 'Never';
+  if (!iso) return t('botSandbox.never');
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
@@ -190,12 +192,12 @@ onMounted(loadData);
 
     <NotEnabledBanner
       v-if="!FEATURE_ENABLED"
-      feature="Bot sandbox"
-      detail="The backend that runs isolated bot sandboxes has not shipped yet. Starting a new sandbox run is disabled."
+      :feature="t('botSandbox.banner.feature')"
+      :detail="t('botSandbox.banner.detail')"
       testid="bot-sandbox-not-enabled"
     />
 
-    <LoadingState v-if="isLoading" message="Loading sandboxes..." />
+    <LoadingState v-if="isLoading" :message="t('botSandbox.loading')" />
 
     <template v-else>
       <!-- Intro banner -->
@@ -208,55 +210,55 @@ onMounted(loadData);
             </svg>
           </div>
           <div>
-            <h2>Bot Test Sandbox Environments</h2>
-            <p>Run bots against a sandboxed fork or branch without touching production repos. Bots can make changes, open PRs, and test integrations safely.</p>
+            <h2>{{ t('botSandbox.introTitle') }}</h2>
+            <p>{{ t('botSandbox.introBody') }}</p>
           </div>
         </div>
         <button
           class="btn btn-primary"
           :disabled="!FEATURE_ENABLED"
-          :title="!FEATURE_ENABLED ? 'Bot sandbox is not yet enabled in this deployment' : ''"
+          :title="!FEATURE_ENABLED ? t('botSandbox.notEnabledTooltip') : ''"
           @click="showCreateForm = !showCreateForm"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-          New Sandbox
+          {{ t('botSandbox.newSandbox') }}
         </button>
       </div>
 
       <!-- Create Form -->
       <div v-if="showCreateForm" class="card create-card">
-        <h3>Create Sandbox</h3>
+        <h3>{{ t('botSandbox.createSandbox') }}</h3>
         <div class="form-grid">
           <div class="form-group">
-            <label>Bot</label>
+            <label>{{ t('botSandbox.field.bot') }}</label>
             <select v-model="form.bot_id" class="form-input">
               <option value="bot-pr-review">PR Review Bot</option>
               <option value="bot-security">Security Audit Bot</option>
             </select>
           </div>
           <div class="form-group">
-            <label>Sandbox Name</label>
+            <label>{{ t('botSandbox.field.sandboxName') }}</label>
             <input v-model="form.name" type="text" class="form-input" placeholder="e.g. PR Review Test" />
           </div>
           <div class="form-group">
-            <label>Repo URL (to fork)</label>
+            <label>{{ t('botSandbox.field.repoUrl') }}</label>
             <input v-model="form.repo_url" type="text" class="form-input" placeholder="https://github.com/org/repo" />
           </div>
           <div class="form-group">
-            <label>Branch</label>
+            <label>{{ t('botSandbox.field.branch') }}</label>
             <input v-model="form.branch" type="text" class="form-input" placeholder="sandbox/test" />
           </div>
         </div>
         <div class="form-actions">
-          <button class="btn btn-ghost" @click="showCreateForm = false">Cancel</button>
+          <button class="btn btn-ghost" @click="showCreateForm = false">{{ t('common.cancel') }}</button>
           <button
             class="btn btn-primary"
             :disabled="isCreating || !FEATURE_ENABLED"
-            :title="!FEATURE_ENABLED ? 'Bot sandbox is not yet enabled in this deployment' : undefined"
+            :title="!FEATURE_ENABLED ? t('botSandbox.notEnabledTooltip') : undefined"
             data-testid="bot-sandbox-create-submit"
             @click="createSandbox"
           >
-            {{ isCreating ? 'Creating...' : 'Create Sandbox' }}
+            {{ isCreating ? t('botSandbox.creating') : t('botSandbox.createSandbox') }}
           </button>
         </div>
       </div>
@@ -265,7 +267,7 @@ onMounted(loadData);
         <!-- Sandbox List -->
         <div class="sandbox-list">
           <div v-if="sandboxes.length === 0" class="empty-state">
-            <p>No sandboxes yet. Create one to safely test bots.</p>
+            <p>{{ t('botSandbox.empty') }}</p>
           </div>
           <div v-for="sb in sandboxes" :key="sb.id"
             class="card sandbox-card"
@@ -289,23 +291,23 @@ onMounted(loadData);
               </span>
             </div>
             <div class="sandbox-footer">
-              <span class="run-count">{{ sb.run_count }} runs</span>
-              <span class="last-run">Last: {{ formatDate(sb.last_run) }}</span>
+              <span class="run-count">{{ t('botSandbox.runs', { count: sb.run_count }) }}</span>
+              <span class="last-run">{{ t('botSandbox.last') }} {{ formatDate(sb.last_run) }}</span>
               <div class="sandbox-actions" @click.stop>
                 <button
                   class="btn btn-primary btn-sm"
                   :disabled="(isRunning && selectedSandbox?.id === sb.id) || !FEATURE_ENABLED"
-                  :title="!FEATURE_ENABLED ? 'Bot sandbox is not yet enabled' : ''"
+                  :title="!FEATURE_ENABLED ? t('botSandbox.notEnabledShort') : ''"
                   @click="runSandbox(sb)"
                 >
-                  {{ isRunning && selectedSandbox?.id === sb.id ? 'Running...' : 'Run' }}
+                  {{ isRunning && selectedSandbox?.id === sb.id ? t('botSandbox.running') : t('botSandbox.run') }}
                 </button>
                 <button
                   class="btn btn-ghost btn-sm btn-danger"
                   :disabled="!FEATURE_ENABLED"
-                  :title="!FEATURE_ENABLED ? 'Bot sandbox is not yet enabled' : ''"
+                  :title="!FEATURE_ENABLED ? t('botSandbox.notEnabledShort') : ''"
                   @click="deleteSandbox(sb.id)"
-                >Delete</button>
+                >{{ t('common.delete') }}</button>
               </div>
             </div>
           </div>
@@ -314,16 +316,16 @@ onMounted(loadData);
         <!-- Log Panel -->
         <div v-if="selectedSandbox" class="card log-card">
           <div class="log-header">
-            <h3>{{ selectedSandbox.name }} — Run Log</h3>
+            <h3>{{ selectedSandbox.name }} — {{ t('botSandbox.runLog') }}</h3>
             <span class="status-label" :style="{ color: statusColor(selectedSandbox.status) }">{{ selectedSandbox.status }}</span>
           </div>
           <div class="log-output">
             <pre v-if="runLog">{{ runLog }}</pre>
             <div v-else-if="isRunning" class="log-running">
               <div class="spinner"></div>
-              Running sandbox...
+              {{ t('botSandbox.runningSandbox') }}
             </div>
-            <div v-else class="log-empty">Click "Run" to execute this sandbox</div>
+            <div v-else class="log-empty">{{ t('botSandbox.logEmpty') }}</div>
           </div>
         </div>
       </div>

@@ -1,20 +1,22 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { retentionApi } from '../services/api/retention';
 import type { RetentionPolicy } from '../services/api/retention';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 type DataCategory = 'execution_logs' | 'execution_outputs' | 'bot_memory' | 'audit_logs' | 'token_metrics';
 
 const categoryMeta: Record<DataCategory, { label: string; icon: string; color: string }> = {
-  execution_logs: { label: 'Execution Logs', icon: '📋', color: '#06b6d4' },
-  execution_outputs: { label: 'Execution Outputs', icon: '📄', color: '#a78bfa' },
-  bot_memory: { label: 'Bot Memory', icon: '🧠', color: '#34d399' },
-  audit_logs: { label: 'Audit Logs', icon: '🔍', color: '#f59e0b' },
-  token_metrics: { label: 'Token Metrics', icon: '📊', color: '#60a5fa' },
+  execution_logs: { label: t('dataRetentionPolicies.categories.executionLogs'), icon: '📋', color: '#06b6d4' },
+  execution_outputs: { label: t('dataRetentionPolicies.categories.executionOutputs'), icon: '📄', color: '#a78bfa' },
+  bot_memory: { label: t('dataRetentionPolicies.categories.botMemory'), icon: '🧠', color: '#34d399' },
+  audit_logs: { label: t('dataRetentionPolicies.categories.auditLogs'), icon: '🔍', color: '#f59e0b' },
+  token_metrics: { label: t('dataRetentionPolicies.categories.tokenMetrics'), icon: '📊', color: '#60a5fa' },
 };
 
 const policies = ref<RetentionPolicy[]>([]);
@@ -49,7 +51,7 @@ async function loadPolicies() {
     const data = await retentionApi.list();
     policies.value = data.policies;
   } catch {
-    showToast('Failed to load retention policies', 'error');
+    showToast(t('dataRetentionPolicies.toast.loadFailed'), 'error');
   } finally {
     loading.value = false;
   }
@@ -64,9 +66,9 @@ async function toggleEnabled(policy: RetentionPolicy) {
   try {
     await retentionApi.toggle(policy.id, Boolean(newEnabled));
     policy.enabled = newEnabled ? 1 : 0;
-    showToast(`Policy ${newEnabled ? 'enabled' : 'disabled'}`, 'success');
+    showToast(newEnabled ? t('dataRetentionPolicies.toast.enabled') : t('dataRetentionPolicies.toast.disabled'), 'success');
   } catch {
-    showToast('Failed to update policy', 'error');
+    showToast(t('dataRetentionPolicies.toast.updateFailed'), 'error');
   }
 }
 
@@ -74,9 +76,9 @@ async function deletePolicy(id: string) {
   try {
     await retentionApi.delete(id);
     policies.value = policies.value.filter(p => p.id !== id);
-    showToast('Retention policy removed', 'success');
+    showToast(t('dataRetentionPolicies.toast.removed'), 'success');
   } catch {
-    showToast('Failed to delete policy', 'error');
+    showToast(t('dataRetentionPolicies.toast.deleteFailed'), 'error');
   }
 }
 
@@ -86,15 +88,15 @@ async function runCleanup() {
     // PR-R: enforcement is deferred to a follow-up PR. Surface the
     // backend's message (which says "queued — enforcement ships next") so
     // operators aren't surprised when no rows disappear.
-    showToast(res.message ?? 'Cleanup queued', 'success');
+    showToast(res.message ?? t('dataRetentionPolicies.toast.cleanupQueued'), 'success');
   } catch {
-    showToast('Failed to queue cleanup job', 'error');
+    showToast(t('dataRetentionPolicies.toast.cleanupFailed'), 'error');
   }
 }
 
 async function savePolicy() {
   if (newDays.value < 1) {
-    showToast('Retention period must be at least 1 day', 'error');
+    showToast(t('dataRetentionPolicies.toast.minDays'), 'error');
     return;
   }
   try {
@@ -109,9 +111,9 @@ async function savePolicy() {
     });
     policies.value.unshift(created);
     showAddModal.value = false;
-    showToast('Retention policy added', 'success');
+    showToast(t('dataRetentionPolicies.toast.added'), 'success');
   } catch {
-    showToast('Failed to add retention policy', 'error');
+    showToast(t('dataRetentionPolicies.toast.addFailed'), 'error');
   }
 }
 
@@ -130,8 +132,8 @@ onMounted(loadPolicies);
   <div class="data-retention">
 
     <PageHeader
-      title="Data Retention Policies"
-      subtitle="Configure how long execution logs, outputs, and metrics are stored per team or bot."
+      :title="t('dataRetentionPolicies.title')"
+      :subtitle="t('dataRetentionPolicies.subtitle')"
     >
       <template #actions>
         <button
@@ -139,14 +141,14 @@ onMounted(loadPolicies);
           @click="runCleanup"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/></svg>
-          Run Cleanup Now
+          {{ t('dataRetentionPolicies.runCleanup') }}
         </button>
         <button
           class="btn btn-primary"
           @click="showAddModal = true"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Add Policy
+          {{ t('dataRetentionPolicies.addPolicy') }}
         </button>
       </template>
     </PageHeader>
@@ -155,19 +157,19 @@ onMounted(loadPolicies);
     <div class="summary-row">
       <div class="stat-card">
         <span class="stat-value">{{ policies.length }}</span>
-        <span class="stat-label">Active Policies</span>
+        <span class="stat-label">{{ t('dataRetentionPolicies.stats.activePolicies') }}</span>
       </div>
       <div class="stat-card">
         <span class="stat-value">{{ totalEstimatedGB.toFixed(1) }} GB</span>
-        <span class="stat-label">Total Managed Data</span>
+        <span class="stat-label">{{ t('dataRetentionPolicies.stats.totalManaged') }}</span>
       </div>
       <div class="stat-card">
         <span class="stat-value">{{ policiesWithExpiry.length }}</span>
-        <span class="stat-label">Policies Enforced</span>
+        <span class="stat-label">{{ t('dataRetentionPolicies.stats.enforced') }}</span>
       </div>
       <div class="stat-card">
         <span class="stat-value">{{ Math.round(totalEstimatedGB * 0.15 * 10) / 10 }} GB</span>
-        <span class="stat-label">Est. Monthly Savings</span>
+        <span class="stat-label">{{ t('dataRetentionPolicies.stats.monthlySavings') }}</span>
       </div>
     </div>
 
@@ -176,18 +178,18 @@ onMounted(loadPolicies);
       <div class="card-header">
         <h3>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-          Retention Policies
+          {{ t('dataRetentionPolicies.listTitle') }}
         </h3>
       </div>
-      <div v-if="loading" class="empty-row">Loading...</div>
+      <div v-if="loading" class="empty-row">{{ t('dataRetentionPolicies.loading') }}</div>
       <div v-else class="policies-table">
         <div class="table-header">
-          <span>Data Category</span>
-          <span>Scope</span>
-          <span>Retention</span>
-          <span>On Expiry</span>
-          <span>Est. Size</span>
-          <span>Status</span>
+          <span>{{ t('dataRetentionPolicies.table.category') }}</span>
+          <span>{{ t('dataRetentionPolicies.table.scope') }}</span>
+          <span>{{ t('dataRetentionPolicies.table.retention') }}</span>
+          <span>{{ t('dataRetentionPolicies.table.onExpiry') }}</span>
+          <span>{{ t('dataRetentionPolicies.table.estSize') }}</span>
+          <span>{{ t('dataRetentionPolicies.table.status') }}</span>
           <span></span>
         </div>
         <div v-for="policy in policies" :key="policy.id" class="table-row" :class="{ disabled: !policy.enabled }">
@@ -205,8 +207,8 @@ onMounted(loadPolicies);
             <span class="days-value">{{ policy.retention_days }}d</span>
           </div>
           <div class="expiry-cell">
-            <span v-if="policy.archive_on_expiry" class="expiry-tag archive">Archive</span>
-            <span v-if="policy.delete_on_expiry" class="expiry-tag delete">Delete</span>
+            <span v-if="policy.archive_on_expiry" class="expiry-tag archive">{{ t('dataRetentionPolicies.archive') }}</span>
+            <span v-if="policy.delete_on_expiry" class="expiry-tag delete">{{ t('dataRetentionPolicies.delete') }}</span>
           </div>
           <div class="size-cell">{{ (policy.estimated_size_gb ?? 0).toFixed(2) }} GB</div>
           <div class="status-cell">
@@ -215,20 +217,20 @@ onMounted(loadPolicies);
               :class="{ active: policy.enabled }"
               @click="toggleEnabled(policy)"
             >
-              {{ policy.enabled ? 'Active' : 'Off' }}
+              {{ policy.enabled ? t('dataRetentionPolicies.active') : t('dataRetentionPolicies.off') }}
             </button>
           </div>
           <div class="actions-cell">
             <button
               class="icon-btn"
-              title="Remove policy"
+              :title="t('dataRetentionPolicies.removePolicy')"
               @click="deletePolicy(policy.id)"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
             </button>
           </div>
         </div>
-        <div v-if="policies.length === 0" class="empty-row">No retention policies configured.</div>
+        <div v-if="policies.length === 0" class="empty-row">{{ t('dataRetentionPolicies.empty') }}</div>
       </div>
     </div>
 
@@ -236,57 +238,57 @@ onMounted(loadPolicies);
     <div v-if="showAddModal" class="modal-overlay" tabindex="-1" @click.self="showAddModal = false" @keydown.escape="showAddModal = false">
       <div class="modal">
         <div class="modal-header">
-          <h3>Add Retention Policy</h3>
+          <h3>{{ t('dataRetentionPolicies.modal.title') }}</h3>
           <button class="icon-btn" @click="showAddModal = false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
         <div class="modal-body">
           <div class="field-group">
-            <label class="field-label">Data Category</label>
+            <label class="field-label">{{ t('dataRetentionPolicies.table.category') }}</label>
             <select v-model="newCategory" class="select-input">
               <option v-for="(meta, cat) in categoryMeta" :key="cat" :value="cat">{{ meta.label }}</option>
             </select>
           </div>
           <div class="field-group">
-            <label class="field-label">Scope</label>
+            <label class="field-label">{{ t('dataRetentionPolicies.table.scope') }}</label>
             <select v-model="newScope" class="select-input" @change="onScopeChange">
-              <option value="global">Global (all teams)</option>
-              <option value="team">Specific Team</option>
-              <option value="bot">Specific Bot</option>
+              <option value="global">{{ t('dataRetentionPolicies.modal.scopeGlobal') }}</option>
+              <option value="team">{{ t('dataRetentionPolicies.modal.scopeTeam') }}</option>
+              <option value="bot">{{ t('dataRetentionPolicies.modal.scopeBot') }}</option>
             </select>
           </div>
           <div class="field-group">
-            <label class="field-label">{{ newScope === 'global' ? 'Applies to' : newScope === 'team' ? 'Team' : 'Bot' }}</label>
+            <label class="field-label">{{ newScope === 'global' ? t('dataRetentionPolicies.modal.appliesTo') : newScope === 'team' ? t('dataRetentionPolicies.modal.team') : t('dataRetentionPolicies.modal.bot') }}</label>
             <select v-model="newScopeName" class="select-input">
               <option v-for="opt in scopeOptions[newScope]" :key="opt" :value="opt">{{ opt }}</option>
             </select>
           </div>
           <div class="field-group">
-            <label class="field-label">Retention Period (days)</label>
+            <label class="field-label">{{ t('dataRetentionPolicies.modal.retentionPeriod') }}</label>
             <input v-model.number="newDays" type="number" min="1" max="3650" class="text-input" />
           </div>
           <div class="field-group">
-            <label class="field-label">On Expiry Action</label>
+            <label class="field-label">{{ t('dataRetentionPolicies.modal.onExpiryAction') }}</label>
             <div class="checkbox-row">
               <label class="check-label">
                 <input v-model="newDeleteOnExpiry" type="checkbox" />
-                Delete permanently
+                {{ t('dataRetentionPolicies.modal.deletePermanently') }}
               </label>
               <label class="check-label">
                 <input v-model="newArchiveOnExpiry" type="checkbox" />
-                Archive to cold storage
+                {{ t('dataRetentionPolicies.modal.archiveColdStorage') }}
               </label>
             </div>
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="showAddModal = false">Cancel</button>
+          <button class="btn btn-secondary" @click="showAddModal = false">{{ t('common.cancel') }}</button>
           <button
             class="btn btn-primary"
             data-testid="data-retention-save-submit"
             @click="savePolicy"
-          >Add Policy</button>
+          >{{ t('dataRetentionPolicies.addPolicy') }}</button>
         </div>
       </div>
     </div>

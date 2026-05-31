@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, watch, onBeforeUnmount } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useStreamingParser } from '../../composables/useAiChat';
+
+const { t } = useI18n();
 
 const outputContainer = ref<HTMLElement | null>(null);
 const isNearBottom = ref(true);
@@ -78,7 +81,7 @@ onBeforeUnmount(() => {
     <button
       v-if="!isNearBottom"
       class="scroll-bottom-btn"
-      title="Scroll to bottom"
+      :title="t('sessionOutput.scrollToBottom')"
       @click="scrollToBottom"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

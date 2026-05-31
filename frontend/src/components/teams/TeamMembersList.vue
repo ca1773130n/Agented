@@ -5,6 +5,9 @@ import { teamApi, agentApi, ApiError } from '../../services/api';
 import ConfirmModal from '../base/ConfirmModal.vue';
 import { useToast } from '../../composables/useToast';
 import { useFocusTrap } from '../../composables/useFocusTrap';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   team: Team;
@@ -54,7 +57,7 @@ async function openAddMemberModal() {
     const data = await agentApi.list();
     agents.value = data.agents || [];
   } catch (err) {
-    showToast('Failed to load agents', 'error');
+    showToast(t('teamMembersList.loadAgentsError'), 'error');
   }
 }
 
@@ -68,7 +71,7 @@ function onAgentSelect(agentId: string) {
 
 async function addMember() {
   if (!newMember.value.name) {
-    showToast('Member name is required', 'error');
+    showToast(t('teamMembersList.nameRequired'), 'error');
     return;
   }
   isAddingMember.value = true;
@@ -80,11 +83,11 @@ async function addMember() {
       layer: newMember.value.layer,
       agent_id: newMember.value.agent_id || undefined,
     });
-    showToast('Member added successfully', 'success');
+    showToast(t('teamMembersList.memberAdded'), 'success');
     showAddMemberModal.value = false;
     emit('member-added');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to add member';
+    const message = err instanceof ApiError ? err.message : t('teamMembersList.addError');
     showToast(message, 'error');
   } finally {
     isAddingMember.value = false;
@@ -103,10 +106,10 @@ async function confirmRemoveMember() {
   if (memberId === null) return;
   try {
     await teamApi.removeMember(props.teamId, memberId);
-    showToast('Member removed', 'success');
+    showToast(t('teamMembersList.memberRemoved'), 'success');
     emit('member-removed');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to remove member';
+    const message = err instanceof ApiError ? err.message : t('teamMembersList.removeError');
     showToast(message, 'error');
   }
 }
@@ -117,14 +120,14 @@ async function confirmRemoveMember() {
   <div class="card">
     <div class="card-header">
       <div class="header-left">
-        <h3>Team Members</h3>
-        <span class="card-count">{{ team.members?.length || 0 }} members</span>
+        <h3>{{ t('teamMembersList.title') }}</h3>
+        <span class="card-count">{{ t('teamMembersList.membersCount', { count: team.members?.length || 0 }) }}</span>
       </div>
       <button class="add-btn" @click="openAddMemberModal">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 5v14M5 12h14"/>
         </svg>
-        Add Member
+        {{ t('teamMembersList.addMember') }}
       </button>
     </div>
 
@@ -137,8 +140,8 @@ async function confirmRemoveMember() {
           <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
         </svg>
       </div>
-      <p>No members yet</p>
-      <span>Add members to this team from the Teams page</span>
+      <p>{{ t('teamMembersList.empty') }}</p>
+      <span>{{ t('teamMembersList.emptyHint') }}</span>
     </div>
 
     <div v-else class="members-list">
@@ -162,10 +165,10 @@ async function confirmRemoveMember() {
           <span v-if="member.role" class="member-description">{{ member.role }}</span>
         </div>
         <div class="member-badges">
-          <span v-if="member.agent_id" class="badge agent-badge">Agent</span>
+          <span v-if="member.agent_id" class="badge agent-badge">{{ t('teamMembersList.agentBadge') }}</span>
           <span v-if="member.layer" class="badge" :class="getLayerClass(member.layer)">{{ member.layer }}</span>
         </div>
-        <button class="remove-btn" @click="removeMember(member.id)" title="Remove member">
+        <button class="remove-btn" @click="removeMember(member.id)" :title="t('teamMembersList.removeMember')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M18 6L6 18M6 6l12 12"/>
           </svg>
@@ -178,7 +181,7 @@ async function confirmRemoveMember() {
   <div v-if="showAddMemberModal" ref="addMemberModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-add-member" tabindex="-1" @click.self="showAddMemberModal = false" @keydown.escape="showAddMemberModal = false">
     <div class="modal">
       <div class="modal-header">
-        <h3 id="modal-title-add-member">Add Team Member</h3>
+        <h3 id="modal-title-add-member">{{ t('teamMembersList.addModalTitle') }}</h3>
         <button class="modal-close" @click="showAddMemberModal = false">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M18 6L6 18M6 6l12 12"/>
@@ -188,54 +191,54 @@ async function confirmRemoveMember() {
       <div class="modal-body">
         <!-- Agent Selection -->
         <div class="form-group">
-          <label for="member-agent">Select Agent (optional)</label>
+          <label for="member-agent">{{ t('teamMembersList.selectAgent') }}</label>
           <select id="member-agent" v-model="newMember.agent_id" class="form-select" @change="onAgentSelect(newMember.agent_id)">
-            <option value="">-- No agent (manual entry) --</option>
+            <option value="">{{ t('teamMembersList.noAgentOption') }}</option>
             <option v-for="agent in agents" :key="agent.id" :value="agent.id">
               {{ agent.name }}
             </option>
           </select>
-          <span class="form-hint">Select an agent to auto-fill name, or leave empty for manual entry</span>
+          <span class="form-hint">{{ t('teamMembersList.selectAgentHint') }}</span>
         </div>
 
         <!-- Name -->
         <div class="form-group">
-          <label for="member-name">Name *</label>
-          <input id="member-name" v-model="newMember.name" type="text" class="form-input" placeholder="Member name" :disabled="!!newMember.agent_id">
+          <label for="member-name">{{ t('teamMembersList.name') }}</label>
+          <input id="member-name" v-model="newMember.name" type="text" class="form-input" :placeholder="t('teamMembersList.namePlaceholder')" :disabled="!!newMember.agent_id">
         </div>
 
         <!-- Email -->
         <div class="form-group">
-          <label for="member-email">Email</label>
+          <label for="member-email">{{ t('teamMembersList.email') }}</label>
           <input id="member-email" v-model="newMember.email" type="email" class="form-input" placeholder="member@example.com">
         </div>
 
         <!-- Role -->
         <div class="form-group">
-          <label for="member-role">Role</label>
+          <label for="member-role">{{ t('teamMembersList.role') }}</label>
           <select id="member-role" v-model="newMember.role" class="form-select">
-            <option value="member">Member</option>
-            <option value="senior">Senior</option>
-            <option value="lead">Lead</option>
+            <option value="member">{{ t('teamMembersList.roleMember') }}</option>
+            <option value="senior">{{ t('teamMembersList.roleSenior') }}</option>
+            <option value="lead">{{ t('teamMembersList.roleLead') }}</option>
           </select>
         </div>
 
         <!-- Layer -->
         <div class="form-group">
-          <label for="member-layer">Layer</label>
+          <label for="member-layer">{{ t('teamMembersList.layer') }}</label>
           <select id="member-layer" v-model="newMember.layer" class="form-select">
-            <option value="frontend">Frontend</option>
-            <option value="backend">Backend</option>
-            <option value="devops">DevOps</option>
-            <option value="fullstack">Fullstack</option>
+            <option value="frontend">{{ t('teamMembersList.layerFrontend') }}</option>
+            <option value="backend">{{ t('teamMembersList.layerBackend') }}</option>
+            <option value="devops">{{ t('teamMembersList.layerDevops') }}</option>
+            <option value="fullstack">{{ t('teamMembersList.layerFullstack') }}</option>
           </select>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" @click="showAddMemberModal = false">Cancel</button>
+        <button class="btn btn-secondary" @click="showAddMemberModal = false">{{ t('common.cancel') }}</button>
         <button class="btn btn-primary" :disabled="!newMember.name || isAddingMember" @click="addMember">
-          <span v-if="isAddingMember">Adding...</span>
-          <span v-else>Add Member</span>
+          <span v-if="isAddingMember">{{ t('teamMembersList.adding') }}</span>
+          <span v-else>{{ t('teamMembersList.addMember') }}</span>
         </button>
       </div>
     </div>
@@ -243,9 +246,9 @@ async function confirmRemoveMember() {
 
   <ConfirmModal
     :open="showRemoveMemberConfirm"
-    title="Remove Member"
-    message="Are you sure you want to remove this member?"
-    confirm-label="Remove"
+    :title="t('teamMembersList.removeConfirmTitle')"
+    :message="t('teamMembersList.removeConfirmMessage')"
+    :confirm-label="t('common.remove')"
     variant="danger"
     @confirm="confirmRemoveMember"
     @cancel="showRemoveMemberConfirm = false"

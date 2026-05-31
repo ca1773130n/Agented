@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { PlanningQuestion } from '../../composables/usePlanningSession';
 import { renderMarkdown, attachCodeCopyHandlers } from '../../composables/useMarkdown';
 import { useAutoScroll } from '../../composables/useAutoScroll';
@@ -16,6 +17,8 @@ const emit = defineEmits<{
   stop: [];
   clear: [];
 }>();
+
+const { t } = useI18n();
 
 // Answer state
 const textAnswer = ref('');
@@ -55,15 +58,17 @@ watch(
 const statusLabel = computed(() => {
   switch (props.status) {
     case 'running':
-      return 'Running...';
+      return t('planningSessionPanel.status.running');
     case 'waiting_input':
-      return 'Waiting for input...';
+      return t('planningSessionPanel.status.waitingInput');
     case 'complete':
-      return props.exitCode === 0 ? 'Complete' : `Exited with code ${props.exitCode}`;
+      return props.exitCode === 0
+        ? t('planningSessionPanel.status.complete')
+        : t('planningSessionPanel.status.exitedWithCode', { code: props.exitCode });
     case 'error':
-      return 'Error';
+      return t('planningSessionPanel.status.error');
     default:
-      return 'Idle';
+      return t('planningSessionPanel.status.idle');
   }
 });
 
@@ -106,14 +111,14 @@ function handleTextKeydown(event: KeyboardEvent) {
           class="action-btn stop-btn"
           @click="emit('stop')"
         >
-          Stop
+          {{ t('planningSessionPanel.stop') }}
         </button>
         <button
           v-if="status === 'complete' || status === 'error'"
           class="action-btn clear-btn"
           @click="emit('clear')"
         >
-          Clear
+          {{ t('planningSessionPanel.clear') }}
         </button>
       </div>
     </div>
@@ -127,10 +132,10 @@ function handleTextKeydown(event: KeyboardEvent) {
           v-html="renderedOutput"
         ></div>
         <div v-else-if="status === 'idle'" class="empty-state">
-          Select a command to start a planning session.
+          {{ t('planningSessionPanel.empty.idle') }}
         </div>
         <div v-else-if="status === 'running' && outputLines.length === 0" class="empty-state">
-          Waiting for output...
+          {{ t('planningSessionPanel.empty.waitingOutput') }}
         </div>
 
         <!-- Structured question widget (from question SSE events) -->
@@ -160,7 +165,7 @@ function handleTextKeydown(event: KeyboardEvent) {
               :disabled="selectedOptions.length === 0"
               @click="handleSendMultiselect"
             >
-              Submit
+              {{ t('planningSessionPanel.submit') }}
             </button>
           </div>
 
@@ -170,7 +175,7 @@ function handleTextKeydown(event: KeyboardEvent) {
               v-model="textAnswer"
               :type="currentQuestion.question_type === 'password' ? 'password' : 'text'"
               class="text-input"
-              placeholder="Type your answer..."
+              :placeholder="t('planningSessionPanel.answerPlaceholder')"
               @keydown="handleTextKeydown"
               autofocus
             />
@@ -179,7 +184,7 @@ function handleTextKeydown(event: KeyboardEvent) {
               :disabled="!textAnswer.trim()"
               @click="handleSendText"
             >
-              Send
+              {{ t('planningSessionPanel.send') }}
             </button>
           </div>
         </div>
@@ -195,7 +200,7 @@ function handleTextKeydown(event: KeyboardEvent) {
         v-model="textAnswer"
         type="text"
         class="text-input"
-        placeholder="Type a response..."
+        :placeholder="t('planningSessionPanel.responsePlaceholder')"
         @keydown="handleTextKeydown"
       />
       <button
@@ -203,7 +208,7 @@ function handleTextKeydown(event: KeyboardEvent) {
         :disabled="!textAnswer.trim()"
         @click="handleSendText"
       >
-        Send
+        {{ t('planningSessionPanel.send') }}
       </button>
     </div>
   </div>

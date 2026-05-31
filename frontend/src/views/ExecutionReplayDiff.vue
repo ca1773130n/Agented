@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { Execution, ReplayComparison, OutputDiff } from '../services/api';
 import { executionApi, replayApi, ApiError } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
+const { t } = useI18n();
 const showToast = useToast();
 
 const executions = ref<Execution[]>([]);
@@ -25,7 +27,7 @@ async function loadExecutions() {
     const res = await executionApi.listAll({ limit: 50 });
     executions.value = res.executions ?? [];
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load executions';
+    const message = err instanceof ApiError ? err.message : t('executionReplayDiff.errors.loadExecutions');
     showToast(message, 'error');
   } finally {
     isLoading.value = false;
@@ -37,10 +39,10 @@ async function handleReplay() {
   isReplaying.value = true;
   try {
     await replayApi.create(selectedExecA.value, 'Manual replay from diff viewer');
-    showToast('Replay started successfully', 'success');
+    showToast(t('executionReplayDiff.toast.replayStarted'), 'success');
     await loadExecutions();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to start replay';
+    const message = err instanceof ApiError ? err.message : t('executionReplayDiff.errors.startReplay');
     showToast(message, 'error');
   } finally {
     isReplaying.value = false;
@@ -54,14 +56,14 @@ async function handleLoadDiff() {
     const comparisons = await replayApi.getComparisons(selectedExecA.value);
     const list = comparisons.comparisons ?? [];
     if (list.length === 0) {
-      showToast('No comparisons found for this execution', 'info');
+      showToast(t('executionReplayDiff.toast.noComparisons'), 'info');
       return;
     }
     comparison.value = list[0];
     const diffData = await replayApi.getDiff(list[0].id);
     diff.value = diffData;
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load diff';
+    const message = err instanceof ApiError ? err.message : t('executionReplayDiff.errors.loadDiff');
     showToast(message, 'error');
   } finally {
     isLoadingDiff.value = false;
@@ -85,11 +87,11 @@ onMounted(loadExecutions);
   <div class="replay-diff">
 
     <PageHeader
-      title="Execution Replay & Diff"
-      subtitle="Compare two execution outputs side-by-side and replay past executions."
+      :title="t('executionReplayDiff.title')"
+      :subtitle="t('executionReplayDiff.subtitle')"
     />
 
-    <LoadingState v-if="isLoading" message="Loading executions..." />
+    <LoadingState v-if="isLoading" :message="t('executionReplayDiff.loading')" />
 
     <template v-else>
       <div class="card selector-card">
@@ -99,25 +101,25 @@ onMounted(loadExecutions);
               <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
               <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
             </svg>
-            Select Executions to Compare
+            {{ t('executionReplayDiff.selectToCompare') }}
           </h3>
         </div>
         <div class="selector-body">
           <div class="selector-row">
             <div class="selector-group">
-              <label class="field-label">Execution A (base)</label>
+              <label class="field-label">{{ t('executionReplayDiff.executionA') }}</label>
               <select v-model="selectedExecA" class="select-input">
-                <option value="">-- Select execution --</option>
+                <option value="">{{ t('executionReplayDiff.selectExecution') }}</option>
                 <option v-for="ex in executions" :key="ex.execution_id" :value="ex.execution_id">
                   {{ ex.execution_id.slice(0, 8) }} — {{ ex.status }} — {{ formatDate(ex.started_at) }}
                 </option>
               </select>
             </div>
-            <div class="selector-vs">vs</div>
+            <div class="selector-vs">{{ t('executionReplayDiff.vs') }}</div>
             <div class="selector-group">
-              <label class="field-label">Execution B (compare)</label>
+              <label class="field-label">{{ t('executionReplayDiff.executionB') }}</label>
               <select v-model="selectedExecB" class="select-input">
-                <option value="">-- Select execution --</option>
+                <option value="">{{ t('executionReplayDiff.selectExecution') }}</option>
                 <option v-for="ex in filteredExecsB" :key="ex.execution_id" :value="ex.execution_id">
                   {{ ex.execution_id.slice(0, 8) }} — {{ ex.status }} — {{ formatDate(ex.started_at) }}
                 </option>
@@ -133,7 +135,7 @@ onMounted(loadExecutions);
               <svg v-if="isLoadingDiff" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                 <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
               </svg>
-              {{ isLoadingDiff ? 'Loading...' : 'Load Diff' }}
+              {{ isLoadingDiff ? t('executionReplayDiff.loadingShort') : t('executionReplayDiff.loadDiff') }}
             </button>
             <button
               class="btn btn-primary"
@@ -146,7 +148,7 @@ onMounted(loadExecutions);
               <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                 <polygon points="5 3 19 12 5 21 5 3"/>
               </svg>
-              {{ isReplaying ? 'Replaying...' : 'Replay Execution A' }}
+              {{ isReplaying ? t('executionReplayDiff.replaying') : t('executionReplayDiff.replayExecutionA') }}
             </button>
           </div>
         </div>
@@ -161,9 +163,9 @@ onMounted(loadExecutions);
               <line x1="9" y1="9" x2="15" y2="9"/>
               <line x1="9" y1="15" x2="15" y2="15"/>
             </svg>
-            Recent Executions
+            {{ t('executionReplayDiff.recentExecutions') }}
           </h3>
-          <span class="card-badge">{{ executions.length }} total</span>
+          <span class="card-badge">{{ t('executionReplayDiff.totalCount', { count: executions.length }) }}</span>
         </div>
         <div class="exec-list">
           <div
@@ -190,19 +192,19 @@ onMounted(loadExecutions);
               <line x1="5" y1="12" x2="19" y2="12"/>
               <polyline points="12 5 19 12 12 19"/>
             </svg>
-            Output Diff
+            {{ t('executionReplayDiff.outputDiff') }}
           </h3>
-          <span class="badge-info">{{ comparison ? 'compared' : 'comparing' }}</span>
+          <span class="badge-info">{{ comparison ? t('executionReplayDiff.compared') : t('executionReplayDiff.comparing') }}</span>
         </div>
         <div class="diff-body">
           <div class="diff-panels">
             <div class="diff-panel">
-              <div class="diff-panel-label">Original</div>
-              <pre class="diff-pre">{{ diff.diff_lines.filter(l => l.type !== 'added').map(l => l.content).join('\n') || '(no output)' }}</pre>
+              <div class="diff-panel-label">{{ t('executionReplayDiff.original') }}</div>
+              <pre class="diff-pre">{{ diff.diff_lines.filter(l => l.type !== 'added').map(l => l.content).join('\n') || t('executionReplayDiff.noOutput') }}</pre>
             </div>
             <div class="diff-panel">
-              <div class="diff-panel-label">Replay</div>
-              <pre class="diff-pre">{{ diff.diff_lines.filter(l => l.type !== 'removed').map(l => l.content).join('\n') || '(no output)' }}</pre>
+              <div class="diff-panel-label">{{ t('executionReplayDiff.replay') }}</div>
+              <pre class="diff-pre">{{ diff.diff_lines.filter(l => l.type !== 'removed').map(l => l.content).join('\n') || t('executionReplayDiff.noOutput') }}</pre>
             </div>
           </div>
         </div>

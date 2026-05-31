@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = withDefaults(defineProps<{
   entityType: string;
@@ -39,7 +42,7 @@ function validate(): boolean {
   if (execTime) {
     const val = parseInt(execTime, 10);
     if (isNaN(val) || val <= 0) {
-      fieldErrors.value.maxExecutionTime = 'Must be a positive integer or empty';
+      fieldErrors.value.maxExecutionTime = t('budgetLimitsExtended.positiveIntegerError');
     }
   }
 
@@ -47,7 +50,7 @@ function validate(): boolean {
   if (monthlyRuns) {
     const val = parseInt(monthlyRuns, 10);
     if (isNaN(val) || val <= 0) {
-      fieldErrors.value.maxMonthlyRuns = 'Must be a positive integer or empty';
+      fieldErrors.value.maxMonthlyRuns = t('budgetLimitsExtended.positiveIntegerError');
     }
   }
 
@@ -78,46 +81,46 @@ function handleSave() {
         <polyline points="12 6 12 12 16 14"/>
       </svg>
       <div>
-        <h4>Execution Limits</h4>
-        <p class="section-subtitle">Set guardrails for execution time and monthly run count</p>
+        <h4>{{ t('budgetLimitsExtended.title') }}</h4>
+        <p class="section-subtitle">{{ t('budgetLimitsExtended.subtitle') }}</p>
       </div>
     </div>
 
     <div class="form-fields">
       <!-- Max Execution Time -->
       <div class="form-group">
-        <label>Maximum execution time per run (seconds)</label>
+        <label>{{ t('budgetLimitsExtended.maxExecTimeLabel') }}</label>
         <input
           type="number"
           v-model="maxExecutionTime"
           min="1"
           step="1"
-          placeholder="No limit"
+          :placeholder="t('budgetLimitsExtended.noLimit')"
           :class="{ error: fieldErrors.maxExecutionTime }"
         >
-        <div class="field-hint">Execution will be gracefully cancelled if it exceeds this limit. Leave empty for no limit.</div>
+        <div class="field-hint">{{ t('budgetLimitsExtended.maxExecTimeHint') }}</div>
         <div v-if="fieldErrors.maxExecutionTime" class="field-error">{{ fieldErrors.maxExecutionTime }}</div>
       </div>
 
       <!-- Max Monthly Runs -->
       <div class="form-group">
-        <label>Maximum executions per month</label>
+        <label>{{ t('budgetLimitsExtended.maxMonthlyRunsLabel') }}</label>
         <input
           type="number"
           v-model="maxMonthlyRuns"
           min="1"
           step="1"
-          placeholder="No limit"
+          :placeholder="t('budgetLimitsExtended.noLimit')"
           :class="{ error: fieldErrors.maxMonthlyRuns }"
         >
-        <div class="field-hint">New executions will be blocked after reaching this limit. Leave empty for no limit.</div>
+        <div class="field-hint">{{ t('budgetLimitsExtended.maxMonthlyRunsHint') }}</div>
         <div v-if="fieldErrors.maxMonthlyRuns" class="field-error">{{ fieldErrors.maxMonthlyRuns }}</div>
       </div>
     </div>
 
     <div class="form-actions">
       <button class="btn btn-primary" :disabled="isSaving" @click="handleSave">
-        {{ isSaving ? 'Saving...' : 'Save Limits' }}
+        {{ isSaving ? t('budgetLimitsExtended.saving') : t('budgetLimitsExtended.saveLimits') }}
       </button>
     </div>
   </div>

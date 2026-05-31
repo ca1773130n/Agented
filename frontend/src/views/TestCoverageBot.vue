@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
 
+const { t } = useI18n();
 const showToast = useToast();
 const isLoading = ref(true);
 const isSaving = ref(false);
@@ -62,9 +64,9 @@ async function saveConfig() {
       body: JSON.stringify(config.value),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    showToast('Configuration saved', 'success');
+    showToast(t('testCoverageBot.toast.configSaved'), 'success');
   } catch {
-    showToast('Saved (demo mode)', 'success');
+    showToast(t('testCoverageBot.toast.savedDemo'), 'success');
   } finally {
     isSaving.value = false;
   }
@@ -97,44 +99,44 @@ onMounted(loadData);
 
     <NotEnabledBanner
       v-if="!FEATURE_ENABLED"
-      feature="Test coverage bot"
-      detail="The backend that stores coverage thresholds and posts PR analyses has not shipped yet. Saving config is disabled."
+      :feature="t('testCoverageBot.feature')"
+      :detail="t('testCoverageBot.notEnabledDetail')"
       testid="test-coverage-not-enabled"
     />
 
     <div class="page-title-row">
       <div>
-        <h2>Test Coverage Bot</h2>
-        <p class="subtitle">Enforce coverage thresholds on every PR via automated bot analysis</p>
+        <h2>{{ t('testCoverageBot.title') }}</h2>
+        <p class="subtitle">{{ t('testCoverageBot.subtitle') }}</p>
       </div>
       <div class="header-actions">
         <button
           class="btn"
           :class="config.enabled ? 'btn-danger' : 'btn-primary'"
           :disabled="isToggling || !FEATURE_ENABLED"
-          :title="!FEATURE_ENABLED ? 'Test coverage bot is not yet enabled in this deployment' : ''"
+          :title="!FEATURE_ENABLED ? t('testCoverageBot.notEnabledHint') : ''"
           @click="toggleEnabled"
         >
-          {{ isToggling ? '...' : config.enabled ? 'Disable Bot' : 'Enable Bot' }}
+          {{ isToggling ? '...' : config.enabled ? t('testCoverageBot.disableBot') : t('testCoverageBot.enableBot') }}
         </button>
       </div>
     </div>
 
-    <LoadingState v-if="isLoading" message="Loading configuration..." />
+    <LoadingState v-if="isLoading" :message="t('testCoverageBot.loading')" />
 
     <template v-else>
       <div class="config-grid">
         <!-- Settings -->
         <div class="card">
           <div class="card-header">
-            <h3>Settings</h3>
+            <h3>{{ t('testCoverageBot.settings') }}</h3>
             <span class="status-badge" :class="config.enabled ? 'active' : 'inactive'">
-              {{ config.enabled ? 'Active' : 'Disabled' }}
+              {{ config.enabled ? t('testCoverageBot.active') : t('testCoverageBot.disabled') }}
             </span>
           </div>
 
           <div class="field-group">
-            <label class="field-label">Coverage Threshold (%)</label>
+            <label class="field-label">{{ t('testCoverageBot.coverageThreshold') }}</label>
             <input
               v-model.number="config.coverage_threshold"
               type="number"
@@ -147,47 +149,47 @@ onMounted(loadData);
           <div class="field-group">
             <label class="toggle-row">
               <input v-model="config.block_merge" type="checkbox" class="toggle-input" />
-              <span class="toggle-label">Block merge when coverage falls below threshold</span>
+              <span class="toggle-label">{{ t('testCoverageBot.blockMerge') }}</span>
             </label>
           </div>
 
           <div class="field-group">
             <label class="toggle-row">
               <input v-model="config.pr_bot_enabled" type="checkbox" class="toggle-input" />
-              <span class="toggle-label">Enable PR comment bot (posts coverage summary on PRs)</span>
+              <span class="toggle-label">{{ t('testCoverageBot.prBot') }}</span>
             </label>
           </div>
 
           <button
             class="btn btn-primary"
             :disabled="isSaving || !FEATURE_ENABLED"
-            :title="!FEATURE_ENABLED ? 'Test coverage bot is not yet enabled in this deployment' : undefined"
+            :title="!FEATURE_ENABLED ? t('testCoverageBot.notEnabledHint') : undefined"
             data-testid="test-coverage-save-submit"
             @click="saveConfig"
           >
-            {{ isSaving ? 'Saving...' : 'Save Settings' }}
+            {{ isSaving ? t('testCoverageBot.saving') : t('testCoverageBot.saveSettings') }}
           </button>
         </div>
 
         <!-- Stats summary -->
         <div class="card stats-card">
           <div class="card-header">
-            <h3>Recent Activity</h3>
+            <h3>{{ t('testCoverageBot.recentActivity') }}</h3>
           </div>
           <div class="stats-grid">
             <div class="stat">
               <span class="stat-value">{{ recentReports.filter(r => r.passed).length }}</span>
-              <span class="stat-label">Passed</span>
+              <span class="stat-label">{{ t('testCoverageBot.passed') }}</span>
             </div>
             <div class="stat">
               <span class="stat-value crimson">{{ recentReports.filter(r => !r.passed).length }}</span>
-              <span class="stat-label">Failed</span>
+              <span class="stat-label">{{ t('testCoverageBot.failed') }}</span>
             </div>
             <div class="stat">
               <span class="stat-value">
                 {{ recentReports.length ? (recentReports.reduce((s, r) => s + r.coverage, 0) / recentReports.length).toFixed(1) : '—' }}%
               </span>
-              <span class="stat-label">Avg Coverage</span>
+              <span class="stat-label">{{ t('testCoverageBot.avgCoverage') }}</span>
             </div>
           </div>
         </div>
@@ -196,18 +198,18 @@ onMounted(loadData);
       <!-- Recent reports -->
       <div class="card">
         <div class="card-header">
-          <h3>Recent Coverage Reports</h3>
-          <span class="card-badge">{{ recentReports.length }} runs</span>
+          <h3>{{ t('testCoverageBot.recentReports') }}</h3>
+          <span class="card-badge">{{ t('testCoverageBot.runsCount', { count: recentReports.length }) }}</span>
         </div>
-        <div v-if="recentReports.length === 0" class="empty-msg">No reports yet.</div>
+        <div v-if="recentReports.length === 0" class="empty-msg">{{ t('testCoverageBot.noReports') }}</div>
         <table v-else class="reports-table">
           <thead>
             <tr>
-              <th>Repository</th>
-              <th>Coverage</th>
-              <th>Threshold</th>
-              <th>Status</th>
-              <th>Run At</th>
+              <th>{{ t('testCoverageBot.columns.repository') }}</th>
+              <th>{{ t('testCoverageBot.columns.coverage') }}</th>
+              <th>{{ t('testCoverageBot.columns.threshold') }}</th>
+              <th>{{ t('testCoverageBot.columns.status') }}</th>
+              <th>{{ t('testCoverageBot.columns.runAt') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -217,7 +219,7 @@ onMounted(loadData);
               <td>{{ r.threshold }}%</td>
               <td>
                 <span class="status-badge" :class="r.passed ? 'active' : 'inactive'">
-                  {{ r.passed ? 'Passed' : 'Failed' }}
+                  {{ r.passed ? t('testCoverageBot.passed') : t('testCoverageBot.failed') }}
                 </span>
               </td>
               <td class="dimmed">{{ formatTime(r.run_at) }}</td>

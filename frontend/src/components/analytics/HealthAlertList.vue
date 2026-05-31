@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { formatDistanceToNow } from 'date-fns';
 import type { HealthAlert } from '../../services/api';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   alerts: HealthAlert[];
@@ -27,16 +30,34 @@ const filteredAlerts = computed(() => {
   }
 });
 
-const alertTypeLabels: Record<string, string> = {
-  consecutive_failure: 'Failing',
-  slow_execution: 'Slow',
-  missing_fire: 'Missing',
-  budget_exceeded: 'Budget',
+const alertTypeKeys: Record<string, string> = {
+  consecutive_failure: 'healthAlertList.typeFailing',
+  slow_execution: 'healthAlertList.typeSlow',
+  missing_fire: 'healthAlertList.typeMissing',
+  budget_exceeded: 'healthAlertList.typeBudget',
 };
 
 function getAlertTypeLabel(type: string): string {
-  return alertTypeLabels[type] || type;
+  const key = alertTypeKeys[type];
+  return key ? t(key) : type;
 }
+
+const severityKeys: Record<string, string> = {
+  critical: 'healthAlertList.severityCritical',
+  warning: 'healthAlertList.severityWarning',
+};
+
+function getSeverityLabel(severity: string): string {
+  const key = severityKeys[severity];
+  return key ? t(key) : severity;
+}
+
+const filterLabelKeys: Record<string, string> = {
+  all: 'healthAlertList.filterAll',
+  critical: 'healthAlertList.filterCritical',
+  warning: 'healthAlertList.filterWarning',
+  acknowledged: 'healthAlertList.filterAcknowledged',
+};
 
 function formatRelativeTime(dateStr: string): string {
   try {
@@ -58,7 +79,7 @@ function formatRelativeTime(dateStr: string): string {
         :class="{ active: activeFilter === filter }"
         @click="activeFilter = filter"
       >
-        {{ filter === 'all' ? 'All' : filter.charAt(0).toUpperCase() + filter.slice(1) }}
+        {{ t(filterLabelKeys[filter]) }}
         <span v-if="filter === 'critical'" class="filter-count critical">
           {{ alerts.filter(a => a.severity === 'critical' && !a.acknowledged).length }}
         </span>
@@ -74,7 +95,7 @@ function formatRelativeTime(dateStr: string): string {
         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
         <polyline points="22 4 12 14.01 9 11.01"/>
       </svg>
-      <p>No health alerts. All bots are running normally.</p>
+      <p>{{ t('healthAlertList.empty') }}</p>
     </div>
 
     <!-- Alert cards -->
@@ -92,7 +113,7 @@ function formatRelativeTime(dateStr: string): string {
               {{ getAlertTypeLabel(alert.alert_type) }}
             </span>
             <span class="alert-severity-badge" :class="alert.severity">
-              {{ alert.severity }}
+              {{ getSeverityLabel(alert.severity) }}
             </span>
             <span class="alert-time">{{ formatRelativeTime(alert.created_at) }}</span>
           </div>
@@ -104,14 +125,14 @@ function formatRelativeTime(dateStr: string): string {
           <button
             v-if="!alert.acknowledged"
             class="btn-acknowledge"
-            title="Acknowledge this alert"
+            :title="t('healthAlertList.acknowledgeTitle')"
             @click="emit('acknowledge', alert.id)"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="20 6 9 17 4 12"/>
             </svg>
           </button>
-          <span v-else class="acknowledged-badge">Acknowledged</span>
+          <span v-else class="acknowledged-badge">{{ t('healthAlertList.acknowledged') }}</span>
         </div>
       </div>
     </div>

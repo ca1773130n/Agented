@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+
 interface SketchRoutingData {
   target_type?: string;
   target_id?: string;
@@ -35,8 +39,8 @@ function getTargetIcon(targetType: string): string {
 
 <template>
   <div class="sketch-routing">
-    <h4 class="panel-title">Routing</h4>
-    <div v-if="!routing" class="placeholder-text">Not yet routed</div>
+    <h4 class="panel-title">{{ t('sketchRouting.title') }}</h4>
+    <div v-if="!routing" class="placeholder-text">{{ t('sketchRouting.notRouted') }}</div>
     <div v-else-if="routing.target_type === 'none'" class="routing-none">
       <div class="none-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20">
@@ -45,12 +49,12 @@ function getTargetIcon(targetType: string): string {
           <line x1="9" y1="9" x2="15" y2="15"/>
         </svg>
       </div>
-      <span class="none-text">No matching target</span>
+      <span class="none-text">{{ t('sketchRouting.noTarget') }}</span>
       <span v-if="routing.reason" class="suggestion-text">{{ routing.reason }}</span>
     </div>
     <div v-else class="routing-details">
       <div class="detail-row">
-        <span class="detail-label">Target</span>
+        <span class="detail-label">{{ t('sketchRouting.target') }}</span>
         <span class="target-type-badge">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
             <path :d="getTargetIcon(routing.target_type || '')"/>
@@ -59,7 +63,7 @@ function getTargetIcon(targetType: string): string {
         </span>
       </div>
       <div class="detail-row">
-        <span class="detail-label">ID</span>
+        <span class="detail-label">{{ t('sketchRouting.id') }}</span>
         <a
           href="#"
           class="target-link"
@@ -67,7 +71,7 @@ function getTargetIcon(targetType: string): string {
         >{{ routing.target_id }}</a>
       </div>
       <div v-if="routing.reason" class="detail-row">
-        <span class="detail-label">Reason</span>
+        <span class="detail-label">{{ t('sketchRouting.reason') }}</span>
         <span class="reason-text">{{ routing.reason }}</span>
       </div>
     </div>

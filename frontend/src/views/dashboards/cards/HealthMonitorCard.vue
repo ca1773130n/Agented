@@ -5,6 +5,7 @@
 -->
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { HealthAlert, HealthStatusResponse } from '../../../services/api';
 import { analyticsApi, ApiError } from '../../../services/api';
 import HealthAlertList from '../../../components/analytics/HealthAlertList.vue';
@@ -14,6 +15,7 @@ import StatCard from '../../../components/base/StatCard.vue';
 import { useToast } from '../../../composables/useToast';
 
 const emit = defineEmits<{ loaded: [slug: string] }>();
+const { t } = useI18n();
 const showToast = useToast();
 
 const isLoading = ref(true);
@@ -34,7 +36,7 @@ async function loadData() {
     healthStatus.value = statusRes;
     alerts.value = alertsRes.alerts || [];
   } catch (err) {
-    loadError.value = err instanceof ApiError ? err.message : 'Failed to load health data';
+    loadError.value = err instanceof ApiError ? err.message : t('healthMonitorCard.error.load');
   } finally {
     isLoading.value = false;
     emit('loaded', 'health-monitor');
@@ -56,10 +58,10 @@ async function runHealthCheck() {
   isRunningCheck.value = true;
   try {
     await analyticsApi.runHealthCheck();
-    showToast('Health check completed', 'success');
+    showToast(t('healthMonitorCard.toast.checkCompleted'), 'success');
     await refreshAlerts();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to run health check';
+    const message = err instanceof ApiError ? err.message : t('healthMonitorCard.error.runCheck');
     showToast(message, 'error');
   } finally {
     isRunningCheck.value = false;
@@ -71,9 +73,9 @@ async function handleAcknowledge(alertId: number) {
     await analyticsApi.acknowledgeAlert(alertId);
     const alert = alerts.value.find(a => a.id === alertId);
     if (alert) alert.acknowledged = true;
-    showToast('Alert acknowledged', 'success');
+    showToast(t('healthMonitorCard.toast.alertAcknowledged'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to acknowledge alert';
+    const message = err instanceof ApiError ? err.message : t('healthMonitorCard.error.acknowledge');
     showToast(message, 'error');
   }
 }
@@ -90,7 +92,7 @@ onUnmounted(() => {
 
 <template>
   <section id="health-monitor" class="lane-card health-monitor-card">
-    <LoadingState v-if="isLoading" message="Loading health data..." />
+    <LoadingState v-if="isLoading" :message="t('healthMonitorCard.loading')" />
 
     <ErrorState v-else-if="loadError" :message="loadError" @retry="loadData" />
 
@@ -106,10 +108,10 @@ onUnmounted(() => {
                 </svg>
               </div>
               <div>
-                <h2>Bot Health Monitor</h2>
+                <h2>{{ t('healthMonitorCard.title') }}</h2>
                 <p class="status-subtitle">
-                  <template v-if="healthStatus?.last_check_time">Last check: {{ new Date(healthStatus.last_check_time).toLocaleString() }}</template>
-                  <template v-else>No health checks run yet</template>
+                  <template v-if="healthStatus?.last_check_time">{{ t('healthMonitorCard.lastCheck', { time: new Date(healthStatus.last_check_time).toLocaleString() }) }}</template>
+                  <template v-else>{{ t('healthMonitorCard.noChecks') }}</template>
                 </p>
               </div>
             </div>
@@ -121,16 +123,16 @@ onUnmounted(() => {
                 <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
                 </svg>
-                {{ isRunningCheck ? 'Running...' : 'Run Health Check' }}
+                {{ isRunningCheck ? t('healthMonitorCard.running') : t('healthMonitorCard.runCheck') }}
               </button>
             </div>
           </div>
 
           <div class="stats-grid">
-            <StatCard title="Total Alerts" :value="healthStatus?.total_alerts ?? 0" />
-            <StatCard title="Critical" :value="healthStatus?.critical_count ?? 0" color="var(--accent-crimson)" />
-            <StatCard title="Warnings" :value="healthStatus?.warning_count ?? 0" color="var(--accent-amber)" />
-            <StatCard title="Auto-refresh" value="30s" />
+            <StatCard :title="t('healthMonitorCard.stat.totalAlerts')" :value="healthStatus?.total_alerts ?? 0" />
+            <StatCard :title="t('healthMonitorCard.stat.critical')" :value="healthStatus?.critical_count ?? 0" color="var(--accent-crimson)" />
+            <StatCard :title="t('healthMonitorCard.stat.warnings')" :value="healthStatus?.warning_count ?? 0" color="var(--accent-amber)" />
+            <StatCard :title="t('healthMonitorCard.stat.autoRefresh')" value="30s" />
           </div>
         </div>
       </div>
@@ -144,9 +146,9 @@ onUnmounted(() => {
               <line x1="12" y1="9" x2="12" y2="13"/>
               <line x1="12" y1="17" x2="12.01" y2="17"/>
             </svg>
-            Health Alerts
+            {{ t('healthMonitorCard.alertsTitle') }}
           </h3>
-          <span class="card-badge">{{ alerts.length }} total</span>
+          <span class="card-badge">{{ t('healthMonitorCard.totalCount', { count: alerts.length }) }}</span>
         </div>
         <HealthAlertList :alerts="alerts" @acknowledge="handleAcknowledge" />
       </div>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, nextTick, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import type { ConversationMessage, AuthenticatedEventSource } from '../services/api';
 import { workflowApi, superAgentApi, superAgentSessionApi } from '../services/api';
@@ -8,6 +9,7 @@ import WorkflowCanvas from '../components/workflow/WorkflowCanvas.vue';
 import { useToast } from '../composables/useToast';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
+const { t } = useI18n();
 const router = useRouter();
 
 const showToast = useToast();
@@ -121,7 +123,7 @@ function connectChatStream() {
         isProcessing.value = false;
         streamingContent.value = '';
         accumulatedContent = '';
-        showToast(data.error || 'AI backend error', 'error');
+        showToast(data.error || t('workflowPlayground.toast.backendError'), 'error');
       }
     } catch {
       // Ignore parse errors for heartbeat events
@@ -175,7 +177,7 @@ function handleSend() {
       .catch(() => {
         // If real AI fails, fall back to stub
         isProcessing.value = false;
-        showToast('AI backend unavailable, using demo mode', 'info');
+        showToast(t('workflowPlayground.toast.backendUnavailable'), 'info');
         isDemoMode.value = true;
         handleStubResponse(userMsg);
       });
@@ -405,9 +407,9 @@ async function tryCreateWorkflowFromJson(jsonStr: string) {
     previewWorkflowId.value = result.workflow_id;
 
     await nextTick();
-    showToast('Workflow generated and loaded into preview', 'success');
+    showToast(t('workflowPlayground.toast.generated'), 'success');
   } catch {
-    showToast('Failed to create workflow from generated JSON', 'error');
+    showToast(t('workflowPlayground.toast.generateFailed'), 'error');
   }
 }
 
@@ -426,11 +428,11 @@ function openInBuilder() {
     <!-- Header -->
     <div class="playground-header">
       <div class="header-title">
-        <h1>Workflow Playground</h1>
-        <p>Describe a workflow and the AI will generate it for you</p>
+        <h1>{{ t('workflowPlayground.title') }}</h1>
+        <p>{{ t('workflowPlayground.subtitle') }}</p>
       </div>
       <div v-if="isDemoMode" class="demo-badge">
-        Demo mode — connect an AI backend for real assistance
+        {{ t('workflowPlayground.demoBadge') }}
       </div>
       <div class="header-actions">
         <button
@@ -443,7 +445,7 @@ function openInBuilder() {
             <polyline points="15 3 21 3 21 9"/>
             <line x1="10" y1="14" x2="21" y2="3"/>
           </svg>
-          Open in Builder
+          {{ t('workflowPlayground.openInBuilder') }}
         </button>
       </div>
     </div>
@@ -461,8 +463,8 @@ function openInBuilder() {
           :canFinalize="false"
           :isFinalizing="false"
           :assistantIconPaths="assistantIconPaths"
-          inputPlaceholder="Describe your workflow... e.g., 'Create a deploy pipeline with build, test, and notification'"
-          entityLabel="Workflow"
+          :inputPlaceholder="t('workflowPlayground.inputPlaceholder')"
+          :entityLabel="t('workflowPlayground.entityLabel')"
           bannerTitle=""
           bannerButtonLabel=""
           :showBackendSelector="true"
@@ -489,13 +491,13 @@ function openInBuilder() {
                   <line x1="12" y1="15" x2="12" y2="18"/>
                 </svg>
               </div>
-              <h2>AI Workflow Designer</h2>
-              <p>Describe the workflow you want to create, and I'll generate the graph for you. Try:</p>
+              <h2>{{ t('workflowPlayground.welcome.title') }}</h2>
+              <p>{{ t('workflowPlayground.welcome.intro') }}</p>
               <ul class="suggestions">
-                <li>"Create a deploy pipeline with build, test, and deploy steps"</li>
-                <li>"Build a code review workflow for pull requests"</li>
-                <li>"Design a data ETL pipeline with extraction and transformation"</li>
-                <li>"Set up a monitoring workflow with health checks and alerts"</li>
+                <li>{{ t('workflowPlayground.welcome.suggestions.deploy') }}</li>
+                <li>{{ t('workflowPlayground.welcome.suggestions.review') }}</li>
+                <li>{{ t('workflowPlayground.welcome.suggestions.data') }}</li>
+                <li>{{ t('workflowPlayground.welcome.suggestions.monitor') }}</li>
               </ul>
             </div>
           </template>
@@ -513,8 +515,8 @@ function openInBuilder() {
               <line x1="12" y1="10" x2="12" y2="14"/>
             </svg>
           </div>
-          <h3>Canvas Preview</h3>
-          <p>Describe your workflow in the chat and I'll generate it for you. The visual graph will appear here.</p>
+          <h3>{{ t('workflowPlayground.preview.title') }}</h3>
+          <p>{{ t('workflowPlayground.preview.description') }}</p>
         </div>
         <WorkflowCanvas
           v-else

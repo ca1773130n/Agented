@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 interface ConditionalNodeData {
   label: string
@@ -32,7 +35,7 @@ const needsConfig = computed(() => {
 
 <template>
   <div :class="['workflow-node', 'node-conditional', statusClass]">
-    <div v-if="needsConfig" class="validation-dot" title="Required configuration missing"></div>
+    <div v-if="needsConfig" class="validation-dot" :title="t('conditionalNode.configMissing')"></div>
     <Handle type="target" :position="Position.Top" :style="inputHandleStyle" />
     <div class="node-header">
       <span class="node-icon">&#x25C7;</span>
@@ -42,8 +45,8 @@ const needsConfig = computed(() => {
       <span class="condition-type">{{ conditionType }}</span>
     </div>
     <div class="branch-labels">
-      <span class="branch-label branch-true">true</span>
-      <span class="branch-label branch-false">false</span>
+      <span class="branch-label branch-true">{{ t('conditionalNode.branchTrue') }}</span>
+      <span class="branch-label branch-false">{{ t('conditionalNode.branchFalse') }}</span>
     </div>
     <!-- True branch: left-offset output -->
     <Handle

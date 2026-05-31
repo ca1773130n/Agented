@@ -11,8 +11,11 @@
  * toast.
  */
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { grdApi, listGroupedBackends, getGroupedBackend, ApiError } from '../../services/api';
 import { useToast } from '../../composables/useToast';
+
+const { t } = useI18n();
 
 const props = defineProps<{ projectId: string }>();
 
@@ -75,7 +78,7 @@ async function reload() {
     });
     allAccounts.value = flat;
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load allowed accounts';
+    const message = err instanceof ApiError ? err.message : t('projectAllowedAccountsPanel.toast.loadFailed');
     showToast(message, 'error');
   } finally {
     isLoading.value = false;
@@ -88,14 +91,14 @@ async function onAdd() {
   try {
     const res = await grdApi.addAllowedAccount(props.projectId, selectedAccountId.value);
     if (res.inserted) {
-      showToast('Account added to whitelist', 'success');
+      showToast(t('projectAllowedAccountsPanel.toast.added'), 'success');
     } else {
-      showToast('Account was already whitelisted', 'info');
+      showToast(t('projectAllowedAccountsPanel.toast.alreadyWhitelisted'), 'info');
     }
     selectedAccountId.value = '';
     await reload();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to add account';
+    const message = err instanceof ApiError ? err.message : t('projectAllowedAccountsPanel.toast.addFailed');
     showToast(message, 'error');
   } finally {
     isSubmitting.value = false;
@@ -105,10 +108,10 @@ async function onAdd() {
 async function onRemove(accountId: string) {
   try {
     await grdApi.removeAllowedAccount(props.projectId, accountId);
-    showToast('Account removed from whitelist', 'info');
+    showToast(t('projectAllowedAccountsPanel.toast.removed'), 'info');
     await reload();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to remove account';
+    const message = err instanceof ApiError ? err.message : t('projectAllowedAccountsPanel.toast.removeFailed');
     showToast(message, 'error');
   }
 }
@@ -119,7 +122,7 @@ function displayName(accountId: string): string {
 }
 
 function displayType(accountId: string): string {
-  return accountById.value.get(accountId)?.backend_type ?? 'unknown';
+  return accountById.value.get(accountId)?.backend_type ?? t('projectAllowedAccountsPanel.unknown');
 }
 
 onMounted(reload);
@@ -128,16 +131,14 @@ onMounted(reload);
 <template>
   <div class="allowed-accounts">
     <p class="hint">
-      Sessions started with <strong>Yolo mode</strong> off must use an account from this
-      list. Yolo sessions bypass the check.
+      {{ t('projectAllowedAccountsPanel.hintPrefix') }}<strong>{{ t('projectAllowedAccountsPanel.yoloMode') }}</strong>{{ t('projectAllowedAccountsPanel.hintSuffix') }}
     </p>
 
-    <div v-if="isLoading" class="loading-state">Loading allowed accounts…</div>
+    <div v-if="isLoading" class="loading-state">{{ t('projectAllowedAccountsPanel.loading') }}</div>
 
     <template v-else>
       <div v-if="allowed.length === 0" class="empty-state">
-        No accounts whitelisted yet — non-yolo sessions will be refused until you add
-        one below.
+        {{ t('projectAllowedAccountsPanel.empty') }}
       </div>
 
       <ul v-else class="allowed-list">
@@ -152,7 +153,7 @@ onMounted(reload);
             class="btn btn-danger btn-sm"
             @click="onRemove(entry.account_id)"
           >
-            Remove
+            {{ t('common.remove') }}
           </button>
         </li>
       </ul>
@@ -162,8 +163,8 @@ onMounted(reload);
           <option value="" disabled>
             {{
               addableAccounts.length === 0
-                ? 'All accounts already whitelisted'
-                : 'Pick an account…'
+                ? t('projectAllowedAccountsPanel.allWhitelisted')
+                : t('projectAllowedAccountsPanel.pickAccount')
             }}
           </option>
           <option v-for="a in addableAccounts" :key="a.id" :value="a.id">
@@ -176,7 +177,7 @@ onMounted(reload);
           :disabled="!selectedAccountId || isSubmitting"
           @click="onAdd"
         >
-          {{ isSubmitting ? 'Adding…' : 'Add' }}
+          {{ isSubmitting ? t('projectAllowedAccountsPanel.adding') : t('common.add') }}
         </button>
       </div>
     </template>

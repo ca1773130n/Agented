@@ -9,6 +9,8 @@ import {
   type ConditionItem,
 } from '../services/api/trigger-conditions';
 import type { Trigger } from '../services/api';
+import { useI18n } from 'vue-i18n';
+const { t } = useI18n();
 const showToast = useToast();
 
 // Trigger selection
@@ -34,9 +36,9 @@ const compiledJson = ref('');
 const isSaving = ref(false);
 
 const examples = [
-  'run when a PR touches the auth directory and has more than 100 lines changed',
-  'fire when commit message contains "fix" and the branch is main',
-  'trigger when PR title includes "security" or any file in src/db/ is modified',
+  t('nLTriggerRuleEditor.examples.0'),
+  t('nLTriggerRuleEditor.examples.1'),
+  t('nLTriggerRuleEditor.examples.2'),
 ];
 
 onMounted(async () => {
@@ -50,7 +52,7 @@ async function loadTriggers() {
     const res = await triggerApi.list();
     triggers.value = res.triggers;
   } catch (e) {
-    triggerLoadError.value = e instanceof ApiError ? e.message : 'Failed to load triggers';
+    triggerLoadError.value = e instanceof ApiError ? e.message : t('nLTriggerRuleEditor.errors.loadTriggers');
   } finally {
     isLoadingTriggers.value = false;
   }
@@ -109,7 +111,7 @@ async function handleCompile() {
     compiledRule.value = conditions;
     const logic = naturalLanguageInput.value.toLowerCase().includes(' or ') ? 'OR' : 'AND';
     compiledJson.value = JSON.stringify({ conditions, logic: logic.toLowerCase() }, null, 2);
-    showToast('Rule compiled successfully', 'success');
+    showToast(t('nLTriggerRuleEditor.toasts.compiled'), 'success');
   } finally {
     isCompiling.value = false;
   }
@@ -117,7 +119,7 @@ async function handleCompile() {
 
 async function handleSave() {
   if (!compiledRule.value || !selectedTriggerId.value) {
-    showToast('Select a trigger and compile a rule first', 'info');
+    showToast(t('nLTriggerRuleEditor.toasts.selectAndCompile'), 'info');
     return;
   }
   isSaving.value = true;
@@ -141,12 +143,12 @@ async function handleSave() {
     if (res.rule) {
       savedRules.value.unshift(res.rule);
     }
-    showToast('Rule saved', 'success');
+    showToast(t('nLTriggerRuleEditor.toasts.saved'), 'success');
     naturalLanguageInput.value = '';
     compiledRule.value = null;
     compiledJson.value = '';
   } catch (e) {
-    showToast(e instanceof ApiError ? e.message : 'Failed to save rule', 'error');
+    showToast(e instanceof ApiError ? e.message : t('nLTriggerRuleEditor.errors.saveRule'), 'error');
   } finally {
     isSaving.value = false;
   }
@@ -173,9 +175,9 @@ async function deleteRule(ruleId: string) {
   try {
     await triggerConditionsApi.delete(ruleId);
     savedRules.value = savedRules.value.filter(r => r.id !== ruleId);
-    showToast('Rule deleted', 'success');
+    showToast(t('nLTriggerRuleEditor.toasts.deleted'), 'success');
   } catch (e) {
-    showToast(e instanceof ApiError ? e.message : 'Failed to delete rule', 'error');
+    showToast(e instanceof ApiError ? e.message : t('nLTriggerRuleEditor.errors.deleteRule'), 'error');
   }
 }
 
@@ -188,17 +190,17 @@ function useExample(ex: string) {
   <div class="nl-trigger">
 
     <PageHeader
-      title="Natural Language Trigger Rule Editor"
-      subtitle="Write trigger conditions in plain English — the platform compiles them to structured filter rules."
+      :title="t('nLTriggerRuleEditor.title')"
+      :subtitle="t('nLTriggerRuleEditor.subtitle')"
     />
 
     <!-- Trigger selector -->
-    <div v-if="isLoadingTriggers" class="loading-msg">Loading triggers...</div>
+    <div v-if="isLoadingTriggers" class="loading-msg">{{ t('nLTriggerRuleEditor.loadingTriggers') }}</div>
     <div v-else-if="triggerLoadError" class="error-msg">{{ triggerLoadError }}</div>
     <div v-else class="trigger-selector">
-      <label class="selector-label">Trigger:</label>
+      <label class="selector-label">{{ t('nLTriggerRuleEditor.triggerLabel') }}</label>
       <select v-model="selectedTriggerId" class="trigger-select" @change="onTriggerChange">
-        <option value="">Select a trigger...</option>
+        <option value="">{{ t('nLTriggerRuleEditor.selectTriggerOption') }}</option>
         <option v-for="t in triggers" :key="t.id" :value="t.id">{{ t.name }} ({{ t.id }})</option>
       </select>
     </div>
@@ -206,17 +208,17 @@ function useExample(ex: string) {
     <div class="layout">
       <div class="editor-col">
         <div class="card compose-card">
-          <div class="compose-header">Describe your trigger condition</div>
+          <div class="compose-header">{{ t('nLTriggerRuleEditor.composeHeader') }}</div>
           <div class="compose-body">
             <textarea
               v-model="naturalLanguageInput"
               class="nl-input"
-              placeholder="e.g. run when a PR touches the auth directory and has more than 100 lines changed"
+              :placeholder="t('nLTriggerRuleEditor.inputPlaceholder')"
               rows="4"
             ></textarea>
 
             <div class="examples-row">
-              <span class="examples-label">Examples:</span>
+              <span class="examples-label">{{ t('nLTriggerRuleEditor.examplesLabel') }}</span>
               <button
                 v-for="ex in examples"
                 :key="ex"
@@ -231,7 +233,7 @@ function useExample(ex: string) {
                 :disabled="isCompiling || !naturalLanguageInput.trim()"
                 @click="handleCompile"
               >
-                {{ isCompiling ? 'Compiling...' : 'Compile Rule' }}
+                {{ isCompiling ? t('nLTriggerRuleEditor.compiling') : t('nLTriggerRuleEditor.compileRule') }}
               </button>
             </div>
           </div>
@@ -239,12 +241,12 @@ function useExample(ex: string) {
 
         <div v-if="compiledRule" class="card compiled-card">
           <div class="compiled-header">
-            <span>Compiled Rule</span>
+            <span>{{ t('nLTriggerRuleEditor.compiledRule') }}</span>
             <button
               class="btn btn-primary btn-sm"
               :disabled="isSaving || !selectedTriggerId"
               @click="handleSave"
-            >{{ isSaving ? 'Saving...' : 'Save Rule' }}</button>
+            >{{ isSaving ? t('nLTriggerRuleEditor.saving') : t('nLTriggerRuleEditor.saveRule') }}</button>
           </div>
           <div class="conditions-list">
             <div v-for="(c, i) in compiledRule" :key="i" class="condition-row">
@@ -254,7 +256,7 @@ function useExample(ex: string) {
             </div>
           </div>
           <div class="compiled-json-section">
-            <div class="json-label">JSON Output</div>
+            <div class="json-label">{{ t('nLTriggerRuleEditor.jsonOutput') }}</div>
             <pre class="json-pre">{{ compiledJson }}</pre>
           </div>
         </div>
@@ -262,16 +264,16 @@ function useExample(ex: string) {
 
       <aside class="saved-col card">
         <div class="saved-header">
-          Saved Rules
-          <span v-if="isLoadingRules" class="loading-hint">loading...</span>
+          {{ t('nLTriggerRuleEditor.savedRules') }}
+          <span v-if="isLoadingRules" class="loading-hint">{{ t('nLTriggerRuleEditor.loadingHint') }}</span>
         </div>
-        <div v-if="!selectedTriggerId" class="saved-empty">Select a trigger to see its rules.</div>
-        <div v-else-if="savedRules.length === 0 && !isLoadingRules" class="saved-empty">No rules yet for this trigger.</div>
+        <div v-if="!selectedTriggerId" class="saved-empty">{{ t('nLTriggerRuleEditor.selectToSeeRules') }}</div>
+        <div v-else-if="savedRules.length === 0 && !isLoadingRules" class="saved-empty">{{ t('nLTriggerRuleEditor.noRulesYet') }}</div>
         <div v-for="r in savedRules" :key="r.id" class="saved-rule">
           <div class="saved-desc">{{ r.description || r.name }}</div>
           <div class="saved-meta">
-            <span class="saved-conditions">{{ r.conditions.length }} condition{{ r.conditions.length !== 1 ? 's' : '' }} · {{ r.logic }}</span>
-            <button class="delete-btn" @click="deleteRule(r.id)" title="Delete rule">x</button>
+            <span class="saved-conditions">{{ t('nLTriggerRuleEditor.conditionsCount', { count: r.conditions.length }) }} · {{ r.logic }}</span>
+            <button class="delete-btn" @click="deleteRule(r.id)" :title="t('nLTriggerRuleEditor.deleteRuleTitle')">x</button>
           </div>
         </div>
       </aside>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, nextTick, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter, useRoute } from 'vue-router';
 import type { RouteLocationRaw } from 'vue-router';
 import { productApi, projectApi, teamApi, agentApi, pluginApi, triggerApi, workflowApi, superAgentApi } from '../../services/api';
@@ -7,6 +8,7 @@ import { productApi, projectApi, teamApi, agentApi, pluginApi, triggerApi, workf
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ 'update:open': [value: boolean] }>();
 
+const { t } = useI18n();
 const router = useRouter();
 const route = useRoute();
 
@@ -378,7 +380,7 @@ function getFlatIndex(groupType: EntityType, itemIndex: number): number {
             v-model="query"
             class="palette-input"
             type="text"
-            placeholder="Search products, projects, teams, agents, plugins..."
+            :placeholder="t('commandPalette.searchPlaceholder')"
             autocomplete="off"
             spellcheck="false"
           />
@@ -388,22 +390,22 @@ function getFlatIndex(groupType: EntityType, itemIndex: number): number {
           <!-- Loading -->
           <div v-if="loading" class="palette-state">
             <div class="spinner" />
-            <div>Searching...</div>
+            <div>{{ t('commandPalette.searching') }}</div>
           </div>
 
           <!-- Error -->
           <div v-else-if="error" class="palette-state">
-            <div>Search failed</div>
-            <button class="retry-btn" @click="retry">Retry</button>
+            <div>{{ t('commandPalette.searchFailed') }}</div>
+            <button class="retry-btn" @click="retry">{{ t('common.retry') }}</button>
           </div>
 
           <!-- Initial state -->
           <div v-else-if="showInitial" class="palette-state">
-            Type to search across products, projects, teams, agents, and plugins
+            {{ t('commandPalette.initialHint') }}
           </div>
 
           <!-- Empty results -->
-          <div v-else-if="showEmpty" class="palette-state">No results found</div>
+          <div v-else-if="showEmpty" class="palette-state">{{ t('commandPalette.noResults') }}</div>
 
           <!-- Results grouped by type -->
           <template v-else>
@@ -427,9 +429,9 @@ function getFlatIndex(groupType: EntityType, itemIndex: number): number {
         </div>
 
         <div class="palette-hint">
-          <span><kbd>&uarr;</kbd> <kbd>&darr;</kbd> navigate</span>
-          <span><kbd>Enter</kbd> select</span>
-          <span><kbd>Esc</kbd> close</span>
+          <span><kbd>&uarr;</kbd> <kbd>&darr;</kbd> {{ t('commandPalette.hint.navigate') }}</span>
+          <span><kbd>Enter</kbd> {{ t('commandPalette.hint.select') }}</span>
+          <span><kbd>Esc</kbd> {{ t('commandPalette.hint.close') }}</span>
         </div>
       </div>
     </div>

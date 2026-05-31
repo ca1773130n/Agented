@@ -4,6 +4,8 @@ import { triggerApi } from '../services/api';
 import type { Trigger, ProjectPath } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { useI18n } from 'vue-i18n';
+const { t } = useI18n();
 const showToast = useToast();
 
 // Loading state
@@ -35,7 +37,7 @@ async function loadTriggers() {
       selectedTriggerId.value = triggers.value[0].id;
     }
   } catch (err: unknown) {
-    loadError.value = err instanceof Error ? err.message : 'Failed to load triggers';
+    loadError.value = err instanceof Error ? err.message : t('multiRepoFanOut.errors.loadTriggers');
   } finally {
     isLoadingTriggers.value = false;
   }
@@ -65,11 +67,11 @@ watch(selectedTriggerId, () => {
 async function addRepo() {
   const url = newRepoUrl.value.trim();
   if (!url) {
-    showToast('Repository URL is required', 'info');
+    showToast(t('multiRepoFanOut.toasts.repoUrlRequired'), 'info');
     return;
   }
   if (!selectedTriggerId.value) {
-    showToast('Select a trigger first', 'info');
+    showToast(t('multiRepoFanOut.toasts.selectTriggerFirst'), 'info');
     return;
   }
   isAdding.value = true;
@@ -80,11 +82,11 @@ async function addRepo() {
     } else {
       await triggerApi.addPath(selectedTriggerId.value, url);
     }
-    showToast('Repository added', 'success');
+    showToast(t('multiRepoFanOut.toasts.repoAdded'), 'success');
     newRepoUrl.value = '';
     await loadPaths();
   } catch (err: unknown) {
-    showToast(err instanceof Error ? err.message : 'Failed to add repository', 'error');
+    showToast(err instanceof Error ? err.message : t('multiRepoFanOut.toasts.repoAddFailed'), 'error');
   } finally {
     isAdding.value = false;
   }
@@ -99,10 +101,10 @@ async function removePath(path: ProjectPath) {
     } else {
       await triggerApi.removePath(selectedTriggerId.value, path.local_project_path);
     }
-    showToast('Repository removed', 'success');
+    showToast(t('multiRepoFanOut.toasts.repoRemoved'), 'success');
     await loadPaths();
   } catch (err: unknown) {
-    showToast(err instanceof Error ? err.message : 'Failed to remove', 'error');
+    showToast(err instanceof Error ? err.message : t('multiRepoFanOut.toasts.repoRemoveFailed'), 'error');
   } finally {
     isRemoving.value = null;
   }
@@ -110,18 +112,21 @@ async function removePath(path: ProjectPath) {
 
 async function handleTest() {
   if (!selectedTriggerId.value) {
-    showToast('Select a trigger first', 'info');
+    showToast(t('multiRepoFanOut.toasts.selectTriggerFirst'), 'info');
     return;
   }
   isTesting.value = true;
   testResult.value = null;
   try {
     const res = await triggerApi.previewPromptFull(selectedTriggerId.value, {});
-    testResult.value = `Prompt preview rendered successfully. ${res.unresolved_placeholders?.length ? `Unresolved placeholders: ${res.unresolved_placeholders.join(', ')}` : 'All placeholders resolved.'}`;
-    showToast('Fan-out test complete', 'success');
+    const detail = res.unresolved_placeholders?.length
+      ? t('multiRepoFanOut.test.unresolvedPlaceholders', { placeholders: res.unresolved_placeholders.join(', ') })
+      : t('multiRepoFanOut.test.allResolved');
+    testResult.value = `${t('multiRepoFanOut.test.previewRendered')} ${detail}`;
+    showToast(t('multiRepoFanOut.toasts.testComplete'), 'success');
   } catch (err: unknown) {
-    testResult.value = err instanceof Error ? err.message : 'Test failed';
-    showToast('Test failed', 'error');
+    testResult.value = err instanceof Error ? err.message : t('multiRepoFanOut.test.testFailed');
+    showToast(t('multiRepoFanOut.test.testFailed'), 'error');
   } finally {
     isTesting.value = false;
   }
@@ -135,8 +140,8 @@ function displayPath(p: ProjectPath): string {
 
 function pathTypeLabel(p: ProjectPath): string {
   if (p.path_type === 'github') return 'GitHub';
-  if (p.path_type === 'project') return 'Project';
-  return 'Local';
+  if (p.path_type === 'project') return t('multiRepoFanOut.pathType.project');
+  return t('multiRepoFanOut.pathType.local');
 }
 
 const selectedTriggerName = () => {
@@ -150,27 +155,27 @@ onMounted(loadTriggers);
 <template>
   <div class="multi-repo">
 
-    <PageHeader title="Multi-Repo Fan-Out" subtitle="Configure a single trigger watching multiple repos with per-repo bot routing.">
+    <PageHeader :title="t('multiRepoFanOut.title')" :subtitle="t('multiRepoFanOut.subtitle')">
       <template #actions>
         <button class="btn btn-secondary" :disabled="isTesting || !selectedTriggerId" @click="handleTest">
           <svg v-if="isTesting" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
           </svg>
-          {{ isTesting ? 'Testing...' : 'Test Fan-Out' }}
+          {{ isTesting ? t('multiRepoFanOut.testing') : t('multiRepoFanOut.testFanOut') }}
         </button>
       </template>
     </PageHeader>
 
     <!-- Loading state -->
     <div v-if="isLoadingTriggers" class="card loading-card">
-      <div class="loading-content">Loading triggers...</div>
+      <div class="loading-content">{{ t('multiRepoFanOut.loadingTriggers') }}</div>
     </div>
 
     <!-- Error state -->
     <div v-else-if="loadError" class="card error-card">
       <div class="error-content">
         <span>{{ loadError }}</span>
-        <button class="btn btn-secondary" @click="loadTriggers">Retry</button>
+        <button class="btn btn-secondary" @click="loadTriggers">{{ t('common.retry') }}</button>
       </div>
     </div>
 
@@ -181,14 +186,14 @@ onMounted(loadTriggers);
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
             </svg>
-            Base Trigger
+            {{ t('multiRepoFanOut.baseTrigger') }}
           </h3>
         </div>
         <div class="trigger-body">
           <div class="field-group">
-            <label class="field-label">Select Trigger to Fan-Out</label>
+            <label class="field-label">{{ t('multiRepoFanOut.selectTriggerLabel') }}</label>
             <select v-model="selectedTriggerId" class="select-input">
-              <option value="">-- Select trigger --</option>
+              <option value="">{{ t('multiRepoFanOut.selectTriggerOption') }}</option>
               <option v-for="t in triggers" :key="t.id" :value="t.id">{{ t.name }}</option>
             </select>
           </div>
@@ -197,7 +202,7 @@ onMounted(loadTriggers);
               <circle cx="12" cy="12" r="10"/>
               <path d="M12 8v4l3 3"/>
             </svg>
-            When this trigger fires, the payload will be routed to each matching repo's bot based on the paths below.
+            {{ t('multiRepoFanOut.triggerInfo') }}
           </div>
         </div>
       </div>
@@ -209,9 +214,9 @@ onMounted(loadTriggers);
               <line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
               <path d="M18 9a9 9 0 0 1-9 9"/>
             </svg>
-            Fan-Out Paths
+            {{ t('multiRepoFanOut.fanOutPaths') }}
           </h3>
-          <span class="card-badge">{{ paths.length }} paths</span>
+          <span class="card-badge">{{ t('multiRepoFanOut.pathsCount', { count: paths.length }) }}</span>
         </div>
 
         <!-- Add new path -->
@@ -221,18 +226,18 @@ onMounted(loadTriggers);
               v-model="newRepoUrl"
               type="text"
               class="text-input"
-              placeholder="GitHub URL (https://github.com/org/repo) or local path"
+              :placeholder="t('multiRepoFanOut.repoUrlPlaceholder')"
               :disabled="!selectedTriggerId"
               @keyup.enter="addRepo"
             />
             <button class="btn btn-primary" :disabled="isAdding || !selectedTriggerId || !newRepoUrl.trim()" @click="addRepo">
-              {{ isAdding ? 'Adding...' : 'Add' }}
+              {{ isAdding ? t('multiRepoFanOut.adding') : t('common.add') }}
             </button>
           </div>
         </div>
 
         <!-- Loading paths indicator -->
-        <div v-if="isLoadingPaths" class="mappings-loading">Loading paths...</div>
+        <div v-if="isLoadingPaths" class="mappings-loading">{{ t('multiRepoFanOut.loadingPaths') }}</div>
 
         <div v-else class="mappings-list">
           <div v-for="p in paths" :key="p.id" class="mapping-row">
@@ -261,7 +266,7 @@ onMounted(loadTriggers);
             </div>
           </div>
           <div v-if="paths.length === 0 && !isLoadingPaths" class="mappings-empty">
-            No paths configured for {{ selectedTriggerName() || 'this trigger' }}. Add a repository above.
+            {{ t('multiRepoFanOut.noPaths', { trigger: selectedTriggerName() || t('multiRepoFanOut.thisTrigger') }) }}
           </div>
         </div>
       </div>
@@ -269,7 +274,7 @@ onMounted(loadTriggers);
       <!-- Test result -->
       <div v-if="testResult" class="card test-result-card">
         <div class="card-header">
-          <h3>Test Result</h3>
+          <h3>{{ t('multiRepoFanOut.testResult') }}</h3>
         </div>
         <div class="test-result-body">{{ testResult }}</div>
       </div>
@@ -281,26 +286,26 @@ onMounted(loadTriggers);
               <circle cx="12" cy="12" r="10"/>
               <path d="M12 8v4l3 3"/>
             </svg>
-            Fan-Out Overview
+            {{ t('multiRepoFanOut.fanOutOverview') }}
           </h3>
         </div>
         <div class="overview-body">
           <div class="overview-stats">
             <div class="ov-stat">
               <span class="ov-num">{{ paths.length }}</span>
-              <span class="ov-lbl">Total paths</span>
+              <span class="ov-lbl">{{ t('multiRepoFanOut.totalPaths') }}</span>
             </div>
             <div class="ov-stat">
               <span class="ov-num" style="color: #34d399">{{ paths.filter(p => p.path_type === 'github').length }}</span>
-              <span class="ov-lbl">GitHub repos</span>
+              <span class="ov-lbl">{{ t('multiRepoFanOut.githubRepos') }}</span>
             </div>
             <div class="ov-stat">
               <span class="ov-num">{{ paths.filter(p => p.path_type === 'local').length }}</span>
-              <span class="ov-lbl">Local paths</span>
+              <span class="ov-lbl">{{ t('multiRepoFanOut.localPaths') }}</span>
             </div>
             <div class="ov-stat">
               <span class="ov-num">{{ paths.filter(p => p.path_type === 'project').length }}</span>
-              <span class="ov-lbl">Projects</span>
+              <span class="ov-lbl">{{ t('multiRepoFanOut.projects') }}</span>
             </div>
           </div>
         </div>

@@ -2,7 +2,9 @@
 import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuth } from '../composables/useAuth';
+import { useI18n } from 'vue-i18n';
 
+const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const { login } = useAuth();
@@ -28,7 +30,7 @@ async function onSubmit() {
     error.value =
       err instanceof Error && err.message
         ? err.message
-        : 'Invalid email or password';
+        : t('login.invalidCredentials');
   } finally {
     submitting.value = false;
   }
@@ -38,12 +40,12 @@ async function onSubmit() {
 <template>
   <div class="login-page">
     <div class="login-card">
-      <h1 class="login-title">Sign in</h1>
-      <p class="login-subtitle">Use your Agented account.</p>
+      <h1 class="login-title">{{ t('login.signIn') }}</h1>
+      <p class="login-subtitle">{{ t('login.useAgentedAccount') }}</p>
 
       <form class="login-form" @submit.prevent="onSubmit">
         <label class="login-field">
-          <span class="login-label">Email</span>
+          <span class="login-label">{{ t('login.email') }}</span>
           <input
             v-model="email"
             type="email"
@@ -56,7 +58,7 @@ async function onSubmit() {
         </label>
 
         <label class="login-field">
-          <span class="login-label">Password</span>
+          <span class="login-label">{{ t('login.password') }}</span>
           <input
             v-model="password"
             type="password"
@@ -78,14 +80,14 @@ async function onSubmit() {
           data-test="login-submit"
           :disabled="!canSubmit"
         >
-          {{ submitting ? 'Signing in…' : 'Sign in' }}
+          {{ submitting ? t('login.signingIn') : t('login.signIn') }}
         </button>
 
         <p class="login-switch">
-          New here?
-          <router-link :to="{ name: 'signup' }" class="login-link">Create an account</router-link>
+          {{ t('login.newHere') }}
+          <router-link :to="{ name: 'signup' }" class="login-link">{{ t('login.createAccount') }}</router-link>
           ·
-          <router-link :to="{ name: 'forgot-password' }" class="login-link">Forgot password?</router-link>
+          <router-link :to="{ name: 'forgot-password' }" class="login-link">{{ t('login.forgotPassword') }}</router-link>
         </p>
       </form>
     </div>

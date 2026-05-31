@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { Trigger } from '../../services/api';
 import { triggerApi, ApiError } from '../../services/api';
 import { useFocusTrap } from '../../composables/useFocusTrap';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   triggers: Trigger[];
@@ -44,7 +47,7 @@ async function onTriggerSelect() {
 
 async function runScan() {
   if (!selectedTriggerId.value) {
-    setStatus('Please select a trigger', 'error');
+    setStatus(t('runScanModal.selectTriggerStatus'), 'error');
     return;
   }
 
@@ -54,14 +57,14 @@ async function runScan() {
   try {
     const result = await triggerApi.run(selectedTriggerId.value);
     setStatus(
-      `Trigger "${result.message}" - Scan is running in the background. Results will appear after completion.`,
+      t('runScanModal.scanRunningStatus', { message: result.message }),
       'success'
     );
     setTimeout(() => {
       emit('scanStarted');
     }, 3000);
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to start trigger';
+    const message = err instanceof ApiError ? err.message : t('runScanModal.startFailed');
     setStatus(message, 'error');
     isRunning.value = false;
   }
@@ -85,8 +88,8 @@ function setStatus(message: string, type: 'success' | 'error') {
           </svg>
         </div>
         <div>
-          <h3 id="modal-title-run-scan">Run Security Scan</h3>
-          <p class="modal-subtitle">Execute vulnerability analysis on project paths</p>
+          <h3 id="modal-title-run-scan">{{ t('runScanModal.title') }}</h3>
+          <p class="modal-subtitle">{{ t('runScanModal.subtitle') }}</p>
         </div>
         <button class="close-btn" @click="emit('close')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -103,14 +106,14 @@ function setStatus(message: string, type: 'success' | 'error') {
               <circle cx="12" cy="5" r="2"/>
               <path d="M12 7v4"/>
             </svg>
-            Select Trigger
+            {{ t('runScanModal.selectTriggerLabel') }}
           </label>
           <select v-model="selectedTriggerId" @change="onTriggerSelect">
             <option value="">
-              {{ triggersWithPaths.length === 0 ? 'No triggers with configured paths' : 'Choose a trigger to run...' }}
+              {{ triggersWithPaths.length === 0 ? t('runScanModal.noTriggersWithPaths') : t('runScanModal.chooseTrigger') }}
             </option>
             <option v-for="trigger in triggersWithPaths" :key="trigger.id" :value="trigger.id">
-              {{ trigger.name }} ({{ trigger.path_count }} path{{ trigger.path_count !== 1 ? 's' : '' }})
+              {{ trigger.name }} ({{ t('runScanModal.pathCount', { count: trigger.path_count }) }})
             </option>
           </select>
         </div>
@@ -120,7 +123,7 @@ function setStatus(message: string, type: 'success' | 'error') {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
             </svg>
-            <span>Configured Paths</span>
+            <span>{{ t('runScanModal.configuredPaths') }}</span>
           </div>
           <div class="paths-list">
             <div v-for="path in (triggerInfo.paths || [])" :key="path.local_project_path" class="path-entry">
@@ -130,7 +133,7 @@ function setStatus(message: string, type: 'success' | 'error') {
               {{ path.local_project_path }}
             </div>
             <div v-if="!triggerInfo.paths || triggerInfo.paths.length === 0" class="empty-text">
-              No paths configured for this trigger
+              {{ t('runScanModal.noPathsConfigured') }}
             </div>
           </div>
         </div>
@@ -149,7 +152,7 @@ function setStatus(message: string, type: 'success' | 'error') {
       </div>
 
       <div class="modal-actions">
-        <button class="btn btn-secondary" @click="emit('close')">Cancel</button>
+        <button class="btn btn-secondary" @click="emit('close')">{{ t('common.cancel') }}</button>
         <button class="btn btn-primary" :disabled="isRunning || !selectedTriggerId" @click="runScan">
           <svg v-if="isRunning" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
@@ -157,7 +160,7 @@ function setStatus(message: string, type: 'success' | 'error') {
           <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polygon points="5 3 19 12 5 21 5 3"/>
           </svg>
-          {{ isRunning ? 'Scan Started' : 'Run Scan' }}
+          {{ isRunning ? t('runScanModal.scanStartedBtn') : t('runScanModal.runScanBtn') }}
         </button>
       </div>
     </div>

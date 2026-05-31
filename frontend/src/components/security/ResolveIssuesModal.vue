@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { AuditRecord } from '../../services/api';
 import { auditApi, resolveApi, ApiError } from '../../services/api';
 import { useFocusTrap } from '../../composables/useFocusTrap';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   auditHistory: AuditRecord[];
@@ -61,7 +64,7 @@ async function buildSummary() {
     projectPaths.value = paths;
     auditSummary.value = summary.join('\n');
   } catch {
-    auditSummary.value = 'Unable to load findings summary';
+    auditSummary.value = t('resolveIssuesModal.summaryLoadError');
   } finally {
     isLoading.value = false;
   }
@@ -69,7 +72,7 @@ async function buildSummary() {
 
 async function runResolve() {
   if (!auditSummary.value || projectPaths.value.length === 0) {
-    setStatus('No findings or projects to resolve', 'error');
+    setStatus(t('resolveIssuesModal.noFindingsStatus'), 'error');
     return;
   }
 
@@ -79,14 +82,14 @@ async function runResolve() {
   try {
     await resolveApi.resolveIssues(auditSummary.value, projectPaths.value);
     setStatus(
-      'Resolution process started. Claude is now working on fixing the issues. This may take several minutes. Run another security scan afterwards to verify fixes.',
+      t('resolveIssuesModal.resolveStartedStatus'),
       'success'
     );
     setTimeout(() => {
       emit('resolved');
     }, 5000);
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to start resolution';
+    const message = err instanceof ApiError ? err.message : t('resolveIssuesModal.resolveFailed');
     setStatus(message, 'error');
     isResolving.value = false;
   }
@@ -112,8 +115,8 @@ onMounted(buildSummary);
           </svg>
         </div>
         <div>
-          <h3 id="modal-title-resolve-issues">Warning: Edit Access Required</h3>
-          <p class="modal-subtitle">Claude will modify your project files</p>
+          <h3 id="modal-title-resolve-issues">{{ t('resolveIssuesModal.title') }}</h3>
+          <p class="modal-subtitle">{{ t('resolveIssuesModal.subtitle') }}</p>
         </div>
         <button class="close-btn" @click="emit('close')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -130,11 +133,9 @@ onMounted(buildSummary);
             </svg>
           </div>
           <div class="warning-content">
-            <p class="warning-title">This action will give Claude edit access to your project files.</p>
+            <p class="warning-title">{{ t('resolveIssuesModal.warningTitle') }}</p>
             <p class="warning-text">
-              Claude will attempt to automatically fix security vulnerabilities by modifying
-              your code. This includes updating dependencies, patching vulnerable code, and
-              making other necessary changes.
+              {{ t('resolveIssuesModal.warningText') }}
             </p>
           </div>
         </div>
@@ -144,13 +145,13 @@ onMounted(buildSummary);
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
             </svg>
-            <span>Projects to Modify</span>
+            <span>{{ t('resolveIssuesModal.projectsToModify') }}</span>
           </div>
           <div class="info-content">
             <template v-if="isLoading">
               <div class="loading-inline">
                 <div class="loading-spinner"></div>
-                <span>Loading projects...</span>
+                <span>{{ t('resolveIssuesModal.loadingProjects') }}</span>
               </div>
             </template>
             <template v-else-if="projectPaths.length > 0">
@@ -162,7 +163,7 @@ onMounted(buildSummary);
               </div>
             </template>
             <template v-else>
-              <div class="empty-text">No projects with findings to resolve</div>
+              <div class="empty-text">{{ t('resolveIssuesModal.noProjectsWithFindings') }}</div>
             </template>
           </div>
         </div>
@@ -175,17 +176,17 @@ onMounted(buildSummary);
               <line x1="16" y1="13" x2="8" y2="13"/>
               <line x1="16" y1="17" x2="8" y2="17"/>
             </svg>
-            <span>Issues Summary</span>
+            <span>{{ t('resolveIssuesModal.issuesSummary') }}</span>
           </div>
           <div class="summary-content">
             <template v-if="isLoading">
               <div class="loading-inline">
                 <div class="loading-spinner"></div>
-                <span>Loading findings summary...</span>
+                <span>{{ t('resolveIssuesModal.loadingSummary') }}</span>
               </div>
             </template>
             <template v-else>
-              {{ auditSummary || 'Unable to load findings summary' }}
+              {{ auditSummary || t('resolveIssuesModal.summaryLoadError') }}
             </template>
           </div>
         </div>
@@ -204,7 +205,7 @@ onMounted(buildSummary);
       </div>
 
       <div class="modal-actions">
-        <button class="btn btn-secondary" @click="emit('close')">Cancel</button>
+        <button class="btn btn-secondary" @click="emit('close')">{{ t('common.cancel') }}</button>
         <button
           class="btn btn-danger"
           :disabled="isResolving || isLoading || projectPaths.length === 0"
@@ -216,7 +217,7 @@ onMounted(buildSummary);
           <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
           </svg>
-          {{ isResolving ? 'Resolution Started' : 'I Understand, Resolve Issues' }}
+          {{ isResolving ? t('resolveIssuesModal.resolveStartedBtn') : t('resolveIssuesModal.confirmBtn') }}
         </button>
       </div>
     </div>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { superAgentSessionApi } from '../../services/api';
 import { safeFormatDateTime } from '../../utils/datetime';
 import MarkdownContent from '../base/MarkdownContent.vue';
@@ -9,6 +10,7 @@ interface Props {
   sessionId: string;
 }
 
+const { t } = useI18n();
 const props = defineProps<Props>();
 const emit = defineEmits<{ (e: 'close'): void }>();
 
@@ -64,16 +66,16 @@ watch(() => props.sessionId, load);
   <div class="historical-viewer">
     <div class="viewer-header">
       <div class="header-text">
-        <div class="title">Historical session (read-only)</div>
+        <div class="title">{{ t('historicalSessionViewer.title') }}</div>
         <div class="subtitle">{{ sessionId }}</div>
       </div>
-      <button class="btn-close" type="button" @click="emit('close')">Close</button>
+      <button class="btn-close" type="button" @click="emit('close')">{{ t('common.close') }}</button>
     </div>
 
-    <div v-if="loading" class="state-row">Loading session...</div>
+    <div v-if="loading" class="state-row">{{ t('historicalSessionViewer.loading') }}</div>
     <div v-else-if="error" class="state-row error">{{ error }}</div>
     <div v-else-if="messages.length === 0" class="state-row muted">
-      No messages recorded in this session.
+      {{ t('historicalSessionViewer.noMessages') }}
     </div>
     <div v-else class="messages">
       <div

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { triggerApi, ApiError } from '../services/api';
 import type { Trigger } from '../services/api';
+const { t } = useI18n();
 const showToast = useToast();
 
 // Trigger loading
@@ -28,7 +30,7 @@ async function loadTriggers() {
       loadFromTrigger(scheduledTriggers.value[0]);
     }
   } catch (e) {
-    triggerLoadError.value = e instanceof ApiError ? e.message : 'Failed to load triggers';
+    triggerLoadError.value = e instanceof ApiError ? e.message : t('visualCronWizard.loadTriggersFailed');
   } finally {
     isLoadingTriggers.value = false;
   }
@@ -79,21 +81,21 @@ const nlParsed = ref<string | null>(null);
 const nlHuman = ref<string | null>(null);
 
 function parseNaturalLanguage(text: string): { cron: string; human: string } | null {
-  const t = text.toLowerCase().trim();
-  if (/\bhourly\b|every hour\b/.test(t)) {
-    const minMatch = t.match(/(?:at\s+)?:(\d+)/);
+  const txt = text.toLowerCase().trim();
+  if (/\bhourly\b|every hour\b/.test(txt)) {
+    const minMatch = txt.match(/(?:at\s+)?:(\d+)/);
     const m = minMatch ? minMatch[1].padStart(2, '0') : '00';
-    return { cron: `${m} * * * *`, human: `Every hour at :${m}` };
+    return { cron: `${m} * * * *`, human: t('visualCronWizard.human.hourlyAtMinute', { minute: m }) };
   }
-  const everyNHours = t.match(/every\s+(\d+)\s+hours?/);
+  const everyNHours = txt.match(/every\s+(\d+)\s+hours?/);
   if (everyNHours) {
     const n = everyNHours[1];
-    return { cron: `0 */${n} * * *`, human: `Every ${n} hours` };
+    return { cron: `0 */${n} * * *`, human: t('visualCronWizard.human.everyNHours', { count: n }) };
   }
-  const everyNMin = t.match(/every\s+(\d+)\s+min(?:utes?)?/);
+  const everyNMin = txt.match(/every\s+(\d+)\s+min(?:utes?)?/);
   if (everyNMin) {
     const n = everyNMin[1];
-    return { cron: `*/${n} * * * *`, human: `Every ${n} minutes` };
+    return { cron: `*/${n} * * * *`, human: t('visualCronWizard.human.everyNMinutes', { count: n }) };
   }
   function parseTime(s: string): { h: number; m: number } | null {
     const t12 = s.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);
@@ -109,34 +111,34 @@ function parseNaturalLanguage(text: string): { cron: string; human: string } | n
     if (t24) return { h: parseInt(t24[1]), m: parseInt(t24[2]) };
     return null;
   }
-  const timeMatch = parseTime(t);
+  const timeMatch = parseTime(txt);
   const h = timeMatch?.h ?? 9;
   const m = timeMatch?.m ?? 0;
   const ms = m.toString().padStart(2, '0');
-  if (/weekday|mon.*fri|business day/.test(t)) {
-    const tz = parseTimezoneStr(t);
-    return { cron: `${ms} ${h} * * 1-5`, human: `Every weekday at ${fmt(h, m)}${tz}` };
+  if (/weekday|mon.*fri|business day/.test(txt)) {
+    const tz = parseTimezoneStr(txt);
+    return { cron: `${ms} ${h} * * 1-5`, human: t('visualCronWizard.human.everyWeekday', { time: fmt(h, m) }) + tz };
   }
-  if (/weekend/.test(t)) {
-    return { cron: `${ms} ${h} * * 0,6`, human: `Every weekend day at ${fmt(h, m)}` };
+  if (/weekend/.test(txt)) {
+    return { cron: `${ms} ${h} * * 0,6`, human: t('visualCronWizard.human.everyWeekend', { time: fmt(h, m) }) };
   }
   const dayNames = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
   for (let i = 0; i < dayNames.length; i++) {
-    if (t.includes(dayNames[i])) {
-      return { cron: `${ms} ${h} * * ${i}`, human: `Every ${capitalize(dayNames[i])} at ${fmt(h, m)}` };
+    if (txt.includes(dayNames[i])) {
+      return { cron: `${ms} ${h} * * ${i}`, human: t('visualCronWizard.human.everyDayOfWeek', { day: capitalize(dayNames[i]), time: fmt(h, m) }) };
     }
   }
-  if (/\bdaily\b|every day\b/.test(t)) {
-    const tz = parseTimezoneStr(t);
-    return { cron: `${ms} ${h} * * *`, human: `Every day at ${fmt(h, m)}${tz}` };
+  if (/\bdaily\b|every day\b/.test(txt)) {
+    const tz = parseTimezoneStr(txt);
+    return { cron: `${ms} ${h} * * *`, human: t('visualCronWizard.human.everyDay', { time: fmt(h, m) }) + tz };
   }
-  if (/\bweekly\b|every week\b/.test(t)) {
-    return { cron: `${ms} ${h} * * 1`, human: `Every Monday at ${fmt(h, m)}` };
+  if (/\bweekly\b|every week\b/.test(txt)) {
+    return { cron: `${ms} ${h} * * 1`, human: t('visualCronWizard.human.everyMonday', { time: fmt(h, m) }) };
   }
-  const monthDay = t.match(/(?:on the\s+)?(\d+)(?:st|nd|rd|th)?\s+(?:of each|of every|each)?\s*month/);
-  if (monthDay || /\bmonthly\b/.test(t)) {
+  const monthDay = txt.match(/(?:on the\s+)?(\d+)(?:st|nd|rd|th)?\s+(?:of each|of every|each)?\s*month/);
+  if (monthDay || /\bmonthly\b/.test(txt)) {
     const d = monthDay ? monthDay[1] : '1';
-    return { cron: `${ms} ${h} ${d} * *`, human: `On day ${d} of every month at ${fmt(h, m)}` };
+    return { cron: `${ms} ${h} ${d} * *`, human: t('visualCronWizard.human.onDayOfMonth', { day: d, time: fmt(h, m) }) };
   }
   return null;
 }
@@ -163,14 +165,14 @@ function applyNLSchedule() {
   if (!result) {
     nlParsed.value = null;
     nlHuman.value = null;
-    showToast('Could not parse schedule. Try "every weekday at 9am" or "daily at 6pm".', 'error');
+    showToast(t('visualCronWizard.toast.parseFailed'), 'error');
     return;
   }
   nlParsed.value = result.cron;
   nlHuman.value = result.human;
   customCron.value = result.cron;
   frequency.value = 'custom';
-  showToast('Schedule applied from natural language!', 'success');
+  showToast(t('visualCronWizard.toast.applied'), 'success');
 }
 
 type Frequency = 'hourly' | 'daily' | 'weekly' | 'monthly' | 'custom';
@@ -183,10 +185,10 @@ const selectedMonthDay = ref(1);
 const timezone = ref('UTC');
 const customCron = ref('');
 
-const days = [
-  { val: 0, label: 'Sun' }, { val: 1, label: 'Mon' }, { val: 2, label: 'Tue' },
-  { val: 3, label: 'Wed' }, { val: 4, label: 'Thu' }, { val: 5, label: 'Fri' }, { val: 6, label: 'Sat' },
-];
+const days = computed(() => [
+  { val: 0, label: t('visualCronWizard.days.sun') }, { val: 1, label: t('visualCronWizard.days.mon') }, { val: 2, label: t('visualCronWizard.days.tue') },
+  { val: 3, label: t('visualCronWizard.days.wed') }, { val: 4, label: t('visualCronWizard.days.thu') }, { val: 5, label: t('visualCronWizard.days.fri') }, { val: 6, label: t('visualCronWizard.days.sat') },
+]);
 
 const timezones = ['UTC', 'US/Eastern', 'US/Pacific', 'Europe/London', 'Europe/Berlin', 'Asia/Tokyo'];
 
@@ -205,14 +207,14 @@ const cronExpression = computed(() => {
 
 const humanReadable = computed(() => {
   switch (frequency.value) {
-    case 'hourly': return `Every hour at :${minute.value.toString().padStart(2, '0')}`;
-    case 'daily': return `Every day at ${formatTime(hour.value, minute.value)} ${timezone.value}`;
+    case 'hourly': return t('visualCronWizard.human.hourlyAtMinute', { minute: minute.value.toString().padStart(2, '0') });
+    case 'daily': return t('visualCronWizard.human.everyDayTz', { time: formatTime(hour.value, minute.value), tz: timezone.value });
     case 'weekly': {
-      const dayNames = selectedDays.value.map(d => days.find(x => x.val === d)?.label).join(', ');
-      return `Every ${dayNames} at ${formatTime(hour.value, minute.value)} ${timezone.value}`;
+      const dayNames = selectedDays.value.map(d => days.value.find(x => x.val === d)?.label).join(', ');
+      return t('visualCronWizard.human.everyDaysTz', { days: dayNames, time: formatTime(hour.value, minute.value), tz: timezone.value });
     }
-    case 'monthly': return `On day ${selectedMonthDay.value} of every month at ${formatTime(hour.value, minute.value)} ${timezone.value}`;
-    case 'custom': return `Custom: ${customCron.value || 'Enter expression above'}`;
+    case 'monthly': return t('visualCronWizard.human.onDayOfMonthTz', { day: selectedMonthDay.value, time: formatTime(hour.value, minute.value), tz: timezone.value });
+    case 'custom': return t('visualCronWizard.human.custom', { cron: customCron.value || t('visualCronWizard.enterExpressionAbove') });
     default: return '';
   }
 });
@@ -246,7 +248,7 @@ function formatTime(h: number, m: number) {
 const isSaving = ref(false);
 async function handleSave() {
   if (!selectedTriggerId.value) {
-    showToast('Select a trigger to save the schedule to', 'info');
+    showToast(t('visualCronWizard.toast.selectTrigger'), 'info');
     return;
   }
   isSaving.value = true;
@@ -255,9 +257,9 @@ async function handleSave() {
       trigger_source: 'scheduled',
     });
 
-    showToast(`Schedule saved: ${cronExpression.value}`, 'success');
+    showToast(t('visualCronWizard.toast.saved', { cron: cronExpression.value }), 'success');
   } catch (e) {
-    showToast(e instanceof ApiError ? e.message : 'Failed to save schedule', 'error');
+    showToast(e instanceof ApiError ? e.message : t('visualCronWizard.toast.saveFailed'), 'error');
   } finally {
     isSaving.value = false;
   }
@@ -268,23 +270,23 @@ async function handleSave() {
   <div class="cron-wizard">
 
     <PageHeader
-      title="Natural Language Schedule Builder"
-      subtitle="Type a schedule in plain English or use the visual builder — generates a valid cron expression with a human-readable preview."
+      :title="t('visualCronWizard.title')"
+      :subtitle="t('visualCronWizard.subtitle')"
     />
 
     <!-- Trigger selector -->
-    <div v-if="isLoadingTriggers" class="loading-msg">Loading triggers...</div>
+    <div v-if="isLoadingTriggers" class="loading-msg">{{ t('visualCronWizard.loadingTriggers') }}</div>
     <div v-else-if="triggerLoadError" class="error-msg">{{ triggerLoadError }}</div>
     <div v-else class="trigger-selector">
-      <label class="selector-label">Trigger:</label>
+      <label class="selector-label">{{ t('visualCronWizard.triggerLabel') }}</label>
       <select v-model="selectedTriggerId" class="trigger-select-input" @change="onTriggerSelect">
-        <option value="">Select a trigger...</option>
-        <option v-for="t in triggers" :key="t.id" :value="t.id">
-          {{ t.name }} ({{ t.trigger_source }})
+        <option value="">{{ t('visualCronWizard.selectTrigger') }}</option>
+        <option v-for="trig in triggers" :key="trig.id" :value="trig.id">
+          {{ trig.name }} ({{ trig.trigger_source }})
         </option>
       </select>
       <span v-if="scheduledTriggers.length > 0" class="scheduled-count">
-        {{ scheduledTriggers.length }} scheduled trigger{{ scheduledTriggers.length !== 1 ? 's' : '' }}
+        {{ t('visualCronWizard.scheduledTriggerCount', { count: scheduledTriggers.length }) }}
       </span>
     </div>
 
@@ -292,61 +294,61 @@ async function handleSave() {
     <div class="card nl-card">
       <div class="nl-header">
         <span class="nl-icon">*</span>
-        <span class="nl-title">Natural Language Input</span>
-        <span class="nl-hint">e.g. "every weekday at 9am PT", "daily at 6pm", "every Monday at 10:30am"</span>
+        <span class="nl-title">{{ t('visualCronWizard.nlTitle') }}</span>
+        <span class="nl-hint">{{ t('visualCronWizard.nlHint') }}</span>
       </div>
       <div class="nl-body">
         <div class="nl-input-row">
           <input
             v-model="nlInput"
             class="nl-input"
-            placeholder="every weekday at 9am PT"
+            :placeholder="t('visualCronWizard.nlPlaceholder')"
             @keyup.enter="applyNLSchedule"
           />
-          <button class="btn btn-primary" @click="applyNLSchedule">Parse Schedule</button>
+          <button class="btn btn-primary" @click="applyNLSchedule">{{ t('visualCronWizard.parseSchedule') }}</button>
         </div>
         <div v-if="nlParsed" class="nl-result">
           <div class="nl-result-human">{{ nlHuman }}</div>
           <code class="nl-result-cron">{{ nlParsed }}</code>
-          <span class="nl-applied-badge">Applied to visual builder</span>
+          <span class="nl-applied-badge">{{ t('visualCronWizard.appliedBadge') }}</span>
         </div>
       </div>
     </div>
 
-    <div class="section-divider">-- or configure visually --</div>
+    <div class="section-divider">{{ t('visualCronWizard.orConfigureVisually') }}</div>
 
     <div class="layout">
       <div class="wizard-col">
         <!-- Frequency selector -->
         <div class="card freq-card">
-          <div class="card-header">Frequency</div>
+          <div class="card-header">{{ t('visualCronWizard.frequency') }}</div>
           <div class="freq-pills">
             <button
               v-for="f in (['hourly', 'daily', 'weekly', 'monthly', 'custom'] as Frequency[])"
               :key="f"
               :class="['freq-pill', { active: frequency === f }]"
               @click="frequency = f"
-            >{{ f }}</button>
+            >{{ t('visualCronWizard.freq.' + f) }}</button>
           </div>
         </div>
 
         <!-- Time picker -->
         <div v-if="frequency !== 'hourly' && frequency !== 'custom'" class="card time-card">
-          <div class="card-header">Time</div>
+          <div class="card-header">{{ t('visualCronWizard.time') }}</div>
           <div class="time-body">
             <div class="time-inputs">
               <div class="time-field">
-                <label class="field-label">Hour</label>
+                <label class="field-label">{{ t('visualCronWizard.hour') }}</label>
                 <input type="number" v-model.number="hour" min="0" max="23" class="num-input" />
               </div>
               <span class="time-sep">:</span>
               <div class="time-field">
-                <label class="field-label">Minute</label>
+                <label class="field-label">{{ t('visualCronWizard.minute') }}</label>
                 <input type="number" v-model.number="minute" min="0" max="59" class="num-input" />
               </div>
             </div>
             <div class="time-field tz-field">
-              <label class="field-label">Timezone</label>
+              <label class="field-label">{{ t('visualCronWizard.timezone') }}</label>
               <select v-model="timezone" class="select-input">
                 <option v-for="tz in timezones" :key="tz" :value="tz">{{ tz }}</option>
               </select>
@@ -356,7 +358,7 @@ async function handleSave() {
 
         <!-- Weekly day picker -->
         <div v-if="frequency === 'weekly'" class="card days-card">
-          <div class="card-header">Days of Week</div>
+          <div class="card-header">{{ t('visualCronWizard.daysOfWeek') }}</div>
           <div class="days-body">
             <button
               v-for="d in days"
@@ -369,7 +371,7 @@ async function handleSave() {
 
         <!-- Monthly day picker -->
         <div v-if="frequency === 'monthly'" class="card">
-          <div class="card-header">Day of Month</div>
+          <div class="card-header">{{ t('visualCronWizard.dayOfMonth') }}</div>
           <div class="month-body">
             <input type="number" v-model.number="selectedMonthDay" min="1" max="31" class="num-input" />
           </div>
@@ -377,16 +379,16 @@ async function handleSave() {
 
         <!-- Custom cron -->
         <div v-if="frequency === 'custom'" class="card">
-          <div class="card-header">Custom Cron Expression</div>
+          <div class="card-header">{{ t('visualCronWizard.customCronExpression') }}</div>
           <div class="custom-body">
             <input v-model="customCron" class="cron-input" placeholder="0 9 * * 1-5" />
-            <div class="cron-help">Format: minute hour day-of-month month day-of-week</div>
+            <div class="cron-help">{{ t('visualCronWizard.cronFormatHelp') }}</div>
           </div>
         </div>
 
         <div class="actions">
           <button class="btn btn-primary" :disabled="isSaving || !selectedTriggerId" @click="handleSave">
-            {{ isSaving ? 'Saving...' : 'Save Schedule' }}
+            {{ isSaving ? t('visualCronWizard.saving') : t('visualCronWizard.saveSchedule') }}
           </button>
         </div>
       </div>
@@ -394,18 +396,18 @@ async function handleSave() {
       <!-- Preview panel -->
       <div class="preview-col">
         <div class="card preview-card">
-          <div class="card-header">Schedule Preview</div>
+          <div class="card-header">{{ t('visualCronWizard.schedulePreview') }}</div>
           <div class="preview-body">
             <div class="human-readable">{{ humanReadable }}</div>
             <div class="cron-expr">
-              <span class="cron-label">Cron:</span>
+              <span class="cron-label">{{ t('visualCronWizard.cronLabel') }}</span>
               <code class="cron-code">{{ cronExpression }}</code>
             </div>
           </div>
         </div>
 
         <div class="card next-runs-card">
-          <div class="card-header">Next 5 Runs</div>
+          <div class="card-header">{{ t('visualCronWizard.next5Runs') }}</div>
           <div class="next-runs-list">
             <div v-for="(run, i) in nextRuns" :key="i" class="next-run-item">
               <span class="run-num">{{ i + 1 }}</span>

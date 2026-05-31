@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import type { Project } from '../../services/api';
 import { safeFormatDate } from '../../utils/datetime';
+
+const { t } = useI18n();
 
 defineProps<{
   project: Project;
@@ -12,7 +15,7 @@ defineProps<{
   <!-- GitHub Repository -->
   <div v-if="project.github_repo" class="card">
     <div class="card-header">
-      <h3>GitHub Repository</h3>
+      <h3>{{ t('harnessStatusSection.githubRepository') }}</h3>
     </div>
     <div class="github-content">
       <a :href="'https://' + (project.github_host || 'github.com') + '/' + project.github_repo" target="_blank" rel="noopener noreferrer" class="github-link">
@@ -30,27 +33,27 @@ defineProps<{
   <!-- Project Info -->
   <div class="card">
     <div class="card-header">
-      <h3>Project Info</h3>
+      <h3>{{ t('harnessStatusSection.projectInfo') }}</h3>
     </div>
     <div class="info-grid">
       <div class="info-item">
-        <span class="info-label">Project ID</span>
+        <span class="info-label">{{ t('harnessStatusSection.projectId') }}</span>
         <span class="info-value mono">{{ project.id }}</span>
       </div>
       <div class="info-item">
-        <span class="info-label">Status</span>
+        <span class="info-label">{{ t('harnessStatusSection.status') }}</span>
         <span class="info-value">{{ project.status }}</span>
       </div>
       <div v-if="project.product_name" class="info-item">
-        <span class="info-label">Product</span>
+        <span class="info-label">{{ t('harnessStatusSection.product') }}</span>
         <span class="info-value">{{ project.product_name }}</span>
       </div>
       <div class="info-item">
-        <span class="info-label">Teams</span>
-        <span class="info-value">{{ totalTeamCount }} assigned</span>
+        <span class="info-label">{{ t('harnessStatusSection.teams') }}</span>
+        <span class="info-value">{{ t('harnessStatusSection.assignedCount', { count: totalTeamCount }) }}</span>
       </div>
       <div v-if="project.created_at" class="info-item">
-        <span class="info-label">Created</span>
+        <span class="info-label">{{ t('harnessStatusSection.created') }}</span>
         <span class="info-value">{{ safeFormatDate(project.created_at) }}</span>
       </div>
     </div>

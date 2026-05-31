@@ -4,7 +4,9 @@ import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { botTemplateApi, ApiError } from '../services/api';
 import type { BotTemplate } from '../services/api';
+import { useI18n } from 'vue-i18n';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 interface Playbook {
@@ -83,7 +85,7 @@ async function loadPlaybooks() {
       ];
     }
   } catch (err) {
-    const msg = err instanceof ApiError ? err.message : 'Failed to load playbooks';
+    const msg = err instanceof ApiError ? err.message : t('incidentResponsePlaybooks.toast.loadFailed');
     loadError.value = msg;
   } finally {
     isLoading.value = false;
@@ -140,10 +142,10 @@ async function runPlaybook() {
     }
 
     runLog.value.push(`[${new Date().toISOString()}] Playbook "${pb.name}" completed successfully.`);
-    showToast(`Playbook "${pb.name}" completed`, 'success');
+    showToast(t('incidentResponsePlaybooks.toast.completed', { name: pb.name }), 'success');
     pb.lastRun = new Date().toISOString();
   } catch (err) {
-    const msg = err instanceof ApiError ? err.message : 'Playbook execution failed';
+    const msg = err instanceof ApiError ? err.message : t('incidentResponsePlaybooks.toast.executionFailed');
     showToast(msg, 'error');
   } finally {
     isRunning.value = false;
@@ -151,8 +153,14 @@ async function runPlaybook() {
 }
 
 function formatDate(iso: string | null) {
-  if (!iso) return 'Never';
+  if (!iso) return t('incidentResponsePlaybooks.never');
   return new Date(iso).toLocaleString();
+}
+
+function categoryLabel(cat: string): string {
+  const key = `incidentResponsePlaybooks.categories.${cat.toLowerCase()}`;
+  const label = t(key);
+  return label === key ? cat : label;
 }
 
 function categoryColor(cat: string): string {
@@ -170,20 +178,20 @@ function categoryColor(cat: string): string {
 <template>
   <div class="incident-playbooks-page">
     <PageHeader
-      title="Incident Response Playbooks"
-      subtitle="Pre-built bot templates for common incident response steps. Automate the mechanical parts so you can focus on the problem."
+      :title="t('incidentResponsePlaybooks.title')"
+      :subtitle="t('incidentResponsePlaybooks.subtitle')"
     />
 
     <div class="page-body">
       <!-- Loading state -->
       <div v-if="isLoading" style="padding: 32px; text-align: center; color: var(--text-tertiary);">
-        Loading playbooks...
+        {{ t('incidentResponsePlaybooks.loading') }}
       </div>
 
       <!-- Error state -->
       <div v-else-if="loadError" style="padding: 32px; text-align: center; color: #ef4444;">
         {{ loadError }}
-        <button class="run-btn" style="margin-top: 12px;" @click="loadPlaybooks">Retry</button>
+        <button class="run-btn" style="margin-top: 12px;" @click="loadPlaybooks">{{ t('common.retry') }}</button>
       </div>
 
       <template v-else>
@@ -192,7 +200,7 @@ function categoryColor(cat: string): string {
         <input
           v-model="searchQuery"
           class="search-input"
-          placeholder="Search playbooks..."
+          :placeholder="t('incidentResponsePlaybooks.searchPlaceholder')"
         />
         <div class="category-tabs">
           <button
@@ -202,7 +210,7 @@ function categoryColor(cat: string): string {
             :class="{ active: selectedCategory === cat }"
             @click="selectedCategory = cat"
           >
-            {{ cat }}
+            {{ categoryLabel(cat) }}
           </button>
         </div>
       </div>
@@ -219,18 +227,18 @@ function categoryColor(cat: string): string {
           >
             <div class="playbook-header">
               <span class="category-badge" :style="{ borderColor: categoryColor(pb.category) }">
-                {{ pb.category }}
+                {{ categoryLabel(pb.category) }}
               </span>
               <span class="est-time">~{{ pb.estimatedMinutes }}m</span>
             </div>
             <div class="playbook-name">{{ pb.name }}</div>
             <div class="playbook-desc">{{ pb.description }}</div>
             <div class="playbook-meta">
-              Last run: {{ formatDate(pb.lastRun) }}
+              {{ t('incidentResponsePlaybooks.lastRun') }}: {{ formatDate(pb.lastRun) }}
             </div>
           </div>
           <div v-if="filteredPlaybooks.length === 0" class="empty-list">
-            No playbooks match your filters.
+            {{ t('incidentResponsePlaybooks.noMatch') }}
           </div>
         </div>
 
@@ -240,19 +248,19 @@ function categoryColor(cat: string): string {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
             </svg>
-            <p>Select a playbook to view details and run it</p>
+            <p>{{ t('incidentResponsePlaybooks.selectPrompt') }}</p>
           </div>
           <template v-else>
             <div class="detail-header">
               <h2>{{ selectedPlaybook.name }}</h2>
               <span class="category-badge" :style="{ borderColor: categoryColor(selectedPlaybook.category) }">
-                {{ selectedPlaybook.category }}
+                {{ categoryLabel(selectedPlaybook.category) }}
               </span>
             </div>
             <p class="detail-desc">{{ selectedPlaybook.description }}</p>
 
             <div class="steps-section">
-              <h3>Steps</h3>
+              <h3>{{ t('incidentResponsePlaybooks.steps') }}</h3>
               <ol class="steps-list">
                 <li v-for="(step, i) in selectedPlaybook.steps" :key="i" class="step-item">
                   {{ step }}
@@ -266,12 +274,12 @@ function categoryColor(cat: string): string {
                   <polygon points="5,3 19,12 5,21"/>
                 </svg>
                 <span v-if="isRunning" class="spinner" />
-                {{ isRunning ? 'Running...' : 'Run Playbook' }}
+                {{ isRunning ? t('incidentResponsePlaybooks.running') : t('incidentResponsePlaybooks.runPlaybook') }}
               </button>
             </div>
 
             <div v-if="runLog.length > 0" class="run-log">
-              <h3>Execution Log</h3>
+              <h3>{{ t('incidentResponsePlaybooks.executionLog') }}</h3>
               <div class="log-output">
                 <div v-for="(line, i) in runLog" :key="i" class="log-line">{{ line }}</div>
               </div>

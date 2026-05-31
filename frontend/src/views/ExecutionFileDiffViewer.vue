@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { executionApi } from '../services/api/triggers';
 import type { Execution } from '../services/api/types';
+
+const { t } = useI18n();
 
 interface FileDiff {
   path: string;
@@ -80,17 +83,17 @@ onMounted(async () => {
   <div class="diff-viewer">
 
     <PageHeader
-      title="Execution File Diff Viewer"
-      subtitle="Inspect all files created or modified by a bot run, with inline change explanations."
+      :title="t('executionFileDiffViewer.title')"
+      :subtitle="t('executionFileDiffViewer.subtitle')"
     />
 
     <div class="layout">
       <!-- Execution list -->
       <aside class="sidebar">
         <div class="sidebar-section">
-          <div class="sidebar-title">Recent Executions</div>
-          <div v-if="loadingExecs" class="sidebar-empty">Loading...</div>
-          <div v-else-if="executions.length === 0" class="sidebar-empty">No executions found</div>
+          <div class="sidebar-title">{{ t('executionFileDiffViewer.recentExecutions') }}</div>
+          <div v-if="loadingExecs" class="sidebar-empty">{{ t('executionFileDiffViewer.loading') }}</div>
+          <div v-else-if="executions.length === 0" class="sidebar-empty">{{ t('executionFileDiffViewer.noExecutions') }}</div>
           <div
             v-for="e in executions"
             :key="e.execution_id"
@@ -101,15 +104,15 @@ onMounted(async () => {
             <div class="exec-bot">{{ e.trigger_name }}</div>
             <div class="exec-meta">
               <span class="exec-date">{{ formatDate(e.started_at) }}</span>
-              <span class="exec-files">{{ selectedExec?.execution_id === e.execution_id ? diffs.length : '–' }} files</span>
+              <span class="exec-files">{{ t('executionFileDiffViewer.filesCount', { count: selectedExec?.execution_id === e.execution_id ? diffs.length : '–' }) }}</span>
             </div>
           </div>
         </div>
 
         <div class="sidebar-section">
-          <div class="sidebar-title">Changed Files</div>
-          <div v-if="loadingDiffs" class="sidebar-empty">Loading diffs...</div>
-          <div v-else-if="diffs.length === 0" class="sidebar-empty">No diffs found</div>
+          <div class="sidebar-title">{{ t('executionFileDiffViewer.changedFiles') }}</div>
+          <div v-if="loadingDiffs" class="sidebar-empty">{{ t('executionFileDiffViewer.loadingDiffs') }}</div>
+          <div v-else-if="diffs.length === 0" class="sidebar-empty">{{ t('executionFileDiffViewer.noDiffs') }}</div>
           <div
             v-for="f in diffs"
             :key="f.path"
@@ -130,11 +133,11 @@ onMounted(async () => {
       <!-- Diff panel -->
       <main class="diff-main">
         <div v-if="selectedExec" class="diff-summary card">
-          <div class="summary-item"><span class="summary-label">Execution</span><span class="summary-val">{{ selectedExec.execution_id }}</span></div>
-          <div class="summary-item"><span class="summary-label">Bot</span><span class="summary-val">{{ selectedExec.trigger_name }}</span></div>
-          <div class="summary-item"><span class="summary-label">Files changed</span><span class="summary-val">{{ diffs.length }}</span></div>
-          <div class="summary-item"><span class="summary-label">Additions</span><span class="additions">+{{ totalChanges.additions }}</span></div>
-          <div class="summary-item"><span class="summary-label">Deletions</span><span class="deletions">-{{ totalChanges.deletions }}</span></div>
+          <div class="summary-item"><span class="summary-label">{{ t('executionFileDiffViewer.summary.execution') }}</span><span class="summary-val">{{ selectedExec.execution_id }}</span></div>
+          <div class="summary-item"><span class="summary-label">{{ t('executionFileDiffViewer.summary.bot') }}</span><span class="summary-val">{{ selectedExec.trigger_name }}</span></div>
+          <div class="summary-item"><span class="summary-label">{{ t('executionFileDiffViewer.summary.filesChanged') }}</span><span class="summary-val">{{ diffs.length }}</span></div>
+          <div class="summary-item"><span class="summary-label">{{ t('executionFileDiffViewer.summary.additions') }}</span><span class="additions">+{{ totalChanges.additions }}</span></div>
+          <div class="summary-item"><span class="summary-label">{{ t('executionFileDiffViewer.summary.deletions') }}</span><span class="deletions">-{{ totalChanges.deletions }}</span></div>
         </div>
 
         <div v-if="selectedFile" class="diff-card card">
@@ -154,7 +157,7 @@ onMounted(async () => {
         </div>
 
         <div v-else-if="!loadingDiffs && selectedExec" class="empty-state card">
-          <p>No unified diff output found in this execution's logs.</p>
+          <p>{{ t('executionFileDiffViewer.noUnifiedDiff') }}</p>
         </div>
       </main>
     </div>

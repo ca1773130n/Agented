@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 import NotEnabledBanner from '../components/base/NotEnabledBanner.vue';
 
+const { t } = useI18n();
 const showToast = useToast();
 const isLoading = ref(true);
 const isExplaining = ref(false);
@@ -74,7 +76,7 @@ async function loadHistory() {
 
 async function runExplanation() {
   if (!selectedFile.value.trim()) {
-    showToast('Please enter a file path or symbol', 'error');
+    showToast(t('codeExplanationBot.toast.enterPath'), 'error');
     return;
   }
   isExplaining.value = true;
@@ -93,13 +95,13 @@ async function runExplanation() {
     const data = await res.json();
     previewExplanation.value = data.explanation;
     showPreview.value = true;
-    showToast('Explanation generated', 'success');
+    showToast(t('codeExplanationBot.toast.generated'), 'success');
     await loadHistory();
   } catch {
     previewExplanation.value =
       'Analyzes the selected file or symbol using the configured AI provider and returns a plain-English explanation suitable for developers unfamiliar with this part of the codebase. Context is gathered from surrounding code, comments, and import dependencies.';
     showPreview.value = true;
-    showToast('Using cached explanation (API unavailable)', 'success');
+    showToast(t('codeExplanationBot.toast.cached'), 'success');
   } finally {
     isExplaining.value = false;
   }
@@ -112,9 +114,9 @@ function destinationIcon(dest: ExplanationEntry['posted_to']): string {
 }
 
 function destinationLabel(dest: ExplanationEntry['posted_to']): string {
-  if (dest === 'github') return 'GitHub Comment';
-  if (dest === 'slack') return 'Slack Message';
-  return 'Inline Preview';
+  if (dest === 'github') return t('codeExplanationBot.dest.github');
+  if (dest === 'slack') return t('codeExplanationBot.dest.slack');
+  return t('codeExplanationBot.dest.inline');
 }
 
 function formatTime(iso: string): string {
@@ -135,28 +137,25 @@ onMounted(loadHistory);
 
     <NotEnabledBanner
       v-if="!FEATURE_ENABLED"
-      feature="On-demand code explanation bot"
-      detail="The backend that generates code explanations has not shipped yet. Running explanations is disabled."
+      :feature="t('codeExplanationBot.banner.feature')"
+      :detail="t('codeExplanationBot.banner.detail')"
       testid="code-explanation-not-enabled"
     />
 
     <div class="page-header">
       <div>
-        <h1 class="page-title">On-Demand Code Explanation Bot</h1>
-        <p class="page-subtitle">
-          Select any file or symbol to get an AI-generated plain-English explanation posted as a
-          GitHub comment or Slack message — instantly.
-        </p>
+        <h1 class="page-title">{{ t('codeExplanationBot.title') }}</h1>
+        <p class="page-subtitle">{{ t('codeExplanationBot.subtitle') }}</p>
       </div>
     </div>
 
     <div class="content-grid">
       <!-- Trigger panel -->
       <div class="trigger-card">
-        <h2 class="section-title">Explain a Symbol</h2>
+        <h2 class="section-title">{{ t('codeExplanationBot.explainSymbol') }}</h2>
 
         <div class="form-group">
-          <label class="form-label">File Path</label>
+          <label class="form-label">{{ t('codeExplanationBot.field.filePath') }}</label>
           <input
             v-model="selectedFile"
             class="form-input"
@@ -165,7 +164,7 @@ onMounted(loadHistory);
         </div>
 
         <div class="form-group">
-          <label class="form-label">Symbol / Function (optional)</label>
+          <label class="form-label">{{ t('codeExplanationBot.field.symbol') }}</label>
           <input
             v-model="selectedSymbol"
             class="form-input"
@@ -174,7 +173,7 @@ onMounted(loadHistory);
         </div>
 
         <div class="form-group">
-          <label class="form-label">Post Result To</label>
+          <label class="form-label">{{ t('codeExplanationBot.field.postTo') }}</label>
           <div class="destination-picker">
             <button
               v-for="opt in (['inline', 'github', 'slack'] as const)"
@@ -191,24 +190,24 @@ onMounted(loadHistory);
         <button
           class="run-btn"
           :disabled="isExplaining || !FEATURE_ENABLED"
-          :title="!FEATURE_ENABLED ? 'On-demand code explanation bot is not yet enabled in this deployment' : undefined"
+          :title="!FEATURE_ENABLED ? t('codeExplanationBot.notEnabledTooltip') : undefined"
           data-testid="code-explanation-run-submit"
           @click="runExplanation"
         >
-          <span v-if="isExplaining">Generating...</span>
-          <span v-else>Explain</span>
+          <span v-if="isExplaining">{{ t('codeExplanationBot.generating') }}</span>
+          <span v-else>{{ t('codeExplanationBot.explain') }}</span>
         </button>
 
         <div v-if="showPreview" class="preview-box">
-          <h3 class="preview-title">Generated Explanation</h3>
+          <h3 class="preview-title">{{ t('codeExplanationBot.generatedExplanation') }}</h3>
           <p class="preview-text">{{ previewExplanation }}</p>
         </div>
       </div>
 
       <!-- History -->
       <div class="history-card">
-        <h2 class="section-title">Recent Explanations</h2>
-        <LoadingState v-if="isLoading" message="Loading explanation history..." />
+        <h2 class="section-title">{{ t('codeExplanationBot.recentExplanations') }}</h2>
+        <LoadingState v-if="isLoading" :message="t('codeExplanationBot.loadingHistory')" />
         <div v-else>
           <div v-for="entry in explanations" :key="entry.id" class="history-item">
             <div class="history-header">
@@ -222,12 +221,12 @@ onMounted(loadHistory);
             <div class="history-meta">
               <span class="meta-lang">{{ entry.language }}</span>
               <span class="meta-sep">·</span>
-              <span class="meta-by">by {{ entry.triggered_by }}</span>
+              <span class="meta-by">{{ t('codeExplanationBot.by', { who: entry.triggered_by }) }}</span>
               <span class="meta-sep">·</span>
               <span class="meta-time">{{ formatTime(entry.created_at) }}</span>
             </div>
           </div>
-          <p v-if="explanations.length === 0" class="empty-msg">No explanations yet.</p>
+          <p v-if="explanations.length === 0" class="empty-msg">{{ t('codeExplanationBot.empty') }}</p>
         </div>
       </div>
     </div>

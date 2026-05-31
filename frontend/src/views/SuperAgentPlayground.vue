@@ -15,6 +15,9 @@ import MessageInbox from '../components/super-agents/MessageInbox.vue';
 import MessageThread from '../components/super-agents/MessageThread.vue';
 import GitActionsToolbar from '../components/ai/GitActionsToolbar.vue';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   instanceId?: string;
@@ -156,7 +159,7 @@ async function loadData() {
     await loadSessions();
     return data;
   } catch (err) {
-    handleApiError(err, showToast, 'Failed to load super agent');
+    handleApiError(err, showToast, t('superAgentPlayground.toast.loadFailed'));
     throw err;
   }
 }
@@ -172,21 +175,21 @@ async function loadData() {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M19 12H5M12 19l-7-7 7-7"/>
         </svg>
-        Back
+        {{ t('common.back') }}
       </button>
       <div class="header-title">
-        <h1>{{ superAgent?.name || 'SuperAgent Playground' }}</h1>
+        <h1>{{ superAgent?.name || t('superAgentPlayground.fallbackTitle') }}</h1>
         <p v-if="superAgent?.description">{{ superAgent.description }}</p>
       </div>
       <div class="chat-mode-toggle">
         <button
           :class="['mode-btn', { active: chatMode === 'management' }]"
           @click="chatMode = 'management'"
-        >Management</button>
+        >{{ t('superAgentPlayground.mode.management') }}</button>
         <button
           :class="['mode-btn', { active: chatMode === 'work' }]"
           @click="chatMode = 'work'"
-        >Work</button>
+        >{{ t('superAgentPlayground.mode.work') }}</button>
       </div>
     </div>
 
@@ -215,9 +218,9 @@ async function loadData() {
           v-else
           density="detailed"
           entity-label="SuperAgent"
-          :placeholder="`Send a message to ${superAgent?.name || 'your SuperAgent'}...`"
-          welcome-title="Chat with your SuperAgent"
-          welcome-subtitle="Type a message to begin."
+          :placeholder="t('superAgentPlayground.chatPlaceholder', { name: superAgent?.name || t('superAgentPlayground.yourSuperAgent') })"
+          :welcome-title="t('superAgentPlayground.welcomeTitle')"
+          :welcome-subtitle="t('superAgentPlayground.welcomeSubtitle')"
         />
       </div>
 
@@ -228,25 +231,25 @@ async function loadData() {
             :class="['right-tab', { active: rightTab === 'identity' }]"
             @click="rightTab = 'identity'"
           >
-            Identity
+            {{ t('superAgentPlayground.tabs.identity') }}
           </button>
           <button
             :class="['right-tab', { active: rightTab === 'team' }]"
             @click="rightTab = 'team'"
           >
-            Team
+            {{ t('superAgentPlayground.tabs.team') }}
           </button>
           <button
             :class="['right-tab', { active: rightTab === 'sessions' }]"
             @click="rightTab = 'sessions'"
           >
-            Sessions
+            {{ t('superAgentPlayground.tabs.sessions') }}
           </button>
           <button
             :class="['right-tab', { active: rightTab === 'messages' }]"
             @click="rightTab = 'messages'"
           >
-            Messages
+            {{ t('superAgentPlayground.tabs.messages') }}
           </button>
         </div>
 
@@ -267,12 +270,10 @@ async function loadData() {
           <!-- Sessions tab: Historical SuperAgent sessions (read-only) -->
           <div v-if="rightTab === 'sessions'" class="tab-panel">
             <div class="sessions-notice">
-              Historical SuperAgent sessions are stored separately from the new
-              ai-accounts-backed chat. Click one to open a read-only transcript
-              in the left panel; close it to return to the live chat.
+              {{ t('superAgentPlayground.sessionsNotice') }}
             </div>
             <div v-if="sessions.length === 0" class="empty-sessions">
-              <p>No historical sessions.</p>
+              <p>{{ t('superAgentPlayground.noHistoricalSessions') }}</p>
             </div>
             <div v-else class="session-list">
               <div

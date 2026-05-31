@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 import { secretsApi, ApiError } from '../services/api';
 import type { SecretMetadata } from '../services/api';
 const showToast = useToast();
+const { t } = useI18n();
 
 const secrets = ref<SecretMetadata[]>([]);
 const isLoading = ref(true);
@@ -36,7 +38,7 @@ async function loadSecrets() {
     const data = await secretsApi.list();
     secrets.value = data.secrets;
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load secrets';
+    const message = err instanceof ApiError ? err.message : t('secretsVault.errors.load');
     loadError.value = message;
   } finally {
     isLoading.value = false;
@@ -45,11 +47,11 @@ async function loadSecrets() {
 
 async function handleAdd() {
   if (!newSecretName.value.trim()) {
-    showToast('Secret name is required', 'info');
+    showToast(t('secretsVault.toasts.nameRequired'), 'info');
     return;
   }
   if (!newSecretValue.value) {
-    showToast('Secret value is required', 'info');
+    showToast(t('secretsVault.toasts.valueRequired'), 'info');
     return;
   }
   isAdding.value = true;
@@ -64,9 +66,9 @@ async function handleAdd() {
     newSecretValue.value = '';
     newSecretDescription.value = '';
     showAddForm.value = false;
-    showToast('Secret added securely', 'success');
+    showToast(t('secretsVault.toasts.added'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to add secret';
+    const message = err instanceof ApiError ? err.message : t('secretsVault.errors.add');
     showToast(message, 'error');
   } finally {
     isAdding.value = false;
@@ -79,9 +81,9 @@ async function handleDelete(s: SecretMetadata) {
     await secretsApi.delete(s.id);
     secrets.value = secrets.value.filter(sec => sec.id !== s.id);
     delete revealedValues.value[s.id];
-    showToast(`Secret "${s.name}" deleted`, 'success');
+    showToast(t('secretsVault.toasts.deleted', { name: s.name }), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to delete secret';
+    const message = err instanceof ApiError ? err.message : t('secretsVault.errors.delete');
     showToast(message, 'error');
   } finally {
     deletingId.value = null;
@@ -98,7 +100,7 @@ async function handleReveal(s: SecretMetadata) {
     const data = await secretsApi.reveal(s.id);
     revealedValues.value[s.id] = data.value;
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to reveal secret';
+    const message = err instanceof ApiError ? err.message : t('secretsVault.errors.reveal');
     showToast(message, 'error');
   } finally {
     revealingId.value = null;
@@ -113,13 +115,13 @@ function copyRef(name: string, id: string) {
   const refStr = `{{secrets.${name}}}`;
   navigator.clipboard.writeText(refStr).then(() => {
     copiedId.value = id;
-    showToast(`Copied reference: ${refStr}`, 'success');
+    showToast(t('secretsVault.toasts.copiedRef', { ref: refStr }), 'success');
     setTimeout(() => { copiedId.value = null; }, 2000);
   });
 }
 
 function formatDate(dateStr: string | null): string {
-  if (!dateStr) return 'never';
+  if (!dateStr) return t('secretsVault.never');
   const d = new Date(dateStr);
   return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
@@ -130,18 +132,18 @@ onMounted(loadSecrets);
 <template>
   <div class="secrets-vault">
 
-    <PageHeader title="Secrets Vault" subtitle="Manage encrypted secrets used by your bots. Values are encrypted at rest and audit-logged on access.">
+    <PageHeader :title="t('secretsVault.title')" :subtitle="t('secretsVault.subtitle')">
       <template #actions>
         <button class="btn btn-primary" @click="showAddForm = !showAddForm" :disabled="!vaultConfigured">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
             <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
-          Add Secret
+          {{ t('secretsVault.addSecret') }}
         </button>
       </template>
     </PageHeader>
 
-    <LoadingState v-if="isLoading" message="Loading secrets vault..." />
+    <LoadingState v-if="isLoading" :message="t('secretsVault.loading')" />
 
     <div v-else-if="loadError" class="card error-card">
       <div class="error-inner">
@@ -149,7 +151,7 @@ onMounted(loadSecrets);
           <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
         <p>{{ loadError }}</p>
-        <button class="btn btn-ghost" @click="loadSecrets">Retry</button>
+        <button class="btn btn-ghost" @click="loadSecrets">{{ t('common.retry') }}</button>
       </div>
     </div>
 
@@ -159,14 +161,14 @@ onMounted(loadSecrets);
           <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
           <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
         </svg>
-        <p>Secrets vault not configured. Set the <code>AGENTED_VAULT_KEYS</code> environment variable to enable encrypted secret storage.</p>
+        <p>{{ t('secretsVault.notConfiguredPrefix') }}<code>AGENTED_VAULT_KEYS</code>{{ t('secretsVault.notConfiguredSuffix') }}</p>
       </div>
     </div>
 
     <template v-else>
       <div v-if="showAddForm" class="card add-form">
         <div class="card-header">
-          <h3>Add New Secret</h3>
+          <h3>{{ t('secretsVault.addNewSecret') }}</h3>
           <button class="btn-icon" @click="showAddForm = false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
@@ -174,24 +176,24 @@ onMounted(loadSecrets);
         <div class="form-body">
           <div class="form-row">
             <div class="field-group">
-              <label class="field-label">Secret Name</label>
+              <label class="field-label">{{ t('secretsVault.fields.name') }}</label>
               <input v-model="newSecretName" type="text" class="text-input" placeholder="GITHUB_TOKEN" />
-              <span class="field-hint">Will be uppercased and spaces replaced with underscores</span>
+              <span class="field-hint">{{ t('secretsVault.hints.name') }}</span>
             </div>
             <div class="field-group">
-              <label class="field-label">Secret Value</label>
-              <input v-model="newSecretValue" type="password" class="text-input" placeholder="Enter secret value..." autocomplete="new-password" />
-              <span class="field-hint">Value is encrypted at rest</span>
+              <label class="field-label">{{ t('secretsVault.fields.value') }}</label>
+              <input v-model="newSecretValue" type="password" class="text-input" :placeholder="t('secretsVault.placeholders.value')" autocomplete="new-password" />
+              <span class="field-hint">{{ t('secretsVault.hints.value') }}</span>
             </div>
           </div>
           <div class="field-group">
-            <label class="field-label">Description <span class="field-optional">(optional)</span></label>
-            <input v-model="newSecretDescription" type="text" class="text-input" placeholder="What this secret is used for..." />
+            <label class="field-label">{{ t('secretsVault.fields.description') }} <span class="field-optional">{{ t('secretsVault.optional') }}</span></label>
+            <input v-model="newSecretDescription" type="text" class="text-input" :placeholder="t('secretsVault.placeholders.description')" />
           </div>
           <div class="form-actions">
-            <button class="btn btn-ghost" @click="showAddForm = false">Cancel</button>
+            <button class="btn btn-ghost" @click="showAddForm = false">{{ t('common.cancel') }}</button>
             <button class="btn btn-primary" :disabled="isAdding || !newSecretName.trim() || !newSecretValue" @click="handleAdd">
-              {{ isAdding ? 'Saving...' : 'Save Secret' }}
+              {{ isAdding ? t('secretsVault.saving') : t('secretsVault.saveSecret') }}
             </button>
           </div>
         </div>
@@ -204,12 +206,12 @@ onMounted(loadSecrets);
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
               <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
             </svg>
-            Secrets
+            {{ t('secretsVault.secrets') }}
           </h3>
-          <span class="card-badge">{{ secrets.length }} secrets</span>
+          <span class="card-badge">{{ t('secretsVault.secretsCount', { count: secrets.length }) }}</span>
         </div>
         <div v-if="secrets.length === 0" class="list-empty">
-          No secrets stored yet. Click "Add Secret" to create one.
+          {{ t('secretsVault.emptyList') }}
         </div>
         <div v-else class="secrets-list">
           <div v-for="s in secrets" :key="s.id" class="secret-row">
@@ -219,14 +221,14 @@ onMounted(loadSecrets);
                 <span v-if="s.scope !== 'global'" class="scope-badge">{{ s.scope }}</span>
               </div>
               <div class="secret-meta">
-                <span>Created {{ formatDate(s.created_at) }}</span>
+                <span>{{ t('secretsVault.createdLabel', { date: formatDate(s.created_at) }) }}</span>
                 <template v-if="s.description">
                   <span class="meta-sep">&middot;</span>
                   <span>{{ s.description }}</span>
                 </template>
                 <template v-if="s.last_accessed_at">
                   <span class="meta-sep">&middot;</span>
-                  <span>Last accessed: {{ formatDate(s.last_accessed_at) }}</span>
+                  <span>{{ t('secretsVault.lastAccessedLabel', { date: formatDate(s.last_accessed_at) }) }}</span>
                 </template>
               </div>
             </div>
@@ -253,13 +255,13 @@ onMounted(loadSecrets);
                   <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
                   <line x1="1" y1="1" x2="23" y2="23"/>
                 </svg>
-                {{ revealingId === s.id ? '...' : revealedValues[s.id] ? 'Hide' : 'Reveal' }}
+                {{ revealingId === s.id ? '...' : revealedValues[s.id] ? t('secretsVault.hide') : t('secretsVault.reveal') }}
               </button>
               <button
                 class="btn btn-sm btn-copy"
                 :class="{ copied: copiedId === s.id }"
                 @click="copyRef(s.name, s.id)"
-                :title="'Copy reference syntax'"
+                :title="t('secretsVault.copyRefSyntax')"
               >
                 <svg v-if="copiedId !== s.id" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
@@ -268,7 +270,7 @@ onMounted(loadSecrets);
                 <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
                   <polyline points="20 6 9 17 4 12"/>
                 </svg>
-                {{ copiedId === s.id ? 'Copied!' : 'Copy ref' }}
+                {{ copiedId === s.id ? t('secretsVault.copied') : t('secretsVault.copyRef') }}
               </button>
               <button
                 class="btn btn-sm btn-delete"
@@ -279,7 +281,7 @@ onMounted(loadSecrets);
                   <polyline points="3 6 5 6 21 6"/>
                   <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
                 </svg>
-                {{ deletingId === s.id ? '...' : 'Delete' }}
+                {{ deletingId === s.id ? '...' : t('common.delete') }}
               </button>
             </div>
           </div>

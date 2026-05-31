@@ -7,79 +7,83 @@
  * matching the WorkflowCanvas.vue onDrop handler.
  */
 
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
+
 interface PaletteNode {
   type: string
-  label: string
+  labelKey: string
   icon: string
-  description: string
+  descriptionKey: string
 }
 
 interface NodeCategory {
-  name: string
+  nameKey: string
   nodes: PaletteNode[]
 }
 
 const nodeCategories: NodeCategory[] = [
   {
-    name: 'Entry Points',
+    nameKey: 'workflowSidebar.category.entryPoints',
     nodes: [
       {
         type: 'trigger',
-        label: 'Trigger',
+        labelKey: 'workflowSidebar.node.trigger.label',
         icon: '\u26A1',
-        description: 'Workflow entry point',
+        descriptionKey: 'workflowSidebar.node.trigger.description',
       },
     ],
   },
   {
-    name: 'Execution',
+    nameKey: 'workflowSidebar.category.execution',
     nodes: [
       {
         type: 'skill',
-        label: 'Skill',
+        labelKey: 'workflowSidebar.node.skill.label',
         icon: '\u2728',
-        description: 'Execute a registered skill',
+        descriptionKey: 'workflowSidebar.node.skill.description',
       },
       {
         type: 'command',
-        label: 'Command',
+        labelKey: 'workflowSidebar.node.command.label',
         icon: '\u2318',
-        description: 'Run a CLI command',
+        descriptionKey: 'workflowSidebar.node.command.description',
       },
       {
         type: 'agent',
-        label: 'Agent',
+        labelKey: 'workflowSidebar.node.agent.label',
         icon: '\uD83E\uDD16',
-        description: 'Delegate to an AI agent',
+        descriptionKey: 'workflowSidebar.node.agent.description',
       },
       {
         type: 'script',
-        label: 'Script',
+        labelKey: 'workflowSidebar.node.script.label',
         icon: '\uD83D\uDCC4',
-        description: 'Run a script file',
+        descriptionKey: 'workflowSidebar.node.script.description',
       },
     ],
   },
   {
-    name: 'Logic',
+    nameKey: 'workflowSidebar.category.logic',
     nodes: [
       {
         type: 'conditional',
-        label: 'Conditional',
+        labelKey: 'workflowSidebar.node.conditional.label',
         icon: '\u25C7',
-        description: 'Branch on conditions',
+        descriptionKey: 'workflowSidebar.node.conditional.description',
       },
       {
         type: 'transform',
-        label: 'Transform',
+        labelKey: 'workflowSidebar.node.transform.label',
         icon: '\u21C4',
-        description: 'Transform data',
+        descriptionKey: 'workflowSidebar.node.transform.description',
       },
       {
         type: 'approval_gate',
-        label: 'Approval Gate',
+        labelKey: 'workflowSidebar.node.approvalGate.label',
         icon: '\u23F8',
-        description: 'Require manual approval',
+        descriptionKey: 'workflowSidebar.node.approvalGate.description',
       },
     ],
   },
@@ -94,12 +98,12 @@ function onDragStart(event: DragEvent, nodeType: string) {
 
 <template>
   <div class="workflow-sidebar">
-    <div class="sidebar-header">Node Palette</div>
-    <p class="sidebar-instruction">Drag nodes onto the canvas to build your workflow</p>
+    <div class="sidebar-header">{{ t('workflowSidebar.header') }}</div>
+    <p class="sidebar-instruction">{{ t('workflowSidebar.instruction') }}</p>
     <div class="sidebar-divider"></div>
 
-    <div v-for="category in nodeCategories" :key="category.name" class="node-category">
-      <div class="category-label">{{ category.name }}</div>
+    <div v-for="category in nodeCategories" :key="category.nameKey" class="node-category">
+      <div class="category-label">{{ t(category.nameKey) }}</div>
       <div
         v-for="node in category.nodes"
         :key="node.type"
@@ -119,8 +123,8 @@ function onDragStart(event: DragEvent, nodeType: string) {
         </span>
         <span class="node-icon">{{ node.icon }}</span>
         <div class="node-info">
-          <span class="node-name">{{ node.label }}</span>
-          <span class="node-desc">{{ node.description }}</span>
+          <span class="node-name">{{ t(node.labelKey) }}</span>
+          <span class="node-desc">{{ t(node.descriptionKey) }}</span>
         </div>
       </div>
     </div>

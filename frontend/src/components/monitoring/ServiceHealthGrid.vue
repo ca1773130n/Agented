@@ -8,7 +8,7 @@
       </div>
     </div>
     <div v-else-if="accounts.length === 0" class="grid-empty">
-      <p>No accounts in this group.</p>
+      <p>{{ t('serviceHealthGrid.noAccounts') }}</p>
     </div>
     <div v-else class="grid-cards">
       <div v-for="account in accounts" :key="account.account_id" class="health-card">
@@ -23,9 +23,9 @@
         </div>
 
         <div class="card-status">
-          <span v-if="account.is_rate_limited" class="status-badge rate-limited">Rate Limited</span>
-          <span v-else class="status-badge healthy">Healthy</span>
-          <span v-if="account.is_default" class="default-badge">Default</span>
+          <span v-if="account.is_rate_limited" class="status-badge rate-limited">{{ t('serviceHealthGrid.rateLimited') }}</span>
+          <span v-else class="status-badge healthy">{{ t('serviceHealthGrid.healthy') }}</span>
+          <span v-if="account.is_default" class="default-badge">{{ t('serviceHealthGrid.default') }}</span>
           <span v-if="account.plan" class="plan-badge">{{ account.plan }}</span>
         </div>
 
@@ -35,23 +35,23 @@
               <circle cx="12" cy="12" r="10"/>
               <polyline points="12,6 12,12 16,14"/>
             </svg>
-            <span>Cooldown: {{ formatCooldown(account) }}</span>
+            <span>{{ t('serviceHealthGrid.cooldown', { value: formatCooldown(account) }) }}</span>
           </div>
           <p v-if="account.rate_limit_reason" class="rate-limit-reason">
             {{ account.rate_limit_reason }}
           </p>
           <button class="clear-rate-limit-btn" @click="$emit('clear-rate-limit', account.account_id)">
-            Clear Rate Limit
+            {{ t('serviceHealthGrid.clearRateLimit') }}
           </button>
         </div>
 
         <div class="card-stats">
           <div class="stat-item">
-            <span class="stat-label">Executions</span>
+            <span class="stat-label">{{ t('serviceHealthGrid.executions') }}</span>
             <span class="stat-value">{{ account.total_executions }}</span>
           </div>
           <div class="stat-item">
-            <span class="stat-label">Last Used</span>
+            <span class="stat-label">{{ t('serviceHealthGrid.lastUsed') }}</span>
             <span class="stat-value">{{ formatRelativeTime(account.last_used_at) }}</span>
           </div>
         </div>
@@ -62,7 +62,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { AccountHealth } from '../../services/api';
+
+const { t } = useI18n();
 
 defineProps<{
   accounts: AccountHealth[];
@@ -91,24 +94,24 @@ function statusClass(account: AccountHealth): string {
 }
 
 function formatCooldown(account: AccountHealth): string {
-  if (!account.rate_limited_until) return 'Unknown';
+  if (!account.rate_limited_until) return t('serviceHealthGrid.unknown');
   const until = new Date(account.rate_limited_until).getTime();
   const remaining = Math.max(0, Math.floor((until - now.value) / 1000));
-  if (remaining <= 0) return 'Expiring...';
+  if (remaining <= 0) return t('serviceHealthGrid.expiring');
   const minutes = Math.floor(remaining / 60);
   const seconds = remaining % 60;
-  if (minutes > 0) return `${minutes}m ${seconds}s remaining`;
-  return `${seconds}s remaining`;
+  if (minutes > 0) return t('serviceHealthGrid.remainingMinSec', { minutes, seconds });
+  return t('serviceHealthGrid.remainingSec', { seconds });
 }
 
 function formatRelativeTime(dateStr: string | null): string {
-  if (!dateStr) return 'Never';
+  if (!dateStr) return t('serviceHealthGrid.never');
   const diff = Math.floor((now.value - new Date(dateStr).getTime()) / 1000);
-  if (diff < 0) return 'Just now';
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
+  if (diff < 0) return t('serviceHealthGrid.justNow');
+  if (diff < 60) return t('serviceHealthGrid.secondsAgo', { value: diff });
+  if (diff < 3600) return t('serviceHealthGrid.minutesAgo', { value: Math.floor(diff / 60) });
+  if (diff < 86400) return t('serviceHealthGrid.hoursAgo', { value: Math.floor(diff / 3600) });
+  return t('serviceHealthGrid.daysAgo', { value: Math.floor(diff / 86400) });
 }
 </script>
 

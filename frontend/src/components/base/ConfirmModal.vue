@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, toRef } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useFocusTrap } from '../../composables/useFocusTrap';
+
+const { t } = useI18n();
 
 const props = withDefaults(
   defineProps<{
@@ -12,9 +15,9 @@ const props = withDefaults(
     variant?: 'danger' | 'default';
   }>(),
   {
-    title: 'Confirm',
-    confirmLabel: 'Confirm',
-    cancelLabel: 'Cancel',
+    title: undefined,
+    confirmLabel: undefined,
+    cancelLabel: undefined,
     variant: 'default',
   },
 );
@@ -43,17 +46,17 @@ useFocusTrap(confirmModalRef, isOpen);
       @keydown.escape="emit('cancel')"
     >
       <div class="modal confirm-modal">
-        <h2 :id="'confirm-title-' + $.uid" class="confirm-title">{{ title }}</h2>
+        <h2 :id="'confirm-title-' + $.uid" class="confirm-title">{{ title ?? t('common.confirm') }}</h2>
         <p class="confirm-message">{{ message }}</p>
         <div class="confirm-actions">
           <button class="btn btn-secondary" @click="emit('cancel')">
-            {{ cancelLabel }}
+            {{ cancelLabel ?? t('common.cancel') }}
           </button>
           <button
             :class="['btn', variant === 'danger' ? 'btn-danger' : 'btn-primary']"
             @click="emit('confirm')"
           >
-            {{ confirmLabel }}
+            {{ confirmLabel ?? t('common.confirm') }}
           </button>
         </div>
       </div>

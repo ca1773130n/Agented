@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import type { BackendCheck } from '../../services/api';
+
+const { t } = useI18n();
 
 defineProps<{
   claudeStatus: BackendCheck | null;
@@ -15,7 +18,7 @@ defineProps<{
           <rect x="2" y="6" width="20" height="12" rx="2"/>
           <path d="M6 10h.01M10 10h.01M6 14h.01M10 14h.01M14 10h4M14 14h4"/>
         </svg>
-        Backend Status
+        {{ t('backendStatusCard.title') }}
       </h3>
     </div>
     <div class="backend-grid">
@@ -28,7 +31,7 @@ defineProps<{
         <div class="backend-info">
           <div class="backend-name">Claude CLI</div>
           <div class="backend-version">
-            {{ claudeStatus?.installed ? (claudeStatus.version || 'Installed') : 'Not installed' }}
+            {{ claudeStatus?.installed ? (claudeStatus.version || t('common.installed')) : t('common.notInstalled') }}
           </div>
         </div>
         <div class="backend-status-dot" :class="{ active: claudeStatus?.installed }"></div>
@@ -43,7 +46,7 @@ defineProps<{
         <div class="backend-info">
           <div class="backend-name">OpenCode CLI</div>
           <div class="backend-version">
-            {{ opencodeStatus?.installed ? (opencodeStatus.version || 'Installed') : 'Not installed' }}
+            {{ opencodeStatus?.installed ? (opencodeStatus.version || t('common.installed')) : t('common.notInstalled') }}
           </div>
         </div>
         <div class="backend-status-dot" :class="{ active: opencodeStatus?.installed }"></div>

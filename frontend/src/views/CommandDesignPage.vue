@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter, useRoute } from 'vue-router';
 import { commandApi, commandConversationApi, ApiError } from '../services/api';
 import { useConversation, createConfigParser } from '../composables/useConversation';
@@ -12,6 +13,7 @@ import { useFocusTrap } from '../composables/useFocusTrap';
 import { useUnsavedGuard } from '../composables/useUnsavedGuard';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
+const { t } = useI18n();
 const router = useRouter();
 const route = useRoute();
 
@@ -137,7 +139,7 @@ async function loadExistingCommand() {
     formData.value.enabled = !!command.enabled;
     originalFormData.value = JSON.stringify(formData.value);
   } catch (e) {
-    showToast('Failed to load command for editing', 'error');
+    showToast(t('commandDesign.toast.loadFailed'), 'error');
   } finally {
     isLoadingEdit.value = false;
   }
@@ -145,7 +147,7 @@ async function loadExistingCommand() {
 
 async function createCommand() {
   if (!formData.value.name.trim()) {
-    showToast('Command name is required', 'error');
+    showToast(t('commandDesign.toast.nameRequired'), 'error');
     return;
   }
 
@@ -160,7 +162,7 @@ async function createCommand() {
         enabled: formData.value.enabled,
       });
       originalFormData.value = JSON.stringify(formData.value);
-      showToast(`Command "${formData.value.name}" updated`, 'success');
+      showToast(t('commandDesign.toast.updated', { name: formData.value.name }), 'success');
       router.push({ name: 'commands' });
     } else {
       const result = await commandApi.create({
@@ -171,14 +173,14 @@ async function createCommand() {
         enabled: formData.value.enabled,
       });
       createdCommandId.value = result.command.id;
-      showToast(`Command "${formData.value.name}" created`, 'success');
+      showToast(t('commandDesign.toast.created', { name: formData.value.name }), 'success');
       showExportModal.value = true;
     }
   } catch (e) {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast(isEditMode.value ? 'Failed to update command' : 'Failed to create command', 'error');
+      showToast(isEditMode.value ? t('commandDesign.toast.updateFailed') : t('commandDesign.toast.createFailed'), 'error');
     }
   } finally {
     isCreating.value = false;
@@ -202,7 +204,7 @@ function exportToLibrary() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showToast('Command exported', 'success');
+  showToast(t('commandDesign.toast.exported'), 'success');
 }
 
 function createAnother() {
@@ -225,7 +227,7 @@ function handleFormCreated() {
 async function finalizeCommand() {
   const result = await conversation.finalize();
   if (result) {
-    showToast(`Command "${(result.command as { name: string }).name}" created successfully!`, 'success');
+    showToast(t('commandDesign.toast.createdSuccess', { name: (result.command as { name: string }).name }), 'success');
     router.push({ name: 'commands' });
   }
 }
@@ -233,8 +235,8 @@ async function finalizeCommand() {
 // v0.7.82 — tooltip mirrors the visible hint when disabled.
 const finalizeTooltip = computed(() =>
   conversation.canFinalize.value
-    ? 'Create the command'
-    : "Keep chatting — Claude needs more details before the command can be created. Tell it the command name, what it does, and the body.",
+    ? t('commandDesign.tooltip.canFinalize')
+    : t('commandDesign.tooltip.cannotFinalize'),
 );
 
 </script>
@@ -245,9 +247,9 @@ const finalizeTooltip = computed(() =>
     <div class="design-header">
       <DesignModeToggle v-model="designMode" />
       <div class="header-title">
-        <h1>{{ isEditMode ? 'Edit Command' : 'Design a Command' }}</h1>
-        <p v-if="designMode === 'form'">{{ isEditMode ? 'Edit an existing slash command' : 'Create a new slash command with a form' }}</p>
-        <p v-else>Chat with Claude to design your slash command</p>
+        <h1>{{ isEditMode ? t('commandDesign.editCommand') : t('commandDesign.designCommand') }}</h1>
+        <p v-if="designMode === 'form'">{{ isEditMode ? t('commandDesign.editExisting') : t('commandDesign.createWithForm') }}</p>
+        <p v-else>{{ t('commandDesign.chatWithClaude') }}</p>
       </div>
       <!-- v0.7.82 — always-visible disabled Create button in chat
            mode so a new operator can see the target action.
@@ -264,15 +266,14 @@ const finalizeTooltip = computed(() =>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M20 6L9 17l-5-5"/>
           </svg>
-          {{ conversation.isFinalizing.value ? 'Creating...' : 'Create Command' }}
+          {{ conversation.isFinalizing.value ? t('commandDesign.creating') : t('commandDesign.createCommand') }}
         </button>
         <p
           v-if="!conversation.canFinalize.value"
           id="finalize-hint"
           class="finalize-hint"
         >
-          Keep chatting — once Claude has the command name, what
-          it does, and the body, this button activates.
+          {{ t('commandDesign.finalizeHint') }}
         </p>
       </div>
     </div>
@@ -281,31 +282,31 @@ const finalizeTooltip = computed(() =>
     <div v-if="designMode === 'form'" class="design-content">
       <div class="design-form">
         <div class="form-section">
-          <h3>Command Configuration</h3>
+          <h3>{{ t('commandDesign.configuration') }}</h3>
 
           <div class="form-group">
-            <label for="command-name">Name *</label>
+            <label for="command-name">{{ t('commandDesign.field.name') }} *</label>
             <input
               id="command-name"
               v-model="formData.name"
               type="text"
               placeholder="my-command"
             />
-            <p class="form-hint">The command will be invoked as /{{ formData.name || 'my-command' }}</p>
+            <p class="form-hint">{{ t('commandDesign.invokedAs', { name: formData.name || 'my-command' }) }}</p>
           </div>
 
           <div class="form-group">
-            <label for="command-description">Description</label>
+            <label for="command-description">{{ t('commandDesign.field.description') }}</label>
             <input
               id="command-description"
               v-model="formData.description"
               type="text"
-              placeholder="What does this command do?"
+              :placeholder="t('commandDesign.field.descriptionPlaceholder')"
             />
           </div>
 
           <div class="form-group">
-            <label for="command-arguments">Arguments (JSON Array)</label>
+            <label for="command-arguments">{{ t('commandDesign.field.arguments') }}</label>
             <textarea
               id="command-arguments"
               v-model="formData.arguments"
@@ -315,11 +316,11 @@ const finalizeTooltip = computed(() =>
   { "name": "options", "type": "string", "required": false }
 ]'
             ></textarea>
-            <p class="form-hint">Define the arguments your command accepts</p>
+            <p class="form-hint">{{ t('commandDesign.field.argumentsHint') }}</p>
           </div>
 
           <div class="form-group">
-            <label for="command-content">Command Content (Markdown)</label>
+            <label for="command-content">{{ t('commandDesign.field.content') }}</label>
             <textarea
               id="command-content"
               v-model="formData.content"
@@ -342,26 +343,26 @@ Describe what this command should do...
           <div class="form-group checkbox-group">
             <label>
               <input type="checkbox" v-model="formData.enabled" />
-              Enabled
+              {{ t('commandDesign.enabled') }}
             </label>
           </div>
         </div>
 
         <div class="form-actions">
-          <button class="btn" @click="router.push({ name: 'commands' })">Cancel</button>
+          <button class="btn" @click="router.push({ name: 'commands' })">{{ t('common.cancel') }}</button>
           <button class="btn btn-primary" @click="createCommand" :disabled="isCreating">
-            {{ isCreating ? (isEditMode ? 'Updating...' : 'Creating...') : (isEditMode ? 'Update Command' : 'Create Command') }}
+            {{ isCreating ? (isEditMode ? t('commandDesign.updating') : t('commandDesign.creating')) : (isEditMode ? t('commandDesign.updateCommand') : t('commandDesign.createCommand')) }}
           </button>
         </div>
       </div>
 
       <div class="design-preview">
-        <h3>Preview</h3>
+        <h3>{{ t('commandDesign.preview') }}</h3>
         <div class="preview-card">
           <div class="preview-header-form">
             <span class="preview-name">/{{ formData.name || 'command-name' }}</span>
           </div>
-          <p class="preview-description">{{ formData.description || 'No description' }}</p>
+          <p class="preview-description">{{ formData.description || t('commandDesign.noDescription') }}</p>
           <div class="preview-content-form" v-if="formData.content">
             <pre>{{ formData.content.slice(0, 200) }}{{ formData.content.length > 200 ? '...' : '' }}</pre>
           </div>
@@ -387,10 +388,10 @@ Describe what this command should do...
         :selected-model="conversation.selectedModel.value"
         :use-cli-runner="conversation.useCliRunner.value"
         :assistant-icon-paths="COMMAND_ICON_PATHS"
-        input-placeholder="Describe your command or answer Claude's questions..."
+        :input-placeholder="t('commandDesign.chatInputPlaceholder')"
         entity-label="command"
-        banner-title="Command Ready to Create!"
-        banner-button-label="Create Command Now"
+        :banner-title="t('commandDesign.bannerTitle')"
+        :banner-button-label="t('commandDesign.bannerButton')"
         :detected-entity-name="conversation.detectedConfig.value?.name"
         @update:input-message="conversation.inputMessage.value = $event"
         @update:selected-backend="conversation.setBackend($event)"
@@ -405,37 +406,37 @@ Describe what this command should do...
       <ConfigPreviewSidebar
         :has-config="!!conversation.detectedConfig.value"
         :empty-icon-paths="COMMAND_ICON_PATHS"
-        empty-text="Command configuration will appear here as you chat with Claude"
+        :empty-text="t('commandDesign.sidebarEmpty')"
       >
         <template v-if="conversation.detectedConfig.value">
           <div class="config-field">
-            <div class="config-label">Name</div>
+            <div class="config-label">{{ t('commandDesign.field.name') }}</div>
             <div class="config-value config-name">/{{ conversation.detectedConfig.value.name }}</div>
           </div>
           <div class="config-field" v-if="conversation.detectedConfig.value.description">
-            <div class="config-label">Description</div>
+            <div class="config-label">{{ t('commandDesign.field.description') }}</div>
             <div class="config-value config-description">{{ conversation.detectedConfig.value.description }}</div>
           </div>
           <div class="config-field" v-if="conversation.detectedConfig.value.content">
-            <div class="config-label">Content</div>
+            <div class="config-label">{{ t('commandDesign.field.content') }}</div>
             <pre class="config-code">{{ conversation.detectedConfig.value.content.slice(0, 300) }}{{ conversation.detectedConfig.value.content.length > 300 ? '...' : '' }}</pre>
           </div>
           <div class="config-field" v-if="conversation.detectedConfig.value.arguments && conversation.detectedConfig.value.arguments.length > 0">
-            <div class="config-label">Arguments</div>
+            <div class="config-label">{{ t('commandDesign.argumentsLabel') }}</div>
             <div class="arguments-list">
               <div v-for="(arg, i) in conversation.detectedConfig.value.arguments" :key="i" class="argument-item">
                 <span class="arg-name">{{ arg.name }}</span>
                 <span class="arg-type">{{ arg.type }}</span>
-                <span v-if="arg.required" class="arg-required">required</span>
+                <span v-if="arg.required" class="arg-required">{{ t('commandDesign.required') }}</span>
                 <span v-if="arg.description" class="arg-desc">{{ arg.description }}</span>
               </div>
             </div>
           </div>
           <div class="config-field">
-            <div class="config-label">Enabled</div>
+            <div class="config-label">{{ t('commandDesign.enabled') }}</div>
             <div class="config-value">
               <span :class="['enabled-badge', conversation.detectedConfig.value.enabled ? 'yes' : 'no']">
-                {{ conversation.detectedConfig.value.enabled ? 'Yes' : 'No' }}
+                {{ conversation.detectedConfig.value.enabled ? t('common.yes') : t('common.no') }}
               </span>
             </div>
           </div>
@@ -452,17 +453,17 @@ Describe what this command should do...
               <path d="M20 6L9 17l-5-5"/>
             </svg>
           </div>
-          <h2 id="modal-title-command-created">Command Created!</h2>
-          <p>Your command "<strong>/{{ formData.name }}</strong>" has been created successfully.</p>
+          <h2 id="modal-title-command-created">{{ t('commandDesign.modal.title') }}</h2>
+          <p>{{ t('commandDesign.modal.bodyPrefix') }} <strong>/{{ formData.name }}</strong> {{ t('commandDesign.modal.bodySuffix') }}</p>
           <div class="modal-actions">
             <button class="btn" @click="exportToLibrary">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
               </svg>
-              Export to Library
+              {{ t('commandDesign.modal.exportToLibrary') }}
             </button>
-            <button class="btn btn-secondary" @click="createAnother">Create Another</button>
-            <button class="btn btn-primary" @click="handleFormCreated">Done</button>
+            <button class="btn btn-secondary" @click="createAnother">{{ t('commandDesign.modal.createAnother') }}</button>
+            <button class="btn btn-primary" @click="handleFormCreated">{{ t('common.done') }}</button>
           </div>
         </div>
       </div>

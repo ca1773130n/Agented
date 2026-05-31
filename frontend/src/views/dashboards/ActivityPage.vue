@@ -9,6 +9,7 @@
 -->
 <script setup lang="ts">
 import { ref, nextTick, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import PageHeader from '../../components/base/PageHeader.vue';
 import SchedulingCard from './cards/SchedulingCard.vue';
@@ -22,6 +23,7 @@ import ImpactReportCard from './cards/ImpactReportCard.vue';
 import CrossTeamInsightsCard from './cards/CrossTeamInsightsCard.vue';
 import RoiLeaderboardCard from './cards/RoiLeaderboardCard.vue';
 
+const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const loaded = ref<Set<string>>(new Set());
@@ -34,34 +36,34 @@ interface InspectorTool {
 
 const inspectorTools: InspectorTool[] = [
   {
-    label: 'Timeline',
+    label: t('activity.inspector.timeline.label'),
     routeName: 'execution-timeline',
-    description: 'Chronological view of executions across triggers.',
+    description: t('activity.inspector.timeline.description'),
   },
   {
-    label: 'Artifacts',
+    label: t('activity.inspector.artifacts.label'),
     routeName: 'execution-artifacts',
-    description: 'Browse files an execution produced or consumed.',
+    description: t('activity.inspector.artifacts.description'),
   },
   {
-    label: 'Diff Viewer',
+    label: t('activity.inspector.diffViewer.label'),
     routeName: 'execution-file-diff-viewer',
-    description: 'Compare file changes between executions.',
+    description: t('activity.inspector.diffViewer.description'),
   },
   {
-    label: 'Time-Travel Debugger',
+    label: t('activity.inspector.timeTravel.label'),
     routeName: 'execution-time-travel-debugger',
-    description: 'Step through an execution backwards/forwards.',
+    description: t('activity.inspector.timeTravel.description'),
   },
   {
-    label: 'Cost Estimator',
+    label: t('activity.inspector.costEstimator.label'),
     routeName: 'execution-cost-estimator',
-    description: 'Project per-execution token + API costs.',
+    description: t('activity.inspector.costEstimator.description'),
   },
   {
-    label: 'Traces',
+    label: t('activity.inspector.traces.label'),
     routeName: 'traces-list',
-    description: 'OTel-style trace explorer for executions and tools.',
+    description: t('activity.inspector.traces.description'),
   },
 ];
 
@@ -89,10 +91,10 @@ onMounted(maybeScroll);
 
 <template>
   <div class="lane-page activity-lane">
-    <PageHeader title="Activity" subtitle="Live ops + team / org reports" />
+    <PageHeader :title="t('activity.title')" :subtitle="t('activity.subtitle')" />
 
-    <section class="lane-block" aria-label="Live ops">
-      <h2 class="lane-block__title">Live ops</h2>
+    <section class="lane-block" :aria-label="t('activity.blocks.liveOps')">
+      <h2 class="lane-block__title">{{ t('activity.blocks.liveOps') }}</h2>
       <div class="lane-cards">
         <SchedulingCard @loaded="onCardLoaded" />
         <ExecutionQueueCard @loaded="onCardLoaded" />
@@ -104,8 +106,8 @@ onMounted(maybeScroll);
       </div>
     </section>
 
-    <section class="lane-block" aria-label="Reports">
-      <h2 class="lane-block__title">Reports</h2>
+    <section class="lane-block" :aria-label="t('activity.blocks.reports')">
+      <h2 class="lane-block__title">{{ t('activity.blocks.reports') }}</h2>
       <div class="lane-cards">
         <ImpactReportCard @loaded="onCardLoaded" />
         <CrossTeamInsightsCard @loaded="onCardLoaded" />
@@ -113,8 +115,8 @@ onMounted(maybeScroll);
       </div>
     </section>
 
-    <section class="lane-block" aria-label="Inspector tools">
-      <h2 class="lane-block__title">Inspector tools</h2>
+    <section class="lane-block" :aria-label="t('activity.blocks.inspectorTools')">
+      <h2 class="lane-block__title">{{ t('activity.blocks.inspectorTools') }}</h2>
       <div class="inspector-grid">
         <button
           v-for="tool in inspectorTools"

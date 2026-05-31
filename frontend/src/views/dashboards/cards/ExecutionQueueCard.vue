@@ -4,11 +4,13 @@
 -->
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useToast } from '../../../composables/useToast';
 import { executionApi, triggerApi, ApiError } from '../../../services/api';
 import type { Execution, Trigger } from '../../../services/api';
 
 const emit = defineEmits<{ loaded: [slug: string] }>();
+const { t } = useI18n();
 const showToast = useToast();
 
 interface QueueEntry {
@@ -68,7 +70,7 @@ function handleDragOver(id: string) { dragOverId.value = id; }
 function handleDrop(_targetId: string) {
   isDragging.value = null;
   dragOverId.value = null;
-  showToast('Queue order is managed by the backend (FIFO with priority)', 'info');
+  showToast(t('executionQueueCard.toast.fifoManaged'), 'info');
 }
 
 function statusColor(s: string): string {
@@ -79,14 +81,14 @@ function statusColor(s: string): string {
 }
 
 function formatTimeAgo(dateStr: string): string {
-  if (!dateStr) return 'unknown';
+  if (!dateStr) return t('executionQueueCard.timeAgo.unknown');
   const diff = Date.now() - new Date(dateStr).getTime();
   const secs = Math.floor(diff / 1000);
-  if (secs < 60) return `${secs}s ago`;
+  if (secs < 60) return t('executionQueueCard.timeAgo.seconds', { count: secs });
   const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 60) return t('executionQueueCard.timeAgo.minutes', { count: mins });
   const hours = Math.floor(mins / 60);
-  return `${hours}h ago`;
+  return t('executionQueueCard.timeAgo.hours', { count: hours });
 }
 
 async function loadTriggers() {
@@ -109,7 +111,7 @@ async function loadQueueData() {
     pendingExecutions.value = pendingRes.executions ?? [];
     loadError.value = '';
   } catch (err) {
-    loadError.value = err instanceof ApiError ? err.message : 'Failed to load queue data';
+    loadError.value = err instanceof ApiError ? err.message : t('executionQueueCard.error.load');
   } finally {
     isLoading.value = false;
   }
@@ -120,10 +122,10 @@ async function cancelExecution(executionId: string) {
   cancellingIds.value.add(executionId);
   try {
     await executionApi.cancel(executionId);
-    showToast('Execution cancellation initiated', 'success');
+    showToast(t('executionQueueCard.toast.cancelInitiated'), 'success');
     await loadQueueData();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to cancel execution';
+    const message = err instanceof ApiError ? err.message : t('executionQueueCard.error.cancel');
     showToast(message, 'error');
   } finally {
     cancellingIds.value.delete(executionId);
@@ -133,10 +135,10 @@ async function cancelExecution(executionId: string) {
 async function cancelQueueForTrigger(triggerId: string) {
   try {
     const res = await executionApi.cancelQueueForTrigger(triggerId);
-    showToast(`Cancelled ${res.cancelled} pending entries`, 'success');
+    showToast(t('executionQueueCard.toast.cancelledEntries', { count: res.cancelled }), 'success');
     await loadQueueData();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to cancel queue entries';
+    const message = err instanceof ApiError ? err.message : t('executionQueueCard.error.cancelQueue');
     showToast(message, 'error');
   }
 }
@@ -156,14 +158,14 @@ onUnmounted(() => {
   <section id="execution-queue" class="lane-card exec-queue-card">
     <header class="lane-card__head">
       <div>
-        <h2 class="lane-card__title">Execution Queue</h2>
-        <p class="lane-card__subtitle">Monitor and manage the execution queue in real time.</p>
+        <h2 class="lane-card__title">{{ t('executionQueueCard.title') }}</h2>
+        <p class="lane-card__subtitle">{{ t('executionQueueCard.subtitle') }}</p>
       </div>
     </header>
 
     <div v-if="isLoading" class="loading-state">
       <div class="loading-spinner"></div>
-      <span>Loading queue data...</span>
+      <span>{{ t('executionQueueCard.loading') }}</span>
     </div>
 
     <div v-else-if="loadError" class="error-state">
@@ -173,30 +175,30 @@ onUnmounted(() => {
         <line x1="12" y1="16" x2="12.01" y2="16"/>
       </svg>
       <span>{{ loadError }}</span>
-      <button class="btn-secondary" @click="loadQueueData">Retry</button>
+      <button class="btn-secondary" @click="loadQueueData">{{ t('common.retry') }}</button>
     </div>
 
     <template v-else>
       <div class="stats-bar">
         <div class="stat-card">
           <span class="stat-num" style="color: #34d399">{{ stats.running }}</span>
-          <span class="stat-lbl">Running</span>
+          <span class="stat-lbl">{{ t('executionQueueCard.stat.running') }}</span>
         </div>
         <div class="stat-card">
           <span class="stat-num" style="color: #f59e0b">{{ stats.pending }}</span>
-          <span class="stat-lbl">Pending</span>
+          <span class="stat-lbl">{{ t('executionQueueCard.stat.pending') }}</span>
         </div>
         <div class="stat-card">
           <span class="stat-num" style="color: #3b82f6">{{ stats.dispatching }}</span>
-          <span class="stat-lbl">Dispatching</span>
+          <span class="stat-lbl">{{ t('executionQueueCard.stat.dispatching') }}</span>
         </div>
         <div class="stat-card">
           <span class="stat-num">{{ stats.total }}</span>
-          <span class="stat-lbl">Total</span>
+          <span class="stat-lbl">{{ t('executionQueueCard.stat.total') }}</span>
         </div>
         <div class="stat-card">
-          <span class="stat-num" style="color: var(--accent-cyan)">Live</span>
-          <span class="stat-lbl">Auto-refresh 5s</span>
+          <span class="stat-num" style="color: var(--accent-cyan)">{{ t('executionQueueCard.stat.live') }}</span>
+          <span class="stat-lbl">{{ t('executionQueueCard.stat.autoRefresh') }}</span>
         </div>
       </div>
 
@@ -204,7 +206,7 @@ onUnmounted(() => {
         <div class="lane">
           <div class="lane-header" style="border-bottom-color: #34d399">
             <div class="lane-dot" style="background: #34d399"></div>
-            <span class="lane-label">Running</span>
+            <span class="lane-label">{{ t('executionQueueCard.lane.running') }}</span>
             <span class="lane-count">{{ runningQueue.length }}</span>
           </div>
           <div class="lane-items">
@@ -234,11 +236,11 @@ onUnmounted(() => {
                 class="cancel-btn"
                 :disabled="cancellingIds.has(ex.id)"
                 @click.stop="cancelExecution(ex.id)"
-                title="Cancel execution"
+                :title="t('executionQueueCard.cancelExecution')"
               >×</button>
             </div>
             <div v-if="runningQueue.length === 0" class="lane-empty">
-              No running executions
+              {{ t('executionQueueCard.empty.running') }}
             </div>
           </div>
         </div>
@@ -246,7 +248,7 @@ onUnmounted(() => {
         <div class="lane">
           <div class="lane-header" style="border-bottom-color: #f59e0b">
             <div class="lane-dot" style="background: #f59e0b"></div>
-            <span class="lane-label">Pending</span>
+            <span class="lane-label">{{ t('executionQueueCard.lane.pending') }}</span>
             <span class="lane-count">{{ pendingQueue.length }}</span>
           </div>
           <div class="lane-items">
@@ -276,11 +278,11 @@ onUnmounted(() => {
                 class="cancel-btn"
                 :disabled="cancellingIds.has(ex.id)"
                 @click.stop="cancelExecution(ex.id)"
-                title="Cancel execution"
+                :title="t('executionQueueCard.cancelExecution')"
               >×</button>
             </div>
             <div v-if="pendingQueue.length === 0" class="lane-empty">
-              No pending executions
+              {{ t('executionQueueCard.empty.pending') }}
             </div>
           </div>
         </div>
@@ -288,7 +290,7 @@ onUnmounted(() => {
         <div class="lane">
           <div class="lane-header" style="border-bottom-color: #6b7280">
             <div class="lane-dot" style="background: #6b7280"></div>
-            <span class="lane-label">Queue by Trigger</span>
+            <span class="lane-label">{{ t('executionQueueCard.lane.queueByTrigger') }}</span>
             <span class="lane-count">{{ queueSummary.length }}</span>
           </div>
           <div class="lane-items">
@@ -303,21 +305,21 @@ onUnmounted(() => {
               </div>
               <div class="item-right">
                 <span class="item-status" :style="{ color: '#f59e0b', background: '#f59e0b20' }">
-                  {{ entry.pending }} pending
+                  {{ t('executionQueueCard.pendingCount', { count: entry.pending }) }}
                 </span>
                 <span v-if="entry.dispatching > 0" class="item-status" :style="{ color: '#3b82f6', background: '#3b82f620' }">
-                  {{ entry.dispatching }} dispatching
+                  {{ t('executionQueueCard.dispatchingCount', { count: entry.dispatching }) }}
                 </span>
               </div>
               <button
                 v-if="entry.pending > 0"
                 class="cancel-btn"
                 @click.stop="cancelQueueForTrigger(entry.trigger_id)"
-                title="Cancel all pending for this trigger"
+                :title="t('executionQueueCard.cancelAllPending')"
               >×</button>
             </div>
             <div v-if="queueSummary.length === 0" class="lane-empty">
-              No queued triggers
+              {{ t('executionQueueCard.empty.triggers') }}
             </div>
           </div>
         </div>

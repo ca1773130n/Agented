@@ -15,7 +15,10 @@
  * SA is currently producing output.
  */
 import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { SuperAgent, SuperAgentActivityStatus } from '../../services/api';
+
+const { t } = useI18n();
 import { projectApi, superAgentApi } from '../../services/api';
 import { safeFormatDateTime } from '../../utils/datetime';
 
@@ -70,7 +73,7 @@ async function loadSessions() {
     await loadActivity();
     loadError.value = null;
   } catch (e) {
-    loadError.value = e instanceof Error ? e.message : 'Failed to load sessions';
+    loadError.value = e instanceof Error ? e.message : t('projectSuperAgentSessions.loadError');
   } finally {
     isLoading.value = false;
   }
@@ -128,23 +131,22 @@ onUnmounted(() => {
 <template>
   <div class="sa-sessions">
     <div class="sa-sessions__header">
-      <h3 class="sa-sessions__title">SuperAgent sessions</h3>
+      <h3 class="sa-sessions__title">{{ t('projectSuperAgentSessions.title') }}</h3>
       <span class="sa-sessions__count">
-        {{ activeSessions.length }} active · {{ sessions.length }} total
+        {{ t('projectSuperAgentSessions.count', { active: activeSessions.length, total: sessions.length }) }}
       </span>
     </div>
 
-    <div v-if="isLoading" class="state-row">Loading SuperAgent sessions…</div>
+    <div v-if="isLoading" class="state-row">{{ t('projectSuperAgentSessions.loading') }}</div>
     <div v-else-if="loadError" class="state-row error">{{ loadError }}</div>
     <div v-else-if="sessions.length === 0" class="state-row muted">
-      No SuperAgent sessions for this project yet. Routing a sketch
-      (<router-link :to="{ name: 'sketch-chat' }">/sketch</router-link>) to one
-      of this project's SAs will start one and surface it here.
+      {{ t('projectSuperAgentSessions.emptyPrefix') }}
+      (<router-link :to="{ name: 'sketch-chat' }">/sketch</router-link>){{ t('projectSuperAgentSessions.emptySuffix') }}
     </div>
 
     <template v-else>
       <div v-if="activeSessions.length > 0" class="group">
-        <div class="group__label">Active</div>
+        <div class="group__label">{{ t('projectSuperAgentSessions.active') }}</div>
         <ul class="rows">
           <li v-for="s in activeSessions" :key="s.id" class="row">
             <router-link :to="playgroundLinkFor(s)" class="row__link">
@@ -153,17 +155,17 @@ onUnmounted(() => {
                 <span
                   v-if="isWorking(s.super_agent_id)"
                   class="working-pill"
-                  title="This SuperAgent is producing a response right now"
+                  :title="t('projectSuperAgentSessions.workingTooltip')"
                 >
                   <span class="working-pill__dot" />
-                  Working
+                  {{ t('projectSuperAgentSessions.working') }}
                 </span>
                 <span :class="statusBadgeClass(s.status)">{{ s.status }}</span>
               </div>
               <div class="row__meta">
                 <span v-if="s.title" class="row__title">{{ s.title }}</span>
                 <span v-if="s.started_at" class="row__time">
-                  Started {{ safeFormatDateTime(s.started_at) }}
+                  {{ t('projectSuperAgentSessions.started', { time: safeFormatDateTime(s.started_at) }) }}
                 </span>
                 <span v-if="s.session_type" class="row__type">{{ s.session_type }}</span>
                 <span v-if="s.worktree_path" class="row__path" :title="s.worktree_path">
@@ -176,7 +178,7 @@ onUnmounted(() => {
       </div>
 
       <div v-if="otherSessions.length > 0" class="group">
-        <div class="group__label">History</div>
+        <div class="group__label">{{ t('projectSuperAgentSessions.history') }}</div>
         <ul class="rows rows--muted">
           <li v-for="s in otherSessions.slice(0, 10)" :key="s.id" class="row">
             <router-link :to="playgroundLinkFor(s)" class="row__link">
@@ -187,7 +189,7 @@ onUnmounted(() => {
               <div class="row__meta">
                 <span v-if="s.title" class="row__title">{{ s.title }}</span>
                 <span v-if="s.ended_at" class="row__time">
-                  Ended {{ safeFormatDateTime(s.ended_at) }}
+                  {{ t('projectSuperAgentSessions.ended', { time: safeFormatDateTime(s.ended_at) }) }}
                 </span>
               </div>
             </router-link>

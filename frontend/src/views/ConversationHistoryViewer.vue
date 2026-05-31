@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { agentApi, agentConversationApi, ApiError } from '../services/api';
 import type { Agent, AgentConversation } from '../services/api';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 type TurnRole = 'user' | 'assistant' | 'tool_result' | 'tool_call';
@@ -67,9 +69,9 @@ onMounted(async () => {
     }
   } catch (err) {
     if (err instanceof ApiError) {
-      loadError.value = `Failed to load agents: ${err.message}`;
+      loadError.value = t('conversationHistoryViewer.errors.loadAgents', { message: err.message });
     } else {
-      loadError.value = 'An unexpected error occurred.';
+      loadError.value = t('conversationHistoryViewer.errors.unexpected');
     }
   } finally {
     isLoading.value = false;
@@ -157,10 +159,10 @@ const filteredTurns = computed(() => {
 
 function roleLabel(role: TurnRole): string {
   const labels: Record<TurnRole, string> = {
-    user: 'System Prompt',
-    assistant: 'Model',
-    tool_call: 'Tool Call',
-    tool_result: 'Tool Result',
+    user: t('conversationHistoryViewer.roles.user'),
+    assistant: t('conversationHistoryViewer.roles.assistant'),
+    tool_call: t('conversationHistoryViewer.roles.toolCall'),
+    tool_result: t('conversationHistoryViewer.roles.toolResult'),
   };
   return labels[role];
 }
@@ -196,7 +198,7 @@ function formatDuration(ms?: number): string {
 
 function copyContent(turn: ConversationTurn) {
   const text = turn.toolCall ? JSON.stringify(turn.toolCall, null, 2) : turn.content;
-  navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard', 'success'));
+  navigator.clipboard.writeText(text).then(() => showToast(t('conversationHistoryViewer.copied'), 'success'));
 }
 
 const totalDuration = computed(() => {
@@ -212,13 +214,13 @@ const totalDuration = computed(() => {
 <template>
   <div class="page-container">
     <PageHeader
-      title="Conversation History Viewer"
-      subtitle="Full multi-turn AI conversation with tool calls for any agent"
+      :title="t('conversationHistoryViewer.title')"
+      :subtitle="t('conversationHistoryViewer.subtitle')"
     />
 
     <!-- Loading state -->
     <div v-if="isLoading && agents.length === 0" class="empty-state">
-      <p>Loading agents...</p>
+      <p>{{ t('conversationHistoryViewer.loadingAgents') }}</p>
     </div>
 
     <!-- Error state -->
@@ -228,7 +230,7 @@ const totalDuration = computed(() => {
 
     <!-- Empty state -->
     <div v-else-if="agents.length === 0" class="empty-state">
-      <p>No agents found. Create an agent to view conversation history.</p>
+      <p>{{ t('conversationHistoryViewer.noAgents') }}</p>
     </div>
 
     <template v-else>
@@ -250,15 +252,15 @@ const totalDuration = computed(() => {
         <input
           v-model="searchQuery"
           class="search-input"
-          placeholder="Search turns, tool names, content..."
+          :placeholder="t('conversationHistoryViewer.searchPlaceholder')"
           type="search"
         />
         <select v-model="filterRole" class="filter-select">
-          <option value="all">All turn types</option>
-          <option value="user">System Prompt</option>
-          <option value="assistant">Model Output</option>
-          <option value="tool_call">Tool Calls</option>
-          <option value="tool_result">Tool Results</option>
+          <option value="all">{{ t('conversationHistoryViewer.filter.all') }}</option>
+          <option value="user">{{ t('conversationHistoryViewer.filter.systemPrompt') }}</option>
+          <option value="assistant">{{ t('conversationHistoryViewer.filter.modelOutput') }}</option>
+          <option value="tool_call">{{ t('conversationHistoryViewer.filter.toolCalls') }}</option>
+          <option value="tool_result">{{ t('conversationHistoryViewer.filter.toolResults') }}</option>
         </select>
       </div>
 
@@ -266,37 +268,37 @@ const totalDuration = computed(() => {
         <!-- Session meta panel -->
         <aside class="session-meta">
           <div class="meta-card">
-            <h3>Session</h3>
+            <h3>{{ t('conversationHistoryViewer.meta.session') }}</h3>
             <div class="meta-row">
-              <span class="meta-key">Agent</span>
+              <span class="meta-key">{{ t('conversationHistoryViewer.meta.agent') }}</span>
               <span class="meta-val">{{ session.botName }}</span>
             </div>
             <div class="meta-row">
-              <span class="meta-key">ID</span>
+              <span class="meta-key">{{ t('conversationHistoryViewer.meta.id') }}</span>
               <span class="meta-val mono">{{ session.executionId }}</span>
             </div>
             <div class="meta-row">
-              <span class="meta-key">Duration</span>
+              <span class="meta-key">{{ t('conversationHistoryViewer.meta.duration') }}</span>
               <span class="meta-val">{{ totalDuration }}</span>
             </div>
             <div class="meta-row">
-              <span class="meta-key">Total Turns</span>
+              <span class="meta-key">{{ t('conversationHistoryViewer.meta.totalTurns') }}</span>
               <span class="meta-val">{{ session.totalTurns }}</span>
             </div>
             <div class="meta-row">
-              <span class="meta-key">Outcome</span>
+              <span class="meta-key">{{ t('conversationHistoryViewer.meta.outcome') }}</span>
               <span class="meta-val" :style="{ color: outcomeColor(session.outcome) }">
                 {{ session.outcome }}
               </span>
             </div>
             <div class="meta-row">
-              <span class="meta-key">Started</span>
+              <span class="meta-key">{{ t('conversationHistoryViewer.meta.started') }}</span>
               <span class="meta-val">{{ session.startedAt ? new Date(session.startedAt).toLocaleString() : '-' }}</span>
             </div>
           </div>
 
           <div class="meta-card">
-            <h3>Turn Breakdown</h3>
+            <h3>{{ t('conversationHistoryViewer.meta.turnBreakdown') }}</h3>
             <div v-for="role in (['user', 'assistant', 'tool_call', 'tool_result'] as TurnRole[])" :key="role" class="meta-row">
               <span class="role-dot" :style="{ background: roleColor(role) }"></span>
               <span class="meta-key">{{ roleLabel(role) }}</span>
@@ -308,7 +310,7 @@ const totalDuration = computed(() => {
         <!-- Turn list -->
         <div class="turn-list">
           <div v-if="isLoading" class="empty-state">
-            <p>Loading conversation...</p>
+            <p>{{ t('conversationHistoryViewer.loadingConversation') }}</p>
           </div>
 
           <div
@@ -323,9 +325,9 @@ const totalDuration = computed(() => {
               <span class="role-label" :style="{ color: roleColor(turn.role) }">{{ roleLabel(turn.role) }}</span>
               <span v-if="turn.toolCall" class="tool-name">{{ turn.toolCall.name }}</span>
               <span v-if="turn.durationMs" class="turn-duration">{{ formatDuration(turn.durationMs) }}</span>
-              <span v-if="turn.tokenCount" class="turn-tokens">{{ turn.tokenCount }} tok</span>
+              <span v-if="turn.tokenCount" class="turn-tokens">{{ t('conversationHistoryViewer.tokens', { count: turn.tokenCount }) }}</span>
               <span class="turn-time">{{ turn.timestamp ? new Date(turn.timestamp).toLocaleTimeString() : '' }}</span>
-              <button class="copy-btn" :title="`Copy turn ${turn.id}`" @click.stop="copyContent(turn)">&#9112;</button>
+              <button class="copy-btn" :title="t('conversationHistoryViewer.copyTurn', { id: turn.id })" @click.stop="copyContent(turn)">&#9112;</button>
             </div>
 
             <!-- Tool call input -->
@@ -340,13 +342,13 @@ const totalDuration = computed(() => {
 
             <!-- Tool result for reference -->
             <div v-if="turn.toolResultFor" class="result-for">
-              Result for turn {{ turn.toolResultFor }}
+              {{ t('conversationHistoryViewer.resultForTurn', { id: turn.toolResultFor }) }}
             </div>
           </div>
 
           <div v-if="!isLoading && filteredTurns.length === 0" class="empty-state">
-            <p v-if="session.turns.length === 0">No conversation history available for this agent.</p>
-            <p v-else>No turns match your filter.</p>
+            <p v-if="session.turns.length === 0">{{ t('conversationHistoryViewer.noHistory') }}</p>
+            <p v-else>{{ t('conversationHistoryViewer.noMatch') }}</p>
           </div>
         </div>
       </div>

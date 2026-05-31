@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import type { Team, Agent } from '../services/api';
 import { teamApi, agentApi, ApiError } from '../services/api';
@@ -13,6 +14,7 @@ const props = defineProps<{
   teamId?: string;
 }>();
 
+const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const teamId = computed(() => (route.params.teamId as string) || props.teamId || '');
@@ -63,7 +65,7 @@ async function loadData() {
     editColor.value = team.value.color || '#00d4ff';
     return team.value;
   } catch (err) {
-    handleApiError(err, showToast, 'Failed to load team settings');
+    handleApiError(err, showToast, t('teamSettings.toast.loadFailed'));
     throw err;
   }
 }
@@ -71,7 +73,7 @@ async function loadData() {
 async function saveSettings() {
   if (!team.value) return;
   if (!editName.value.trim()) {
-    showToast('Team name is required', 'error');
+    showToast(t('teamSettings.toast.teamNameRequired'), 'error');
     return;
   }
   isSaving.value = true;
@@ -82,10 +84,10 @@ async function saveSettings() {
       color: editColor.value,
       leader_id: selectedLeaderId.value || undefined,
     });
-    showToast('Team settings saved', 'success');
+    showToast(t('teamSettings.toast.saved'), 'success');
     await loadData();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to save settings';
+    const message = err instanceof ApiError ? err.message : t('teamSettings.toast.saveFailed');
     showToast(message, 'error');
   } finally {
     isSaving.value = false;
@@ -101,24 +103,24 @@ async function saveSettings() {
   <div class="settings-page">
 
     <template v-if="team">
-      <PageHeader :title="(team?.name ?? '') + ' Settings'" subtitle="Configure team settings and leadership" />
+      <PageHeader :title="t('teamSettings.pageTitle', { name: team?.name ?? '' })" :subtitle="t('teamSettings.pageSubtitle')" />
 
       <!-- Basic Info Section -->
       <div class="card">
         <div class="card-header">
-          <h3>Basic Information</h3>
+          <h3>{{ t('teamSettings.basicInformation') }}</h3>
         </div>
         <div class="card-body">
           <div class="form-group">
-            <label>Team Name</label>
-            <input v-model="editName" type="text" placeholder="Enter team name" />
+            <label>{{ t('teamSettings.teamName') }}</label>
+            <input v-model="editName" type="text" :placeholder="t('teamSettings.teamNamePlaceholder')" />
           </div>
           <div class="form-group">
-            <label>Description</label>
-            <textarea v-model="editDescription" placeholder="Describe the team..."></textarea>
+            <label>{{ t('teamSettings.description') }}</label>
+            <textarea v-model="editDescription" :placeholder="t('teamSettings.descriptionPlaceholder')"></textarea>
           </div>
           <div class="form-group">
-            <label>Color</label>
+            <label>{{ t('teamSettings.color') }}</label>
             <div class="color-picker">
               <input v-model="editColor" type="color" />
               <span>{{ editColor }}</span>
@@ -130,13 +132,13 @@ async function saveSettings() {
       <!-- Leader Section -->
       <div class="card">
         <div class="card-header">
-          <h3>Team Leader</h3>
+          <h3>{{ t('teamSettings.teamLeader') }}</h3>
         </div>
         <div class="card-body">
-          <p class="section-description">Select an agent to lead this team.</p>
+          <p class="section-description">{{ t('teamSettings.selectLeaderHint') }}</p>
 
           <div v-if="agents.length === 0" class="empty-state">
-            <p>No agents available. Create agents first.</p>
+            <p>{{ t('teamSettings.noAgentsAvailable') }}</p>
           </div>
 
           <div v-else class="agents-grid">
@@ -168,7 +170,7 @@ async function saveSettings() {
             class="btn btn-text"
             @click="selectedLeaderId = ''"
           >
-            Clear selection
+            {{ t('teamSettings.clearSelection') }}
           </button>
         </div>
       </div>
@@ -176,11 +178,11 @@ async function saveSettings() {
       <!-- Actions -->
       <div class="actions-row">
         <button class="btn btn-secondary" @click="router.push({ name: 'team-dashboard', params: { teamId: teamId } })">
-          Cancel
+          {{ t('common.cancel') }}
         </button>
         <button class="btn btn-primary" :disabled="isSaving" @click="saveSettings">
-          <span v-if="isSaving">Saving...</span>
-          <span v-else>Save Settings</span>
+          <span v-if="isSaving">{{ t('teamSettings.saving') }}</span>
+          <span v-else>{{ t('teamSettings.saveSettings') }}</span>
         </button>
       </div>
     </template>

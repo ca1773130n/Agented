@@ -6,22 +6,25 @@ import MarketplacePlugins from './marketplace/MarketplacePlugins.vue';
 import MarketplaceSkills from './marketplace/MarketplaceSkills.vue';
 import MarketplaceMcpServers from './marketplace/MarketplaceMcpServers.vue';
 import MarketplaceSuperAgents from './marketplace/MarketplaceSuperAgents.vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 type TabKey = 'plugins' | 'skills' | 'mcp-servers' | 'super-agents';
 
-const TABS: Array<{ key: TabKey; label: string }> = [
-  { key: 'plugins', label: 'Plugins' },
-  { key: 'skills', label: 'Skills' },
-  { key: 'mcp-servers', label: 'MCP Servers' },
-  { key: 'super-agents', label: 'SuperAgents' },
-];
+const TABS = computed<Array<{ key: TabKey; label: string }>>(() => [
+  { key: 'plugins', label: t('marketplace.tabs.plugins') },
+  { key: 'skills', label: t('marketplace.tabs.skills') },
+  { key: 'mcp-servers', label: t('marketplace.tabs.mcpServers') },
+  { key: 'super-agents', label: t('marketplace.tabs.superAgents') },
+]);
 
 const route = useRoute();
 const router = useRouter();
 
 const activeTab = computed<TabKey>(() => {
   const raw = String(route.query.type ?? '');
-  const match = TABS.find((t) => t.key === raw);
+  const match = TABS.value.find((tab) => tab.key === raw);
   return match ? match.key : 'plugins';
 });
 
@@ -35,11 +38,11 @@ function selectTab(key: TabKey) {
 <template>
   <div class="marketplace-page">
     <PageHeader
-      title="Marketplace"
-      subtitle="Discover plugins, skills, MCP servers, and SuperAgents across registered marketplaces."
+      :title="t('marketplace.title')"
+      :subtitle="t('marketplace.subtitle')"
     />
 
-    <div class="tab-strip" role="tablist" aria-label="Marketplace artifact type">
+    <div class="tab-strip" role="tablist" :aria-label="t('marketplace.tabStripLabel')">
       <button
         v-for="tab in TABS"
         :key="tab.key"

@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Chart, registerables, type ChartDataset } from 'chart.js';
 import 'chartjs-adapter-date-fns';
 import type { SnapshotHistoryEntry } from '../../services/api';
 import { safeFormatTime } from '../../utils/datetime';
+
+const { t } = useI18n();
 
 Chart.register(...registerables);
 
@@ -154,7 +157,7 @@ function renderChart() {
       ctx.fillStyle = 'rgba(234, 179, 8, 0.7)';
       ctx.font = "10px 'Geist Mono', 'SF Mono', monospace";
       ctx.textAlign = 'center';
-      ctx.fillText('Reset', x, yScale.top - 4);
+      ctx.fillText(t('remainingTimeChart.reset'), x, yScale.top - 4);
       ctx.restore();
     },
   };
@@ -181,8 +184,8 @@ function renderChart() {
           bodyFont: { family: "'Geist', sans-serif", size: 11 },
           callbacks: {
             label: (context) => {
-              const suffix = context.dataset.borderDash ? ' (est.)' : '';
-              return `Remaining${suffix}: ${(context.parsed.y ?? 0).toFixed(1)}%`;
+              const suffix = context.dataset.borderDash ? ` ${t('remainingTimeChart.estimatedSuffix')}` : '';
+              return t('remainingTimeChart.remainingTooltip', { suffix, value: (context.parsed.y ?? 0).toFixed(1) });
             },
           },
         },
@@ -241,11 +244,11 @@ watch(() => [props.history, props.resetsAt, props.timeRangeStart, props.timeRang
     <div class="remaining-chart-header">
       <span class="remaining-chart-label">{{ label }}</span>
       <span v-if="resetsAt" class="remaining-reset-tag">
-        Reset: {{ safeFormatTime(resetsAt, '', { hour: '2-digit', minute: '2-digit' }) }}
+        {{ t('remainingTimeChart.resetAt', { time: safeFormatTime(resetsAt, '', { hour: '2-digit', minute: '2-digit' }) }) }}
       </span>
     </div>
     <div v-if="!history?.length" class="chart-no-data">
-      No data yet
+      {{ t('remainingTimeChart.noData') }}
     </div>
     <canvas v-else ref="chartRef"></canvas>
   </div>

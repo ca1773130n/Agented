@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { SchedulingSuggestion, SchedulingSuggestionsResponse } from '../../services/api';
 import { analyticsApi } from '../../services/api';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   triggerId: string;
@@ -50,7 +53,7 @@ function formatDuration(ms: number | null): string {
       <svg class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
       </svg>
-      Loading scheduling suggestions...
+      {{ t('schedulingSuggestions.loading') }}
     </div>
 
     <template v-else-if="data">
@@ -63,7 +66,7 @@ function formatDuration(ms: number | null): string {
         </svg>
         <div>
           <p>{{ data.message }}</p>
-          <span class="info-detail">{{ data.total_executions_analyzed }} executions analyzed over {{ data.analysis_period_days }} days</span>
+          <span class="info-detail">{{ t('schedulingSuggestions.analyzedDetail', { count: data.total_executions_analyzed, days: data.analysis_period_days }) }}</span>
         </div>
       </div>
 
@@ -74,12 +77,12 @@ function formatDuration(ms: number | null): string {
             <circle cx="12" cy="12" r="10"/>
             <polyline points="12 6 12 12 16 14"/>
           </svg>
-          <span>Based on {{ data.total_executions_analyzed }} executions over {{ data.analysis_period_days }} days</span>
+          <span>{{ t('schedulingSuggestions.basedOn', { count: data.total_executions_analyzed, days: data.analysis_period_days }) }}</span>
         </div>
 
         <!-- Recommended Hours -->
         <div v-if="hourSuggestions.length > 0" class="suggestion-section">
-          <h4>Recommended Hours</h4>
+          <h4>{{ t('schedulingSuggestions.recommendedHours') }}</h4>
           <div class="suggestion-list">
             <div
               v-for="suggestion in hourSuggestions"
@@ -89,10 +92,10 @@ function formatDuration(ms: number | null): string {
               <div class="suggestion-value">{{ suggestion.value }}</div>
               <div class="suggestion-metrics">
                 <span class="success-rate" :class="getSuccessRateClass(suggestion.success_rate)">
-                  {{ Math.round(suggestion.success_rate * 100) }}% success
+                  {{ t('schedulingSuggestions.successSuffix', { pct: Math.round(suggestion.success_rate * 100) }) }}
                 </span>
                 <span class="duration">{{ formatDuration(suggestion.avg_duration_ms) }}</span>
-                <span class="exec-count">{{ suggestion.execution_count }} runs</span>
+                <span class="exec-count">{{ t('schedulingSuggestions.runsSuffix', { count: suggestion.execution_count }) }}</span>
               </div>
               <div class="suggestion-rationale">{{ suggestion.rationale }}</div>
             </div>
@@ -101,7 +104,7 @@ function formatDuration(ms: number | null): string {
 
         <!-- Recommended Days -->
         <div v-if="daySuggestions.length > 0" class="suggestion-section">
-          <h4>Recommended Days</h4>
+          <h4>{{ t('schedulingSuggestions.recommendedDays') }}</h4>
           <div class="suggestion-list">
             <div
               v-for="suggestion in daySuggestions"
@@ -111,10 +114,10 @@ function formatDuration(ms: number | null): string {
               <div class="suggestion-value">{{ suggestion.value }}</div>
               <div class="suggestion-metrics">
                 <span class="success-rate" :class="getSuccessRateClass(suggestion.success_rate)">
-                  {{ Math.round(suggestion.success_rate * 100) }}% success
+                  {{ t('schedulingSuggestions.successSuffix', { pct: Math.round(suggestion.success_rate * 100) }) }}
                 </span>
                 <span class="duration">{{ formatDuration(suggestion.avg_duration_ms) }}</span>
-                <span class="exec-count">{{ suggestion.execution_count }} runs</span>
+                <span class="exec-count">{{ t('schedulingSuggestions.runsSuffix', { count: suggestion.execution_count }) }}</span>
               </div>
               <div class="suggestion-rationale">{{ suggestion.rationale }}</div>
             </div>

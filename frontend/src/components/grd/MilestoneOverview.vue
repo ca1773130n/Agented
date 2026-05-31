@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { GrdMilestone, GrdPhase, GrdPlan } from '../../services/api';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   milestone: GrdMilestone | null;
@@ -78,11 +81,11 @@ const progressPercent = computed(() => {
 });
 
 const statusPills = computed(() => [
-  { label: 'Pending', count: plansByStatus.value.pending, cls: 'pill-pending' },
-  { label: 'In Progress', count: plansByStatus.value.in_progress, cls: 'pill-in-progress' },
-  { label: 'In Review', count: plansByStatus.value.in_review, cls: 'pill-in-review' },
-  { label: 'Completed', count: plansByStatus.value.completed, cls: 'pill-completed' },
-  { label: 'Failed', count: plansByStatus.value.failed, cls: 'pill-failed' },
+  { label: t('milestoneOverview.status.pending'), count: plansByStatus.value.pending, cls: 'pill-pending' },
+  { label: t('milestoneOverview.status.inProgress'), count: plansByStatus.value.in_progress, cls: 'pill-in-progress' },
+  { label: t('milestoneOverview.status.inReview'), count: plansByStatus.value.in_review, cls: 'pill-in-review' },
+  { label: t('milestoneOverview.status.completed'), count: plansByStatus.value.completed, cls: 'pill-completed' },
+  { label: t('milestoneOverview.status.failed'), count: plansByStatus.value.failed, cls: 'pill-failed' },
 ]);
 </script>
 
@@ -97,10 +100,10 @@ const statusPills = computed(() => [
 
     <div class="milestone-stats">
       <div class="stat-item">
-        <span class="stat-label">Phases</span>
+        <span class="stat-label">{{ t('milestoneOverview.phases') }}</span>
         <div class="stat-value-row">
           <span class="stat-value">{{ phasesCompleted }}/{{ totalPhases }}</span>
-          <span class="stat-unit">complete</span>
+          <span class="stat-unit">{{ t('milestoneOverview.complete') }}</span>
         </div>
         <div class="mini-progress-bar">
           <div
@@ -113,7 +116,7 @@ const statusPills = computed(() => [
       <div class="stat-divider"></div>
 
       <div class="stat-item">
-        <span class="stat-label">Overall Progress</span>
+        <span class="stat-label">{{ t('milestoneOverview.overallProgress') }}</span>
         <div class="stat-value-row">
           <span class="stat-value stat-value-large">{{ progressPercent }}%</span>
         </div>
@@ -125,7 +128,7 @@ const statusPills = computed(() => [
       <div class="stat-divider"></div>
 
       <div class="stat-item stat-item-pills">
-        <span class="stat-label">Plans by Status</span>
+        <span class="stat-label">{{ t('milestoneOverview.plansByStatus') }}</span>
         <div class="status-pills">
           <span
             v-for="pill in statusPills"
@@ -148,7 +151,7 @@ const statusPills = computed(() => [
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
-            New Phase
+            {{ t('milestoneOverview.newPhase') }}
           </button>
         </template>
         <template v-else>
@@ -157,18 +160,18 @@ const statusPills = computed(() => [
               ref="newPhaseInput"
               v-model="newPhaseName"
               class="new-phase-input"
-              placeholder="Phase name..."
+              :placeholder="t('milestoneOverview.phaseNamePlaceholder')"
               @keydown="handlePhaseKeydown"
             />
             <input
               v-model="newPhaseGoal"
               class="new-phase-input"
-              placeholder="Goal (optional)"
+              :placeholder="t('milestoneOverview.goalPlaceholder')"
               @keydown="handlePhaseKeydown"
             />
             <div class="new-phase-actions">
-              <button class="new-phase-submit" @click="submitNewPhase">Create</button>
-              <button class="new-phase-cancel" @click="showNewPhaseForm = false">Cancel</button>
+              <button class="new-phase-submit" @click="submitNewPhase">{{ t('common.create') }}</button>
+              <button class="new-phase-cancel" @click="showNewPhaseForm = false">{{ t('common.cancel') }}</button>
             </div>
           </div>
         </template>
@@ -186,24 +189,24 @@ const statusPills = computed(() => [
           <span class="phase-number">{{ String(phase.phase_number).padStart(2, '0') }}</span>
           <span class="phase-name">{{ phase.name }}</span>
           <span class="phase-status-badge" :class="'phase-' + phase.status">{{ phase.status }}</span>
-          <span v-if="phase.plan_count > 0" class="phase-plan-count">{{ phase.plan_count }} plans</span>
+          <span v-if="phase.plan_count > 0" class="phase-plan-count">{{ t('milestoneOverview.planCount', { count: phase.plan_count }) }}</span>
         </div>
         <div class="phase-actions">
           <button
             class="phase-action-btn"
-            title="Discuss this phase"
+            :title="t('milestoneOverview.discussTitle')"
             @click="emit('phaseCommand', phase.phase_number, 'discuss-phase')"
-          >Discuss</button>
+          >{{ t('milestoneOverview.discuss') }}</button>
           <button
             class="phase-action-btn"
-            title="Plan this phase"
+            :title="t('milestoneOverview.planTitle')"
             @click="emit('phaseCommand', phase.phase_number, 'plan-phase')"
-          >Plan</button>
+          >{{ t('milestoneOverview.plan') }}</button>
           <button
             class="phase-action-btn"
-            title="Research this phase"
+            :title="t('milestoneOverview.researchTitle')"
             @click="emit('phaseCommand', phase.phase_number, 'survey')"
-          >Research</button>
+          >{{ t('milestoneOverview.research') }}</button>
         </div>
       </div>
     </div>

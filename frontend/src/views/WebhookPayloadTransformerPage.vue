@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { payloadTransformerApi } from '../services/api/payload-transformers';
+const { t } = useI18n();
 const route = useRoute();
 const showToast = useToast();
 
@@ -43,12 +45,12 @@ const transformedPayload = ref<Record<string, unknown>>({});
 const payloadError = ref('');
 const activeRuleId = ref<string | null>(null);
 
-const modeOptions: { value: TransformMode; label: string; icon: string }[] = [
-  { value: 'jsonpath', label: 'JSONPath', icon: '$.' },
-  { value: 'jq', label: 'jq-style', icon: '|' },
-  { value: 'rename', label: 'Rename Key', icon: '→' },
-  { value: 'extract', label: 'Extract', icon: '[]' },
-];
+const modeOptions = computed<{ value: TransformMode; label: string; icon: string }[]>(() => [
+  { value: 'jsonpath', label: t('webhookPayloadTransformer.modes.jsonpath'), icon: '$.' },
+  { value: 'jq', label: t('webhookPayloadTransformer.modes.jq'), icon: '|' },
+  { value: 'rename', label: t('webhookPayloadTransformer.modes.rename'), icon: '→' },
+  { value: 'extract', label: t('webhookPayloadTransformer.modes.extract'), icon: '[]' },
+]);
 
 function newRule(): TransformRule {
   return {
@@ -88,7 +90,7 @@ function runTransform() {
   try {
     parsed = JSON.parse(rawPayload.value);
   } catch {
-    payloadError.value = 'Invalid JSON payload';
+    payloadError.value = t('webhookPayloadTransformer.errors.invalidJson');
     return;
   }
 
@@ -108,7 +110,7 @@ function runTransform() {
   }
 
   transformedPayload.value = result;
-  showToast('Transform applied', 'success');
+  showToast(t('webhookPayloadTransformer.toast.applied'), 'success');
 }
 
 const hasTransformResult = computed(() => Object.keys(transformedPayload.value).length > 0);
@@ -131,9 +133,9 @@ async function saveRules() {
       name: 'default',
       rules: rules.value,
     });
-    showToast('Rules saved', 'success');
+    showToast(t('webhookPayloadTransformer.toast.rulesSaved'), 'success');
   } catch {
-    showToast('Failed to save rules', 'error');
+    showToast(t('webhookPayloadTransformer.toast.rulesSaveFailed'), 'error');
   } finally {
     isSaving.value = false;
   }
@@ -144,8 +146,8 @@ async function saveRules() {
   <div class="transformer">
 
     <PageHeader
-      title="Webhook Payload Transformer"
-      subtitle="Define JSONPath or jq-style transforms on incoming webhook payloads before they reach your prompt template."
+      :title="t('webhookPayloadTransformer.title')"
+      :subtitle="t('webhookPayloadTransformer.subtitle')"
     />
 
     <div class="layout">
@@ -157,7 +159,7 @@ async function saveRules() {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16">
                 <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
               </svg>
-              Raw Webhook Payload
+              {{ t('webhookPayloadTransformer.rawPayload.title') }}
             </h3>
           </div>
           <div class="card-body">
@@ -179,13 +181,13 @@ async function saveRules() {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16">
                 <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
               </svg>
-              Transform Rules
+              {{ t('webhookPayloadTransformer.rules.title') }}
             </h3>
             <button class="btn btn-secondary btn-sm" @click="addRule">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
                 <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
               </svg>
-              Add Rule
+              {{ t('webhookPayloadTransformer.rules.add') }}
             </button>
           </div>
           <div class="rules-list">
@@ -209,7 +211,7 @@ async function saveRules() {
                   <input
                     v-model="rule.output_key"
                     class="rule-input"
-                    placeholder="output_key"
+                    :placeholder="t('webhookPayloadTransformer.rules.outputKeyPlaceholder')"
                     @click.stop
                   />
                 </div>
@@ -217,7 +219,7 @@ async function saveRules() {
                   <select v-model="rule.mode" class="mode-select" @click.stop>
                     <option v-for="m in modeOptions" :key="m.value" :value="m.value">{{ m.label }}</option>
                   </select>
-                  <input v-model="rule.description" class="rule-input desc-input" placeholder="Description (optional)" @click.stop />
+                  <input v-model="rule.description" class="rule-input desc-input" :placeholder="t('webhookPayloadTransformer.rules.descriptionPlaceholder')" @click.stop />
                 </div>
               </div>
               <button class="remove-btn" @click.stop="removeRule(rule.id)">
@@ -227,7 +229,7 @@ async function saveRules() {
               </button>
             </div>
             <div v-if="rules.length === 0" class="empty-rules">
-              No rules defined. Click "Add Rule" to get started.
+              {{ t('webhookPayloadTransformer.rules.empty') }}
             </div>
           </div>
           <div class="card-footer">
@@ -236,13 +238,13 @@ async function saveRules() {
                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
                 <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
               </svg>
-              {{ isSaving ? 'Saving…' : 'Save Rules' }}
+              {{ isSaving ? t('webhookPayloadTransformer.rules.saving') : t('webhookPayloadTransformer.rules.save') }}
             </button>
             <button class="btn btn-primary" :disabled="rules.length === 0" @click="runTransform">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                 <polygon points="5 3 19 12 5 21 5 3"/>
               </svg>
-              Run Transform
+              {{ t('webhookPayloadTransformer.rules.run') }}
             </button>
           </div>
         </div>
@@ -256,16 +258,16 @@ async function saveRules() {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16">
                 <polyline points="9 18 15 12 9 6"/>
               </svg>
-              Transformed Output
+              {{ t('webhookPayloadTransformer.output.title') }}
             </h3>
-            <span v-if="hasTransformResult" class="card-badge">{{ Object.keys(transformedPayload).length }} keys</span>
+            <span v-if="hasTransformResult" class="card-badge">{{ t('webhookPayloadTransformer.output.keysCount', { count: Object.keys(transformedPayload).length }) }}</span>
           </div>
 
           <div v-if="!hasTransformResult" class="empty-output">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32">
               <polyline points="9 18 15 12 9 6"/>
             </svg>
-            <p>Define transform rules and click "Run Transform" to see the output.</p>
+            <p>{{ t('webhookPayloadTransformer.output.empty') }}</p>
           </div>
 
           <pre v-else class="output-pre">{{ JSON.stringify(transformedPayload, null, 2) }}</pre>
@@ -278,11 +280,11 @@ async function saveRules() {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16">
                 <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
               </svg>
-              Use in Prompt Template
+              {{ t('webhookPayloadTransformer.hint.title') }}
             </h3>
           </div>
           <div class="hint-body">
-            <p class="hint-desc">Reference transformed values in your prompt template using these placeholders:</p>
+            <p class="hint-desc">{{ t('webhookPayloadTransformer.hint.desc') }}</p>
             <div class="placeholder-list">
               <div v-for="(val, key) in transformedPayload" :key="key" class="placeholder-item">
                 <code class="placeholder-key">{{ '{' + key + '}' }}</code>

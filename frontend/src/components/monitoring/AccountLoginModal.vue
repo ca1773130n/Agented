@@ -6,6 +6,7 @@
  * Shows real-time terminal output and handles interactive prompts.
  */
 import { ref, watch, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { backendManagementApi } from '../../services/api';
 import { createAuthenticatedEventSource } from '../../services/api/client';
 import type { AuthenticatedEventSource } from '../../services/api/client';
@@ -24,6 +25,8 @@ const emit = defineEmits<{
   close: [];
   success: [];
 }>();
+
+const { t } = useI18n();
 
 // Auto-start proxy login when opened in proxyOnly mode
 watch(() => props.open, (isOpen) => {
@@ -91,20 +94,20 @@ async function startLogin() {
         runProxyLogin();
       } else {
         loginStatus.value = 'error';
-        loginError.value = data.error_message || 'Login failed';
+        loginError.value = data.error_message || t('accountLoginModal.loginFailed');
       }
       es.close();
     });
     es.addEventListener('error', () => {
       if (loginStatus.value !== 'completed') {
         loginStatus.value = 'error';
-        loginError.value = 'Connection lost';
+        loginError.value = t('accountLoginModal.connectionLost');
       }
     });
     loginStatus.value = 'streaming';
   } catch (e: unknown) {
     loginStatus.value = 'error';
-    loginError.value = e instanceof Error ? e.message : 'Failed to start login';
+    loginError.value = e instanceof Error ? e.message : t('accountLoginModal.startFailed');
   }
 }
 
@@ -123,7 +126,7 @@ async function sendResponse() {
     pendingOptions.value = [];
     pendingInteractionId.value = '';
   } catch {
-    loginLines.value.push('Error: Failed to send response');
+    loginLines.value.push(t('accountLoginModal.sendResponseError'));
   } finally {
     sendingResponse.value = false;
   }
@@ -171,17 +174,17 @@ async function runProxyLogin() {
     return;
   }
   proxyStatus.value = 'running';
-  proxyMessage.value = `Registering with API proxy...`;
+  proxyMessage.value = t('accountLoginModal.proxy.registering');
   try {
     const res = await backendManagementApi.proxyLogin(props.backendType, props.configPath);
     if (res.status === 'ok') {
       proxyStatus.value = 'success';
-      proxyMessage.value = res.message || 'API proxy configured';
+      proxyMessage.value = res.message || t('accountLoginModal.proxy.configured');
     } else if (res.status === 'started' && res.device_code) {
       proxyStatus.value = 'device_auth';
       proxyDeviceCode.value = res.device_code;
       proxyOAuthUrl.value = res.oauth_url || '';
-      proxyMessage.value = 'Enter the code below to register with API proxy';
+      proxyMessage.value = t('accountLoginModal.proxy.enterCode');
     } else if (res.status === 'started' && res.oauth_url) {
       // Record initial account count, open OAuth URL, then poll for completion
       const beforeCount = await getProxyAccountCount();
@@ -194,17 +197,17 @@ async function runProxyLogin() {
         codex: 'OpenAI',
         gemini: 'Google',
       };
-      const provider = providerHint[props.backendType] || 'the provider';
-      proxyMessage.value = `Sign in with ${provider} in the browser. Login will be detected automatically.`;
+      const provider = providerHint[props.backendType] || t('accountLoginModal.proxy.theProvider');
+      proxyMessage.value = t('accountLoginModal.proxy.signInWith', { provider });
       // Poll — the browser redirect completes the login on localhost directly
       pollForNewAccount(beforeCount);
     } else {
       proxyStatus.value = 'skipped';
-      proxyMessage.value = res.message || 'Proxy login skipped';
+      proxyMessage.value = res.message || t('accountLoginModal.proxy.skipped');
     }
   } catch {
     proxyStatus.value = 'skipped';
-    proxyMessage.value = 'API proxy not available';
+    proxyMessage.value = t('accountLoginModal.proxy.notAvailable');
   }
 }
 
@@ -235,7 +238,7 @@ function pollForNewAccount(beforeCount: number) {
         if (pollTimer) clearInterval(pollTimer);
         pollTimer = null;
         proxyStatus.value = 'success';
-        proxyMessage.value = 'API proxy login completed';
+        proxyMessage.value = t('accountLoginModal.proxy.loginCompleted');
       }
     } catch {
       // ignore polling errors
@@ -271,16 +274,16 @@ onUnmounted(() => {
     >
       <div class="modal login-modal">
         <div class="modal-header">
-          <h2 class="modal-title">{{ proxyOnly ? 'Proxy Login' : 'Login' }} to {{ backendName }}</h2>
+          <h2 class="modal-title">{{ proxyOnly ? t('accountLoginModal.title.proxy', { name: backendName }) : t('accountLoginModal.title.login', { name: backendName }) }}</h2>
           <button class="modal-close" @click="handleClose">&times;</button>
         </div>
 
         <!-- Idle — start button (hidden in proxyOnly mode since it auto-starts) -->
         <template v-if="loginStatus === 'idle' && !proxyOnly">
-          <p class="modal-message">Start a CLI login session for this {{ backendName }} account.</p>
+          <p class="modal-message">{{ t('accountLoginModal.startPrompt', { name: backendName }) }}</p>
           <div class="modal-actions">
-            <button class="btn btn-secondary" @click="handleClose">Cancel</button>
-            <button class="btn btn-primary" @click="startLogin">Start Login</button>
+            <button class="btn btn-secondary" @click="handleClose">{{ t('common.cancel') }}</button>
+            <button class="btn btn-primary" @click="startLogin">{{ t('accountLoginModal.startLogin') }}</button>
           </div>
         </template>
 
@@ -288,7 +291,7 @@ onUnmounted(() => {
         <template v-else-if="loginStatus === 'connecting'">
           <div class="login-connecting">
             <div class="spinner-sm"></div>
-            <span>Connecting...</span>
+            <span>{{ t('accountLoginModal.connecting') }}</span>
           </div>
         </template>
 
@@ -316,7 +319,7 @@ onUnmounted(() => {
               @keydown.enter="sendResponse"
               autofocus
             />
-            <button class="btn btn-sm btn-primary" :disabled="sendingResponse" @click="sendResponse">Send</button>
+            <button class="btn btn-sm btn-primary" :disabled="sendingResponse" @click="sendResponse">{{ t('accountLoginModal.send') }}</button>
           </div>
         </template>
 
@@ -326,7 +329,7 @@ onUnmounted(() => {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
               <polyline points="20 6 9 17 4 12"/>
             </svg>
-            <span>CLI login completed</span>
+            <span>{{ t('accountLoginModal.cliLoginCompleted') }}</span>
           </div>
 
           <!-- Proxy login status -->
@@ -338,7 +341,7 @@ onUnmounted(() => {
             <p class="proxy-msg">{{ proxyMessage }}</p>
             <div v-if="proxyDeviceCode" class="proxy-code"><code>{{ proxyDeviceCode }}</code></div>
             <a v-if="proxyOAuthUrl" :href="proxyOAuthUrl" target="_blank" class="btn btn-sm btn-outline proxy-link">
-              {{ proxyDeviceCode ? 'Open Device Login Page' : 'Open OAuth Login Page' }}
+              {{ proxyDeviceCode ? t('accountLoginModal.proxy.openDeviceLogin') : t('accountLoginModal.proxy.openOauthLogin') }}
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
                 <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
                 <polyline points="15 3 21 3 21 9"/>
@@ -347,7 +350,7 @@ onUnmounted(() => {
             </a>
             <div class="proxy-waiting">
               <div class="spinner-sm"></div>
-              <span>Waiting for sign-in to complete...</span>
+              <span>{{ t('accountLoginModal.proxy.waitingSignIn') }}</span>
             </div>
           </div>
           <div v-else-if="proxyStatus === 'success'" class="proxy-section proxy-ok">
@@ -361,7 +364,7 @@ onUnmounted(() => {
           </div>
 
           <div class="modal-actions">
-            <button class="btn btn-primary" @click="handleDone">Done</button>
+            <button class="btn btn-primary" @click="handleDone">{{ t('common.done') }}</button>
           </div>
         </template>
 
@@ -372,8 +375,8 @@ onUnmounted(() => {
           </div>
           <p class="login-error-msg">{{ loginError }}</p>
           <div class="modal-actions">
-            <button class="btn btn-secondary" @click="handleClose">Close</button>
-            <button class="btn btn-primary" @click="startLogin">Retry</button>
+            <button class="btn btn-secondary" @click="handleClose">{{ t('common.close') }}</button>
+            <button class="btn btn-primary" @click="startLogin">{{ t('common.retry') }}</button>
           </div>
         </template>
       </div>

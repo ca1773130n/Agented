@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import type { Trigger, ProjectPath, PathType, SkillInfo, Project, Team, BudgetLimit, SuperAgent } from '../../services/api';
 import { triggerApi, utilityApi, budgetApi, superAgentApi, ApiError } from '../../services/api';
@@ -20,6 +21,7 @@ const emit = defineEmits<{
   (e: 'pathChanged'): void;
 }>();
 
+const { t } = useI18n();
 const router = useRouter();
 const showToast = useToast();
 
@@ -125,8 +127,9 @@ function onEditSkillInputFocus() {
 function onEditSkillInputBlur() { setTimeout(() => { showEditSkillDropdown.value = false; }, 200); }
 
 function getWeekdayName(day: number): string {
-  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-  return days[day] || 'Unknown';
+  const keys = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  const key = keys[day];
+  return key ? t(`triggerDetailPanel.weekdays.${key}`) : t('triggerDetailPanel.weekdays.unknown');
 }
 
 function formatDate(dateStr: string | undefined): string {
@@ -151,9 +154,9 @@ async function saveTrigger() {
       super_agent_id: editDispatchType.value === 'super_agent' ? editSuperAgentId.value : null,
     });
     emit('saved');
-    showToast('Trigger updated', 'success');
+    showToast(t('triggerDetailPanel.toast.updated'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to update trigger';
+    const message = err instanceof ApiError ? err.message : t('triggerDetailPanel.toast.updateFailed');
     showToast(message, 'error');
   }
 }
@@ -162,10 +165,10 @@ async function toggleAutoResolve() {
   const newValue = props.selectedTrigger.auto_resolve !== 1;
   try {
     await triggerApi.setAutoResolve(props.selectedTrigger.id, newValue);
-    showToast(newValue ? 'Auto-resolve enabled' : 'Auto-resolve disabled', 'success');
+    showToast(newValue ? t('triggerDetailPanel.toast.autoResolveEnabled') : t('triggerDetailPanel.toast.autoResolveDisabled'), 'success');
     emit('saved');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to update auto-resolve';
+    const message = err instanceof ApiError ? err.message : t('triggerDetailPanel.toast.autoResolveFailed');
     showToast(message, 'error');
   }
 }
@@ -177,9 +180,9 @@ async function addPath() {
     await triggerApi.addPath(props.selectedTrigger.id, path);
     newPathInput.value = '';
     emit('pathChanged');
-    showToast('Path added', 'success');
+    showToast(t('triggerDetailPanel.toast.pathAdded'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to add path';
+    const message = err instanceof ApiError ? err.message : t('triggerDetailPanel.toast.pathAddFailed');
     showToast(message, 'error');
   }
 }
@@ -191,9 +194,9 @@ async function addGitHubRepo() {
     await triggerApi.addGitHubRepo(props.selectedTrigger.id, url);
     newGitHubUrl.value = '';
     emit('pathChanged');
-    showToast('GitHub repository added', 'success');
+    showToast(t('triggerDetailPanel.toast.githubRepoAdded'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to add GitHub repo';
+    const message = err instanceof ApiError ? err.message : t('triggerDetailPanel.toast.githubRepoAddFailed');
     showToast(message, 'error');
   }
 }
@@ -209,9 +212,9 @@ async function addProject() {
     await triggerApi.addProject(props.selectedTrigger.id, selectedProjectId.value);
     selectedProjectId.value = '';
     emit('pathChanged');
-    showToast('Project added', 'success');
+    showToast(t('triggerDetailPanel.toast.projectAdded'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to add project';
+    const message = err instanceof ApiError ? err.message : t('triggerDetailPanel.toast.projectAddFailed');
     showToast(message, 'error');
   }
 }
@@ -226,9 +229,9 @@ async function removePath(path: ProjectPath) {
       await triggerApi.removePath(props.selectedTrigger.id, path.local_project_path);
     }
     emit('pathChanged');
-    showToast('Path removed', 'success');
+    showToast(t('triggerDetailPanel.toast.pathRemoved'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to remove path';
+    const message = err instanceof ApiError ? err.message : t('triggerDetailPanel.toast.pathRemoveFailed');
     showToast(message, 'error');
   }
 }
@@ -253,15 +256,15 @@ async function loadTriggerBudget(triggerId: string) {
 async function saveTriggerBudget() {
   const soft = budgetSoftLimit.value.trim() ? parseFloat(budgetSoftLimit.value) : undefined;
   const hard = budgetHardLimit.value.trim() ? parseFloat(budgetHardLimit.value) : undefined;
-  if (soft == null && hard == null) { showToast('Set at least one budget limit', 'error'); return; }
+  if (soft == null && hard == null) { showToast(t('triggerDetailPanel.toast.setAtLeastOneLimit'), 'error'); return; }
   isSavingBudget.value = true;
   try {
     await budgetApi.setLimit({ entity_type: 'trigger', entity_id: props.selectedTrigger.id, period: budgetPeriod.value, soft_limit_usd: soft, hard_limit_usd: hard });
     await loadTriggerBudget(props.selectedTrigger.id);
     showBudgetForm.value = false;
-    showToast('Budget limit saved', 'success');
+    showToast(t('triggerDetailPanel.toast.budgetSaved'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to save budget';
+    const message = err instanceof ApiError ? err.message : t('triggerDetailPanel.toast.budgetSaveFailed');
     showToast(message, 'error');
   } finally { isSavingBudget.value = false; }
 }
@@ -273,9 +276,9 @@ async function deleteTriggerBudget() {
     budgetSoftLimit.value = '';
     budgetHardLimit.value = '';
     showBudgetForm.value = false;
-    showToast('Budget limit removed', 'success');
+    showToast(t('triggerDetailPanel.toast.budgetRemoved'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to remove budget';
+    const message = err instanceof ApiError ? err.message : t('triggerDetailPanel.toast.budgetRemoveFailed');
     showToast(message, 'error');
   }
 }
@@ -287,11 +290,11 @@ async function deleteTriggerBudget() {
       <h4>{{ selectedTrigger.name }}</h4>
       <span class="detail-id">{{ selectedTrigger.id }}</span>
       <span class="badge trigger-badge" :class="selectedTrigger.trigger_source">
-        {{ selectedTrigger.trigger_source === 'webhook' ? 'JSON Webhook' : selectedTrigger.trigger_source === 'github' ? 'GitHub Webhook' : selectedTrigger.trigger_source === 'manual' ? 'Manual' : selectedTrigger.trigger_source === 'scheduled' ? 'Scheduled' : selectedTrigger.trigger_source }}
+        {{ selectedTrigger.trigger_source === 'webhook' ? t('triggerDetailPanel.source.webhook') : selectedTrigger.trigger_source === 'github' ? t('triggerDetailPanel.source.github') : selectedTrigger.trigger_source === 'manual' ? t('triggerDetailPanel.source.manual') : selectedTrigger.trigger_source === 'scheduled' ? t('triggerDetailPanel.source.scheduled') : selectedTrigger.trigger_source }}
       </span>
       <button class="btn btn-secondary btn-sm view-dashboard-btn" @click="router.push({ name: 'trigger-dashboard', params: { triggerId: selectedTrigger.id } })">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-        View Dashboard
+        {{ t('triggerDetailPanel.viewDashboard') }}
       </button>
     </div>
 
@@ -299,24 +302,24 @@ async function deleteTriggerBudget() {
       <!-- Trigger-specific info panels -->
       <div v-if="selectedTrigger.trigger_source === 'github'" class="trigger-info">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
-        <span>This bot is triggered by GitHub webhooks. Configure your repository to send PR events to <code>/api/webhooks/github</code></span>
+        <span>{{ t('triggerDetailPanel.info.githubPrefix') }} <code>/api/webhooks/github</code></span>
       </div>
       <div v-else-if="selectedTrigger.trigger_source === 'manual'" class="trigger-info">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
-        <span>This bot can only be triggered manually from the dashboard.</span>
+        <span>{{ t('triggerDetailPanel.info.manual') }}</span>
       </div>
       <div v-else-if="selectedTrigger.trigger_source === 'scheduled'" class="trigger-info scheduled-info">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         <div class="schedule-details">
           <span v-if="selectedTrigger.schedule_type">
-            Runs <strong>{{ selectedTrigger.schedule_type }}</strong>
-            <span v-if="selectedTrigger.schedule_type === 'weekly'"> on {{ getWeekdayName(selectedTrigger.schedule_day || 0) }}</span>
-            <span v-if="selectedTrigger.schedule_type === 'monthly'"> on day {{ selectedTrigger.schedule_day || 1 }}</span>
-            at <strong>{{ selectedTrigger.schedule_time || '00:00' }}</strong> KST
+            {{ t('triggerDetailPanel.schedule.runs') }} <strong>{{ selectedTrigger.schedule_type }}</strong>
+            <span v-if="selectedTrigger.schedule_type === 'weekly'"> {{ t('triggerDetailPanel.schedule.on') }} {{ getWeekdayName(selectedTrigger.schedule_day || 0) }}</span>
+            <span v-if="selectedTrigger.schedule_type === 'monthly'"> {{ t('triggerDetailPanel.schedule.onDay', { day: selectedTrigger.schedule_day || 1 }) }}</span>
+            {{ t('triggerDetailPanel.schedule.at') }} <strong>{{ selectedTrigger.schedule_time || '00:00' }}</strong> KST
           </span>
-          <span v-else>This bot runs on a schedule. Configure schedule in edit mode.</span>
-          <div v-if="selectedTrigger.next_run_at" class="schedule-next">Next run: {{ formatDate(selectedTrigger.next_run_at) }}</div>
-          <div v-if="selectedTrigger.last_run_at" class="schedule-last">Last run: {{ formatDate(selectedTrigger.last_run_at) }}</div>
+          <span v-else>{{ t('triggerDetailPanel.schedule.unconfigured') }}</span>
+          <div v-if="selectedTrigger.next_run_at" class="schedule-next">{{ t('triggerDetailPanel.schedule.nextRun') }} {{ formatDate(selectedTrigger.next_run_at) }}</div>
+          <div v-if="selectedTrigger.last_run_at" class="schedule-last">{{ t('triggerDetailPanel.schedule.lastRun') }} {{ formatDate(selectedTrigger.last_run_at) }}</div>
         </div>
         <SchedulingSuggestions :triggerId="selectedTrigger.id" />
       </div>
@@ -325,139 +328,139 @@ async function deleteTriggerBudget() {
       <div v-if="selectedTrigger.trigger_source === 'webhook'" class="webhook-edit-config">
         <div class="form-row">
           <div class="form-group">
-            <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4h16v16H4z"/><path d="M9 9h6M9 13h6M9 17h4"/></svg> Match Field Path</label>
+            <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4h16v16H4z"/><path d="M9 9h6M9 13h6M9 17h4"/></svg> {{ t('triggerDetailPanel.fields.matchFieldPath') }}</label>
             <input type="text" v-model="editMatchFieldPath" placeholder="event.type">
           </div>
           <div class="form-group">
-            <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Match Field Value</label>
+            <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> {{ t('triggerDetailPanel.fields.matchFieldValue') }}</label>
             <input type="text" v-model="editMatchFieldValue" placeholder="security_alert">
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8"/></svg> Text Field Path</label>
+            <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8"/></svg> {{ t('triggerDetailPanel.fields.textFieldPath') }}</label>
             <input type="text" v-model="editTextFieldPath" placeholder="text">
           </div>
           <div class="form-group">
-            <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg> Detection Keyword</label>
-            <input type="text" v-model="editKeyword" placeholder="Optional keyword filter">
+            <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg> {{ t('triggerDetailPanel.fields.detectionKeyword') }}</label>
+            <input type="text" v-model="editKeyword" :placeholder="t('triggerDetailPanel.fields.detectionKeywordPlaceholder')">
           </div>
         </div>
       </div>
 
       <!-- Common fields -->
       <div class="form-group">
-        <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01"/></svg> Backend</label>
+        <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01"/></svg> {{ t('triggerDetailPanel.fields.backend') }}</label>
         <select v-model="editBackend"><option value="claude">Claude CLI</option><option value="opencode">OpenCode CLI</option></select>
       </div>
 
       <!-- Skill/Command Selector (Claude only) -->
       <div v-if="showEditSkillField" class="form-group skill-autocomplete-group">
-        <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 17l6-6-6-6M12 19h8"/></svg> Skill / Command</label>
+        <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 17l6-6-6-6M12 19h8"/></svg> {{ t('triggerDetailPanel.fields.skillCommand') }}</label>
         <div class="skill-input-wrapper">
-          <input type="text" v-model="editSkillSearchQuery" placeholder="Search skills (e.g. /weekly-security-audit)..." @focus="onEditSkillInputFocus" @blur="onEditSkillInputBlur" @input="showEditSkillDropdown = true" autocomplete="off">
-          <button v-if="editSkillCommand" type="button" class="skill-clear-btn" @click="clearEditSkill" title="Clear skill">
+          <input type="text" v-model="editSkillSearchQuery" :placeholder="t('triggerDetailPanel.fields.skillSearchPlaceholder')" @focus="onEditSkillInputFocus" @blur="onEditSkillInputBlur" @input="showEditSkillDropdown = true" autocomplete="off">
+          <button v-if="editSkillCommand" type="button" class="skill-clear-btn" @click="clearEditSkill" :title="t('triggerDetailPanel.fields.clearSkill')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
           </button>
         </div>
         <div v-if="showEditSkillDropdown && (filteredEditSkills.length > 0 || isLoadingEditSkills)" class="skill-dropdown">
-          <div v-if="isLoadingEditSkills" class="skill-dropdown-loading">Scanning for skills...</div>
+          <div v-if="isLoadingEditSkills" class="skill-dropdown-loading">{{ t('triggerDetailPanel.fields.scanningSkills') }}</div>
           <div v-for="skill in filteredEditSkills" :key="skill.name" class="skill-dropdown-item" :class="{ selected: editSkillCommand === skill.name }" @mousedown.prevent="selectEditSkill(skill)">
             <span class="skill-name">{{ skill.name }}</span>
             <span v-if="skill.description" class="skill-desc">{{ skill.description }}</span>
           </div>
-          <div v-if="!isLoadingEditSkills && filteredEditSkills.length === 0" class="skill-dropdown-empty">No skills found</div>
+          <div v-if="!isLoadingEditSkills && filteredEditSkills.length === 0" class="skill-dropdown-empty">{{ t('triggerDetailPanel.fields.noSkillsFound') }}</div>
         </div>
-        <div class="form-hint">Select a Claude skill to prepend to the prompt at execution time</div>
+        <div class="form-hint">{{ t('triggerDetailPanel.fields.skillHint') }}</div>
       </div>
 
       <div class="form-group">
-        <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8"/></svg> Prompt Template</label>
+        <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8"/></svg> {{ t('triggerDetailPanel.fields.promptTemplate') }}</label>
         <textarea v-model="editPrompt" required></textarea>
-        <div class="form-hint">Use {paths} for project paths, {message} for the original message</div>
+        <div class="form-hint">{{ t('triggerDetailPanel.fields.promptHint') }}</div>
       </div>
 
       <div v-if="selectedTrigger?.id === 'bot-security'" class="form-group auto-resolve-group">
-        <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Auto-resolve &amp; PR</label>
+        <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> {{ t('triggerDetailPanel.fields.autoResolve') }}</label>
         <label class="auto-resolve-toggle">
           <input type="checkbox" :checked="selectedTrigger.auto_resolve === 1" @change="toggleAutoResolve" />
-          <span class="toggle-desc">Automatically resolve security issues and create pull requests for GitHub repos</span>
+          <span class="toggle-desc">{{ t('triggerDetailPanel.fields.autoResolveDesc') }}</span>
         </label>
       </div>
 
       <!-- Execution Mode -->
       <div class="form-group execution-mode-group">
-        <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Execution Mode</label>
-        <select v-model="editExecutionMode"><option value="direct">Direct (Orchestration)</option><option value="team">Team Delegation</option></select>
-        <div class="form-hint">Direct mode uses orchestration fallback chain. Team mode delegates execution to a team.</div>
+        <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> {{ t('triggerDetailPanel.fields.executionMode') }}</label>
+        <select v-model="editExecutionMode"><option value="direct">{{ t('triggerDetailPanel.fields.executionModeDirect') }}</option><option value="team">{{ t('triggerDetailPanel.fields.executionModeTeam') }}</option></select>
+        <div class="form-hint">{{ t('triggerDetailPanel.fields.executionModeHint') }}</div>
       </div>
       <div v-if="editExecutionMode === 'team'" class="form-group">
-        <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Target Team</label>
+        <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> {{ t('triggerDetailPanel.fields.targetTeam') }}</label>
         <select v-model="editTeamId">
-          <option :value="null">Select a team...</option>
+          <option :value="null">{{ t('triggerDetailPanel.fields.selectTeam') }}</option>
           <option v-for="team in teams" :key="team.id" :value="team.id">{{ team.name }} ({{ team.id }})</option>
         </select>
       </div>
 
       <!-- Dispatch Type -->
       <div class="form-group dispatch-type-group">
-        <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg> Dispatch Type</label>
+        <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg> {{ t('triggerDetailPanel.fields.dispatchType') }}</label>
         <div class="dispatch-type-toggle">
-          <button type="button" class="toggle-btn" :class="{ active: editDispatchType === 'bot' }" @click="editDispatchType = 'bot'">Bot</button>
-          <button type="button" class="toggle-btn" :class="{ active: editDispatchType === 'super_agent' }" @click="editDispatchType = 'super_agent'">Super Agent</button>
+          <button type="button" class="toggle-btn" :class="{ active: editDispatchType === 'bot' }" @click="editDispatchType = 'bot'">{{ t('triggerDetailPanel.fields.dispatchBot') }}</button>
+          <button type="button" class="toggle-btn" :class="{ active: editDispatchType === 'super_agent' }" @click="editDispatchType = 'super_agent'">{{ t('triggerDetailPanel.fields.dispatchSuperAgent') }}</button>
         </div>
-        <div class="form-hint">Bot dispatches run a CLI process. Super Agent dispatches route to a persistent AI session.</div>
+        <div class="form-hint">{{ t('triggerDetailPanel.fields.dispatchHint') }}</div>
       </div>
       <div v-if="editDispatchType === 'super_agent'" class="form-group">
-        <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg> Target Super Agent</label>
+        <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg> {{ t('triggerDetailPanel.fields.targetSuperAgent') }}</label>
         <select v-model="editSuperAgentId">
-          <option :value="null">Select a super agent...</option>
+          <option :value="null">{{ t('triggerDetailPanel.fields.selectSuperAgent') }}</option>
           <option v-for="sa in availableSuperAgents" :key="sa.id" :value="sa.id">{{ sa.name }} ({{ sa.id }})</option>
         </select>
       </div>
 
       <button type="submit" class="btn btn-primary">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg>
-        Save Changes
+        {{ t('triggerDetailPanel.saveChanges') }}
       </button>
     </form>
 
     <!-- Harness Configuration -->
     <div class="harness-config-section">
       <div class="section-header">
-        <h5><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Harness Configuration</h5>
+        <h5><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> {{ t('triggerDetailPanel.harness.title') }}</h5>
       </div>
-      <p class="section-description">Configure fallback chain and budget limits for this trigger.</p>
+      <p class="section-description">{{ t('triggerDetailPanel.harness.description') }}</p>
       <FallbackChainEditor :triggerId="selectedTrigger.id" :availableBackends="availableBackends" :availableAccounts="availableAccounts" />
 
       <!-- Budget Limit -->
       <div class="budget-section">
         <div class="budget-header">
-          <h6>Budget Limit</h6>
+          <h6>{{ t('triggerDetailPanel.budget.title') }}</h6>
           <button v-if="!showBudgetForm && !triggerBudget" class="btn btn-secondary btn-sm" @click="showBudgetForm = true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Set Budget
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> {{ t('triggerDetailPanel.budget.setBudget') }}
           </button>
         </div>
         <div v-if="triggerBudget && !showBudgetForm" class="budget-display">
-          <div class="budget-info-row"><span class="budget-label">Period:</span><span class="budget-value">{{ triggerBudget.period }}</span></div>
-          <div v-if="triggerBudget.soft_limit_usd != null" class="budget-info-row"><span class="budget-label">Alert threshold:</span><span class="budget-value">${{ triggerBudget.soft_limit_usd.toFixed(2) }}</span></div>
-          <div v-if="triggerBudget.hard_limit_usd != null" class="budget-info-row"><span class="budget-label">Halt threshold:</span><span class="budget-value">${{ triggerBudget.hard_limit_usd.toFixed(2) }}</span></div>
+          <div class="budget-info-row"><span class="budget-label">{{ t('triggerDetailPanel.budget.period') }}</span><span class="budget-value">{{ triggerBudget.period }}</span></div>
+          <div v-if="triggerBudget.soft_limit_usd != null" class="budget-info-row"><span class="budget-label">{{ t('triggerDetailPanel.budget.alertThreshold') }}</span><span class="budget-value">${{ triggerBudget.soft_limit_usd.toFixed(2) }}</span></div>
+          <div v-if="triggerBudget.hard_limit_usd != null" class="budget-info-row"><span class="budget-label">{{ t('triggerDetailPanel.budget.haltThreshold') }}</span><span class="budget-value">${{ triggerBudget.hard_limit_usd.toFixed(2) }}</span></div>
           <div class="budget-actions">
-            <button class="btn btn-secondary btn-sm" @click="showBudgetForm = true">Edit</button>
-            <button class="btn-icon btn-delete" @click="deleteTriggerBudget" title="Remove budget">
+            <button class="btn btn-secondary btn-sm" @click="showBudgetForm = true">{{ t('common.edit') }}</button>
+            <button class="btn-icon btn-delete" @click="deleteTriggerBudget" :title="t('triggerDetailPanel.budget.removeBudget')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3,6 5,6 21,6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
             </button>
           </div>
         </div>
         <div v-if="showBudgetForm" class="budget-form">
-          <div class="form-group"><label>Period</label><select v-model="budgetPeriod"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>
+          <div class="form-group"><label>{{ t('triggerDetailPanel.budget.periodLabel') }}</label><select v-model="budgetPeriod"><option value="daily">{{ t('triggerDetailPanel.budget.daily') }}</option><option value="weekly">{{ t('triggerDetailPanel.budget.weekly') }}</option><option value="monthly">{{ t('triggerDetailPanel.budget.monthly') }}</option></select></div>
           <div class="form-row">
-            <div class="form-group"><label>Alert Threshold (USD)</label><input type="number" v-model="budgetSoftLimit" step="0.01" min="0" placeholder="e.g. 5.00"></div>
-            <div class="form-group"><label>Halt Threshold (USD)</label><input type="number" v-model="budgetHardLimit" step="0.01" min="0" placeholder="e.g. 10.00"></div>
+            <div class="form-group"><label>{{ t('triggerDetailPanel.budget.alertThresholdUsd') }}</label><input type="number" v-model="budgetSoftLimit" step="0.01" min="0" placeholder="e.g. 5.00"></div>
+            <div class="form-group"><label>{{ t('triggerDetailPanel.budget.haltThresholdUsd') }}</label><input type="number" v-model="budgetHardLimit" step="0.01" min="0" placeholder="e.g. 10.00"></div>
           </div>
           <div class="budget-form-actions">
-            <button class="btn btn-secondary btn-sm" @click="showBudgetForm = false">Cancel</button>
-            <button class="btn btn-primary btn-sm" :disabled="isSavingBudget" @click="saveTriggerBudget">{{ isSavingBudget ? 'Saving...' : 'Save Budget' }}</button>
+            <button class="btn btn-secondary btn-sm" @click="showBudgetForm = false">{{ t('common.cancel') }}</button>
+            <button class="btn btn-primary btn-sm" :disabled="isSavingBudget" @click="saveTriggerBudget">{{ isSavingBudget ? t('triggerDetailPanel.budget.saving') : t('triggerDetailPanel.budget.saveBudget') }}</button>
           </div>
         </div>
       </div>
@@ -466,13 +469,13 @@ async function deleteTriggerBudget() {
     <!-- Paths Section -->
     <div class="paths-section">
       <div class="section-header">
-        <h5><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg> Project Paths</h5>
-        <span class="paths-count">{{ triggerPaths.length }} configured</span>
+        <h5><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg> {{ t('triggerDetailPanel.paths.title') }}</h5>
+        <span class="paths-count">{{ t('triggerDetailPanel.paths.count', { count: triggerPaths.length }) }}</span>
       </div>
       <div class="path-list">
-        <div v-if="triggerPaths.length === 0" class="empty-paths">No paths configured</div>
+        <div v-if="triggerPaths.length === 0" class="empty-paths">{{ t('triggerDetailPanel.paths.empty') }}</div>
         <div v-for="path in triggerPaths" :key="path.id" class="path-item">
-          <span class="path-type-badge" :class="path.path_type || 'local'">{{ path.path_type === 'project' ? 'PROJECT' : (path.path_type === 'github' ? 'GitHub' : 'LOCAL') }}</span>
+          <span class="path-type-badge" :class="path.path_type || 'local'">{{ path.path_type === 'project' ? t('triggerDetailPanel.paths.badgeProject') : (path.path_type === 'github' ? 'GitHub' : t('triggerDetailPanel.paths.badgeLocal')) }}</span>
           <span class="path-text">
             <template v-if="path.path_type === 'project'">{{ path.project_name }} <span class="path-arrow">&rarr;</span> {{ path.project_github_repo }}</template>
             <template v-else-if="path.path_type === 'github'">{{ path.github_repo_url }}</template>
@@ -485,18 +488,18 @@ async function deleteTriggerBudget() {
       </div>
       <div class="add-path-form">
         <div class="path-type-toggle">
-          <button class="toggle-btn" :class="{ active: pathInputMode === 'local' }" @click="pathInputMode = 'local'">Local</button>
+          <button class="toggle-btn" :class="{ active: pathInputMode === 'local' }" @click="pathInputMode = 'local'">{{ t('triggerDetailPanel.paths.modeLocal') }}</button>
           <button class="toggle-btn" :class="{ active: pathInputMode === 'github' }" @click="pathInputMode = 'github'">GitHub</button>
-          <button class="toggle-btn" :class="{ active: pathInputMode === 'project' }" @click="pathInputMode = 'project'">Project</button>
+          <button class="toggle-btn" :class="{ active: pathInputMode === 'project' }" @click="pathInputMode = 'project'">{{ t('triggerDetailPanel.paths.modeProject') }}</button>
         </div>
         <input v-if="pathInputMode === 'local'" type="text" v-model="newPathInput" placeholder="/path/to/project" @keydown.enter="handleAddPathOrRepo">
-        <input v-else-if="pathInputMode === 'github'" type="text" v-model="newGitHubUrl" placeholder="https://github.com/owner/repo or enterprise URL" @keydown.enter="handleAddPathOrRepo">
+        <input v-else-if="pathInputMode === 'github'" type="text" v-model="newGitHubUrl" :placeholder="t('triggerDetailPanel.paths.githubUrlPlaceholder')" @keydown.enter="handleAddPathOrRepo">
         <select v-else v-model="selectedProjectId" @change="addProject">
-          <option value="">Select a project...</option>
+          <option value="">{{ t('triggerDetailPanel.paths.selectProject') }}</option>
           <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }} ({{ p.github_repo }})</option>
         </select>
         <button v-if="pathInputMode !== 'project'" class="btn btn-secondary" @click="handleAddPathOrRepo">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Add
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> {{ t('common.add') }}
         </button>
       </div>
     </div>

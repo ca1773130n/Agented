@@ -9,6 +9,7 @@
 -->
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import {
   HARNESS_LAYER_COLOR_VAR,
   HARNESS_LAYER_LABEL,
@@ -20,6 +21,7 @@ import LoadingState from '../../../components/base/LoadingState.vue';
 import ErrorState from '../../../components/base/ErrorState.vue';
 
 const emit = defineEmits<{ loaded: [slug: string] }>();
+const { t } = useI18n();
 
 const isLoading = ref(false);
 const loadError = ref<string | null>(null);
@@ -38,7 +40,7 @@ async function loadData() {
     summary.value = await harnessAnnotationsApi.getSummary({ limit: 5 });
   } catch (err) {
     loadError.value =
-      err instanceof Error ? err.message : 'Failed to load harness annotations';
+      err instanceof Error ? err.message : t('harnessLayerCard.error.load');
   } finally {
     isLoading.value = false;
     emit('loaded', 'harness-layers');
@@ -52,17 +54,17 @@ onMounted(loadData);
   <section id="harness-layers" class="lane-card" data-testid="harness-layer-card">
     <header class="lane-card__head">
       <div>
-        <h2 class="lane-card__title">Harness layer breakdown</h2>
+        <h2 class="lane-card__title">{{ t('harnessLayerCard.title') }}</h2>
         <p class="lane-card__subtitle">
-          Recurring interface failures classified into Life-Harness layers.
+          {{ t('harnessLayerCard.subtitle') }}
         </p>
       </div>
     </header>
 
-    <LoadingState v-if="isLoading" message="Loading…" />
+    <LoadingState v-if="isLoading" :message="t('harnessLayerCard.loading')" />
     <ErrorState v-else-if="loadError" :message="loadError" @retry="loadData" />
     <p v-else-if="isEmpty" class="empty" data-testid="harness-layer-empty">
-      No executions annotated yet.
+      {{ t('harnessLayerCard.empty') }}
     </p>
     <template v-else>
       <div class="badges">
@@ -81,8 +83,8 @@ onMounted(loadData);
         </div>
       </div>
       <p class="meta">
-        {{ total }} executions annotated
-        <span v-if="noneCount">· {{ noneCount }} clean</span>
+        {{ t('harnessLayerCard.executionsAnnotated', { count: total }) }}
+        <span v-if="noneCount">· {{ t('harnessLayerCard.clean', { count: noneCount }) }}</span>
       </p>
 
       <div
@@ -90,7 +92,7 @@ onMounted(loadData);
         class="recent"
         data-testid="harness-layer-recent"
       >
-        <h3 class="recent__title">Recent failures</h3>
+        <h3 class="recent__title">{{ t('harnessLayerCard.recentFailures') }}</h3>
         <ul class="recent__list">
           <li
             v-for="row in summary.recent_failures"
@@ -105,8 +107,7 @@ onMounted(loadData);
             </span>
             <code class="recent__id">{{ row.session_id }}</code>
             <span class="recent__count">
-              {{ row.incident_count }}
-              {{ row.incident_count === 1 ? 'incident' : 'incidents' }}
+              {{ t('harnessLayerCard.incidents', { count: row.incident_count }) }}
             </span>
           </li>
         </ul>

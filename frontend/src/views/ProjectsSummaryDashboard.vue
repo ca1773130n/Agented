@@ -12,6 +12,9 @@ import StatusBadge from '../components/base/StatusBadge.vue';
 import EmptyState from '../components/base/EmptyState.vue';
 import { useToast } from '../composables/useToast';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const router = useRouter();
 
@@ -44,11 +47,11 @@ useWebMcpTool({
 });
 
 const columns: DataTableColumn[] = [
-  { key: 'name', label: 'Name' },
-  { key: 'status', label: 'Status' },
-  { key: 'product_name', label: 'Product' },
-  { key: 'github_repo', label: 'GitHub Repo' },
-  { key: 'owner_team_name', label: 'Owner Team' },
+  { key: 'name', label: t('projectsSummaryDashboard.colName') },
+  { key: 'status', label: t('projectsSummaryDashboard.colStatus') },
+  { key: 'product_name', label: t('projectsSummaryDashboard.colProduct') },
+  { key: 'github_repo', label: t('projectsSummaryDashboard.colGithubRepo') },
+  { key: 'owner_team_name', label: t('projectsSummaryDashboard.colOwnerTeam') },
 ];
 
 function getStatusVariant(status: string): 'success' | 'neutral' {
@@ -61,7 +64,7 @@ async function loadData() {
     const res = await projectApi.list();
     projects.value = res.projects || [];
   } catch {
-    showToast('Failed to load projects data', 'error');
+    showToast(t('projectsSummaryDashboard.loadError'), 'error');
   } finally {
     isLoading.value = false;
   }
@@ -73,28 +76,28 @@ onMounted(loadData);
 <template>
   <div class="summary-dashboard">
 
-    <PageHeader title="Projects Overview" subtitle="Summary of all projects across the organization">
+    <PageHeader :title="t('projectsSummaryDashboard.title')" :subtitle="t('projectsSummaryDashboard.subtitle')">
       <template #actions>
-        <button class="manage-btn" @click="router.push({ name: 'projects' })">Manage Projects</button>
+        <button class="manage-btn" @click="router.push({ name: 'projects' })">{{ t('projectsSummaryDashboard.manageProjects') }}</button>
       </template>
     </PageHeader>
 
-    <LoadingState v-if="isLoading" message="Loading projects data..." />
+    <LoadingState v-if="isLoading" :message="t('projectsSummaryDashboard.loading')" />
 
     <template v-else>
       <div class="stats-grid">
-        <StatCard title="Total Projects" :value="totalProjects" />
-        <StatCard title="Active" :value="activeCount" color="#22c55e" />
-        <StatCard title="GitHub Connected" :value="githubConnected" color="var(--accent-violet)" />
+        <StatCard :title="t('projectsSummaryDashboard.statTotal')" :value="totalProjects" />
+        <StatCard :title="t('projectsSummaryDashboard.statActive')" :value="activeCount" color="#22c55e" />
+        <StatCard :title="t('projectsSummaryDashboard.statGithub')" :value="githubConnected" color="var(--accent-violet)" />
       </div>
 
       <div class="entity-section">
         <div class="section-header">
-          <h2 class="section-title">All Projects</h2>
-          <span class="section-count">{{ totalProjects }} total</span>
+          <h2 class="section-title">{{ t('projectsSummaryDashboard.allProjects') }}</h2>
+          <span class="section-count">{{ t('projectsSummaryDashboard.totalCount', { count: totalProjects }) }}</span>
         </div>
 
-        <EmptyState v-if="projects.length === 0" title="No projects found" description="Create your first project to get started." />
+        <EmptyState v-if="projects.length === 0" :title="t('projectsSummaryDashboard.emptyTitle')" :description="t('projectsSummaryDashboard.emptyDescription')" />
 
         <DataTable v-else :columns="columns" :items="projects" row-clickable @row-click="(item: Project) => router.push({ name: 'project-dashboard', params: { projectId: item.id } })">
           <template #cell-name="{ item }">

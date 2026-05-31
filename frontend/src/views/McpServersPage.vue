@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick } from 'vue';
+import { ref, onMounted, watch, nextTick, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import type { McpServer } from '../services/api';
 import { mcpServerApi, ApiError } from '../services/api';
@@ -15,7 +15,9 @@ import { useListFilter } from '../composables/useListFilter';
 import { usePagination } from '../composables/usePagination';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import { useWebMcpPageTools } from '../composables/useWebMcpPageTools';
+import { useI18n } from 'vue-i18n';
 
+const { t } = useI18n();
 const router = useRouter();
 
 const showToast = useToast();
@@ -39,10 +41,10 @@ const { searchQuery, sortField, sortOrder, filteredAndSorted, hasActiveFilter, r
 
 const pagination = usePagination({ defaultPageSize: 25, storageKey: 'mcp-pagination' });
 
-const sortOptions = [
-  { value: 'name', label: 'Name' },
-  { value: 'created_at', label: 'Date Created' },
-];
+const sortOptions = computed(() => [
+  { value: 'name', label: t('mcpServers.sort.name') },
+  { value: 'created_at', label: t('mcpServers.sort.dateCreated') },
+]);
 
 const newServer = ref({
   name: '',
@@ -97,7 +99,7 @@ async function loadServers() {
     servers.value = data.servers || [];
     if (data.total_count != null) pagination.totalCount.value = data.total_count;
   } catch (e) {
-    loadError.value = e instanceof ApiError ? e.message : 'Failed to load MCP servers';
+    loadError.value = e instanceof ApiError ? e.message : t('mcpServers.toast.loadFailed');
     showToast(loadError.value, 'error');
   } finally {
     isLoading.value = false;
@@ -116,7 +118,7 @@ const isCreating = ref(false);
 async function createServer() {
   if (isCreating.value) return;
   if (!newServer.value.name.trim()) {
-    showToast('Server name is required', 'error');
+    showToast(t('mcpServers.toast.nameRequired'), 'error');
     return;
   }
   isCreating.value = true;
@@ -129,7 +131,7 @@ async function createServer() {
       url: newServer.value.url || undefined,
       description: newServer.value.description || undefined,
     } as Partial<McpServer>);
-    showToast('MCP server created successfully', 'success');
+    showToast(t('mcpServers.toast.created'), 'success');
     showCreateModal.value = false;
     newServer.value = { name: '', server_type: 'stdio', command: '', args: '', url: '', description: '' };
     await loadServers();
@@ -137,7 +139,7 @@ async function createServer() {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to create MCP server', 'error');
+      showToast(t('mcpServers.toast.createFailed'), 'error');
     }
   } finally {
     isCreating.value = false;
@@ -154,7 +156,7 @@ async function deleteServer() {
   deletingId.value = serverToDelete.value.id;
   try {
     await mcpServerApi.delete(serverToDelete.value.id);
-    showToast(`Server "${serverToDelete.value.name}" deleted`, 'success');
+    showToast(t('mcpServers.toast.deleted', { name: serverToDelete.value.name }), 'success');
     showDeleteConfirm.value = false;
     serverToDelete.value = null;
     await loadServers();
@@ -162,7 +164,7 @@ async function deleteServer() {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
     } else {
-      showToast('Failed to delete MCP server', 'error');
+      showToast(t('mcpServers.toast.deleteFailed'), 'error');
     }
   } finally {
     deletingId.value = null;
@@ -185,13 +187,13 @@ onMounted(() => {
 
 <template>
   <div class="mcp-servers-page">
-    <PageHeader title="MCP Servers" subtitle="Manage Model Context Protocol server configurations">
+    <PageHeader :title="t('mcpServers.title')" :subtitle="t('mcpServers.subtitle')">
       <template #actions>
         <button class="btn btn-primary" @click="showCreateModal = true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 5v14M5 12h14"/>
           </svg>
-          Create Server
+          {{ t('mcpServers.createServer') }}
         </button>
       </template>
     </PageHeader>
@@ -204,32 +206,32 @@ onMounted(() => {
       :sort-options="sortOptions"
       :result-count="resultCount"
       :total-count="totalCount"
-      placeholder="Search MCP servers..."
+      :placeholder="t('mcpServers.searchPlaceholder')"
     />
 
-    <LoadingState v-if="isLoading" message="Loading MCP servers..." />
+    <LoadingState v-if="isLoading" :message="t('mcpServers.loading')" />
 
     <ErrorState
       v-else-if="loadError"
-      title="Failed to load MCP servers"
+      :title="t('mcpServers.loadErrorTitle')"
       :message="loadError"
       @retry="loadServers"
     />
 
     <EmptyState
       v-else-if="servers.length === 0"
-      title="No MCP servers yet"
-      description="Create your first server or explore the marketplace."
+      :title="t('mcpServers.empty.title')"
+      :description="t('mcpServers.empty.description')"
     >
       <template #actions>
-        <button class="btn btn-primary" @click="showCreateModal = true">Create Your First Server</button>
+        <button class="btn btn-primary" @click="showCreateModal = true">{{ t('mcpServers.createFirstServer') }}</button>
       </template>
     </EmptyState>
 
     <EmptyState
       v-else-if="filteredAndSorted.length === 0 && hasActiveFilter"
-      title="No matching MCP servers"
-      description="Try a different search term"
+      :title="t('mcpServers.noMatch.title')"
+      :description="t('mcpServers.noMatch.description')"
     />
 
     <div v-else class="servers-grid">
@@ -254,20 +256,20 @@ onMounted(() => {
           </div>
           <div class="server-badges">
             <span :class="['type-badge', getServerTypeBadgeClass(server.server_type)]">{{ server.server_type }}</span>
-            <span v-if="server.is_preset" class="preset-badge">Preset</span>
+            <span v-if="server.is_preset" class="preset-badge">{{ t('mcpServers.preset') }}</span>
           </div>
         </div>
 
         <p v-if="server.description" class="server-description">{{ server.description }}</p>
-        <p v-else class="server-description muted">No description</p>
+        <p v-else class="server-description muted">{{ t('mcpServers.noDescription') }}</p>
 
         <div class="server-meta">
           <div v-if="server.command" class="meta-item">
-            <span class="meta-label">Command:</span>
+            <span class="meta-label">{{ t('mcpServers.meta.command') }}</span>
             <span class="meta-value mono">{{ server.command }}</span>
           </div>
           <div v-if="server.url" class="meta-item">
-            <span class="meta-label">URL:</span>
+            <span class="meta-label">{{ t('mcpServers.meta.url') }}</span>
             <span class="meta-value mono">{{ server.url }}</span>
           </div>
         </div>
@@ -278,7 +280,7 @@ onMounted(() => {
             <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
             </svg>
-            {{ deletingId === server.id ? 'Deleting...' : 'Delete' }}
+            {{ deletingId === server.id ? t('mcpServers.deleting') : t('common.delete') }}
           </button>
         </div>
       </div>
@@ -302,16 +304,16 @@ onMounted(() => {
       <div v-if="showCreateModal" ref="createModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-create-mcp" tabindex="-1" @click.self="showCreateModal = false" @keydown.escape="showCreateModal = false">
         <div class="modal">
           <div class="modal-header">
-            <h2 id="modal-title-create-mcp">Create MCP Server</h2>
+            <h2 id="modal-title-create-mcp">{{ t('mcpServers.createModal.title') }}</h2>
             <button class="modal-close" @click="showCreateModal = false">&times;</button>
           </div>
           <div class="modal-body">
             <div class="form-group">
-              <label>Server Name *</label>
+              <label>{{ t('mcpServers.form.serverNameRequired') }}</label>
               <input v-model="newServer.name" type="text" placeholder="e.g., my-mcp-server" />
             </div>
             <div class="form-group">
-              <label>Server Type</label>
+              <label>{{ t('mcpServers.form.serverType') }}</label>
               <select v-model="newServer.server_type">
                 <option value="stdio">stdio</option>
                 <option value="sse">sse</option>
@@ -319,26 +321,26 @@ onMounted(() => {
               </select>
             </div>
             <div v-if="newServer.server_type === 'stdio'" class="form-group">
-              <label>Command</label>
+              <label>{{ t('mcpServers.form.command') }}</label>
               <input v-model="newServer.command" type="text" placeholder="e.g., npx -y @modelcontextprotocol/server-filesystem" />
             </div>
             <div v-if="newServer.server_type === 'stdio'" class="form-group">
-              <label>Args</label>
+              <label>{{ t('mcpServers.form.args') }}</label>
               <input v-model="newServer.args" type="text" placeholder="e.g., /path/to/dir" />
             </div>
             <div v-if="newServer.server_type !== 'stdio'" class="form-group">
-              <label>URL</label>
+              <label>{{ t('mcpServers.form.url') }}</label>
               <input v-model="newServer.url" type="text" placeholder="e.g., http://localhost:3001/sse" />
             </div>
             <div class="form-group">
-              <label>Description</label>
-              <textarea v-model="newServer.description" placeholder="Describe the server..."></textarea>
+              <label>{{ t('mcpServers.form.description') }}</label>
+              <textarea v-model="newServer.description" :placeholder="t('mcpServers.form.descriptionPlaceholder')"></textarea>
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn" @click="showCreateModal = false">Cancel</button>
+            <button class="btn" @click="showCreateModal = false">{{ t('common.cancel') }}</button>
             <button class="btn btn-primary" :disabled="isCreating" @click="createServer">
-              {{ isCreating ? 'Creating…' : 'Create Server' }}
+              {{ isCreating ? t('mcpServers.creating') : t('mcpServers.createServer') }}
             </button>
           </div>
         </div>
@@ -347,10 +349,10 @@ onMounted(() => {
 
     <ConfirmModal
       :open="showDeleteConfirm"
-      title="Delete MCP Server"
-      :message="`Are you sure you want to delete \u201C${serverToDelete?.name}\u201D? This action cannot be undone.`"
-      confirm-label="Delete"
-      cancel-label="Cancel"
+      :title="t('mcpServers.deleteModal.title')"
+      :message="t('mcpServers.deleteModal.message', { name: serverToDelete?.name })"
+      :confirm-label="t('common.delete')"
+      :cancel-label="t('common.cancel')"
       variant="danger"
       @confirm="deleteServer"
       @cancel="showDeleteConfirm = false"

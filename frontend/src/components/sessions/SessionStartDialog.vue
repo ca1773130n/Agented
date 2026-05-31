@@ -22,6 +22,7 @@
  * reusable for any future "kick off a new session" entry point.
  */
 import { ref, computed, watch, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useFocusTrap } from '../../composables/useFocusTrap';
 import {
   settingsApi,
@@ -85,6 +86,8 @@ const emit = defineEmits<{
     },
   ): void;
 }>();
+
+const { t } = useI18n();
 
 const dialogRef = ref<HTMLElement | null>(null);
 const isOpen = computed(() => props.visible);
@@ -157,14 +160,14 @@ const firstPromptAttachments = ref<ForgeAttachment[]>([]);
 const addBindingKind = ref<ForgeBindingKind>('rule');
 const addBindingAssetId = ref('');
 
-const FORGE_KIND_LABELS: Record<ForgeBindingKind, string> = {
-  rule: 'Rule',
-  skill: 'Skill',
-  hook: 'Hook',
-  command: 'Command',
+const FORGE_KIND_LABELS = computed<Record<ForgeBindingKind, string>>(() => ({
+  rule: t('sessionStartDialog.forgeKind.rule'),
+  skill: t('sessionStartDialog.forgeKind.skill'),
+  hook: t('sessionStartDialog.forgeKind.hook'),
+  command: t('sessionStartDialog.forgeKind.command'),
   mcp_server: 'MCP Server',
-  plugin: 'Plugin',
-};
+  plugin: t('sessionStartDialog.forgeKind.plugin'),
+}));
 
 const hasAnyForgeState = computed(
   () =>
@@ -377,9 +380,9 @@ function onSubmit() {
           </svg>
         </div>
         <div>
-          <h3 id="modal-title-session-start">Start a new session</h3>
+          <h3 id="modal-title-session-start">{{ t('sessionStartDialog.title') }}</h3>
           <p class="modal-subtitle">
-            Configure how this claude subprocess runs in the project's worktree.
+            {{ t('sessionStartDialog.subtitle') }}
           </p>
         </div>
         <button class="close-btn" @click="emit('close')">
@@ -392,10 +395,10 @@ function onSubmit() {
       <form @submit.prevent="onSubmit">
         <div class="form-group">
           <div class="label-row">
-            <label for="session-name-input">Session name</label>
+            <label for="session-name-input">{{ t('sessionStartDialog.sessionName') }}</label>
             <label class="inline-toggle">
               <input type="checkbox" v-model="autoTitle" />
-              <span>Auto title</span>
+              <span>{{ t('sessionStartDialog.autoTitle') }}</span>
             </label>
           </div>
           <input
@@ -403,34 +406,30 @@ function onSubmit() {
             type="text"
             v-model="name"
             :disabled="autoTitle"
-            placeholder="e.g. 'Refactor auth middleware'"
+            :placeholder="t('sessionStartDialog.namePlaceholder')"
           />
           <p class="form-hint">
-            When auto title is on, an empty name is filled by the backend after
-            the first turn (placeholder today, claude-generated summary in a
-            follow-up).
+            {{ t('sessionStartDialog.nameHint') }}
           </p>
         </div>
 
         <div class="form-group">
-          <label>Execution type</label>
+          <label>{{ t('sessionStartDialog.executionType') }}</label>
           <select v-model="executionType">
-            <option value="direct">Direct — interactive claude chat</option>
-            <option value="ralph_loop">Ralph loop — autonomous iteration</option>
-            <option value="team_spawn">Team spawn — multi-agent</option>
-            <option value="goal_loop">Goal loop — run until goal met</option>
+            <option value="direct">{{ t('sessionStartDialog.execDirect') }}</option>
+            <option value="ralph_loop">{{ t('sessionStartDialog.execRalph') }}</option>
+            <option value="team_spawn">{{ t('sessionStartDialog.execTeam') }}</option>
+            <option value="goal_loop">{{ t('sessionStartDialog.execGoal') }}</option>
           </select>
           <p v-if="executionType === 'ralph_loop'" class="form-hint">
-            Requires <code>ralph-wiggum</code> plugin.
+            {{ t('sessionStartDialog.ralphHintPre') }} <code>ralph-wiggum</code> {{ t('sessionStartDialog.ralphHintPost') }}
           </p>
           <p v-else-if="executionType === 'team_spawn'" class="form-hint">
-            Requires
-            <code>CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1</code> in the environment.
+            {{ t('sessionStartDialog.teamHintPre') }}
+            <code>CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1</code> {{ t('sessionStartDialog.teamHintPost') }}
           </p>
           <p v-else-if="executionType === 'goal_loop'" class="form-hint">
-            Autonomous loop. Each turn is judged against your goal;
-            session continues until the goal is met, the iteration
-            cap is reached, or the wall-time cap elapses.
+            {{ t('sessionStartDialog.goalHint') }}
           </p>
         </div>
 
@@ -438,38 +437,36 @@ function onSubmit() {
              type is ``goal_loop``; collapses otherwise so the
              dialog stays compact for the common direct case. -->
         <div v-if="isGoalLoop" class="form-group goal-loop-config">
-          <label for="goal-text">Goal</label>
+          <label for="goal-text">{{ t('sessionStartDialog.goal') }}</label>
           <textarea
             id="goal-text"
             v-model="goalText"
             class="goal-textarea"
-            placeholder="Describe what success looks like in 1–3 sentences."
+            :placeholder="t('sessionStartDialog.goalPlaceholder')"
             rows="3"
           ></textarea>
           <p v-if="goalText.trim().length > 0 && goalText.trim().length < 5"
              class="form-hint goal-error">
-            Goal must be at least 5 characters.
+            {{ t('sessionStartDialog.goalMinLength') }}
           </p>
 
           <label for="goal-check-cmd" class="goal-secondary-label">
-            Check command (optional)
+            {{ t('sessionStartDialog.checkCommand') }}
           </label>
           <input
             id="goal-check-cmd"
             v-model="goalCheckCmd"
             class="goal-mono-input"
             type="text"
-            placeholder="e.g. pytest -x  (exit 0 = goal met)"
+            :placeholder="t('sessionStartDialog.checkCommandPlaceholder')"
           />
           <p class="form-hint">
-            If set, run after each turn — exit 0 means met. Otherwise
-            the LLM judge evaluates the latest assistant turn against
-            the goal.
+            {{ t('sessionStartDialog.checkCommandHint') }}
           </p>
 
           <div class="goal-caps-row">
             <div class="goal-cap-field">
-              <label for="goal-max-iter">Max iterations</label>
+              <label for="goal-max-iter">{{ t('sessionStartDialog.maxIterations') }}</label>
               <input
                 id="goal-max-iter"
                 v-model.number="goalMaxIterations"
@@ -479,7 +476,7 @@ function onSubmit() {
               />
             </div>
             <div class="goal-cap-field">
-              <label for="goal-max-wall">Max wall time (min)</label>
+              <label for="goal-max-wall">{{ t('sessionStartDialog.maxWallTime') }}</label>
               <input
                 id="goal-max-wall"
                 v-model.number="goalMaxWallMinutes"
@@ -491,7 +488,7 @@ function onSubmit() {
           </div>
 
           <label for="goal-judge-backend" class="goal-secondary-label">
-            Judge backend
+            {{ t('sessionStartDialog.judgeBackend') }}
           </label>
           <select id="goal-judge-backend" v-model="goalJudgeBackend">
             <option value="claude">Claude (claude-haiku-4-5)</option>
@@ -503,11 +500,10 @@ function onSubmit() {
             v-model="goalJudgeModelOverride"
             class="goal-mono-input goal-model-override"
             type="text"
-            placeholder="Override model name (optional)"
+            :placeholder="t('sessionStartDialog.modelOverridePlaceholder')"
           />
           <p class="form-hint">
-            Defaults to a small/cheap model per backend — the judge
-            only answers yes/no, so the cheapest available is enough.
+            {{ t('sessionStartDialog.judgeBackendHint') }}
           </p>
         </div>
 
@@ -519,15 +515,11 @@ function onSubmit() {
           <label class="row-toggle">
             <input type="checkbox" v-model="goalOuroboros" />
             <span class="toggle-body">
-              <span class="toggle-title">Ouroboros mode (recommended)</span>
+              <span class="toggle-title">{{ t('sessionStartDialog.ouroborosTitle') }}</span>
               <span class="toggle-sub">
-                Each turn must lead with
+                {{ t('sessionStartDialog.ouroborosPre') }}
                 <code>**Hypothesis:**</code> +
-                <code>**Predicted outcome:**</code> markers; the
-                judge scores them in 4-state mode and falsified
-                approaches are recorded as session dead-ends so
-                the agent doesn't re-walk known failures.
-                Untick to fall back to the legacy binary judge.
+                <code>**Predicted outcome:**</code> {{ t('sessionStartDialog.ouroborosPost') }}
               </span>
             </span>
           </label>
@@ -537,12 +529,11 @@ function onSubmit() {
           <label class="row-toggle">
             <input type="checkbox" v-model="yoloMode" />
             <span class="toggle-body">
-              <span class="toggle-title">Yolo mode</span>
+              <span class="toggle-title">{{ t('sessionStartDialog.yoloTitle') }}</span>
               <span class="toggle-sub">
-                Appends <code>--dangerously-skip-permissions</code> and bypasses
-                the project's allowed-accounts whitelist.
+                {{ t('sessionStartDialog.yoloPre') }} <code>--dangerously-skip-permissions</code> {{ t('sessionStartDialog.yoloPost') }}
                 <template v-if="userDefaultYolo">
-                  Default-on per your Settings.
+                  {{ t('sessionStartDialog.yoloDefaultOn') }}
                 </template>
               </span>
             </span>
@@ -550,7 +541,7 @@ function onSubmit() {
         </div>
 
         <div v-if="!yoloMode" class="form-group">
-          <label>AI account</label>
+          <label>{{ t('sessionStartDialog.aiAccount') }}</label>
           <select
             v-model="accountId"
             :disabled="isLoadingAccounts || allowedAccountOptions.length === 0"
@@ -558,10 +549,10 @@ function onSubmit() {
             <option value="" disabled>
               {{
                 isLoadingAccounts
-                  ? 'Loading accounts…'
+                  ? t('sessionStartDialog.loadingAccounts')
                   : allowedAccountOptions.length === 0
-                  ? 'No accounts whitelisted — add one in project settings'
-                  : 'Pick an account…'
+                  ? t('sessionStartDialog.noAccountsWhitelisted')
+                  : t('sessionStartDialog.pickAccount')
               }}
             </option>
             <option v-for="a in allowedAccountOptions" :key="a.id" :value="a.id">
@@ -569,8 +560,7 @@ function onSubmit() {
             </option>
           </select>
           <p class="form-hint">
-            Sessions must use a whitelisted account unless Yolo is on. Manage the
-            whitelist on the project's settings page.
+            {{ t('sessionStartDialog.accountHint') }}
           </p>
         </div>
 
@@ -581,24 +571,25 @@ function onSubmit() {
              list + no extras renders as a compact empty state so
              the dialog doesn't grow for projects without bindings. -->
         <div class="form-group forge-section">
-          <label>Forge context</label>
+          <label>{{ t('sessionStartDialog.forgeContext') }}</label>
 
           <details class="forge-disclosure" :open="hasAnyForgeState">
             <summary class="forge-summary">
-              <span v-if="isLoadingBindings">Loading bindings…</span>
+              <span v-if="isLoadingBindings">{{ t('sessionStartDialog.loadingBindings') }}</span>
               <span v-else-if="!hasAnyForgeState">
-                No project bindings or first-prompt attachments.
-                Click to add session-only context.
+                {{ t('sessionStartDialog.forgeEmpty') }}
               </span>
               <span v-else>
-                {{ inheritedBindings.length }} inherited
-                · {{ sessionOnlyAdditions.length }} session-only
-                · {{ firstPromptAttachments.length }} attachments
+                {{ t('sessionStartDialog.forgeSummary', {
+                  inherited: inheritedBindings.length,
+                  sessionOnly: sessionOnlyAdditions.length,
+                  attachments: firstPromptAttachments.length,
+                }) }}
               </span>
             </summary>
 
             <div v-if="inheritedBindings.length" class="forge-block">
-              <h4 class="forge-heading">Inherited from project</h4>
+              <h4 class="forge-heading">{{ t('sessionStartDialog.inheritedFromProject') }}</h4>
               <ul class="forge-binding-list">
                 <li
                   v-for="b in inheritedBindings"
@@ -621,7 +612,7 @@ function onSubmit() {
             </div>
 
             <div class="forge-block">
-              <h4 class="forge-heading">Add session-only binding</h4>
+              <h4 class="forge-heading">{{ t('sessionStartDialog.addSessionOnlyBinding') }}</h4>
               <div class="forge-add-row">
                 <select v-model="addBindingKind" class="forge-add-kind">
                   <option
@@ -636,7 +627,7 @@ function onSubmit() {
                   v-model="addBindingAssetId"
                   type="text"
                   class="forge-add-asset"
-                  placeholder="asset id (e.g. 42, skill-name)"
+                  :placeholder="t('sessionStartDialog.assetIdPlaceholder')"
                   @keydown.enter.prevent="addSessionOnlyBinding"
                 />
                 <button
@@ -644,7 +635,7 @@ function onSubmit() {
                   class="btn btn-secondary forge-add-btn"
                   @click="addSessionOnlyBinding"
                 >
-                  Add
+                  {{ t('common.add') }}
                 </button>
               </div>
               <ul v-if="sessionOnlyAdditions.length" class="forge-binding-list">
@@ -657,11 +648,11 @@ function onSubmit() {
                     {{ FORGE_KIND_LABELS[b.kind] }}
                   </span>
                   <code class="forge-binding-id">{{ b.asset_id }}</code>
-                  <span class="forge-session-flag">session only</span>
+                  <span class="forge-session-flag">{{ t('sessionStartDialog.sessionOnlyFlag') }}</span>
                   <button
                     type="button"
                     class="forge-binding-remove"
-                    aria-label="Remove session-only binding"
+                    :aria-label="t('sessionStartDialog.removeSessionOnlyBinding')"
                     @click="removeSessionOnlyAt(idx)"
                   >
                     ×
@@ -671,14 +662,12 @@ function onSubmit() {
             </div>
 
             <div class="forge-block">
-              <h4 class="forge-heading">First-prompt attachments</h4>
+              <h4 class="forge-heading">{{ t('sessionStartDialog.firstPromptAttachments') }}</h4>
               <SessionContextTray
                 v-model:attachments="firstPromptAttachments"
               />
               <p class="form-hint forge-hint">
-                These attach to the first message you send. After
-                that, use the tray above the chat input for
-                subsequent turns.
+                {{ t('sessionStartDialog.firstPromptHint') }}
               </p>
             </div>
           </details>
@@ -686,10 +675,10 @@ function onSubmit() {
 
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" @click="emit('close')">
-            Cancel
+            {{ t('common.cancel') }}
           </button>
           <button type="submit" class="btn btn-primary" :disabled="!canSubmit">
-            Start session
+            {{ t('sessionStartDialog.startSession') }}
           </button>
         </div>
       </form>

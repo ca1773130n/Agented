@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { EntityUsageEntry } from '../../services/api';
 import { useTokenFormatting } from '../../composables/useTokenFormatting';
 
+const { t } = useI18n();
 const { formatCurrency } = useTokenFormatting();
 
 const props = defineProps<{
@@ -23,34 +25,34 @@ const maxEntityCost = computed(() => {
 <template>
   <div class="section">
     <div class="section-header">
-      <h2 class="section-title">Spend by Entity</h2>
+      <h2 class="section-title">{{ t('entitySpendSection.title') }}</h2>
       <div class="entity-tabs">
         <button
           class="tab-btn"
           :class="{ active: activeEntityTab === 'agent' }"
           @click="emit('update:activeEntityTab', 'agent')"
         >
-          By Agent
+          {{ t('entitySpendSection.byAgent') }}
         </button>
         <button
           class="tab-btn"
           :class="{ active: activeEntityTab === 'team' }"
           @click="emit('update:activeEntityTab', 'team')"
         >
-          By Team
+          {{ t('entitySpendSection.byTeam') }}
         </button>
         <button
           class="tab-btn"
           :class="{ active: activeEntityTab === 'trigger' }"
           @click="emit('update:activeEntityTab', 'trigger')"
         >
-          By Trigger
+          {{ t('entitySpendSection.byTrigger') }}
         </button>
       </div>
     </div>
 
     <div v-if="entityData.length === 0" class="empty-state">
-      No {{ activeEntityTab }} usage data for the selected period
+      {{ t(`entitySpendSection.emptyState.${activeEntityTab}`) }}
     </div>
 
     <div v-else class="entity-list">
@@ -58,9 +60,9 @@ const maxEntityCost = computed(() => {
         <div class="entity-info">
           <span class="entity-name">{{ entity.entity_name || entity.entity_id }}</span>
           <span class="entity-meta">
-            {{ entity.execution_count }} execution{{ entity.execution_count !== 1 ? 's' : '' }}
+            {{ t('entitySpendSection.executions', entity.execution_count) }}
             &middot;
-            {{ entity.execution_count > 0 ? formatCurrency(entity.total_cost_usd / entity.execution_count) : '$0.00' }} avg
+            {{ t('entitySpendSection.avg', { value: entity.execution_count > 0 ? formatCurrency(entity.total_cost_usd / entity.execution_count) : '$0.00' }) }}
           </span>
         </div>
         <div class="entity-cost">

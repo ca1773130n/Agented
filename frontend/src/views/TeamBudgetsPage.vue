@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 
+const { t } = useI18n();
 const showToast = useToast();
 const isLoading = ref(true);
 const isSending = ref<string | null>(null);
@@ -65,9 +67,9 @@ async function sendTestAlert(teamId: string) {
   try {
     const res = await fetch(`/admin/budgets/${teamId}/test-alert`, { method: 'POST' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    showToast('Test alert sent', 'success');
+    showToast(t('teamBudgets.toast.testAlertSent'), 'success');
   } catch {
-    showToast('Test alert sent (demo mode)', 'success');
+    showToast(t('teamBudgets.toast.testAlertSentDemo'), 'success');
   } finally {
     isSending.value = null;
   }
@@ -84,9 +86,9 @@ async function saveThreshold(teamId: string) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const b = budgets.value.find(x => x.team_id === teamId);
     if (b) b.alert_threshold = threshold;
-    showToast('Threshold saved', 'success');
+    showToast(t('teamBudgets.toast.thresholdSaved'), 'success');
   } catch {
-    showToast('Saved (demo mode)', 'success');
+    showToast(t('teamBudgets.toast.savedDemo'), 'success');
     const b = budgets.value.find(x => x.team_id === teamId);
     if (b) b.alert_threshold = threshold;
   }
@@ -98,7 +100,7 @@ function resetCreateForm() {
 
 async function createBudget() {
   if (!newBudget.value.team_name.trim()) {
-    showToast('Team name is required', 'error');
+    showToast(t('teamBudgets.toast.teamNameRequired'), 'error');
     return;
   }
   isCreating.value = true;
@@ -116,7 +118,7 @@ async function createBudget() {
     editingThreshold.value[b.team_id] = b.alert_threshold;
     showCreateForm.value = false;
     resetCreateForm();
-    showToast('Budget created', 'success');
+    showToast(t('teamBudgets.toast.budgetCreated'), 'success');
   } finally {
     isCreating.value = false;
   }
@@ -130,32 +132,32 @@ onMounted(loadBudgets);
 
     <div class="page-title-row">
       <div>
-        <h2>Team Budgets</h2>
-        <p class="subtitle">Monthly execution limits and alert thresholds per team</p>
+        <h2>{{ t('teamBudgets.title') }}</h2>
+        <p class="subtitle">{{ t('teamBudgets.subtitle') }}</p>
       </div>
       <button class="btn btn-primary" @click="showCreateForm = !showCreateForm">
-        {{ showCreateForm ? 'Cancel' : '+ Add Budget' }}
+        {{ showCreateForm ? t('common.cancel') : t('teamBudgets.addBudget') }}
       </button>
     </div>
 
     <!-- Create form -->
     <div v-if="showCreateForm" class="card create-form">
-      <div class="create-form-header">New Team Budget</div>
+      <div class="create-form-header">{{ t('teamBudgets.newBudget') }}</div>
       <div class="create-form-body">
         <div class="create-fields-row">
           <div class="create-field">
-            <label class="create-field-label">Team Name</label>
-            <input v-model="newBudget.team_name" class="threshold-input wide-input" type="text" placeholder="e.g. Platform" />
+            <label class="create-field-label">{{ t('teamBudgets.teamName') }}</label>
+            <input v-model="newBudget.team_name" class="threshold-input wide-input" type="text" :placeholder="t('teamBudgets.teamNamePlaceholder')" />
           </div>
           <div class="create-field">
-            <label class="create-field-label">Monthly Limit</label>
+            <label class="create-field-label">{{ t('teamBudgets.monthlyLimit') }}</label>
             <div class="input-with-suffix">
               <input v-model.number="newBudget.monthly_limit" class="threshold-input" type="number" min="1" />
-              <span class="pct-suffix">executions</span>
+              <span class="pct-suffix">{{ t('teamBudgets.executions') }}</span>
             </div>
           </div>
           <div class="create-field">
-            <label class="create-field-label">Alert Threshold</label>
+            <label class="create-field-label">{{ t('teamBudgets.alertThreshold') }}</label>
             <div class="input-with-suffix">
               <input v-model.number="newBudget.alert_threshold" class="threshold-input" type="number" min="1" max="100" />
               <span class="pct-suffix">%</span>
@@ -163,27 +165,27 @@ onMounted(loadBudgets);
           </div>
         </div>
         <div class="create-actions">
-          <button class="btn btn-secondary btn-sm" @click="showCreateForm = false; resetCreateForm()">Cancel</button>
+          <button class="btn btn-secondary btn-sm" @click="showCreateForm = false; resetCreateForm()">{{ t('common.cancel') }}</button>
           <button class="btn btn-primary btn-sm" :disabled="isCreating" @click="createBudget">
-            {{ isCreating ? 'Creating...' : 'Create Budget' }}
+            {{ isCreating ? t('teamBudgets.creating') : t('teamBudgets.createBudget') }}
           </button>
         </div>
       </div>
     </div>
 
-    <LoadingState v-if="isLoading" message="Loading budgets..." />
+    <LoadingState v-if="isLoading" :message="t('teamBudgets.loading')" />
 
     <template v-else>
       <!-- Empty state -->
       <div v-if="budgets.length === 0" class="card" style="padding: 48px; text-align: center;">
-        <div style="color: var(--text-tertiary); font-size: 0.875rem; margin-bottom: 12px;">No team budgets configured yet.</div>
-        <button class="btn btn-primary" style="margin: 0 auto;" @click="showCreateForm = true">+ Add Budget</button>
+        <div style="color: var(--text-tertiary); font-size: 0.875rem; margin-bottom: 12px;">{{ t('teamBudgets.emptyState') }}</div>
+        <button class="btn btn-primary" style="margin: 0 auto;" @click="showCreateForm = true">{{ t('teamBudgets.addBudget') }}</button>
       </div>
       <div v-else class="budget-cards">
         <div v-for="b in budgets" :key="b.team_id" class="card budget-card">
           <div class="budget-header">
             <span class="team-name">{{ b.team_name }}</span>
-            <span class="usage-label">{{ b.used }} / {{ b.monthly_limit }} executions</span>
+            <span class="usage-label">{{ b.used }} / {{ b.monthly_limit }} {{ t('teamBudgets.executions') }}</span>
           </div>
 
           <div class="progress-track">
@@ -193,12 +195,12 @@ onMounted(loadBudgets);
             />
           </div>
           <div class="progress-meta">
-            <span class="pct">{{ usagePercent(b) }}% used</span>
-            <span class="remaining">{{ b.monthly_limit - b.used }} remaining</span>
+            <span class="pct">{{ t('teamBudgets.percentUsed', { pct: usagePercent(b) }) }}</span>
+            <span class="remaining">{{ t('teamBudgets.remaining', { count: b.monthly_limit - b.used }) }}</span>
           </div>
 
           <div class="threshold-row">
-            <label class="threshold-label">Alert at</label>
+            <label class="threshold-label">{{ t('teamBudgets.alertAt') }}</label>
             <input
               v-model.number="editingThreshold[b.team_id]"
               type="number"
@@ -207,13 +209,13 @@ onMounted(loadBudgets);
               class="threshold-input"
             />
             <span class="pct-suffix">%</span>
-            <button class="btn btn-secondary btn-sm" @click="saveThreshold(b.team_id)">Save</button>
+            <button class="btn btn-secondary btn-sm" @click="saveThreshold(b.team_id)">{{ t('common.save') }}</button>
             <button
               class="btn btn-primary btn-sm"
               :disabled="isSending === b.team_id"
               @click="sendTestAlert(b.team_id)"
             >
-              {{ isSending === b.team_id ? 'Sending...' : 'Send Alert' }}
+              {{ isSending === b.team_id ? t('teamBudgets.sending') : t('teamBudgets.sendAlert') }}
             </button>
           </div>
         </div>

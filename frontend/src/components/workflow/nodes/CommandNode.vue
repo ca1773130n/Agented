@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 interface CommandNodeData {
   label: string
@@ -20,11 +23,18 @@ const statusClass = computed(() =>
   props.data.executionStatus ? `status-${props.data.executionStatus}` : '',
 )
 
+const isUnconfigured = computed(() => {
+  const cmdName = props.data.config?.command_name
+  if (typeof cmdName === 'string' && cmdName) return false
+  const cmd = props.data.config?.command
+  return typeof cmd !== 'string' || !cmd
+})
+
 const commandPreview = computed(() => {
   const cmdName = props.data.config?.command_name
   if (typeof cmdName === 'string' && cmdName) return cmdName
   const cmd = props.data.config?.command
-  if (typeof cmd !== 'string' || !cmd) return 'Not configured'
+  if (typeof cmd !== 'string' || !cmd) return t('commandNode.notConfigured')
   return cmd.length > 40 ? cmd.slice(0, 40) + '...' : cmd
 })
 
@@ -36,14 +46,14 @@ const needsConfig = computed(() => {
 
 <template>
   <div :class="['workflow-node', 'node-command', statusClass]">
-    <div v-if="needsConfig" class="validation-dot" title="Required configuration missing"></div>
+    <div v-if="needsConfig" class="validation-dot" :title="t('commandNode.configMissing')"></div>
     <Handle type="target" :position="Position.Top" :style="inputHandleStyle" />
     <div class="node-header">
       <span class="node-icon">&#x2318;</span>
       <span class="node-label">{{ data.label }}</span>
     </div>
     <div class="node-body">
-      <code :class="['command-preview', { unconfigured: commandPreview === 'Not configured' }]">{{
+      <code :class="['command-preview', { unconfigured: isUnconfigured }]">{{
         commandPreview
       }}</code>
     </div>

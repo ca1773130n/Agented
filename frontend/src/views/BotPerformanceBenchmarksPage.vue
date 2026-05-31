@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useToast } from '../composables/useToast';
 import { analyticsApi, ApiError } from '../services/api';
 import type { ExecutionDataPoint, EffectivenessOverTimePoint } from '../services/api';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 const isLoading = ref(true);
@@ -43,9 +45,9 @@ interface BotBenchmark {
 
 const selectedPeriod = ref<PeriodKey>('30d');
 const periodOptions: { key: PeriodKey; label: string }[] = [
-  { key: '7d', label: 'Last 7 Days' },
-  { key: '30d', label: 'Last 30 Days' },
-  { key: '90d', label: 'Last 90 Days' },
+  { key: '7d', label: t('botPerformanceBenchmarks.period.7d') },
+  { key: '30d', label: t('botPerformanceBenchmarks.period.30d') },
+  { key: '90d', label: t('botPerformanceBenchmarks.period.90d') },
 ];
 
 const selectedBotId = ref<string | null>(null);
@@ -114,7 +116,7 @@ async function loadBenchmarks() {
 
       results.push({
         botId: `backend-${backend}`,
-        botName: `${backend.charAt(0).toUpperCase() + backend.slice(1)} Bot`,
+        botName: t('botPerformanceBenchmarks.botName', { name: backend.charAt(0).toUpperCase() + backend.slice(1) }),
         totalExecutions: totalExec,
         successRate: Math.round(successRate * 10) / 10,
         avgLatencyMs: Math.round(avgLatency),
@@ -135,7 +137,7 @@ async function loadBenchmarks() {
     if (e instanceof ApiError) {
       error.value = e.message;
     } else {
-      error.value = 'Failed to load performance benchmarks';
+      error.value = t('botPerformanceBenchmarks.toast.loadFailed');
     }
     showToast(error.value, 'error');
   } finally {
@@ -204,11 +206,11 @@ async function runEvaluation(botId: string) {
   selectedBotId.value = botId;
   await new Promise((r) => setTimeout(r, 1200));
   isRunningEval.value = false;
-  showToast('LLM-as-judge evaluation queued — results in ~5 minutes', 'success');
+  showToast(t('botPerformanceBenchmarks.toast.evalQueued'), 'success');
 }
 
 function exportCsv() {
-  showToast('Benchmark CSV exported', 'success');
+  showToast(t('botPerformanceBenchmarks.toast.csvExported'), 'success');
 }
 
 onMounted(loadBenchmarks);
@@ -217,15 +219,15 @@ onMounted(loadBenchmarks);
 <template>
   <div class="page-container">
     <PageHeader
-      title="Bot Performance Benchmarks"
-      subtitle="Track execution latency, LLM-as-judge quality scores, and success rates per bot over time"
+      :title="t('botPerformanceBenchmarks.title')"
+      :subtitle="t('botPerformanceBenchmarks.subtitle')"
     />
 
-    <LoadingState v-if="isLoading" message="Loading performance data..." />
+    <LoadingState v-if="isLoading" :message="t('botPerformanceBenchmarks.loading')" />
 
     <div v-else-if="error" class="section-card error-state">
       <p class="error-text">{{ error }}</p>
-      <button class="btn-secondary" @click="loadBenchmarks">Retry</button>
+      <button class="btn-secondary" @click="loadBenchmarks">{{ t('common.retry') }}</button>
     </div>
 
     <template v-else>
@@ -241,26 +243,26 @@ onMounted(loadBenchmarks);
             {{ opt.label }}
           </button>
         </div>
-        <button class="btn-secondary" @click="exportCsv">↓ Export CSV</button>
+        <button class="btn-secondary" @click="exportCsv">↓ {{ t('botPerformanceBenchmarks.exportCsv') }}</button>
       </div>
 
       <div class="stats-row">
         <div class="stat-card">
-          <div class="stat-label">Bots Tracked</div>
+          <div class="stat-label">{{ t('botPerformanceBenchmarks.stat.botsTracked') }}</div>
           <div class="stat-value">{{ benchmarks.length }}</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Total Executions</div>
+          <div class="stat-label">{{ t('botPerformanceBenchmarks.stat.totalExecutions') }}</div>
           <div class="stat-value">{{ benchmarks.reduce((s, b) => s + b.totalExecutions, 0) }}</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Avg Quality Score</div>
+          <div class="stat-label">{{ t('botPerformanceBenchmarks.stat.avgQuality') }}</div>
           <div class="stat-value" :style="{ color: scoreColor(avgQuality) }">
             {{ avgQuality.toFixed(1) }}
           </div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Avg Success Rate</div>
+          <div class="stat-label">{{ t('botPerformanceBenchmarks.stat.avgSuccess') }}</div>
           <div class="stat-value" :style="{ color: successColor(avgSuccess) }">
             {{ avgSuccess.toFixed(1) }}%
           </div>
@@ -268,26 +270,26 @@ onMounted(loadBenchmarks);
       </div>
 
       <div v-if="benchmarks.length === 0" class="section-card empty-state">
-        <p>No execution data available for the selected period.</p>
+        <p>{{ t('botPerformanceBenchmarks.noData') }}</p>
       </div>
 
       <template v-else>
         <div class="section-card">
           <div class="section-header">
-            <h3 class="section-title">Bot Benchmark Overview</h3>
-            <span class="section-hint">Click a row to view trend history</span>
+            <h3 class="section-title">{{ t('botPerformanceBenchmarks.overview') }}</h3>
+            <span class="section-hint">{{ t('botPerformanceBenchmarks.clickRowHint') }}</span>
           </div>
           <table class="bench-table">
             <thead>
               <tr>
-                <th>Bot</th>
-                <th>Executions</th>
-                <th>Success Rate</th>
-                <th>Avg Latency</th>
-                <th>P95 Latency</th>
-                <th>Quality Score</th>
-                <th>Eval Model</th>
-                <th>Actions</th>
+                <th>{{ t('botPerformanceBenchmarks.col.bot') }}</th>
+                <th>{{ t('botPerformanceBenchmarks.col.executions') }}</th>
+                <th>{{ t('botPerformanceBenchmarks.col.successRate') }}</th>
+                <th>{{ t('botPerformanceBenchmarks.col.avgLatency') }}</th>
+                <th>{{ t('botPerformanceBenchmarks.col.p95Latency') }}</th>
+                <th>{{ t('botPerformanceBenchmarks.col.qualityScore') }}</th>
+                <th>{{ t('botPerformanceBenchmarks.col.evalModel') }}</th>
+                <th>{{ t('botPerformanceBenchmarks.col.actions') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -300,7 +302,7 @@ onMounted(loadBenchmarks);
               >
                 <td>
                   <div class="bot-name">{{ b.botName }}</div>
-                  <div class="bot-meta">Last run {{ formatDate(b.lastRunAt) }}</div>
+                  <div class="bot-meta">{{ t('botPerformanceBenchmarks.lastRun', { date: formatDate(b.lastRunAt) }) }}</div>
                 </td>
                 <td>{{ b.totalExecutions.toLocaleString() }}</td>
                 <td>
@@ -335,7 +337,7 @@ onMounted(loadBenchmarks);
                     :disabled="isRunningEval && selectedBotId === b.botId"
                     @click.stop="runEvaluation(b.botId)"
                   >
-                    {{ isRunningEval && selectedBotId === b.botId ? 'Queuing...' : 'Run Eval' }}
+                    {{ isRunningEval && selectedBotId === b.botId ? t('botPerformanceBenchmarks.queuing') : t('botPerformanceBenchmarks.runEval') }}
                   </button>
                 </td>
               </tr>
@@ -347,7 +349,7 @@ onMounted(loadBenchmarks);
           <div class="detail-grid">
             <div class="section-card">
               <div class="section-header">
-                <h3 class="section-title">Latency Trend -- {{ selectedBenchmark.botName }}</h3>
+                <h3 class="section-title">{{ t('botPerformanceBenchmarks.latencyTrend', { bot: selectedBenchmark.botName }) }}</h3>
               </div>
               <div class="trend-chart">
                 <div v-for="point in selectedBenchmark.latencyHistory" :key="point.date" class="trend-col">
@@ -355,12 +357,12 @@ onMounted(loadBenchmarks);
                     <div
                       class="bar p50"
                       :style="{ height: (point.p50 / (selectedBenchmark.p95LatencyMs || 1)) * 80 + 'px' }"
-                      :title="`P50: ${formatMs(point.p50)}`"
+                      :title="t('botPerformanceBenchmarks.tooltip.p50', { val: formatMs(point.p50) })"
                     ></div>
                     <div
                       class="bar p95"
                       :style="{ height: (point.p95 / (selectedBenchmark.p95LatencyMs || 1)) * 80 + 'px' }"
-                      :title="`P95: ${formatMs(point.p95)}`"
+                      :title="t('botPerformanceBenchmarks.tooltip.p95', { val: formatMs(point.p95) })"
                     ></div>
                   </div>
                   <div class="bar-label">{{ formatDate(point.date) }}</div>
@@ -374,7 +376,7 @@ onMounted(loadBenchmarks);
 
             <div class="section-card">
               <div class="section-header">
-                <h3 class="section-title">Quality Score Trend (LLM-as-judge)</h3>
+                <h3 class="section-title">{{ t('botPerformanceBenchmarks.qualityTrend') }}</h3>
               </div>
               <div class="quality-chart">
                 <div v-for="point in selectedBenchmark.qualityHistory" :key="point.date" class="quality-col">
@@ -382,7 +384,7 @@ onMounted(loadBenchmarks);
                     <div
                       class="quality-bar"
                       :style="{ height: point.score + '%', background: scoreColor(point.score) }"
-                      :title="`Score: ${point.score}`"
+                      :title="t('botPerformanceBenchmarks.tooltip.score', { val: point.score })"
                     ></div>
                   </div>
                   <div class="quality-score">{{ point.score.toFixed(0) }}</div>
@@ -390,14 +392,14 @@ onMounted(loadBenchmarks);
                 </div>
               </div>
               <div class="eval-note">
-                Judge model: <code class="mono">{{ selectedBenchmark.evalModel }}</code>
+                {{ t('botPerformanceBenchmarks.judgeModel') }} <code class="mono">{{ selectedBenchmark.evalModel }}</code>
               </div>
             </div>
           </div>
         </template>
 
         <div v-else class="empty-detail">
-          <div class="empty-text">Select a bot above to view latency and quality trends</div>
+          <div class="empty-text">{{ t('botPerformanceBenchmarks.selectBotHint') }}</div>
         </div>
       </template>
     </template>

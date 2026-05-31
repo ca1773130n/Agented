@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { agentMemoryApi, type MemoryMessage } from '../../services/api/agentMemory';
 
 const props = defineProps<{ agentId: string }>();
+
+const { t } = useI18n();
 
 const query = ref('');
 const topK = ref<number>(5);
@@ -21,7 +24,7 @@ async function onSubmit() {
     const resp = await agentMemoryApi.recall(props.agentId, q, topK.value);
     results.value = resp.results;
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Recall failed';
+    error.value = e instanceof Error ? e.message : t('recallSearch.recallFailed');
   } finally {
     loading.value = false;
   }
@@ -38,7 +41,7 @@ function truncate(s: string, n: number = 200): string {
       <input
         v-model="query"
         type="search"
-        placeholder="Search the agent's memory…"
+        :placeholder="t('recallSearch.placeholder')"
         data-testid="recall-input"
         class="recall-input"
       />
@@ -48,21 +51,21 @@ function truncate(s: string, n: number = 200): string {
         <option :value="20">20</option>
       </select>
       <button type="submit" :disabled="!query.trim() || loading" class="recall-submit">
-        {{ loading ? 'Searching…' : 'Search' }}
+        {{ loading ? t('recallSearch.searching') : t('common.search') }}
       </button>
     </form>
 
     <div v-if="loading" class="state state-loading" data-testid="recall-loading">
-      Searching…
+      {{ t('recallSearch.searching') }}
     </div>
     <div v-else-if="error" class="state state-error" data-testid="recall-error">
       {{ error }}
     </div>
     <div v-else-if="!hasSearched" class="state state-empty" data-testid="recall-empty">
-      Type a query and press Search to recall messages from this agent's memory.
+      {{ t('recallSearch.prompt') }}
     </div>
     <div v-else-if="results.length === 0" class="state state-empty" data-testid="recall-no-matches">
-      No matches.
+      {{ t('recallSearch.noMatches') }}
     </div>
     <ul v-else class="recall-results">
       <li
@@ -81,7 +84,7 @@ function truncate(s: string, n: number = 200): string {
           class="result-link"
           data-testid="recall-result-link"
         >
-          View thread →
+          {{ t('recallSearch.viewThread') }} →
         </RouterLink>
       </li>
     </ul>

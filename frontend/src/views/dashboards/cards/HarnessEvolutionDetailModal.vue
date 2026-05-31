@@ -5,6 +5,7 @@
 -->
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import {
   EVOLUTION_STATUS_COLOR_VAR,
   EVOLUTION_STATUS_LABEL,
@@ -20,6 +21,7 @@ const emit = defineEmits<{
   approve: [roundId: string];
   abort: [roundId: string];
 }>();
+const { t } = useI18n();
 
 const impact = ref<EvolutionImpactResponse | null>(null);
 const impactLoading = ref(false);
@@ -37,7 +39,7 @@ async function loadImpact() {
     impact.value = await harnessEvolutionApi.getImpact(props.round.id);
   } catch (err) {
     impactError.value =
-      err instanceof Error ? err.message : 'Failed to load impact';
+      err instanceof Error ? err.message : t('harnessEvolutionDetailModal.error.impact');
   } finally {
     impactLoading.value = false;
   }
@@ -92,37 +94,37 @@ function onKeydown(event: KeyboardEvent) {
         <button
           class="modal-close"
           data-testid="evolution-detail-close"
-          aria-label="Close"
+          :aria-label="t('common.close')"
           @click="close"
         >×</button>
       </header>
 
       <div class="modal-body">
         <section class="meta">
-          <div><label>Round</label><code>{{ round!.id }}</code></div>
-          <div><label>Started</label><span>{{ round!.started_at }}</span></div>
+          <div><label>{{ t('harnessEvolutionDetailModal.round') }}</label><code>{{ round!.id }}</code></div>
+          <div><label>{{ t('harnessEvolutionDetailModal.started') }}</label><span>{{ round!.started_at }}</span></div>
           <div v-if="round!.finished_at">
-            <label>Finished</label><span>{{ round!.finished_at }}</span>
+            <label>{{ t('harnessEvolutionDetailModal.finished') }}</label><span>{{ round!.finished_at }}</span>
           </div>
           <div>
-            <label>Inputs</label>
-            <span>{{ round!.input_execution_count }} trajectories</span>
+            <label>{{ t('harnessEvolutionDetailModal.inputs') }}</label>
+            <span>{{ t('harnessEvolutionDetailModal.trajectories', { count: round!.input_execution_count }) }}</span>
           </div>
         </section>
 
         <section v-if="round!.notes" class="notes">
-          <h3>Codex notes</h3>
+          <h3>{{ t('harnessEvolutionDetailModal.codexNotes') }}</h3>
           <pre data-testid="evolution-detail-notes">{{ round!.notes }}</pre>
         </section>
 
         <section v-if="round!.error_message" class="error">
-          <h3>Error</h3>
+          <h3>{{ t('harnessEvolutionDetailModal.errorHeading') }}</h3>
           <pre data-testid="evolution-detail-error">{{ round!.error_message }}</pre>
         </section>
 
         <section class="entries">
-          <h3>Forge patch entries ({{ entries.length }})</h3>
-          <p v-if="entries.length === 0" class="muted">No changes proposed.</p>
+          <h3>{{ t('harnessEvolutionDetailModal.patchEntries', { count: entries.length }) }}</h3>
+          <p v-if="entries.length === 0" class="muted">{{ t('harnessEvolutionDetailModal.noChangesProposed') }}</p>
           <ul v-else>
             <li
               v-for="(e, i) in entries"
@@ -151,23 +153,23 @@ function onKeydown(event: KeyboardEvent) {
           class="impact"
           data-testid="evolution-impact-section"
         >
-          <h3>Impact</h3>
-          <p v-if="impactLoading" class="muted">Computing…</p>
+          <h3>{{ t('harnessEvolutionDetailModal.impact') }}</h3>
+          <p v-if="impactLoading" class="muted">{{ t('harnessEvolutionDetailModal.computing') }}</p>
           <p v-else-if="impactError" class="error-text">{{ impactError }}</p>
           <template v-else-if="impact && impact.available">
             <div class="impact-grid">
               <div class="impact-col">
-                <label>Before</label>
+                <label>{{ t('harnessEvolutionDetailModal.before') }}</label>
                 <span class="impact-val">{{ fmtPct(impact.before.success_rate) }}</span>
-                <span class="impact-meta">{{ impact.before.executions }} runs</span>
+                <span class="impact-meta">{{ t('harnessEvolutionDetailModal.runs', { count: impact.before.executions }) }}</span>
               </div>
               <div class="impact-col">
-                <label>After</label>
+                <label>{{ t('harnessEvolutionDetailModal.after') }}</label>
                 <span class="impact-val">{{ fmtPct(impact.after.success_rate) }}</span>
-                <span class="impact-meta">{{ impact.after.executions }} runs</span>
+                <span class="impact-meta">{{ t('harnessEvolutionDetailModal.runs', { count: impact.after.executions }) }}</span>
               </div>
               <div class="impact-col">
-                <label>Δ Success</label>
+                <label>{{ t('harnessEvolutionDetailModal.deltaSuccess') }}</label>
                 <span
                   class="impact-val"
                   :class="{
@@ -189,12 +191,12 @@ function onKeydown(event: KeyboardEvent) {
             class="btn btn-approve"
             data-testid="evolution-detail-approve"
             @click="emit('approve', round!.id)"
-          >Approve</button>
+          >{{ t('harnessEvolutionDetailModal.approve') }}</button>
           <button
             class="btn btn-abort"
             data-testid="evolution-detail-abort"
             @click="emit('abort', round!.id)"
-          >Abort</button>
+          >{{ t('harnessEvolutionDetailModal.abort') }}</button>
         </section>
       </div>
     </div>

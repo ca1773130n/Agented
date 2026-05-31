@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import type { Agent } from '../services/api';
 import { agentApi } from '../services/api';
@@ -14,6 +15,7 @@ import EmptyState from '../components/base/EmptyState.vue';
 import { ApiError } from '../services/api';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
+const { t } = useI18n();
 const router = useRouter();
 
 const agents = ref<Agent[]>([]);
@@ -45,13 +47,13 @@ useWebMcpTool({
   deps: [isLoading, totalAgents, enabledCount, claudeCount, openCodeCount],
 });
 
-const columns: DataTableColumn[] = [
-  { key: 'name', label: 'Name' },
-  { key: 'role', label: 'Role' },
-  { key: 'backend_type', label: 'Backend' },
-  { key: 'enabled', label: 'Enabled' },
-  { key: 'creation_status', label: 'Status' },
-];
+const columns = computed<DataTableColumn[]>(() => [
+  { key: 'name', label: t('agentsSummaryDashboard.col.name') },
+  { key: 'role', label: t('agentsSummaryDashboard.col.role') },
+  { key: 'backend_type', label: t('agentsSummaryDashboard.col.backend') },
+  { key: 'enabled', label: t('agentsSummaryDashboard.col.enabled') },
+  { key: 'creation_status', label: t('agentsSummaryDashboard.col.status') },
+]);
 
 function getBackendVariant(backend: string): 'info' | 'violet' | 'neutral' {
   if (backend === 'claude') return 'info';
@@ -72,7 +74,7 @@ async function loadData() {
     const res = await agentApi.list();
     agents.value = res.agents || [];
   } catch (err) {
-    loadError.value = err instanceof ApiError ? err.message : 'Failed to load agents';
+    loadError.value = err instanceof ApiError ? err.message : t('agentsSummaryDashboard.loadFailed');
   } finally {
     isLoading.value = false;
   }
@@ -84,36 +86,36 @@ onMounted(loadData);
 <template>
   <div class="summary-dashboard">
 
-    <PageHeader title="Agents Overview" subtitle="Summary of all AI agents and their configurations">
+    <PageHeader :title="t('agentsSummaryDashboard.title')" :subtitle="t('agentsSummaryDashboard.subtitle')">
       <template #actions>
         <button class="manage-btn" @click="router.push({ name: 'agents' })">
-          Manage Agents
+          {{ t('agentsSummaryDashboard.manageAgents') }}
         </button>
       </template>
     </PageHeader>
 
-    <LoadingState v-if="isLoading" message="Loading agents data..." />
+    <LoadingState v-if="isLoading" :message="t('agentsSummaryDashboard.loading')" />
 
     <ErrorState v-else-if="loadError" :message="loadError" @retry="loadData" />
 
     <template v-else>
       <div class="stats-grid">
-        <StatCard title="Total Agents" :value="totalAgents" />
-        <StatCard title="Enabled" :value="enabledCount" color="#22c55e" />
-        <StatCard title="Claude Backend" :value="claudeCount" color="var(--accent-cyan)" />
-        <StatCard title="OpenCode Backend" :value="openCodeCount" color="var(--accent-violet)" />
+        <StatCard :title="t('agentsSummaryDashboard.stat.total')" :value="totalAgents" />
+        <StatCard :title="t('agentsSummaryDashboard.stat.enabled')" :value="enabledCount" color="#22c55e" />
+        <StatCard :title="t('agentsSummaryDashboard.stat.claudeBackend')" :value="claudeCount" color="var(--accent-cyan)" />
+        <StatCard :title="t('agentsSummaryDashboard.stat.openCodeBackend')" :value="openCodeCount" color="var(--accent-violet)" />
       </div>
 
       <div class="entity-section">
         <div class="section-header">
-          <h2 class="section-title">All Agents</h2>
-          <span class="section-count">{{ totalAgents }} total</span>
+          <h2 class="section-title">{{ t('agentsSummaryDashboard.allAgents') }}</h2>
+          <span class="section-count">{{ t('agentsSummaryDashboard.totalCount', { count: totalAgents }) }}</span>
         </div>
 
         <EmptyState
           v-if="agents.length === 0"
-          title="No agents found"
-          description="Design your first agent to get started."
+          :title="t('agentsSummaryDashboard.empty.title')"
+          :description="t('agentsSummaryDashboard.empty.description')"
         />
 
         <DataTable
@@ -133,7 +135,7 @@ onMounted(loadData);
             <StatusBadge :label="item.backend_type" :variant="getBackendVariant(item.backend_type)" />
           </template>
           <template #cell-enabled="{ item }">
-            <StatusBadge :label="item.enabled === 1 ? 'Yes' : 'No'" :variant="item.enabled === 1 ? 'success' : 'neutral'" />
+            <StatusBadge :label="item.enabled === 1 ? t('common.yes') : t('common.no')" :variant="item.enabled === 1 ? 'success' : 'neutral'" />
           </template>
           <template #cell-creation_status="{ item }">
             <StatusBadge :label="item.creation_status" :variant="getStatusVariant(item.creation_status)" />

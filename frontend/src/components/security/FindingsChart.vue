@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Chart, registerables } from 'chart.js';
 import type { AuditRecord } from '../../services/api';
 import { safeFormatDate } from '../../utils/datetime';
+
+const { t } = useI18n();
 
 Chart.register(...registerables);
 
@@ -23,7 +26,7 @@ function renderChart() {
   const sorted = [...props.audits].sort((a, b) => a.audit_date.localeCompare(b.audit_date));
 
   const labels = sorted.map(a => {
-    const name = a.project_name || a.project_path || 'Unknown';
+    const name = a.project_name || a.project_path || t('findingsChart.unknownProject');
     const shortName = name.length > 15 ? name.substring(0, 15) + '...' : name;
     return `${shortName} (${formatDateShort(a.audit_date)})`;
   });
@@ -49,28 +52,28 @@ function renderChart() {
       labels,
       datasets: [
         {
-          label: 'Critical',
+          label: t('findingsChart.critical'),
           data: sorted.map(a => a.critical),
           backgroundColor: colors.critical,
           borderRadius: 4,
           stack: 'severity',
         },
         {
-          label: 'High',
+          label: t('findingsChart.high'),
           data: sorted.map(a => a.high),
           backgroundColor: colors.high,
           borderRadius: 4,
           stack: 'severity',
         },
         {
-          label: 'Medium',
+          label: t('findingsChart.medium'),
           data: sorted.map(a => a.medium),
           backgroundColor: colors.medium,
           borderRadius: 4,
           stack: 'severity',
         },
         {
-          label: 'Low',
+          label: t('findingsChart.low'),
           data: sorted.map(a => a.low),
           backgroundColor: colors.low,
           borderRadius: 4,

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import type { Team, TopologyType, SuperAgent, SuperAgentSession } from '../services/api';
 import { teamApi, superAgentApi, superAgentSessionApi, ApiError } from '../services/api';
@@ -17,6 +18,7 @@ const props = defineProps<{
   teamId?: string;
 }>();
 
+const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const teamId = computed(() => (route.params.teamId as string) || props.teamId || '');
@@ -72,29 +74,29 @@ function toggleAgentExpand(agentId: string) {
   }
 }
 
-function getTopologyLabel(t?: TopologyType): string {
-  if (!t) return 'None';
+function getTopologyLabel(topo?: TopologyType): string {
+  if (!topo) return t('teamDashboard.none');
   const labels: Record<TopologyType, string> = {
-    sequential: 'Sequential Pipeline',
-    parallel: 'Parallel Fan-out',
-    coordinator: 'Coordinator / Dispatcher',
-    generator_critic: 'Generator / Critic',
-    hierarchical: 'Hierarchical Delegation',
-    human_in_loop: 'Human-in-the-Loop',
-    composite: 'Composite Pattern',
+    sequential: t('teamDashboard.topologyLabels.sequential'),
+    parallel: t('teamDashboard.topologyLabels.parallel'),
+    coordinator: t('teamDashboard.topologyLabels.coordinator'),
+    generator_critic: t('teamDashboard.topologyLabels.generatorCritic'),
+    hierarchical: t('teamDashboard.topologyLabels.hierarchical'),
+    human_in_loop: t('teamDashboard.topologyLabels.humanInLoop'),
+    composite: t('teamDashboard.topologyLabels.composite'),
   };
-  return labels[t] || t;
+  return labels[topo] || topo;
 }
 
-function getTriggerLabel(t?: string): string {
-  if (!t) return 'None';
+function getTriggerLabel(trig?: string): string {
+  if (!trig) return t('teamDashboard.none');
   const labels: Record<string, string> = {
-    webhook: 'Webhook',
+    webhook: t('teamDashboard.triggerLabels.webhook'),
     github: 'GitHub',
-    manual: 'Manual',
-    scheduled: 'Scheduled',
+    manual: t('teamDashboard.triggerLabels.manual'),
+    scheduled: t('teamDashboard.triggerLabels.scheduled'),
   };
-  return labels[t] || t;
+  return labels[trig] || trig;
 }
 
 async function loadData() {
@@ -104,7 +106,7 @@ async function loadData() {
     loadTeamSuperAgents();
     return data;
   } catch (err) {
-    handleApiError(err, showToast, 'Failed to load team dashboard');
+    handleApiError(err, showToast, t('teamDashboard.toast.loadFailed'));
     throw err;
   }
 }
@@ -140,10 +142,10 @@ async function runTeam() {
   isRunning.value = true;
   try {
     const result = await teamApi.runTeam(teamId.value, { message: runMessage.value || undefined });
-    showToast(result.message || 'Team run initiated', 'success');
+    showToast(result.message || t('teamDashboard.toast.runInitiated'), 'success');
     runMessage.value = '';
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to run team';
+    const message = err instanceof ApiError ? err.message : t('teamDashboard.toast.runFailed');
     showToast(message, 'error');
   } finally {
     isRunning.value = false;
@@ -174,11 +176,11 @@ async function runTeam() {
             <h2>{{ team.name }}</h2>
             <div class="status-meta">
               <span class="meta-pill members">
-                {{ team.member_count }} members
+                {{ t('teamDashboard.membersCount', { count: team.member_count }) }}
               </span>
               <span v-if="team.topology" class="meta-pill topology">{{ getTopologyLabel(team.topology) }}</span>
               <span v-if="team.trigger_source" class="meta-pill trigger">{{ getTriggerLabel(team.trigger_source) }}</span>
-              <span v-if="team.enabled !== undefined" class="enabled-dot" :class="{ active: team.enabled === 1 }" :title="team.enabled === 1 ? 'Enabled' : 'Disabled'"></span>
+              <span v-if="team.enabled !== undefined" class="enabled-dot" :class="{ active: team.enabled === 1 }" :title="team.enabled === 1 ? t('teamDashboard.enabled') : t('teamDashboard.disabled')"></span>
               <span class="color-indicator" :style="{ background: team.color }"></span>
             </div>
           </div>
@@ -187,7 +189,7 @@ async function runTeam() {
 
         <!-- Leader Section -->
         <div v-if="team.leader_name" class="leader-section">
-          <div class="leader-label">Team Leader</div>
+          <div class="leader-label">{{ t('teamDashboard.teamLeader') }}</div>
           <div class="leader-info">
             <div class="leader-avatar">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -199,7 +201,7 @@ async function runTeam() {
               <span class="leader-name">{{ team.leader_name }}</span>
               <span v-if="team.leader_id" class="leader-id">{{ team.leader_id }}</span>
             </div>
-            <span class="leader-badge">Agent</span>
+            <span class="leader-badge">{{ t('teamDashboard.agentBadge') }}</span>
           </div>
         </div>
       </div>
@@ -210,19 +212,19 @@ async function runTeam() {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M19 12H5M12 19l-7-7 7-7"/>
           </svg>
-          All Teams
+          {{ t('teamDashboard.allTeams') }}
         </button>
         <button class="action-btn secondary" @click="router.push({ name: 'team-settings', params: { teamId: teamId } })">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
           </svg>
-          Edit Team
+          {{ t('teamDashboard.editTeam') }}
         </button>
         <button
           class="visual-builder-btn"
           :disabled="!team.members || team.members.filter(m => m.agent_id).length === 0"
-          :title="(!team.members || team.members.filter(m => m.agent_id).length === 0) ? 'Add agents to use Visual Builder' : 'Open Visual Builder'"
+          :title="(!team.members || team.members.filter(m => m.agent_id).length === 0) ? t('teamDashboard.visualBuilderDisabledHint') : t('teamDashboard.openVisualBuilder')"
           @click="router.push({ name: 'team-builder', params: { teamId: teamId } })"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -232,32 +234,32 @@ async function runTeam() {
             <rect x="14" y="14" width="7" height="7" rx="1"/>
             <path d="M10 6.5h4M6.5 10v4M17.5 10v4M10 17.5h4"/>
           </svg>
-          Visual Builder
+          {{ t('teamDashboard.visualBuilder') }}
         </button>
       </div>
 
       <!-- Test Run section -->
       <div v-if="team.topology" class="card run-card">
         <div class="card-header">
-          <h3>Test Run</h3>
-          <span class="test-run-badge">Runs on server codebase</span>
+          <h3>{{ t('teamDashboard.testRun') }}</h3>
+          <span class="test-run-badge">{{ t('teamDashboard.runsOnServerCodebase') }}</span>
         </div>
         <div class="test-run-info">
-          Test mode runs on the Agented server's local directory, not a project working directory. For project-scoped runs, use the Project dashboard.
+          {{ t('teamDashboard.testRunInfo') }}
         </div>
         <div class="run-body">
           <input
             v-model="runMessage"
             type="text"
             class="form-input"
-            placeholder="Optional message for the test run..."
+            :placeholder="t('teamDashboard.testRunPlaceholder')"
             @keyup.enter="runTeam"
           />
           <button class="action-btn primary compact" :disabled="isRunning" @click="runTeam">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polygon points="5 3 19 12 5 21 5 3"/>
             </svg>
-            {{ isRunning ? 'Running...' : 'Test Run' }}
+            {{ isRunning ? t('teamDashboard.running') : t('teamDashboard.testRun') }}
           </button>
         </div>
       </div>
@@ -272,14 +274,14 @@ async function runTeam() {
       <div class="card">
         <div class="card-header">
           <div class="header-left">
-            <h3>Agent Assignments</h3>
-            <span class="card-count">{{ agentMembers.length }} agents</span>
+            <h3>{{ t('teamDashboard.agentAssignments') }}</h3>
+            <span class="card-count">{{ t('teamDashboard.agentsCount', { count: agentMembers.length }) }}</span>
           </div>
         </div>
 
         <div v-if="agentMembers.length === 0" class="empty-state">
-          <p>No agent members</p>
-          <span>Add agent members to assign skills, commands, hooks, and rules</span>
+          <p>{{ t('teamDashboard.noAgentMembers') }}</p>
+          <span>{{ t('teamDashboard.noAgentMembersHint') }}</span>
         </div>
 
         <div v-else class="agent-assignments-list">
@@ -327,7 +329,7 @@ async function runTeam() {
       <div v-if="teamSuperAgents.length > 0" class="card">
         <div class="card-header">
           <div class="header-left">
-            <h3>Super Agents</h3>
+            <h3>{{ t('teamDashboard.superAgents') }}</h3>
             <span class="card-count">{{ teamSuperAgents.length }}</span>
           </div>
         </div>
@@ -339,9 +341,9 @@ async function runTeam() {
             </div>
             <div class="sa-status">
               <span v-if="getActiveSessionCount(sa.id) > 0" class="sa-session-badge active">
-                {{ getActiveSessionCount(sa.id) }} active
+                {{ t('teamDashboard.activeCount', { count: getActiveSessionCount(sa.id) }) }}
               </span>
-              <span v-else class="sa-session-badge idle">idle</span>
+              <span v-else class="sa-session-badge idle">{{ t('teamDashboard.idle') }}</span>
             </div>
             <div class="sa-actions">
               <button
@@ -349,7 +351,7 @@ async function runTeam() {
                 @click="router.push({ name: 'super-agent-playground', params: { superAgentId: sa.id } })"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-                Chat
+                {{ t('teamDashboard.chat') }}
               </button>
               <button
                 class="action-btn secondary compact"
@@ -357,7 +359,7 @@ async function runTeam() {
                 @click="openMailbox(sa.id)"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-                Mailbox
+                {{ t('teamDashboard.mailbox') }}
               </button>
             </div>
           </div>
@@ -367,7 +369,7 @@ async function runTeam() {
       <!-- Mailbox -->
       <div v-if="selectedMailboxAgentId" class="card mailbox-card">
         <div class="card-header">
-          <h3>Messages</h3>
+          <h3>{{ t('teamDashboard.messages') }}</h3>
           <button class="close-mailbox-btn" @click="selectedMailboxAgentId = null">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
           </button>
@@ -380,30 +382,30 @@ async function runTeam() {
       <!-- Team Info -->
       <div class="card">
         <div class="card-header">
-          <h3>Team Info</h3>
+          <h3>{{ t('teamDashboard.teamInfo') }}</h3>
         </div>
         <div class="info-grid">
           <div class="info-item">
-            <span class="info-label">Team ID</span>
+            <span class="info-label">{{ t('teamDashboard.teamId') }}</span>
             <span class="info-value mono">{{ team.id }}</span>
           </div>
           <div class="info-item">
-            <span class="info-label">Members</span>
-            <span class="info-value">{{ team.member_count }} total</span>
+            <span class="info-label">{{ t('teamDashboard.members') }}</span>
+            <span class="info-value">{{ t('teamDashboard.membersTotal', { count: team.member_count }) }}</span>
           </div>
           <div v-if="team.leader_id" class="info-item">
-            <span class="info-label">Leader</span>
+            <span class="info-label">{{ t('teamDashboard.leader') }}</span>
             <span class="info-value">{{ team.leader_name || team.leader_id }}</span>
           </div>
           <div class="info-item">
-            <span class="info-label">Color</span>
+            <span class="info-label">{{ t('teamDashboard.color') }}</span>
             <div class="color-preview">
               <span class="color-swatch" :style="{ background: team.color }"></span>
               <span class="info-value mono">{{ team.color }}</span>
             </div>
           </div>
           <div v-if="team.created_at" class="info-item">
-            <span class="info-label">Created</span>
+            <span class="info-label">{{ t('teamDashboard.created') }}</span>
             <span class="info-value">{{ new Date(team.created_at).toLocaleDateString() }}</span>
           </div>
         </div>

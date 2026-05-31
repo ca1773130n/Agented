@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+
 const props = defineProps<{
   modelValue: string;
 }>();
@@ -20,15 +24,15 @@ function onChange(event: Event) {
       :value="modelValue"
       @change="onChange"
     >
-      <option value="direct">Direct</option>
-      <option value="ralph_loop">Ralph Loop</option>
-      <option value="team_spawn">Team Spawn</option>
+      <option value="direct">{{ t('executionTypeSelector.direct') }}</option>
+      <option value="ralph_loop">{{ t('executionTypeSelector.ralphLoop') }}</option>
+      <option value="team_spawn">{{ t('executionTypeSelector.teamSpawn') }}</option>
     </select>
     <p v-if="props.modelValue === 'ralph_loop'" class="prereq-notice">
-      Requires ralph-wiggum plugin (claude plugin install ralph-wiggum@official --scope user)
+      {{ t('executionTypeSelector.ralphPrereq') }}
     </p>
     <p v-else-if="props.modelValue === 'team_spawn'" class="prereq-notice">
-      Requires CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 in environment
+      {{ t('executionTypeSelector.teamSpawnPrereq') }}
     </p>
   </div>
 </template>

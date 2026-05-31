@@ -4,6 +4,7 @@
 -->
 <script setup lang="ts">
 import { ref, nextTick, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import PageHeader from '../../components/base/PageHeader.vue';
 import HealthMonitorCard from './cards/HealthMonitorCard.vue';
@@ -11,6 +12,7 @@ import BotHealthCard from './cards/BotHealthCard.vue';
 import ServiceHealthCard from './cards/ServiceHealthCard.vue';
 import BotEffectivenessCard from './cards/BotEffectivenessCard.vue';
 
+const { t } = useI18n();
 const route = useRoute();
 const loaded = ref<Set<string>>(new Set());
 
@@ -34,7 +36,7 @@ onMounted(maybeScroll);
 
 <template>
   <div class="lane-page health-lane">
-    <PageHeader title="Health" subtitle="System, per-bot, per-service, and per-bot effectiveness rollups" />
+    <PageHeader :title="t('health.title')" :subtitle="t('health.subtitle')" />
     <div class="lane-cards">
       <HealthMonitorCard @loaded="onCardLoaded" />
       <BotHealthCard @loaded="onCardLoaded" />

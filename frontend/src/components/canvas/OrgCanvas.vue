@@ -10,6 +10,9 @@ import { useCanvasLayout } from '../../composables/useCanvasLayout'
 import { useToast } from '../../composables/useToast'
 import { teamApi, projectApi } from '../../services/api'
 import type { CanvasEdgeType, Team, TeamMember } from '../../services/api'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
@@ -66,12 +69,12 @@ const availableTeams = ref<Team[]>([])
 const isLoadingTeams = ref(false)
 
 // Edge type options
-const edgeTypeOptions: { type: CanvasEdgeType; label: string; desc: string; color: string }[] = [
-  { type: 'command', label: 'Command', desc: 'Leader sends task', color: '#00d4ff' },
-  { type: 'report', label: 'Report', desc: 'Member reports result', color: 'rgba(160,160,176,0.6)' },
-  { type: 'peer', label: 'Peer', desc: 'Bidirectional collaboration', color: '#22c55e' },
-  { type: 'inter_team', label: 'Inter-Team', desc: 'Cross-team connection', color: '#f59e0b' },
-]
+const edgeTypeOptions = computed<{ type: CanvasEdgeType; label: string; desc: string; color: string }[]>(() => [
+  { type: 'command', label: t('orgCanvas.edgeType.command.label'), desc: t('orgCanvas.edgeType.command.desc'), color: '#00d4ff' },
+  { type: 'report', label: t('orgCanvas.edgeType.report.label'), desc: t('orgCanvas.edgeType.report.desc'), color: 'rgba(160,160,176,0.6)' },
+  { type: 'peer', label: t('orgCanvas.edgeType.peer.label'), desc: t('orgCanvas.edgeType.peer.desc'), color: '#22c55e' },
+  { type: 'inter_team', label: t('orgCanvas.edgeType.interTeam.label'), desc: t('orgCanvas.edgeType.interTeam.desc'), color: '#f59e0b' },
+])
 
 onConnect((params) => {
   addEdges([{
@@ -124,10 +127,10 @@ async function handleSave() {
   try {
     await saveEdges()
     await savePositions()
-    showToast('Team topology saved', 'success')
+    showToast(t('orgCanvas.toast.topologySaved'), 'success')
     emit('save')
   } catch {
-    showToast('Failed to save team topology', 'error')
+    showToast(t('orgCanvas.toast.topologySaveFailed'), 'error')
   }
 }
 
@@ -154,11 +157,11 @@ async function toggleAddTeamDropdown() {
 async function addTeamToProject(teamId: string) {
   try {
     await projectApi.assignTeam(props.projectId, teamId)
-    showToast('Team added to project', 'success')
+    showToast(t('orgCanvas.toast.teamAdded'), 'success')
     showAddTeamDropdown.value = false
     emit('team-added', teamId)
   } catch {
-    showToast('Failed to add team', 'error')
+    showToast(t('orgCanvas.toast.teamAddFailed'), 'error')
   }
 }
 
@@ -169,10 +172,10 @@ async function removeTeamFromProject(teamId: string) {
     nodes.value = nodes.value.filter((n) => n.id !== teamId)
     // Remove any connected edges
     edges.value = edges.value.filter((e) => e.source !== teamId && e.target !== teamId)
-    showToast('Team removed from project', 'success')
+    showToast(t('orgCanvas.toast.teamRemoved'), 'success')
     emit('team-removed', teamId)
   } catch {
-    showToast('Failed to remove team', 'error')
+    showToast(t('orgCanvas.toast.teamRemoveFailed'), 'error')
   }
 }
 
@@ -246,19 +249,19 @@ const hasNodes = computed(() => nodes.value.length > 0)
 <template>
   <div v-if="hasNodes || teams.length > 0" class="org-canvas-container">
     <div class="canvas-header">
-      <h3 class="canvas-title">Team Organization</h3>
+      <h3 class="canvas-title">{{ t('orgCanvas.title') }}</h3>
       <div class="canvas-actions">
         <div class="add-team-dropdown-container">
-          <button class="canvas-btn" @click.stop="toggleAddTeamDropdown" title="Add Team">
+          <button class="canvas-btn" @click.stop="toggleAddTeamDropdown" :title="t('orgCanvas.addTeam')">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
               <line x1="8" y1="2" x2="8" y2="14" />
               <line x1="2" y1="8" x2="14" y2="8" />
             </svg>
-            Add Team
+            {{ t('orgCanvas.addTeam') }}
           </button>
           <div v-if="showAddTeamDropdown" class="add-team-dropdown" @click.stop>
-            <div v-if="isLoadingTeams" class="dropdown-loading">Loading teams...</div>
-            <div v-else-if="availableTeams.length === 0" class="dropdown-empty">No teams available</div>
+            <div v-if="isLoadingTeams" class="dropdown-loading">{{ t('orgCanvas.loadingTeams') }}</div>
+            <div v-else-if="availableTeams.length === 0" class="dropdown-empty">{{ t('orgCanvas.noTeamsAvailable') }}</div>
             <button
               v-else
               v-for="team in availableTeams"
@@ -271,31 +274,31 @@ const hasNodes = computed(() => nodes.value.length > 0)
             </button>
           </div>
         </div>
-        <button class="canvas-btn" @click="handleAutoLayout" title="Auto Layout">
+        <button class="canvas-btn" @click="handleAutoLayout" :title="t('orgCanvas.autoLayout')">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
             <rect x="1" y="1" width="5" height="5" rx="1" />
             <rect x="10" y="1" width="5" height="5" rx="1" />
             <rect x="1" y="10" width="5" height="5" rx="1" />
             <rect x="10" y="10" width="5" height="5" rx="1" />
           </svg>
-          Layout
+          {{ t('orgCanvas.layout') }}
         </button>
-        <button class="canvas-btn" @click="handleFitView" title="Fit View">
+        <button class="canvas-btn" @click="handleFitView" :title="t('orgCanvas.fitView')">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M1 5V2a1 1 0 011-1h3" />
             <path d="M11 1h3a1 1 0 011 1v3" />
             <path d="M15 11v3a1 1 0 01-1 1h-3" />
             <path d="M5 15H2a1 1 0 01-1-1v-3" />
           </svg>
-          Fit
+          {{ t('orgCanvas.fit') }}
         </button>
-        <button class="canvas-btn primary" @click="handleSave" title="Save">
+        <button class="canvas-btn primary" @click="handleSave" :title="t('common.save')">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M13 15H3a1 1 0 01-1-1V2a1 1 0 011-1h7l4 4v9a1 1 0 01-1 1z" />
             <path d="M11 15V9H5v6" />
             <path d="M5 1v4h4" />
           </svg>
-          Save
+          {{ t('common.save') }}
         </button>
       </div>
     </div>
@@ -319,7 +322,7 @@ const hasNodes = computed(() => nodes.value.length > 0)
             <TeamOrgNode v-bind="nodeProps" />
             <button
               class="node-remove-btn"
-              title="Remove team from project"
+              :title="t('orgCanvas.removeTeam')"
               @click.stop="removeTeamFromProject(nodeProps.data.teamId)"
             >
               <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
@@ -340,7 +343,7 @@ const hasNodes = computed(() => nodes.value.length > 0)
         :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
         @click.stop
       >
-        <div class="context-menu-title">Edge Type</div>
+        <div class="context-menu-title">{{ t('orgCanvas.edgeTypeTitle') }}</div>
         <button
           v-for="opt in edgeTypeOptions"
           :key="opt.type"
@@ -353,7 +356,7 @@ const hasNodes = computed(() => nodes.value.length > 0)
             <span class="type-desc">{{ opt.desc }}</span>
           </div>
         </button>
-        <button class="context-menu-item cancel" @click="closeContextMenu">Cancel</button>
+        <button class="context-menu-item cancel" @click="closeContextMenu">{{ t('common.cancel') }}</button>
       </div>
     </Teleport>
   </div>
