@@ -129,3 +129,88 @@ def test_list_bindings_returns_propagation_fields(isolated_db):
     bindings_repo.add_binding("pl", "rule", "1", source_scope="shared", fingerprint="fpY")
     rows = bindings_repo.list_bindings("pl")
     assert rows and rows[0]["source_scope"] == "shared" and rows[0]["fingerprint"] == "fpY"
+
+
+# ---------------------------------------------------------------------------
+# Task 4 — promotion: record evidence + promote to shared layer
+# ---------------------------------------------------------------------------
+from app.db import rules as rules_repo
+from app.services.forge_fingerprint import fingerprint as _fp
+from app.services.harness_propagation import (
+    promote_if_qualified,
+    record_promotion_evidence,
+)
+
+
+def test_promotion_creates_global_copy_and_shared_binding(isolated_db):
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('pq', 'P', 'active')")
+        conn.commit()
+    rid = rules_repo.create_rule(
+        name="great", rule_type="validation", description="d", action="a", project_id="pq"
+    )
+    asset = rules_repo.get_rule(int(rid))
+    fpv = _fp("rule", asset)
+    for _ in range(10):  # pump high-score evidence past the threshold
+        fp.record_evidence(
+            fingerprint=fpv, kind="rule", asset_id=str(rid), project_id="pq", eval_score=0.95
+        )
+    promote_if_qualified("rule", fpv, asset)
+    shared = [s for s in fp.list_shared_bindings(enabled_only=True) if s["fingerprint"] == fpv]
+    assert len(shared) == 1
+    # a GLOBAL-scope rule copy now exists (project_id IS NULL)
+    glob = [
+        r
+        for r in rules_repo.get_rules_by_type("validation")
+        if r.get("project_id") is None and r["name"] == "great"
+    ]
+    assert glob
+
+
+def test_below_threshold_does_not_promote(isolated_db):
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('pn', 'P', 'active')")
+        conn.commit()
+    rid = rules_repo.create_rule(
+        name="meh", rule_type="validation", description="d", action="a", project_id="pn"
+    )
+    asset = rules_repo.get_rule(int(rid))
+    fpv = _fp("rule", asset)
+    fp.record_evidence(
+        fingerprint=fpv, kind="rule", asset_id=str(rid), project_id="pn", eval_score=0.5
+    )  # 1 weak
+    promote_if_qualified("rule", fpv, asset)
+    assert not [s for s in fp.list_shared_bindings(enabled_only=True) if s["fingerprint"] == fpv]
+
+
+def test_record_evidence_from_applied(isolated_db):
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('pr2', 'P', 'active')")
+        conn.commit()
+    rid = rules_repo.create_rule(
+        name="r2", rule_type="validation", description="d", action="a", project_id="pr2"
+    )
+    applied = [{"kind": "rule", "op": "create", "asset_id": rid}]
+    record_promotion_evidence("pr2", applied, eval_score=0.9)
+    asset = rules_repo.get_rule(int(rid))
+    assert fp.promotion_score(_fp("rule", asset)) > 0
+
+
+def test_promote_idempotent(isolated_db):
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('pi', 'P', 'active')")
+        conn.commit()
+    rid = rules_repo.create_rule(
+        name="dup", rule_type="validation", description="d", action="a", project_id="pi"
+    )
+    asset = rules_repo.get_rule(int(rid))
+    fpv = _fp("rule", asset)
+    for _ in range(10):
+        fp.record_evidence(
+            fingerprint=fpv, kind="rule", asset_id=str(rid), project_id="pi", eval_score=0.95
+        )
+    promote_if_qualified("rule", fpv, asset)
+    promote_if_qualified("rule", fpv, asset)  # second call must NOT create a duplicate
+    assert (
+        len([s for s in fp.list_shared_bindings(enabled_only=True) if s["fingerprint"] == fpv]) == 1
+    )
