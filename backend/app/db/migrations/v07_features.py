@@ -34,8 +34,7 @@ def _migrate_116_super_agent_activity(conn):
         "ON super_agent_activity(session_id, recorded_at DESC)"
     )
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_saa_recorded_at "
-        "ON super_agent_activity(recorded_at)"
+        "CREATE INDEX IF NOT EXISTS idx_saa_recorded_at ON super_agent_activity(recorded_at)"
     )
 
 
@@ -92,12 +91,10 @@ def _migrate_117_model_discovery_cache(conn):
         )
     """)
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_mdc_expires_at "
-        "ON model_discovery_cache(expires_at)"
+        "CREATE INDEX IF NOT EXISTS idx_mdc_expires_at ON model_discovery_cache(expires_at)"
     )
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_mdc_discovered_at "
-        "ON model_discovery_cache(discovered_at)"
+        "CREATE INDEX IF NOT EXISTS idx_mdc_discovered_at ON model_discovery_cache(discovered_at)"
     )
 
 
@@ -123,9 +120,7 @@ def _migrate_119_session_name_and_yolo(conn) -> None:
             "ALTER TABLE project_sessions ADD COLUMN auto_title INTEGER NOT NULL DEFAULT 1"
         )
     if "yolo_mode" not in cols:
-        conn.execute(
-            "ALTER TABLE project_sessions ADD COLUMN yolo_mode INTEGER NOT NULL DEFAULT 0"
-        )
+        conn.execute("ALTER TABLE project_sessions ADD COLUMN yolo_mode INTEGER NOT NULL DEFAULT 0")
 
 
 def _migrate_120_project_allowed_accounts(conn) -> None:
@@ -185,15 +180,19 @@ def _migrate_121_project_forge_bindings(conn) -> None:
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS project_forge_bindings (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            project_id  TEXT NOT NULL
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id               TEXT NOT NULL
               REFERENCES projects(id) ON DELETE CASCADE,
-            kind        TEXT NOT NULL,
-            asset_id    TEXT NOT NULL,
-            role        TEXT,
-            enabled     INTEGER NOT NULL DEFAULT 1,
-            position    INTEGER NOT NULL DEFAULT 0,
-            created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            kind                     TEXT NOT NULL,
+            asset_id                 TEXT NOT NULL,
+            role                     TEXT,
+            enabled                  INTEGER NOT NULL DEFAULT 1,
+            position                 INTEGER NOT NULL DEFAULT 0,
+            created_at               TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            source_scope             TEXT NOT NULL DEFAULT 'project',
+            source_shared_binding_id INTEGER,
+            conflict_policy          TEXT NOT NULL DEFAULT 'local_wins',
+            fingerprint              TEXT,
             UNIQUE(project_id, kind, asset_id)
         )
         """
@@ -217,9 +216,7 @@ def _migrate_122_goal_loop(conn) -> None:
     """
     cols = {row[1] for row in conn.execute("PRAGMA table_info(project_sessions)").fetchall()}
     if "goal_loop_config" not in cols:
-        conn.execute(
-            "ALTER TABLE project_sessions ADD COLUMN goal_loop_config TEXT"
-        )
+        conn.execute("ALTER TABLE project_sessions ADD COLUMN goal_loop_config TEXT")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS goal_loop_iterations (
@@ -322,9 +319,7 @@ def _migrate_125_agent_conversations_user_id(conn) -> None:
     cursor = conn.execute("PRAGMA table_info(agent_conversations)")
     cols = {row[1] for row in cursor.fetchall()}
     if "user_id" not in cols:
-        conn.execute(
-            "ALTER TABLE agent_conversations ADD COLUMN user_id TEXT REFERENCES users(id)"
-        )
+        conn.execute("ALTER TABLE agent_conversations ADD COLUMN user_id TEXT REFERENCES users(id)")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_agent_conv_user_status "
         "ON agent_conversations(user_id, status, updated_at DESC)"
@@ -402,8 +397,7 @@ def _migrate_127_grd_ouroboros_artifacts(conn) -> None:
         "ON phase_reflections(phase_id, recorded_at DESC)"
     )
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_phase_reflections_verdict "
-        "ON phase_reflections(verdict)"
+        "CREATE INDEX IF NOT EXISTS idx_phase_reflections_verdict ON phase_reflections(verdict)"
     )
 
     conn.execute(
@@ -547,8 +541,7 @@ def _migrate_129_grd_evolve_runs(conn) -> None:
         "ON grd_evolve_runs(project_id, started_at DESC)"
     )
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_grd_evolve_runs_session "
-        "ON grd_evolve_runs(session_id)"
+        "CREATE INDEX IF NOT EXISTS idx_grd_evolve_runs_session ON grd_evolve_runs(session_id)"
     )
 
 
@@ -600,9 +593,7 @@ def _migrate_141_projects_tesserae(conn):
     cursor = conn.execute("PRAGMA table_info(projects)")
     cols = {row[1] for row in cursor.fetchall()}
     if "tesserae_project_root" not in cols:
-        conn.execute(
-            "ALTER TABLE projects ADD COLUMN tesserae_project_root TEXT"
-        )
+        conn.execute("ALTER TABLE projects ADD COLUMN tesserae_project_root TEXT")
 
 
 def _migrate_140_team_executions(conn):
@@ -726,15 +717,16 @@ def _migrate_137_harness_forge_pivot(conn):
     #    still has the pre-pivot shape (the fresh-install bundle creates
     #    the new shape directly, so this migration is a no-op there).
     ehs_old_shape = _column_exists(
-        conn, "execution_harness_snapshots", "artifact_json",
+        conn,
+        "execution_harness_snapshots",
+        "artifact_json",
     )
     if ehs_old_shape:
-        conn.execute(
-            "ALTER TABLE execution_harness_snapshots RENAME TO _ehs_old"
-        )
+        conn.execute("ALTER TABLE execution_harness_snapshots RENAME TO _ehs_old")
         from app.db.schema._harness_snapshots import (
             create_harness_snapshot_tables,
         )
+
         create_harness_snapshot_tables(conn)
         conn.execute(
             """INSERT INTO execution_harness_snapshots
@@ -748,15 +740,16 @@ def _migrate_137_harness_forge_pivot(conn):
 
     # 3. Rebuild ``harness_evolution_rounds`` — same idempotency probe.
     her_old_shape = _column_exists(
-        conn, "harness_evolution_rounds", "input_layers_json",
+        conn,
+        "harness_evolution_rounds",
+        "input_layers_json",
     )
     if her_old_shape:
-        conn.execute(
-            "ALTER TABLE harness_evolution_rounds RENAME TO _her_old"
-        )
+        conn.execute("ALTER TABLE harness_evolution_rounds RENAME TO _her_old")
         from app.db.schema._harness_evolution import (
             create_harness_evolution_tables,
         )
+
         create_harness_evolution_tables(conn)
         # Backfill rounds with NULL project_id — they predate the pivot
         # and stay as historical audit. New rounds carry project_id.
@@ -825,8 +818,7 @@ def _migrate_135_harness_evolution_dry_run(conn):
     # Probe: try inserting a sentinel under the new state to see if the
     # constraint already permits it. Cheaper than parsing sqlite_master.
     cur = conn.execute(
-        "SELECT sql FROM sqlite_master WHERE type='table' "
-        "AND name='harness_evolution_rounds'"
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='harness_evolution_rounds'"
     )
     row = cur.fetchone()
     if row is None:
@@ -835,6 +827,7 @@ def _migrate_135_harness_evolution_dry_run(conn):
         from app.db.schema._harness_evolution import (
             create_harness_evolution_tables,
         )
+
         create_harness_evolution_tables(conn)
         return
     if "'awaiting_approval'" in (row[0] or ""):
@@ -844,6 +837,7 @@ def _migrate_135_harness_evolution_dry_run(conn):
     from app.db.schema._harness_evolution import (
         create_harness_evolution_tables,
     )
+
     create_harness_evolution_tables(conn)
     conn.execute(
         """INSERT INTO harness_evolution_rounds (

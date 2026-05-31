@@ -84,3 +84,48 @@ def test_record_adoption_idempotent(isolated_db):
     fp.record_adoption(project_id="padopt", shared_binding_id=sbid)  # idempotent
     assert fp.is_adopted("padopt", sbid) is True
     assert fp.is_adopted("other", sbid) is False
+
+
+# ---------------------------------------------------------------------------
+# Task 3 — project_forge_bindings propagation columns
+# ---------------------------------------------------------------------------
+from app.database import get_connection
+from app.db import project_forge_bindings as bindings_repo
+
+
+def test_add_binding_records_source_scope(isolated_db):
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('ps', 'P', 'active')")
+        conn.commit()
+    bid = bindings_repo.add_binding(
+        "ps",
+        "rule",
+        "9",
+        source_scope="shared",
+        source_shared_binding_id=3,
+        fingerprint="fpX",
+    )
+    b = bindings_repo.get_binding(bid["id"])
+    assert b["source_scope"] == "shared"
+    assert b["source_shared_binding_id"] == 3
+    assert b["fingerprint"] == "fpX"
+
+
+def test_default_source_scope_is_project(isolated_db):
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('pp', 'P', 'active')")
+        conn.commit()
+    bid = bindings_repo.add_binding("pp", "rule", "1")
+    b = bindings_repo.get_binding(bid["id"])
+    assert b["source_scope"] == "project"
+    assert b["source_shared_binding_id"] is None
+    assert b.get("fingerprint") is None
+
+
+def test_list_bindings_returns_propagation_fields(isolated_db):
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('pl', 'P', 'active')")
+        conn.commit()
+    bindings_repo.add_binding("pl", "rule", "1", source_scope="shared", fingerprint="fpY")
+    rows = bindings_repo.list_bindings("pl")
+    assert rows and rows[0]["source_scope"] == "shared" and rows[0]["fingerprint"] == "fpY"

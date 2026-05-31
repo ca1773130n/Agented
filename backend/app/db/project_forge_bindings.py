@@ -24,6 +24,26 @@ from .connection import get_connection
 VALID_KINDS = {"rule", "skill", "hook", "command", "mcp_server", "plugin"}
 
 
+def _ensure_propagation_columns(conn) -> None:
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(project_forge_bindings)")}
+    if "source_scope" not in cols:
+        conn.execute(
+            "ALTER TABLE project_forge_bindings ADD COLUMN"
+            " source_scope TEXT NOT NULL DEFAULT 'project'"
+        )
+    if "source_shared_binding_id" not in cols:
+        conn.execute(
+            "ALTER TABLE project_forge_bindings ADD COLUMN source_shared_binding_id INTEGER"
+        )
+    if "conflict_policy" not in cols:
+        conn.execute(
+            "ALTER TABLE project_forge_bindings ADD COLUMN"
+            " conflict_policy TEXT NOT NULL DEFAULT 'local_wins'"
+        )
+    if "fingerprint" not in cols:
+        conn.execute("ALTER TABLE project_forge_bindings ADD COLUMN fingerprint TEXT")
+
+
 def _row_to_dict(row) -> dict:
     return {
         "id": row["id"],
@@ -34,6 +54,10 @@ def _row_to_dict(row) -> dict:
         "enabled": bool(row["enabled"]),
         "position": row["position"],
         "created_at": row["created_at"],
+        "source_scope": row["source_scope"],
+        "source_shared_binding_id": row["source_shared_binding_id"],
+        "conflict_policy": row["conflict_policy"],
+        "fingerprint": row["fingerprint"],
     }
 
 
@@ -45,12 +69,14 @@ def list_bindings(project_id: str, *, enabled_only: bool = False) -> List[dict]:
         + "ORDER BY kind ASC, position ASC, id ASC"
     )
     with get_connection() as conn:
+        _ensure_propagation_columns(conn)
         cursor = conn.execute(sql, (project_id,))
         return [_row_to_dict(row) for row in cursor.fetchall()]
 
 
 def get_binding(binding_id: int) -> Optional[dict]:
     with get_connection() as conn:
+        _ensure_propagation_columns(conn)
         cursor = conn.execute(
             "SELECT * FROM project_forge_bindings WHERE id = ?",
             (binding_id,),
@@ -67,11 +93,15 @@ def add_binding(
     role: Optional[str] = None,
     position: Optional[int] = None,
     enabled: bool = True,
+    source_scope: str = "project",
+    source_shared_binding_id: Optional[int] = None,
+    fingerprint: Optional[str] = None,
 ) -> dict:
     """Insert a binding. Idempotent: re-adding bumps position + re-enables."""
     if kind not in VALID_KINDS:
         raise ValueError(f"Unknown forge kind: {kind!r}")
     with get_connection() as conn:
+        _ensure_propagation_columns(conn)
         if position is None:
             cursor = conn.execute(
                 "SELECT COALESCE(MAX(position), -1) + 1 FROM project_forge_bindings "
@@ -82,14 +112,28 @@ def add_binding(
         conn.execute(
             """
             INSERT INTO project_forge_bindings
-                (project_id, kind, asset_id, role, enabled, position)
-            VALUES (?, ?, ?, ?, ?, ?)
+                (project_id, kind, asset_id, role, enabled, position,
+                 source_scope, source_shared_binding_id, fingerprint)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(project_id, kind, asset_id) DO UPDATE SET
-                role     = excluded.role,
-                enabled  = excluded.enabled,
-                position = excluded.position
+                role                    = excluded.role,
+                enabled                 = excluded.enabled,
+                position                = excluded.position,
+                source_scope            = excluded.source_scope,
+                source_shared_binding_id = excluded.source_shared_binding_id,
+                fingerprint             = excluded.fingerprint
             """,
-            (project_id, kind, asset_id, role, 1 if enabled else 0, position),
+            (
+                project_id,
+                kind,
+                asset_id,
+                role,
+                1 if enabled else 0,
+                position,
+                source_scope,
+                source_shared_binding_id,
+                fingerprint,
+            ),
         )
         conn.commit()
         cursor = conn.execute(
