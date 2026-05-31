@@ -98,3 +98,8 @@ backend/.secret_key
 # Tesserae per-project workspace (compiled graph + harness sessions —
 # regenerable from source, per-machine state).
 .tesserae/
+
+# VitePress docs site (build cache + output + local deps)
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+docs/node_modules/
