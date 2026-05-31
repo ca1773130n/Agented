@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { McpServer } from '../../services/api';
 import { mcpServerApi, ApiError } from '../../services/api';
 import ConfirmModal from '../base/ConfirmModal.vue';
 import { useToast } from '../../composables/useToast';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 const servers = ref<McpServer[]>([]);
@@ -43,7 +45,7 @@ async function loadServers() {
     const data = await mcpServerApi.list();
     servers.value = data.servers || [];
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load MCP servers';
+    const message = err instanceof ApiError ? err.message : t('settings.mcp.toastLoadFailed');
     showToast(message, 'error');
   } finally {
     isLoading.value = false;
@@ -52,7 +54,7 @@ async function loadServers() {
 
 async function addCustomServer() {
   if (!newServer.value.name.trim()) {
-    showToast('Name is required', 'error');
+    showToast(t('settings.mcp.toastNameRequired'), 'error');
     return;
   }
   try {
@@ -77,7 +79,7 @@ async function addCustomServer() {
     if (newServer.value.npm_package) payload.npm_package = newServer.value.npm_package;
 
     await mcpServerApi.create(payload as Partial<McpServer>);
-    showToast('MCP server added', 'success');
+    showToast(t('settings.mcp.toastAdded'), 'success');
     showAddForm.value = false;
     newServer.value = {
       name: '', display_name: '', description: '', server_type: 'stdio',
@@ -86,7 +88,7 @@ async function addCustomServer() {
     };
     await loadServers();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to add MCP server';
+    const message = err instanceof ApiError ? err.message : t('settings.mcp.toastAddFailed');
     showToast(message, 'error');
   }
 }
@@ -103,10 +105,10 @@ async function confirmDeleteServer() {
   if (!id) return;
   try {
     await mcpServerApi.delete(id);
-    showToast('MCP server deleted', 'success');
+    showToast(t('settings.mcp.toastDeleted'), 'success');
     await loadServers();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to delete MCP server';
+    const message = err instanceof ApiError ? err.message : t('settings.mcp.toastDeleteFailed');
     showToast(message, 'error');
   }
 }
@@ -119,48 +121,48 @@ onMounted(loadServers);
     <!-- Header -->
     <div class="section-header">
       <div class="header-text">
-        <h2>MCP Servers</h2>
-        <p class="section-subtitle">Model Context Protocol server catalog</p>
+        <h2>{{ t('settings.mcp.title') }}</h2>
+        <p class="section-subtitle">{{ t('settings.mcp.subtitle') }}</p>
       </div>
       <div class="header-actions">
         <div class="filter-group">
           <button
             :class="['filter-btn', { active: filter === 'all' }]"
             @click="filter = 'all'"
-          >All</button>
+          >{{ t('settings.mcp.filterAll') }}</button>
           <button
             :class="['filter-btn', { active: filter === 'presets' }]"
             @click="filter = 'presets'"
-          >Presets</button>
+          >{{ t('settings.mcp.filterPresets') }}</button>
           <button
             :class="['filter-btn', { active: filter === 'custom' }]"
             @click="filter = 'custom'"
-          >Custom</button>
+          >{{ t('settings.mcp.filterCustom') }}</button>
         </div>
         <button class="btn btn-primary" @click="showAddForm = !showAddForm">
-          {{ showAddForm ? 'Cancel' : '+ Add Custom' }}
+          {{ showAddForm ? t('common.cancel') : t('settings.mcp.addCustom') }}
         </button>
       </div>
     </div>
 
     <!-- Add Form -->
     <div v-if="showAddForm" class="add-form-card">
-      <h3>Add Custom MCP Server</h3>
+      <h3>{{ t('settings.mcp.addFormTitle') }}</h3>
       <div class="form-grid">
         <div class="form-group">
-          <label>Name *</label>
-          <input v-model="newServer.name" type="text" placeholder="e.g., my-custom-server" />
+          <label>{{ t('settings.mcp.nameLabel') }}</label>
+          <input v-model="newServer.name" type="text" :placeholder="t('settings.mcp.namePlaceholder')" />
         </div>
         <div class="form-group">
-          <label>Display Name</label>
-          <input v-model="newServer.display_name" type="text" placeholder="e.g., My Custom Server" />
+          <label>{{ t('settings.mcp.displayNameLabel') }}</label>
+          <input v-model="newServer.display_name" type="text" :placeholder="t('settings.mcp.displayNamePlaceholder')" />
         </div>
         <div class="form-group full-width">
-          <label>Description</label>
-          <textarea v-model="newServer.description" placeholder="What does this server do?" rows="2"></textarea>
+          <label>{{ t('settings.mcp.descriptionLabel') }}</label>
+          <textarea v-model="newServer.description" :placeholder="t('settings.mcp.descriptionPlaceholder')" rows="2"></textarea>
         </div>
         <div class="form-group">
-          <label>Transport</label>
+          <label>{{ t('settings.mcp.transportLabel') }}</label>
           <select v-model="newServer.server_type">
             <option value="stdio">stdio</option>
             <option value="http">http</option>
@@ -168,55 +170,55 @@ onMounted(loadServers);
           </select>
         </div>
         <div class="form-group">
-          <label>Category</label>
-          <input v-model="newServer.category" type="text" placeholder="e.g., development" />
+          <label>{{ t('settings.mcp.categoryLabel') }}</label>
+          <input v-model="newServer.category" type="text" :placeholder="t('settings.mcp.categoryPlaceholder')" />
         </div>
         <div v-if="newServer.server_type === 'stdio'" class="form-group">
-          <label>Command</label>
-          <input v-model="newServer.command" type="text" placeholder="e.g., npx" />
+          <label>{{ t('settings.mcp.commandLabel') }}</label>
+          <input v-model="newServer.command" type="text" :placeholder="t('settings.mcp.commandPlaceholder')" />
         </div>
         <div v-if="newServer.server_type === 'stdio'" class="form-group">
-          <label>Args (JSON array)</label>
+          <label>{{ t('settings.mcp.argsLabel') }}</label>
           <input v-model="newServer.args" type="text" placeholder='e.g., ["-y", "my-pkg"]' />
         </div>
         <div v-if="newServer.server_type !== 'stdio'" class="form-group full-width">
-          <label>URL</label>
-          <input v-model="newServer.url" type="text" placeholder="e.g., https://api.example.com/mcp" />
+          <label>{{ t('settings.mcp.urlLabel') }}</label>
+          <input v-model="newServer.url" type="text" :placeholder="t('settings.mcp.urlPlaceholder')" />
         </div>
         <div class="form-group full-width">
-          <label>Env JSON</label>
+          <label>{{ t('settings.mcp.envLabel') }}</label>
           <textarea v-model="newServer.env_json" placeholder='e.g., {"API_KEY": "${MY_API_KEY}"}' rows="2"></textarea>
         </div>
         <div class="form-group">
-          <label>Icon</label>
-          <input v-model="newServer.icon" type="text" placeholder="e.g., server" />
+          <label>{{ t('settings.mcp.iconLabel') }}</label>
+          <input v-model="newServer.icon" type="text" :placeholder="t('settings.mcp.iconPlaceholder')" />
         </div>
         <div class="form-group">
-          <label>NPM Package</label>
-          <input v-model="newServer.npm_package" type="text" placeholder="e.g., @scope/pkg" />
+          <label>{{ t('settings.mcp.npmLabel') }}</label>
+          <input v-model="newServer.npm_package" type="text" :placeholder="t('settings.mcp.npmPlaceholder')" />
         </div>
         <div class="form-group full-width">
-          <label>Documentation URL</label>
+          <label>{{ t('settings.mcp.docUrlLabel') }}</label>
           <input v-model="newServer.documentation_url" type="text" placeholder="https://..." />
         </div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-secondary" @click="showAddForm = false">Cancel</button>
-        <button class="btn btn-primary" @click="addCustomServer">Save Server</button>
+        <button class="btn btn-secondary" @click="showAddForm = false">{{ t('common.cancel') }}</button>
+        <button class="btn btn-primary" @click="addCustomServer">{{ t('settings.mcp.saveServer') }}</button>
       </div>
     </div>
 
     <!-- Loading -->
     <div v-if="isLoading" class="loading-state">
       <div class="loading-spinner"></div>
-      <span>Loading MCP servers...</span>
+      <span>{{ t('settings.mcp.loading') }}</span>
     </div>
 
     <!-- Empty -->
     <div v-else-if="filteredServers.length === 0" class="empty-state">
-      <p v-if="filter === 'custom'">No custom MCP servers yet. Click "Add Custom" to create one.</p>
-      <p v-else-if="filter === 'presets'">No preset MCP servers found.</p>
-      <p v-else>No MCP servers found.</p>
+      <p v-if="filter === 'custom'">{{ t('settings.mcp.emptyCustom') }}</p>
+      <p v-else-if="filter === 'presets'">{{ t('settings.mcp.emptyPresets') }}</p>
+      <p v-else>{{ t('settings.mcp.empty') }}</p>
     </div>
 
     <!-- Server Grid -->
@@ -233,12 +235,12 @@ onMounted(loadServers);
           <div class="server-badges">
             <span class="badge badge-transport">{{ server.server_type }}</span>
             <span class="badge badge-category">{{ server.category }}</span>
-            <span v-if="server.is_preset === 1" class="badge badge-preset">Preset</span>
+            <span v-if="server.is_preset === 1" class="badge badge-preset">{{ t('settings.mcp.presetBadge') }}</span>
           </div>
         </div>
         <div class="server-card-body">
           <h4 class="server-name">{{ server.display_name || server.name }}</h4>
-          <p class="server-description">{{ server.description || 'No description' }}</p>
+          <p class="server-description">{{ server.description || t('settings.mcp.noDescription') }}</p>
         </div>
         <div class="server-card-footer">
           <a
@@ -247,22 +249,22 @@ onMounted(loadServers);
             target="_blank"
             rel="noopener noreferrer"
             class="link-btn"
-          >Docs</a>
+          >{{ t('settings.mcp.docs') }}</a>
           <span v-if="server.npm_package" class="npm-label">{{ server.npm_package }}</span>
           <button
             v-if="server.is_preset === 0"
             class="btn btn-danger-sm"
             @click="deleteServer(server.id)"
-          >Delete</button>
+          >{{ t('common.delete') }}</button>
         </div>
       </div>
     </div>
 
     <ConfirmModal
       :open="showDeleteServerConfirm"
-      title="Delete MCP Server"
-      message="Delete this MCP server?"
-      confirm-label="Delete"
+      :title="t('settings.mcp.deleteServerTitle')"
+      :message="t('settings.mcp.deleteServerMessage')"
+      :confirm-label="t('common.delete')"
       variant="danger"
       @confirm="confirmDeleteServer"
       @cancel="showDeleteServerConfirm = false"

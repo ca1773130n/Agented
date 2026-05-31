@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { Marketplace, MarketplacePlugin, Plugin } from '../../services/api';
 import { marketplaceApi, pluginApi, pluginExportApi, ApiError } from '../../services/api';
 import ConfirmModal from '../base/ConfirmModal.vue';
@@ -15,6 +16,7 @@ const emit = defineEmits<{
   (e: 'show-add-modal'): void;
 }>();
 
+const { t } = useI18n();
 const showToast = useToast();
 
 // Selected marketplace for plugin management
@@ -61,7 +63,7 @@ async function selectMarketplace(marketplace: Marketplace) {
     const data = await marketplaceApi.listPlugins(marketplace.id);
     marketplacePlugins.value = data.plugins || [];
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load plugins';
+    const message = err instanceof ApiError ? err.message : t('settings.marketplaces.toastLoadPluginsFailed');
     showToast(message, 'error');
     marketplacePlugins.value = [];
   } finally {
@@ -83,14 +85,14 @@ async function confirmDeleteMarketplace() {
   if (!marketplace) return;
   try {
     await marketplaceApi.delete(marketplace.id);
-    showToast('Marketplace deleted', 'success');
+    showToast(t('settings.marketplaces.toastDeleted'), 'success');
     if (selectedMarketplace.value?.id === marketplace.id) {
       selectedMarketplace.value = null;
       marketplacePlugins.value = [];
     }
     emit('refreshed');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to delete marketplace';
+    const message = err instanceof ApiError ? err.message : t('settings.marketplaces.toastDeleteFailed');
     showToast(message, 'error');
   }
 }
@@ -108,10 +110,10 @@ async function confirmUninstallPlugin() {
   if (!plugin || !selectedMarketplace.value) return;
   try {
     await marketplaceApi.uninstallPlugin(selectedMarketplace.value.id, plugin.id);
-    showToast('Plugin uninstalled', 'success');
+    showToast(t('settings.marketplaces.toastUninstalled'), 'success');
     await selectMarketplace(selectedMarketplace.value);
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to uninstall plugin';
+    const message = err instanceof ApiError ? err.message : t('settings.marketplaces.toastUninstallFailed');
     showToast(message, 'error');
   }
 }
@@ -122,7 +124,7 @@ async function testConnection(marketplaceId: string) {
     const result = await pluginExportApi.testConnection(marketplaceId);
     testResults.value.set(marketplaceId, result);
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Connection test failed';
+    const message = err instanceof ApiError ? err.message : t('settings.marketplaces.toastConnectionFailed');
     testResults.value.set(marketplaceId, { connected: false, message });
   } finally {
     testingConnection.value = null;
@@ -131,7 +133,7 @@ async function testConnection(marketplaceId: string) {
 
 async function deployPlugin(marketplaceId: string) {
   if (!deployPluginId.value) {
-    showToast('Please select a plugin to deploy', 'error');
+    showToast(t('settings.marketplaces.toastSelectPlugin'), 'error');
     return;
   }
   isDeploying.value = true;
@@ -141,12 +143,12 @@ async function deployPlugin(marketplaceId: string) {
       marketplace_id: marketplaceId,
       version: deployVersion.value || undefined,
     });
-    showToast(`Deployed "${result.plugin_name}" successfully`, 'success');
+    showToast(t('settings.marketplaces.toastDeployed', { name: result.plugin_name }), 'success');
     showDeployForm.value = null;
     deployPluginId.value = '';
     deployVersion.value = '1.0.0';
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Deploy failed';
+    const message = err instanceof ApiError ? err.message : t('settings.marketplaces.toastDeployFailed');
     showToast(message, 'error');
   } finally {
     isDeploying.value = false;
@@ -163,9 +165,9 @@ async function refreshMarketplace(marketplace: Marketplace) {
     if (selectedMarketplace.value?.id === marketplace.id) {
       marketplacePlugins.value = data.plugins || [];
     }
-    showToast(`Found ${result.total} plugin(s) in "${marketplace.name}"`, 'success');
+    showToast(t('settings.marketplaces.toastDiscovered', { count: result.total, name: marketplace.name }), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to discover plugins';
+    const message = err instanceof ApiError ? err.message : t('settings.marketplaces.toastDiscoverFailed');
     showToast(message, 'error');
   } finally {
     refreshingMarketplace.value = null;
@@ -180,11 +182,11 @@ async function installPlugin(pluginName: string) {
       marketplace_id: selectedMarketplace.value.id,
       remote_plugin_name: pluginName,
     });
-    showToast(`Installed "${pluginName}"`, 'success');
+    showToast(t('settings.marketplaces.toastInstalled', { name: pluginName }), 'success');
     // Refresh both lists
     await refreshMarketplace(selectedMarketplace.value);
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to install plugin';
+    const message = err instanceof ApiError ? err.message : t('settings.marketplaces.toastInstallFailed');
     showToast(message, 'error');
   } finally {
     installingPlugin.value = null;
@@ -202,9 +204,9 @@ async function loadAvailablePlugins() {
 
 function getTypeLabel(type: string): string {
   switch (type) {
-    case 'git': return 'Git Repository';
-    case 'http': return 'HTTP Endpoint';
-    case 'local': return 'Local Directory';
+    case 'git': return t('settings.marketplaces.typeGit');
+    case 'http': return t('settings.marketplaces.typeHttp');
+    case 'local': return t('settings.marketplaces.typeLocal');
     default: return type;
   }
 }
@@ -219,18 +221,18 @@ loadAvailablePlugins();
       <!-- Marketplaces List -->
       <div class="card marketplaces-list">
         <div class="card-header">
-          <h3>Marketplaces</h3>
+          <h3>{{ t('settings.marketplaces.listTitle') }}</h3>
           <button class="btn btn-primary btn-sm" @click="emit('show-add-modal')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 5v14M5 12h14"/>
             </svg>
-            Add
+            {{ t('settings.marketplaces.addBtn') }}
           </button>
         </div>
 
         <div v-if="isLoading" class="loading-state">
           <div class="spinner"></div>
-          <span>Loading...</span>
+          <span>{{ t('common.loading') }}</span>
         </div>
 
         <div v-else-if="marketplaces.length === 0" class="empty-state">
@@ -239,8 +241,8 @@ loadAvailablePlugins();
               <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
             </svg>
           </div>
-          <p>No marketplaces configured</p>
-          <span>Add a marketplace to install plugins</span>
+          <p>{{ t('settings.marketplaces.emptyTitle') }}</p>
+          <span>{{ t('settings.marketplaces.emptySubtitle') }}</span>
         </div>
 
         <div v-else class="list">
@@ -253,7 +255,7 @@ loadAvailablePlugins();
             <div class="item-info">
               <div class="item-name">
                 {{ marketplace.name }}
-                <span v-if="marketplace.is_default" class="badge default">Default</span>
+                <span v-if="marketplace.is_default" class="badge default">{{ t('settings.marketplaces.defaultBadge') }}</span>
               </div>
               <div class="item-meta">{{ getTypeLabel(marketplace.type) }}</div>
             </div>
@@ -262,7 +264,7 @@ loadAvailablePlugins();
                 class="btn-icon btn-test"
                 @click.stop="testConnection(marketplace.id)"
                 :disabled="testingConnection === marketplace.id"
-                title="Test Connection"
+                :title="t('settings.marketplaces.testConnection')"
               >
                 <div v-if="testingConnection === marketplace.id" class="spinner-xs"></div>
                 <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -274,7 +276,7 @@ loadAvailablePlugins();
                 class="btn-icon btn-refresh"
                 @click.stop="refreshMarketplace(marketplace)"
                 :disabled="refreshingMarketplace === marketplace.id"
-                title="Refresh Plugins"
+                :title="t('settings.marketplaces.refreshPlugins')"
               >
                 <div v-if="refreshingMarketplace === marketplace.id" class="spinner-xs"></div>
                 <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -285,7 +287,7 @@ loadAvailablePlugins();
               <button
                 class="btn-icon btn-deploy"
                 @click.stop="showDeployForm = showDeployForm === marketplace.id ? null : marketplace.id"
-                title="Deploy Plugin"
+                :title="t('settings.marketplaces.deployPlugin')"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -296,7 +298,7 @@ loadAvailablePlugins();
               <button
                 class="btn-icon btn-danger"
                 @click.stop="deleteMarketplace(marketplace)"
-                title="Delete"
+                :title="t('common.delete')"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
@@ -310,40 +312,40 @@ loadAvailablePlugins();
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="test-icon">
                   <polyline points="20 6 9 17 4 12"/>
                 </svg>
-                Connected
+                {{ t('settings.marketplaces.connected') }}
               </span>
               <span v-else class="test-failure">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="test-icon">
                   <line x1="18" y1="6" x2="6" y2="18"/>
                   <line x1="6" y1="6" x2="18" y2="18"/>
                 </svg>
-                {{ testResults.get(marketplace.id)?.message || 'Connection failed' }}
+                {{ testResults.get(marketplace.id)?.message || t('settings.marketplaces.connectionFailed') }}
               </span>
             </div>
 
             <!-- Deploy form -->
             <div v-if="showDeployForm === marketplace.id" class="deploy-form" @click.stop>
               <div class="deploy-form-group">
-                <label>Plugin</label>
+                <label>{{ t('settings.marketplaces.deployPluginLabel') }}</label>
                 <select v-model="deployPluginId">
-                  <option value="">Select a plugin...</option>
+                  <option value="">{{ t('settings.marketplaces.deploySelectPlugin') }}</option>
                   <option v-for="plugin in availablePlugins" :key="plugin.id" :value="plugin.id">
                     {{ plugin.name }} (v{{ plugin.version }})
                   </option>
                 </select>
               </div>
               <div class="deploy-form-group">
-                <label>Version</label>
+                <label>{{ t('settings.marketplaces.deployVersionLabel') }}</label>
                 <input v-model="deployVersion" type="text" placeholder="1.0.0" />
               </div>
               <div class="deploy-form-actions">
-                <button class="btn btn-sm btn-secondary" @click="showDeployForm = null">Cancel</button>
+                <button class="btn btn-sm btn-secondary" @click="showDeployForm = null">{{ t('common.cancel') }}</button>
                 <button
                   class="btn btn-sm btn-primary"
                   :disabled="!deployPluginId || isDeploying"
                   @click="deployPlugin(marketplace.id)"
                 >
-                  {{ isDeploying ? 'Deploying...' : 'Deploy' }}
+                  {{ isDeploying ? t('settings.marketplaces.deploying') : t('settings.marketplaces.deploy') }}
                 </button>
               </div>
             </div>
@@ -359,19 +361,19 @@ loadAvailablePlugins();
               <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
             </svg>
           </div>
-          <p>Select a marketplace</p>
-          <span>View and manage installed plugins</span>
+          <p>{{ t('settings.marketplaces.selectMarketplaceTitle') }}</p>
+          <span>{{ t('settings.marketplaces.selectMarketplaceSubtitle') }}</span>
         </div>
 
         <template v-else>
           <div class="card-header">
-            <h3>{{ selectedMarketplace.name }} Plugins</h3>
+            <h3>{{ selectedMarketplace.name }} {{ t('settings.marketplaces.pluginsSuffix') }}</h3>
             <span class="url-display">{{ selectedMarketplace.url }}</span>
           </div>
 
           <div v-if="loadingPlugins" class="loading-state">
             <div class="spinner"></div>
-            <span>Loading plugins...</span>
+            <span>{{ t('settings.marketplaces.loadingPlugins') }}</span>
           </div>
 
           <div v-else-if="marketplacePlugins.length === 0" class="empty-state">
@@ -380,8 +382,8 @@ loadAvailablePlugins();
                 <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
               </svg>
             </div>
-            <p>No plugins installed</p>
-            <span>Plugins from this marketplace will appear here</span>
+            <p>{{ t('settings.marketplaces.noPluginsTitle') }}</p>
+            <span>{{ t('settings.marketplaces.noPluginsSubtitle') }}</span>
           </div>
 
           <div v-else class="list">
@@ -390,10 +392,10 @@ loadAvailablePlugins();
                 <div class="item-name">{{ plugin.remote_name }}</div>
                 <div class="item-meta">
                   <span v-if="plugin.version">v{{ plugin.version }}</span>
-                  <span v-if="plugin.installed_at">Installed {{ safeFormatDate(plugin.installed_at) }}</span>
+                  <span v-if="plugin.installed_at">{{ t('settings.marketplaces.installedAt', { date: safeFormatDate(plugin.installed_at) }) }}</span>
                 </div>
               </div>
-              <button class="btn-icon btn-danger" @click="uninstallPlugin(plugin)" title="Uninstall">
+              <button class="btn-icon btn-danger" @click="uninstallPlugin(plugin)" :title="t('settings.marketplaces.uninstall')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
                 </svg>
@@ -404,11 +406,11 @@ loadAvailablePlugins();
           <!-- Available Plugins (from discovery) -->
           <div v-if="discoveredPlugins.length > 0" class="discovered-section">
             <div class="card-header discovered-header">
-              <h3>Available Plugins</h3>
-              <span class="plugin-count">{{ discoveredPlugins.filter(p => !p.installed).length }} available</span>
+              <h3>{{ t('settings.marketplaces.availablePluginsTitle') }}</h3>
+              <span class="plugin-count">{{ t('settings.marketplaces.availableCount', { count: discoveredPlugins.filter(p => !p.installed).length }) }}</span>
             </div>
             <div v-if="discoveredPlugins.filter(p => !p.installed).length === 0" class="empty-state-inline">
-              <p class="muted">All plugins are already installed</p>
+              <p class="muted">{{ t('settings.marketplaces.allInstalled') }}</p>
             </div>
             <div v-else class="list">
               <div v-for="plugin in discoveredPlugins.filter(p => !p.installed)" :key="plugin.name" class="list-item plugin-item">
@@ -424,7 +426,7 @@ loadAvailablePlugins();
                   :disabled="installingPlugin === plugin.name"
                   @click="installPlugin(plugin.name)"
                 >
-                  {{ installingPlugin === plugin.name ? 'Installing...' : 'Install' }}
+                  {{ installingPlugin === plugin.name ? t('settings.marketplaces.installing') : t('settings.marketplaces.install') }}
                 </button>
               </div>
             </div>
@@ -435,9 +437,9 @@ loadAvailablePlugins();
 
     <ConfirmModal
       :open="showDeleteMarketplaceConfirm"
-      title="Delete Marketplace"
-      :message="pendingDeleteMarketplace ? 'Delete \u201C' + pendingDeleteMarketplace.name + '\u201D? This will also remove installed plugin references.' : 'Delete this marketplace?'"
-      confirm-label="Delete"
+      :title="t('settings.marketplaces.deleteTitle')"
+      :message="pendingDeleteMarketplace ? t('settings.marketplaces.deleteMessage', { name: pendingDeleteMarketplace.name }) : t('settings.marketplaces.deleteMessageFallback')"
+      :confirm-label="t('common.delete')"
       variant="danger"
       @confirm="confirmDeleteMarketplace"
       @cancel="showDeleteMarketplaceConfirm = false"
@@ -445,9 +447,9 @@ loadAvailablePlugins();
 
     <ConfirmModal
       :open="showUninstallConfirm"
-      title="Uninstall Plugin"
-      :message="pendingUninstallPlugin ? 'Uninstall \u201C' + pendingUninstallPlugin.remote_name + '\u201D?' : 'Uninstall this plugin?'"
-      confirm-label="Uninstall"
+      :title="t('settings.marketplaces.uninstallTitle')"
+      :message="pendingUninstallPlugin ? t('settings.marketplaces.uninstallMessage', { name: pendingUninstallPlugin.remote_name }) : t('settings.marketplaces.uninstallMessageFallback')"
+      :confirm-label="t('settings.marketplaces.uninstall')"
       variant="danger"
       @confirm="confirmUninstallPlugin"
       @cancel="showUninstallConfirm = false"

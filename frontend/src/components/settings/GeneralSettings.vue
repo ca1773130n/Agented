@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, inject, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import type { MonitoringConfig } from '../../services/api';
 import { settingsApi, monitoringApi, listGroupedBackends, getGroupedBackend, ApiError } from '../../services/api';
@@ -7,6 +8,7 @@ import { useToast } from '../../composables/useToast';
 import { useTourMachine } from '../../composables/useTourMachine';
 import DirectoryBrowser from '../base/DirectoryBrowser.vue';
 
+const { t } = useI18n();
 const showToast = useToast();
 const setTourGuide = inject<(msg: string | null) => void>('setTourGuide', () => {});
 const tourMachine = useTourMachine();
@@ -29,11 +31,11 @@ const showDirectoryBrowser = ref(false);
 // Tour guide — update bottom bar when user interacts with workspace settings
 watch(showDirectoryBrowser, (open) => {
   if (open) {
-    setTourGuide('Browse to select your workspace directory. You can create a new folder if needed.');
+    setTourGuide(t('settings.general.tourGuideBrowse'));
   } else if (tourMachine.isActive.value) {
     setTourGuide(workspaceRoot.value
-      ? 'Workspace path set. Click Save to confirm, then the tour will advance automatically.'
-      : 'Enter or browse for the workspace root directory where project repos will be cloned.');
+      ? t('settings.general.tourGuideSet')
+      : t('settings.general.tourGuideEnter'));
   }
 });
 
@@ -79,9 +81,9 @@ async function saveWorkspaceRoot() {
   try {
     await settingsApi.set('workspace_root', workspaceRoot.value);
     originalWorkspaceRoot.value = workspaceRoot.value;
-    showToast('Workspace root saved', 'success');
+    showToast(t('settings.general.toastWorkspaceSaved'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to save workspace root';
+    const message = err instanceof ApiError ? err.message : t('settings.general.toastWorkspaceFailed');
     showToast(message, 'error');
   } finally {
     savingGeneral.value = false;
@@ -103,9 +105,9 @@ async function saveAutoUpdateSetting() {
   try {
     await settingsApi.set('marketplace_auto_update', String(marketplaceAutoUpdate.value));
     originalAutoUpdate.value = marketplaceAutoUpdate.value;
-    showToast('Auto-update setting saved', 'success');
+    showToast(t('settings.general.toastAutoUpdateSaved'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to save setting';
+    const message = err instanceof ApiError ? err.message : t('settings.general.toastSettingFailed');
     showToast(message, 'error');
   }
 }
@@ -125,12 +127,12 @@ async function saveYoloMode() {
     await settingsApi.set('agent_yolo_mode', String(yoloMode.value));
     showToast(
       yoloMode.value
-        ? 'YOLO mode enabled — agents run with tool privileges'
-        : 'YOLO mode disabled — agents fall back to CLIProxyAPI',
+        ? t('settings.general.toastYoloEnabled')
+        : t('settings.general.toastYoloDisabled'),
       'success',
     );
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to save YOLO mode';
+    const message = err instanceof ApiError ? err.message : t('settings.general.toastYoloFailed');
     showToast(message, 'error');
     // Revert the optimistic flip so the UI reflects the persisted value.
     yoloMode.value = !yoloMode.value;
@@ -163,12 +165,12 @@ async function saveSessionDefaultYolo() {
     );
     showToast(
       sessionDefaultYolo.value
-        ? 'Yolo toggle will be on by default in the start-session dialog'
-        : 'Yolo toggle will be off by default in the start-session dialog',
+        ? t('settings.general.toastSessionYoloOn')
+        : t('settings.general.toastSessionYoloOff'),
       'success',
     );
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to save setting';
+    const message = err instanceof ApiError ? err.message : t('settings.general.toastSettingFailed');
     showToast(message, 'error');
     sessionDefaultYolo.value = !sessionDefaultYolo.value;
   }
@@ -219,9 +221,9 @@ async function saveMonitoringConfig() {
   try {
     await monitoringApi.setConfig(monitoringConfig.value);
     originalMonitoringConfig.value = JSON.stringify(monitoringConfig.value);
-    showToast('Monitoring settings saved', 'success');
+    showToast(t('settings.general.toastMonitoringSaved'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to save monitoring settings';
+    const message = err instanceof ApiError ? err.message : t('settings.general.toastMonitoringFailed');
     showToast(message, 'error');
   } finally {
     savingMonitoring.value = false;
@@ -259,28 +261,28 @@ onMounted(() => {
   <div class="tab-content">
     <div class="card" data-tour="workspace-root">
       <div class="card-header">
-        <h3>Project Workspace</h3>
+        <h3>{{ t('settings.general.workspaceTitle') }}</h3>
       </div>
       <div class="card-body">
         <div class="form-group">
-          <label>Workspace Root</label>
-          <p class="form-help">Root directory where GitHub repos are cloned for project team execution.</p>
+          <label>{{ t('settings.general.workspaceRootLabel') }}</label>
+          <p class="form-help">{{ t('settings.general.workspaceRootHelp') }}</p>
           <div class="input-with-browse">
             <input
               v-model="workspaceRoot"
               type="text"
               class="form-input"
-              placeholder="/home/user/workspace"
+              :placeholder="t('settings.general.workspaceRootPlaceholder')"
             />
             <button
               type="button"
               class="btn btn-secondary browse-btn"
               @click="showDirectoryBrowser = true"
             >
-              Browse
+              {{ t('common.browse') }}
             </button>
           </div>
-          <p class="form-hint">Projects will be cloned to: <code>{{ workspaceRoot || '{workspace_root}' }}/projects/{project_name}/</code></p>
+          <p class="form-hint">{{ t('settings.general.cloneHint') }} <code>{{ workspaceRoot || '{workspace_root}' }}/projects/{project_name}/</code></p>
         </div>
         <div class="form-actions">
           <button
@@ -288,7 +290,7 @@ onMounted(() => {
             :disabled="savingGeneral || workspaceRoot === originalWorkspaceRoot"
             @click="saveWorkspaceRoot"
           >
-            {{ savingGeneral ? 'Saving...' : 'Save' }}
+            {{ savingGeneral ? t('settings.general.saving') : t('common.save') }}
           </button>
         </div>
       </div>
@@ -296,14 +298,14 @@ onMounted(() => {
 
     <div class="card" style="margin-top: 1.5rem;">
       <div class="card-header">
-        <h3>Marketplace</h3>
+        <h3>{{ t('settings.general.marketplaceTitle') }}</h3>
       </div>
       <div class="card-body">
         <div class="form-group toggle-group">
           <label class="toggle-label">
             <span class="toggle-text">
-              <strong>Auto-refresh on tab open</strong>
-              <span class="toggle-description">Automatically refresh marketplace data when switching to the Marketplaces tab</span>
+              <strong>{{ t('settings.general.autoRefreshTitle') }}</strong>
+              <span class="toggle-description">{{ t('settings.general.autoRefreshDesc') }}</span>
             </span>
             <button
               :class="['toggle-switch', { active: marketplaceAutoUpdate }]"
@@ -318,20 +320,19 @@ onMounted(() => {
 
     <div class="card" style="margin-top: 1.5rem;">
       <div class="card-header">
-        <h3>Agent Execution</h3>
+        <h3>{{ t('settings.general.agentExecutionTitle') }}</h3>
       </div>
       <div class="card-body">
         <div class="form-group toggle-group">
           <label class="toggle-label">
             <span class="toggle-text">
-              <strong>YOLO mode</strong>
+              <strong>{{ t('settings.general.yoloTitle') }}</strong>
               <span class="toggle-description">
-                When ON (default), sketches and agent-driven sessions invoke the
-                <code>claude</code>/<code>codex</code>/<code>gemini</code> CLIs directly with
-                tool privileges so agents can read files, run shell commands, and edit code in
-                the project worktree. When OFF, those flows fall back to CLIProxyAPI for pure
-                token chat (no tool use). The ai-accounts chat panel keeps using CLIProxyAPI by
-                default regardless of this toggle.
+                <i18n-t keypath="settings.general.yoloDesc" scope="global">
+                  <template #claude><code>claude</code></template>
+                  <template #codex><code>codex</code></template>
+                  <template #gemini><code>gemini</code></template>
+                </i18n-t>
               </span>
             </span>
             <button
@@ -347,21 +348,18 @@ onMounted(() => {
 
     <div class="card" style="margin-top: 1.5rem;">
       <div class="card-header">
-        <h3>Interactive Sessions</h3>
+        <h3>{{ t('settings.general.interactiveSessionsTitle') }}</h3>
       </div>
       <div class="card-body">
         <div class="form-group toggle-group">
           <label class="toggle-label">
             <span class="toggle-text">
-              <strong>Default Yolo on session start</strong>
+              <strong>{{ t('settings.general.sessionYoloTitle') }}</strong>
               <span class="toggle-description">
-                When ON, the Yolo toggle in the
-                "Start a new session" dialog is pre-checked. Yolo sessions append
-                <code>--dangerously-skip-permissions</code> to the
-                <code>claude</code> command and (in a follow-up) bypass the
-                per-project allowed-accounts whitelist. Distinct from the Agent
-                Execution YOLO above, which controls sketches and agent-driven
-                flows.
+                <i18n-t keypath="settings.general.sessionYoloDesc" scope="global">
+                  <template #flag><code>--dangerously-skip-permissions</code></template>
+                  <template #claude><code>claude</code></template>
+                </i18n-t>
               </span>
             </span>
             <button
@@ -381,12 +379,12 @@ onMounted(() => {
     <!-- Token Monitoring Section -->
     <div class="card" style="margin-top: 1.5rem;" data-tour="token-monitoring">
       <div class="card-header">
-        <h3>Token Monitoring</h3>
+        <h3>{{ t('settings.general.tokenMonitoringTitle') }}</h3>
       </div>
       <div class="card-body">
         <div v-if="loadingMonitoring" class="loading-state" style="padding: 1.5rem;">
           <div class="spinner"></div>
-          <span>Loading monitoring settings...</span>
+          <span>{{ t('settings.general.loadingMonitoring') }}</span>
         </div>
 
         <template v-else>
@@ -394,8 +392,8 @@ onMounted(() => {
           <div class="form-group toggle-group">
             <label class="toggle-label">
               <span class="toggle-text">
-                <strong>Enable Rate Limit Monitoring</strong>
-                <span class="toggle-description">Periodically poll token usage to track rate limit consumption and display gauges on the dashboard</span>
+                <strong>{{ t('settings.general.enableMonitoringTitle') }}</strong>
+                <span class="toggle-description">{{ t('settings.general.enableMonitoringDesc') }}</span>
               </span>
               <button
                 :class="['toggle-switch', { active: monitoringConfig.enabled }]"
@@ -408,26 +406,26 @@ onMounted(() => {
 
           <!-- Polling period selector -->
           <div class="form-group" style="margin-top: 1rem;">
-            <label>Polling Period</label>
+            <label>{{ t('settings.general.pollingPeriodLabel') }}</label>
             <select
               v-model.number="monitoringConfig.polling_minutes"
               :disabled="!monitoringConfig.enabled"
               class="monitoring-select"
             >
-              <option :value="1">Every 1 minute</option>
-              <option :value="5">Every 5 minutes</option>
-              <option :value="15">Every 15 minutes</option>
-              <option :value="30">Every 30 minutes</option>
-              <option :value="60">Every 60 minutes</option>
+              <option :value="1">{{ t('settings.general.pollingEvery1') }}</option>
+              <option :value="5">{{ t('settings.general.pollingEvery5') }}</option>
+              <option :value="15">{{ t('settings.general.pollingEvery15') }}</option>
+              <option :value="30">{{ t('settings.general.pollingEvery30') }}</option>
+              <option :value="60">{{ t('settings.general.pollingEvery60') }}</option>
             </select>
-            <span class="help-text">How often to poll token usage data from backend accounts</span>
+            <span class="help-text">{{ t('settings.general.pollingHelp') }}</span>
           </div>
 
           <!-- Per-account toggles -->
           <div class="form-group" style="margin-top: 1rem;">
-            <label>Monitored Accounts</label>
+            <label>{{ t('settings.general.monitoredAccountsLabel') }}</label>
             <div v-if="backendAccounts.length === 0" class="monitoring-no-accounts">
-              No AI backend accounts configured. Add accounts in AI Backends to enable per-account monitoring.
+              {{ t('settings.general.noAccounts') }}
             </div>
             <div v-else class="monitoring-accounts-list">
               <div
@@ -457,7 +455,7 @@ onMounted(() => {
               :disabled="savingMonitoring || !isMonitoringDirty()"
               @click="saveMonitoringConfig"
             >
-              {{ savingMonitoring ? 'Saving...' : 'Save Monitoring Settings' }}
+              {{ savingMonitoring ? t('settings.general.saving') : t('settings.general.saveMonitoring') }}
             </button>
           </div>
         </template>
@@ -467,15 +465,14 @@ onMounted(() => {
     <!-- OB-35a: Restart Setup Guide -->
     <div class="card" style="margin-top: 1.5rem;">
       <div class="card-header">
-        <h3>Setup Guide</h3>
+        <h3>{{ t('settings.general.setupGuideTitle') }}</h3>
       </div>
       <div class="card-body">
         <p class="form-help" style="margin-bottom: 1rem;">
-          Restart the onboarding tour to re-run through workspace setup and account configuration.
-          Your existing configuration will not be affected.
+          {{ t('settings.general.setupGuideDesc') }}
         </p>
         <button type="button" class="btn btn-secondary restart-tour-btn" @click="handleRestartTour">
-          Restart Setup Guide
+          {{ t('settings.general.restartSetupGuide') }}
         </button>
       </div>
     </div>

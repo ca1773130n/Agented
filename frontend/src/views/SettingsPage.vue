@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import type { Marketplace } from '../services/api';
 import { marketplaceApi, ApiError } from '../services/api';
@@ -15,6 +16,7 @@ import { useToast } from '../composables/useToast';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
 
+const { t } = useI18n();
 const showToast = useToast();
 const route = useRoute();
 
@@ -84,7 +86,7 @@ async function loadMarketplaces() {
     const data = await marketplaceApi.list();
     marketplaces.value = data.marketplaces || [];
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to load marketplaces';
+    const message = err instanceof ApiError ? err.message : t('settings.page.toastLoadFailed');
     showToast(message, 'error');
   } finally {
     isLoading.value = false;
@@ -93,17 +95,17 @@ async function loadMarketplaces() {
 
 async function addMarketplace() {
   if (!newMarketplace.value.name.trim() || !newMarketplace.value.url.trim()) {
-    showToast('Name and URL are required', 'error');
+    showToast(t('settings.page.toastNameUrlRequired'), 'error');
     return;
   }
   try {
     await marketplaceApi.create(newMarketplace.value);
-    showToast('Marketplace added successfully', 'success');
+    showToast(t('settings.page.toastAdded'), 'success');
     showAddModal.value = false;
     newMarketplace.value = { name: '', url: '', type: 'git', is_default: false };
     await loadMarketplaces();
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to add marketplace';
+    const message = err instanceof ApiError ? err.message : t('settings.page.toastAddFailed');
     showToast(message, 'error');
   }
 }
@@ -142,7 +144,7 @@ onUnmounted(() => {
 
 <template>
   <div class="settings-page">
-    <PageHeader title="Settings" subtitle="Application settings and configuration" />
+    <PageHeader :title="t('settings.title')" :subtitle="t('settings.subtitle')" />
 
     <!-- Tabs -->
     <div class="tabs">
@@ -150,44 +152,44 @@ onUnmounted(() => {
         :class="['tab', { active: activeTab === 'general' }]"
         @click="activeTab = 'general'"
       >
-        General
+        {{ t('settings.tabs.general') }}
       </button>
       <button
         :class="['tab', { active: activeTab === 'security' }]"
         @click="activeTab = 'security'"
       >
-        Security
+        {{ t('settings.tabs.security') }}
       </button>
       <button
         :class="['tab', { active: activeTab === 'marketplaces' }]"
         @click="activeTab = 'marketplaces'"
       >
-        Plugin Marketplaces
+        {{ t('settings.tabs.marketplaces') }}
       </button>
       <button
         :class="['tab', { active: activeTab === 'harness' }]"
         @click="activeTab = 'harness'"
       >
-        Harness Plugin
+        {{ t('settings.tabs.harness') }}
       </button>
       <button
         :class="['tab', { active: activeTab === 'mcp' }]"
         @click="activeTab = 'mcp'"
       >
-        MCP Servers
+        {{ t('settings.tabs.mcp') }}
       </button>
       <button
         :class="['tab', { active: activeTab === 'grd' }]"
         @click="activeTab = 'grd'"
       >
-        GRD Planning
+        {{ t('settings.tabs.grd') }}
       </button>
       <button
         :class="['tab', { active: activeTab === 'memory' }]"
         @click="activeTab = 'memory'"
         data-testid="settings-tab-memory"
       >
-        Memory System
+        {{ t('settings.tabs.memory') }}
       </button>
     </div>
 
@@ -210,36 +212,36 @@ onUnmounted(() => {
       <div v-if="showAddModal" ref="addModalRef" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-add-marketplace-settings" tabindex="-1" @click.self="showAddModal = false" @keydown.escape="showAddModal = false">
         <div class="modal">
           <div class="modal-header">
-            <h2 id="modal-title-add-marketplace-settings">Add Marketplace</h2>
+            <h2 id="modal-title-add-marketplace-settings">{{ t('settings.addMarketplaceModal.title') }}</h2>
             <button class="modal-close" @click="showAddModal = false">&times;</button>
           </div>
           <div class="modal-body">
             <div class="form-group">
-              <label for="marketplace-name">Name *</label>
-              <input id="marketplace-name" v-model="newMarketplace.name" type="text" placeholder="e.g., Harness Plugins" />
+              <label for="marketplace-name">{{ t('settings.addMarketplaceModal.nameLabel') }}</label>
+              <input id="marketplace-name" v-model="newMarketplace.name" type="text" :placeholder="t('settings.addMarketplaceModal.namePlaceholder')" />
             </div>
             <div class="form-group">
-              <label for="marketplace-url">URL *</label>
-              <input id="marketplace-url" v-model="newMarketplace.url" type="text" placeholder="e.g., https://github.com/org/repo or enterprise URL" />
+              <label for="marketplace-url">{{ t('settings.addMarketplaceModal.urlLabel') }}</label>
+              <input id="marketplace-url" v-model="newMarketplace.url" type="text" :placeholder="t('settings.addMarketplaceModal.urlPlaceholder')" />
             </div>
             <div class="form-group">
-              <label for="marketplace-type">Type</label>
+              <label for="marketplace-type">{{ t('settings.addMarketplaceModal.typeLabel') }}</label>
               <select id="marketplace-type" v-model="newMarketplace.type">
-                <option value="git">Git Repository</option>
-                <option value="http">HTTP Endpoint</option>
-                <option value="local">Local Directory</option>
+                <option value="git">{{ t('settings.addMarketplaceModal.typeGit') }}</option>
+                <option value="http">{{ t('settings.addMarketplaceModal.typeHttp') }}</option>
+                <option value="local">{{ t('settings.addMarketplaceModal.typeLocal') }}</option>
               </select>
             </div>
             <div class="form-group checkbox">
               <label for="marketplace-default">
                 <input id="marketplace-default" v-model="newMarketplace.is_default" type="checkbox" />
-                Set as default marketplace
+                {{ t('settings.addMarketplaceModal.setDefault') }}
               </label>
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" @click="showAddModal = false">Cancel</button>
-            <button class="btn btn-primary" @click="addMarketplace">Add Marketplace</button>
+            <button class="btn btn-secondary" @click="showAddModal = false">{{ t('common.cancel') }}</button>
+            <button class="btn btn-primary" @click="addMarketplace">{{ t('settings.addMarketplaceModal.submit') }}</button>
           </div>
         </div>
       </div>

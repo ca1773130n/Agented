@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { settingsApi, ApiError } from '../../services/api';
 import { useToast } from '../../composables/useToast';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 const autoInitEnabled = ref(true);
@@ -31,9 +33,9 @@ async function saveSettings() {
     await settingsApi.set('grd.auto_init_enabled', String(autoInitEnabled.value));
     await settingsApi.set('grd.sync_on_complete', String(syncOnSessionComplete.value));
     await settingsApi.set('grd.default_verification_level', defaultVerificationLevel.value);
-    showToast('GRD settings saved', 'success');
+    showToast(t('settings.grd.toastSaved'), 'success');
   } catch (e) {
-    const message = e instanceof ApiError ? e.message : 'Failed to save GRD settings';
+    const message = e instanceof ApiError ? e.message : t('settings.grd.toastSaveFailed');
     showToast(message, 'error');
   } finally {
     isSaving.value = false;
@@ -47,20 +49,20 @@ onMounted(loadSettings);
   <div class="tab-content">
     <div v-if="isLoading" class="loading-state">
       <div class="spinner"></div>
-      <span>Loading GRD settings...</span>
+      <span>{{ t('settings.grd.loading') }}</span>
     </div>
 
     <template v-else>
       <div class="card">
         <div class="card-header">
-          <h3>Project Initialization</h3>
+          <h3>{{ t('settings.grd.projectInitTitle') }}</h3>
         </div>
         <div class="card-body">
           <div class="form-group toggle-group">
             <label class="toggle-label">
               <span class="toggle-text">
-                <strong>Auto-initialize GRD on project creation</strong>
-                <span class="toggle-description">Automatically run map-codebase and new-project when a project is created</span>
+                <strong>{{ t('settings.grd.autoInitTitle') }}</strong>
+                <span class="toggle-description">{{ t('settings.grd.autoInitDesc') }}</span>
               </span>
               <button
                 :class="['toggle-switch', { active: autoInitEnabled }]"
@@ -75,14 +77,14 @@ onMounted(loadSettings);
 
       <div class="card" style="margin-top: 1.5rem;">
         <div class="card-header">
-          <h3>Sync Behavior</h3>
+          <h3>{{ t('settings.grd.syncBehaviorTitle') }}</h3>
         </div>
         <div class="card-body">
           <div class="form-group toggle-group">
             <label class="toggle-label">
               <span class="toggle-text">
-                <strong>Sync on session completion</strong>
-                <span class="toggle-description">Automatically sync .planning/ files to database when a planning session completes</span>
+                <strong>{{ t('settings.grd.syncOnCompleteTitle') }}</strong>
+                <span class="toggle-description">{{ t('settings.grd.syncOnCompleteDesc') }}</span>
               </span>
               <button
                 :class="['toggle-switch', { active: syncOnSessionComplete }]"
@@ -97,23 +99,23 @@ onMounted(loadSettings);
 
       <div class="card" style="margin-top: 1.5rem;">
         <div class="card-header">
-          <h3>Default Verification Level</h3>
+          <h3>{{ t('settings.grd.verificationLevelTitle') }}</h3>
         </div>
         <div class="card-body">
           <div class="form-group">
             <select v-model="defaultVerificationLevel" class="form-select">
-              <option value="sanity">Sanity</option>
-              <option value="proxy">Proxy</option>
-              <option value="deferred">Deferred</option>
+              <option value="sanity">{{ t('settings.grd.verificationSanity') }}</option>
+              <option value="proxy">{{ t('settings.grd.verificationProxy') }}</option>
+              <option value="deferred">{{ t('settings.grd.verificationDeferred') }}</option>
             </select>
-            <span class="help-text">Default verification level for new phases</span>
+            <span class="help-text">{{ t('settings.grd.verificationHelp') }}</span>
           </div>
         </div>
       </div>
 
       <div class="form-actions" style="margin-top: 1.5rem;">
         <button class="btn btn-primary" :disabled="isSaving" @click="saveSettings">
-          {{ isSaving ? 'Saving...' : 'Save GRD Settings' }}
+          {{ isSaving ? t('settings.grd.saving') : t('settings.grd.saveSettings') }}
         </button>
       </div>
     </template>

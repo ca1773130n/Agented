@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { Marketplace, MarketplacePlugin } from '../../services/api';
 import { settingsApi, marketplaceApi, pluginApi, pluginExportApi, ApiError } from '../../services/api';
 import SyncStatusPanel from '../plugins/SyncStatusPanel.vue';
@@ -9,6 +10,7 @@ defineProps<{
   marketplaces: Marketplace[];
 }>();
 
+const { t } = useI18n();
 const showToast = useToast();
 
 // Harness plugin settings
@@ -61,7 +63,7 @@ async function onHarnessMarketplaceChange(marketplaceId: string) {
 
 async function saveHarnessSettings() {
   if (!harnessMarketplaceId.value || !harnessPluginName.value) {
-    showToast('Please select a marketplace and plugin', 'error');
+    showToast(t('settings.harness.toastSelectMarketplacePlugin'), 'error');
     return;
   }
   savingHarnessSettings.value = true;
@@ -70,9 +72,9 @@ async function saveHarnessSettings() {
       marketplace_id: harnessMarketplaceId.value,
       plugin_name: harnessPluginName.value,
     });
-    showToast('Harness plugin settings saved', 'success');
+    showToast(t('settings.harness.toastSaved'), 'success');
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : 'Failed to save settings';
+    const message = err instanceof ApiError ? err.message : t('settings.harness.toastSaveFailed');
     showToast(message, 'error');
   } finally {
     savingHarnessSettings.value = false;
@@ -121,44 +123,43 @@ onMounted(() => {
   <div class="tab-content">
     <div class="card" data-tour="harness-plugins">
       <div class="card-header">
-        <h3>Harness Integration Plugin</h3>
+        <h3>{{ t('settings.harness.title') }}</h3>
       </div>
       <div class="card-body">
         <p class="description">
-          Select which marketplace plugin to use for harness integration.
-          This plugin will be used when loading skills from or deploying to the marketplace.
+          {{ t('settings.harness.description') }}
         </p>
 
         <div v-if="loadingHarnessSettings" class="loading-state">
           <div class="spinner"></div>
-          <span>Loading settings...</span>
+          <span>{{ t('settings.harness.loadingSettings') }}</span>
         </div>
 
         <template v-else>
           <div class="form-group">
-            <label>Marketplace</label>
+            <label>{{ t('settings.harness.marketplaceLabel') }}</label>
             <select
               :value="harnessMarketplaceId || ''"
               @change="onHarnessMarketplaceChange(($event.target as HTMLSelectElement).value)"
             >
-              <option value="">Select a marketplace...</option>
+              <option value="">{{ t('settings.harness.selectMarketplace') }}</option>
               <option v-for="mp in marketplaces" :key="mp.id" :value="mp.id">
                 {{ mp.name }}
               </option>
             </select>
             <span v-if="marketplaces.length === 0" class="help-text">
-              No marketplaces configured. Add one in the Plugin Marketplaces tab.
+              {{ t('settings.harness.noMarketplaces') }}
             </span>
           </div>
 
           <div v-if="harnessMarketplaceId" class="form-group">
-            <label>Plugin</label>
+            <label>{{ t('settings.harness.pluginLabel') }}</label>
             <select
               v-if="harnessPluginsList.length > 0"
               :value="harnessPluginName"
               @change="harnessPluginName = ($event.target as HTMLSelectElement).value"
             >
-              <option value="">Select a plugin...</option>
+              <option value="">{{ t('settings.harness.selectPlugin') }}</option>
               <option v-for="plugin in harnessPluginsList" :key="plugin.id" :value="plugin.remote_name">
                 {{ plugin.remote_name }}{{ plugin.version ? ` (v${plugin.version})` : '' }}
               </option>
@@ -167,10 +168,10 @@ onMounted(() => {
               v-else
               v-model="harnessPluginName"
               type="text"
-              placeholder="e.g., harness-sync"
+              :placeholder="t('settings.harness.pluginPlaceholder')"
             />
             <span v-if="harnessPluginsList.length === 0" class="help-text">
-              No plugins installed from this marketplace yet. Enter a plugin name manually.
+              {{ t('settings.harness.noPlugins') }}
             </span>
           </div>
 
@@ -182,19 +183,19 @@ onMounted(() => {
             >
               <template v-if="savingHarnessSettings">
                 <div class="spinner-sm"></div>
-                Saving...
+                {{ t('settings.harness.saving') }}
               </template>
               <template v-else>
-                Save Settings
+                {{ t('settings.harness.saveSettings') }}
               </template>
             </button>
           </div>
 
           <div v-if="harnessMarketplaceId && harnessPluginName" class="current-config">
-            <span class="config-label">Current Configuration:</span>
+            <span class="config-label">{{ t('settings.harness.currentConfig') }}</span>
             <div class="config-value">
               <span class="marketplace-name">
-                {{ marketplaces.find(m => m.id === harnessMarketplaceId)?.name || 'Unknown' }}
+                {{ marketplaces.find(m => m.id === harnessMarketplaceId)?.name || t('settings.harness.unknown') }}
               </span>
               <span class="separator">/</span>
               <span class="plugin-name-display">{{ harnessPluginName }}</span>
@@ -207,16 +208,16 @@ onMounted(() => {
     <!-- Sync Status Section -->
     <div class="card sync-section">
       <div class="card-header">
-        <h3>Plugin Sync</h3>
+        <h3>{{ t('settings.harness.syncTitle') }}</h3>
       </div>
       <div class="card-body">
         <div v-if="loadingExportedPlugins" class="loading-state">
           <div class="spinner"></div>
-          <span>Loading exported plugins...</span>
+          <span>{{ t('settings.harness.loadingExported') }}</span>
         </div>
 
         <div v-else-if="exportedPlugins.length === 0" class="empty-state-inline">
-          <p class="muted">Export a plugin first to enable sync</p>
+          <p class="muted">{{ t('settings.harness.exportFirst') }}</p>
         </div>
 
         <div v-else class="sync-panels">

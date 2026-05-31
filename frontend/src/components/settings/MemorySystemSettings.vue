@@ -8,6 +8,7 @@
 -->
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import {
   memorySystemApi,
   type MemorySystemSummary,
@@ -20,6 +21,7 @@ import { useToast } from '../../composables/useToast';
 import LoadingState from '../base/LoadingState.vue';
 import ErrorState from '../base/ErrorState.vue';
 
+const { t } = useI18n();
 const showToast = useToast();
 
 const isLoading = ref(true);
@@ -50,7 +52,7 @@ async function loadAll() {
     tesseraeProjects.value = b.projects || [];
   } catch (err) {
     loadError.value =
-      err instanceof ApiError ? err.message : 'Failed to load memory systems';
+      err instanceof ApiError ? err.message : t('settings.memory.loadError');
   } finally {
     isLoading.value = false;
   }
@@ -62,7 +64,7 @@ async function toggleTesserae(project: TesseraeProjectState) {
     const nextRoot = project.enabled
       ? null
       : (project.local_path || prompt(
-          `Tesserae workspace path for ${project.project_name}`,
+          t('settings.memory.promptWorkspacePath', { name: project.project_name }),
           project.local_path || '',
         ));
     if (project.enabled === false && !nextRoot) {
@@ -79,12 +81,12 @@ async function toggleTesserae(project: TesseraeProjectState) {
     if (idx >= 0) tesseraeProjects.value[idx] = res.project;
     showToast(
       res.project.enabled
-        ? `Tesserae enabled for ${project.project_name}`
-        : `Tesserae disabled for ${project.project_name}`,
+        ? t('settings.memory.toastEnabled', { name: project.project_name })
+        : t('settings.memory.toastDisabled', { name: project.project_name }),
       'success',
     );
   } catch (err) {
-    const msg = err instanceof ApiError ? err.message : 'Toggle failed';
+    const msg = err instanceof ApiError ? err.message : t('settings.memory.toastToggleFailed');
     showToast(msg, 'error');
   } finally {
     busyProjectId.value = null;
@@ -97,12 +99,12 @@ async function refreshTesserae(project: TesseraeProjectState) {
     const res = await memorySystemApi.refreshTesserae(project.project_id);
     if (res.skipped_reason) {
       showToast(
-        `Refresh skipped: ${res.skipped_reason}`,
+        t('settings.memory.toastRefreshSkipped', { reason: res.skipped_reason }),
         res.skipped_reason === 'tesserae_disabled' ? 'info' : 'error',
       );
     } else {
       showToast(
-        `Re-imported ${res.imported} sessions to ${project.project_name}`,
+        t('settings.memory.toastReimported', { count: res.imported, name: project.project_name }),
         'success',
       );
     }
@@ -110,7 +112,7 @@ async function refreshTesserae(project: TesseraeProjectState) {
     const reload = await memorySystemApi.listTesseraeProjects();
     tesseraeProjects.value = reload.projects || [];
   } catch (err) {
-    const msg = err instanceof ApiError ? err.message : 'Refresh failed';
+    const msg = err instanceof ApiError ? err.message : t('settings.memory.toastRefreshFailed');
     showToast(msg, 'error');
   } finally {
     busyProjectId.value = null;
@@ -147,7 +149,7 @@ async function refreshStatus(projectId: string) {
     const s = await memorySystemApi.tesseraeStatus(projectId);
     projectStatus.value = { ...projectStatus.value, [projectId]: s };
   } catch (err) {
-    const msg = err instanceof ApiError ? err.message : 'Status fetch failed';
+    const msg = err instanceof ApiError ? err.message : t('settings.memory.toastStatusFailed');
     showToast(msg, 'error');
   }
 }
@@ -157,16 +159,16 @@ async function runInit(project: TesseraeProjectState) {
   try {
     const r = await memorySystemApi.tesseraeInit(project.project_id);
     if (r.ok) {
-      showToast(`Initialized Tesserae workspace for ${project.project_name}`, 'success');
+      showToast(t('settings.memory.toastInitialized', { name: project.project_name }), 'success');
     } else {
-      showToast(`Init failed: ${r.reason || r.stderr || 'unknown'}`, 'error');
+      showToast(t('settings.memory.toastInitFailed', { reason: r.reason || r.stderr || t('settings.memory.unknown') }), 'error');
     }
     await Promise.all([
       refreshStatus(project.project_id),
       loadAll(),  // refresh the per-project row's workspace_initialized flag
     ]);
   } catch (err) {
-    const msg = err instanceof ApiError ? err.message : 'Init failed';
+    const msg = err instanceof ApiError ? err.message : t('settings.memory.toastInitFailedShort');
     showToast(msg, 'error');
   } finally {
     busyProjectId.value = null;
@@ -178,13 +180,13 @@ async function runIngest(project: TesseraeProjectState) {
   try {
     const r = await memorySystemApi.tesseraeIngest(project.project_id);
     if (r.ok) {
-      showToast(`Ingested docs (${r.elapsed_seconds?.toFixed(1)}s)`, 'success');
+      showToast(t('settings.memory.toastIngested', { seconds: r.elapsed_seconds?.toFixed(1) }), 'success');
     } else {
-      showToast(`Ingest failed: ${r.reason || r.stderr || 'unknown'}`, 'error');
+      showToast(t('settings.memory.toastIngestFailed', { reason: r.reason || r.stderr || t('settings.memory.unknown') }), 'error');
     }
     await refreshStatus(project.project_id);
   } catch (err) {
-    const msg = err instanceof ApiError ? err.message : 'Ingest failed';
+    const msg = err instanceof ApiError ? err.message : t('settings.memory.toastIngestFailedShort');
     showToast(msg, 'error');
   } finally {
     busyProjectId.value = null;
@@ -208,10 +210,10 @@ async function startAsyncOp(
   try {
     const job = await apiCall(project.project_id);
     runningJobs.value = { ...runningJobs.value, [project.project_id]: job };
-    showToast(`${opLabel} started (${job.job_id})`, 'info');
+    showToast(t('settings.memory.toastOpStarted', { op: opLabel, jobId: job.job_id }), 'info');
     pollJob(project.project_id, job.job_id);
   } catch (err) {
-    const msg = err instanceof ApiError ? err.message : `${opLabel} failed to start`;
+    const msg = err instanceof ApiError ? err.message : t('settings.memory.toastOpStartFailed', { op: opLabel });
     showToast(msg, 'error');
   } finally {
     busyProjectId.value = null;
@@ -230,10 +232,10 @@ function pollJob(projectId: string, jobId: string) {
         clearInterval(handle);
         jobPollers.delete(projectId);
         if (job.status === 'completed') {
-          showToast(`${job.op} completed`, 'success');
+          showToast(t('settings.memory.toastOpCompleted', { op: job.op }), 'success');
         } else {
           showToast(
-            `${job.op} failed: ${job.result?.reason || job.result?.stderr || 'unknown'}`,
+            t('settings.memory.toastOpFailed', { op: job.op, reason: job.result?.reason || job.result?.stderr || t('settings.memory.unknown') }),
             'error',
           );
         }
@@ -243,7 +245,7 @@ function pollJob(projectId: string, jobId: string) {
     } catch (err) {
       clearInterval(handle);
       jobPollers.delete(projectId);
-      const msg = err instanceof ApiError ? err.message : 'Polling failed';
+      const msg = err instanceof ApiError ? err.message : t('settings.memory.toastPollingFailed');
       showToast(msg, 'error');
     }
   }, 3000);
@@ -261,16 +263,13 @@ onMounted(loadAll);
 <template>
   <section class="frameworks" data-testid="memory-system-settings">
     <header class="head">
-      <h2>Memory System</h2>
+      <h2>{{ t('settings.memory.title') }}</h2>
       <p class="muted">
-        Bundled session-memory integrations. Each memory system can
-        be enabled per project; operators control when sessions get
-        exported, when graphs get refreshed, and which workspaces are
-        involved.
+        {{ t('settings.memory.description') }}
       </p>
     </header>
 
-    <LoadingState v-if="isLoading" message="Loading frameworks…" />
+    <LoadingState v-if="isLoading" :message="t('settings.memory.loadingFrameworks')" />
     <ErrorState v-else-if="loadError" :message="loadError" @retry="loadAll" />
 
     <template v-else-if="tesserae">
@@ -287,31 +286,31 @@ onMounted(loadAll);
               :class="tesserae.cli.installed ? 'ok' : 'warn'"
               :data-testid="`memory-system-tesserae-cli-${tesserae.cli.installed ? 'ok' : 'missing'}`"
             >
-              CLI {{ tesserae.cli.installed ? 'installed' : 'missing' }}
+              {{ tesserae.cli.installed ? t('settings.memory.cliInstalled') : t('settings.memory.cliMissing') }}
             </span>
             <span v-if="tesserae.cli.version" class="meta">
               {{ tesserae.cli.version }}
             </span>
             <span class="meta">
-              {{ tesserae.enabled_project_count }} enabled
+              {{ t('settings.memory.enabledCount', { count: tesserae.enabled_project_count }) }}
             </span>
           </div>
         </header>
 
         <p v-if="!tesserae.cli.installed" class="hint warn">
-          The <code>tesserae</code> CLI isn't on PATH. Install it
-          first; per-project enable will still record the root, but
-          imports will be silently skipped until the CLI is available.
+          <i18n-t keypath="settings.memory.cliHint" scope="global">
+            <template #tesserae><code>tesserae</code></template>
+          </i18n-t>
         </p>
 
         <table class="projects" v-if="tesseraeProjects.length">
           <thead>
             <tr>
-              <th>Project</th>
-              <th>Workspace</th>
-              <th>Sessions</th>
-              <th>Last import</th>
-              <th class="actions-col">Actions</th>
+              <th>{{ t('settings.memory.colProject') }}</th>
+              <th>{{ t('settings.memory.colWorkspace') }}</th>
+              <th>{{ t('settings.memory.colSessions') }}</th>
+              <th>{{ t('settings.memory.colLastImport') }}</th>
+              <th class="actions-col">{{ t('settings.memory.colActions') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -343,9 +342,9 @@ onMounted(loadAll);
                     v-if="p.enabled && !p.workspace_initialized"
                     class="badge warn inline"
                     :data-testid="`tesserae-project-uninit-${p.project_id}`"
-                    title="Click ▸ to expand, then Init"
+                    :title="t('settings.memory.notInitializedTitle')"
                   >
-                    not initialized
+                    {{ t('settings.memory.notInitialized') }}
                   </span>
                 </td>
                 <td>
@@ -361,7 +360,7 @@ onMounted(loadAll);
                     :data-testid="`tesserae-toggle-${p.project_id}`"
                     @click="toggleTesserae(p)"
                   >
-                    {{ p.enabled ? 'Disable' : 'Enable' }}
+                    {{ p.enabled ? t('settings.memory.disable') : t('settings.memory.enable') }}
                   </button>
                   <button
                     class="btn btn-refresh"
@@ -373,7 +372,7 @@ onMounted(loadAll);
                     :data-testid="`tesserae-refresh-${p.project_id}`"
                     @click="refreshTesserae(p)"
                   >
-                    Refresh
+                    {{ t('settings.memory.refresh') }}
                   </button>
                 </td>
               </tr>
@@ -386,36 +385,36 @@ onMounted(loadAll);
                   <div class="detail">
                     <!-- Status panel -->
                     <div class="status-panel">
-                      <h4>Workspace status</h4>
+                      <h4>{{ t('settings.memory.workspaceStatus') }}</h4>
                       <dl v-if="projectStatus[p.project_id]">
-                        <dt>Initialized</dt>
+                        <dt>{{ t('settings.memory.statusInitialized') }}</dt>
                         <dd>
-                          {{ projectStatus[p.project_id].workspace_initialized ? 'yes' : 'no' }}
+                          {{ projectStatus[p.project_id].workspace_initialized ? t('settings.memory.yes') : t('settings.memory.no') }}
                         </dd>
-                        <dt>Graph compiled</dt>
+                        <dt>{{ t('settings.memory.statusGraphCompiled') }}</dt>
                         <dd>
                           <span v-if="projectStatus[p.project_id].graph_compiled">
-                            yes ({{ fmtBytes(projectStatus[p.project_id].graph_size_bytes) }})
+                            {{ t('settings.memory.yes') }} ({{ fmtBytes(projectStatus[p.project_id].graph_size_bytes) }})
                           </span>
-                          <span v-else class="muted">no</span>
+                          <span v-else class="muted">{{ t('settings.memory.no') }}</span>
                         </dd>
-                        <dt>Compiled at</dt>
+                        <dt>{{ t('settings.memory.statusCompiledAt') }}</dt>
                         <dd class="meta">
                           {{ fmtTimestamp(projectStatus[p.project_id].graph_compiled_at) }}
                         </dd>
-                        <dt>Sessions imported</dt>
+                        <dt>{{ t('settings.memory.statusSessionsImported') }}</dt>
                         <dd>{{ projectStatus[p.project_id].session_count }}</dd>
-                        <dt>Site built</dt>
+                        <dt>{{ t('settings.memory.statusSiteBuilt') }}</dt>
                         <dd>
-                          {{ projectStatus[p.project_id].site_built ? 'yes' : 'no' }}
+                          {{ projectStatus[p.project_id].site_built ? t('settings.memory.yes') : t('settings.memory.no') }}
                         </dd>
                       </dl>
-                      <p v-else class="muted">Loading…</p>
+                      <p v-else class="muted">{{ t('settings.memory.loadingStatus') }}</p>
                     </div>
 
                     <!-- Op buttons -->
                     <div class="ops">
-                      <h4>Operations</h4>
+                      <h4>{{ t('settings.memory.operations') }}</h4>
                       <div class="op-grid">
                         <button
                           class="btn op-init"
@@ -427,7 +426,7 @@ onMounted(loadAll);
                           :data-testid="`tesserae-op-init-${p.project_id}`"
                           @click="runInit(p)"
                         >
-                          Init workspace
+                          {{ t('settings.memory.opInit') }}
                         </button>
                         <button
                           class="btn op-ingest"
@@ -438,9 +437,9 @@ onMounted(loadAll);
                           "
                           :data-testid="`tesserae-op-ingest-${p.project_id}`"
                           @click="runIngest(p)"
-                          title="Ingest README, CLAUDE.md, AGENTS.md, CONVENTIONS.md, .planning/ — whatever exists"
+                          :title="t('settings.memory.opIngestTitle')"
                         >
-                          Ingest docs
+                          {{ t('settings.memory.opIngest') }}
                         </button>
                         <button
                           class="btn op-compile"
@@ -452,9 +451,9 @@ onMounted(loadAll);
                           "
                           :data-testid="`tesserae-op-compile-${p.project_id}`"
                           @click="runCompile(p)"
-                          title="Extract typed knowledge graph from sources (heavy, async)"
+                          :title="t('settings.memory.opCompileTitle')"
                         >
-                          Compile graph
+                          {{ t('settings.memory.opCompile') }}
                         </button>
                         <button
                           class="btn op-build"
@@ -466,9 +465,9 @@ onMounted(loadAll);
                           "
                           :data-testid="`tesserae-op-build-site-${p.project_id}`"
                           @click="runBuildSite(p)"
-                          title="Build static frontend site for the compiled graph"
+                          :title="t('settings.memory.opBuildTitle')"
                         >
-                          Build site
+                          {{ t('settings.memory.opBuild') }}
                         </button>
                       </div>
 
@@ -494,12 +493,10 @@ onMounted(loadAll);
                       </div>
 
                       <p class="hint muted">
-                        Auto-compile fires automatically every
-                        <code>AGENTED_TESSERAE_AUTO_COMPILE_AFTER_N_SESSIONS</code>
-                        session imports (default 5), with a min-interval
-                        of
-                        <code>AGENTED_TESSERAE_AUTO_COMPILE_MIN_INTERVAL_SECONDS</code>
-                        (default 3600s).
+                        <i18n-t keypath="settings.memory.autoCompileHint" scope="global">
+                          <template #nKey><code>AGENTED_TESSERAE_AUTO_COMPILE_AFTER_N_SESSIONS</code></template>
+                          <template #intervalKey><code>AGENTED_TESSERAE_AUTO_COMPILE_MIN_INTERVAL_SECONDS</code></template>
+                        </i18n-t>
                       </p>
                     </div>
                   </div>
@@ -509,7 +506,7 @@ onMounted(loadAll);
           </tbody>
         </table>
         <p v-else class="muted">
-          No projects yet. Create one to enable per-project frameworks.
+          {{ t('settings.memory.noProjects') }}
         </p>
       </article>
     </template>
