@@ -17,6 +17,7 @@ def start_round(
     input_execution_count: int,
     input_forge: dict[str, Any],
     scratch_dir: Optional[str] = None,
+    input_kg_signals: Optional[list] = None,
 ) -> str:
     """Insert a fresh round in ``pending`` status. Returns the round id."""
     round_id = generate_id("her")
@@ -24,8 +25,9 @@ def start_round(
         conn.execute(
             """INSERT INTO harness_evolution_rounds
                    (id, project_id, status, input_window_since, input_window_until,
-                    input_execution_count, input_forge_json, scratch_dir)
-               VALUES (?, ?, 'pending', ?, ?, ?, ?, ?)""",
+                    input_execution_count, input_forge_json, input_kg_signals_json,
+                    scratch_dir)
+               VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?)""",
             (
                 round_id,
                 project_id,
@@ -33,6 +35,7 @@ def start_round(
                 input_window_until,
                 int(input_execution_count),
                 json.dumps(input_forge, default=str),
+                json.dumps(input_kg_signals or [], default=str),
                 scratch_dir,
             ),
         )
@@ -60,6 +63,7 @@ _ROUND_COLUMNS_IN_ORDER = (
     "input_window_until",
     "input_execution_count",
     "input_forge_json",
+    "input_kg_signals_json",
     "output_patch_json",
     "applied_asset_ids_json",
     "error_message",
@@ -136,6 +140,16 @@ def _ensure_autonomy_columns(conn) -> None:
             conn.execute(f"ALTER TABLE harness_evolution_rounds ADD COLUMN {col} TEXT")
 
 
+def _ensure_kg_signals_column(conn) -> None:
+    _ensure_autonomy_columns(conn)
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(harness_evolution_rounds)")}
+    if "input_kg_signals_json" not in cols:
+        conn.execute(
+            "ALTER TABLE harness_evolution_rounds "
+            "ADD COLUMN input_kg_signals_json TEXT NOT NULL DEFAULT '[]'"
+        )
+
+
 def mark_applied(
     round_id: str,
     *,
@@ -149,7 +163,7 @@ def mark_applied(
     auto_apply_reason: Optional[dict] = None,
 ) -> None:
     with get_connection() as conn:
-        _ensure_autonomy_columns(conn)
+        _ensure_kg_signals_column(conn)
         conn.execute(
             """UPDATE harness_evolution_rounds SET
                    status                      = 'applied',
@@ -296,7 +310,7 @@ def set_revert_error(round_id: str, error: str) -> None:
 
 def mark_auto_apply_blocked(round_id: str, reason: dict) -> None:
     with get_connection() as conn:
-        _ensure_autonomy_columns(conn)
+        _ensure_kg_signals_column(conn)
         conn.execute(
             "UPDATE harness_evolution_rounds SET auto_apply_blocked_reason = ? "
             "WHERE id = ? AND status = 'awaiting_approval'",
@@ -307,7 +321,7 @@ def mark_auto_apply_blocked(round_id: str, reason: dict) -> None:
 
 def count_recent_auto_applies(project_id: str, *, since: str) -> int:
     with get_connection() as conn:
-        _ensure_autonomy_columns(conn)
+        _ensure_kg_signals_column(conn)
         row = conn.execute(
             "SELECT COUNT(*) AS c FROM harness_evolution_rounds "
             "WHERE project_id = ? AND auto_applied = 1 AND finished_at >= ?",

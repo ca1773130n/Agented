@@ -588,6 +588,19 @@ def _migrate_142_harness_kg_signals(conn):
     create_harness_kg_signals_tables(conn)
 
 
+def _migrate_143_round_kg_signals_col(conn):
+    """Life-Harness Phase E2: add ``input_kg_signals_json`` to existing
+    ``harness_evolution_rounds`` tables so a round can persist a snapshot
+    of the Tesserae-KG-derived signals that seeded it. PRAGMA-guarded,
+    idempotent — fresh DBs already get the column from the CREATE TABLE."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(harness_evolution_rounds)")}
+    if "input_kg_signals_json" not in cols:
+        conn.execute(
+            "ALTER TABLE harness_evolution_rounds "
+            "ADD COLUMN input_kg_signals_json TEXT NOT NULL DEFAULT '[]'"
+        )
+
+
 def _migrate_141_projects_tesserae(conn):
     """Add ``tesserae_project_root`` to ``projects`` so each Agented
     project can record where its Tesserae ``.tesserae/`` workspace lives.
@@ -1010,4 +1023,6 @@ V07_MIGRATIONS: list = [
     (141, "projects_tesserae", _migrate_141_projects_tesserae),
     # Life-Harness Phase E2: Tesserae-KG-derived evolution signals store.
     (142, "harness_kg_signals", _migrate_142_harness_kg_signals),
+    # Life-Harness Phase E2: round column persisting seeded KG signals.
+    (143, "round_kg_signals_col", _migrate_143_round_kg_signals_col),
 ]

@@ -15,7 +15,9 @@ def create_harness_evolution_tables(conn) -> None:
 
     ``input_forge_json`` is a snapshot of the project's bound Forge primitives
     (rules/skills/hooks/commands/mcp_servers) at the moment the round
-    started. ``output_patch_json`` carries Codex's proposed CRUD operations
+    started. ``input_kg_signals_json`` is a snapshot of the Tesserae-KG-derived
+    evolution signals that seeded the round (a JSON list, defaults ``[]``).
+    ``output_patch_json`` carries Codex's proposed CRUD operations
     against those Forge tables. ``applied_asset_ids_json`` records what
     actually got persisted on approval.
     """
@@ -37,6 +39,7 @@ def create_harness_evolution_tables(conn) -> None:
             input_window_until       TEXT,
             input_execution_count    INTEGER NOT NULL DEFAULT 0,
             input_forge_json         TEXT NOT NULL DEFAULT '{}',
+            input_kg_signals_json    TEXT NOT NULL DEFAULT '[]',
             output_patch_json        TEXT,
             applied_asset_ids_json   TEXT NOT NULL DEFAULT '[]',
             error_message            TEXT,
