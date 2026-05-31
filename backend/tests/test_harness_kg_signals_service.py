@@ -74,6 +74,13 @@ def test_compute_weight_unparseable_returns_max():
     assert compute_weight("2026-05-30 12:00:00", "garbage") == W_MAX
 
 
+def test_compute_weight_unparseable_logs_warning(monkeypatch):
+    calls = []
+    monkeypatch.setattr(svc.logger, "warning", lambda *a, **k: calls.append((a, k)))
+    assert compute_weight("not-a-timestamp", "also-bad") == W_MAX
+    assert len(calls) == 1
+
+
 def test_compute_weight_future_first_clamped_to_max():
     now = datetime(2026, 5, 30, 12, 0, 0)
     future = now + timedelta(days=5)

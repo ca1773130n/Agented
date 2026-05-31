@@ -67,6 +67,12 @@ def compute_weight(first_seen_at: str, now: str) -> float:
         first_dt = datetime.strptime(first_seen_at, _TS_FMT)
         now_dt = datetime.strptime(now, _TS_FMT)
     except (ValueError, TypeError):
+        logger.warning(
+            "harness_kg_signals: compute_weight could not parse timestamps "
+            "(first_seen_at=%r now=%r); defaulting weight to W_MAX",
+            first_seen_at,
+            now,
+        )
         return W_MAX
     age_days = max(0.0, (now_dt - first_dt).total_seconds() / 86400.0)
     w = W_MAX * (2 ** (-age_days / HALF_LIFE_DAYS))
