@@ -13,6 +13,7 @@ from ._core import create_core_tables
 from ._embeddings import create_embedding_tables
 from ._harness_annotations import create_harness_annotation_tables
 from ._harness_evolution import create_harness_evolution_tables
+from ._harness_kg_signals import create_harness_kg_signals_tables
 from ._harness_snapshots import create_harness_snapshot_tables
 from ._harness_takeaways import create_harness_takeaway_tables
 from ._misc import create_misc_tables
@@ -68,4 +69,5 @@ def create_fresh_schema(conn):
     create_team_execution_tables(conn)
     create_project_autonomy_tables(conn)
     create_forge_promotion_tables(conn)
+    create_harness_kg_signals_tables(conn)
     conn.commit()

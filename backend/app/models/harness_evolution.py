@@ -45,3 +45,17 @@ class RevertResult(BaseModel):
     git_reverted: bool = False
     error: str = ""
     conflicts: list[dict] = Field(default_factory=list)
+
+
+class KGSignalItem(BaseModel):
+    """A Tesserae-KG-derived evolution signal (Phase E2)."""
+
+    signal_id: str
+    project_id: str
+    round_id: Optional[str] = None
+    question: str
+    content: str
+    weight: float = Field(ge=0.3, le=0.7)
+    already_forged: bool = False
+    first_seen_at: str
+    captured_at: str

@@ -577,6 +577,17 @@ def _migrate_130_project_sessions_super_agent_link(conn) -> None:
     )
 
 
+def _migrate_142_harness_kg_signals(conn):
+    """Life-Harness Phase E2: storage for Tesserae-KG-derived evolution
+    signals. Each signal is a piece of KG-discovered guidance (prose
+    answer) with a dedup ``signal_id``, a decayed ``weight``, and an
+    ``already_forged`` flag; later tasks use them to seed evolution
+    rounds. Idempotent."""
+    from app.db.schema._harness_kg_signals import create_harness_kg_signals_tables
+
+    create_harness_kg_signals_tables(conn)
+
+
 def _migrate_141_projects_tesserae(conn):
     """Add ``tesserae_project_root`` to ``projects`` so each Agented
     project can record where its Tesserae ``.tesserae/`` workspace lives.
@@ -997,4 +1008,6 @@ V07_MIGRATIONS: list = [
     # Tesserae workspace that consolidates code + docs + sessions
     # into a typed KG for retrieval.
     (141, "projects_tesserae", _migrate_141_projects_tesserae),
+    # Life-Harness Phase E2: Tesserae-KG-derived evolution signals store.
+    (142, "harness_kg_signals", _migrate_142_harness_kg_signals),
 ]
