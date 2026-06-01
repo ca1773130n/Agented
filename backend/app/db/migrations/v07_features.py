@@ -966,6 +966,40 @@ def _migrate_144_token_usage_immutable_date(conn):
         )
 
 
+def _migrate_145_subscription_cost_zero(conn):
+    """Cost is per-token only for API-key (metered) backends. OAuth/
+    subscription backends (Claude Max/Pro, Codex via ChatGPT, Gemini login)
+    pay a flat monthly fee, so their usage cost is $0 — it must NOT be priced
+    at pay-as-you-go API list rates (which produced absurd six-figure totals).
+
+    Backfill: zero total_cost_usd for token_usage rows whose backend_type has
+    no API-key account configured. New rows are gated at collection time
+    (SessionCollectionService._metered_backend_types). Idempotent — re-zeroing
+    already-zero rows is a no-op.
+    """
+    metered = []
+    try:
+        for r in conn.execute(
+            "SELECT backend_id FROM backend_accounts "
+            "WHERE api_key_env IS NOT NULL AND TRIM(api_key_env) != ''"
+        ).fetchall():
+            bt = (r[0] or "").replace("backend-", "").strip()
+            if bt:
+                metered.append(bt)
+    except Exception:  # noqa: BLE001 — table may not exist on a bare DB
+        return
+    if metered:
+        placeholders = ",".join("?" for _ in metered)
+        conn.execute(
+            f"UPDATE token_usage SET total_cost_usd = 0 "
+            f"WHERE total_cost_usd != 0 AND backend_type NOT IN ({placeholders})",
+            metered,
+        )
+    else:
+        # No metered (API-key) accounts at all → all usage is subscription → $0.
+        conn.execute("UPDATE token_usage SET total_cost_usd = 0 WHERE total_cost_usd != 0")
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -1048,4 +1082,7 @@ V07_MIGRATIONS: list = [
     # Cost-dashboard correctness: immutable per-row usage_date so past
     # days' cost cannot drift when active sessions are re-collected.
     (144, "token_usage_immutable_date", _migrate_144_token_usage_immutable_date),
+    # Cost correctness: $0 for OAuth/subscription backends (flat fee), only
+    # API-key (metered) backends accrue per-token cost.
+    (145, "subscription_cost_zero", _migrate_145_subscription_cost_zero),
 ]

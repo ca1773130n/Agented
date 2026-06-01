@@ -7915,7 +7915,7 @@
     "monthly": "Monthly",
     "monthsShort": "{count}mo",
     "loading": "Loading history...",
-    "totalCost": "Total Cost (API-equiv.)",
+    "totalCost": "Total Cost",
     "inputTokens": "Input Tokens",
     "outputTokens": "Output Tokens",
     "executions": "Executions",
@@ -7925,14 +7925,14 @@
     "monthlyBreakdown": "Monthly Breakdown",
     "columns": {
       "period": "Period",
-      "cost": "Cost (API-equiv.)",
+      "cost": "Cost",
       "inputTokens": "Input Tokens",
       "outputTokens": "Output Tokens",
       "executions": "Executions",
       "avgRate": "Avg Rate %",
       "maxRate": "Max Rate %"
     },
-    "notionalNote": "Cost is a notional API list-price estimate — what this token usage would cost on the pay-as-you-go API, including cache tokens (which usually dominate). Max / subscription accounts pay a flat monthly fee with no per-token billing, so this is not your actual spend."
+    "billingNote": "Cost reflects actual billing: accounts authenticated with an API key are charged per token; OAuth/subscription accounts (Claude Max/Pro, ChatGPT, Gemini login) pay a flat monthly fee and show $0 here. Token counts are still tracked for every account."
   },
   "visualCronWizard": {
     "title": "Natural Language Schedule Builder",
@@ -8269,7 +8269,7 @@
   "cost": {
     "title": "Cost",
     "subtitle": "Token spend, budgets, and rate-limit windows",
-    "notionalNote": "Cost is a notional API list-price estimate — what this token usage would cost on the pay-as-you-go API, including cache tokens (which usually dominate). Max / subscription accounts pay a flat monthly fee with no per-token billing, so this is not your actual spend."
+    "billingNote": "Cost reflects actual billing: accounts authenticated with an API key are charged per token; OAuth/subscription accounts (Claude Max/Pro, ChatGPT, Gemini login) pay a flat monthly fee and show $0 here. Token counts are still tracked for every account."
   },
   "health": {
     "title": "Health",

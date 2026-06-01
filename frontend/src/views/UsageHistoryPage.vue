@@ -132,7 +132,7 @@ onMounted(loadData);
 
     <div class="notional-note">
       <span class="notional-icon">ⓘ</span>
-      <span>{{ t('usageHistory.notionalNote') }}</span>
+      <span>{{ t('usageHistory.billingNote') }}</span>
     </div>
 
     <LoadingState v-if="isLoading" :message="t('usageHistory.loading')" />

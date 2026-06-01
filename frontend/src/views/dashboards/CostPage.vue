@@ -37,7 +37,7 @@ onMounted(maybeScroll);
     <PageHeader :title="t('cost.title')" :subtitle="t('cost.subtitle')" />
     <div class="notional-note">
       <span class="notional-icon">ⓘ</span>
-      <span>{{ t('cost.notionalNote') }}</span>
+      <span>{{ t('cost.billingNote') }}</span>
     </div>
     <div class="lane-cards">
       <TokenUsageCard @loaded="onCardLoaded" />
