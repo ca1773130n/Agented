@@ -7915,7 +7915,7 @@
     "monthly": "月次",
     "monthsShort": "{count}ヶ月",
     "loading": "履歴を読み込み中...",
-    "totalCost": "総コスト",
+    "totalCost": "総コスト (API換算)",
     "inputTokens": "入力トークン",
     "outputTokens": "出力トークン",
     "executions": "実行回数",
@@ -7925,13 +7925,14 @@
     "monthlyBreakdown": "月次内訳",
     "columns": {
       "period": "期間",
-      "cost": "コスト",
+      "cost": "コスト (API換算)",
       "inputTokens": "入力トークン",
       "outputTokens": "出力トークン",
       "executions": "実行",
       "avgRate": "平均レート %",
       "maxRate": "最大レート %"
-    }
+    },
+    "notionalNote": "コストは名目上のAPI定価の見積もりです — このトークン使用量を従量課金APIで使った場合の金額で、キャッシュトークン(通常最大の割合)も含みます。Max・サブスクリプションのアカウントはトークン単位の課金がない月額定額制のため、実際の支出ではありません。"
   },
   "visualCronWizard": {
     "title": "自然言語スケジュールビルダー",
@@ -8267,7 +8268,8 @@
   },
   "cost": {
     "title": "コスト",
-    "subtitle": "トークン消費、予算、レート制限ウィンドウ"
+    "subtitle": "トークン消費、予算、レート制限ウィンドウ",
+    "notionalNote": "コストは名目上のAPI定価の見積もりです — このトークン使用量を従量課金APIで使った場合の金額で、キャッシュトークン(通常最大の割合)も含みます。Max・サブスクリプションのアカウントはトークン単位の課金がない月額定額制のため、実際の支出ではありません。"
   },
   "health": {
     "title": "ヘルス",

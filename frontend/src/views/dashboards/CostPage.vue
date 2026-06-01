@@ -35,6 +35,10 @@ onMounted(maybeScroll);
 <template>
   <div class="lane-page cost-lane">
     <PageHeader :title="t('cost.title')" :subtitle="t('cost.subtitle')" />
+    <div class="notional-note">
+      <span class="notional-icon">ⓘ</span>
+      <span>{{ t('cost.notionalNote') }}</span>
+    </div>
     <div class="lane-cards">
       <TokenUsageCard @loaded="onCardLoaded" />
     </div>
@@ -44,4 +48,14 @@ onMounted(maybeScroll);
 <style scoped>
 .lane-page { display: flex; flex-direction: column; gap: 24px; width: 100%; }
 .lane-cards { display: flex; flex-direction: column; gap: 24px; }
+.notional-note {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 16px; margin-top: -8px;
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  border-left: 3px solid var(--accent-violet, #a78bfa);
+  border-radius: 8px; font-size: 0.8rem; line-height: 1.45;
+  color: var(--text-tertiary, #888);
+}
+.notional-icon { color: var(--accent-violet, #a78bfa); flex-shrink: 0; font-size: 0.95rem; }
 </style>

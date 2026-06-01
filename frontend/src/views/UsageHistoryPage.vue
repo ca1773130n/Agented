@@ -130,6 +130,11 @@ onMounted(loadData);
       </template>
     </PageHeader>
 
+    <div class="notional-note">
+      <span class="notional-icon">ⓘ</span>
+      <span>{{ t('usageHistory.notionalNote') }}</span>
+    </div>
+
     <LoadingState v-if="isLoading" :message="t('usageHistory.loading')" />
 
     <div v-if="!isLoading" class="summary-cards">
@@ -300,6 +305,27 @@ onMounted(loadData);
   font-family: var(--font-mono);
   font-weight: 600;
   color: var(--accent-violet);
+}
+
+.notional-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  border-left: 3px solid var(--accent-violet, #a78bfa);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--text-tertiary, #888);
+}
+
+.notional-icon {
+  color: var(--accent-violet, #a78bfa);
+  flex-shrink: 0;
+  font-size: 0.95rem;
 }
 
 .rate-high {

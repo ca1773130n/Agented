@@ -7915,7 +7915,7 @@
     "monthly": "每月",
     "monthsShort": "{count} 个月",
     "loading": "正在加载历史...",
-    "totalCost": "总成本",
+    "totalCost": "总成本 (API 折算)",
     "inputTokens": "输入令牌",
     "outputTokens": "输出令牌",
     "executions": "执行次数",
@@ -7925,13 +7925,14 @@
     "monthlyBreakdown": "每月明细",
     "columns": {
       "period": "期间",
-      "cost": "成本",
+      "cost": "成本 (API 折算)",
       "inputTokens": "输入令牌",
       "outputTokens": "输出令牌",
       "executions": "执行",
       "avgRate": "平均速率 %",
       "maxRate": "最大速率 %"
-    }
+    },
+    "notionalNote": "成本是名义上的 API 标价估算 — 即这些 token 用量按按量计费 API 计算的金额，包含缓存 token（通常占大头）。Max / 订阅账户按月固定付费、不按 token 计费，因此这并非你的实际支出。"
   },
   "visualCronWizard": {
     "title": "自然语言计划构建器",
@@ -8267,7 +8268,8 @@
   },
   "cost": {
     "title": "成本",
-    "subtitle": "令牌支出、预算和速率限制窗口"
+    "subtitle": "令牌支出、预算和速率限制窗口",
+    "notionalNote": "成本是名义上的 API 标价估算 — 即这些 token 用量按按量计费 API 计算的金额，包含缓存 token（通常占大头）。Max / 订阅账户按月固定付费、不按 token 计费，因此这并非你的实际支出。"
   },
   "health": {
     "title": "健康",

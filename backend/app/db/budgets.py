@@ -285,6 +285,11 @@ def get_usage_aggregated_summary(
             COALESCE(SUM(tu.num_turns), 0) as total_turns
         FROM token_usage tu
         WHERE 1=1
+          -- Dedupe: a session re-collected under two project dirs (or the
+          -- same id seen twice) lands as duplicate execution_id rows, which
+          -- would double-count its cost/tokens. Keep one canonical row
+          -- (latest insert = MAX(rowid)) per execution_id.
+          AND tu.rowid IN (SELECT MAX(rowid) FROM token_usage GROUP BY execution_id)
     """
     params: list = []
 
@@ -327,6 +332,11 @@ def get_usage_by_entity(
             COUNT(*) as execution_count
         FROM token_usage tu
         WHERE 1=1
+          -- Dedupe: a session re-collected under two project dirs (or the
+          -- same id seen twice) lands as duplicate execution_id rows, which
+          -- would double-count its cost/tokens. Keep one canonical row
+          -- (latest insert = MAX(rowid)) per execution_id.
+          AND tu.rowid IN (SELECT MAX(rowid) FROM token_usage GROUP BY execution_id)
     """
     params: list = []
 

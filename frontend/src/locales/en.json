@@ -7915,7 +7915,7 @@
     "monthly": "Monthly",
     "monthsShort": "{count}mo",
     "loading": "Loading history...",
-    "totalCost": "Total Cost",
+    "totalCost": "Total Cost (API-equiv.)",
     "inputTokens": "Input Tokens",
     "outputTokens": "Output Tokens",
     "executions": "Executions",
@@ -7925,13 +7925,14 @@
     "monthlyBreakdown": "Monthly Breakdown",
     "columns": {
       "period": "Period",
-      "cost": "Cost",
+      "cost": "Cost (API-equiv.)",
       "inputTokens": "Input Tokens",
       "outputTokens": "Output Tokens",
       "executions": "Executions",
       "avgRate": "Avg Rate %",
       "maxRate": "Max Rate %"
-    }
+    },
+    "notionalNote": "Cost is a notional API list-price estimate — what this token usage would cost on the pay-as-you-go API, including cache tokens (which usually dominate). Max / subscription accounts pay a flat monthly fee with no per-token billing, so this is not your actual spend."
   },
   "visualCronWizard": {
     "title": "Natural Language Schedule Builder",
@@ -8267,7 +8268,8 @@
   },
   "cost": {
     "title": "Cost",
-    "subtitle": "Token spend, budgets, and rate-limit windows"
+    "subtitle": "Token spend, budgets, and rate-limit windows",
+    "notionalNote": "Cost is a notional API list-price estimate — what this token usage would cost on the pay-as-you-go API, including cache tokens (which usually dominate). Max / subscription accounts pay a flat monthly fee with no per-token billing, so this is not your actual spend."
   },
   "health": {
     "title": "Health",
