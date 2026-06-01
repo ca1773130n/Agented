@@ -946,6 +946,26 @@ def _migrate_131_harness_annotations(conn):
     create_harness_annotation_tables(conn)
 
 
+def _migrate_144_token_usage_immutable_date(conn):
+    """Cost-dashboard correctness: a session's per-day cost must be FIXED
+    once the day has passed. The daily summary grouped on ``recorded_at``,
+    which ``_update_usage_if_changed`` rewrites to the session's newest
+    message timestamp on every re-collection — so a growing/active session
+    silently migrated its whole cost from one day's bucket to another,
+    mutating *past* days. Add an immutable ``usage_date`` (YYYY-MM-DD)
+    frozen on first insert; the summary groups on it instead. PRAGMA-guarded
+    + backfilled from existing rows so historical charts are unchanged at
+    migration time.
+    """
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(token_usage)")}
+    if "usage_date" not in cols:
+        conn.execute("ALTER TABLE token_usage ADD COLUMN usage_date TEXT")
+        conn.execute(
+            "UPDATE token_usage SET usage_date = date(recorded_at) "
+            "WHERE usage_date IS NULL AND recorded_at IS NOT NULL"
+        )
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -1025,4 +1045,7 @@ V07_MIGRATIONS: list = [
     (142, "harness_kg_signals", _migrate_142_harness_kg_signals),
     # Life-Harness Phase E2: round column persisting seeded KG signals.
     (143, "round_kg_signals_col", _migrate_143_round_kg_signals_col),
+    # Cost-dashboard correctness: immutable per-row usage_date so past
+    # days' cost cannot drift when active sessions are re-collected.
+    (144, "token_usage_immutable_date", _migrate_144_token_usage_immutable_date),
 ]

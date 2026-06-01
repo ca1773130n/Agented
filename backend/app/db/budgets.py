@@ -35,11 +35,17 @@ def create_token_usage_record(
     duration_api_ms: int = 0,
     session_id: Optional[str] = None,
     recorded_at: Optional[str] = None,
+    usage_date: Optional[str] = None,
 ) -> Optional[int]:
     """Insert a token usage record. Returns the record ID on success.
 
     If recorded_at is provided (ISO timestamp), it is used as the record timestamp.
     Otherwise defaults to CURRENT_TIMESTAMP (now).
+
+    ``usage_date`` (YYYY-MM-DD) is the IMMUTABLE day the cost is attributed to.
+    It is set ONCE here and never updated on re-collection, so a past day's
+    total cannot drift. When omitted it is frozen to the date of recorded_at
+    (or today). The daily cost summary groups on this column, not recorded_at.
     """
     with get_connection() as conn:
         try:
@@ -48,8 +54,10 @@ def create_token_usage_record(
                 INSERT INTO token_usage (
                     execution_id, entity_type, entity_id, backend_type, account_id,
                     input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
-                    total_cost_usd, num_turns, duration_api_ms, session_id, recorded_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))
+                    total_cost_usd, num_turns, duration_api_ms, session_id, recorded_at,
+                    usage_date
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP),
+                    COALESCE(?, date(COALESCE(?, CURRENT_TIMESTAMP))))
             """,
                 (
                     execution_id,
@@ -65,6 +73,8 @@ def create_token_usage_record(
                     num_turns,
                     duration_api_ms,
                     session_id,
+                    recorded_at,
+                    usage_date,
                     recorded_at,
                 ),
             )
@@ -257,9 +267,14 @@ def get_usage_aggregated_summary(
     else:  # month
         date_fmt = "%Y-%m"
 
+    # Bucket on the IMMUTABLE usage_date (frozen at insert), NOT recorded_at
+    # (which re-collection rewrites). COALESCE keeps any pre-migration row
+    # working by falling back to its recorded_at date. This is what makes a
+    # past day's cost fixed once the day has passed.
+    day_expr = "COALESCE(tu.usage_date, date(tu.recorded_at))"
     query = f"""
         SELECT
-            strftime('{date_fmt}', tu.recorded_at) as period_start,
+            strftime('{date_fmt}', {day_expr}) as period_start,
             COALESCE(SUM(tu.total_cost_usd), 0) as total_cost_usd,
             COALESCE(SUM(tu.input_tokens), 0) as total_input_tokens,
             COALESCE(SUM(tu.output_tokens), 0) as total_output_tokens,
@@ -280,13 +295,13 @@ def get_usage_aggregated_summary(
         query += " AND tu.entity_id = ?"
         params.append(entity_id)
     if start_date:
-        query += " AND date(tu.recorded_at) >= ?"
+        query += f" AND {day_expr} >= ?"
         params.append(start_date)
     if end_date:
-        query += " AND date(tu.recorded_at) <= ?"
+        query += f" AND {day_expr} <= ?"
         params.append(end_date)
 
-    query += f" GROUP BY strftime('{date_fmt}', tu.recorded_at) ORDER BY period_start DESC"
+    query += f" GROUP BY strftime('{date_fmt}', {day_expr}) ORDER BY period_start DESC"
 
     with get_connection() as conn:
         cursor = conn.execute(query, params)

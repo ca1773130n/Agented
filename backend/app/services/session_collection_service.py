@@ -466,6 +466,13 @@ class SessionCollectionService:
         execution_id = f"session-{session_id}"
         # Use the session's actual timestamp (last message time), not import time
         session_ts = usage.get("last_timestamp") or usage.get("first_timestamp")
+        # Freeze the cost's day to the session's START date (immutable). This
+        # is set once and never updated on re-collection, so a session that
+        # keeps growing cannot migrate its cost between days and a past day's
+        # total stays fixed. ts may be "YYYY-MM-DDT..." or "YYYY-MM-DD ..." —
+        # the first 10 chars are the date in both.
+        start_ts = usage.get("first_timestamp") or session_ts
+        usage_date = start_ts[:10] if start_ts else None
         create_token_usage_record(
             execution_id=execution_id,
             entity_type="session",
@@ -480,6 +487,7 @@ class SessionCollectionService:
             num_turns=usage.get("num_turns", 0),
             session_id=session_id,
             recorded_at=session_ts,
+            usage_date=usage_date,
         )
 
     @classmethod
