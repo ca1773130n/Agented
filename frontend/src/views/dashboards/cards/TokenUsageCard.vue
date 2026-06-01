@@ -370,6 +370,14 @@ watch(() => monitoringStatus.value?.polling_minutes, () => startMonitoringPollin
 
 onMounted(async () => {
   await Promise.all([loadSessionStats(), loadAllTimeSpend(), loadAgentsTeamsAndTriggers()]);
+  // Render the rate-limit monitoring graphs immediately from cached
+  // snapshots (fast GET /admin/monitoring/status). pollNow() below is a
+  // slow (≤120s) live provider round-trip — if it is the ONLY thing that
+  // populates monitoringStatus, the graphs stay hidden whenever it is slow
+  // or fails, even though fresh cached data exists. (Cost-lane "no rate
+  // limit graphs" bug.) The polling_minutes watcher starts the interval
+  // once this resolves.
+  loadMonitoringStatus().catch(() => {});
   startMonitoringPolling();
   startRotationPolling();
   collectSessionUsage().catch(() => {});
@@ -426,7 +434,11 @@ onUnmounted(() => {
     <LoadingState v-if="isLoading" :message="t('tokenUsageCard.loadingUsage')" />
 
     <TokenBreakdownCard v-show="!isLoading" :total-input-tokens="totalInputTokens" :total-output-tokens="totalOutputTokens" :total-cache-read-tokens="totalCacheReadTokens" :total-cache-creation-tokens="totalCacheCreationTokens" :total-all-tokens="totalAllTokens" :cache-hit-rate="cacheHitRate" :period-label="periodLabel" :total-spend="totalSpend" :total-sessions="totalSessions" :total-turns="totalTurns" :total-executions="totalExecutions" :session-stats="sessionStats" :all-time-spend="allTimeSpend" />
-    <MonitoringSection v-show="!isLoading" :monitoring-status="monitoringStatus" :monitoring-loading="monitoringLoading" :poll-now-loading="pollNowLoading" :monitoring-refreshing="monitoringRefreshing" :trend-histories="trendHistories" :expanded-cards="expandedCards" :selected-rate-windows="selectedRateWindows" :selected-projection-window="selectedProjectionWindow" :chart-time-range-start="chartTimeRangeStart" :chart-time-range-end="chartTimeRangeEnd" :rotation-sessions="rotationStatus?.sessions ?? []" :rotation-evaluator="rotationStatus?.evaluator ?? undefined" @poll-now="pollNow" @toggle-card="toggleCard" @update:selected-rate-windows="Object.assign(selectedRateWindows, $event)" @update:selected-projection-window="Object.assign(selectedProjectionWindow, $event)" />
+    <!-- Rate-limit monitoring graphs are independent of the usage/cost fetch
+         (they have their own monitoringStatus + loading/empty/disabled states).
+         Do NOT gate them on isLoading, or a slow budget-usage load hides the
+         rate-limit graphs entirely. -->
+    <MonitoringSection :monitoring-status="monitoringStatus" :monitoring-loading="monitoringLoading" :poll-now-loading="pollNowLoading" :monitoring-refreshing="monitoringRefreshing" :trend-histories="trendHistories" :expanded-cards="expandedCards" :selected-rate-windows="selectedRateWindows" :selected-projection-window="selectedProjectionWindow" :chart-time-range-start="chartTimeRangeStart" :chart-time-range-end="chartTimeRangeEnd" :rotation-sessions="rotationStatus?.sessions ?? []" :rotation-evaluator="rotationStatus?.evaluator ?? undefined" @poll-now="pollNow" @toggle-card="toggleCard" @update:selected-rate-windows="Object.assign(selectedRateWindows, $event)" @update:selected-projection-window="Object.assign(selectedProjectionWindow, $event)" />
 
     <div class="section" v-if="!isLoading">
       <div class="section-header">

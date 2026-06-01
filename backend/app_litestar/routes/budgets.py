@@ -218,7 +218,14 @@ def all_time_usage() -> dict[str, Any]:
     return {"total_cost_usd": get_token_usage_total_cost()}
 
 
-@post("/collect-sessions", sync_to_thread=False)
+# Heavy: collect_all() recursively walks every Claude/Codex session .jsonl
+# on disk and writes to SQLite — multi-second on large histories. It MUST run
+# in a worker thread; with sync_to_thread=False it executes on the single
+# UvicornWorker's event loop (workers=1) and freezes the whole backend, so
+# concurrent reads (monitoring/status, usage, even /health) hang until it
+# finishes. That starvation is what blanked the Cost dashboard's rate-limit
+# graphs. See gunicorn.conf.py (workers=1 is mandatory).
+@post("/collect-sessions", sync_to_thread=True)
 def collect_session_usage() -> dict[str, Any]:
     try:
         return {"collected": SessionUsageCollector.collect_all()}
