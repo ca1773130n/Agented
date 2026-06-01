@@ -543,7 +543,9 @@
       "toastSessionYoloOn": "セッション開始ダイアログで Yolo トグルがデフォルトでオンになります",
       "toastSessionYoloOff": "セッション開始ダイアログで Yolo トグルがデフォルトでオフになります",
       "toastMonitoringSaved": "モニタリング設定を保存しました",
-      "toastMonitoringFailed": "モニタリング設定の保存に失敗しました"
+      "toastMonitoringFailed": "モニタリング設定の保存に失敗しました",
+      "languageTitle": "言語",
+      "languageHelp": "インターフェース言語を選択します。すぐに適用され、このデバイスに記憶されます。"
     },
     "marketplaces": {
       "listTitle": "マーケットプレイス",

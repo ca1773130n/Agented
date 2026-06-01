@@ -7,8 +7,16 @@ import { settingsApi, monitoringApi, listGroupedBackends, getGroupedBackend, Api
 import { useToast } from '../../composables/useToast';
 import { useTourMachine } from '../../composables/useTourMachine';
 import DirectoryBrowser from '../base/DirectoryBrowser.vue';
+import { SUPPORTED_LOCALES, setLocale } from '../../i18n';
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
+
+// Language — persisted to localStorage by setLocale and applied app-wide,
+// independent of the onboarding picker. Same source of truth (SUPPORTED_LOCALES).
+function onLocaleChange(e: Event) {
+  const lang = (e.target as HTMLSelectElement).value as 'en' | 'ko' | 'ja' | 'zh';
+  setLocale(lang);
+}
 const showToast = useToast();
 const setTourGuide = inject<(msg: string | null) => void>('setTourGuide', () => {});
 const tourMachine = useTourMachine();
@@ -259,7 +267,24 @@ onMounted(() => {
 
 <template>
   <div class="tab-content">
-    <div class="card" data-tour="workspace-root">
+    <div class="card">
+      <div class="card-header">
+        <h3>{{ t('settings.general.languageTitle') }}</h3>
+      </div>
+      <div class="card-body">
+        <div class="form-group">
+          <label>{{ t('language.label') }}</label>
+          <p class="form-help">{{ t('settings.general.languageHelp') }}</p>
+          <select :value="locale" class="monitoring-select" @change="onLocaleChange">
+            <option v-for="loc in SUPPORTED_LOCALES" :key="loc.code" :value="loc.code">
+              {{ loc.nativeName }}
+            </option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top: 1.5rem;" data-tour="workspace-root">
       <div class="card-header">
         <h3>{{ t('settings.general.workspaceTitle') }}</h3>
       </div>

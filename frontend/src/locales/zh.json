@@ -543,7 +543,9 @@
       "toastSessionYoloOn": "会话启动对话框中的 Yolo 开关将默认开启",
       "toastSessionYoloOff": "会话启动对话框中的 Yolo 开关将默认关闭",
       "toastMonitoringSaved": "监控设置已保存",
-      "toastMonitoringFailed": "保存监控设置失败"
+      "toastMonitoringFailed": "保存监控设置失败",
+      "languageTitle": "语言",
+      "languageHelp": "选择界面语言。立即生效并在此设备上记住。"
     },
     "marketplaces": {
       "listTitle": "市场",

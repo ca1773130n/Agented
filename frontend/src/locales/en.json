@@ -543,7 +543,9 @@
       "toastSessionYoloOn": "Yolo toggle will be on by default in the start-session dialog",
       "toastSessionYoloOff": "Yolo toggle will be off by default in the start-session dialog",
       "toastMonitoringSaved": "Monitoring settings saved",
-      "toastMonitoringFailed": "Failed to save monitoring settings"
+      "toastMonitoringFailed": "Failed to save monitoring settings",
+      "languageTitle": "Language",
+      "languageHelp": "Choose the interface language. Applies immediately and is remembered on this device."
     },
     "marketplaces": {
       "listTitle": "Marketplaces",
