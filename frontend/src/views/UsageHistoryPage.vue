@@ -75,6 +75,8 @@ const columns = computed<DataTableColumn[]>(() => [
   { key: 'total_cost_usd', label: t('usageHistory.columns.cost') },
   { key: 'total_input_tokens', label: t('usageHistory.columns.inputTokens') },
   { key: 'total_output_tokens', label: t('usageHistory.columns.outputTokens') },
+  { key: 'total_cache_read_tokens', label: t('usageHistory.columns.cacheRead') },
+  { key: 'total_cache_creation_tokens', label: t('usageHistory.columns.cacheWrite') },
   { key: 'execution_count', label: t('usageHistory.columns.executions') },
   { key: 'avg_rate_limit_pct', label: t('usageHistory.columns.avgRate') },
   { key: 'max_rate_limit_pct', label: t('usageHistory.columns.maxRate') },
@@ -176,6 +178,12 @@ onMounted(loadData);
         </template>
         <template #cell-total_output_tokens="{ item }">
           {{ formatTokenCount(item.total_output_tokens) }}
+        </template>
+        <template #cell-total_cache_read_tokens="{ item }">
+          {{ formatTokenCount(item.total_cache_read_tokens || 0) }}
+        </template>
+        <template #cell-total_cache_creation_tokens="{ item }">
+          {{ formatTokenCount(item.total_cache_creation_tokens || 0) }}
         </template>
         <template #cell-execution_count="{ item }">
           {{ item.execution_count }}

@@ -7915,7 +7915,7 @@
     "monthly": "月次",
     "monthsShort": "{count}ヶ月",
     "loading": "履歴を読み込み中...",
-    "totalCost": "総コスト",
+    "totalCost": "総コスト (API換算)",
     "inputTokens": "入力トークン",
     "outputTokens": "出力トークン",
     "executions": "実行回数",
@@ -7925,14 +7925,16 @@
     "monthlyBreakdown": "月次内訳",
     "columns": {
       "period": "期間",
-      "cost": "コスト",
+      "cost": "コスト (API換算)",
       "inputTokens": "入力トークン",
       "outputTokens": "出力トークン",
       "executions": "実行",
       "avgRate": "平均レート %",
-      "maxRate": "最大レート %"
+      "maxRate": "最大レート %",
+      "cacheRead": "キャッシュ読取",
+      "cacheWrite": "キャッシュ書込"
     },
-    "billingNote": "コストは実際の課金方式を反映します: APIキーで認証したアカウントはトークン単位で課金され、OAuth・サブスクリプションのアカウント(Claude Max/Pro、ChatGPT、Geminiログイン)は月額定額のためここでは$0と表示されます。トークン数はすべてのアカウントで引き続き集計されます。"
+    "billingNote": "コストは名目上のAPI換算の見積もりです — 各セッションのモデルの従量課金API単価でこの使用量を換算した金額で、キャッシュトークン(大半を占める)も含みます。OAuth・サブスクリプションのアカウント(Max/Pro、ChatGPT、Geminiログイン)はトークン単位で課金されないため、実際の支出ではありません。"
   },
   "visualCronWizard": {
     "title": "自然言語スケジュールビルダー",
@@ -8269,7 +8271,7 @@
   "cost": {
     "title": "コスト",
     "subtitle": "トークン消費、予算、レート制限ウィンドウ",
-    "billingNote": "コストは実際の課金方式を反映します: APIキーで認証したアカウントはトークン単位で課金され、OAuth・サブスクリプションのアカウント(Claude Max/Pro、ChatGPT、Geminiログイン)は月額定額のためここでは$0と表示されます。トークン数はすべてのアカウントで引き続き集計されます。"
+    "billingNote": "コストは名目上のAPI換算の見積もりです — 各セッションのモデルの従量課金API単価でこの使用量を換算した金額で、キャッシュトークン(大半を占める)も含みます。OAuth・サブスクリプションのアカウント(Max/Pro、ChatGPT、Geminiログイン)はトークン単位で課金されないため、実際の支出ではありません。"
   },
   "health": {
     "title": "ヘルス",

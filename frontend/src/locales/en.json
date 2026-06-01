@@ -7915,7 +7915,7 @@
     "monthly": "Monthly",
     "monthsShort": "{count}mo",
     "loading": "Loading history...",
-    "totalCost": "Total Cost",
+    "totalCost": "Total Cost (API-equiv.)",
     "inputTokens": "Input Tokens",
     "outputTokens": "Output Tokens",
     "executions": "Executions",
@@ -7925,14 +7925,16 @@
     "monthlyBreakdown": "Monthly Breakdown",
     "columns": {
       "period": "Period",
-      "cost": "Cost",
+      "cost": "Cost (API-equiv.)",
       "inputTokens": "Input Tokens",
       "outputTokens": "Output Tokens",
       "executions": "Executions",
       "avgRate": "Avg Rate %",
-      "maxRate": "Max Rate %"
+      "maxRate": "Max Rate %",
+      "cacheRead": "Cache Read",
+      "cacheWrite": "Cache Write"
     },
-    "billingNote": "Cost reflects actual billing: accounts authenticated with an API key are charged per token; OAuth/subscription accounts (Claude Max/Pro, ChatGPT, Gemini login) pay a flat monthly fee and show $0 here. Token counts are still tracked for every account."
+    "billingNote": "Cost is a notional API-equivalent estimate — what this usage would cost at each session model’s pay-as-you-go API price, including cache tokens (which dominate). OAuth/subscription accounts (Max/Pro, ChatGPT, Gemini login) aren’t billed per token, so this is not your actual spend."
   },
   "visualCronWizard": {
     "title": "Natural Language Schedule Builder",
@@ -8269,7 +8271,7 @@
   "cost": {
     "title": "Cost",
     "subtitle": "Token spend, budgets, and rate-limit windows",
-    "billingNote": "Cost reflects actual billing: accounts authenticated with an API key are charged per token; OAuth/subscription accounts (Claude Max/Pro, ChatGPT, Gemini login) pay a flat monthly fee and show $0 here. Token counts are still tracked for every account."
+    "billingNote": "Cost is a notional API-equivalent estimate — what this usage would cost at each session model’s pay-as-you-go API price, including cache tokens (which dominate). OAuth/subscription accounts (Max/Pro, ChatGPT, Gemini login) aren’t billed per token, so this is not your actual spend."
   },
   "health": {
     "title": "Health",

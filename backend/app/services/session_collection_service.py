@@ -17,31 +17,6 @@ class SessionCollectionService:
     """Collects token usage from local CLI session files."""
 
     @classmethod
-    def _metered_backend_types(cls) -> set:
-        """Backend types billed PER TOKEN — i.e. an account authenticated with
-        an API key (pay-as-you-go), as opposed to OAuth/subscription accounts
-        (Max/Pro/Plus) that pay a flat monthly fee. Cost is only meaningful
-        for metered backends; subscription usage costs $0 (covered by the
-        flat fee) and must not be priced at API list rates.
-        """
-        from ..database import get_connection
-
-        metered: set = set()
-        try:
-            with get_connection() as conn:
-                rows = conn.execute(
-                    "SELECT backend_id, api_key_env FROM backend_accounts"
-                ).fetchall()
-            for r in rows:
-                if (r["api_key_env"] or "").strip():
-                    bt = (r["backend_id"] or "").replace("backend-", "").strip()
-                    if bt:
-                        metered.add(bt)
-        except Exception as e:  # noqa: BLE001
-            logger.debug("metered-backend detection failed: %s", e)
-        return metered
-
-    @classmethod
     def collect_all(cls) -> dict:
         """Run full collection. Returns summary of imported data.
 
@@ -50,12 +25,6 @@ class SessionCollectionService:
         token counts have increased.
         """
         imported_set = cls._get_imported_sessions()
-        # Backends that bill PER TOKEN (an account authed with an API key) vs
-        # OAuth/subscription backends (Max/Pro/Plus) that pay a flat monthly
-        # fee. Only metered backends accrue a dollar cost — subscription usage
-        # is $0 (covered by the subscription), so we must NOT price it as
-        # pay-as-you-go API list price.
-        metered = cls._metered_backend_types()
         results = {
             "claude": {"sessions": 0, "updated": 0, "cost": 0.0},
             "codex": {"sessions": 0, "updated": 0, "cost": 0.0},
@@ -69,8 +38,6 @@ class SessionCollectionService:
                 usage = cls._parse_claude_session(jsonl_file)
                 if not usage or (usage["input_tokens"] == 0 and usage["output_tokens"] == 0):
                     continue
-                if "claude" not in metered:
-                    usage["total_cost_usd"] = 0.0  # subscription: flat fee, $0/token
                 if session_id in imported_set:
                     # Re-imported: update if tokens grew
                     if cls._update_usage_if_changed(session_id, "claude", usage):
@@ -97,8 +64,6 @@ class SessionCollectionService:
                 usage = cls._parse_codex_session(jsonl_file)
                 if not usage or (usage["input_tokens"] == 0 and usage["output_tokens"] == 0):
                     continue
-                if "codex" not in metered:
-                    usage["total_cost_usd"] = 0.0  # subscription: flat fee, $0/token
                 if session_id in imported_set:
                     if cls._update_usage_if_changed(session_id, "codex", usage):
                         results["codex"]["updated"] += 1
@@ -538,7 +503,7 @@ class SessionCollectionService:
             with get_connection() as conn:
                 cursor = conn.execute(
                     """SELECT input_tokens, output_tokens, cache_read_tokens,
-                              cache_creation_tokens
+                              cache_creation_tokens, total_cost_usd
                        FROM token_usage WHERE execution_id = ?""",
                     (execution_id,),
                 )
@@ -550,14 +515,20 @@ class SessionCollectionService:
                 new_output = usage.get("output_tokens", 0)
                 new_cache_read = usage.get("cache_read_tokens", 0)
                 new_cache_create = usage.get("cache_creation_tokens", 0)
+                new_cost = round(usage.get("total_cost_usd", 0.0), 6)
 
+                # Skip only when nothing grew AND the (per-model) cost already
+                # matches — so a re-collection still repairs rows whose cost is
+                # stale/zeroed even though their token counts are unchanged.
+                cost_matches = abs(new_cost - (row["total_cost_usd"] or 0.0)) < 0.005
                 if (
                     new_input <= row["input_tokens"]
                     and new_output <= row["output_tokens"]
                     and new_cache_read <= row["cache_read_tokens"]
                     and new_cache_create <= row["cache_creation_tokens"]
+                    and cost_matches
                 ):
-                    return False  # No growth
+                    return False  # No growth and cost already correct
 
                 # Use the session's actual timestamp, preserve original if not available
                 session_ts = usage.get("last_timestamp") or usage.get("first_timestamp")
