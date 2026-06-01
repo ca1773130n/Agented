@@ -23,6 +23,22 @@ export const monitoringApi = {
     apiFetch<SnapshotHistory>(
       `/admin/monitoring/history?account_id=${accountId}&window_type=${windowType}${minutes ? `&minutes=${minutes}` : ''}`
     ),
+  // Batch history: one request for many windows. The Cost dashboard needs a
+  // history per window per account (~12-36 series); firing them as individual
+  // getHistory() calls bursts past the 30/min admin rate limit → 429 storm →
+  // blank trend charts. This collapses them into a single POST.
+  getHistoryBatch: (
+    windows: { account_id: number; window_type: string }[],
+    minutes?: number,
+  ) =>
+    apiFetch<{ histories: Record<string, SnapshotHistory> }>(
+      '/admin/monitoring/history-batch',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ windows, minutes }),
+      },
+    ),
   // Per-account OAuth credential status — used by the Token Usage
   // Dashboard banner and the AI Backends row badge to flag accounts
   // the poller can't resolve a token for (so the dashboard isn't

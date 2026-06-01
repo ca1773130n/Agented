@@ -201,13 +201,17 @@ function checkAndNotifyThresholds() {
 }
 
 async function loadTrendHistories(windows: MonitoringStatus['windows']) {
-  const results: Record<string, SnapshotHistory> = {};
-  await Promise.all(windows.map(async (w) => {
-    const key = getTrendKey(w.account_id, w.window_type);
-    try { results[key] = await monitoringApi.getHistory(w.account_id, w.window_type, monitoringHistoryMinutes.value); }
-    catch { /* skip */ }
-  }));
-  trendHistories.value = { ...trendHistories.value, ...results };
+  if (!windows?.length) return;
+  // ONE batched request, not one-per-window. Firing ~12-36 concurrent
+  // /history calls bursts past the 30/min admin rate limit → 429 storm →
+  // trend charts render with missing data (wrong shapes/legends/heights).
+  try {
+    const { histories } = await monitoringApi.getHistoryBatch(
+      windows.map((w) => ({ account_id: w.account_id, window_type: w.window_type })),
+      monitoringHistoryMinutes.value,
+    );
+    trendHistories.value = { ...trendHistories.value, ...histories };
+  } catch { /* skip */ }
 }
 
 async function loadMonitoringStatus() {

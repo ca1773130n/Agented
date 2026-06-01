@@ -180,6 +180,63 @@ def monitoring_history(
     }
 
 
+@post("/history-batch", sync_to_thread=False)
+def monitoring_history_batch(data: dict[str, Any]) -> dict[str, Any]:
+    """Return snapshot history for MANY (account_id, window_type) windows in
+    ONE request.
+
+    The Cost dashboard charts a history per window per account (~12-36
+    series). Fetching each as an individual GET /history call bursts past
+    the per-key admin rate limit (30/min, see RateLimitMiddleware) → 429
+    storm → trend charts render with missing data (wrong shapes/legends).
+    One batched read avoids the burst entirely.
+
+    Body: ``{"windows": [{"account_id": int, "window_type": str}, ...],
+             "minutes": int, "limit": int}``
+    Returns: ``{"histories": {"<account_id>_<window_type>":
+             {account_id, window_type, history: [...]}}}``.
+    """
+    windows = data.get("windows") or []
+    minutes = int(data.get("minutes", 360))
+    # Max points returned per window. The chart needs the trend to span the
+    # WHOLE selected window (e.g. 30 days), evenly downsampled — not the
+    # oldest 50 rows that ``get_snapshot_history`` (ORDER BY ASC LIMIT 50)
+    # would otherwise return, which made a 30-day selection show only the
+    # first few hours of monitoring.
+    max_points = max(50, min(int(data.get("max_points", 400)), 2000))
+
+    def _downsample(rows: list, cap: int) -> list:
+        if len(rows) <= cap:
+            return rows
+        step = len(rows) / cap
+        out = [rows[int(i * step)] for i in range(cap)]
+        out[-1] = rows[-1]  # always keep the most-recent point
+        return out
+
+    histories: dict[str, Any] = {}
+    for w in windows:
+        aid = w.get("account_id")
+        wt = w.get("window_type")
+        if aid is None or not wt:
+            continue
+        # Fetch the full window (bounded), then downsample for the chart.
+        rows = get_snapshot_history(aid, wt, since_minutes=minutes, limit=20000, offset=0)
+        rows = _downsample(rows, max_points)
+        histories[f"{aid}_{wt}"] = {
+            "account_id": aid,
+            "window_type": wt,
+            "history": [
+                {
+                    "tokens_used": s["tokens_used"],
+                    "percentage": s["percentage"],
+                    "recorded_at": s["recorded_at"],
+                }
+                for s in rows
+            ],
+        }
+    return {"histories": histories}
+
+
 monitoring_router = Router(
     path="/admin/monitoring",
     route_handlers=[
@@ -189,6 +246,7 @@ monitoring_router = Router(
         monitoring_poll,
         monitoring_credentials,
         monitoring_history,
+        monitoring_history_batch,
     ],
 )
 

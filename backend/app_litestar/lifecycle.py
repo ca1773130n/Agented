@@ -270,6 +270,32 @@ def _setup_scheduler(app: Any) -> None:
                 **interval_kwargs,
             )
 
+        # Rate-limit / usage monitoring as a FIRST-CLASS background daemon
+        # job. Previously it was registered only inside
+        # MonitoringService.init()'s conditional auto-enable path, so it
+        # could effectively run "only while the operator is browsing" (the
+        # frontend's pollNow drives extra polls). Register it explicitly here
+        # on every startup at the CONFIGURED interval, gated on enabled. Same
+        # job id => idempotent with init() (one job, no double-poll).
+        try:
+            from app.database import get_monitoring_config
+
+            _mon_cfg = get_monitoring_config()
+            if _mon_cfg.get("enabled"):
+                _mon_interval = max(1, int(_mon_cfg.get("polling_minutes", 5)))
+                SchedulerService._scheduler.add_job(
+                    func=MonitoringService._poll_usage,
+                    trigger="interval",
+                    minutes=_mon_interval,
+                    id="token_usage_monitoring",
+                    replace_existing=True,
+                )
+                logger.info(
+                    "Monitoring daemon job registered: poll every %d min", _mon_interval
+                )
+        except Exception:
+            logger.warning("monitoring daemon job registration failed", exc_info=True)
+
     # Auxiliary schedulers
     from app.services.agent_scheduler_service import AgentSchedulerService
     from app.services.rotation_evaluator import RotationEvaluator
