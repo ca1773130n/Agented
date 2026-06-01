@@ -35,6 +35,7 @@ export default defineConfig({
         nav: [
           { text: 'Home', link: '/' },
           { text: 'Architecture', link: '/self-improving-harness-architecture' },
+          { text: 'Tutorial', link: '/self-improving-harness-tutorial' },
           { text: 'Blog', link: `${GITHUB}/blob/main/BLOG-self-improving-harness.md` },
         ],
         sidebar: [
@@ -44,6 +45,10 @@ export default defineConfig({
               {
                 text: 'The Self-Improving Harness',
                 link: '/self-improving-harness-architecture',
+              },
+              {
+                text: 'Tutorial: Watch It Improve Itself',
+                link: '/self-improving-harness-tutorial',
               },
             ],
           },
@@ -59,6 +64,7 @@ export default defineConfig({
         nav: [
           { text: '홈', link: '/ko/' },
           { text: '아키텍처', link: '/ko/self-improving-harness-architecture' },
+          { text: '튜토리얼', link: '/ko/self-improving-harness-tutorial' },
           { text: '블로그', link: `${GITHUB}/blob/main/BLOG-self-improving-harness.ko.md` },
         ],
         sidebar: [
@@ -68,6 +74,10 @@ export default defineConfig({
               {
                 text: '자기개선 하네스',
                 link: '/ko/self-improving-harness-architecture',
+              },
+              {
+                text: '튜토리얼: 스스로 개선되는 과정',
+                link: '/ko/self-improving-harness-tutorial',
               },
             ],
           },
