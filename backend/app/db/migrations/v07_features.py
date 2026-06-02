@@ -977,6 +977,21 @@ def _migrate_145_subscription_cost_zero(conn):
     return
 
 
+def _migrate_146_project_autonomy_config(conn):
+    """Phase D/E tables (autonomy + forge propagation) were added to
+    ``create_fresh_schema`` but never got migrations, so any DB created before
+    those phases lacks them: ``project_autonomy_config`` (the 5-minute
+    ``autonomous_apply_job`` crashes with "no such table" every run),
+    ``shared_forge_bindings``, ``forge_promotion_evidence``, and
+    ``project_shared_forge_adoptions`` (propagation paths). Create them all
+    idempotently for existing DBs (CREATE TABLE/INDEX IF NOT EXISTS)."""
+    from app.db.schema._forge_promotion import create_forge_promotion_tables
+    from app.db.schema._project_autonomy import create_project_autonomy_tables
+
+    create_project_autonomy_tables(conn)
+    create_forge_promotion_tables(conn)
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -1062,4 +1077,7 @@ V07_MIGRATIONS: list = [
     # Cost correctness: $0 for OAuth/subscription backends (flat fee), only
     # API-key (metered) backends accrue per-token cost.
     (145, "subscription_cost_zero", _migrate_145_subscription_cost_zero),
+    # Backfill Phase D autonomy table on pre-Phase-D DBs (was fresh-schema
+    # only) so autonomous_apply_job stops crashing with "no such table".
+    (146, "project_autonomy_config", _migrate_146_project_autonomy_config),
 ]
