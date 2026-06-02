@@ -43,11 +43,4 @@ export const notificationRoutes: RouteRecordRaw[] = [
     name: 'on-call-escalation',
     redirect: () => ({ name: 'dashboards-activity', hash: '#scheduling' }),
   },
-  // Incident Response Playbook Bots (item 34)
-  {
-    path: '/bots/incident-playbooks',
-    name: 'incident-response-playbooks',
-    component: () => import('../../views/IncidentResponsePlaybooksPage.vue'),
-    meta: { title: 'Incident Response Playbooks' },
-  },
 ];

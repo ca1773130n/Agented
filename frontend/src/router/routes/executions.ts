@@ -57,20 +57,6 @@ export const executionRoutes: RouteRecordRaw[] = [
     props: true,
     meta: { title: 'Live Execution Terminal' },
   },
-  // Execution Quota & Rate Controls (Feature 19)
-  {
-    path: '/settings/execution-quotas',
-    name: 'execution-quota-controls',
-    component: () => import('../../views/ExecutionQuotaControls.vue'),
-    meta: { title: 'Execution Quotas & Rate Controls' },
-  },
-  // Mobile Execution Monitor (Feature 30)
-  {
-    path: '/executions/monitor',
-    name: 'mobile-execution-monitor',
-    component: () => import('../../views/MobileExecutionMonitor.vue'),
-    meta: { title: 'Execution Monitor' },
-  },
   // Execution Output Artifacts (Feature 34)
   {
     path: '/executions/artifacts',

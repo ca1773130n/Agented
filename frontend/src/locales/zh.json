@@ -86,10 +86,6 @@
     "blockIntrospection": "内省",
     "blockAuthoring": "编写",
     "botTemplates": "机器人模板",
-    "cloneForkBot": "克隆与复刻机器人",
-    "crossTeamSharing": "跨团队共享",
-    "incidentPlaybooks": "事件处理手册",
-    "livePromptSandbox": "实时提示词沙箱",
     "nlCronBuilder": "自然语言 Cron 构建器",
     "triggerConditions": "触发条件",
     "nlRuleEditor": "自然语言规则编辑器",
@@ -97,12 +93,8 @@
     "prAutoAssignment": "PR 自动分配",
     "prReviewLearning": "PR 审查学习",
     "githubActions": "GitHub Actions",
-    "webhookRecorder": "Webhook 录制器",
-    "dependencyUpdates": "依赖更新",
     "botDryRun": "机器人试运行",
-    "outputPiping": "输出管道",
     "webhookForwarding": "Webhook 转发",
-    "botRunbooks": "机器人运行手册",
     "executionTagging": "执行标记",
     "promptSnippets": "提示词片段",
     "allPlugins": "所有插件",
@@ -121,7 +113,6 @@
     "tokenUsage": "令牌用量",
     "allBackends": "所有后端",
     "aiCost": "AI 成本",
-    "providerBenchmarks": "提供商基准",
     "traces": "追踪",
     "slackNotifications": "Slack 通知",
     "jiraLinear": "Jira / Linear",
@@ -130,10 +121,6 @@
     "rbacSettings": "RBAC 设置",
     "ssoSaml": "SSO / SAML",
     "teamBudgets": "团队预算",
-    "executionQuotas": "执行配额",
-    "digestReports": "摘要报告",
-    "mobileMonitor": "移动监控",
-    "botSlaUptime": "机器人 SLA 与运行时间",
     "apiKeys": "API 密钥",
     "findingsTriage": "发现项分诊",
     "versionPinning": "版本锁定",
@@ -3559,49 +3546,6 @@
       "saveFailed": "保存失败"
     }
   },
-  "botCloneFork": {
-    "title": "机器人克隆与派生",
-    "subtitle": "将任意机器人复制为新机器人的起点——可选择复制到不同团队的工作区。",
-    "loading": "正在加载触发器和团队...",
-    "loadFailed": "加载数据失败",
-    "copyName": "{name}（副本）",
-    "chooseSource": "选择源机器人",
-    "searchPlaceholder": "搜索机器人...",
-    "tag": {
-      "team": "团队",
-      "predefined": "预定义"
-    },
-    "paths": "{count} 条路径",
-    "noMatch": "没有与搜索匹配的机器人",
-    "cloneConfig": "克隆配置",
-    "selectPrompt": "选择源机器人以配置克隆",
-    "cloningFrom": "克隆来源",
-    "previewDesc": "{source} 触发器 · {mode} 模式",
-    "newBotName": "新机器人名称",
-    "newBotNamePlaceholder": "我的派生机器人",
-    "targetTeam": "目标团队",
-    "noTeam": "无团队（直接）",
-    "noneDirect": "无（直接）",
-    "copyPrompt": "复制提示词模板",
-    "copyTrigger": "复制触发器配置",
-    "copySchedule": "复制计划设置",
-    "summary": {
-      "newName": "新名称",
-      "targetTeam": "目标团队",
-      "copying": "复制内容",
-      "prompt": "提示词",
-      "trigger": "触发器",
-      "schedule": "计划",
-      "configOnly": "仅配置"
-    },
-    "cloning": "克隆中...",
-    "cloneBot": "克隆机器人",
-    "toast": {
-      "nameRequired": "需要机器人名称",
-      "created": "\"{name}\"创建成功",
-      "cloneFailed": "克隆失败"
-    }
-  },
   "botDependencyGraph": {
     "title": "机器人依赖图",
     "subtitle": "可视化机器人、触发器、团队和智能体之间的关系。",
@@ -3693,35 +3637,6 @@
       "deleteFailed": "删除内存条目失败",
       "allCleared": "已清除 {bot} 的所有内存",
       "clearFailed": "清除内存失败"
-    }
-  },
-  "botOutputPiping": {
-    "title": "机器人输出管道",
-    "subtitle": "按顺序串联机器人执行 — 一个机器人的输出成为下一个机器人的输入上下文。",
-    "configuredPipes": "已配置的管道",
-    "createNewPipe": "创建新管道",
-    "enabled": "已启用",
-    "disabled": "已禁用",
-    "pipeDiagram": "管道图",
-    "recentExecutions": "最近的管道执行",
-    "transform": {
-      "passthrough": "直接传递",
-      "trim": "去除空白",
-      "jsonExtract": "JSON 提取"
-    },
-    "node": {
-      "sourceBot": "源机器人",
-      "stdoutCaptured": "已捕获 stdout",
-      "transform": "转换",
-      "outputProcessed": "输出已处理",
-      "destBot": "目标机器人",
-      "stdinInjected": "已注入 stdin"
-    },
-    "col": {
-      "pipe": "管道",
-      "triggered": "触发时间",
-      "sourcePreview": "源预览",
-      "destStatus": "目标状态"
     }
   },
   "botOutputWebhookForwarding": {
@@ -3826,39 +3741,6 @@
       "enableFailed": "启用 {name} 失败"
     }
   },
-  "botRunbooks": {
-    "loading": "正在加载运行手册...",
-    "bots": "机器人",
-    "runbook": "运行手册",
-    "noRunbook": "无运行手册",
-    "lastUpdated": "最后更新:",
-    "onCall": "值班:",
-    "severityMatrix": "严重程度操作矩阵",
-    "noRunbookFor": "{bot} 没有运行手册",
-    "emptyHint": "添加运行手册，以便值班工程师在此机器人触发严重问题时确切知道该怎么做。",
-    "createRunbook": "创建运行手册",
-    "editRunbook": "编辑运行手册",
-    "saving": "正在保存...",
-    "saveRunbook": "保存运行手册",
-    "sections": "章节",
-    "addSection": "+ 添加章节",
-    "selectBotHint": "从左侧选择一个机器人以查看或创建其运行手册。",
-    "never": "从未",
-    "field": {
-      "title": "标题",
-      "description": "描述",
-      "descriptionPlaceholder": "此运行手册的用途是什么？",
-      "onCallContact": "值班联系人",
-      "onCallPlaceholder": "#slack-频道 或邮箱",
-      "sectionTitle": "章节标题",
-      "sectionTitlePlaceholder": "步骤 {num} 标题",
-      "content": "内容",
-      "contentPlaceholder": "说明..."
-    },
-    "toast": {
-      "saved": "运行手册已保存"
-    }
-  },
   "botSandbox": {
     "loading": "正在加载沙箱...",
     "introTitle": "机器人测试沙箱环境",
@@ -3892,50 +3774,6 @@
       "created": "沙箱已创建",
       "runComplete": "沙箱运行完成",
       "deleted": "沙箱已删除"
-    }
-  },
-  "botSlaUptime": {
-    "title": "机器人 SLA 与正常运行时间跟踪",
-    "subtitle": "为每个机器人定义预期的执行频率并监控合规性。当计划的机器人未按时运行时 — 在错过审计或延迟报告被发现之前获得提醒。",
-    "loading": "正在加载 SLA 数据...",
-    "empty": "未配置 SLA 条目。一旦机器人有计划运行，机器人 SLA 跟踪将在此处显示。",
-    "noMatch": "没有机器人符合此筛选条件。",
-    "on": "开",
-    "off": "关",
-    "never": "从未",
-    "justNow": "刚刚",
-    "hoursAgo": "{h} 小时前",
-    "daysAgo": "{d} 天前",
-    "na": "不适用",
-    "overdueBy": "逾期 {h} 小时",
-    "soon": "即将",
-    "inHours": "{h} 小时后",
-    "inDays": "{d} 天后",
-    "filter": {
-      "allBots": "所有机器人"
-    },
-    "stat": {
-      "onSchedule": "按计划",
-      "overdue": "逾期",
-      "avgUptime": "平均 30 天正常运行时间",
-      "trackedBots": "已跟踪的机器人"
-    },
-    "col": {
-      "bot": "机器人",
-      "lastRun": "上次运行",
-      "nextExpected": "下次预期",
-      "uptime7d": "7 天正常运行时间",
-      "uptime30d": "30 天正常运行时间",
-      "successRate": "成功率",
-      "alerts": "提醒"
-    },
-    "error": {
-      "timeout": "请求超时。后端可能无法访问。",
-      "loadFailed": "加载 SLA 数据失败"
-    },
-    "toast": {
-      "alertsEnabled": "已为 {bot} 启用 SLA 提醒",
-      "alertsDisabled": "已为 {bot} 禁用 SLA 提醒"
     }
   },
   "botTemplateMarketplace": {
@@ -4221,49 +4059,6 @@
       "saveFailed": "保存规则失败",
       "deleted": "规则已删除",
       "deleteFailed": "删除规则失败"
-    }
-  },
-  "executionQuotaControls": {
-    "loading": "正在加载配额规则...",
-    "rulesTitle": "配额规则",
-    "rulesDescription": "设置每个机器人每小时/每天的最大执行次数。硬性停止会阻止，软性警报仅通知。",
-    "newRule": "新规则",
-    "createRuleTitle": "创建配额规则",
-    "createRule": "创建规则",
-    "saveChanges": "保存更改",
-    "nearingLimit": "{count} 个配额接近限制",
-    "hardStop": "硬性停止",
-    "thisHour": "本小时",
-    "today": "今天",
-    "emptyTitle": "未配置配额规则",
-    "emptyDescription": "点击“添加规则”以创建一个。",
-    "notEnabledShort": "配额执行尚未启用",
-    "notEnabledDeployment": "配额执行在此部署中尚未启用",
-    "notEnabled": {
-      "feature": "配额执行",
-      "detail": "在后端发布持久配额执行之前，创建、编辑或删除配额规则已被禁用。"
-    },
-    "form": {
-      "targetType": "目标类型",
-      "bot": "机器人",
-      "team": "团队",
-      "global": "全局",
-      "targetName": "目标名称 / ID",
-      "targetNamePlaceholder": "例如 bot-security",
-      "maxPerHour": "每小时最大",
-      "maxPerHourPlaceholder": "例如 10",
-      "maxPerDay": "每天最大",
-      "maxPerDayPlaceholder": "例如 100",
-      "alertAt": "警报阈值 (%)",
-      "alertThreshold": "警报阈值 (%)",
-      "hardStopFull": "硬性停止（达到限制时阻止执行）",
-      "hardStopShort": "硬性停止"
-    },
-    "toast": {
-      "updated": "配额规则已更新",
-      "updatedDemo": "配额已更新（演示）",
-      "created": "配额规则已创建",
-      "deleted": "配额规则已删除"
     }
   },
   "executionTagging": {
@@ -4869,55 +4664,6 @@
       "rejectFailed": "拒绝失败"
     }
   },
-  "incidentResponsePlaybooks": {
-    "title": "事件响应剧本",
-    "subtitle": "用于常见事件响应步骤的预构建机器人模板。自动化机械性的部分，让您专注于问题本身。",
-    "loading": "正在加载剧本...",
-    "searchPlaceholder": "搜索剧本...",
-    "noMatch": "没有符合筛选条件的剧本。",
-    "selectPrompt": "选择一个剧本以查看详情并运行",
-    "steps": "步骤",
-    "running": "运行中...",
-    "runPlaybook": "运行剧本",
-    "executionLog": "执行日志",
-    "lastRun": "上次运行",
-    "never": "从未",
-    "categories": {
-      "all": "全部",
-      "outage": "故障",
-      "performance": "性能",
-      "security": "安全",
-      "documentation": "文档",
-      "deployment": "部署"
-    },
-    "toast": {
-      "loadFailed": "加载剧本失败",
-      "completed": "剧本 \"{name}\" 已完成",
-      "executionFailed": "剧本执行失败"
-    }
-  },
-  "inlinePromptEditor": {
-    "title": "带实时预览的内联提示词编辑器",
-    "subtitle": "带有模板变量高亮、测试载荷注入器和渲染预览的分屏编辑器。",
-    "loadingTriggers": "正在加载触发器...",
-    "noTriggers": "未找到触发器。请先创建触发器。",
-    "triggerLabel": "触发器：",
-    "loadingPrompt": "正在加载提示词...",
-    "variables": "变量：",
-    "promptTemplate": "提示词模板",
-    "saving": "保存中...",
-    "testPayload": "测试载荷 (JSON)",
-    "renderedPreview": "渲染预览",
-    "unresolvedCount": "{count} 个未解析",
-    "invalidJson": "无效的 JSON",
-    "loadTriggersFailed": "加载触发器失败",
-    "loadPromptFailed": "加载提示词失败",
-    "selectTriggerFirst": "请先选择一个触发器",
-    "savePromptFailed": "保存提示词失败",
-    "toast": {
-      "saved": "提示词模板已保存"
-    }
-  },
   "integrationTicketing": {
     "title": "工单集成",
     "subtitle": "配置 Jira 和 Linear，从机器人发现结果自动创建工单。",
@@ -5128,36 +4874,6 @@
     "recall": "回忆",
     "threads": "线程",
     "loadFailed": "加载工作记忆失败"
-  },
-  "mobileExecutionMonitor": {
-    "title": "执行监控",
-    "autoRefresh": "每 15 秒自动刷新",
-    "alertsOn": "提醒已开启",
-    "enableAlerts": "启用提醒",
-    "loading": "正在加载执行...",
-    "running": "运行中",
-    "failed": "失败",
-    "succeeded": "成功",
-    "secondsAgo": "{count} 秒前",
-    "minutesAgo": "{count} 分钟前",
-    "hoursAgo": "{count} 小时前",
-    "emptyAll": "未找到执行。",
-    "emptyFiltered": "未找到 {status} 执行。",
-    "mobileHint": "此视图针对移动设备进行了优化。启用推送提醒，即可在凌晨 2 点的故障时收到通知。",
-    "detail": {
-      "id": "ID",
-      "bot": "机器人",
-      "status": "状态",
-      "started": "已开始",
-      "finished": "已完成",
-      "error": "错误"
-    },
-    "toast": {
-      "notSupported": "此浏览器不支持推送通知",
-      "disabled": "推送通知已禁用",
-      "enabled": "已为机器人故障启用推送通知",
-      "permissionDenied": "通知权限被拒绝"
-    }
   },
   "multiAgentCollaboration": {
     "title": "多代理协作模式",
@@ -6311,37 +6027,6 @@
       "rollbackFailed": "回滚失败"
     }
   },
-  "providerBenchmarkDashboard": {
-    "title": "提供商基准测试仪表板",
-    "subtitle": "对多个 AI 提供商同时运行相同的机器人，并比较质量、延迟和成本。",
-    "loading": "正在加载提供商状态和后端数据...",
-    "empty": "未找到提供商账户。配置后端和账户以查看基准测试数据。",
-    "unknown": "未知",
-    "unknownError": "未知错误",
-    "liveAccountHealth": "实时账户状态",
-    "livePrompt": "基于状态、延迟和成本指标的提供商账户实时比较。",
-    "benchmarks": "基准测试",
-    "providersCount": "{count} 个提供商",
-    "bestQuality": "最佳质量",
-    "fastest": "最快",
-    "cheapest": "最便宜",
-    "costPer1k": "${cost}/1k 令牌",
-    "comparisonResults": "比较结果",
-    "refreshing": "正在刷新...",
-    "refreshData": "▶ 刷新数据",
-    "benchmarkDescription": "基准测试说明",
-    "cols": {
-      "provider": "提供商",
-      "quality": "质量",
-      "latency": "延迟",
-      "cost": "成本 /1k",
-      "tokensOut": "输出令牌"
-    },
-    "toasts": {
-      "refreshed": "基准测试数据已刷新",
-      "refreshFailed": "刷新失败"
-    }
-  },
   "rbacSettings": {
     "title": "基于角色的访问控制",
     "subtitle": "管理 API 密钥角色并查看权限矩阵",
@@ -6506,54 +6191,6 @@
       "switchedTo": "已切换到{mode}",
       "updateModeFailed": "更新过滤器模式失败",
       "enterTestValue": "请先输入测试值"
-    }
-  },
-  "reportDigests": {
-    "title": "报告摘要",
-    "subtitle": "安排 AI 生成的摘要通过电子邮件或 Slack 发送",
-    "addDigest": "+ 添加摘要",
-    "newDigest": "新报告摘要",
-    "creating": "正在创建...",
-    "createDigest": "创建摘要",
-    "saving": "正在保存...",
-    "loading": "正在加载摘要配置...",
-    "active": "活动",
-    "disabled": "已禁用",
-    "never": "从不",
-    "lastLabel": "最近：{time}",
-    "enableForTeam": "为此团队启用摘要",
-    "previewTitle": "最近生成的摘要预览",
-    "platformTeam": "平台团队",
-    "notEnabledTooltipShort": "摘要发送尚未启用",
-    "notEnabledTooltip": "此部署中摘要发送尚未启用",
-    "notEnabled": {
-      "feature": "摘要发送",
-      "detail": "在后端提供摘要持久化和发送之前，创建或编辑摘要计划已禁用。"
-    },
-    "fields": {
-      "teamName": "团队名称",
-      "frequency": "频率",
-      "channel": "渠道",
-      "slackChannel": "Slack 渠道",
-      "emailRecipients": "电子邮件收件人"
-    },
-    "frequency": {
-      "daily": "每日",
-      "weekly": "每周"
-    },
-    "channel": {
-      "email": "电子邮件"
-    },
-    "empty": {
-      "title": "未配置报告摘要",
-      "description": "为您的团队配置摘要计划以接收自动报告。"
-    },
-    "toasts": {
-      "saved": "摘要设置已保存",
-      "savedDemo": "已保存（演示模式）",
-      "teamNameRequired": "需要团队名称",
-      "created": "摘要配置已创建",
-      "createdDemo": "已创建（演示模式）"
     }
   },
   "resetPassword": {
@@ -8072,43 +7709,6 @@
       "desc": "使用以下占位符在提示模板中引用转换后的值:"
     }
   },
-  "webhookRecorder": {
-    "title": "Webhook 记录器",
-    "subtitle": "浏览、检查并重放捕获的 Webhook 负载。",
-    "loading": "正在加载 Webhook 记录...",
-    "errors": {
-      "load": "加载 Webhook 记录失败",
-      "loadWithDetail": "加载 Webhook 记录失败: {message}"
-    },
-    "toast": {
-      "replayed": "Webhook {id} 已成功重放",
-      "triggerNotFound": "无法重放: 未找到触发器",
-      "replayFailed": "重放失败"
-    },
-    "filters": {
-      "title": "筛选器",
-      "source": "来源",
-      "allSources": "所有来源",
-      "bot": "机器人",
-      "allBots": "所有机器人",
-      "date": "日期",
-      "clear": "清除筛选器"
-    },
-    "records": {
-      "count": "{count} 个 Webhook",
-      "empty": "没有匹配筛选条件的 Webhook"
-    },
-    "detail": {
-      "selectPrompt": "选择一个 Webhook 以检查其负载",
-      "titleSuffix": "{source} Webhook",
-      "replay": "重放",
-      "replaying": "重放中...",
-      "method": "方法: {method}",
-      "status": "状态: {status}",
-      "bot": "机器人: {bot}",
-      "payload": "负载"
-    }
-  },
   "workflowBuilder": {
     "untitled": "未命名工作流",
     "errors": {
@@ -8980,68 +8580,6 @@
     "importComingSoon": "导入（即将推出）",
     "toast": {
       "importComingSoon": "SuperAgent 导入将在未来更新中提供"
-    }
-  },
-  "crossTeamBotSharing": {
-    "title": "跨团队 Bot 共享",
-    "subtitle": "浏览分配给组织内各团队的 trigger。",
-    "loading": "正在加载团队和 trigger...",
-    "searchPlaceholder": "按 trigger 名称、团队或来源搜索...",
-    "triggerCount": "{count} 个 trigger | {count} 个 trigger",
-    "noMatch": "没有与搜索匹配的 trigger。",
-    "noAssignments": "尚无 trigger 分配给团队。",
-    "backendLabel": "Backend",
-    "modelLabel": "Model",
-    "idLabel": "ID",
-    "enabled": "已启用",
-    "disabled": "已禁用",
-    "view": "查看",
-    "unassigned": "未分配",
-    "triggerSourceLabel": "{source} trigger",
-    "tabs": {
-      "browse": "浏览 trigger",
-      "assignments": "团队分配"
-    },
-    "errors": {
-      "load": "加载失败：{message}",
-      "unexpected": "加载数据时发生意外错误。"
-    }
-  },
-  "dependencyImpactBot": {
-    "title": "Dependency Impact Bot",
-    "subtitle": "分析 PR 中的接口变更会影响哪些下游服务。",
-    "loadingTriggers": "正在加载 trigger 数据...",
-    "analyzePr": "分析 PR",
-    "analyzeImpact": "分析影响",
-    "analyzing": "正在分析...",
-    "triggersLoaded": "已加载 {count} 个 trigger",
-    "activeTriggers": "活动 Trigger",
-    "recentExecutionsSummary": "最近 {count} 次执行 — {failed} 次失败",
-    "warning": "警告",
-    "healthy": "正常",
-    "prLabel": "PR",
-    "prTitle": "PR #{num} — Dependency Impact 分析",
-    "impactScore": "影响分数",
-    "changedInterfaces": "变更的接口",
-    "noneDetected": "未检测到",
-    "impactedServices": "受影响的服务",
-    "legend": {
-      "breaking": "Breaking",
-      "potential": "潜在",
-      "safe": "安全"
-    },
-    "reasons": {
-      "noFailures": "Trigger \"{name}\" 最近没有失败。",
-      "breaking": "最近 {failed}/{total} 次执行失败 — 高失败率表明存在 breaking 依赖。",
-      "potential": "最近 {failed}/{total} 次执行出现失败 — 可能存在依赖问题。",
-      "noExecutions": "未找到最近的执行 — 无法验证依赖兼容性。"
-    },
-    "errors": {
-      "loadTriggers": "加载 trigger 失败"
-    },
-    "toast": {
-      "enterPr": "请输入 PR URL",
-      "analysisFailed": "分析失败"
     }
   },
   "executionCostEstimator": {

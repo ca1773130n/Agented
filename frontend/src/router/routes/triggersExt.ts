@@ -1,13 +1,6 @@
 import type { RouteRecordRaw } from 'vue-router';
 
 export const triggersExtRoutes: RouteRecordRaw[] = [
-  // Webhook Recorder
-  {
-    path: '/webhooks/recorder',
-    name: 'webhook-recorder',
-    component: () => import('../../views/WebhookRecorder.vue'),
-    meta: { title: 'Webhook Recorder' },
-  },
   // Bot Output Webhook Forwarding
   {
     path: '/integrations/webhook-forwarding',

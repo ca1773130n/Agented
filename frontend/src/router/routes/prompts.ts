@@ -22,13 +22,6 @@ export const promptRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/AutoContextInjection.vue'),
     meta: { title: 'Auto Context Injection' },
   },
-  // Inline Prompt Editor with Live Preview
-  {
-    path: '/bots/prompt-editor',
-    name: 'inline-prompt-editor',
-    component: () => import('../../views/InlinePromptEditor.vue'),
-    meta: { title: 'Inline Prompt Editor' },
-  },
   // Full Conversation History Viewer (feature 33)
   {
     path: '/executions/conversation-history',

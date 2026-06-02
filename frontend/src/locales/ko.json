@@ -86,10 +86,6 @@
     "blockIntrospection": "내부 점검",
     "blockAuthoring": "작성",
     "botTemplates": "봇 템플릿",
-    "cloneForkBot": "봇 복제 & 포크",
-    "crossTeamSharing": "팀 간 공유",
-    "incidentPlaybooks": "장애 대응 플레이북",
-    "livePromptSandbox": "실시간 프롬프트 샌드박스",
     "nlCronBuilder": "자연어 크론 빌더",
     "triggerConditions": "트리거 조건",
     "nlRuleEditor": "자연어 규칙 편집기",
@@ -97,12 +93,8 @@
     "prAutoAssignment": "PR 자동 할당",
     "prReviewLearning": "PR 리뷰 학습",
     "githubActions": "GitHub Actions",
-    "webhookRecorder": "웹훅 레코더",
-    "dependencyUpdates": "의존성 업데이트",
     "botDryRun": "봇 드라이런",
-    "outputPiping": "출력 파이핑",
     "webhookForwarding": "웹훅 포워딩",
-    "botRunbooks": "봇 런북",
     "executionTagging": "실행 태깅",
     "promptSnippets": "프롬프트 스니펫",
     "allPlugins": "모든 플러그인",
@@ -121,7 +113,6 @@
     "tokenUsage": "토큰 사용량",
     "allBackends": "모든 백엔드",
     "aiCost": "AI 비용",
-    "providerBenchmarks": "제공자 벤치마크",
     "traces": "트레이스",
     "slackNotifications": "Slack 알림",
     "jiraLinear": "Jira / Linear",
@@ -130,10 +121,6 @@
     "rbacSettings": "RBAC 설정",
     "ssoSaml": "SSO / SAML",
     "teamBudgets": "팀 예산",
-    "executionQuotas": "실행 할당량",
-    "digestReports": "다이제스트 리포트",
-    "mobileMonitor": "모바일 모니터",
-    "botSlaUptime": "봇 SLA & 가동률",
     "apiKeys": "API 키",
     "findingsTriage": "발견 항목 분류",
     "versionPinning": "버전 고정",
@@ -3559,49 +3546,6 @@
       "saveFailed": "저장에 실패했습니다"
     }
   },
-  "botCloneFork": {
-    "title": "봇 복제 및 포크",
-    "subtitle": "어떤 봇이든 새 봇의 시작점으로 복제하세요. 선택적으로 다른 팀의 워크스페이스로 복제할 수 있습니다.",
-    "loading": "트리거 및 팀 불러오는 중...",
-    "loadFailed": "데이터를 불러오지 못했습니다",
-    "copyName": "{name} (복사본)",
-    "chooseSource": "소스 봇 선택",
-    "searchPlaceholder": "봇 검색...",
-    "tag": {
-      "team": "팀",
-      "predefined": "사전 정의됨"
-    },
-    "paths": "경로 {count}개",
-    "noMatch": "검색과 일치하는 봇이 없습니다",
-    "cloneConfig": "복제 구성",
-    "selectPrompt": "복제를 구성하려면 소스 봇을 선택하세요",
-    "cloningFrom": "복제 원본",
-    "previewDesc": "{source} 트리거 · {mode} 모드",
-    "newBotName": "새 봇 이름",
-    "newBotNamePlaceholder": "내 포크 봇",
-    "targetTeam": "대상 팀",
-    "noTeam": "팀 없음 (직접)",
-    "noneDirect": "없음 (직접)",
-    "copyPrompt": "프롬프트 템플릿 복사",
-    "copyTrigger": "트리거 구성 복사",
-    "copySchedule": "스케줄 설정 복사",
-    "summary": {
-      "newName": "새 이름",
-      "targetTeam": "대상 팀",
-      "copying": "복사 항목",
-      "prompt": "프롬프트",
-      "trigger": "트리거",
-      "schedule": "스케줄",
-      "configOnly": "구성만"
-    },
-    "cloning": "복제 중...",
-    "cloneBot": "봇 복제",
-    "toast": {
-      "nameRequired": "봇 이름이 필요합니다",
-      "created": "\"{name}\"이(가) 성공적으로 생성되었습니다",
-      "cloneFailed": "복제에 실패했습니다"
-    }
-  },
   "botDependencyGraph": {
     "title": "봇 의존성 그래프",
     "subtitle": "봇, 트리거, 팀, 에이전트 간의 관계를 시각화합니다.",
@@ -3693,35 +3637,6 @@
       "deleteFailed": "메모리 항목 삭제에 실패했습니다",
       "allCleared": "{bot}의 모든 메모리가 지워졌습니다",
       "clearFailed": "메모리 지우기에 실패했습니다"
-    }
-  },
-  "botOutputPiping": {
-    "title": "봇 출력 파이핑",
-    "subtitle": "봇 실행을 순차적으로 연결합니다 — 한 봇의 출력이 다음 봇의 입력 컨텍스트가 됩니다.",
-    "configuredPipes": "구성된 파이프",
-    "createNewPipe": "새 파이프 만들기",
-    "enabled": "활성화됨",
-    "disabled": "비활성화됨",
-    "pipeDiagram": "파이프 다이어그램",
-    "recentExecutions": "최근 파이프 실행",
-    "transform": {
-      "passthrough": "그대로 전달",
-      "trim": "공백 제거",
-      "jsonExtract": "JSON 추출"
-    },
-    "node": {
-      "sourceBot": "소스 봇",
-      "stdoutCaptured": "stdout 캡처됨",
-      "transform": "변환",
-      "outputProcessed": "출력 처리됨",
-      "destBot": "대상 봇",
-      "stdinInjected": "stdin 주입됨"
-    },
-    "col": {
-      "pipe": "파이프",
-      "triggered": "트리거됨",
-      "sourcePreview": "소스 미리보기",
-      "destStatus": "대상 상태"
     }
   },
   "botOutputWebhookForwarding": {
@@ -3826,39 +3741,6 @@
       "enableFailed": "{name} 활성화에 실패했습니다"
     }
   },
-  "botRunbooks": {
-    "loading": "런북을 불러오는 중...",
-    "bots": "봇",
-    "runbook": "런북",
-    "noRunbook": "런북 없음",
-    "lastUpdated": "마지막 업데이트:",
-    "onCall": "온콜:",
-    "severityMatrix": "심각도 조치 매트릭스",
-    "noRunbookFor": "{bot}에 대한 런북이 없습니다",
-    "emptyHint": "이 봇이 심각한 문제를 발생시켰을 때 온콜 엔지니어가 정확히 무엇을 해야 하는지 알 수 있도록 런북을 추가하세요.",
-    "createRunbook": "런북 만들기",
-    "editRunbook": "런북 편집",
-    "saving": "저장 중...",
-    "saveRunbook": "런북 저장",
-    "sections": "섹션",
-    "addSection": "+ 섹션 추가",
-    "selectBotHint": "왼쪽에서 봇을 선택하여 런북을 보거나 만드세요.",
-    "never": "없음",
-    "field": {
-      "title": "제목",
-      "description": "설명",
-      "descriptionPlaceholder": "이 런북은 무엇을 위한 것인가요?",
-      "onCallContact": "온콜 연락처",
-      "onCallPlaceholder": "#slack-채널 또는 이메일",
-      "sectionTitle": "섹션 제목",
-      "sectionTitlePlaceholder": "{num}단계 제목",
-      "content": "내용",
-      "contentPlaceholder": "지침..."
-    },
-    "toast": {
-      "saved": "런북이 저장되었습니다"
-    }
-  },
   "botSandbox": {
     "loading": "샌드박스를 불러오는 중...",
     "introTitle": "봇 테스트 샌드박스 환경",
@@ -3892,50 +3774,6 @@
       "created": "샌드박스가 생성되었습니다",
       "runComplete": "샌드박스 실행이 완료되었습니다",
       "deleted": "샌드박스가 삭제되었습니다"
-    }
-  },
-  "botSlaUptime": {
-    "title": "봇 SLA 및 가동 시간 추적",
-    "subtitle": "봇별 예상 실행 빈도를 정의하고 준수 여부를 모니터링하세요. 예약된 봇이 제때 실행되지 않으면 — 누락된 감사나 늦은 보고서가 발견되기 전에 알림을 받으세요.",
-    "loading": "SLA 데이터를 불러오는 중...",
-    "empty": "구성된 SLA 항목이 없습니다. 봇에 예약된 실행이 있으면 여기에 봇 SLA 추적이 표시됩니다.",
-    "noMatch": "이 필터와 일치하는 봇이 없습니다.",
-    "on": "켜짐",
-    "off": "꺼짐",
-    "never": "없음",
-    "justNow": "방금 전",
-    "hoursAgo": "{h}시간 전",
-    "daysAgo": "{d}일 전",
-    "na": "해당 없음",
-    "overdueBy": "{h}시간 지연",
-    "soon": "곧",
-    "inHours": "{h}시간 후",
-    "inDays": "{d}일 후",
-    "filter": {
-      "allBots": "모든 봇"
-    },
-    "stat": {
-      "onSchedule": "정상 일정",
-      "overdue": "지연됨",
-      "avgUptime": "평균 30일 가동 시간",
-      "trackedBots": "추적 중인 봇"
-    },
-    "col": {
-      "bot": "봇",
-      "lastRun": "마지막 실행",
-      "nextExpected": "다음 예상",
-      "uptime7d": "7일 가동 시간",
-      "uptime30d": "30일 가동 시간",
-      "successRate": "성공률",
-      "alerts": "알림"
-    },
-    "error": {
-      "timeout": "요청 시간이 초과되었습니다. 백엔드에 연결할 수 없을 수 있습니다.",
-      "loadFailed": "SLA 데이터를 불러오지 못했습니다"
-    },
-    "toast": {
-      "alertsEnabled": "{bot}의 SLA 알림이 활성화되었습니다",
-      "alertsDisabled": "{bot}의 SLA 알림이 비활성화되었습니다"
     }
   },
   "botTemplateMarketplace": {
@@ -4221,49 +4059,6 @@
       "saveFailed": "규칙 저장에 실패했습니다",
       "deleted": "규칙이 삭제되었습니다",
       "deleteFailed": "규칙 삭제에 실패했습니다"
-    }
-  },
-  "executionQuotaControls": {
-    "loading": "할당량 규칙 불러오는 중...",
-    "rulesTitle": "할당량 규칙",
-    "rulesDescription": "봇별 시간/일 최대 실행 횟수를 설정합니다. 하드 스톱은 차단하고 소프트 알림은 알림만 보냅니다.",
-    "newRule": "새 규칙",
-    "createRuleTitle": "할당량 규칙 생성",
-    "createRule": "규칙 생성",
-    "saveChanges": "변경 사항 저장",
-    "nearingLimit": "한도에 근접한 할당량 {count}개",
-    "hardStop": "하드 스톱",
-    "thisHour": "이번 시간",
-    "today": "오늘",
-    "emptyTitle": "구성된 할당량 규칙이 없습니다",
-    "emptyDescription": "\"규칙 추가\"를 클릭하여 생성하세요.",
-    "notEnabledShort": "할당량 적용이 아직 활성화되지 않았습니다",
-    "notEnabledDeployment": "할당량 적용이 이 배포에서 아직 활성화되지 않았습니다",
-    "notEnabled": {
-      "feature": "할당량 적용",
-      "detail": "백엔드가 영속 할당량 적용을 제공할 때까지 할당량 규칙 생성, 편집, 삭제가 비활성화됩니다."
-    },
-    "form": {
-      "targetType": "대상 유형",
-      "bot": "봇",
-      "team": "팀",
-      "global": "전역",
-      "targetName": "대상 이름 / ID",
-      "targetNamePlaceholder": "예: bot-security",
-      "maxPerHour": "시간당 최대",
-      "maxPerHourPlaceholder": "예: 10",
-      "maxPerDay": "일일 최대",
-      "maxPerDayPlaceholder": "예: 100",
-      "alertAt": "알림 기준 (%)",
-      "alertThreshold": "알림 임계값 (%)",
-      "hardStopFull": "하드 스톱 (한도 도달 시 실행 차단)",
-      "hardStopShort": "하드 스톱"
-    },
-    "toast": {
-      "updated": "할당량 규칙이 업데이트되었습니다",
-      "updatedDemo": "할당량이 업데이트되었습니다 (데모)",
-      "created": "할당량 규칙이 생성되었습니다",
-      "deleted": "할당량 규칙이 삭제되었습니다"
     }
   },
   "executionTagging": {
@@ -4869,55 +4664,6 @@
       "rejectFailed": "거부에 실패했습니다"
     }
   },
-  "incidentResponsePlaybooks": {
-    "title": "사고 대응 플레이북",
-    "subtitle": "일반적인 사고 대응 단계를 위한 사전 구축된 봇 템플릿입니다. 기계적인 부분을 자동화하여 문제에 집중하세요.",
-    "loading": "플레이북 불러오는 중...",
-    "searchPlaceholder": "플레이북 검색...",
-    "noMatch": "필터와 일치하는 플레이북이 없습니다.",
-    "selectPrompt": "상세 정보를 보고 실행하려면 플레이북을 선택하세요",
-    "steps": "단계",
-    "running": "실행 중...",
-    "runPlaybook": "플레이북 실행",
-    "executionLog": "실행 로그",
-    "lastRun": "마지막 실행",
-    "never": "없음",
-    "categories": {
-      "all": "전체",
-      "outage": "장애",
-      "performance": "성능",
-      "security": "보안",
-      "documentation": "문서",
-      "deployment": "배포"
-    },
-    "toast": {
-      "loadFailed": "플레이북을 불러오지 못했습니다",
-      "completed": "플레이북 \"{name}\"이(가) 완료되었습니다",
-      "executionFailed": "플레이북 실행에 실패했습니다"
-    }
-  },
-  "inlinePromptEditor": {
-    "title": "라이브 미리보기가 있는 인라인 프롬프트 편집기",
-    "subtitle": "템플릿 변수 강조, 테스트 페이로드 주입기, 렌더링 미리보기가 있는 분할 창 편집기입니다.",
-    "loadingTriggers": "트리거 불러오는 중...",
-    "noTriggers": "트리거가 없습니다. 먼저 트리거를 만드세요.",
-    "triggerLabel": "트리거:",
-    "loadingPrompt": "프롬프트 불러오는 중...",
-    "variables": "변수:",
-    "promptTemplate": "프롬프트 템플릿",
-    "saving": "저장 중...",
-    "testPayload": "테스트 페이로드 (JSON)",
-    "renderedPreview": "렌더링 미리보기",
-    "unresolvedCount": "{count}개 미해결",
-    "invalidJson": "잘못된 JSON",
-    "loadTriggersFailed": "트리거를 불러오지 못했습니다",
-    "loadPromptFailed": "프롬프트를 불러오지 못했습니다",
-    "selectTriggerFirst": "먼저 트리거를 선택하세요",
-    "savePromptFailed": "프롬프트 저장에 실패했습니다",
-    "toast": {
-      "saved": "프롬프트 템플릿이 저장되었습니다"
-    }
-  },
   "integrationTicketing": {
     "title": "티켓팅 통합",
     "subtitle": "봇 발견 사항에서 티켓을 자동 생성하도록 Jira 및 Linear를 구성합니다.",
@@ -5128,36 +4874,6 @@
     "recall": "리콜",
     "threads": "스레드",
     "loadFailed": "작업 메모리를 불러오지 못했습니다"
-  },
-  "mobileExecutionMonitor": {
-    "title": "실행 모니터",
-    "autoRefresh": "15초마다 자동 새로고침",
-    "alertsOn": "알림 켜짐",
-    "enableAlerts": "알림 활성화",
-    "loading": "실행 불러오는 중...",
-    "running": "실행 중",
-    "failed": "실패",
-    "succeeded": "성공",
-    "secondsAgo": "{count}초 전",
-    "minutesAgo": "{count}분 전",
-    "hoursAgo": "{count}시간 전",
-    "emptyAll": "실행을 찾을 수 없습니다.",
-    "emptyFiltered": "{status} 실행을 찾을 수 없습니다.",
-    "mobileHint": "이 화면은 모바일에 최적화되어 있습니다. 푸시 알림을 활성화하면 새벽 2시 실패도 알림을 받을 수 있습니다.",
-    "detail": {
-      "id": "ID",
-      "bot": "봇",
-      "status": "상태",
-      "started": "시작됨",
-      "finished": "완료됨",
-      "error": "오류"
-    },
-    "toast": {
-      "notSupported": "이 브라우저에서는 푸시 알림이 지원되지 않습니다",
-      "disabled": "푸시 알림이 비활성화되었습니다",
-      "enabled": "봇 실패에 대한 푸시 알림이 활성화되었습니다",
-      "permissionDenied": "알림 권한이 거부되었습니다"
-    }
   },
   "multiAgentCollaboration": {
     "title": "멀티 에이전트 협업 모드",
@@ -6311,37 +6027,6 @@
       "rollbackFailed": "롤백 실패"
     }
   },
-  "providerBenchmarkDashboard": {
-    "title": "프로바이더 벤치마킹 대시보드",
-    "subtitle": "동일한 봇을 여러 AI 프로바이더에 동시에 실행하고 품질, 지연 시간, 비용을 비교하세요.",
-    "loading": "프로바이더 상태 및 백엔드 데이터 불러오는 중...",
-    "empty": "프로바이더 계정을 찾을 수 없습니다. 벤치마크 데이터를 보려면 백엔드와 계정을 설정하세요.",
-    "unknown": "알 수 없음",
-    "unknownError": "알 수 없는 오류",
-    "liveAccountHealth": "실시간 계정 상태",
-    "livePrompt": "상태, 지연 시간, 비용 지표를 기준으로 한 프로바이더 계정의 실시간 비교.",
-    "benchmarks": "벤치마크",
-    "providersCount": "프로바이더 {count}개",
-    "bestQuality": "최고 품질",
-    "fastest": "가장 빠름",
-    "cheapest": "가장 저렴함",
-    "costPer1k": "${cost}/1k 토큰",
-    "comparisonResults": "비교 결과",
-    "refreshing": "새로고침 중...",
-    "refreshData": "▶ 데이터 새로고침",
-    "benchmarkDescription": "벤치마크 설명",
-    "cols": {
-      "provider": "프로바이더",
-      "quality": "품질",
-      "latency": "지연 시간",
-      "cost": "비용 /1k",
-      "tokensOut": "출력 토큰"
-    },
-    "toasts": {
-      "refreshed": "벤치마크 데이터를 새로고침했습니다",
-      "refreshFailed": "새로고침 실패"
-    }
-  },
   "rbacSettings": {
     "title": "역할 기반 접근 제어",
     "subtitle": "API 키 역할을 관리하고 권한 매트릭스를 확인하세요",
@@ -6506,54 +6191,6 @@
       "switchedTo": "{mode}(으)로 전환했습니다",
       "updateModeFailed": "필터 모드를 업데이트하지 못했습니다",
       "enterTestValue": "먼저 테스트 값을 입력하세요"
-    }
-  },
-  "reportDigests": {
-    "title": "리포트 다이제스트",
-    "subtitle": "AI가 생성한 요약을 이메일 또는 Slack으로 전달하도록 예약합니다",
-    "addDigest": "+ 다이제스트 추가",
-    "newDigest": "새 리포트 다이제스트",
-    "creating": "생성 중...",
-    "createDigest": "다이제스트 생성",
-    "saving": "저장 중...",
-    "loading": "다이제스트 구성 불러오는 중...",
-    "active": "활성",
-    "disabled": "비활성화됨",
-    "never": "없음",
-    "lastLabel": "마지막: {time}",
-    "enableForTeam": "이 팀에 다이제스트 활성화",
-    "previewTitle": "마지막 생성된 다이제스트 미리보기",
-    "platformTeam": "플랫폼 팀",
-    "notEnabledTooltipShort": "다이제스트 전달이 아직 활성화되지 않았습니다",
-    "notEnabledTooltip": "이 배포에서는 다이제스트 전달이 아직 활성화되지 않았습니다",
-    "notEnabled": {
-      "feature": "다이제스트 전달",
-      "detail": "백엔드가 다이제스트 영속성 및 전달을 제공할 때까지 다이제스트 일정 생성 또는 편집이 비활성화됩니다."
-    },
-    "fields": {
-      "teamName": "팀 이름",
-      "frequency": "빈도",
-      "channel": "채널",
-      "slackChannel": "Slack 채널",
-      "emailRecipients": "이메일 수신자"
-    },
-    "frequency": {
-      "daily": "매일",
-      "weekly": "매주"
-    },
-    "channel": {
-      "email": "이메일"
-    },
-    "empty": {
-      "title": "구성된 리포트 다이제스트가 없습니다",
-      "description": "자동 리포트를 받으려면 팀의 다이제스트 일정을 구성하세요."
-    },
-    "toasts": {
-      "saved": "다이제스트 설정이 저장되었습니다",
-      "savedDemo": "저장됨 (데모 모드)",
-      "teamNameRequired": "팀 이름이 필요합니다",
-      "created": "다이제스트 구성이 생성되었습니다",
-      "createdDemo": "생성됨 (데모 모드)"
     }
   },
   "resetPassword": {
@@ -8072,43 +7709,6 @@
       "desc": "다음 플레이스홀더를 사용해 프롬프트 템플릿에서 변환된 값을 참조하세요:"
     }
   },
-  "webhookRecorder": {
-    "title": "웹훅 레코더",
-    "subtitle": "캡처된 웹훅 페이로드를 탐색, 검사 및 재전송합니다.",
-    "loading": "웹훅 기록을 불러오는 중...",
-    "errors": {
-      "load": "웹훅 기록을 불러오지 못했습니다",
-      "loadWithDetail": "웹훅 기록을 불러오지 못했습니다: {message}"
-    },
-    "toast": {
-      "replayed": "웹훅 {id}이(가) 성공적으로 재전송되었습니다",
-      "triggerNotFound": "재전송할 수 없음: 트리거를 찾을 수 없습니다",
-      "replayFailed": "재전송 실패"
-    },
-    "filters": {
-      "title": "필터",
-      "source": "소스",
-      "allSources": "모든 소스",
-      "bot": "봇",
-      "allBots": "모든 봇",
-      "date": "날짜",
-      "clear": "필터 지우기"
-    },
-    "records": {
-      "count": "웹훅 {count}개",
-      "empty": "필터와 일치하는 웹훅이 없습니다"
-    },
-    "detail": {
-      "selectPrompt": "페이로드를 검사할 웹훅을 선택하세요",
-      "titleSuffix": "{source} 웹훅",
-      "replay": "재전송",
-      "replaying": "재전송 중...",
-      "method": "메서드: {method}",
-      "status": "상태: {status}",
-      "bot": "봇: {bot}",
-      "payload": "페이로드"
-    }
-  },
   "workflowBuilder": {
     "untitled": "제목 없는 워크플로",
     "errors": {
@@ -8980,68 +8580,6 @@
     "importComingSoon": "가져오기 (곧 제공)",
     "toast": {
       "importComingSoon": "SuperAgent 가져오기는 향후 업데이트에서 제공됩니다"
-    }
-  },
-  "crossTeamBotSharing": {
-    "title": "팀 간 Bot 공유",
-    "subtitle": "조직 전반의 팀에 할당된 trigger를 둘러봅니다.",
-    "loading": "팀 및 trigger를 불러오는 중...",
-    "searchPlaceholder": "trigger 이름, 팀 또는 소스로 검색...",
-    "triggerCount": "trigger {count}개 | trigger {count}개",
-    "noMatch": "검색과 일치하는 trigger가 없습니다.",
-    "noAssignments": "아직 팀에 할당된 trigger가 없습니다.",
-    "backendLabel": "Backend",
-    "modelLabel": "Model",
-    "idLabel": "ID",
-    "enabled": "활성화됨",
-    "disabled": "비활성화됨",
-    "view": "보기",
-    "unassigned": "할당되지 않음",
-    "triggerSourceLabel": "{source} trigger",
-    "tabs": {
-      "browse": "trigger 둘러보기",
-      "assignments": "팀 할당"
-    },
-    "errors": {
-      "load": "불러오기 실패: {message}",
-      "unexpected": "데이터를 불러오는 중 예기치 않은 오류가 발생했습니다."
-    }
-  },
-  "dependencyImpactBot": {
-    "title": "Dependency Impact Bot",
-    "subtitle": "PR의 인터페이스 변경으로 영향을 받는 다운스트림 서비스를 분석합니다.",
-    "loadingTriggers": "trigger 데이터를 불러오는 중...",
-    "analyzePr": "PR 분석",
-    "analyzeImpact": "영향 분석",
-    "analyzing": "분석 중...",
-    "triggersLoaded": "trigger {count}개 로드됨",
-    "activeTriggers": "활성 Trigger",
-    "recentExecutionsSummary": "최근 실행 {count}건 — {failed}건 실패",
-    "warning": "경고",
-    "healthy": "정상",
-    "prLabel": "PR",
-    "prTitle": "PR #{num} — Dependency Impact 분석",
-    "impactScore": "영향 점수",
-    "changedInterfaces": "변경된 인터페이스",
-    "noneDetected": "감지되지 않음",
-    "impactedServices": "영향받는 서비스",
-    "legend": {
-      "breaking": "Breaking",
-      "potential": "잠재적",
-      "safe": "안전"
-    },
-    "reasons": {
-      "noFailures": "Trigger \"{name}\"에 최근 실패가 없습니다.",
-      "breaking": "최근 실행 {failed}/{total}건 실패 — 높은 실패율은 breaking 의존성을 나타냅니다.",
-      "potential": "최근 실행 {failed}/{total}건에서 실패 발생 — 의존성 문제 가능성이 있습니다.",
-      "noExecutions": "최근 실행을 찾을 수 없음 — 의존성 호환성을 확인할 수 없습니다."
-    },
-    "errors": {
-      "loadTriggers": "trigger 불러오기 실패"
-    },
-    "toast": {
-      "enterPr": "PR URL을 입력하세요",
-      "analysisFailed": "분석 실패"
     }
   },
   "executionCostEstimator": {

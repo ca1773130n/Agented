@@ -27,13 +27,6 @@ export const observabilityExtRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/AiCostDashboard.vue'),
     meta: { title: 'AI Cost Dashboard' },
   },
-  // Provider Benchmarking Dashboard
-  {
-    path: '/backends/benchmark',
-    name: 'provider-benchmark-dashboard',
-    component: () => import('../../views/ProviderBenchmarkDashboard.vue'),
-    meta: { title: 'Provider Benchmarks' },
-  },
   // PR-D — Execution Anomaly Detection folded into the Quality lane.
   {
     path: '/executions/anomalies',

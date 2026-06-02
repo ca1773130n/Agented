@@ -1,7 +1,7 @@
 <!--
   NotEnabledBanner — shared "Feature not yet enabled in this deployment"
-  banner. Extracted from 17 PR-J3 STUB-DEFER views + 3 PR-G surfaces
-  (ExecutionQuotaControls, ReportDigestsPage, AnomalyDetectionCard).
+  banner. Extracted from 17 PR-J3 STUB-DEFER views + 1 PR-G surface
+  (AnomalyDetectionCard).
 
   Props:
     - feature  Required. Sentence-leading subject. Rendered as:

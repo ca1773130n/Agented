@@ -6,7 +6,6 @@
  * views that are wired to real APIs:
  * - ExecutionQueueCard
  * - BotDryRun
- * - BotCloneForkPage
  * - MultiRepoFanOut
  * - MultiProviderFallback
  */
@@ -508,74 +507,6 @@ describe('BotDryRun', () => {
 })
 
 // ===========================================================================
-// BotCloneForkPage
-// ===========================================================================
-
-describe('BotCloneForkPage', () => {
-  async function mountCloneFork() {
-    const BotCloneForkPage = (await import('../views/BotCloneForkPage.vue')).default
-    return mount(BotCloneForkPage, {
-      global: {
-        stubs: {
-          AppBreadcrumb: true,
-          PageHeader: true,
-        },
-      },
-    })
-  }
-
-  it('renders with a list of bots from API', async () => {
-    const wrapper = await mountCloneFork()
-    await flushPromises()
-
-    expect(wrapper.exists()).toBe(true)
-    const text = wrapper.text()
-    // Shows trigger names from the mock API data
-    expect(text).toContain('Weekly Security Audit')
-    expect(text).toContain('PR Review')
-  })
-
-  it('displays bot backend type and trigger source', async () => {
-    const wrapper = await mountCloneFork()
-    await flushPromises()
-
-    const text = wrapper.text()
-    // Shows backend_type and trigger_source from API data
-    expect(text).toContain('claude')
-    expect(text).toContain('webhook')
-  })
-
-  it('shows search input for filtering bots', async () => {
-    const wrapper = await mountCloneFork()
-    await flushPromises()
-
-    const inputs = wrapper.findAll('input')
-    const searchInput = inputs.find(i => {
-      const placeholder = i.attributes('placeholder') || ''
-      return placeholder.toLowerCase().includes('search')
-    })
-    expect(searchInput).toBeDefined()
-  })
-
-  it('handles search filtering', async () => {
-    const wrapper = await mountCloneFork()
-    await flushPromises()
-
-    const inputs = wrapper.findAll('input')
-    const searchInput = inputs.find(i => {
-      const placeholder = i.attributes('placeholder') || ''
-      return placeholder.toLowerCase().includes('search')
-    })
-
-    if (searchInput) {
-      await searchInput.setValue('security')
-      await nextTick()
-      expect(wrapper.exists()).toBe(true)
-    }
-  })
-})
-
-// ===========================================================================
 // MultiRepoFanOut
 // ===========================================================================
 
@@ -752,7 +683,6 @@ describe('Cross-component integration', () => {
     const modules = await Promise.all([
       import('../views/dashboards/cards/ExecutionQueueCard.vue'),
       import('../views/BotDryRun.vue'),
-      import('../views/BotCloneForkPage.vue'),
       import('../views/MultiRepoFanOut.vue'),
       import('../views/MultiProviderFallback.vue'),
     ])

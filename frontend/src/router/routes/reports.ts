@@ -1,13 +1,6 @@
 import type { RouteRecordRaw } from 'vue-router';
 
 export const reportsRoutes: RouteRecordRaw[] = [
-  // Report Digests
-  {
-    path: '/reports/digests',
-    name: 'report-digests',
-    component: () => import('../../views/ReportDigestsPage.vue'),
-    meta: { title: 'Report Digests' },
-  },
   // Project Activity Timeline
   {
     path: '/projects/activity',
