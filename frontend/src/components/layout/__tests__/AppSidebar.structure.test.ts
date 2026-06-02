@@ -68,23 +68,22 @@ function buildRouter(): Router {
     'hooks', 'hook-design',
     'rules', 'rule-design',
     // Trigger facets (new section in PR-B)
-    'triggers', 'bot-templates', 'bot-clone-fork', 'cross-team-bot-sharing',
-    'incident-response-playbooks', 'inline-prompt-editor', 'visual-cron-wizard',
+    'triggers', 'bot-templates', 'visual-cron-wizard',
     'conditional-trigger-rules', 'repo-scope-filters', 'structured-output',
     'prompt-ab-testing', 'multi-provider-fallback', 'multi-repo-fan-out',
     'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions',
-    'webhook-recorder', 'dependency-impact-bot', 'bot-recommendation-engine',
-    'bot-dependency-graph', 'bot-performance-benchmarks', 'bot-runbooks',
+    'bot-recommendation-engine',
+    'bot-dependency-graph', 'bot-performance-benchmarks',
     'execution-tagging', 'changelog-generator', 'prompt-snippets',
     // PR-J2 — KEEP+WIRE routes wired into the sidebar.
     // Plugins child (PR-K kept Plugin SDK only).
     'plugin-sdk',
     // Triggers submenu additions (PR-K kept these — low marginal cost
     // inside the existing busy submenu).
-    'bot-dry-run', 'bot-output-piping', 'bot-output-webhook-forwarding',
+    'bot-dry-run', 'bot-output-webhook-forwarding',
     'nl-trigger-rule-editor', 'webhook-payload-transformer',
     // System / Analytics group (PR-K dropped alert-grouping).
-    'ai-cost-dashboard', 'provider-benchmark-dashboard',
+    'ai-cost-dashboard',
     'traces-list',
     // External integrations
     'slack-notifications', 'integration-ticketing', 'notification-channels',
@@ -95,8 +94,7 @@ function buildRouter(): Router {
     'usage-history',
     'ai-backends', 'backend-detail',
     'secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets',
-    'execution-quota-controls', 'report-digests', 'mobile-execution-monitor',
-    'bot-sla-uptime', 'api-keys', 'findings-triage-board',
+    'api-keys', 'findings-triage-board',
     'skill-version-pinning', 'conversation-history-viewer', 'system-errors',
     'settings',
   ];
