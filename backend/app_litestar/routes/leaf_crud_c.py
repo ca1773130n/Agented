@@ -1,6 +1,6 @@
 """Wave 67 — leaf CRUD batch C (~22 routes).
 
-products + analytics + findings + report_digests + config_export.
+products + analytics + findings + config_export.
 """
 
 from __future__ import annotations
@@ -246,38 +246,6 @@ findings_router = Router(
         update_finding_route,
         delete_finding_route,
     ],
-)
-
-
-# ===========================================================================
-# /admin/reports/digests/* (3) — stubs
-# ===========================================================================
-
-
-@get("/digests", sync_to_thread=False)
-def list_digests() -> dict[str, list]:
-    return {"digests": []}
-
-
-@post("/digests", sync_to_thread=False)
-def create_digest(data: dict) -> dict[str, Any]:
-    del data
-    # PR-G: silent-success stub flipped to 501. The previous body echoed
-    # input back as if the digest had been persisted; nothing was wired up
-    # behind the scenes, so the UI was lying about "Saved".
-    raise HTTPException(status_code=501, detail="Feature not yet enabled")
-
-
-@put("/digests/{team_id:str}", sync_to_thread=False)
-def update_digest(team_id: str, data: dict) -> dict[str, Any]:
-    del team_id, data
-    # PR-G: silent-success stub flipped to 501.
-    raise HTTPException(status_code=501, detail="Feature not yet enabled")
-
-
-report_digests_router = Router(
-    path="/admin/reports",
-    route_handlers=[list_digests, create_digest, update_digest],
 )
 
 

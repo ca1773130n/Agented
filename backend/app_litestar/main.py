@@ -72,7 +72,6 @@ from .routes.leaf_crud_c import (
     config_export_router,
     findings_router,
     products_router,
-    report_digests_router,
 )
 from .routes.leaf_crud_d import (
     campaigns_router,
@@ -278,7 +277,6 @@ def create_app() -> Litestar:
             products_router,
             analytics_router,
             findings_router,
-            report_digests_router,
             config_export_router,
             knowledge_graph_router,
             collaborative_router,
