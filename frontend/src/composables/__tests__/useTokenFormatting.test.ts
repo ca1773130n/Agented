@@ -55,20 +55,26 @@ describe('useTokenFormatting', () => {
       });
     });
 
-    it('parses Claude five_hour window', () => {
-      expect(parseWindowType('five_hour')).toEqual({ model: 'Opus', window: '5 Hour' });
+    it('parses Claude five_hour window as overall (not Opus)', () => {
+      // five_hour is the all-models 5h limit — NOT Opus-specific.
+      expect(parseWindowType('five_hour')).toEqual({ model: '', window: '5 Hour' });
     });
 
-    it('parses Claude 5h_sliding window', () => {
+    it('parses Claude 5h_sliding (legacy alias) window', () => {
       expect(parseWindowType('5h_sliding')).toEqual({ model: 'Opus', window: '5 Hour' });
     });
 
-    it('parses Claude seven_day window', () => {
-      expect(parseWindowType('seven_day')).toEqual({ model: 'Opus', window: '7 Day' });
+    it('parses Claude seven_day window as overall (not Opus)', () => {
+      // seven_day is the all-models weekly limit; the Opus weekly is seven_day_opus.
+      expect(parseWindowType('seven_day')).toEqual({ model: '', window: '7 Day' });
     });
 
-    it('parses Claude weekly window', () => {
+    it('parses Claude weekly (legacy alias) window', () => {
       expect(parseWindowType('weekly')).toEqual({ model: 'Opus', window: '7 Day' });
+    });
+
+    it('parses seven_day_opus window', () => {
+      expect(parseWindowType('seven_day_opus')).toEqual({ model: 'Opus', window: '7 Day' });
     });
 
     it('parses seven_day_sonnet window', () => {

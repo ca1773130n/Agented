@@ -392,18 +392,25 @@ class ProviderUsageClient:
         if data is None:
             return []
 
+        # Read EVERY window Anthropic returns that carries a utilization %, not
+        # a hardcoded three. The previous list dropped model-specific weekly
+        # limits the user can actually be maxed on — most importantly
+        # ``seven_day_opus`` (the Opus weekly cap). The UI then mislabeled the
+        # *overall* ``seven_day`` as "Opus 7 Day", so a user at 100% of their
+        # Opus weekly saw the (low) overall weekly instead. ``extra_usage`` is
+        # a credit-balance object, not a rate-limit window — skip it.
         windows = []
-        for key in ("five_hour", "seven_day", "seven_day_sonnet"):
-            window = data.get(key)
-            if not window:
+        for key, window in data.items():
+            if key == "extra_usage" or not isinstance(window, dict):
                 continue
-            utilization = window.get("utilization", 0)
-            resets_at = window.get("resets_at")
+            utilization = window.get("utilization")
+            if utilization is None:
+                continue
             windows.append(
                 {
                     "window_type": key,
                     "percentage": round(float(utilization), 1),
-                    "resets_at": resets_at,
+                    "resets_at": window.get("resets_at"),
                     "tokens_used": 0,
                     "tokens_limit": 0,
                 }

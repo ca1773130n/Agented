@@ -12,9 +12,12 @@ export const rateWindowLabels: Record<RateWindow, string> = {
 
 // Window type display labels
 export const windowTypeLabels: Record<string, string> = {
-  five_hour: 'Opus 5 Hour',
-  seven_day: 'Opus 7 Day',
+  five_hour: '5 Hour',
+  seven_day: '7 Day',
+  seven_day_opus: 'Opus 7 Day',
   seven_day_sonnet: 'Sonnet 7 Day',
+  seven_day_oauth_apps: 'OAuth Apps 7 Day',
+  seven_day_cowork: 'Cowork 7 Day',
   primary_window: 'Codex 5 Hour',
   secondary_window: 'Codex 7 Day',
   '5h_sliding': 'Opus 5 Hour',
@@ -24,7 +27,14 @@ export const windowTypeLabels: Record<string, string> = {
 };
 
 export const legacyWindowTypes = new Set(['5h_sliding', 'weekly', 'rpd', 'tpm_60s']);
-export const providerWindowTypes = new Set(['five_hour', 'seven_day', 'seven_day_sonnet']);
+export const providerWindowTypes = new Set([
+  'five_hour',
+  'seven_day',
+  'seven_day_opus',
+  'seven_day_sonnet',
+  'seven_day_oauth_apps',
+  'seven_day_cowork',
+]);
 export const backendTypeOrder: Record<string, number> = {
   claude: 0,
   codex: 1,

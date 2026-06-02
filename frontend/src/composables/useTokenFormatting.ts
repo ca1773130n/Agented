@@ -19,12 +19,19 @@ export function useTokenFormatting() {
     if (codexMatch) {
       return { model: codexMatch[1], window: codexMatch[2] === 'primary' ? '5 Hour' : '7 Day' };
     }
-    // Claude windows
-    if (windowType === 'five_hour' || windowType === '5h_sliding')
-      return { model: 'Opus', window: '5 Hour' };
-    if (windowType === 'seven_day' || windowType === 'weekly')
-      return { model: 'Opus', window: '7 Day' };
+    // Claude windows. NOTE: five_hour and seven_day are the OVERALL
+    // (all-models) limits — NOT Opus-specific. The Opus weekly cap is a
+    // separate window (seven_day_opus). Labeling the overall limit as "Opus"
+    // hid the real Opus-weekly usage from the operator.
+    if (windowType === 'five_hour') return { model: '', window: '5 Hour' };
+    if (windowType === 'seven_day') return { model: '', window: '7 Day' };
+    // Legacy aliases (pre-multi-window) kept as-is.
+    if (windowType === '5h_sliding') return { model: 'Opus', window: '5 Hour' };
+    if (windowType === 'weekly') return { model: 'Opus', window: '7 Day' };
+    if (windowType === 'seven_day_opus') return { model: 'Opus', window: '7 Day' };
     if (windowType === 'seven_day_sonnet') return { model: 'Sonnet', window: '7 Day' };
+    if (windowType === 'seven_day_oauth_apps') return { model: 'OAuth Apps', window: '7 Day' };
+    if (windowType === 'seven_day_cowork') return { model: 'Cowork', window: '7 Day' };
     // Gemini: model name IS the window type
     return { model: windowType, window: '' };
   }
