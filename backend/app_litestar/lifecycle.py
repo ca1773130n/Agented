@@ -290,11 +290,29 @@ def _setup_scheduler(app: Any) -> None:
                     id="token_usage_monitoring",
                     replace_existing=True,
                 )
-                logger.info(
-                    "Monitoring daemon job registered: poll every %d min", _mon_interval
-                )
+                logger.info("Monitoring daemon job registered: poll every %d min", _mon_interval)
         except Exception:
             logger.warning("monitoring daemon job registration failed", exc_info=True)
+
+        # When a standalone usage daemon (scripts/run_usage_daemon.py) owns
+        # background tracking, drop the in-process collection + monitoring
+        # jobs so the same work isn't done twice (and two writers don't
+        # contend on SQLite). The daemon runs them 24/7 regardless of whether
+        # this web backend is up.
+        if os.environ.get("AGENTED_EXTERNAL_USAGE_DAEMON", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+        ):
+            for _jid in ("session_usage_collection", "token_usage_monitoring"):
+                try:
+                    SchedulerService._scheduler.remove_job(_jid)
+                except Exception:  # noqa: BLE001 — job may not exist
+                    pass
+            logger.info(
+                "AGENTED_EXTERNAL_USAGE_DAEMON set — in-process usage tracking "
+                "deferred to the standalone daemon"
+            )
 
     # Auxiliary schedulers
     from app.services.agent_scheduler_service import AgentSchedulerService

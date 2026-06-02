@@ -180,6 +180,32 @@ dev-all:
     just kill
     just dev-backend & just dev-ai-accounts & just dev-frontend & wait
 
+# Run the standalone usage daemon in the foreground (token/cost collection +
+# rate-limit polling, 24/7, independent of the web backend). Ctrl-C to stop.
+usage-daemon: ensure-backend
+    cd backend && uv run python scripts/run_usage_daemon.py
+
+# Install + load the usage daemon as a macOS LaunchAgent so tracking runs
+# continuously regardless of whether the web app is open. Idempotent.
+usage-daemon-install:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    repo="$(pwd)"
+    dst="$HOME/Library/LaunchAgents/com.agented.usage-daemon.plist"
+    sed "s#REPLACE_ME_REPO_PATH#${repo}#g" scripts/launchd/com.agented.usage-daemon.plist > "$dst"
+    launchctl unload "$dst" 2>/dev/null || true
+    launchctl load "$dst"
+    echo "Loaded com.agented.usage-daemon — logs: backend/usage-daemon.log"
+    echo "If you also run the web backend, set AGENTED_EXTERNAL_USAGE_DAEMON=1 in its env."
+
+# Stop + remove the usage daemon LaunchAgent.
+usage-daemon-uninstall:
+    #!/usr/bin/env bash
+    dst="$HOME/Library/LaunchAgents/com.agented.usage-daemon.plist"
+    launchctl unload "$dst" 2>/dev/null || true
+    rm -f "$dst"
+    echo "Unloaded + removed com.agented.usage-daemon."
+
 # v0.5.13: validate required env vars (fail loudly on missing).
 check-env:
     cd backend && uv run python -m scripts.check_env

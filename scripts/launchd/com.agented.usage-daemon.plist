@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  macOS launchd template for the Agented USAGE DAEMON.
+
+  Tracks token usage / cost (collect_all) and rate-limit windows
+  (_poll_usage) for every account 24/7, INDEPENDENT of the web UI or the
+  gunicorn backend. This is the "track usage in the background regardless of
+  activity" service — it runs even when you are not using Agented at all.
+
+  CUSTOMIZE BEFORE INSTALL:
+    1. Replace REPLACE_ME_REPO_PATH with your absolute Agented checkout path.
+    2. (Optional) tune AGENTED_USAGE_COLLECT_MINUTES below.
+    3. If you ALSO run the web backend, set AGENTED_EXTERNAL_USAGE_DAEMON=1
+       in its environment so it doesn't double-collect.
+
+  INSTALL (or just: `just usage-daemon-install`):
+    cp scripts/launchd/com.agented.usage-daemon.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.agented.usage-daemon.plist
+
+  UNLOAD:
+    launchctl unload ~/Library/LaunchAgents/com.agented.usage-daemon.plist
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.agented.usage-daemon</string>
+
+    <!-- /bin/zsh -lc sources ~/.zshrc so per-account CLI auth (gemini/codex
+         login dirs, Keychain exports) is on PATH for the poller. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/zsh</string>
+        <string>-lc</string>
+        <string>cd REPLACE_ME_REPO_PATH/backend &amp;&amp; exec uv run python scripts/run_usage_daemon.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>REPLACE_ME_REPO_PATH/backend</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>REPLACE_ME_REPO_PATH/backend/usage-daemon.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>REPLACE_ME_REPO_PATH/backend/usage-daemon.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>OBJC_DISABLE_INITIALIZE_FORK_SAFETY</key>
+        <string>YES</string>
+        <key>AGENTED_USAGE_COLLECT_MINUTES</key>
+        <string>10</string>
+    </dict>
+
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+</dict>
+</plist>

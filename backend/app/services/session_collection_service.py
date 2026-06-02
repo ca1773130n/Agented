@@ -78,6 +78,25 @@ class SessionCollectionService:
                     results["codex"]["cost"] += usage.get("total_cost_usd", 0.0)
 
         cls._save_imported_sessions(imported_set)
+        # Stamp a "last collected" time so the operator can SEE that usage is
+        # tracked in the background (whether by the web backend's scheduler or
+        # the standalone usage daemon) — without this, a stale dashboard was
+        # the only, misleading, signal.
+        try:
+            from datetime import datetime, timezone
+
+            from ..database import get_connection
+
+            with get_connection() as conn:
+                conn.execute(
+                    "INSERT INTO settings (key, value) VALUES "
+                    "('usage_last_collected_at', ?) "
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (datetime.now(timezone.utc).isoformat(),),
+                )
+                conn.commit()
+        except Exception as e:  # noqa: BLE001 — observability only
+            logger.debug("could not stamp usage_last_collected_at: %s", e)
         return results
 
     @classmethod
