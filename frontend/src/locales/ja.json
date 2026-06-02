@@ -1374,11 +1374,12 @@
     "shared": "共有中",
     "running": "実行中",
     "noMonitoringData": "モニタリングデータがありません。アカウントの OAuth トークンが有効か確認してください。",
-    "resetsIn": "リセットまで",
+    "resetsIn": "{time}後にリセット",
     "allWindowsUsage": "全ウィンドウの使用量",
     "remainingCapacity": "残り容量",
     "windowRemaining": "{window} の残り",
-    "notEnoughData": "まだデータが十分ではありません"
+    "notEnoughData": "まだデータが十分ではありません",
+    "limitReached": "上限到達"
   },
   "monitoringHeader": {
     "title": "レート制限モニタリング",

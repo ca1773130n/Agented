@@ -309,6 +309,51 @@ class MonitoringService:
                 if transition:
                     cls._recent_alerts.append(transition)
 
+            # Authoritative block detection: the OAuth usage % can read low
+            # (e.g. 7%) while Claude Code has actually locked the account out
+            # on a 429. Scan the account's own transcripts for that error and
+            # mark it blocked until the real reset, so the dashboard shows the
+            # truth instead of a misleading low gauge.
+            if backend_type == "claude":
+                try:
+                    from datetime import timedelta
+
+                    from .rate_limit_service import RateLimitService
+
+                    block = RateLimitService.detect_usage_limit_block(account.get("config_path"))
+                    if block:
+                        prefer = {
+                            "weekly": "seven_day",
+                            "weekly_opus": "seven_day_opus",
+                            "weekly_sonnet": "seven_day_sonnet",
+                            "five_hour": "five_hour",
+                        }.get(block["limit_kind"])
+                        reset = None
+                        for wt in (prefer, "seven_day"):
+                            if not wt:
+                                continue
+                            reset = next(
+                                (
+                                    w["resets_at"]
+                                    for w in windows
+                                    if w.get("window_type") == wt and w.get("resets_at")
+                                ),
+                                None,
+                            )
+                            if reset:
+                                break
+                        if not reset:
+                            reset = (now + timedelta(hours=24)).isoformat()
+                        RateLimitService.mark_blocked_until(account_id, reset, block["message"])
+                        logger.info(
+                            "Account %s usage-limit block detected (%s): %s",
+                            account_id,
+                            block["limit_kind"],
+                            block["message"][:80],
+                        )
+                except Exception as e:  # noqa: BLE001
+                    logger.debug("block detection failed for account %s: %s", account_id, e)
+
         # Apply adaptive backoff when all provider API calls fail
         if fetch_attempted > 0 and not any_fetch_succeeded:
             cls._consecutive_poll_failures += 1
@@ -604,6 +649,24 @@ class MonitoringService:
             account_names = {}
             account_plans = {}
 
+        # Active usage-limit blocks (rate_limited_until in the future). This is
+        # the truth the gauges must reflect when the OAuth usage % under-reports
+        # a real lockout — surfaced per account so the card can show a BLOCKED
+        # badge with the real reset time + message.
+        account_blocks: dict[int, dict] = {}
+        for a in all_accounts:
+            until = a.get("rate_limited_until")
+            if not until:
+                continue
+            try:
+                if datetime.fromisoformat(until) > now:
+                    account_blocks[a["id"]] = {
+                        "rate_limited_until": until,
+                        "rate_limit_reason": a.get("rate_limit_reason"),
+                    }
+            except (ValueError, TypeError):
+                pass
+
         # Detect shared credentials via token fingerprints
         shared_credential_groups: dict[int, list[int]] = {}  # account_id -> [peer_ids]
         try:
@@ -672,6 +735,9 @@ class MonitoringService:
                 "consumption_rates": rates,
                 "eta": eta,
             }
+            if account_id in account_blocks:
+                window_entry["rate_limited_until"] = account_blocks[account_id]["rate_limited_until"]
+                window_entry["rate_limit_reason"] = account_blocks[account_id]["rate_limit_reason"]
             if account_id in shared_credential_groups:
                 peer_names = [
                     account_names.get(pid, str(pid)) for pid in shared_credential_groups[account_id]
@@ -687,24 +753,28 @@ class MonitoringService:
             acct_key = str(acct_id)
             acct_cfg = monitoring_accounts.get(acct_key, {})
             if acct_cfg.get("enabled", False) and acct_id not in accounts_with_data:
-                windows.append(
-                    {
-                        "account_id": acct_id,
-                        "account_name": account_names.get(acct_id, ""),
-                        "plan": account_plans.get(acct_id, ""),
-                        "backend_type": acct.get("backend_type", "claude"),
-                        "window_type": "no_data",
-                        "tokens_used": 0,
-                        "tokens_limit": 0,
-                        "percentage": 0,
-                        "threshold_level": "normal",
-                        "resets_at": None,
-                        "recorded_at": None,
-                        "consumption_rates": {},
-                        "eta": {"status": "no_data", "message": "No monitoring data"},
-                        "no_data": True,
-                    }
-                )
+                no_data_entry = {
+                    "account_id": acct_id,
+                    "account_name": account_names.get(acct_id, ""),
+                    "plan": account_plans.get(acct_id, ""),
+                    "backend_type": acct.get("backend_type", "claude"),
+                    "window_type": "no_data",
+                    "tokens_used": 0,
+                    "tokens_limit": 0,
+                    "percentage": 0,
+                    "threshold_level": "normal",
+                    "resets_at": None,
+                    "recorded_at": None,
+                    "consumption_rates": {},
+                    "eta": {"status": "no_data", "message": "No monitoring data"},
+                    "no_data": True,
+                }
+                if acct_id in account_blocks:
+                    no_data_entry["rate_limited_until"] = account_blocks[acct_id][
+                        "rate_limited_until"
+                    ]
+                    no_data_entry["rate_limit_reason"] = account_blocks[acct_id]["rate_limit_reason"]
+                windows.append(no_data_entry)
 
         return {
             "enabled": config.get("enabled", False),

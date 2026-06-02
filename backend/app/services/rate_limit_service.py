@@ -71,6 +71,128 @@ class RateLimitService:
                 return DEFAULT_COOLDOWN_SECONDS
         return None
 
+    # Claude Code writes this into a session transcript (as an
+    # isApiErrorMessage assistant turn) when the model API returns a 429
+    # usage-limit block, e.g. "You've hit your weekly limit · resets Jun 5
+    # at 6am (Asia/Seoul)". This is the AUTHORITATIVE "account is blocked"
+    # signal — Anthropic's /api/oauth/usage utilization can read low (e.g. 7%)
+    # while the account is actually locked out, so we cannot rely on it.
+    USAGE_BLOCK_PATTERN = re.compile(
+        r"hit your (?P<kind>weekly|5-hour|five-hour|usage|opus|sonnet)[\s\-]*limit"
+        r"|usage limit reached|reached your usage limit",
+        re.IGNORECASE,
+    )
+
+    @staticmethod
+    def _message_text(message: object) -> str:
+        """Flatten a transcript message's content into plain text."""
+        if isinstance(message, dict):
+            content = message.get("content")
+            if isinstance(content, str):
+                return content
+            if isinstance(content, list):
+                parts = []
+                for blk in content:
+                    if isinstance(blk, dict) and isinstance(blk.get("text"), str):
+                        parts.append(blk["text"])
+                    elif isinstance(blk, str):
+                        parts.append(blk)
+                return " ".join(parts)
+        if isinstance(message, str):
+            return message
+        return ""
+
+    @classmethod
+    def detect_usage_limit_block(cls, config_path: Optional[str]) -> Optional[dict]:
+        """Scan a Claude config dir's recent transcripts for a usage-limit
+        block error Claude Code recorded when it hit a 429.
+
+        Catches blocks the user hit OUTSIDE Agented. Returns
+        ``{"message": str, "limit_kind": str}`` for the most recent block in
+        the last ~24h, or None. Bounded: only recently-modified transcripts,
+        tail of each file.
+        """
+        import json
+        import os
+        import shlex
+        import subprocess
+        from pathlib import Path
+
+        base = Path(os.path.expanduser(config_path)) if config_path else (Path.home() / ".claude")
+        projects = base / "projects"
+        if not projects.is_dir():
+            return None
+
+        # There can be tens of thousands of transcripts, so a Python scan is
+        # too slow and a recency cap can't reach a block hit a day or two ago.
+        # Let grep (C-fast) locate the few files containing the block error
+        # among those modified in the last 7 days (a weekly block's lifetime),
+        # then parse only those. Bounded by a hard timeout.
+        grep_re = (
+            r"hit your (weekly|5-hour|five-hour|usage|opus|sonnet)[ -]?limit"
+            r"|usage limit reached|reached your usage limit"
+        )
+        cmd = (
+            f"find {shlex.quote(str(projects))} -name '*.jsonl' -mtime -7 -print0 2>/dev/null "
+            f"| xargs -0 grep -lEi {shlex.quote(grep_re)} 2>/dev/null | head -40"
+        )
+        try:
+            out = subprocess.run(
+                ["bash", "-lc", cmd],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            ).stdout
+        except Exception as e:  # noqa: BLE001 — subprocess/timeout, never fatal
+            logger.debug("block grep failed: %s", e)
+            return None
+
+        candidates = [Path(p) for p in out.splitlines() if p.strip()]
+        if not candidates:
+            return None
+        # Newest candidate first — most recent block wins.
+        candidates.sort(
+            key=lambda p: p.stat().st_mtime if p.exists() else 0.0, reverse=True
+        )
+
+        for f in candidates[:10]:
+            match_text = None
+            try:
+                with open(f, "r", errors="replace") as fh:
+                    for line in fh:
+                        if "isApiErrorMessage" not in line:
+                            continue
+                        try:
+                            entry = json.loads(line)
+                        except (json.JSONDecodeError, ValueError):
+                            continue
+                        if not entry.get("isApiErrorMessage"):
+                            continue
+                        text = cls._message_text(entry.get("message", {}))
+                        if cls.USAGE_BLOCK_PATTERN.search(text):
+                            match_text = text  # keep last (end-of-session) match
+            except OSError:
+                continue
+            if match_text:
+                m = cls.USAGE_BLOCK_PATTERN.search(match_text)
+                if m:
+                    kind_raw = (m.groupdict().get("kind") or "usage").lower()
+                    kind = {
+                        "weekly": "weekly",
+                        "opus": "weekly_opus",
+                        "sonnet": "weekly_sonnet",
+                        "5-hour": "five_hour",
+                        "five-hour": "five_hour",
+                    }.get(kind_raw, "usage")
+                    return {"message": match_text.strip(), "limit_kind": kind}
+        return None
+
+    @classmethod
+    def mark_blocked_until(cls, account_id: int, until_iso: str, reason: str) -> bool:
+        """Mark an account blocked until an absolute ISO time (from the
+        provider's reset), with a human reason (the transcript message)."""
+        return update_account_rate_limit(account_id, until_iso, reason[:300])
+
     @classmethod
     def mark_rate_limited(cls, account_id: int, cooldown_seconds: int) -> bool:
         """Mark an account as rate-limited with a cooldown period.

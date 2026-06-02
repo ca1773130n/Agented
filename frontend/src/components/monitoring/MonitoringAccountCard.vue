@@ -74,6 +74,17 @@ const sharedWith = computed(() => {
   return (w as WindowSnapshot & { shared_with?: string[] })?.shared_with;
 });
 
+// Authoritative lockout: Claude Code actually 429'd this account. Overrides
+// the (possibly low) usage gauges with the real "limit reached · resets …".
+const blockedInfo = computed(() => {
+  const w = props.card.windows.find(
+    (win: WindowSnapshot) =>
+      !!win.rate_limited_until && new Date(win.rate_limited_until).getTime() > Date.now(),
+  );
+  if (!w?.rate_limited_until) return null;
+  return { until: w.rate_limited_until, reason: w.rate_limit_reason || '' };
+});
+
 const dataBounds = computed(() => {
   let earliest = Infinity;
   let latest = 0;
@@ -201,6 +212,11 @@ function rateAvailable(rates: WindowSnapshot['consumption_rates']): boolean {
       <span class="account-card-name">{{ card.account_name }}</span>
       <span class="account-card-type" :class="card.backend_type">{{ card.backend_type }}</span>
       <span v-if="card.plan" class="plan-label">{{ card.plan }}</span>
+      <span
+        v-if="blockedInfo"
+        class="blocked-badge"
+        :title="blockedInfo.reason || ''"
+      >{{ t('monitoringAccountCard.limitReached') }} &middot; {{ t('monitoringAccountCard.resetsIn', { time: formatRelativeReset(blockedInfo.until) }) }}</span>
       <span
         v-if="sharedWith?.length"
         class="shared-creds-badge"
@@ -444,6 +460,20 @@ function rateAvailable(rates: WindowSnapshot['consumption_rates']): boolean {
   background: rgba(255, 170, 0, 0.15);
   color: #ffaa00;
   cursor: help;
+}
+
+.blocked-badge {
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(239, 68, 68, 0.16);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  cursor: help;
+  white-space: nowrap;
 }
 
 .session-indicator {

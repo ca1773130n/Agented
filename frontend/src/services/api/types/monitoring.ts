@@ -45,6 +45,11 @@ export interface WindowSnapshot {
   eta: EtaProjection;
   shared_with?: string[];
   no_data?: boolean;
+  // Set when Claude Code has actually locked this account out (429 usage
+  // limit), detected from its transcripts. Authoritative over the OAuth
+  // usage %, which can read low while the account is blocked.
+  rate_limited_until?: string | null;
+  rate_limit_reason?: string | null;
 }
 
 export interface MonitoringStatus {

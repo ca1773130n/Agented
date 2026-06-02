@@ -1374,11 +1374,12 @@
     "shared": "Shared",
     "running": "Running",
     "noMonitoringData": "No monitoring data available. Check if the account's OAuth token is valid.",
-    "resetsIn": "Resets in",
+    "resetsIn": "resets in {time}",
     "allWindowsUsage": "All Windows Usage",
     "remainingCapacity": "Remaining Capacity",
     "windowRemaining": "{window} remaining",
-    "notEnoughData": "Not enough data yet"
+    "notEnoughData": "Not enough data yet",
+    "limitReached": "Limit reached"
   },
   "monitoringHeader": {
     "title": "Rate Limit Monitoring",

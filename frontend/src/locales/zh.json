@@ -1374,11 +1374,12 @@
     "shared": "已共享",
     "running": "运行中",
     "noMonitoringData": "无可用监控数据。请检查账户的 OAuth 令牌是否有效。",
-    "resetsIn": "重置于",
+    "resetsIn": "{time}后重置",
     "allWindowsUsage": "所有窗口使用量",
     "remainingCapacity": "剩余容量",
     "windowRemaining": "{window} 剩余",
-    "notEnoughData": "数据尚不足"
+    "notEnoughData": "数据尚不足",
+    "limitReached": "已达上限"
   },
   "monitoringHeader": {
     "title": "速率限制监控",
