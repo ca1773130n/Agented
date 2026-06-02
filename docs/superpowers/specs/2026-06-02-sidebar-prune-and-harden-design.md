@@ -1,7 +1,11 @@
 # Sidebar Prune + Production-Hardening — Design Spec
 
 **Date:** 2026-06-02
-**Status:** Awaiting user approval
+**Status:** Approved 2026-06-02. **Phase 1 (hard-cuts) complete & verified** —
+commits `61242f6f` (frontend), `8808b5b8` (backend), `ffd4ccc4` (test stub) on
+branch `prune/phase1-sidebar-hard-cuts`; frontend build + 1344 tests green,
+backend 3358 passed (3 unrelated pre-existing failures). **P2 (merges +
+relocations) and P3 (IA restructure) pending.**
 **Owner:** Agented operator console (frontend `frontend/`, backend `backend/`)
 
 ## 1. Goal & locked decisions
