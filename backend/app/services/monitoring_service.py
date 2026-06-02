@@ -351,6 +351,18 @@ class MonitoringService:
                             block["limit_kind"],
                             block["message"][:80],
                         )
+                    else:
+                        # No active block per transcripts → CLEAR a previously
+                        # detected usage-limit block so a recovered account
+                        # stops showing BLOCKED. Only clear our own usage-limit
+                        # blocks (reason mentions "limit"), not short 429
+                        # cooldowns set elsewhere.
+                        reason = (account.get("rate_limit_reason") or "").lower()
+                        if account.get("rate_limited_until") and "limit" in reason:
+                            RateLimitService.clear_rate_limit(account_id)
+                            logger.info(
+                                "Account %s usage-limit block cleared (recovered)", account_id
+                            )
                 except Exception as e:  # noqa: BLE001
                     logger.debug("block detection failed for account %s: %s", account_id, e)
 

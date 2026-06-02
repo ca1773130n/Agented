@@ -104,18 +104,21 @@ class RateLimitService:
 
     @classmethod
     def detect_usage_limit_block(cls, config_path: Optional[str]) -> Optional[dict]:
-        """Scan a Claude config dir's recent transcripts for a usage-limit
-        block error Claude Code recorded when it hit a 429.
+        """Return a CURRENTLY-ACTIVE usage-limit block for the account, or None.
 
-        Catches blocks the user hit OUTSIDE Agented. Returns
-        ``{"message": str, "limit_kind": str}`` for the most recent block in
-        the last ~24h, or None. Bounded: only recently-modified transcripts,
-        tail of each file.
+        Looks only at the account's most-recent sessions and reports a block
+        ONLY when the latest API outcome is a limit error with NO successful
+        API call after it. A block the user has since recovered from — or a
+        stale / transient / model-specific error from days ago — is NOT
+        reported, because a later successful call proves the account is usable
+        again. (Earlier this over-fired on any 7-day-old error, flagging
+        accounts that work fine.)
+
+        Returns ``{"message": str, "limit_kind": str}`` or None.
         """
         import json
         import os
-        import shlex
-        import subprocess
+        from datetime import datetime
         from pathlib import Path
 
         base = Path(os.path.expanduser(config_path)) if config_path else (Path.home() / ".claude")
@@ -123,68 +126,74 @@ class RateLimitService:
         if not projects.is_dir():
             return None
 
-        # There can be tens of thousands of transcripts, so a Python scan is
-        # too slow and a recency cap can't reach a block hit a day or two ago.
-        # Let grep (C-fast) locate the few files containing the block error
-        # among those modified in the last 7 days (a weekly block's lifetime),
-        # then parse only those. Bounded by a hard timeout.
-        grep_re = (
-            r"hit your (weekly|5-hour|five-hour|usage|opus|sonnet)[ -]?limit"
-            r"|usage limit reached|reached your usage limit"
-        )
-        cmd = (
-            f"find {shlex.quote(str(projects))} -name '*.jsonl' -mtime -7 -print0 2>/dev/null "
-            f"| xargs -0 grep -lEi {shlex.quote(grep_re)} 2>/dev/null | head -40"
-        )
+        files: list[tuple[float, Path]] = []
         try:
-            out = subprocess.run(
-                ["bash", "-lc", cmd],
-                capture_output=True,
-                text=True,
-                timeout=60,
-            ).stdout
-        except Exception as e:  # noqa: BLE001 — subprocess/timeout, never fatal
-            logger.debug("block grep failed: %s", e)
+            for proj in projects.iterdir():
+                if not proj.is_dir():
+                    continue
+                for f in proj.glob("*.jsonl"):
+                    try:
+                        files.append((f.stat().st_mtime, f))
+                    except OSError:
+                        continue
+        except OSError:
             return None
+        files.sort(reverse=True)  # newest first
 
-        candidates = [Path(p) for p in out.splitlines() if p.strip()]
-        if not candidates:
-            return None
-        # Newest candidate first — most recent block wins.
-        candidates.sort(
-            key=lambda p: p.stat().st_mtime if p.exists() else 0.0, reverse=True
-        )
+        def _ts(entry: dict):
+            t = entry.get("timestamp")
+            if not isinstance(t, str):
+                return None
+            try:
+                return datetime.fromisoformat(t.replace("Z", "+00:00"))
+            except ValueError:
+                return None
 
-        for f in candidates[:10]:
-            match_text = None
+        latest_block = None  # (ts, message, kind)
+        latest_ok = None  # ts of most recent SUCCESSFUL assistant turn
+
+        # Only the most-recent sessions decide current state — a newer success
+        # means the account is usable again.
+        for _mt, f in files[:30]:
             try:
                 with open(f, "r", errors="replace") as fh:
                     for line in fh:
-                        if "isApiErrorMessage" not in line:
+                        is_err = "isApiErrorMessage" in line
+                        is_asst = '"assistant"' in line
+                        if not (is_err or is_asst):
                             continue
                         try:
                             entry = json.loads(line)
                         except (json.JSONDecodeError, ValueError):
                             continue
-                        if not entry.get("isApiErrorMessage"):
+                        ts = _ts(entry)
+                        if ts is None:
                             continue
-                        text = cls._message_text(entry.get("message", {}))
-                        if cls.USAGE_BLOCK_PATTERN.search(text):
-                            match_text = text  # keep last (end-of-session) match
+                        if entry.get("isApiErrorMessage"):
+                            text = cls._message_text(entry.get("message", {}))
+                            m = cls.USAGE_BLOCK_PATTERN.search(text)
+                            if m and (latest_block is None or ts > latest_block[0]):
+                                kind_raw = (m.groupdict().get("kind") or "usage").lower()
+                                kind = {
+                                    "weekly": "weekly",
+                                    "opus": "weekly_opus",
+                                    "sonnet": "weekly_sonnet",
+                                    "5-hour": "five_hour",
+                                    "five-hour": "five_hour",
+                                }.get(kind_raw, "usage")
+                                latest_block = (ts, text.strip(), kind)
+                        elif entry.get("type") == "assistant":
+                            msg = entry.get("message")
+                            if isinstance(msg, dict) and msg.get("usage"):
+                                if latest_ok is None or ts > latest_ok:
+                                    latest_ok = ts
             except OSError:
                 continue
-            if match_text:
-                m = cls.USAGE_BLOCK_PATTERN.search(match_text)
-                if m:
-                    kind_raw = (m.groupdict().get("kind") or "usage").lower()
-                    kind = {
-                        "weekly": "weekly",
-                        "opus": "weekly_opus",
-                        "sonnet": "weekly_sonnet",
-                        "5-hour": "five_hour",
-                        "five-hour": "five_hour",
-                    }.get(kind_raw, "usage")
-                    return {"message": match_text.strip(), "limit_kind": kind}
+
+        # Blocked only if the most recent block is NEWER than the most recent
+        # successful call (or there is no later success).
+        if latest_block and (latest_ok is None or latest_block[0] > latest_ok):
+            return {"message": latest_block[1], "limit_kind": latest_block[2]}
         return None
 
     @classmethod
