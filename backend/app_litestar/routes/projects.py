@@ -43,7 +43,7 @@ from app.database import (
     update_project_team_topology_config,
 )
 from app.database import create_project as db_create_project
-from app.db.owned_entities import get_for_user
+from app.db.owned_entities import can_access, get_for_user
 from app.services.github_service import GitHubService
 from app.services.grd_planning_service import GrdPlanningService
 from app.services.harness_service import HarnessService
@@ -63,6 +63,16 @@ def _result_or_raise(payload: tuple[dict, int]) -> dict:
     return body
 
 
+def _assert_project_access(project_id: str, caller: Caller) -> None:
+    """Enforce per-object ownership on a single project (IDOR, H1).
+
+    Admins and the owner pass; legacy/unowned rows are shared. A 404 (not 403)
+    is raised on denial so the endpoint doesn't leak which ids exist.
+    """
+    if not can_access("projects", project_id, caller.user_id, caller.role):
+        raise NotFoundException(detail="Project not found")
+
+
 # ---------------------------------------------------------------------------
 # CRUD
 # ---------------------------------------------------------------------------
@@ -73,9 +83,7 @@ def list_projects(
     caller: Caller, limit: Optional[int] = None, offset: Optional[int] = None
 ) -> dict[str, Any]:
     if caller.user_id:
-        rows = get_for_user(
-            "projects", caller.user_id, limit=limit, offset=offset or 0
-        )
+        rows = get_for_user("projects", caller.user_id, limit=limit, offset=offset or 0)
         return {"projects": rows, "total_count": len(rows)}
     return {
         "projects": get_all_projects(limit=limit, offset=offset or 0),
@@ -85,7 +93,6 @@ def list_projects(
 
 @post("/", sync_to_thread=False)
 def create_project(data: dict, caller: Caller) -> dict[str, Any]:
-    del caller
     if not data:
         raise ClientException(detail="JSON body required")
 
@@ -105,9 +112,7 @@ def create_project(data: dict, caller: Caller) -> dict[str, Any]:
     if github_repo:
         full_url = f"https://{github_host}/{github_repo}"
         if not GitHubService.validate_repo_url(full_url):
-            raise ClientException(
-                detail=f"Invalid or inaccessible GitHub repo: {github_repo}"
-            )
+            raise ClientException(detail=f"Invalid or inaccessible GitHub repo: {github_repo}")
 
     project_id = db_create_project(
         name=name,
@@ -118,6 +123,7 @@ def create_project(data: dict, caller: Caller) -> dict[str, Any]:
         owner_team_id=data.get("owner_team_id"),
         local_path=local_path,
         github_host=github_host,
+        user_id=caller.user_id,
     )
     if not project_id:
         raise HTTPException(status_code=500, detail="Failed to create project")
@@ -128,6 +134,7 @@ def create_project(data: dict, caller: Caller) -> dict[str, Any]:
     if local_path and not github_repo:
         GrdPlanningService.auto_init_project(project_id, local_path)
     elif github_repo:
+
         def _wait_for_clone_and_init(proj_id: str) -> None:
             for _ in range(120):
                 time.sleep(2)
@@ -163,7 +170,7 @@ def create_project(data: dict, caller: Caller) -> dict[str, Any]:
 
 @get("/{project_id:str}", sync_to_thread=False)
 def get_project_detail_endpoint(project_id: str, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_project_access(project_id, caller)
     project = get_project_detail(project_id)
     if not project:
         raise NotFoundException(detail="Project not found")
@@ -171,10 +178,8 @@ def get_project_detail_endpoint(project_id: str, caller: Caller) -> dict[str, An
 
 
 @put("/{project_id:str}", sync_to_thread=False)
-def update_project_endpoint(
-    project_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
-    del caller
+def update_project_endpoint(project_id: str, data: dict, caller: Caller) -> dict[str, Any]:
+    _assert_project_access(project_id, caller)
     if not data:
         raise ClientException(detail="JSON body required")
     if not update_project(
@@ -195,7 +200,7 @@ def update_project_endpoint(
 
 @delete("/{project_id:str}", status_code=200, sync_to_thread=False)
 def delete_project_endpoint(project_id: str, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_project_access(project_id, caller)
     if not delete_project(project_id):
         raise NotFoundException(detail="Project not found")
     return {"message": "Project deleted"}
@@ -220,9 +225,7 @@ def assign_team(project_id: str, team_id: str, caller: Caller) -> dict[str, Any]
     return {"message": "Team assigned"}
 
 
-@delete(
-    "/{project_id:str}/teams/{team_id:str}", status_code=200, sync_to_thread=False
-)
+@delete("/{project_id:str}/teams/{team_id:str}", status_code=200, sync_to_thread=False)
 def unassign_team(project_id: str, team_id: str, caller: Caller) -> dict[str, Any]:
     del caller
     if not unassign_team_from_project(project_id, team_id):
@@ -241,7 +244,7 @@ def run_team_in_project(
     data: RunTeamBody,
     caller: Caller,
 ) -> dict[str, Any]:
-    del caller
+    _assert_project_access(project_id, caller)
     project = get_project(project_id)
     if not project:
         raise NotFoundException(detail="Project not found")
@@ -285,7 +288,7 @@ def run_team_in_project(
 
 @post("/{project_id:str}/deploy", sync_to_thread=False)
 def deploy_teams(project_id: str, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_project_access(project_id, caller)
     return _result_or_raise(ProjectDeployService.deploy_to_project(project_id))
 
 
@@ -330,9 +333,7 @@ def list_project_skills(project_id: str, caller: Caller) -> dict[str, Any]:
 
 
 @post("/{project_id:str}/skills", sync_to_thread=False)
-def add_skill_to_project(
-    project_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def add_skill_to_project(project_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     if not data:
         raise ClientException(detail="JSON body required")
@@ -350,12 +351,8 @@ def add_skill_to_project(
     return {"message": "Skill added", "skill_id": skill_id}
 
 
-@delete(
-    "/{project_id:str}/skills/{skill_id:int}", status_code=200, sync_to_thread=False
-)
-def remove_skill_from_project(
-    project_id: str, skill_id: int, caller: Caller
-) -> dict[str, Any]:
+@delete("/{project_id:str}/skills/{skill_id:int}", status_code=200, sync_to_thread=False)
+def remove_skill_from_project(project_id: str, skill_id: int, caller: Caller) -> dict[str, Any]:
     del caller, project_id
     if not delete_project_skill_by_id(skill_id):
         raise NotFoundException(detail="Skill not found")
@@ -404,23 +401,17 @@ def _install_op(
     except ValueError as exc:
         raise ClientException(detail=str(exc)) from None
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(
-            status_code=500, detail=f"Operation failed: {exc}"
-        ) from None
+        raise HTTPException(status_code=500, detail=f"Operation failed: {exc}") from None
 
 
 @post("/{project_id:str}/install", sync_to_thread=False)
-def install_component(
-    project_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def install_component(project_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     return _install_op(ProjectInstallService.install_component, project_id, data)
 
 
 @post("/{project_id:str}/uninstall", sync_to_thread=False)
-def uninstall_component(
-    project_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def uninstall_component(project_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     return _install_op(ProjectInstallService.uninstall_component, project_id, data)
 
@@ -437,18 +428,14 @@ def list_team_edges(project_id: str, caller: Caller) -> dict[str, Any]:
 
 
 @post("/{project_id:str}/team-edges", sync_to_thread=False)
-def create_team_edge(
-    project_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def create_team_edge(project_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     if not data:
         raise ClientException(detail="JSON body required")
     source_team_id = data.get("source_team_id")
     target_team_id = data.get("target_team_id")
     if not source_team_id or not target_team_id:
-        raise ClientException(
-            detail="source_team_id and target_team_id required"
-        )
+        raise ClientException(detail="source_team_id and target_team_id required")
     edge_id = add_project_team_edge(
         project_id=project_id,
         source_team_id=source_team_id,
@@ -467,9 +454,7 @@ def create_team_edge(
     status_code=200,
     sync_to_thread=False,
 )
-def delete_team_edge_endpoint(
-    project_id: str, edge_id: int, caller: Caller
-) -> dict[str, Any]:
+def delete_team_edge_endpoint(project_id: str, edge_id: int, caller: Caller) -> dict[str, Any]:
     del caller, project_id
     if not delete_project_team_edge(edge_id):
         raise NotFoundException(detail="Edge not found")
@@ -477,9 +462,7 @@ def delete_team_edge_endpoint(
 
 
 @put("/{project_id:str}/team-topology", sync_to_thread=False)
-def update_team_topology(
-    project_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def update_team_topology(project_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     if not data:
         raise ClientException(detail="JSON body required")

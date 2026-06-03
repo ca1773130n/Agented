@@ -48,8 +48,9 @@ class AgentService:
         return agent, HTTPStatus.OK
 
     @staticmethod
-    def create_agent(data: dict) -> Tuple[dict, HTTPStatus]:
-        """Create a new agent."""
+    def create_agent(data: dict, user_id: Optional[str] = None) -> Tuple[dict, HTTPStatus]:
+        """Create a new agent. ``user_id`` (the authenticated caller) is recorded
+        as the owner — never read from the request body, to prevent spoofing."""
         name = data.get("name")
         if not name:
             return error_response("BAD_REQUEST", "name is required", HTTPStatus.BAD_REQUEST)
@@ -89,6 +90,7 @@ class AgentService:
             system_prompt=system_prompt,
             creation_conversation_id=creation_conversation_id,
             creation_status="completed",
+            user_id=user_id,
         )
 
         if agent_id:

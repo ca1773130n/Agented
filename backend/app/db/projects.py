@@ -24,15 +24,20 @@ def create_project(
     owner_team_id: str = None,
     local_path: str = None,
     github_host: str = None,
+    user_id: str = None,
 ) -> Optional[str]:
-    """Add a new project. Returns project_id on success, None on failure."""
+    """Add a new project. Returns project_id on success, None on failure.
+
+    ``user_id`` records the creating principal as the owner for per-object
+    access control. None leaves the row unowned (shared).
+    """
     with get_connection() as conn:
         try:
             project_id = _get_unique_project_id(conn)
             conn.execute(
                 """
-                INSERT INTO projects (id, name, description, status, product_id, github_repo, owner_team_id, local_path, github_host)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO projects (id, name, description, status, product_id, github_repo, owner_team_id, local_path, github_host, user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     project_id,
@@ -44,6 +49,7 @@ def create_project(
                     owner_team_id,
                     local_path,
                     github_host or "github.com",
+                    user_id,
                 ),
             )
             conn.commit()
