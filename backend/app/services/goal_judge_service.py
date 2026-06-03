@@ -31,9 +31,12 @@ from typing import Optional
 import httpx
 
 from .cliproxy_manager import CLIProxyManager
-from autoresearch_core import ExperimentResult, MetricSpec, measure
-from autoresearch_core import parse_metrics_line, validate_metric_spec
 from app.config import AUTORESEARCH_KERNEL_ENABLED
+
+# autoresearch_core is imported lazily inside the flag-guarded kernel branch
+# (see judge()), so a default-OFF deployment has no hard import dependency on
+# the editable sibling package — the module imports identically whether or not
+# autoresearch-core is present.
 
 logger = logging.getLogger(__name__)
 
@@ -71,15 +74,11 @@ _MAX_TURN_TEXT_CHARS = 8 * 1024
 _JUDGE_SYSTEM = (
     "You are a strict goal-judging assistant. Read the goal and the "
     "agent's latest turn. Decide if the goal is met. Reply ONLY with "
-    "a JSON object: {\"met\": true|false, \"reason\": \"...\"}. "
+    'a JSON object: {"met": true|false, "reason": "..."}. '
     "Be concise — the reason is one sentence."
 )
 
-_JUDGE_USER_TEMPLATE = (
-    "Goal: {goal}\n\n"
-    "Latest agent turn:\n---\n{turn}\n---\n\n"
-    "Is the goal met?"
-)
+_JUDGE_USER_TEMPLATE = "Goal: {goal}\n\nLatest agent turn:\n---\n{turn}\n---\n\nIs the goal met?"
 
 
 # v0.7.86 — Ouroboros-mode judge prompt. Used when the iteration
@@ -91,12 +90,12 @@ _OUROBOROS_JUDGE_SYSTEM = (
     "You are a strict goal-judging assistant operating under the "
     "Ouroboros pattern. Compare the agent's actual outcome against "
     "its stated hypothesis and predicted outcome. Reply ONLY with a "
-    "JSON object: {\"met\": true|false, \"verdict\": "
-    "\"confirmed\"|\"partial\"|\"falsified\"|\"unknown\", "
-    "\"reason\": \"...\"}. "
-    "Use \"confirmed\" when actual matches predicted; \"partial\" "
-    "when some but not all predictions held; \"falsified\" when the "
-    "hypothesis was tested and failed; \"unknown\" when the agent "
+    'JSON object: {"met": true|false, "verdict": '
+    '"confirmed"|"partial"|"falsified"|"unknown", '
+    '"reason": "..."}. '
+    'Use "confirmed" when actual matches predicted; "partial" '
+    'when some but not all predictions held; "falsified" when the '
+    'hypothesis was tested and failed; "unknown" when the agent '
     "didn't produce enough evidence to score. Reason is one sentence."
 )
 
@@ -135,7 +134,9 @@ class JudgeVerdict:
     cost_usd: float = 0.0
     ouroboros_verdict: Optional[str] = None
     metric_spec: Optional[dict] = None
-    kernel_record: Optional[object] = None   # transient autoresearch_core.VerdictRecord; not persisted
+    kernel_record: Optional[object] = (
+        None  # transient autoresearch_core.VerdictRecord; not persisted
+    )
 
 
 class GoalJudgeService:
@@ -171,23 +172,50 @@ class GoalJudgeService:
         if AUTORESEARCH_KERNEL_ENABLED and metric_spec is not None:
             # metric_spec is authoritative — this branch ALWAYS returns; it never
             # falls through to check_cmd (shell=True) or the LLM judges.
+            # Lazy import so flag-off deployments don't require the package.
+            try:
+                from autoresearch_core import (
+                    ExperimentResult,
+                    MetricSpec,
+                    measure,
+                    parse_metrics_line,
+                    validate_metric_spec,
+                )
+            except ImportError as exc:
+                logger.error("autoresearch-core unavailable but kernel enabled: %s", exc)
+                return JudgeVerdict(
+                    met=False,
+                    source="kernel",
+                    reason=f"kernel unavailable: {exc}",
+                    metric_spec=metric_spec,
+                )
             try:
                 spec = MetricSpec(**metric_spec)
                 validate_metric_spec(spec)
             except (TypeError, ValueError) as exc:
                 return JudgeVerdict(
-                    met=False, source="kernel",
-                    reason=f"invalid metric_spec: {exc}", metric_spec=metric_spec,
+                    met=False,
+                    source="kernel",
+                    reason=f"invalid metric_spec: {exc}",
+                    metric_spec=metric_spec,
                 )
-            rec = measure(spec, ExperimentResult(
-                metrics=parse_metrics_line(last_assistant_text), exit_code=0))
+            rec = measure(
+                spec, ExperimentResult(metrics=parse_metrics_line(last_assistant_text), exit_code=0)
+            )
             return JudgeVerdict(
-                met=(rec.verdict == "supported"), source="kernel", reason=rec.detail,
-                metric_spec=metric_spec, kernel_record=rec,
-                stdout=json.dumps({
-                    "verdict": rec.verdict, "evidence_level": rec.evidence_level,
-                    "strategy": rec.strategy, "detail": rec.detail,
-                }),
+                met=(rec.verdict == "supported"),
+                source="kernel",
+                reason=rec.detail,
+                metric_spec=metric_spec,
+                kernel_record=rec,
+                stdout=json.dumps(
+                    {
+                        "verdict": rec.verdict,
+                        "evidence_level": rec.evidence_level,
+                        "strategy": rec.strategy,
+                        "detail": rec.detail,
+                    }
+                ),
             )
         if check_cmd:
             return cls._run_deterministic(check_cmd, cwd)

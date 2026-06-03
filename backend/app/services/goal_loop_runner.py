@@ -33,8 +33,11 @@ from app.db import (
 
 from .goal_judge_service import GoalJudgeService
 from .project_session_manager import ProjectSessionManager
-from autoresearch_core import should_promote_dead_end
 from app.config import AUTORESEARCH_KERNEL_ENABLED
+
+# autoresearch_core.should_promote_dead_end is imported lazily inside
+# _maybe_promote_kernel_dead_end so flag-off deployments don't require the
+# editable sibling package at import time.
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +121,13 @@ def _maybe_promote_kernel_dead_end(
     """
     if not (AUTORESEARCH_KERNEL_ENABLED and verdict.source == "kernel" and hypothesis):
         return
-    if verdict.kernel_record is None or not should_promote_dead_end(verdict.kernel_record):
+    if verdict.kernel_record is None:
+        return
+    try:
+        from autoresearch_core import should_promote_dead_end
+    except ImportError:
+        return
+    if not should_promote_dead_end(verdict.kernel_record):
         return
     add_goal_loop_dead_end(
         session_id=session_id,
@@ -200,8 +209,7 @@ def _initial_prompt(goal: str, *, ouroboros: bool = True, result_block: str = ""
     """
     if not ouroboros:
         return (
-            f"Goal: {goal}\n\nStart working toward the goal. "
-            f"Make progress this turn.{result_block}"
+            f"Goal: {goal}\n\nStart working toward the goal. Make progress this turn.{result_block}"
         )
     return (
         f"Goal: {goal}\n\nStart working toward the goal. "
@@ -311,7 +319,18 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
     # judge falls back to its legacy binary mode for that
     # iteration without losing the audit row.
     ouroboros = bool(config.get("ouroboros", True))
-    result_block = _result_instruction(metric_spec) if (AUTORESEARCH_KERNEL_ENABLED and metric_spec is not None) else ""
+    if metric_spec is not None and not AUTORESEARCH_KERNEL_ENABLED:
+        # Operator configured a metric_spec but the kernel flag is off — it's
+        # silently ignored. Log once so this isn't a confusing no-op.
+        logger.warning(
+            "goal_loop %s has metric_spec but AUTORESEARCH_KERNEL_ENABLED is off; ignoring it",
+            session_id,
+        )
+    result_block = (
+        _result_instruction(metric_spec)
+        if (AUTORESEARCH_KERNEL_ENABLED and metric_spec is not None)
+        else ""
+    )
 
     queue = ProjectSessionManager.subscribe_raw(session_id)
     try:
@@ -435,11 +454,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
             # could falsify. The ``UNIQUE(session_id, approach_hash)``
             # constraint keeps repeat attempts of the same approach
             # from multiplying rows.
-            if (
-                ouroboros
-                and hypothesis
-                and verdict.ouroboros_verdict == "falsified"
-            ):
+            if ouroboros and hypothesis and verdict.ouroboros_verdict == "falsified":
                 add_goal_loop_dead_end(
                     session_id=session_id,
                     iteration=iteration_no,
@@ -449,9 +464,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                     approach_hash=_approach_hash(hypothesis),
                 )
 
-            _maybe_promote_kernel_dead_end(
-                session_id, iteration_no, hypothesis, verdict, turn_text
-            )
+            _maybe_promote_kernel_dead_end(session_id, iteration_no, hypothesis, verdict, turn_text)
 
             state.not_met_streak += 1
             if not (AUTORESEARCH_KERNEL_ENABLED and metric_spec is not None):
@@ -483,9 +496,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
             # fires when the agent has been consistently producing
             # hypotheses but they're stuck.
             if ouroboros and verdict.ouroboros_verdict:
-                recent = recent_iteration_verdicts(
-                    session_id, limit=_OUROBOROS_CONVERGENCE_WINDOW
-                )
+                recent = recent_iteration_verdicts(session_id, limit=_OUROBOROS_CONVERGENCE_WINDOW)
                 if (
                     len(recent) >= _OUROBOROS_CONVERGENCE_WINDOW
                     and len(set(recent)) == 1
@@ -531,7 +542,10 @@ def _send_continue(
     _send_user_text(
         session_id,
         _continue_prompt(
-            goal, reason, ouroboros=ouroboros, dead_ends_block=dead_ends_block,
+            goal,
+            reason,
+            ouroboros=ouroboros,
+            dead_ends_block=dead_ends_block,
             result_block=result_block,
         ),
     )
@@ -546,7 +560,9 @@ def _send_initial(
     begins so claude has something to respond to and the first
     ``turn_done`` actually arrives.
     """
-    _send_user_text(session_id, _initial_prompt(goal, ouroboros=ouroboros, result_block=result_block))
+    _send_user_text(
+        session_id, _initial_prompt(goal, ouroboros=ouroboros, result_block=result_block)
+    )
 
 
 def _send_user_text(session_id: str, text: str) -> None:
