@@ -85,8 +85,9 @@ function buildRouter(): Router {
     // System / Analytics group (PR-K dropped alert-grouping).
     'ai-cost-dashboard',
     'traces-list',
-    // External integrations
-    'slack-notifications', 'integration-ticketing', 'notification-channels',
+    // Integrations (P2: merged into one /integrations tabbed page; the old
+    // route names remain as redirects, so keep them registered too).
+    'integrations', 'slack-notifications', 'integration-ticketing', 'notification-channels',
     'on-call-escalation',
     // History (security-history route still exists; sidebar entry removed)
     'security-history', 'trigger-history', 'audit-history',
@@ -244,18 +245,33 @@ describe('AppSidebar — PR-B structure', () => {
     expect(labels).not.toContain('Integrations');
   });
 
-  it('PR-E: Integrations group exists under System with the original 3 items', () => {
-    // The renamed-to-"Integrations" group still carries the same 3
-    // items it had as "External Integrations" before PR-E.
-    const items = submenuItems(wrapper, 'Integrations');
-    const texts = items.map((b) => b.textContent?.trim().replace(/\s+/g, ' ') ?? '');
-    expect(texts.length).toBe(3);
-    expect(texts).toContain('Slack Notifications');
-    expect(texts).toContain('Jira / Linear');
-    expect(texts).toContain('Notification Channels');
-    expect(texts).not.toContain('On-Call Escalation');
-    // And the old aria-label/region is gone.
+  it('P2: Integrations is a single flat link (Slack/Ticketing/Channels merged into one tabbed page)', () => {
+    // The three integration surfaces (slack-notifications, integration-ticketing,
+    // notification-channels) — all views over the same db_integrations table —
+    // collapsed into one /integrations tabbed page. The sidebar now shows a
+    // single flat link with no submenu.
+    expect(submenuOf(wrapper, 'Integrations')).toBeNull();
     expect(submenuOf(wrapper, 'External Integrations')).toBeNull();
+
+    const allButtons = Array.from(
+      rootEl(wrapper).querySelectorAll<HTMLElement>('button'),
+    );
+    const integrationsLinks = allButtons.filter(
+      (b) => b.querySelector<HTMLElement>('.nav-text')?.textContent?.trim() === 'Integrations',
+    );
+    expect(integrationsLinks.length).toBe(1);
+    // Flat-link shape: no chevron, no aria-expanded.
+    const btn = integrationsLinks[0];
+    expect(btn.querySelector('.chevron-icon')).toBeNull();
+    expect(btn.hasAttribute('aria-expanded')).toBe(false);
+
+    // The old per-integration submenu items are gone from the whole sidebar.
+    const allItems = Array.from(
+      rootEl(wrapper).querySelectorAll<HTMLElement>('button.submenu-item'),
+    ).map((b) => b.textContent?.trim().replace(/\s+/g, ' ') ?? '');
+    expect(allItems).not.toContain('Slack Notifications');
+    expect(allItems).not.toContain('Jira / Linear');
+    expect(allItems).not.toContain('Notification Channels');
   });
 
   it('PR-D: Dashboards submenu collapses to exactly 5 items (1 landing + 4 lanes)', () => {
