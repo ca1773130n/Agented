@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
+import EmptyState from '../components/base/EmptyState.vue';
 import { useToast } from '../composables/useToast';
 import { secretsApi, ApiError } from '../services/api';
 import type { SecretMetadata } from '../services/api';
@@ -80,7 +81,7 @@ async function handleDelete(s: SecretMetadata) {
   try {
     await secretsApi.delete(s.id);
     secrets.value = secrets.value.filter(sec => sec.id !== s.id);
-    delete revealedValues.value[s.id];
+    hideSecret(s.id);
     showToast(t('secretsVault.toasts.deleted', { name: s.name }), 'success');
   } catch (err) {
     const message = err instanceof ApiError ? err.message : t('secretsVault.errors.delete');
@@ -90,15 +91,29 @@ async function handleDelete(s: SecretMetadata) {
   }
 }
 
+// Auto-re-mask a revealed secret after a short window so plaintext doesn't
+// linger in the DOM indefinitely.
+const REVEAL_TIMEOUT_MS = 30_000;
+const revealTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+
+function hideSecret(id: string) {
+  delete revealedValues.value[id];
+  if (revealTimers[id]) {
+    clearTimeout(revealTimers[id]);
+    delete revealTimers[id];
+  }
+}
+
 async function handleReveal(s: SecretMetadata) {
   if (revealedValues.value[s.id]) {
-    delete revealedValues.value[s.id];
+    hideSecret(s.id);
     return;
   }
   revealingId.value = s.id;
   try {
     const data = await secretsApi.reveal(s.id);
     revealedValues.value[s.id] = data.value;
+    revealTimers[s.id] = setTimeout(() => hideSecret(s.id), REVEAL_TIMEOUT_MS);
   } catch (err) {
     const message = err instanceof ApiError ? err.message : t('secretsVault.errors.reveal');
     showToast(message, 'error');
@@ -106,6 +121,10 @@ async function handleReveal(s: SecretMetadata) {
     revealingId.value = null;
   }
 }
+
+onUnmounted(() => {
+  Object.values(revealTimers).forEach(clearTimeout);
+});
 
 function secretRefSyntax(name: string): string {
   return `{{secrets.${name}}}`;
@@ -210,9 +229,7 @@ onMounted(loadSecrets);
           </h3>
           <span class="card-badge">{{ t('secretsVault.secretsCount', { count: secrets.length }) }}</span>
         </div>
-        <div v-if="secrets.length === 0" class="list-empty">
-          {{ t('secretsVault.emptyList') }}
-        </div>
+        <EmptyState v-if="secrets.length === 0" :title="t('secretsVault.emptyList')" />
         <div v-else class="secrets-list">
           <div v-for="s in secrets" :key="s.id" class="secret-row">
             <div class="secret-info">
