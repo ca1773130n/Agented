@@ -182,21 +182,25 @@ class AgentService:
             "_entity_id": agent_id,
         }
 
-        # Shared mutable container to capture execution_id from background thread
-        result = {"execution_id": None}
+        # Pre-allocate the execution_id synchronously (06 L1) so the returned id
+        # is always present and the run is immediately trackable/cancellable —
+        # instead of racing a 2s thread.join that could return None.
+        from app.db.ids import generate_execution_id
+
+        execution_id = generate_execution_id(agent_id)
 
         def _run_agent_trigger() -> None:
-            result["execution_id"] = ExecutionService.run_trigger(
-                pseudo_trigger, message, event=None, trigger_type="manual"
+            ExecutionService.run_trigger(
+                pseudo_trigger,
+                message,
+                event=None,
+                trigger_type="manual",
+                execution_id=execution_id,
             )
 
-        # Run in background thread (run_trigger handles start_execution internally)
+        # Run in background thread (run_trigger handles start_execution internally).
         thread = threading.Thread(target=_run_agent_trigger, daemon=True)
         thread.start()
-        # Wait briefly for execution_id to be created
-        thread.join(timeout=2.0)
-
-        execution_id = result["execution_id"]
 
         return {
             "message": f"Agent '{agent.get('name')}' started",

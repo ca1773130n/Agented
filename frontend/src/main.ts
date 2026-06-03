@@ -1,4 +1,14 @@
 import '@mcp-b/global'
+// [08.L2] Self-host Geist / Geist Mono via @fontsource instead of the Google
+// Fonts CDN — removes a third-party request + privacy/availability dependency.
+import '@fontsource/geist-sans/400.css'
+import '@fontsource/geist-sans/500.css'
+import '@fontsource/geist-sans/600.css'
+import '@fontsource/geist-sans/700.css'
+import '@fontsource/geist-mono/400.css'
+import '@fontsource/geist-mono/500.css'
+import '@fontsource/geist-mono/600.css'
+import '@fontsource/geist-mono/700.css'
 import { createApp } from 'vue'
 import './style.css'
 import '@ai-accounts/vue-styled/styles.css'

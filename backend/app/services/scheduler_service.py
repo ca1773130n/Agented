@@ -226,6 +226,27 @@ class SchedulerService:
             logger.info(f"Trigger {trigger_id} is disabled, skipping execution")
             return
 
+        # Overlap guard (06 L2): APScheduler's max_instances=1 only serializes the
+        # cron job itself, but team/workflow strategies fork their own daemon
+        # threads, so the job "returns" while work continues — letting the next
+        # tick start a concurrent run. Skip (coalesce) if the prior run is still
+        # in flight, and audit the skip so coalescing is visible.
+        try:
+            from .audit_log_service import AuditLogService
+            from .execution_service import ExecutionService
+
+            if ExecutionService.get_status(trigger_id).get("status") == "running":
+                logger.info("Scheduled trigger %s still running; skipping overlap", trigger_id)
+                AuditLogService.log(
+                    action="scheduler.skip_overlap",
+                    entity_type="trigger",
+                    entity_id=trigger_id,
+                    outcome="skipped",
+                )
+                return
+        except Exception:
+            logger.debug("overlap check failed for %s", trigger_id, exc_info=True)
+
         # Only stamp last_run once we know the trigger is real + enabled.
         update_trigger_last_run(trigger_id, datetime.now(timezone.utc).isoformat())
 

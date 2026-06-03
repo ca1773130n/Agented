@@ -329,9 +329,14 @@ class ExecutionService:
         env_overrides: dict = None,
         account_id: int = None,
         working_directory: str = None,
+        execution_id: str = None,
     ) -> Optional[str]:
-        """Execute a trigger's prompt with real-time log streaming. Returns execution_id."""
+        """Execute a trigger's prompt with real-time log streaming. Returns execution_id.
+
+        ``execution_id`` may be pre-allocated by the caller (06 L1) so a
+        background runner is trackable before start_execution runs."""
         trigger_id = trigger["id"]
+        preallocated_execution_id = execution_id
         execution_id = None
         cloned_dirs = []  # temp dirs to clean up
         github_repo_map = {}  # clone_dir -> repo_url (for auto-resolve PR flow)
@@ -406,6 +411,7 @@ class ExecutionService:
                 command=cmd_str,
                 trigger_config_snapshot=trigger_config_snapshot,
                 account_id=account_id,
+                execution_id=preallocated_execution_id,
             )
             # Trace logger — prefixes all subsequent log lines with the execution ID
             # so that trigger receipt -> subprocess output -> completion can be correlated.
