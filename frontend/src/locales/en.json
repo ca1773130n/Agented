@@ -88,6 +88,7 @@
     "botTemplates": "Bot Templates",
     "nlCronBuilder": "NL Cron Builder",
     "triggerConditions": "Trigger Conditions",
+    "triggerTools": "Trigger Tools",
     "nlRuleEditor": "NL Rule Editor",
     "payloadTransformer": "Payload Transformer",
     "prAutoAssignment": "PR Auto-Assignment",

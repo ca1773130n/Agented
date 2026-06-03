@@ -1,6 +1,13 @@
 import type { RouteRecordRaw } from 'vue-router';
 
 export const triggersExtRoutes: RouteRecordRaw[] = [
+  // Trigger Tools — unified Conditions / NL / Schedule / Payload / Dry-Run (P2).
+  {
+    path: '/trigger-tools',
+    name: 'trigger-tools',
+    component: () => import('../../views/TriggerToolsPage.vue'),
+    meta: { title: 'Trigger Tools' },
+  },
   // Bot Output Webhook Forwarding
   {
     path: '/integrations/webhook-forwarding',
@@ -8,33 +15,29 @@ export const triggersExtRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/BotOutputWebhookForwarding.vue'),
     meta: { title: 'Webhook Output Forwarding' },
   },
-  // Webhook Payload Transformer (Feature 37)
+  // Webhook Payload Transformer — folded into the Trigger Tools page (P2).
   {
     path: '/webhooks/transformer',
     name: 'webhook-payload-transformer',
-    component: () => import('../../views/WebhookPayloadTransformerPage.vue'),
-    meta: { title: 'Webhook Payload Transformer' },
+    redirect: (to) => ({ name: 'trigger-tools', query: { ...to.query, tab: 'payload' } }),
   },
-  // Visual Schedule / Cron Wizard
+  // Visual Schedule / Cron Wizard — folded into the Trigger Tools page (P2).
   {
     path: '/scheduling/wizard',
     name: 'visual-cron-wizard',
-    component: () => import('../../views/VisualCronWizard.vue'),
-    meta: { title: 'Schedule Wizard' },
+    redirect: (to) => ({ name: 'trigger-tools', query: { ...to.query, tab: 'schedule' } }),
   },
-  // Conditional Trigger Rules Engine (Feature 12)
+  // Conditional Trigger Rules Engine — folded into the Trigger Tools page (P2).
   {
     path: '/triggers/conditional-rules',
     name: 'conditional-trigger-rules',
-    component: () => import('../../views/ConditionalTriggerRulesPage.vue'),
-    meta: { title: 'Conditional Trigger Rules' },
+    redirect: (to) => ({ name: 'trigger-tools', query: { ...to.query, tab: 'conditions' } }),
   },
-  // Natural Language Trigger Rule Editor
+  // Natural Language Trigger Rule Editor — folded into the Trigger Tools page (P2).
   {
     path: '/triggers/nl-rule-editor',
     name: 'nl-trigger-rule-editor',
-    component: () => import('../../views/NLTriggerRuleEditor.vue'),
-    meta: { title: 'Natural Language Trigger Rules' },
+    redirect: (to) => ({ name: 'trigger-tools', query: { ...to.query, tab: 'nl' } }),
   },
   // Multi-Provider Fallback Chains
   {
