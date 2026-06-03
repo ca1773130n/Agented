@@ -1,12 +1,11 @@
 import type { RouteRecordRaw } from 'vue-router';
 
 export const githubRoutes: RouteRecordRaw[] = [
-  // GitHub Actions Integration
+  // GitHub Actions Integration — folded into the Help page (P2).
   {
     path: '/integrations/github-actions',
     name: 'github-actions',
-    component: () => import('../../views/GitHubActionsPage.vue'),
-    meta: { title: 'GitHub Actions' },
+    redirect: (to) => ({ name: 'help', query: { ...to.query, tab: 'github-actions' } }),
   },
   // GitHub PR Annotation Integration
   {

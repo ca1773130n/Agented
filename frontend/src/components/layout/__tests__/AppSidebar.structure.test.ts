@@ -77,7 +77,7 @@ function buildRouter(): Router {
     'execution-tagging', 'changelog-generator', 'prompt-snippets',
     // PR-J2 — KEEP+WIRE routes wired into the sidebar.
     // Plugins child (PR-K kept Plugin SDK only).
-    'plugin-sdk',
+    'plugin-sdk', 'help',
     // Triggers submenu additions (PR-K kept these — low marginal cost
     // inside the existing busy submenu).
     'bot-dry-run', 'bot-output-webhook-forwarding',
@@ -176,14 +176,14 @@ describe('AppSidebar — PR-B structure', () => {
     expect(labels).not.toContain('Triggers');
   });
 
-  it('Triggers section contains exactly 8 sub-items (editors + execution-tagging folded out)', () => {
-    // P2 folded the 5 trigger editors into Trigger Tools (Configuration) and
-    // execution-tagging into the Execution Tools page — which empties and
-    // removes the Introspection block.
-    // Resulting blocks: Core (2) + Configuration (1) + PR-Review (3)
-    // + Ops (1) + Authoring (1) = 8.
+  it('Triggers section contains exactly 7 sub-items (github-actions folded into Help)', () => {
+    // P2 folded the 5 trigger editors into Trigger Tools, execution-tagging
+    // into Execution Tools (removing Introspection), and github-actions into
+    // the Help page.
+    // Resulting blocks: Core (2) + Configuration (1) + PR-Review (2)
+    // + Ops (1) + Authoring (1) = 7.
     const items = submenuItems(wrapper, 'Triggers');
-    expect(items.length).toBe(8);
+    expect(items.length).toBe(7);
   });
 
   it('Triggers section contains spot-checked items from different blocks', () => {
@@ -193,8 +193,8 @@ describe('AppSidebar — PR-B structure', () => {
     expect(texts).toContain('Triggers');
     // Configuration block (P2 — the folded Trigger Tools page)
     expect(texts).toContain('Trigger Tools');
-    // PR-Review block
-    expect(texts).toContain('GitHub Actions');
+    // PR-Review block (github-actions folded into Help in P2)
+    expect(texts).toContain('PR Auto-Assignment');
     // Ops block
     expect(texts).toContain('Webhook Forwarding');
     // Authoring block (folded-in Prompt Snippets)
@@ -500,11 +500,11 @@ describe('AppSidebar — PR-B structure', () => {
   //     IA additions (5 Work flat links + Agent Memory + 4 Forge flat
   //     links + Alert Grouping) were reverted in PR-K. ───
 
-  it('PR-J2: Plugins submenu includes "Plugin SDK"', () => {
+  it('P2: Plugin SDK is folded into the Help page (not a Plugins submenu item)', () => {
     const texts = submenuItems(wrapper, 'Plugins').map(
       (b) => b.textContent?.trim().replace(/\s+/g, ' ') ?? '',
     );
-    expect(texts).toContain('Plugin SDK');
+    expect(texts).not.toContain('Plugin SDK');
   });
 
   it('P2: the 5 trigger editors are folded into Trigger Tools (no longer standalone submenu items)', () => {
