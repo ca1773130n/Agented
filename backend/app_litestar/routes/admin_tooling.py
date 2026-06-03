@@ -23,6 +23,7 @@ from app.database import (
     get_setting,
     set_setting,
 )
+from app_litestar.auth_guards import requires_role
 from app.db.gitops import (
     create_gitops_repo,
     delete_gitops_repo,
@@ -320,12 +321,16 @@ def get_secret_detail(secret_id: str) -> dict[str, Any]:
 @post("/{secret_id:str}/reveal", sync_to_thread=False)
 def reveal_secret(secret_id: str) -> dict[str, Any]:
     _ensure_vault_configured()
-    value = SecretVaultService.get_secret_value(secret_id, accessor="api")
-    if value is None:
-        raise NotFoundException(detail="Secret not found")
     from app.db.secrets import get_secret
 
+    # Resolve strictly by ID — never by name fallback — so the unguessable-ID
+    # protection cannot be bypassed by guessing a secret's name (M4).
     secret = get_secret(secret_id)
+    if not secret:
+        raise NotFoundException(detail="Secret not found")
+    value = SecretVaultService.get_secret_value(secret["id"], accessor="api")
+    if value is None:
+        raise NotFoundException(detail="Secret not found")
     return {"id": secret["id"], "name": secret["name"], "value": value}
 
 
@@ -355,6 +360,12 @@ def delete_secret(secret_id: str) -> dict[str, Any]:
 
 secrets_router = Router(
     path="/admin/secrets",
+    # The secret vault is the most sensitive surface in the system: reveal
+    # returns plaintext. Gate the entire router at admin so a missing
+    # per-handler decorator can never silently downgrade to the coarse
+    # viewer/editor defaults (C1). A coarse-table safety net is also added
+    # in auth_guards.ROLE_REQUIRED.
+    guards=[requires_role("admin")],
     route_handlers=[
         vault_status,
         create_secret,

@@ -25,15 +25,24 @@ ROLE_RANK: dict[str, int] = {
 # the table is iterated and the first method-and-prefix match wins.
 # Coverage closes the v0.5.12 critical: mutating /api/* must be gated.
 ROLE_REQUIRED: list[tuple[str, str, str]] = [
-    ("GET",    "/api/",   "viewer"),
-    ("POST",   "/api/",   "editor"),
-    ("PUT",    "/api/",   "editor"),
-    ("PATCH",  "/api/",   "editor"),
-    ("DELETE", "/api/",   "admin"),
-    ("GET",    "/admin/", "viewer"),
-    ("POST",   "/admin/", "editor"),
-    ("PUT",    "/admin/", "editor"),
-    ("PATCH",  "/admin/", "editor"),
+    ("GET", "/api/", "viewer"),
+    ("POST", "/api/", "editor"),
+    ("PUT", "/api/", "editor"),
+    ("PATCH", "/api/", "editor"),
+    ("DELETE", "/api/", "admin"),
+    # Secret vault: admin for every method. Listed before the generic
+    # /admin/ rows (first-match-wins) so a missing per-route guard can never
+    # downgrade reveal/list to editor/viewer. Defence-in-depth alongside the
+    # router-level requires_role("admin") guard.
+    ("GET", "/admin/secrets", "admin"),
+    ("POST", "/admin/secrets", "admin"),
+    ("PUT", "/admin/secrets", "admin"),
+    ("PATCH", "/admin/secrets", "admin"),
+    ("DELETE", "/admin/secrets", "admin"),
+    ("GET", "/admin/", "viewer"),
+    ("POST", "/admin/", "editor"),
+    ("PUT", "/admin/", "editor"),
+    ("PATCH", "/admin/", "editor"),
     ("DELETE", "/admin/", "admin"),
 ]
 
@@ -87,14 +96,18 @@ def requires_role(min_role: str):
     coarse default. Validates `min_role` at construction time."""
     if min_role not in ROLE_RANK:
         raise ValueError(
-            f"requires_role: unknown role {min_role!r}; "
-            f"valid roles are {sorted(ROLE_RANK)}"
+            f"requires_role: unknown role {min_role!r}; valid roles are {sorted(ROLE_RANK)}"
         )
 
     def guard(connection, _route_handler) -> None:
         principal = connection.scope.get("state", {}).get("principal")
         if principal is None:
+            # Explicit per-route guards always require a real authenticated
+            # principal — bootstrap mode does NOT weaken them. Fresh-install UX
+            # is served by ungated routes; sensitive guarded routes (e.g. the
+            # secret vault) stay closed until a real admin role exists.
             raise PermissionDeniedException(detail="not authenticated")
         if not has_sufficient_role(principal.get("role"), min_role):
             raise PermissionDeniedException(detail=f"requires {min_role}")
+
     return guard

@@ -23,10 +23,23 @@ logger = logging.getLogger(__name__)
 # Default timeout for HTTP requests (seconds)
 _HTTP_TIMEOUT = 15
 
-# Gemini CLI well-known OAuth credentials (public, embedded in the open-source CLI).
-# See: https://github.com/anthropics/gemini-cli → code_assist/oauth2.js
-_GEMINI_CLI_CLIENT_ID = "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com"
-_GEMINI_CLI_CLIENT_SECRET = "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"
+# Gemini CLI well-known OAuth credentials. These are NOT a confidential secret:
+# they are the *installed-app* client credentials published in the open-source
+# Gemini CLI (code_assist/oauth2.js). Google's installed-app flow treats the
+# client_secret as non-confidential and relies on PKCE (code_verifier) for
+# security; the value is in every copy of the CLI and cannot be "rotated" by us.
+# Single source of truth for the whole app (also imported by the OAuth route).
+# An operator may override via env to point at their own Google OAuth client.
+GEMINI_CLI_CLIENT_ID = os.environ.get(
+    "AGENTED_GEMINI_CLIENT_ID",
+    "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com",
+)
+GEMINI_CLI_CLIENT_SECRET = os.environ.get(
+    "AGENTED_GEMINI_CLIENT_SECRET", "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"
+)
+# Backwards-compatible private aliases (existing references).
+_GEMINI_CLI_CLIENT_ID = GEMINI_CLI_CLIENT_ID
+_GEMINI_CLI_CLIENT_SECRET = GEMINI_CLI_CLIENT_SECRET
 
 
 class CredentialResolver:
@@ -182,10 +195,7 @@ class CredentialResolver:
             if expanded:
                 suffix = hashlib.sha256(expanded.encode()).hexdigest()[:8]
                 kc = f"Claude Code-credentials-{suffix}"
-                hint = (
-                    f"CLAUDE_CONFIG_DIR={config_path} claude  "
-                    f"# then /login inside that session"
-                )
+                hint = f"CLAUDE_CONFIG_DIR={config_path} claude  # then /login inside that session"
             else:
                 kc = "Claude Code-credentials"
                 hint = "claude  # then /login inside that session"
@@ -209,9 +219,7 @@ class CredentialResolver:
             if token and id_present:
                 return {"status": "ok"}
             expanded = os.path.expanduser(config_path) if config_path else None
-            loc = (
-                f"{expanded}/auth.json" if expanded else "~/.codex/auth.json"
-            )
+            loc = f"{expanded}/auth.json" if expanded else "~/.codex/auth.json"
             hint = (
                 f"CODEX_HOME={config_path} codex  # then complete login"
                 if config_path
@@ -234,16 +242,8 @@ class CredentialResolver:
             if token and not cls._gemini_token_is_expired(account):
                 return {"status": "ok"}
             expanded = os.path.expanduser(config_path) if config_path else None
-            loc = (
-                f"{expanded}/oauth_creds.json"
-                if expanded
-                else "~/.gemini/oauth_creds.json"
-            )
-            hint = (
-                f"GEMINI_DIR={config_path} gemini auth"
-                if config_path
-                else "gemini auth"
-            )
+            loc = f"{expanded}/oauth_creds.json" if expanded else "~/.gemini/oauth_creds.json"
+            hint = f"GEMINI_DIR={config_path} gemini auth" if config_path else "gemini auth"
             return {
                 "status": "missing",
                 "remediation": hint,
@@ -810,9 +810,7 @@ def _iter_keychain_entries(service: str):
             cmd += ["-a", acct]
         cmd.append("-w")
         try:
-            result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=5
-            )
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
             continue
         if result.returncode != 0:

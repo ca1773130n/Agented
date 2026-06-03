@@ -150,13 +150,9 @@ def browse_directory(path: Optional[str] = None) -> dict[str, Any]:
                 continue
             if not os.access(entry_resolved, os.R_OK):
                 continue
-            entries.append(
-                {"name": entry.name, "path": str(entry_resolved), "type": "directory"}
-            )
+            entries.append({"name": entry.name, "path": str(entry_resolved), "type": "directory"})
     except PermissionError as e:
-        raise HTTPException(
-            status_code=403, detail="Cannot read directory contents"
-        ) from e
+        raise HTTPException(status_code=403, detail="Cannot read directory contents") from e
     return {"current_path": str(resolved), "parent_path": parent_path, "entries": entries}
 
 
@@ -479,8 +475,13 @@ def gemini_auth_complete(data: dict) -> dict[str, Any]:
     config_path = pending.get("config_path")
     email = pending.get("email", "")
 
-    client_id = "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com"
-    client_secret = "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"
+    # Gemini CLI's published installed-app OAuth credentials (PKCE-protected,
+    # not a confidential secret). Single source of truth lives in
+    # provider_usage_client; overridable via AGENTED_GEMINI_CLIENT_* env.
+    from app.services.provider_usage_client import (
+        GEMINI_CLI_CLIENT_ID as client_id,
+        GEMINI_CLI_CLIENT_SECRET as client_secret,
+    )
 
     try:
         resp = httpx.post(
@@ -507,9 +508,7 @@ def gemini_auth_complete(data: dict) -> dict[str, Any]:
     except ClientException:
         raise
     except Exception as exc:
-        raise HTTPException(
-            status_code=500, detail=f"Token exchange error: {exc}"
-        ) from exc
+        raise HTTPException(status_code=500, detail=f"Token exchange error: {exc}") from exc
 
     with BackendCLIService._lock:
         getattr(BackendCLIService, "_gemini_auth_pending", {}).pop(state, None)
