@@ -134,7 +134,7 @@ function autoExpandForRoute() {
     expandedSections.value.triggers = true;
   }
   // PR-J2 — Analytics dashboards (System).
-  if (['ai-cost-dashboard', 'traces-list', 'trace-detail'].includes(name)) {
+  if (['traces-list', 'trace-detail'].includes(name)) {
     expandedSections.value.analytics = true;
   }
   if (['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'audit-history', 'findings-triage-board'].includes(name)) {
@@ -242,7 +242,7 @@ function isTriggersSectionActive(): boolean {
 
 // PR-J2 — Analytics dashboards group under System.
 function isAnalyticsSectionActive(): boolean {
-  return ['ai-cost-dashboard', 'traces-list', 'trace-detail'].includes(currentRouteName.value);
+  return ['traces-list', 'trace-detail'].includes(currentRouteName.value);
 }
 
 function isPlatformSectionActive(): boolean {
@@ -1047,9 +1047,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </template>
       </SidebarGroupToggle>
       <div v-show="expandedSections.analytics" class="nav-submenu" role="region" :aria-label="t('nav.analytics')">
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('ai-cost-dashboard') }" :aria-current="sidebarActive('ai-cost-dashboard') ? 'page' : undefined" @click="navTo('ai-cost-dashboard')">
-          {{ t('nav.aiCost') }}
-        </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('traces-list') }" :aria-current="sidebarActive('traces-list') ? 'page' : undefined" @click="navTo('traces-list')">
           {{ t('nav.traces') }}
         </button>

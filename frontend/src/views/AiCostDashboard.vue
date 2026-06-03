@@ -8,6 +8,10 @@ import { useToast } from '../composables/useToast';
 const { t } = useI18n();
 const showToast = useToast();
 
+// When embedded inside another page (the Cost lane) we suppress the full
+// PageHeader and show a lighter section header (see template).
+const props = defineProps<{ embedded?: boolean }>();
+
 type Period = '7d' | '30d' | '90d';
 const selectedPeriod = ref<Period>('30d');
 const periodOptions = computed<{ key: Period; label: string }[]>(() => [
@@ -106,6 +110,7 @@ onMounted(loadData);
   <div class="cost-dashboard">
 
     <PageHeader
+      v-if="!props.embedded"
       :title="t('aiCostDashboard.title')"
       :subtitle="t('aiCostDashboard.subtitle')"
     >
@@ -120,6 +125,19 @@ onMounted(loadData);
         </div>
       </template>
     </PageHeader>
+
+    <!-- Embedded in the Cost lane: a lighter header keeps the period control visible. -->
+    <div v-else class="embedded-header">
+      <h3 class="embedded-title">{{ t('aiCostDashboard.title') }}</h3>
+      <div class="period-tabs">
+        <button
+          v-for="p in periodOptions"
+          :key="p.key"
+          :class="['period-tab', { active: selectedPeriod === p.key }]"
+          @click="selectedPeriod = p.key; onPeriodChange()"
+        >{{ p.label }}</button>
+      </div>
+    </div>
 
     <div v-if="isLoading" class="loading-placeholder">
       <div class="skeleton-row">
@@ -260,6 +278,19 @@ onMounted(loadData);
 </template>
 
 <style scoped>
+.embedded-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.embedded-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+  margin: 0;
+}
 .cost-dashboard {
   display: flex;
   flex-direction: column;
