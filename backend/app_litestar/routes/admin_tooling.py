@@ -10,7 +10,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from litestar import Router, delete, get, patch, post, put
+from litestar import Request, Router, delete, get, patch, post, put
 from litestar.exceptions import (
     ClientException,
     HTTPException,
@@ -346,7 +346,7 @@ def get_secret_detail(secret_id: str) -> dict[str, Any]:
 
 
 @post("/{secret_id:str}/reveal", sync_to_thread=False)
-def reveal_secret(secret_id: str) -> dict[str, Any]:
+def reveal_secret(secret_id: str, request: Request) -> dict[str, Any]:
     _ensure_vault_configured()
     from app.db.secrets import get_secret
 
@@ -355,7 +355,11 @@ def reveal_secret(secret_id: str) -> dict[str, Any]:
     secret = get_secret(secret_id)
     if not secret:
         raise NotFoundException(detail="Secret not found")
-    value = SecretVaultService.get_secret_value(secret["id"], accessor="api")
+    # Attribute the (sensitive) plaintext reveal to the real principal rather
+    # than a static "api" string, so the access log is auditable.
+    principal = (request.scope.get("state") or {}).get("principal") or {}
+    accessor = principal.get("user_id") or "api"
+    value = SecretVaultService.get_secret_value(secret["id"], accessor=accessor)
     if value is None:
         raise NotFoundException(detail="Secret not found")
     return {"id": secret["id"], "name": secret["name"], "value": value}

@@ -16,7 +16,7 @@ import subprocess
 import threading
 import time
 import uuid
-from queue import Empty, Queue
+from queue import Empty, Full, Queue
 from typing import Dict, Generator, List, Optional
 from urllib.parse import parse_qs, quote, urlencode, urlparse, urlunparse
 
@@ -1096,10 +1096,12 @@ class BackendCLIService:
                 "finished_at": finished_at,
             }
 
-            # Signal all subscriber queues with None (end of stream)
+            # Signal all subscriber queues with None (end of stream). Use the
+            # non-blocking enqueue so a full bounded queue (slow client) can't
+            # hang session finalization while _lock is held.
             if session_id in cls._subscribers:
                 for q in cls._subscribers[session_id]:
-                    q.put(None)
+                    cls._enqueue(q, None)
                 cls._subscribers.pop(session_id, None)
 
         # Schedule cleanup of completed session after 5 minutes
@@ -1296,7 +1298,7 @@ class BackendCLIService:
     @classmethod
     def subscribe(cls, session_id: str) -> Generator[str, None, None]:
         """SSE generator for real-time CLI streaming."""
-        queue: Queue = Queue()
+        queue: Queue = Queue(maxsize=cls._SUBSCRIBER_QUEUE_MAXSIZE)
 
         with cls._lock:
             # Register subscriber
@@ -1481,7 +1483,24 @@ class BackendCLIService:
                     len(subs),
                 )
             for q in subs:
-                q.put(message)
+                cls._enqueue(q, message)
+
+    # Per-subscriber SSE backpressure bound (drop-oldest past this). A
+    # stalled-but-connected login/usage CLI viewer must not grow its queue
+    # without bound and OOM the single worker.
+    _SUBSCRIBER_QUEUE_MAXSIZE = 1000
+
+    @staticmethod
+    def _enqueue(q: Queue, item) -> None:
+        """Non-blocking enqueue with drop-oldest on a full bounded queue."""
+        try:
+            q.put_nowait(item)
+        except Full:
+            try:
+                q.get_nowait()
+                q.put_nowait(item)
+            except (Empty, Full):
+                pass
 
     @staticmethod
     def _format_sse(event_type: str, data: dict) -> str:

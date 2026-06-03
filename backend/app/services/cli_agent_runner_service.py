@@ -114,10 +114,16 @@ def _run_subprocess(
     def _on_timeout() -> None:
         nonlocal timed_out
         timed_out = True
+        # Kill the whole process group, not just the direct child — otherwise
+        # tool grandchildren survive the timeout (start_new_session gives the
+        # child its own group). proc.kill() alone leaves them orphaned.
         try:
-            proc.kill()
-        except OSError:
-            pass
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, OSError):
+            try:
+                proc.kill()
+            except OSError:
+                pass
 
     timer = threading.Timer(SUBPROCESS_TIMEOUT_SECONDS, _on_timeout)
     timer.start()

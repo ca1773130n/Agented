@@ -43,6 +43,21 @@ class ExecutionLogService:
     _subscribers: Dict[str, List[Queue]] = {}
     # Per-subscriber SSE backpressure bound (drop-oldest past this).
     _SUBSCRIBER_QUEUE_MAXSIZE = 2000
+
+    @staticmethod
+    def _signal_end(q: Queue) -> None:
+        """Non-blocking end-of-stream signal. The queue is bounded, so a plain
+        blocking ``put(None)`` on a full queue (slow client) would hang
+        finalization forever while ``_lock`` is held. Drop oldest to make room."""
+        try:
+            q.put_nowait(None)
+        except Full:
+            try:
+                q.get_nowait()
+                q.put_nowait(None)
+            except (Empty, Full):
+                pass
+
     # Track execution start times for cleanup: {execution_id: datetime}
     _start_times: Dict[str, datetime.datetime] = {}
     # _lock guards all access to _log_buffers, _subscribers, and _start_times.
@@ -195,7 +210,7 @@ class ExecutionLogService:
             # Close all subscriber queues
             if execution_id in cls._subscribers:
                 for q in cls._subscribers[execution_id]:
-                    q.put(None)  # Signal end of stream
+                    cls._signal_end(q)
                 cls._subscribers.pop(execution_id, None)
 
     @classmethod
@@ -378,7 +393,7 @@ class ExecutionLogService:
                 cls._start_times.pop(execution_id, None)
                 if execution_id in cls._subscribers:
                     for q in cls._subscribers[execution_id]:
-                        q.put(None)  # Signal end of stream
+                        cls._signal_end(q)
                     cls._subscribers.pop(execution_id, None)
             cleaned += 1
 

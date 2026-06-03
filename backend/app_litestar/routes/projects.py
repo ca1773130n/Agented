@@ -213,13 +213,13 @@ def delete_project_endpoint(project_id: str, caller: Caller) -> dict[str, Any]:
 
 @get("/{project_id:str}/teams", sync_to_thread=False)
 def list_project_teams(project_id: str, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_project_access(project_id, caller)
     return {"teams": get_project_teams(project_id)}
 
 
 @post("/{project_id:str}/teams/{team_id:str}", sync_to_thread=False)
 def assign_team(project_id: str, team_id: str, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_project_access(project_id, caller)
     if not assign_team_to_project(project_id, team_id):
         raise ClientException(detail="Failed to assign team (may already be assigned)")
     return {"message": "Team assigned"}
@@ -227,7 +227,7 @@ def assign_team(project_id: str, team_id: str, caller: Caller) -> dict[str, Any]
 
 @delete("/{project_id:str}/teams/{team_id:str}", status_code=200, sync_to_thread=False)
 def unassign_team(project_id: str, team_id: str, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_project_access(project_id, caller)
     if not unassign_team_from_project(project_id, team_id):
         raise NotFoundException(detail="Team assignment not found")
     return {"message": "Team removed"}
@@ -294,7 +294,7 @@ def deploy_teams(project_id: str, caller: Caller) -> dict[str, Any]:
 
 @get("/{project_id:str}/deploy/preview", sync_to_thread=False)
 def preview_deploy(project_id: str, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_project_access(project_id, caller)
     return _result_or_raise(ProjectDeployService.get_deploy_preview(project_id))
 
 
@@ -305,19 +305,19 @@ def preview_deploy(project_id: str, caller: Caller) -> dict[str, Any]:
 
 @get("/{project_id:str}/harness/status", sync_to_thread=False)
 def harness_status(project_id: str, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_project_access(project_id, caller)
     return _result_or_raise(HarnessService.check_harness_exists(project_id))
 
 
 @post("/{project_id:str}/harness/load", sync_to_thread=False)
 def load_harness(project_id: str, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_project_access(project_id, caller)
     return _result_or_raise(HarnessService.load_from_github(project_id))
 
 
 @post("/{project_id:str}/harness/deploy", sync_to_thread=False)
 def deploy_harness(project_id: str, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_project_access(project_id, caller)
     return _result_or_raise(HarnessService.deploy_to_github(project_id))
 
 
@@ -328,13 +328,13 @@ def deploy_harness(project_id: str, caller: Caller) -> dict[str, Any]:
 
 @get("/{project_id:str}/skills", sync_to_thread=False)
 def list_project_skills(project_id: str, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_project_access(project_id, caller)
     return {"skills": get_project_skills(project_id)}
 
 
 @post("/{project_id:str}/skills", sync_to_thread=False)
 def add_skill_to_project(project_id: str, data: dict, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_project_access(project_id, caller)
     if not data:
         raise ClientException(detail="JSON body required")
     skill_name = data.get("skill_name")
@@ -353,7 +353,7 @@ def add_skill_to_project(project_id: str, data: dict, caller: Caller) -> dict[st
 
 @delete("/{project_id:str}/skills/{skill_id:int}", status_code=200, sync_to_thread=False)
 def remove_skill_from_project(project_id: str, skill_id: int, caller: Caller) -> dict[str, Any]:
-    del caller, project_id
+    _assert_project_access(project_id, caller)
     if not delete_project_skill_by_id(skill_id):
         raise NotFoundException(detail="Skill not found")
     return {"message": "Skill removed"}
@@ -371,7 +371,7 @@ _VALID_COMPONENT_TYPES = ("agent", "skill", "hook", "command", "rule")
 def list_installations(
     project_id: str, caller: Caller, component_type: Optional[str] = None
 ) -> dict[str, Any]:
-    del caller
+    _assert_project_access(project_id, caller)
     try:
         installations = ProjectInstallService.list_installations(
             project_id, component_type=component_type
@@ -406,13 +406,13 @@ def _install_op(
 
 @post("/{project_id:str}/install", sync_to_thread=False)
 def install_component(project_id: str, data: dict, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_project_access(project_id, caller)
     return _install_op(ProjectInstallService.install_component, project_id, data)
 
 
 @post("/{project_id:str}/uninstall", sync_to_thread=False)
 def uninstall_component(project_id: str, data: dict, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_project_access(project_id, caller)
     return _install_op(ProjectInstallService.uninstall_component, project_id, data)
 
 
@@ -423,13 +423,13 @@ def uninstall_component(project_id: str, data: dict, caller: Caller) -> dict[str
 
 @get("/{project_id:str}/team-edges", sync_to_thread=False)
 def list_team_edges(project_id: str, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_project_access(project_id, caller)
     return {"edges": get_project_team_edges(project_id)}
 
 
 @post("/{project_id:str}/team-edges", sync_to_thread=False)
 def create_team_edge(project_id: str, data: dict, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_project_access(project_id, caller)
     if not data:
         raise ClientException(detail="JSON body required")
     source_team_id = data.get("source_team_id")
@@ -455,7 +455,7 @@ def create_team_edge(project_id: str, data: dict, caller: Caller) -> dict[str, A
     sync_to_thread=False,
 )
 def delete_team_edge_endpoint(project_id: str, edge_id: int, caller: Caller) -> dict[str, Any]:
-    del caller, project_id
+    _assert_project_access(project_id, caller)
     if not delete_project_team_edge(edge_id):
         raise NotFoundException(detail="Edge not found")
     return {"message": "Edge deleted"}
@@ -463,7 +463,7 @@ def delete_team_edge_endpoint(project_id: str, edge_id: int, caller: Caller) -> 
 
 @put("/{project_id:str}/team-topology", sync_to_thread=False)
 def update_team_topology(project_id: str, data: dict, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_project_access(project_id, caller)
     if not data:
         raise ClientException(detail="JSON body required")
     config = data.get("team_topology_config", "{}")
@@ -480,7 +480,7 @@ def update_team_topology(project_id: str, data: dict, caller: Caller) -> dict[st
 
 @post("/{project_id:str}/sync", sync_to_thread=False)
 def sync_project_repo(project_id: str, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_project_access(project_id, caller)
     project = get_project(project_id)
     if not project:
         raise NotFoundException(detail="Project not found")
@@ -496,7 +496,7 @@ def sync_project_repo(project_id: str, caller: Caller) -> dict[str, Any]:
 
 @get("/{project_id:str}/health-scorecard", sync_to_thread=False)
 def get_health_scorecard(project_id: str, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_project_access(project_id, caller)
     scorecard = ProjectHealthService.compute_scorecard(project_id)
     if scorecard is None:
         raise NotFoundException(detail="Project not found")
@@ -505,7 +505,7 @@ def get_health_scorecard(project_id: str, caller: Caller) -> dict[str, Any]:
 
 @get("/{project_id:str}/clone-status", sync_to_thread=False)
 def get_clone_status(project_id: str, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_project_access(project_id, caller)
     project = get_project(project_id)
     if not project:
         raise NotFoundException(detail="Project not found")
@@ -518,7 +518,7 @@ def get_clone_status(project_id: str, caller: Caller) -> dict[str, Any]:
 
 @get("/{project_id:str}/manager", sync_to_thread=False)
 def get_or_create_manager(project_id: str, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_project_access(project_id, caller)
     project = get_project(project_id)
     if not project:
         raise NotFoundException(detail="Project not found")
@@ -552,7 +552,7 @@ def get_or_create_manager(project_id: str, caller: Caller) -> dict[str, Any]:
 def list_project_sessions(
     project_id: str, caller: Caller, status: Optional[str] = None
 ) -> dict[str, Any]:
-    del caller
+    _assert_project_access(project_id, caller)
     from app.db.super_agents import get_sessions_for_project
 
     return {"sessions": get_sessions_for_project(project_id, status=status)}

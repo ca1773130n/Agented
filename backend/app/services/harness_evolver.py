@@ -1020,6 +1020,17 @@ def _validate_payload(kind: str, payload: dict, prefix: str) -> list[str]:
 # --------------------------------------------------------------------------
 
 
+class PartialApplyError(Exception):
+    """apply_patch failed mid-loop AND the compensating rollback could not fully
+    reverse the already-applied entries. Carries the residual journal (entries
+    still applied) so the caller can persist it and a later revert_round can
+    finish the cleanup."""
+
+    def __init__(self, message: str, residual_journal: list[dict]):
+        super().__init__(message)
+        self.residual_journal = residual_journal
+
+
 def apply_patch(patch: EvolutionPatch, project_id: str) -> tuple[list[dict], list[dict]]:
     """Apply each patch entry against the appropriate Forge repo, and bind
     new primitives to the project.
@@ -1033,30 +1044,39 @@ def apply_patch(patch: EvolutionPatch, project_id: str) -> tuple[list[dict], lis
     journal: list[dict] = []
     try:
         _apply_patch_entries(patch, project_id, applied, journal)
-    except Exception:
+    except Exception as exc:
         # C1: a mid-loop failure must not leave a half-applied harness mutation
         # with a lost journal. Compensate by reversing the entries already
-        # applied (best-effort), then re-raise so the caller's mark_failed path
-        # runs against a now-clean state.
-        if journal:
-            try:
-                from app.services.harness_evolution_rollback import reverse_apply_journal
+        # applied. If that rollback is INCOMPLETE (some entries couldn't be
+        # reversed, or the rollback itself raised), raise PartialApplyError
+        # carrying the residual journal so the caller persists it for a later
+        # revert — otherwise re-raise the original (state is clean).
+        if not journal:
+            raise
+        incomplete = False
+        try:
+            from app.services.harness_evolution_rollback import reverse_apply_journal
 
-                reversed_count, failures = reverse_apply_journal(project_id, journal)
-                logger.error(
-                    "apply_patch failed mid-loop; reversed %d/%d journal entries "
-                    "(%d reversal failures)",
-                    reversed_count,
-                    len(journal),
-                    len(failures),
-                    exc_info=True,
-                )
-            except Exception:
-                logger.error(
-                    "apply_patch: compensating rollback itself failed; partial journal=%r",
-                    journal,
-                    exc_info=True,
-                )
+            reversed_count, failures = reverse_apply_journal(project_id, journal)
+            incomplete = bool(failures)
+            logger.error(
+                "apply_patch failed mid-loop; reversed %d/%d journal entries "
+                "(%d reversal failures, rollback %s)",
+                reversed_count,
+                len(journal),
+                len(failures),
+                "INCOMPLETE" if incomplete else "complete",
+                exc_info=True,
+            )
+        except Exception:
+            incomplete = True
+            logger.error(
+                "apply_patch: compensating rollback itself raised; persisting residual journal=%r",
+                journal,
+                exc_info=True,
+            )
+        if incomplete:
+            raise PartialApplyError(str(exc), journal) from exc
         raise
     return applied, journal
 
@@ -1642,6 +1662,16 @@ def run_evolution_round(
             notes=notes,
         )
 
+    except PartialApplyError as exc:
+        # Rollback was incomplete — persist the residual journal so a later
+        # revert_round can finish reversing the half-applied mutation.
+        logger.exception("harness_evolver: round %s failed with incomplete rollback", round_id)
+        evolution_repo.mark_failed(
+            round_id,
+            error_message=str(exc),
+            apply_journal_json=json.dumps(exc.residual_journal, default=str),
+        )
+        return EvolutionResult(round_id=round_id, status="failed", error=str(exc))
     except Exception as exc:  # noqa: BLE001
         logger.exception("harness_evolver: round %s failed", round_id)
         evolution_repo.mark_failed(round_id, error_message=str(exc))
@@ -1688,6 +1718,18 @@ def apply_dry_run_round(
 
     try:
         applied, journal = apply_patch(patch, row["project_id"])
+    except PartialApplyError as exc:
+        # Incomplete rollback — persist the residual journal for a later revert.
+        evolution_repo.mark_failed(
+            round_id,
+            error_message=f"apply failed (incomplete rollback): {exc}",
+            apply_journal_json=json.dumps(exc.residual_journal, default=str),
+        )
+        return EvolutionResult(
+            round_id=round_id,
+            status="failed",
+            error=f"apply failed (incomplete rollback): {exc}",
+        )
     except Exception as exc:  # noqa: BLE001
         evolution_repo.mark_failed(
             round_id,

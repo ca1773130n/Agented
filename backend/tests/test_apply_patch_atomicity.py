@@ -60,6 +60,36 @@ def test_midloop_failure_reverses_partial_journal(isolated_db):
     assert journal[0]["op"] == "create"
 
 
+def test_incomplete_rollback_raises_partial_apply_error(isolated_db):
+    """When reverse_apply_journal reports failures, apply_patch raises
+    PartialApplyError carrying the residual journal (durable rollback, HIGH)."""
+    entries = [
+        _Entry("create", "rule", name="r1", payload={"description": "first"}),
+        _Entry("create", "hook", name="h1", payload={"event": "boom"}),
+    ]
+
+    def _fake_reverse(project_id, journal):
+        # Rollback could not reverse the entry → 0 reversed, 1 failure.
+        return (0, [{"entry": journal[0], "error": "reverse blew up"}])
+
+    create_dispatch = {
+        "rule": lambda **kw: "rule-123",
+        "hook": lambda **kw: (_ for _ in ()).throw(RuntimeError("hook create blew up")),
+    }
+
+    with (
+        patch.dict(hv._create_dispatch, create_dispatch),
+        patch("app.services.harness_evolution_rollback.reverse_apply_journal", _fake_reverse),
+        patch.object(hv.bindings_repo, "add_binding", lambda *a, **k: None),
+    ):
+        with pytest.raises(hv.PartialApplyError) as ei:
+            hv.apply_patch(_Patch(entries), project_id="proj-xyz")
+
+    # Residual journal is carried so the caller can persist it for later revert.
+    assert len(ei.value.residual_journal) == 1
+    assert ei.value.residual_journal[0]["kind"] == "rule"
+
+
 def test_clean_patch_returns_applied_and_journal(isolated_db):
     entries = [_Entry("create", "rule", name="ok", payload={"description": "fine"})]
     create_dispatch = {"rule": lambda **kw: "rule-ok"}
