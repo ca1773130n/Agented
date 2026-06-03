@@ -166,6 +166,17 @@ from .routes.webhooks import (
 from .routes.workflows import workflows_router
 
 
+def _max_body_bytes() -> int:
+    """Global request body-size cap in bytes (default 10 MiB)."""
+    raw = os.environ.get("AGENTED_MAX_BODY_BYTES")
+    if raw:
+        try:
+            return max(64 * 1024, int(raw))
+        except ValueError:
+            pass
+    return 10 * 1024 * 1024
+
+
 def _cors_config() -> CORSConfig:
     """Mirror Flask CORS: dev-localhost always allowed, env CSV widens."""
     allowed = [
@@ -186,6 +197,10 @@ def create_app() -> Litestar:
     """Build the Litestar application instance."""
     return Litestar(
         cors_config=_cors_config(),
+        # Global request body-size cap (DoS / memory exhaustion, 07-routes M3).
+        # Bulk/import endpoints otherwise accept an arbitrarily large body.
+        # Default 10 MiB; override via AGENTED_MAX_BODY_BYTES.
+        request_max_body_size=_max_body_bytes(),
         # Middleware order matters — outermost runs first on ingress and
         # last on egress. The choice below ensures:
         #   - RequestContext sets request_id BEFORE RateLimit/ApiKey can

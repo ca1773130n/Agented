@@ -6,6 +6,7 @@ per Flask community conventions to enforce role-based access on routes.
 
 import functools
 import logging
+import os
 from http import HTTPStatus
 from typing import Callable, Optional
 
@@ -79,8 +80,9 @@ def require_role(*allowed_roles) -> Callable:
     def decorator(fn: Callable) -> Callable:
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
-            # Graceful bootstrap: if no roles configured, allow all requests
-            if count_user_roles() == 0:
+            # Graceful bootstrap: allow all only with explicit opt-in (M1).
+            # Without the flag, absent roles must fail closed, not fail open.
+            if count_user_roles() == 0 and os.environ.get("AGENTED_ALLOW_BOOTSTRAP") == "1":
                 return fn(*args, **kwargs)
 
             api_key = request.headers.get("X-API-Key")

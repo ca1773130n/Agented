@@ -48,6 +48,7 @@ from app.db.settings import get_setting, set_setting
 from app.db.triggers import get_pr_reviews_for_trigger
 from app.db.viewer_comments import delete_comment as db_delete_comment
 from app.db.viewer_comments import get_comment
+from app_litestar.route_helpers import clamp_limit
 from app.services.campaign_service import get_campaign_results, start_campaign
 from app.services.collaborative_viewer_service import CollaborativeViewerService
 
@@ -369,6 +370,7 @@ def list_tagged_executions(
     limit: int = 50,
     offset: int = 0,
 ) -> dict[str, Any]:
+    limit = clamp_limit(limit, default=50)
     ids = [t.strip() for t in tag_ids.split(",") if t.strip()] if tag_ids else None
     executions = get_executions_with_tags(limit=limit, offset=offset, tag_ids=ids)
     return {"executions": executions, "total": len(executions)}
@@ -444,9 +446,7 @@ def create_pr_rule(data: dict) -> dict[str, Any]:
         raise ClientException(detail="pattern and team are required")
     if isinstance(reviewers, str):
         reviewers = [r.strip() for r in reviewers.split(",") if r.strip()]
-    rule_id = add_ownership_rule(
-        pattern=pattern, team=team, reviewers=reviewers, priority=priority
-    )
+    rule_id = add_ownership_rule(pattern=pattern, team=team, reviewers=reviewers, priority=priority)
     return {
         "id": rule_id,
         "pattern": pattern,
@@ -488,6 +488,7 @@ def update_pr_settings(data: dict) -> dict[str, Any]:
 
 @get("/recent", sync_to_thread=False)
 def list_recent_assignments(limit: int = 20) -> dict[str, Any]:
+    limit = clamp_limit(limit, default=20)
     reviews = get_pr_reviews_for_trigger(limit=limit)
     assignments = [
         {

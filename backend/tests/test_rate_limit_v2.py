@@ -4,6 +4,7 @@ Tests cover per-IP keying (unauthed), per-key keying (authed), key
 isolation, per-route override beats default, 429 response shape,
 env-driven defaults, regression of webhook rules, and health-bypass.
 """
+
 from importlib import reload
 from unittest.mock import patch
 
@@ -15,6 +16,7 @@ def _reset_limiter():
     """Force a fresh fixed-window state between tests."""
     from app_litestar import middleware as mw
     from app_litestar.rate_limit_guard import clear_overrides
+
     mw._limiter = mw._FixedWindowLimiter()
     clear_overrides()
     yield
@@ -22,8 +24,13 @@ def _reset_limiter():
     clear_overrides()
 
 
-def _make_scope(method: str, path: str, *, ip: str = "1.2.3.4",
-                principal: dict | None = None) -> dict:
+def _make_scope(
+    method: str, path: str, *, ip: str = "1.2.3.4", principal: dict | None = None
+) -> dict:
+    # X-Forwarded-For is no longer trusted by default (it is spoofable); the
+    # rate limiter keys on the real socket peer unless AGENTED_TRUST_PROXY=1.
+    # Set the peer to `ip` so the per-IP keying tests exercise the production
+    # path. The XFF header is still present but intentionally ignored.
     headers = [(b"x-forwarded-for", ip.encode("latin-1"))]
     scope = {
         "type": "http",
@@ -31,7 +38,7 @@ def _make_scope(method: str, path: str, *, ip: str = "1.2.3.4",
         "path": path,
         "headers": headers,
         "state": {"principal": principal} if principal else {},
-        "client": ("0.0.0.0", 12345),
+        "client": (ip, 12345),
     }
     return scope
 
@@ -52,6 +59,7 @@ async def _stub_next(scope, receive, send):
 async def _drive(method: str, path: str, *, ip="1.2.3.4", principal=None) -> int:
     """Runs ApiKeyMiddleware-skipped path: just RateLimitMiddleware."""
     from app_litestar.middleware import RateLimitMiddleware
+
     mw = RateLimitMiddleware()
     scope = _make_scope(method, path, ip=ip, principal=principal)
     sender = _StubSend()
@@ -76,6 +84,38 @@ class TestPerIPKeying:
             await _drive("GET", "/api/foo", ip="1.1.1.1")
         # Different IP — fresh budget.
         assert await _drive("GET", "/api/foo", ip="2.2.2.2") == 200
+
+    async def test_spoofed_xff_does_not_mint_fresh_budget(self, monkeypatch):
+        # Security: with no trusted proxy, rotating X-Forwarded-For must NOT
+        # create new buckets — all requests from the same socket peer share one
+        # budget regardless of the spoofable header.
+        monkeypatch.delenv("AGENTED_TRUST_PROXY", raising=False)
+        same_peer = ("203.0.113.7", 5555)
+
+        async def drive_with_xff(xff: str) -> int:
+            from app_litestar.middleware import RateLimitMiddleware
+
+            scope = {
+                "type": "http",
+                "method": "GET",
+                "path": "/api/foo",
+                "headers": [(b"x-forwarded-for", xff.encode("latin-1"))],
+                "state": {},
+                "client": same_peer,
+            }
+            status = {"code": 200}
+
+            async def sender(msg):
+                if msg["type"] == "http.response.start":
+                    status["code"] = msg["status"]
+
+            await RateLimitMiddleware().handle(scope, None, sender, _stub_next)
+            return status["code"]
+
+        for i in range(60):
+            assert await drive_with_xff(f"10.0.0.{i}") == 200
+        # 61st request, yet another spoofed XFF, same socket peer → throttled.
+        assert await drive_with_xff("10.0.0.250") == 429
 
 
 @pytest.mark.asyncio
@@ -106,6 +146,7 @@ class TestPerKeyKeying:
 class TestPerRouteOverride:
     async def test_override_is_tighter_than_default(self):
         from app_litestar.rate_limit_guard import register_override
+
         register_override("POST", "/api/auth/login", 5, 60.0)
         # 5 hits ok, 6th 429 — even though /api/* coarse default is 30/min.
         for _ in range(5):
@@ -118,6 +159,7 @@ class TestResponseShape:
     async def test_429_includes_retry_after_header(self):
         from app_litestar.middleware import RateLimitMiddleware
         from app_litestar.rate_limit_guard import register_override
+
         register_override("POST", "/api/test", 1, 60.0)
         await _drive("POST", "/api/test", ip="4.4.4.4")
         # Hit it again — second request should 429.
@@ -134,6 +176,7 @@ class TestResponseShape:
         import json as _json
         from app_litestar.middleware import RateLimitMiddleware
         from app_litestar.rate_limit_guard import register_override
+
         register_override("POST", "/api/foo", 1, 60.0)
         await _drive("POST", "/api/foo", ip="5.5.5.5")
         mw = RateLimitMiddleware()
@@ -173,7 +216,8 @@ class TestFullStackOrdering:
         from litestar.testing import create_test_client
         from app_litestar.middleware import ApiKeyMiddleware, RateLimitMiddleware
         from app_litestar.rate_limit_guard import (
-            clear_overrides, register_override,
+            clear_overrides,
+            register_override,
         )
         from app.database import get_connection
         from app.db.rbac import create_user_role, generate_api_key
@@ -224,7 +268,8 @@ class TestFullStackOrdering:
         from litestar.testing import create_test_client
         from app_litestar.middleware import ApiKeyMiddleware, RateLimitMiddleware
         from app_litestar.rate_limit_guard import (
-            clear_overrides, register_override,
+            clear_overrides,
+            register_override,
         )
         from app.database import get_connection
         from app.db.rbac import create_user_role, generate_api_key
@@ -255,16 +300,10 @@ class TestFullStackOrdering:
         ) as client:
             # User A burns their budget.
             for _ in range(3):
-                assert client.get(
-                    "/api/probe-iso", headers={"X-API-Key": key_a}
-                ).status_code == 200
-            assert client.get(
-                "/api/probe-iso", headers={"X-API-Key": key_a}
-            ).status_code == 429
+                assert client.get("/api/probe-iso", headers={"X-API-Key": key_a}).status_code == 200
+            assert client.get("/api/probe-iso", headers={"X-API-Key": key_a}).status_code == 429
             # User B should be unaffected.
-            assert client.get(
-                "/api/probe-iso", headers={"X-API-Key": key_b}
-            ).status_code == 200, (
+            assert client.get("/api/probe-iso", headers={"X-API-Key": key_b}).status_code == 200, (
                 "Per-user budget isolation broken: user B should have a "
                 "fresh budget on a route where user A is throttled"
             )
@@ -279,15 +318,18 @@ class TestEnvDrivenDefaults:
 
     def test_int_env_returns_default_when_unset(self, monkeypatch):
         from app_litestar.middleware import _int_env
+
         monkeypatch.delenv("RATE_LIMIT_TEST_VAR", raising=False)
         assert _int_env("RATE_LIMIT_TEST_VAR", 99) == 99
 
     def test_int_env_returns_parsed_int_when_set(self, monkeypatch):
         from app_litestar.middleware import _int_env
+
         monkeypatch.setenv("RATE_LIMIT_TEST_VAR", "7")
         assert _int_env("RATE_LIMIT_TEST_VAR", 99) == 7
 
     def test_int_env_falls_back_on_garbage(self, monkeypatch):
         from app_litestar.middleware import _int_env
+
         monkeypatch.setenv("RATE_LIMIT_TEST_VAR", "not-a-number")
         assert _int_env("RATE_LIMIT_TEST_VAR", 99) == 99

@@ -20,6 +20,16 @@ from app.db.sessions import get_session_by_token
 from app.db.sessions import rotate_session as _rotate_session
 from app.logging_config import current_user_var, request_id_var
 from app_litestar.auth_guards import has_sufficient_role, required_role
+from app_litestar.cookie_auth import (
+    CSRF_COOKIE,
+    CSRF_HEADER,
+    SESSION_COOKIE,
+    csrf_valid,
+    generate_csrf_token,
+    parse_cookies,
+    set_cookie_headers,
+)
+
 # v0.6.2 round-1 M5: import the metrics registry at module load
 # instead of per-request inside PerformanceMiddleware.handle's
 # finally block.
@@ -86,16 +96,13 @@ def _resolve_session_user(authorization: str | None) -> str | None:
 class RequestContextMiddleware(ASGIMiddleware):
     """Set request_id + current_user contextvars; emit X-Request-ID header."""
 
-    async def handle(
-        self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp
-    ) -> None:
+    async def handle(self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp) -> None:
         if scope["type"] != "http":
             await next_app(scope, receive, send)
             return
 
         headers = {
-            k.decode("latin-1").lower(): v.decode("latin-1")
-            for k, v in scope.get("headers", ())
+            k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers", ())
         }
         rid = headers.get("x-request-id") or str(uuid.uuid4())
         request_id_var.set(rid)
@@ -135,9 +142,7 @@ class ApiKeyMiddleware(ASGIMiddleware):
     request through so first-run UX works.
     """
 
-    async def handle(
-        self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp
-    ) -> None:
+    async def handle(self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp) -> None:
         if scope["type"] != "http":
             await next_app(scope, receive, send)
             return
@@ -156,13 +161,24 @@ class ApiKeyMiddleware(ASGIMiddleware):
         env_key = os.environ.get("AGENTED_API_KEY", "")
 
         if not db_has_keys and not env_key:
-            # Bootstrap mode — every request through.
-            await next_app(scope, receive, send)
+            # Bootstrap mode (no roles, no env key). This is fail-OPEN, so it
+            # must be an explicit opt-in — never the silent default in
+            # production (M1). Mirrors AI_ACCOUNTS_ALLOW_NOAUTH for the sidecar.
+            # A prod DB that loses its user_roles rows must fail closed, loudly,
+            # not silently become unauthenticated-admin.
+            if os.environ.get("AGENTED_ALLOW_BOOTSTRAP") == "1":
+                logger.warning(
+                    "AUTH BOOTSTRAP MODE ACTIVE: no API keys or roles configured "
+                    "and AGENTED_ALLOW_BOOTSTRAP=1 — all requests are unauthenticated. "
+                    "Never enable this in production."
+                )
+                await next_app(scope, receive, send)
+                return
+            await self._unauthorized(send)
             return
 
         headers = {
-            k.decode("latin-1").lower(): v.decode("latin-1")
-            for k, v in scope.get("headers", ())
+            k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers", ())
         }
         api_key_provided = headers.get("x-api-key", "")
         bearer = ""
@@ -172,6 +188,8 @@ class ApiKeyMiddleware(ASGIMiddleware):
         principal_role: Optional[str] = None
         principal_user_id: Optional[str] = None
         rotated_token: Optional[str] = None
+        rotated_cookie_token: Optional[str] = None
+        csrf_token_to_set: Optional[str] = None
 
         # 1) Bearer session path.
         if bearer:
@@ -192,18 +210,44 @@ class ApiKeyMiddleware(ASGIMiddleware):
                 role_and_user = get_role_and_user_for_api_key(api_key_provided)
                 if role_and_user:
                     principal_role, principal_user_id = role_and_user
-            if principal_role is None and env_key and hmac.compare_digest(
-                api_key_provided, env_key
+            if (
+                principal_role is None
+                and env_key
+                and hmac.compare_digest(api_key_provided, env_key)
             ):
-                principal_role = "admin"  # env-key principal acts as admin
+                # Break-glass shared credential: acts as admin by design, but
+                # attribute it to a named service identity so audit events are
+                # traceable rather than actor=None (H3).
+                principal_role = "admin"
+                principal_user_id = "service:env-api-key"
             if principal_role is None:
                 await self._unauthorized(send)
                 return
+        # 3) Cookie session path (browser SPA). Subject to CSRF double-submit on
+        #    mutating methods, since the cookie is auto-sent by the browser.
         else:
-            await self._unauthorized(send)
-            return
+            cookies = parse_cookies(headers.get("cookie", ""))
+            cookie_token = cookies.get(SESSION_COOKIE, "")
+            if not cookie_token:
+                await self._unauthorized(send)
+                return
+            session = get_session_by_token(cookie_token)
+            if not session:
+                await self._unauthorized(send)
+                return
+            if not csrf_valid(method, cookies, headers.get(CSRF_HEADER)):
+                await self._forbidden(send, detail="CSRF token missing or invalid")
+                return
+            principal_user_id = session["user_id"]
+            principal_role = get_highest_role_for_user(principal_user_id)
+            rotated = _rotate_session(cookie_token)
+            if rotated:
+                rotated_cookie_token = rotated["token"]
+                # Keep the same CSRF token across rotation (it's an independent
+                # secret); refresh its Max-Age. Mint one if somehow absent.
+                csrf_token_to_set = cookies.get(CSRF_COOKIE) or generate_csrf_token()
 
-        # 3) Coarse role check.
+        # 4) Coarse role check.
         needed = required_role(method, path)
         if needed is not None and not has_sufficient_role(principal_role, needed):
             await self._forbidden(send)
@@ -216,13 +260,20 @@ class ApiKeyMiddleware(ASGIMiddleware):
             "role": principal_role,
         }
 
-        # 5) Wrap `send` to inject X-New-Session-Token on the response start.
+        # 5) Wrap `send` to inject rotation artifacts on the response start:
+        #    the X-New-Session-Token header (header-auth clients) and/or a
+        #    Set-Cookie rotation (cookie-auth browser clients).
+        scheme = scope.get("scheme", "http")
+
         async def send_with_rotation(message: Any) -> None:
-            if message["type"] == "http.response.start" and rotated_token:
+            if message["type"] == "http.response.start":
                 hdrs = list(message.get("headers", []))
-                hdrs.append(
-                    (b"x-new-session-token", rotated_token.encode("latin-1"))
-                )
+                if rotated_token:
+                    hdrs.append((b"x-new-session-token", rotated_token.encode("latin-1")))
+                if rotated_cookie_token and csrf_token_to_set:
+                    hdrs.extend(
+                        set_cookie_headers(rotated_cookie_token, csrf_token_to_set, scheme=scheme)
+                    )
                 message = dict(message, headers=hdrs)
             await send(message)
 
@@ -244,8 +295,8 @@ class ApiKeyMiddleware(ASGIMiddleware):
         await send({"type": "http.response.body", "body": body, "more_body": False})
 
     @staticmethod
-    async def _forbidden(send: Send) -> None:
-        body = _json_error_body("FORBIDDEN", "Forbidden")
+    async def _forbidden(send: Send, detail: str = "Forbidden") -> None:
+        body = _json_error_body("FORBIDDEN", detail)
         await send(
             {
                 "type": "http.response.start",
@@ -262,9 +313,7 @@ class ApiKeyMiddleware(ASGIMiddleware):
 class RequestLoggingMiddleware(ASGIMiddleware):
     """Log method/path/status after each HTTP response."""
 
-    async def handle(
-        self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp
-    ) -> None:
+    async def handle(self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp) -> None:
         if scope["type"] != "http":
             await next_app(scope, receive, send)
             return
@@ -319,9 +368,7 @@ class SecurityHeadersMiddleware(ASGIMiddleware):
       - Content-Security-Policy: locked-down with Swagger inline allowance
     """
 
-    async def handle(
-        self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp
-    ) -> None:
+    async def handle(self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp) -> None:
         if scope["type"] != "http":
             await next_app(scope, receive, send)
             return
@@ -331,9 +378,7 @@ class SecurityHeadersMiddleware(ASGIMiddleware):
                 headers = list(message.get("headers", []))
                 headers.append((b"x-frame-options", b"DENY"))
                 headers.append((b"x-content-type-options", b"nosniff"))
-                headers.append(
-                    (b"referrer-policy", b"strict-origin-when-cross-origin")
-                )
+                headers.append((b"referrer-policy", b"strict-origin-when-cross-origin"))
                 headers.append((b"content-security-policy", _CSP.encode("latin-1")))
                 if _FORCE_HTTPS:
                     headers.append(
@@ -420,18 +465,26 @@ _RATE_LIMITS: list[tuple[str, str, int, float]] = [
 
 
 def _client_ip(scope: Scope) -> str:
+    # Only trust forwarding headers when explicitly behind a known proxy
+    # (AGENTED_TRUST_PROXY=1). Otherwise an attacker rotates X-Forwarded-For per
+    # request to mint unlimited fresh rate-limit buckets and defeat the
+    # login/reset throttle. Default: use the un-spoofable socket peer.
+    client = scope.get("client")
+    peer = client[0] if client else "unknown"
+    if os.environ.get("AGENTED_TRUST_PROXY") != "1":
+        return peer
     headers = {
-        k.decode("latin-1").lower(): v.decode("latin-1")
-        for k, v in scope.get("headers", ())
+        k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers", ())
     }
     forwarded = headers.get("x-forwarded-for")
     if forwarded:
-        return forwarded.split(",")[0].strip()
+        # Right-most hop is the one our trusted proxy appended; left-most is
+        # client-supplied and spoofable.
+        return forwarded.split(",")[-1].strip()
     real = headers.get("x-real-ip")
     if real:
         return real.strip()
-    client = scope.get("client")
-    return client[0] if client else "unknown"
+    return peer
 
 
 def _resolve_rate_key(scope: Scope) -> tuple[str, str]:
@@ -476,9 +529,7 @@ class RateLimitMiddleware(ASGIMiddleware):
     """v0.5.14: per-key rate limits on /api/* + /admin/* + per-route
     overrides + preserved webhook rules."""
 
-    async def handle(
-        self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp
-    ) -> None:
+    async def handle(self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp) -> None:
         if scope["type"] != "http":
             await next_app(scope, receive, send)
             return
@@ -530,9 +581,7 @@ class PerformanceMiddleware(ASGIMiddleware):
     + duration histograms.
     """
 
-    async def handle(
-        self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp
-    ) -> None:
+    async def handle(self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp) -> None:
         if scope["type"] != "http":
             await next_app(scope, receive, send)
             return
@@ -550,9 +599,7 @@ class PerformanceMiddleware(ASGIMiddleware):
             if message["type"] == "http.response.start" and not sent_start:
                 elapsed_ms = (perf_counter() - started) * 1000.0
                 hdrs = list(message.get("headers", []))
-                hdrs.append(
-                    (b"server-timing", f"app;dur={elapsed_ms:.1f}".encode("latin-1"))
-                )
+                hdrs.append((b"server-timing", f"app;dur={elapsed_ms:.1f}".encode("latin-1")))
                 message = {**message, "headers": hdrs}
                 captured_status = int(message.get("status", 0))
                 sent_start = True
@@ -566,7 +613,9 @@ class PerformanceMiddleware(ASGIMiddleware):
             # load (v0.6.2 round-1 M5) — no per-request import dance.
             try:
                 _metrics_registry.record_request(
-                    method, path, captured_status or 500,
+                    method,
+                    path,
+                    captured_status or 500,
                     (perf_counter() - started) * 1000.0,
                 )
             except Exception:  # noqa: BLE001 — never fail the request on a metric failure
@@ -580,9 +629,7 @@ class SlowRequestMiddleware(ASGIMiddleware):
     bumps it via env to silence false positives during dev.
     """
 
-    async def handle(
-        self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp
-    ) -> None:
+    async def handle(self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp) -> None:
         if scope["type"] != "http":
             await next_app(scope, receive, send)
             return
@@ -600,6 +647,8 @@ class SlowRequestMiddleware(ASGIMiddleware):
                 path = scope.get("path", "")
                 logger.warning(
                     "slow request: %s %s took %.1fms (threshold %dms)",
-                    method, path, elapsed_ms, threshold_ms,
+                    method,
+                    path,
+                    elapsed_ms,
+                    threshold_ms,
                 )
-

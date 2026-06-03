@@ -10,7 +10,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from litestar import Router, delete, get, patch, post, put
+from litestar import Request, Router, delete, get, patch, post, put
 from litestar.exceptions import (
     ClientException,
     HTTPException,
@@ -23,6 +23,7 @@ from app.database import (
     get_setting,
     set_setting,
 )
+from app_litestar.auth_guards import requires_role
 from app.db.gitops import (
     create_gitops_repo,
     delete_gitops_repo,
@@ -52,10 +53,37 @@ from app.services.secret_vault_service import SecretVaultService
 # /api/settings/* (6)
 # ===========================================================================
 
+# Settings keys whose values may hold credentials/tokens. Their values are
+# redacted in read responses (a viewer can read settings); the presence of a
+# value is still observable, but never the secret itself (H4).
+_SENSITIVE_SETTING_MARKERS = ("token", "secret", "key", "password", "credential")
+_REDACTED = "••••••••"
+
+
+def _is_sensitive_setting(key: str) -> bool:
+    k = (key or "").lower()
+    return any(marker in k for marker in _SENSITIVE_SETTING_MARKERS)
+
+
+def _redact_setting_value(key: str, value: Any) -> Any:
+    if value and _is_sensitive_setting(key):
+        return _REDACTED
+    return value
+
 
 @get("/", sync_to_thread=False)
 def list_settings() -> dict[str, Any]:
-    return {"settings": get_all_settings()}
+    settings = get_all_settings()
+    if isinstance(settings, dict):
+        settings = {k: _redact_setting_value(k, v) for k, v in settings.items()}
+    elif isinstance(settings, list):
+        settings = [
+            {**row, "value": _redact_setting_value(row.get("key", ""), row.get("value"))}
+            if isinstance(row, dict)
+            else row
+            for row in settings
+        ]
+    return {"settings": settings}
 
 
 @get("/harness-plugin", sync_to_thread=False)
@@ -84,7 +112,7 @@ def set_harness_plugin(data: dict) -> dict[str, Any]:
 
 @get("/{key:str}", sync_to_thread=False)
 def get_setting_endpoint(key: str) -> dict[str, Any]:
-    return {"key": key, "value": get_setting(key) or ""}
+    return {"key": key, "value": _redact_setting_value(key, get_setting(key) or "")}
 
 
 @put("/{key:str}", sync_to_thread=False)
@@ -318,14 +346,22 @@ def get_secret_detail(secret_id: str) -> dict[str, Any]:
 
 
 @post("/{secret_id:str}/reveal", sync_to_thread=False)
-def reveal_secret(secret_id: str) -> dict[str, Any]:
+def reveal_secret(secret_id: str, request: Request) -> dict[str, Any]:
     _ensure_vault_configured()
-    value = SecretVaultService.get_secret_value(secret_id, accessor="api")
-    if value is None:
-        raise NotFoundException(detail="Secret not found")
     from app.db.secrets import get_secret
 
+    # Resolve strictly by ID — never by name fallback — so the unguessable-ID
+    # protection cannot be bypassed by guessing a secret's name (M4).
     secret = get_secret(secret_id)
+    if not secret:
+        raise NotFoundException(detail="Secret not found")
+    # Attribute the (sensitive) plaintext reveal to the real principal rather
+    # than a static "api" string, so the access log is auditable.
+    principal = (request.scope.get("state") or {}).get("principal") or {}
+    accessor = principal.get("user_id") or "api"
+    value = SecretVaultService.get_secret_value(secret["id"], accessor=accessor)
+    if value is None:
+        raise NotFoundException(detail="Secret not found")
     return {"id": secret["id"], "name": secret["name"], "value": value}
 
 
@@ -355,6 +391,12 @@ def delete_secret(secret_id: str) -> dict[str, Any]:
 
 secrets_router = Router(
     path="/admin/secrets",
+    # The secret vault is the most sensitive surface in the system: reveal
+    # returns plaintext. Gate the entire router at admin so a missing
+    # per-handler decorator can never silently downgrade to the coarse
+    # viewer/editor defaults (C1). A coarse-table safety net is also added
+    # in auth_guards.ROLE_REQUIRED.
+    guards=[requires_role("admin")],
     route_handlers=[
         vault_status,
         create_secret,

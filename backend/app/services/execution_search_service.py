@@ -47,8 +47,8 @@ class ExecutionSearchService:
                         e.started_at,
                         e.status,
                         e.prompt,
-                        snippet(execution_logs_fts, 0, '<mark>', '</mark>', '...', 32) AS stdout_match,
-                        snippet(execution_logs_fts, 1, '<mark>', '</mark>', '...', 32) AS stderr_match
+                        snippet(execution_logs_fts, 0, '\x02MARK\x03', '\x02/MARK\x03', '...', 32) AS stdout_match,
+                        snippet(execution_logs_fts, 1, '\x02MARK\x03', '\x02/MARK\x03', '...', 32) AS stderr_match
                     FROM execution_logs_fts
                     JOIN execution_logs e ON e.id = execution_logs_fts.rowid
                     LEFT JOIN triggers t ON e.trigger_id = t.id
@@ -80,10 +80,30 @@ class ExecutionSearchService:
                 params.append(limit)
 
                 cursor = conn.execute(sql, params)
-                return [dict(row) for row in cursor.fetchall()]
+                return [
+                    ExecutionSearchService._escape_snippets(dict(row)) for row in cursor.fetchall()
+                ]
         except sqlite3.OperationalError as exc:
             logger.warning("FTS5 search error for query %r: %s", query, exc)
             return []
+
+    # Sentinel markers wrap matched terms in the SQL (control chars that cannot
+    # appear in log text). We HTML-escape the whole snippet so agent-controlled
+    # log content can never inject markup, then restore only the <mark> tags.
+    _MARK_OPEN = "\x02MARK\x03"
+    _MARK_CLOSE = "\x02/MARK\x03"
+
+    @staticmethod
+    def _escape_snippets(row: dict) -> dict:
+        for field in ("stdout_match", "stderr_match"):
+            val = row.get(field)
+            if not val:
+                continue
+            escaped = val.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            row[field] = escaped.replace(ExecutionSearchService._MARK_OPEN, "<mark>").replace(
+                ExecutionSearchService._MARK_CLOSE, "</mark>"
+            )
+        return row
 
     @staticmethod
     def get_search_stats() -> dict:

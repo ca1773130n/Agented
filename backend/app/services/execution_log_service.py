@@ -5,7 +5,7 @@ import json
 import logging
 import threading
 from dataclasses import asdict, dataclass
-from queue import Empty, Queue
+from queue import Empty, Full, Queue
 from typing import Dict, Generator, List, Optional
 
 from app.config import SSE_KEEPALIVE_TIMEOUT, SSE_REPLAY_LIMIT, STALE_EXECUTION_THRESHOLD
@@ -41,6 +41,23 @@ class ExecutionLogService:
     _log_buffers: Dict[str, List[LogLine]] = {}
     # SSE subscribers: {execution_id: [Queue]}
     _subscribers: Dict[str, List[Queue]] = {}
+    # Per-subscriber SSE backpressure bound (drop-oldest past this).
+    _SUBSCRIBER_QUEUE_MAXSIZE = 2000
+
+    @staticmethod
+    def _signal_end(q: Queue) -> None:
+        """Non-blocking end-of-stream signal. The queue is bounded, so a plain
+        blocking ``put(None)`` on a full queue (slow client) would hang
+        finalization forever while ``_lock`` is held. Drop oldest to make room."""
+        try:
+            q.put_nowait(None)
+        except Full:
+            try:
+                q.get_nowait()
+                q.put_nowait(None)
+            except (Empty, Full):
+                pass
+
     # Track execution start times for cleanup: {execution_id: datetime}
     _start_times: Dict[str, datetime.datetime] = {}
     # _lock guards all access to _log_buffers, _subscribers, and _start_times.
@@ -193,13 +210,13 @@ class ExecutionLogService:
             # Close all subscriber queues
             if execution_id in cls._subscribers:
                 for q in cls._subscribers[execution_id]:
-                    q.put(None)  # Signal end of stream
+                    cls._signal_end(q)
                 cls._subscribers.pop(execution_id, None)
 
     @classmethod
     def subscribe(cls, execution_id: str) -> Generator[str, None, None]:
         """SSE generator for real-time log streaming."""
-        queue: Queue = Queue()
+        queue: Queue = Queue(maxsize=cls._SUBSCRIBER_QUEUE_MAXSIZE)
 
         with cls._lock:
             # Replay buffered logs up to SSE_REPLAY_LIMIT lines to avoid flooding the client.
@@ -273,7 +290,20 @@ class ExecutionLogService:
         with cls._lock:
             if execution_id in cls._subscribers:
                 for q in cls._subscribers[execution_id]:
-                    q.put(message)
+                    try:
+                        q.put_nowait(message)
+                    except Full:
+                        # Backpressure: a slow SSE client on a --verbose run must
+                        # not grow the queue unbounded (single-worker OOM). Drop
+                        # oldest; the full log is persisted and replayable.
+                        try:
+                            q.get_nowait()
+                            q.put_nowait(message)
+                        except (Empty, Full):
+                            logger.warning(
+                                "execution log: dropping event for slow subscriber %s",
+                                execution_id,
+                            )
 
     @staticmethod
     def _format_sse(event_type: str, data: dict) -> str:
@@ -363,7 +393,7 @@ class ExecutionLogService:
                 cls._start_times.pop(execution_id, None)
                 if execution_id in cls._subscribers:
                     for q in cls._subscribers[execution_id]:
-                        q.put(None)  # Signal end of stream
+                        cls._signal_end(q)
                     cls._subscribers.pop(execution_id, None)
             cleaned += 1
 

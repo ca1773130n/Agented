@@ -1,14 +1,13 @@
 /**
  * useAuth — track B, wave 34.
  *
- * Owns the session-token lifecycle and the current-user state. Token lives
- * in localStorage so reloads stay authenticated; the API client automatically
- * attaches it as Authorization: Bearer (see services/api/client.ts).
+ * Owns the current-user state. The session now lives in an HttpOnly cookie set
+ * by the login response (no longer in localStorage); the API client sends it
+ * automatically via `credentials: 'include'` and echoes the CSRF token.
  */
 import { ref, computed, readonly } from 'vue';
 import {
   authApi,
-  setSessionToken,
   clearSessionToken,
   getSessionToken,
   type AuthUser,
@@ -24,7 +23,8 @@ async function login(email: string, password: string): Promise<AuthUser> {
   lastError.value = null;
   try {
     const result = await authApi.login(email, password);
-    setSessionToken(result.token);
+    // Session now lives in an HttpOnly cookie (set by the login response) — the
+    // token is no longer persisted to localStorage where XSS could read it.
     currentUser.value = result.user;
     return result.user;
   } catch (err) {
@@ -41,7 +41,7 @@ async function signup(
   lastError.value = null;
   try {
     const result = await authApi.signup(email, password, displayName);
-    setSessionToken(result.token);
+    // Session is in the HttpOnly cookie; not persisted to localStorage.
     currentUser.value = result.user;
     return result.user;
   } catch (err) {
@@ -51,29 +51,23 @@ async function signup(
 }
 
 async function logout(): Promise<void> {
-  const token = getSessionToken();
-  // Best-effort revoke; clear local state regardless of server response.
-  if (token) {
-    try {
-      await authApi.logout(token);
-    } catch {
-      // ignore — clearing the local token is the source of truth
-    }
+  // Best-effort revoke; the cookie is sent automatically. Clear local state +
+  // any legacy localStorage token regardless of server response.
+  try {
+    await authApi.logout(getSessionToken() || undefined);
+  } catch {
+    // ignore — clearing local state is the source of truth
   }
   clearSessionToken();
   currentUser.value = null;
 }
 
 /**
- * Restore the current user from the stored token. Call once on app boot.
- * On failure (expired/revoked token) the local state is cleared.
+ * Restore the current user on app boot. The session lives in an HttpOnly cookie
+ * (auto-sent), so we always probe ``me()`` rather than gating on a localStorage
+ * token; a legacy bearer token, if present, is still sent for backward compat.
  */
 async function restore(): Promise<void> {
-  const token = getSessionToken();
-  if (!token) {
-    currentUser.value = null;
-    return;
-  }
   isRestoring.value = true;
   try {
     const user = await authApi.me();

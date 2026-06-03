@@ -8,13 +8,14 @@
  * to the user. Mirrors the visual rules in vue-styled's ChatBubble
  * so live chat and historical viewers look consistent.
  *
- * Trust model: ``v-html`` is used on the parsed output. Caller must
- * ensure ``content`` originates from a source we already trust (our
- * own session logs, our own assistant replies, etc.). Do **not** use
- * for arbitrary user-uploaded markdown without a sanitizer.
+ * Security: the parsed output is DOMPurify-sanitized before it reaches
+ * ``v-html``. Callers pass agent/session/trigger-authored content that is
+ * NOT trusted (autonomous agents, remote triggers), so sanitization is
+ * mandatory here — ``marked`` passes raw inline HTML through by default.
  */
 import { computed } from 'vue';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 
 const props = withDefaults(
   defineProps<{
@@ -32,10 +33,12 @@ const props = withDefaults(
 
 const html = computed(() => {
   const src = props.content || '';
-  if (props.breaks) {
-    return marked.parse(src, { breaks: true }) as string;
-  }
-  return marked.parse(src) as string;
+  const raw = (props.breaks
+    ? marked.parse(src, { breaks: true })
+    : marked.parse(src)) as string;
+  // DOMPurify with defaults: keeps all markdown-generated tags, drops
+  // scripts/event-handlers/javascript: URLs. ADD_ATTR keeps link target/rel.
+  return DOMPurify.sanitize(raw, { ADD_ATTR: ['target', 'rel'] });
 });
 </script>
 

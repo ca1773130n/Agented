@@ -110,6 +110,31 @@ const marked = new Marked({
 });
 
 /**
+ * HTML-escape a raw string so it is safe to interpolate into markup.
+ * Use before re-introducing only known-safe tags (e.g. <mark> highlights,
+ * ANSI <span>s) ahead of a `v-html` binding.
+ */
+export function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Defense-in-depth sanitizer for snippet/highlight HTML that should only ever
+ * contain <mark> (and optionally <span style>) tags. Strips everything else.
+ */
+export function sanitizeHighlight(html: string, allowSpan = false): string {
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: allowSpan ? ['mark', 'span'] : ['mark'],
+    ALLOWED_ATTR: allowSpan ? ['style'] : [],
+  });
+}
+
+/**
  * Render markdown to sanitized HTML.
  * Uses DOMPurify to prevent XSS — all output is sanitized before use.
  */

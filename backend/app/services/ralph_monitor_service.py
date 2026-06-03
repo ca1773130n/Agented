@@ -61,6 +61,9 @@ class RalphMonitorService:
             "triggered": False,
             "active": True,
             "thread": None,
+            # Set on stop so the poll loop wakes immediately instead of sleeping
+            # out the full 30s cycle (06 H2).
+            "stop_event": threading.Event(),
         }
 
         monitor_thread = threading.Thread(
@@ -95,8 +98,17 @@ class RalphMonitorService:
         # Import here to avoid circular imports at module level
         from .project_session_manager import ProjectSessionManager
 
+        with cls._lock:
+            s0 = cls._monitors.get(session_id)
+            stop_event = s0["stop_event"] if s0 else None
+        if stop_event is None:
+            return
+
         while True:
-            time.sleep(30)
+            # Interruptible wait — wakes immediately on stop instead of sleeping
+            # out the full 30s (06 H2).
+            if stop_event.wait(30):
+                return
 
             with cls._lock:
                 state = cls._monitors.get(session_id)
@@ -172,9 +184,17 @@ class RalphMonitorService:
         """
         with cls._lock:
             state = cls._monitors.pop(session_id, None)
-            if state:
-                state["active"] = False
-                logger.info(f"Stopped Ralph monitor for session {session_id}")
+        if state:
+            state["active"] = False
+            # Wake the poll loop now (don't wait up to 30s) and join it so
+            # threads don't accumulate on rapid start/stop churn (06 H2).
+            ev = state.get("stop_event")
+            if ev is not None:
+                ev.set()
+            thread = state.get("thread")
+            if thread is not None and thread is not threading.current_thread():
+                thread.join(timeout=5)
+            logger.info(f"Stopped Ralph monitor for session {session_id}")
 
     @classmethod
     def get_state(cls, session_id: str) -> Optional[dict]:

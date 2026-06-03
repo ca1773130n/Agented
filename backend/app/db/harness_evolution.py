@@ -221,6 +221,7 @@ def mark_failed(
     *,
     error_message: str,
     output_patch: Optional[dict[str, Any]] = None,
+    apply_journal_json: Optional[str] = None,
 ) -> None:
     with get_connection() as conn:
         conn.execute(
@@ -228,11 +229,13 @@ def mark_failed(
                    status            = 'failed',
                    finished_at       = datetime('now'),
                    error_message     = ?,
-                   output_patch_json = COALESCE(?, output_patch_json)
+                   output_patch_json = COALESCE(?, output_patch_json),
+                   apply_journal_json = COALESCE(?, apply_journal_json)
                WHERE id = ?""",
             (
                 (error_message or "")[:4000],
                 json.dumps(output_patch, default=str) if output_patch else None,
+                apply_journal_json,
                 round_id,
             ),
         )

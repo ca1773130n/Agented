@@ -110,7 +110,9 @@ class AuditLogService:
                 details=details,
             )
         except Exception as exc:
-            audit_logger.debug("Failed to persist audit event to SQLite: %s", exc)
+            # Durable audit loss is security-relevant — surface at WARNING (was
+            # DEBUG, invisible at default INFO) so it can be alerted on (02 L1).
+            audit_logger.warning("Failed to persist audit event to SQLite: %s", exc)
 
     @staticmethod
     def log_field_changes(

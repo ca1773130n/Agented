@@ -43,10 +43,11 @@ export const authApi = {
     return apiFetch<AuthUser>('/api/auth/me', { headers });
   },
 
-  logout: (token: string) =>
+  logout: (token?: string) =>
     apiFetch<void>('/api/auth/logout', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
+      // Cookie auth is the norm now; a legacy bearer token is sent if present.
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
     }),
 
   forgotPassword: (email: string) =>

@@ -59,9 +59,24 @@ vi.mock('shiki/langs/tsx.mjs', () => ({ default: {} }));
 vi.mock('shiki/langs/vue.mjs', () => ({ default: {} }));
 vi.mock('shiki/langs/dockerfile.mjs', () => ({ default: {} }));
 
-import { renderMarkdown, highlightCodeBlocks, attachCodeCopyHandlers } from '../useMarkdown';
+import {
+  renderMarkdown,
+  highlightCodeBlocks,
+  attachCodeCopyHandlers,
+  escapeHtml,
+} from '../useMarkdown';
 
 describe('useMarkdown', () => {
+  describe('escapeHtml', () => {
+    it('escapes all HTML-significant characters', () => {
+      // Pure string op (no DOM needed); the v-html sinks (terminal/tagging
+      // highlight) rely on this before re-introducing safe <mark>/<span> tags.
+      expect(escapeHtml(`<img src=x onerror="a">&'`)).toBe(
+        '&lt;img src=x onerror=&quot;a&quot;&gt;&amp;&#39;',
+      );
+    });
+  });
+
   describe('renderMarkdown', () => {
     it('returns sanitized HTML from markdown content', () => {
       const result = renderMarkdown('Hello world');

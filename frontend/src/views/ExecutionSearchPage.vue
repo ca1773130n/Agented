@@ -5,7 +5,15 @@ import type { ExecutionSearchResult } from '../services/api';
 import { specializedBotApi, ApiError } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { sanitizeHighlight } from '../composables/useMarkdown';
 const { t } = useI18n();
+
+// FTS5 snippet() wraps matches in <mark> but does NOT HTML-escape the
+// surrounding (agent-controlled) log text. Sanitize to <mark>-only before
+// v-html as defense-in-depth (server also escapes — see execution_search_service).
+function safeSnippet(value: string | null | undefined): string {
+  return sanitizeHighlight(value || '');
+}
 const showToast = useToast();
 
 const query = ref('');
@@ -135,16 +143,15 @@ function statusClass(status: string): string {
             <span class="result-id">{{ result.execution_id }}</span>
           </div>
 
-          <!-- XSS safety note: content comes from our own FTS5 snippet function,
-               which wraps matched terms in <mark> tags. The source data is execution
-               logs stored in our own database, not user-generated HTML. -->
+          <!-- Snippets are sanitized to <mark>-only (safeSnippet); the raw log
+               text is agent-controlled and must never reach the DOM unescaped. -->
           <div v-if="result.stdout_match" class="result-snippet">
             <span class="snippet-label">{{ t('executionSearch.stdout') }}</span>
-            <span class="snippet-text" v-html="result.stdout_match"></span>
+            <span class="snippet-text" v-html="safeSnippet(result.stdout_match)"></span>
           </div>
           <div v-if="result.stderr_match" class="result-snippet">
             <span class="snippet-label">{{ t('executionSearch.stderr') }}</span>
-            <span class="snippet-text" v-html="result.stderr_match"></span>
+            <span class="snippet-text" v-html="safeSnippet(result.stderr_match)"></span>
           </div>
         </div>
       </div>
