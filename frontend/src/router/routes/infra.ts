@@ -1,12 +1,11 @@
 import type { RouteRecordRaw } from 'vue-router';
 
 export const infraRoutes: RouteRecordRaw[] = [
-  // Plugin SDK & CLI (Feature 18)
+  // Plugin SDK & CLI — folded into the Help page (P2).
   {
     path: '/plugins/sdk',
     name: 'plugin-sdk',
-    component: () => import('../../views/PluginSdkPage.vue'),
-    meta: { title: 'Plugin SDK & CLI' },
+    redirect: (to) => ({ name: 'help', query: { ...to.query, tab: 'plugin-sdk' } }),
   },
   // Plugin Execution Sandboxing (Feature 37)
   {

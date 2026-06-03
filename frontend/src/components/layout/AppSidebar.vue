@@ -92,7 +92,7 @@ function autoExpandForRoute() {
   if (['skills-playground', 'skill-create', 'my-skills', 'skill-detail', 'explore-skills'].includes(name)) {
     expandedSections.value.skills = true;
   }
-  if (['plugins', 'plugin-design', 'harness-integration', 'explore-plugins', 'plugin-detail', 'plugin-sdk'].includes(name)) {
+  if (['plugins', 'plugin-design', 'harness-integration', 'explore-plugins', 'plugin-detail'].includes(name)) {
     expandedSections.value.plugins = true;
   }
   if (['mcp-servers', 'mcp-server-detail', 'explore-mcp-servers'].includes(name)) {
@@ -130,7 +130,7 @@ function autoExpandForRoute() {
   }
   // Auto-expand only for sidebar-visible Triggers children; URL-only
   // routes (still reachable, just not in this submenu) don't trigger expand.
-  if (['triggers', 'bot-templates', 'trigger-tools', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'prompt-snippets', 'bot-output-webhook-forwarding'].includes(name)) {
+  if (['triggers', 'bot-templates', 'trigger-tools', 'pr-auto-assignment', 'pr-review-learning-loop', 'prompt-snippets', 'bot-output-webhook-forwarding'].includes(name)) {
     expandedSections.value.triggers = true;
   }
   // PR-J2 — Analytics dashboards (System).
@@ -191,7 +191,7 @@ function isSkillsSectionActive(): boolean {
 }
 
 function isPluginsSectionActive(): boolean {
-  return ['plugins', 'plugin-design', 'harness-integration', 'explore-plugins', 'plugin-detail', 'plugin-sdk'].includes(currentRouteName.value);
+  return ['plugins', 'plugin-design', 'harness-integration', 'explore-plugins', 'plugin-detail'].includes(currentRouteName.value);
 }
 
 function isProjectsSectionActive(): boolean {
@@ -237,7 +237,7 @@ function isWorkflowsSectionActive(): boolean {
 function isTriggersSectionActive(): boolean {
   // Only the 21 currently-visible Triggers children. URL-only routes
   // (still reachable) don't paint this toggle active.
-  return ['triggers', 'bot-templates', 'trigger-tools', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'prompt-snippets', 'bot-output-webhook-forwarding'].includes(currentRouteName.value);
+  return ['triggers', 'bot-templates', 'trigger-tools', 'pr-auto-assignment', 'pr-review-learning-loop', 'prompt-snippets', 'bot-output-webhook-forwarding'].includes(currentRouteName.value);
 }
 
 // PR-J2 — Analytics dashboards group under System.
@@ -691,9 +691,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('pr-review-learning-loop') }" :aria-current="sidebarActive('pr-review-learning-loop') ? 'page' : undefined" @click="navTo('pr-review-learning-loop')">
           {{ t('nav.prReviewLearning') }}
         </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('github-actions') }" :aria-current="sidebarActive('github-actions') ? 'page' : undefined" @click="navTo('github-actions')">
-          {{ t('nav.githubActions') }}
-        </button>
 
         <div class="submenu-block-label" aria-hidden="true">{{ t('nav.blockOps') }}</div>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-output-webhook-forwarding') }" :aria-current="sidebarActive('bot-output-webhook-forwarding') ? 'page' : undefined" @click="navTo('bot-output-webhook-forwarding')">
@@ -729,10 +726,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('harness-integration') }" :aria-current="sidebarActive('harness-integration') ? 'page' : undefined" @click="navTo('harness-integration')">
           {{ t('nav.harnessIntegration') }}
-        </button>
-        <!-- PR-J2 — Plugin SDK reference & scaffolding. -->
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('plugin-sdk') }" :aria-current="sidebarActive('plugin-sdk') ? 'page' : undefined" @click="navTo('plugin-sdk')">
-          {{ t('nav.pluginSdk') }}
         </button>
         <button v-for="plugin in props.plugins" :key="plugin.id" type="button" class="submenu-item"
           :class="{ active: currentRouteName === 'plugin-detail' && route.params.pluginId === plugin.id }"
@@ -967,6 +960,21 @@ function handleSidebarKeydown(e: KeyboardEvent) {
       </div>
 
       <div class="nav-section-label">{{ t('nav.sectionResources') }}</div>
+      <!-- Help — Plugin SDK + GitHub Actions docs (P2 fold). -->
+      <SidebarFlatLink
+        :label="t('nav.help')"
+        :active="sidebarActive('help')"
+        :collapsed-desktop="isCollapsedDesktop()"
+        @click="navTo('help')"
+      >
+        <template #icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        </template>
+      </SidebarFlatLink>
       <a href="/docs" target="_blank" class="external-link">
         <span class="nav-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">

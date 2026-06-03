@@ -4,6 +4,13 @@ import type { RouteRecordRaw } from 'vue-router';
 // New routes should be added to a domain-specific file (auth, bots, executions,
 // prompts, github, etc.) — this file should stay small.
 export const miscRoutes: RouteRecordRaw[] = [
+  // Help — developer docs / setup surfaces (Plugin SDK, GitHub Actions) (P2).
+  {
+    path: '/help',
+    name: 'help',
+    component: () => import('../../views/HelpPage.vue'),
+    meta: { title: 'Help' },
+  },
   // Base redirect for the Platform expandable sidebar section.
   // (`/integrations` is now a real route — the unified Integrations page.)
   {
