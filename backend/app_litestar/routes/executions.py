@@ -1,7 +1,7 @@
 """Wave 75 — execution log routes (~20 routes).
 
 Everything except /admin/executions/{id}/stream (SSE — deferred to the
-streaming wave) plus the queue, retries, anomaly stubs, and quota stubs.
+streaming wave) plus the queue, retries, and anomaly stubs.
 """
 
 from __future__ import annotations
@@ -445,7 +445,7 @@ def cancel_queue_for_trigger(trigger_id: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Retries / anomalies / quotas
+# Retries / anomalies
 # ---------------------------------------------------------------------------
 
 
