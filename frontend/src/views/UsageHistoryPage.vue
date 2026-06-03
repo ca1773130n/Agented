@@ -2,30 +2,38 @@
 import { ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { HistoryStatsPeriod } from '../services/api';
-import { budgetApi } from '../services/api';
+import { budgetApi, ApiError } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import DataTable from '../components/base/DataTable.vue';
 import type { DataTableColumn } from '../components/base/DataTable.vue';
 import EmptyState from '../components/base/EmptyState.vue';
+import ErrorState from '../components/base/ErrorState.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import { useWebMcpTool } from '../composables/useWebMcpTool';
+import { useToast } from '../composables/useToast';
 
 const { t } = useI18n();
+const showToast = useToast();
 const selectedPeriod = ref<'weekly' | 'monthly'>('weekly');
 const monthsBack = ref<number>(6);
 const periods = ref<HistoryStatsPeriod[]>([]);
 const isLoading = ref(false);
+const loadError = ref<string | null>(null);
 
 async function loadData() {
   isLoading.value = true;
+  loadError.value = null;
   try {
     const res = await budgetApi.getHistoryStats({
       period: selectedPeriod.value,
       months_back: monthsBack.value,
     });
     periods.value = res.periods || [];
-  } catch {
+  } catch (e) {
+    // A failed load must not masquerade as "no usage data" — surface it.
     periods.value = [];
+    loadError.value = e instanceof ApiError ? e.message : t('usageHistory.loadError');
+    showToast(loadError.value, 'error');
   } finally {
     isLoading.value = false;
   }
@@ -139,7 +147,14 @@ onMounted(loadData);
 
     <LoadingState v-if="isLoading" :message="t('usageHistory.loading')" />
 
-    <div v-if="!isLoading" class="summary-cards">
+    <ErrorState
+      v-if="!isLoading && loadError"
+      :title="t('usageHistory.loadErrorTitle')"
+      :message="loadError"
+      @retry="loadData"
+    />
+
+    <div v-if="!isLoading && !loadError" class="summary-cards">
       <div class="summary-card">
         <div class="card-label">{{ t('usageHistory.totalCost') }}</div>
         <div class="card-value highlight">{{ formatCurrency(totalCost) }}</div>
@@ -159,12 +174,12 @@ onMounted(loadData);
     </div>
 
     <EmptyState
-      v-if="!isLoading && periods.length === 0"
+      v-if="!isLoading && !loadError && periods.length === 0"
       :title="t('usageHistory.emptyTitle')"
       :description="t('usageHistory.emptyDescription')"
     />
 
-    <div v-if="!isLoading && periods.length > 0" class="section">
+    <div v-if="!isLoading && !loadError && periods.length > 0" class="section">
       <h2 class="section-title">{{ selectedPeriod === 'weekly' ? t('usageHistory.weeklyBreakdown') : t('usageHistory.monthlyBreakdown') }}</h2>
       <DataTable :columns="columns" :items="periods">
         <template #cell-period_start="{ item }">
