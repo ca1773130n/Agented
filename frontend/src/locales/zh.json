@@ -3261,6 +3261,7 @@
     "createAgent": "创建智能体",
     "searchPlaceholder": "搜索智能体...",
     "loading": "正在加载智能体...",
+    "loadErrorTitle": "无法加载代理",
     "empty": {
       "title": "尚无智能体",
       "description": "创建你的第一个 AI 智能体以开始"
@@ -5569,6 +5570,7 @@
     "searchPlaceholder": "搜索产品...",
     "loading": "正在加载产品...",
     "loadFailed": "加载产品失败",
+    "loadError": "加载产品失败",
     "loadError": "加载产品失败",
     "emptyTitle": "暂无产品",
     "emptyDescription": "创建您的第一个产品以组织项目",

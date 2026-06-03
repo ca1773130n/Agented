@@ -3261,6 +3261,7 @@
     "createAgent": "에이전트 생성",
     "searchPlaceholder": "에이전트 검색...",
     "loading": "에이전트 불러오는 중...",
+    "loadErrorTitle": "에이전트를 불러오지 못했습니다",
     "empty": {
       "title": "아직 에이전트가 없습니다",
       "description": "첫 번째 AI 에이전트를 생성하여 시작하세요"
@@ -5569,6 +5570,7 @@
     "searchPlaceholder": "제품 검색...",
     "loading": "제품을 불러오는 중...",
     "loadFailed": "제품을 불러오지 못했습니다",
+    "loadError": "제품을 불러오지 못했습니다",
     "loadError": "제품을 불러오지 못했습니다",
     "emptyTitle": "아직 제품이 없습니다",
     "emptyDescription": "프로젝트를 정리하기 위한 첫 제품을 생성하세요",

@@ -94,7 +94,7 @@ async function loadProducts() {
     if (productsData.total_count != null) pagination.totalCount.value = productsData.total_count;
     teams.value = teamsData.teams || [];
   } catch (e) {
-    loadError.value = e instanceof ApiError ? e.message : 'Failed to load products';
+    loadError.value = e instanceof ApiError ? e.message : t('products.loadError');
     showToast(loadError.value, 'error');
   } finally {
     isLoading.value = false;

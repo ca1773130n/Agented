@@ -35,6 +35,8 @@ vi.mock('../../services/api', () => ({
     list: vi.fn(),
     create: vi.fn(),
     delete: vi.fn(),
+    update: vi.fn(),
+    activityStatus: vi.fn(),
   },
   ApiError: class extends Error {
     status: number
@@ -67,6 +69,8 @@ describe('SuperAgentsPage', () => {
     vi.mocked(superAgentApi.list).mockResolvedValue({ super_agents: mockSuperAgents })
     vi.mocked(superAgentApi.create).mockResolvedValue({ message: 'Created', super_agent_id: 'super-new123' })
     vi.mocked(superAgentApi.delete).mockResolvedValue({ message: 'Deleted' })
+    vi.mocked(superAgentApi.update).mockResolvedValue({ message: 'Updated' })
+    vi.mocked(superAgentApi.activityStatus).mockResolvedValue({ statuses: {} })
   })
 
   it('renders loading state initially', async () => {
@@ -223,5 +227,37 @@ describe('SuperAgentsPage', () => {
 
     expect(wrapper.find('.status-active').exists()).toBe(true)
     expect(wrapper.find('.status-inactive').exists()).toBe(true)
+  })
+
+  it('shows the error state and re-fetches on retry', async () => {
+    const { superAgentApi, ApiError } = await import('../../services/api')
+    vi.mocked(superAgentApi.list).mockRejectedValueOnce(new ApiError(500, 'boom'))
+
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    expect(wrapper.find('.ds-error-state').exists()).toBe(true)
+    expect(mockShowToast).toHaveBeenCalledWith('boom', 'error')
+
+    // Retry succeeds -> list renders, error state clears.
+    vi.mocked(superAgentApi.list).mockResolvedValueOnce({ super_agents: mockSuperAgents })
+    await wrapper.find('.ds-error-state button').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.ds-error-state').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Code Reviewer')
+    expect(superAgentApi.list).toHaveBeenCalledTimes(2)
+  })
+
+  it('toggles a super agent from enabled to disabled', async () => {
+    const { superAgentApi } = await import('../../services/api')
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    // First card is enabled (enabled: 1) -> its toggle should disable it.
+    await wrapper.find('.btn-toggle-active').trigger('click')
+    await flushPromises()
+
+    expect(superAgentApi.update).toHaveBeenCalledWith('super-abc123', { enabled: 0 })
   })
 })

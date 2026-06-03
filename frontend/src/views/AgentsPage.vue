@@ -212,7 +212,7 @@ onMounted(() => {
 
     <LoadingState v-if="isLoading" :message="t('agents.loading')" />
 
-    <ErrorState v-else-if="loadError" :title="t('agents.toast.loadFailed')" :message="loadError" @retry="loadAgents" />
+    <ErrorState v-else-if="loadError" :title="t('agents.loadErrorTitle')" :message="loadError" @retry="loadAgents" />
 
     <EmptyState v-else-if="agents.length === 0" :title="t('agents.empty.title')" :description="t('agents.empty.description')">
       <template #actions>
