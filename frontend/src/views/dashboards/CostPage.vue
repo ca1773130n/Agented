@@ -30,7 +30,12 @@ function maybeScroll() {
   });
 }
 
-onMounted(maybeScroll);
+onMounted(() => {
+  // The AI Cost section is static (always rendered), so mark it loaded for the
+  // #ai-cost deep-link to scroll.
+  loaded.value.add('ai-cost');
+  maybeScroll();
+});
 </script>
 
 <template>
@@ -44,7 +49,7 @@ onMounted(maybeScroll);
       <TokenUsageCard @loaded="onCardLoaded" />
       <!-- P2: the AI Cost dashboard is folded into the Cost lane (one cost surface). -->
       <section id="ai-cost" class="ai-cost-section">
-        <AiCostDashboard />
+        <AiCostDashboard :embedded="true" />
       </section>
     </div>
   </div>
