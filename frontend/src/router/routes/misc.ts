@@ -17,13 +17,6 @@ export const miscRoutes: RouteRecordRaw[] = [
     path: '/platform',
     redirect: '/settings',
   },
-  // Team Budgets
-  {
-    path: '/teams/budgets',
-    name: 'team-budgets',
-    component: () => import('../../views/TeamBudgetsPage.vue'),
-    meta: { title: 'Team Budgets' },
-  },
   // Human Approval Gates
   {
     path: '/workflows/approval-gates',

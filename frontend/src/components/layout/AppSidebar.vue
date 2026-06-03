@@ -137,7 +137,7 @@ function autoExpandForRoute() {
   if (['traces-list', 'trace-detail'].includes(name)) {
     expandedSections.value.analytics = true;
   }
-  if (['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'audit-history', 'findings-triage-board'].includes(name)) {
+  if (['secrets-vault', 'rbac-settings', 'sso-settings', 'audit-history', 'findings-triage-board'].includes(name)) {
     expandedSections.value.platform = true;
   }
 }
@@ -246,7 +246,7 @@ function isAnalyticsSectionActive(): boolean {
 }
 
 function isPlatformSectionActive(): boolean {
-  return ['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'audit-history', 'findings-triage-board', 'system-errors'].includes(currentRouteName.value);
+  return ['secrets-vault', 'rbac-settings', 'sso-settings', 'audit-history', 'findings-triage-board', 'system-errors'].includes(currentRouteName.value);
 }
 
 // Helper: navigate via router (mobile auto-close handled by router.afterEach)
@@ -1090,9 +1090,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('sso-settings') }" :aria-current="sidebarActive('sso-settings') ? 'page' : undefined" @click="navTo('sso-settings')">
           {{ t('nav.ssoSaml') }}
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('team-budgets') }" :aria-current="sidebarActive('team-budgets') ? 'page' : undefined" @click="navTo('team-budgets')">
-          {{ t('nav.teamBudgets') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('api-keys') }" :aria-current="sidebarActive('api-keys') ? 'page' : undefined" @click="navTo('api-keys')">
           {{ t('nav.apiKeys') }}

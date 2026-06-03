@@ -121,7 +121,6 @@
     "secretsVault": "Secrets Vault",
     "rbacSettings": "RBAC Settings",
     "ssoSaml": "SSO / SAML",
-    "teamBudgets": "Team Budgets",
     "apiKeys": "API Keys",
     "findingsTriage": "Findings Triage",
     "versionPinning": "Version Pinning",
@@ -7190,34 +7189,6 @@
     "time": {
       "justNow": "just now",
       "hoursAgo": "{n}h ago"
-    }
-  },
-  "teamBudgets": {
-    "title": "Team Budgets",
-    "subtitle": "Monthly execution limits and alert thresholds per team",
-    "addBudget": "+ Add Budget",
-    "newBudget": "New Team Budget",
-    "teamName": "Team Name",
-    "teamNamePlaceholder": "e.g. Platform",
-    "monthlyLimit": "Monthly Limit",
-    "executions": "executions",
-    "alertThreshold": "Alert Threshold",
-    "creating": "Creating...",
-    "createBudget": "Create Budget",
-    "loading": "Loading budgets...",
-    "emptyState": "No team budgets configured yet.",
-    "percentUsed": "{pct}% used",
-    "remaining": "{count} remaining",
-    "alertAt": "Alert at",
-    "sending": "Sending...",
-    "sendAlert": "Send Alert",
-    "toast": {
-      "testAlertSent": "Test alert sent",
-      "testAlertSentDemo": "Test alert sent (demo mode)",
-      "thresholdSaved": "Threshold saved",
-      "savedDemo": "Saved (demo mode)",
-      "teamNameRequired": "Team name is required",
-      "budgetCreated": "Budget created"
     }
   },
   "teamBuilder": {

@@ -121,7 +121,6 @@
     "secretsVault": "シークレットボルト",
     "rbacSettings": "RBAC 設定",
     "ssoSaml": "SSO / SAML",
-    "teamBudgets": "チーム予算",
     "apiKeys": "API キー",
     "findingsTriage": "検出結果のトリアージ",
     "versionPinning": "バージョン固定",
@@ -7190,34 +7189,6 @@
     "time": {
       "justNow": "たった今",
       "hoursAgo": "{n}時間前"
-    }
-  },
-  "teamBudgets": {
-    "title": "チーム予算",
-    "subtitle": "チームごとの月次実行上限とアラートしきい値",
-    "addBudget": "+ 予算を追加",
-    "newBudget": "新しいチーム予算",
-    "teamName": "チーム名",
-    "teamNamePlaceholder": "例: Platform",
-    "monthlyLimit": "月次上限",
-    "executions": "回実行",
-    "alertThreshold": "アラートしきい値",
-    "creating": "作成中...",
-    "createBudget": "予算を作成",
-    "loading": "予算を読み込み中...",
-    "emptyState": "まだ設定されたチーム予算はありません。",
-    "percentUsed": "{pct}% 使用",
-    "remaining": "残り{count}回",
-    "alertAt": "アラートしきい値",
-    "sending": "送信中...",
-    "sendAlert": "アラートを送信",
-    "toast": {
-      "testAlertSent": "テストアラートを送信しました",
-      "testAlertSentDemo": "テストアラートを送信しました（デモモード）",
-      "thresholdSaved": "しきい値を保存しました",
-      "savedDemo": "保存しました（デモモード）",
-      "teamNameRequired": "チーム名は必須です",
-      "budgetCreated": "予算を作成しました"
     }
   },
   "teamBuilder": {
