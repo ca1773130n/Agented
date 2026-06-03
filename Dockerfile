@@ -49,6 +49,7 @@ RUN pip install --no-cache-dir uv
 WORKDIR /build
 # Copy ai-accounts so the file:../../ path deps resolve.
 COPY ai-accounts/ /build/ai-accounts/
+COPY autoresearch-core/ /build/autoresearch-core/
 COPY Agented/backend/pyproject.toml Agented/backend/uv.lock* /build/Agented/backend/
 WORKDIR /build/Agented/backend
 RUN uv sync --frozen --no-dev || uv sync --no-dev

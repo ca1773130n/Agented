@@ -46,3 +46,7 @@ DEFAULT_WEEKLY_TOKEN_LIMIT = 1_000_000
 
 CLONE_TIMEOUT = 300  # 5 minutes
 GIT_OP_TIMEOUT = 120  # 2 minutes
+
+# --- Autoresearch kernel ---
+
+AUTORESEARCH_KERNEL_ENABLED = os.environ.get("AUTORESEARCH_KERNEL_ENABLED", "0") == "1"
