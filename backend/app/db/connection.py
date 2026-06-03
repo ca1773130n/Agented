@@ -40,6 +40,15 @@ def get_connection():
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA busy_timeout = 5000")
+    # WAL lets readers and a writer proceed concurrently instead of serializing
+    # on a single global lock — reduces "database is locked" under the
+    # multi-threaded SSE/scheduler workload (03-core M4). Best-effort: some
+    # backing stores (e.g. certain network FS) reject WAL; fall back silently.
+    try:
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA synchronous = NORMAL")
+    except sqlite3.OperationalError:
+        pass
     try:
         yield conn
     finally:

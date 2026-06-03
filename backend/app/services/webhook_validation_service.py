@@ -13,6 +13,7 @@ Security best practices per webhooks.fyi:
 import hashlib
 import hmac
 import logging
+import os
 import time
 from typing import Tuple
 
@@ -22,11 +23,12 @@ logger = logging.getLogger(__name__)
 class WebhookValidationService:
     """Unified webhook signature validation and replay protection."""
 
-    # Supported HMAC algorithms
-    _ALGORITHMS = {
-        "sha256": hashlib.sha256,
-        "sha1": hashlib.sha1,
-    }
+    # Supported HMAC algorithms. SHA-1 is weak/deprecated and is NOT accepted by
+    # default — a sender can no longer downgrade to it via the header prefix
+    # (02 L2). Re-enable only for a legacy sender via AGENTED_WEBHOOK_ALLOW_SHA1=1.
+    _ALGORITHMS = {"sha256": hashlib.sha256}
+    if os.environ.get("AGENTED_WEBHOOK_ALLOW_SHA1") == "1":
+        _ALGORITHMS["sha1"] = hashlib.sha1
 
     @classmethod
     def validate_signature(
