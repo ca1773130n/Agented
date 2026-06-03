@@ -20,6 +20,15 @@ from app.db.sessions import get_session_by_token
 from app.db.sessions import rotate_session as _rotate_session
 from app.logging_config import current_user_var, request_id_var
 from app_litestar.auth_guards import has_sufficient_role, required_role
+from app_litestar.cookie_auth import (
+    CSRF_COOKIE,
+    CSRF_HEADER,
+    SESSION_COOKIE,
+    csrf_valid,
+    generate_csrf_token,
+    parse_cookies,
+    set_cookie_headers,
+)
 
 # v0.6.2 round-1 M5: import the metrics registry at module load
 # instead of per-request inside PerformanceMiddleware.handle's
@@ -179,6 +188,8 @@ class ApiKeyMiddleware(ASGIMiddleware):
         principal_role: Optional[str] = None
         principal_user_id: Optional[str] = None
         rotated_token: Optional[str] = None
+        rotated_cookie_token: Optional[str] = None
+        csrf_token_to_set: Optional[str] = None
 
         # 1) Bearer session path.
         if bearer:
@@ -212,11 +223,31 @@ class ApiKeyMiddleware(ASGIMiddleware):
             if principal_role is None:
                 await self._unauthorized(send)
                 return
+        # 3) Cookie session path (browser SPA). Subject to CSRF double-submit on
+        #    mutating methods, since the cookie is auto-sent by the browser.
         else:
-            await self._unauthorized(send)
-            return
+            cookies = parse_cookies(headers.get("cookie", ""))
+            cookie_token = cookies.get(SESSION_COOKIE, "")
+            if not cookie_token:
+                await self._unauthorized(send)
+                return
+            session = get_session_by_token(cookie_token)
+            if not session:
+                await self._unauthorized(send)
+                return
+            if not csrf_valid(method, cookies, headers.get(CSRF_HEADER)):
+                await self._forbidden(send, detail="CSRF token missing or invalid")
+                return
+            principal_user_id = session["user_id"]
+            principal_role = get_highest_role_for_user(principal_user_id)
+            rotated = _rotate_session(cookie_token)
+            if rotated:
+                rotated_cookie_token = rotated["token"]
+                # Keep the same CSRF token across rotation (it's an independent
+                # secret); refresh its Max-Age. Mint one if somehow absent.
+                csrf_token_to_set = cookies.get(CSRF_COOKIE) or generate_csrf_token()
 
-        # 3) Coarse role check.
+        # 4) Coarse role check.
         needed = required_role(method, path)
         if needed is not None and not has_sufficient_role(principal_role, needed):
             await self._forbidden(send)
@@ -229,11 +260,20 @@ class ApiKeyMiddleware(ASGIMiddleware):
             "role": principal_role,
         }
 
-        # 5) Wrap `send` to inject X-New-Session-Token on the response start.
+        # 5) Wrap `send` to inject rotation artifacts on the response start:
+        #    the X-New-Session-Token header (header-auth clients) and/or a
+        #    Set-Cookie rotation (cookie-auth browser clients).
+        scheme = scope.get("scheme", "http")
+
         async def send_with_rotation(message: Any) -> None:
-            if message["type"] == "http.response.start" and rotated_token:
+            if message["type"] == "http.response.start":
                 hdrs = list(message.get("headers", []))
-                hdrs.append((b"x-new-session-token", rotated_token.encode("latin-1")))
+                if rotated_token:
+                    hdrs.append((b"x-new-session-token", rotated_token.encode("latin-1")))
+                if rotated_cookie_token and csrf_token_to_set:
+                    hdrs.extend(
+                        set_cookie_headers(rotated_cookie_token, csrf_token_to_set, scheme=scheme)
+                    )
                 message = dict(message, headers=hdrs)
             await send(message)
 
@@ -255,8 +295,8 @@ class ApiKeyMiddleware(ASGIMiddleware):
         await send({"type": "http.response.body", "body": body, "more_body": False})
 
     @staticmethod
-    async def _forbidden(send: Send) -> None:
-        body = _json_error_body("FORBIDDEN", "Forbidden")
+    async def _forbidden(send: Send, detail: str = "Forbidden") -> None:
+        body = _json_error_body("FORBIDDEN", detail)
         await send(
             {
                 "type": "http.response.start",

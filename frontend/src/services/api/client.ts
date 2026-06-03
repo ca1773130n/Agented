@@ -77,6 +77,19 @@ export function clearSessionToken(): void {
   }
 }
 
+const CSRF_COOKIE = 'agented_csrf';
+
+/** Read the readable (non-HttpOnly) CSRF token from the cookie jar. The session
+ *  cookie itself is HttpOnly and never visible here — only the CSRF token is. */
+export function getCsrfToken(): string | null {
+  if (typeof document === 'undefined') return null;
+  for (const part of document.cookie.split(';')) {
+    const [name, ...rest] = part.trim().split('=');
+    if (name === CSRF_COOKIE) return decodeURIComponent(rest.join('='));
+  }
+  return null;
+}
+
 const DEFAULT_TIMEOUT_MS = 120000;
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_STATUSES = [429, 502, 503, 504];
@@ -137,11 +150,23 @@ async function apiFetchSingle<T>(url: string, options?: ApiFetchOptions): Promis
     const sessionToken = getSessionToken();
     const authHeaders: Record<string, string> = {};
     if (apiKey) authHeaders['X-API-Key'] = apiKey;
+    // Bearer header kept only for any pre-migration localStorage token; new
+    // sessions authenticate via the HttpOnly cookie (sent automatically).
     if (sessionToken) authHeaders['Authorization'] = `Bearer ${sessionToken}`;
+
+    // Double-submit CSRF: echo the readable CSRF cookie in a header on mutating
+    // requests so the cookie-authenticated session can't be ridden cross-site.
+    const method = (fetchOptions?.method || 'GET').toUpperCase();
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+      const csrf = getCsrfToken();
+      if (csrf) authHeaders['X-CSRF-Token'] = csrf;
+    }
 
     const response = await fetch(`${API_BASE}${url}`, {
       ...fetchOptions,
       signal: controller.signal,
+      // Send the HttpOnly session + CSRF cookies on every request.
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
         ...authHeaders,
