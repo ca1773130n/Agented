@@ -14,6 +14,22 @@ describe('MarkdownContent', () => {
     expect(wrapper.find('h2').text()).toBe('Summary')
   })
 
+  it('strips XSS payloads from untrusted agent markdown (C2)', () => {
+    const wrapper = mount(MarkdownContent, {
+      props: { content: 'hi <img src=x onerror="alert(1)"> there <script>alert(2)</script>' },
+    })
+    expect(wrapper.html()).not.toContain('onerror')
+    expect(wrapper.html()).not.toContain('<script')
+    expect(wrapper.find('img').attributes('onerror')).toBeUndefined()
+  })
+
+  it('drops javascript: link hrefs', () => {
+    const wrapper = mount(MarkdownContent, {
+      props: { content: '[click](javascript:alert(1))' },
+    })
+    expect(wrapper.html().toLowerCase()).not.toContain('javascript:')
+  })
+
   it('renders bullet lists', () => {
     const wrapper = mount(MarkdownContent, {
       props: { content: '- one\n- two\n- three' },

@@ -4,6 +4,7 @@ import PageHeader from '../components/base/PageHeader.vue';
 import { executionApi } from '../services/api';
 import type { AuthenticatedEventSource } from '../services/api';
 import { safeParseSSE } from '../composables/useEventSource';
+import { escapeHtml } from '../composables/useMarkdown';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
@@ -50,7 +51,10 @@ const stats = computed(() => ({
 }));
 
 function ansiToHtml(text: string) {
-  return text
+  // HTML-escape the raw (harness-streamed) text BEFORE introducing the ANSI
+  // <span> markup, else a log line like `</span><img onerror=...>` injects
+  // arbitrary HTML into the live terminal (v-html sink).
+  return escapeHtml(text)
     .replace(/\x1b\[33m/g, '<span style="color:#f0a500">')
     .replace(/\x1b\[31m/g, '<span style="color:var(--color-error)">')
     .replace(/\x1b\[32m/g, '<span style="color:var(--color-success)">')
