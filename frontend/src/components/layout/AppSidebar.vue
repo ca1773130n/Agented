@@ -67,7 +67,6 @@ const expandedSections = ref<Record<string, boolean>>({
   aiBackends: false,
   workflows: false,
   triggers: false,
-  externalIntegrations: false,
   platform: false,
   // PR-J2 — System analytics dashboards group.
   analytics: false,
@@ -137,9 +136,6 @@ function autoExpandForRoute() {
   // PR-J2 — Analytics dashboards (System).
   if (['ai-cost-dashboard', 'traces-list', 'trace-detail'].includes(name)) {
     expandedSections.value.analytics = true;
-  }
-  if (['slack-notifications', 'integration-ticketing', 'notification-channels', 'github-app-install'].includes(name)) {
-    expandedSections.value.externalIntegrations = true;
   }
   if (['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'audit-history', 'findings-triage-board', 'skill-version-pinning', 'conversation-history-viewer'].includes(name)) {
     expandedSections.value.platform = true;
@@ -247,10 +243,6 @@ function isTriggersSectionActive(): boolean {
 // PR-J2 — Analytics dashboards group under System.
 function isAnalyticsSectionActive(): boolean {
   return ['ai-cost-dashboard', 'traces-list', 'trace-detail'].includes(currentRouteName.value);
-}
-
-function isExternalIntegrationsSectionActive(): boolean {
-  return ['slack-notifications', 'integration-ticketing', 'notification-channels', 'github-app-install'].includes(currentRouteName.value);
 }
 
 function isPlatformSectionActive(): boolean {
@@ -1092,36 +1084,21 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
       </div>
 
-      <!-- Integrations (expandable, 3 items) — PR-E: folded the
-           former top-level "External Integrations" section into System
-           as a child block alongside AI Backends. Label tightened to
-           "Integrations". State key (`externalIntegrations`) and the
-           helper (`isExternalIntegrationsSectionActive`) intentionally
-           keep their old names — only the user-visible label changes. -->
-      <SidebarGroupToggle
+      <!-- Integrations (flat link) — P2: Slack / Ticketing / Channels
+           merged into one tabbed page at /integrations (they were three
+           views over the same db_integrations table). -->
+      <SidebarFlatLink
         :label="t('nav.integrations')"
-        :expanded="expandedSections.externalIntegrations"
-        :active="isExternalIntegrationsSectionActive()"
+        :active="sidebarActive('integrations')"
         :collapsed-desktop="isCollapsedDesktop()"
-        @toggle="toggleSection('externalIntegrations')"
+        @click="navTo('integrations')"
       >
         <template #icon>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/>
           </svg>
         </template>
-      </SidebarGroupToggle>
-      <div v-show="expandedSections.externalIntegrations" class="nav-submenu" role="region" :aria-label="t('nav.integrations')">
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('slack-notifications') }" :aria-current="sidebarActive('slack-notifications') ? 'page' : undefined" @click="navTo('slack-notifications')">
-          {{ t('nav.slackNotifications') }}
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('integration-ticketing') }" :aria-current="sidebarActive('integration-ticketing') ? 'page' : undefined" @click="navTo('integration-ticketing')">
-          {{ t('nav.jiraLinear') }}
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('notification-channels') }" :aria-current="sidebarActive('notification-channels') ? 'page' : undefined" @click="navTo('notification-channels')">
-          {{ t('nav.notificationChannels') }}
-        </button>
-      </div>
+      </SidebarFlatLink>
 
       <!-- Platform Admin (expandable) -->
       <SidebarGroupToggle

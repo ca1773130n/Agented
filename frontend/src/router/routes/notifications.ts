@@ -8,12 +8,18 @@ export const notificationRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/NotificationHubPage.vue'),
     meta: { title: 'Notification Hub' },
   },
-  // Slack Execution Notifications (Feature 7)
+  // Integrations — unified Slack / Ticketing / Channels surface (P2 merge).
+  {
+    path: '/integrations',
+    name: 'integrations',
+    component: () => import('../../views/IntegrationsPage.vue'),
+    meta: { title: 'Integrations' },
+  },
+  // Slack Execution Notifications — folded into the Integrations page (P2).
   {
     path: '/integrations/slack-notifications',
     name: 'slack-notifications',
-    component: () => import('../../views/SlackNotificationsPage.vue'),
-    meta: { title: 'Slack Notifications' },
+    redirect: () => ({ name: 'integrations', query: { tab: 'slack' } }),
   },
   // Slack Command Gateway
   {
@@ -22,19 +28,17 @@ export const notificationRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/SlackCommandGatewayPage.vue'),
     meta: { title: 'Slack Command Gateway' },
   },
-  // Slack & Teams Notification Channels (feature 9)
+  // Slack & Teams Notification Channels — folded into the Integrations page (P2).
   {
     path: '/integrations/notification-channels',
     name: 'notification-channels',
-    component: () => import('../../views/TeamsNotificationChannelsPage.vue'),
-    meta: { title: 'Notification Channels' },
+    redirect: () => ({ name: 'integrations', query: { tab: 'channels' } }),
   },
-  // Integration Ticketing
+  // Integration Ticketing — folded into the Integrations page (P2).
   {
     path: '/integrations/ticketing',
     name: 'integration-ticketing',
-    component: () => import('../../views/IntegrationTicketing.vue'),
-    meta: { title: 'Ticketing Integrations' },
+    redirect: () => ({ name: 'integrations', query: { tab: 'ticketing' } }),
   },
   // PR-D — On-Call Escalation merged into SchedulingCard's On-Call Policy
   // sub-card inside the Activity lane.
