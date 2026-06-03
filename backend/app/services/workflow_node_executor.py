@@ -69,15 +69,28 @@ class NodeExecutor:
         """
         result: list = [None, None]  # [output_msg, exception]
 
+        # Python can't force-kill the worker thread, so a node whose subprocess
+        # outlives the wall-clock timeout would leave an orphan subprocess +
+        # thread (H4). Cap the handler's own subprocess timeout (command/script
+        # nodes pass node_config["timeout"] into subprocess.run) to the node
+        # wall-clock so subprocess.run kills the child at or before the deadline.
+        capped_config = dict(node_config)
+        existing_timeout = capped_config.get("timeout")
+        capped_config["timeout"] = (
+            min(existing_timeout, timeout_seconds)
+            if isinstance(existing_timeout, (int, float))
+            else timeout_seconds
+        )
+
         def _run() -> None:
             try:
-                result[0] = cls.dispatch_node(node_id, node_type, node_config, input_msg)
+                result[0] = cls.dispatch_node(node_id, node_type, capped_config, input_msg)
             except Exception as exc:
                 result[1] = exc
 
         thread = threading.Thread(target=_run, daemon=True)
         thread.start()
-        thread.join(timeout=timeout_seconds)
+        thread.join(timeout=timeout_seconds + 1.0)
 
         if thread.is_alive():
             raise RuntimeError(

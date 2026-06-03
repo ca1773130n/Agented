@@ -226,7 +226,13 @@ def _read_until_done(fd: int, timeout: float) -> str:
 
 
 def _cleanup_child(pid: int, master_fd: int) -> None:
-    """Kill child process and close master fd."""
+    """Kill child process and close master fd, then reap it.
+
+    A plain SIGTERM + non-blocking waitpid(WNOHANG) almost always returns
+    (0, 0) because the child hasn't died yet — leaving a zombie per call (H3).
+    Do a short bounded wait for the child to exit, escalate to SIGKILL, then a
+    final blocking reap so no zombie accumulates.
+    """
     try:
         os.close(master_fd)
     except OSError as e:
@@ -234,8 +240,20 @@ def _cleanup_child(pid: int, master_fd: int) -> None:
     try:
         os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
-        pass  # Process already exited — expected
+        return  # Process already exited — nothing to reap
+
+    deadline = time.monotonic() + 5.0
     try:
-        os.waitpid(pid, os.WNOHANG)
+        while time.monotonic() < deadline:
+            reaped, _ = os.waitpid(pid, os.WNOHANG)
+            if reaped == pid:
+                return
+            time.sleep(0.05)
+        # Still alive after SIGTERM — escalate and block until reaped.
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        os.waitpid(pid, 0)
     except ChildProcessError as e:
         logger.debug("PTY waitpid failed (pid=%d): %s", pid, e)

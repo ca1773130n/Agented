@@ -220,6 +220,9 @@ class TestCleanupChild:
     @patch("app.services.pty_service.os.kill")
     @patch("app.services.pty_service.os.close")
     def test_normal_cleanup(self, mock_close, mock_kill, mock_waitpid):
+        # Bounded reap: waitpid is polled until it returns the pid. A child that
+        # exits promptly is reaped on the first WNOHANG poll (no SIGKILL).
+        mock_waitpid.return_value = (1234, 0)
         _cleanup_child(pid=1234, master_fd=5)
 
         mock_close.assert_called_once_with(5)
@@ -231,6 +234,7 @@ class TestCleanupChild:
     @patch("app.services.pty_service.os.close")
     def test_close_oserror_handled(self, mock_close, mock_kill, mock_waitpid):
         mock_close.side_effect = OSError("bad fd")
+        mock_waitpid.return_value = (1234, 0)
         # Should not raise
         _cleanup_child(pid=1234, master_fd=5)
         mock_kill.assert_called_once()

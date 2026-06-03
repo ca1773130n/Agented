@@ -24,6 +24,30 @@ from .pty_service import strip_ansi
 
 logger = logging.getLogger(__name__)
 
+
+def _reap_after_sigterm(pid: int) -> None:
+    """Reap a child already sent SIGTERM, escalating to SIGKILL.
+
+    A bare waitpid(pid, WNOHANG) right after SIGTERM almost always returns
+    (0, 0) because the child hasn't died yet, leaving a zombie per call (H3).
+    Wait briefly for exit, escalate to SIGKILL, then block until reaped.
+    """
+    deadline = time.monotonic() + 5.0
+    try:
+        while time.monotonic() < deadline:
+            reaped, _ = os.waitpid(pid, os.WNOHANG)
+            if reaped == pid:
+                return
+            time.sleep(0.05)
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        os.waitpid(pid, 0)
+    except ChildProcessError:
+        pass  # Already reaped elsewhere
+
+
 # Timeout for waiting on user input (5 minutes)
 INPUT_TIMEOUT_SECONDS = 300
 
@@ -445,12 +469,9 @@ class BackendCLIService:
                                     pass  # Intentionally silenced: cleanup/IO operation is best-effort
                                 try:
                                     os.kill(pid, signal.SIGTERM)
+                                    _reap_after_sigterm(pid)
                                 except ProcessLookupError:
                                     pass  # Intentionally silenced: process already terminated
-                                try:
-                                    os.waitpid(pid, os.WNOHANG)
-                                except ChildProcessError:
-                                    pass  # Intentionally silenced: child process already reaped
                                 # Auto-save account on login completion
                                 cls._auto_save_account(session_id)
                                 cls._finish_session(session_id, "completed", 0, None)
@@ -720,11 +741,8 @@ class BackendCLIService:
                                 pass
                             try:
                                 os.kill(pid, signal.SIGTERM)
+                                _reap_after_sigterm(pid)
                             except ProcessLookupError:
-                                pass
-                            try:
-                                os.waitpid(pid, os.WNOHANG)
-                            except ChildProcessError:
                                 pass
                             cls._auto_save_account(session_id)
                             cls._finish_session(session_id, "completed", 0, None)
