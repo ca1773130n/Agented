@@ -7432,7 +7432,7 @@
       "descriptionTooShort": "최소 10자 이상의 설명을 입력하세요",
       "generateFailed": "팅 구성 생성에 실패했습니다",
       "creationFailed": "팅 생성에 실패했습니다",
-      "agentCreateSkipped": "에이전트 \"{name}\"을(를) 생성할 수 없습니다 — 건너뜀",
+      "createdWithIssues": "팀이 생성되었지만 {count}개 단계를 적용하지 못했습니다 — 팀을 확인하고 누락된 항목을 추가하세요",
       "createdFromGenerated": "생성된 구성으로 팅이 생성되었습니다",
       "saveGeneratedFailed": "생성된 팅 저장에 실패했습니다"
     }

@@ -7432,7 +7432,7 @@
       "descriptionTooShort": "Please provide a description of at least 10 characters",
       "generateFailed": "Failed to generate team configuration",
       "creationFailed": "Team creation failed",
-      "agentCreateSkipped": "Could not create agent \"{name}\" — skipping",
+      "createdWithIssues": "Team created, but {count} step(s) couldn't be applied — review the team and add what's missing",
       "createdFromGenerated": "Team created from generated configuration",
       "saveGeneratedFailed": "Failed to save generated team"
     }
