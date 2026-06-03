@@ -70,7 +70,9 @@ class GitHubService:
             resp = httpx.get(
                 f"https://api.github.com/repos/{owner}/{repo}",
                 timeout=10,
-                follow_redirects=True,
+                # Don't follow redirects off the GitHub API — only a direct 200
+                # from api.github.com confirms the repo (05 L1).
+                follow_redirects=False,
             )
             if resp.status_code == 200:
                 return True

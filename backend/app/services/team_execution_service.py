@@ -100,7 +100,8 @@ class TeamExecutionService:
         except Exception:
             logger.warning(
                 "team_executions: insert failed for %s",
-                team_exec_id, exc_info=True,
+                team_exec_id,
+                exc_info=True,
             )
 
         # Strategy dispatch map
@@ -165,9 +166,10 @@ class TeamExecutionService:
             if strategy in (execute_human_in_loop, execute_composite):
                 kwargs["tracker"] = TeamExecutionTracker
 
-            execution_ids = strategy(
-                team, config, message, event, trigger_type, working_directory, **kwargs
-            ) or []
+            execution_ids = (
+                strategy(team, config, message, event, trigger_type, working_directory, **kwargs)
+                or []
+            )
             TeamExecutionTracker.set_completed(team_exec_id, execution_ids)
             terminal_status = "completed"
             logger.info(f"Team execution completed: {team_exec_id}")
@@ -226,7 +228,8 @@ class TeamExecutionService:
         except Exception:
             logger.warning(
                 "team_executions: finalize failed for %s",
-                team_exec_id, exc_info=True,
+                team_exec_id,
+                exc_info=True,
             )
 
         try:
@@ -242,7 +245,8 @@ class TeamExecutionService:
         except Exception:
             logger.warning(
                 "team_executions: emit_session_complete failed for %s",
-                team_exec_id, exc_info=True,
+                team_exec_id,
+                exc_info=True,
             )
 
     @classmethod

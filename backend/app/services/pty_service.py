@@ -130,6 +130,7 @@ class PtyRunner:
         Returns:
             Cleaned output string, or None on failure
         """
+        master_fd = slave_fd = -1
         try:
             master_fd, slave_fd = pty.openpty()
             pid = os.fork()
@@ -150,6 +151,7 @@ class PtyRunner:
 
             # Parent process
             os.close(slave_fd)
+            slave_fd = -1
 
             deadline = time.monotonic() + timeout
             collected = ""
@@ -184,11 +186,20 @@ class PtyRunner:
                 collected += final_output
 
             _cleanup_child(pid, master_fd)
+            master_fd = -1
             return strip_ansi(collected).strip() if collected else None
 
         except Exception as e:
             logger.warning(f"PtyRunner.run_interactive failed for {cmd_list}: {e}")
             return None
+        finally:
+            # Close any fds left open on fork failure / mid-read error (01 M3).
+            for _fd in (master_fd, slave_fd):
+                if _fd is not None and _fd >= 0:
+                    try:
+                        os.close(_fd)
+                    except OSError:
+                        pass
 
 
 def _read_chunk(fd: int, timeout: float) -> str:
