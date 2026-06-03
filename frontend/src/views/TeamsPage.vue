@@ -296,13 +296,13 @@ async function saveGeneratedConfig(config: GeneratedTeamConfig) {
     showConfigReview.value = false;
     generatedConfig.value = null;
     generatedWarnings.value = [];
-    await loadTeams();
 
     if (outcome.issues.length > 0) {
       showToast(t('teams.toast.createdWithIssues', { count: outcome.issues.length }), 'error');
     } else {
       showToast(t('teams.toast.createdFromGenerated'), 'success');
     }
+    await loadTeams();
   } catch (e) {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');

@@ -1,7 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { ref } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import TeamsPage from '../TeamsPage.vue'
 import type { Team } from '../../services/api'
+
+// Streaming generation is mocked so the generate flow resolves synchronously.
+const mockStartStream = vi.fn()
+vi.mock('../../composables/useStreamingGeneration', () => ({
+  useStreamingGeneration: () => ({ log: ref([]), phase: ref(''), startStream: mockStartStream }),
+}))
+
+// The multi-step apply is unit-tested on its own; here we drive the page's
+// outcome-reporting branch, so stub it to return a controlled outcome.
+const mockApply = vi.fn()
+vi.mock('../../composables/useTeamGeneration', () => ({
+  applyGeneratedConfig: (...args: unknown[]) => mockApply(...args),
+}))
 
 const mockPush = vi.fn()
 vi.mock('vue-router', () => ({
@@ -87,5 +101,72 @@ describe('TeamsPage', () => {
     expect(wrapper.find('.ds-error-state').exists()).toBe(false)
     expect(wrapper.text()).toContain('Alpha Squad')
     expect(teamApi.list).toHaveBeenCalledTimes(2)
+  })
+
+  // Page-level wiring of the silent-failure fix: when applyGeneratedConfig
+  // reports issues, the page must surface an ERROR toast (not the success one).
+  it('reports an error toast when the generated config applies with issues', async () => {
+    const genConfig = {
+      name: 'Generated', description: '', topology: 'mesh', topology_config: {}, color: '#123', agents: [],
+    }
+    mockStartStream.mockResolvedValue({ config: genConfig, warnings: [] })
+    mockApply.mockResolvedValue({ teamId: 'team-9', issues: [{ kind: 'agent', name: 'X' }], membersAdded: 0, assignmentsAdded: 0 })
+
+    const wrapper = mount(TeamsPage, {
+      global: {
+        provide: { showToast: mockShowToast },
+        stubs: {
+          teleport: true,
+          // Decouple from the real review UI — just expose a save trigger.
+          TeamConfigReview: { name: 'TeamConfigReview', template: '<button class="stub-save" @click="$emit(\'save\', config)"></button>', props: ['config'] },
+        },
+      },
+    })
+    await flushPromises()
+
+    // Open generate modal, enter a long-enough description, submit.
+    await wrapper.find('.btn-ai').trigger('click')
+    await wrapper.find('textarea').setValue('a description that is long enough')
+    await wrapper.findAll('.btn-ai').at(-1)!.trigger('click')
+    await flushPromises()
+
+    // Generated config is now under review — trigger save.
+    await wrapper.find('.stub-save').trigger('click')
+    await flushPromises()
+
+    expect(mockApply).toHaveBeenCalledTimes(1)
+    expect(mockShowToast).toHaveBeenCalledWith(expect.any(String), 'error')
+    // And NOT a success toast.
+    expect(mockShowToast).not.toHaveBeenCalledWith(expect.any(String), 'success')
+  })
+
+  it('reports a success toast when the generated config applies cleanly', async () => {
+    const genConfig = {
+      name: 'Generated', description: '', topology: 'mesh', topology_config: {}, color: '#123', agents: [],
+    }
+    mockStartStream.mockResolvedValue({ config: genConfig, warnings: [] })
+    mockApply.mockResolvedValue({ teamId: 'team-9', issues: [], membersAdded: 1, assignmentsAdded: 1 })
+
+    const wrapper = mount(TeamsPage, {
+      global: {
+        provide: { showToast: mockShowToast },
+        stubs: {
+          teleport: true,
+          TeamConfigReview: { name: 'TeamConfigReview', template: '<button class="stub-save" @click="$emit(\'save\', config)"></button>', props: ['config'] },
+        },
+      },
+    })
+    await flushPromises()
+
+    await wrapper.find('.btn-ai').trigger('click')
+    await wrapper.find('textarea').setValue('a description that is long enough')
+    await wrapper.findAll('.btn-ai').at(-1)!.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('.stub-save').trigger('click')
+    await flushPromises()
+
+    expect(mockShowToast).toHaveBeenCalledWith(expect.any(String), 'success')
+    expect(mockShowToast).not.toHaveBeenCalledWith(expect.any(String), 'error')
   })
 })

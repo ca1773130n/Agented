@@ -18,7 +18,7 @@
 import { teamApi, agentApi, userSkillsApi, ApiError } from '../services/api';
 import type { GeneratedTeamConfig } from '../services/api';
 
-export type ApplyIssueKind = 'topology' | 'agent' | 'member' | 'skill' | 'assignment';
+export type ApplyIssueKind = 'topology' | 'agent' | 'member' | 'assignment';
 
 export interface ApplyIssue {
   kind: ApplyIssueKind;
@@ -120,9 +120,11 @@ export async function applyGeneratedConfig(
             description: assignment.entity_name || assignment.entity_id,
           });
         } catch {
-          // Still attempt the assignment in case the skill already exists,
-          // but record that creation failed.
-          issues.push({ kind: 'skill', name: assignment.entity_name || assignment.entity_id });
+          // Best-effort prerequisite: the skill may already exist. Don't flag
+          // this on its own — the assignment attempt below is the source of
+          // truth. (If creation failing causes the assignment to fail, that is
+          // captured once as an 'assignment' issue; if the assignment still
+          // succeeds, nothing actually went wrong.)
         }
       }
 

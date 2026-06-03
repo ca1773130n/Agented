@@ -151,6 +151,28 @@ describe('applyGeneratedConfig', () => {
     expect(outcome.issues).toEqual([])
   })
 
+  it('does not flag a skill-create failure when the assignment still succeeds', async () => {
+    const { userSkillsApi } = await import('../../services/api')
+    // Skill "create" fails (already exists) but the assignment lands — nothing
+    // actually went wrong, so no issue should be reported.
+    vi.mocked(userSkillsApi.add).mockRejectedValue(new Error('already exists'))
+
+    const outcome = await applyGeneratedConfig(makeConfig(), deps)
+
+    expect(outcome.issues).toEqual([])
+    expect(outcome.assignmentsAdded).toBe(1)
+  })
+
+  it('counts a failed skill assignment exactly once (no skill+assignment double count)', async () => {
+    const { userSkillsApi, teamApi } = await import('../../services/api')
+    vi.mocked(userSkillsApi.add).mockRejectedValue(new Error('boom'))
+    vi.mocked(teamApi.addAssignment).mockRejectedValue(new Error('boom'))
+
+    const outcome = await applyGeneratedConfig(makeConfig(), deps)
+
+    expect(outcome.issues).toEqual([{ kind: 'assignment', name: 'Skill One' }])
+  })
+
   it('skips assignments explicitly marked invalid', async () => {
     const { teamApi } = await import('../../services/api')
     const cfg = makeConfig({
