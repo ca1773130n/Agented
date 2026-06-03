@@ -891,7 +891,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </template>
       </SidebarFlatLink>
 
-      <div class="nav-section-label">{{ t('nav.sectionHistory') }}</div>
+      <div class="nav-section-label">{{ t('nav.sectionObservability') }}</div>
       <!-- Triggers History (expandable) -->
       <SidebarGroupToggle
         :label="t('nav.triggers')"
@@ -967,8 +967,13 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
       </div>
 
-      <div class="nav-section-label">{{ t('nav.sectionResources') }}</div>
-      <!-- Help — Plugin SDK + GitHub Actions docs (P2 fold). -->
+      <SidebarSectionLabel
+        :label="t('nav.sectionPlatform')"
+        :error-keys="['backends']"
+        :errors="props.sidebarErrors"
+        @retry="(k) => emit('retrySidebarSection', k)"
+      />
+      <!-- Help + API docs — P2: the standalone Resources section folded into Platform. -->
       <SidebarFlatLink
         :label="t('nav.help')"
         :active="sidebarActive('help')"
@@ -995,13 +1000,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/>
         </svg>
       </a>
-
-      <SidebarSectionLabel
-        :label="t('nav.sectionSystem')"
-        :error-keys="['backends']"
-        :errors="props.sidebarErrors"
-        @retry="(k) => emit('retrySidebarSection', k)"
-      />
       <!-- AI Backends (expandable) -->
       <button type="button" class="nav-group-toggle" :class="{ active: currentRouteName === 'ai-backends' || currentRouteName === 'backend-detail' }" :aria-expanded="expandedSections.aiBackends" :aria-current="(currentRouteName === 'ai-backends' || currentRouteName === 'backend-detail') ? 'page' : undefined" :title="isCollapsedDesktop() ? t('nav.aiBackends') : undefined" @click="toggleSection( 'aiBackends')">
         <span class="nav-icon">
