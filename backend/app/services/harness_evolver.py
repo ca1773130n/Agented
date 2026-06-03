@@ -1419,24 +1419,32 @@ def _eval_gate(round_id: str, *, patch, inputs: dict, scratch: Path) -> Optional
             patched_summary=_patched_summary(patch),
         )
     except Exception as exc:
-        logger.warning("eval gate errored for %s; bypassing (fail-open)", round_id, exc_info=True)
+        # Fail CLOSED: an eval infra error must NOT auto-apply an unvetted
+        # mutation. Previously this stored passed=True, which a
+        # confidence_threshold=0.0 project would auto-apply — coupling an eval
+        # outage to an untested harness change. Treat the error as a gate
+        # failure so the round stops at eval_failed.
+        logger.error("eval gate errored for %s; failing closed", round_id, exc_info=True)
         try:
             from app.models.harness_evolution import EvalVerdict
 
-            evolution_repo.store_eval_verdict(
-                round_id,
-                EvalVerdict(
-                    passed=True,
-                    score=0.0,
-                    per_check=[],
-                    notes=f"eval gate bypassed (fail-open) due to error: {exc}"[:300],
-                ),
+            failed_verdict = EvalVerdict(
+                passed=False,
+                score=0.0,
+                per_check=[],
+                notes=f"eval gate failed closed due to error: {exc}"[:300],
             )
+            evolution_repo.store_eval_verdict(round_id, failed_verdict)
+            evolution_repo.mark_eval_failed(round_id, verdict=failed_verdict)
         except Exception:
             logger.warning(
-                "eval gate: could not store bypass verdict for %s", round_id, exc_info=True
+                "eval gate: could not store fail-closed verdict for %s", round_id, exc_info=True
             )
-        return None
+        return EvolutionResult(
+            round_id=round_id,
+            status="eval_failed",
+            error=f"eval gate errored (failed closed): {exc}",
+        )
     evolution_repo.store_eval_verdict(round_id, verdict)
     if not verdict.passed:
         evolution_repo.mark_eval_failed(round_id, verdict=verdict)

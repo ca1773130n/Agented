@@ -37,7 +37,9 @@ def _error_body(code: str, message: str) -> dict[str, Any]:
 
 
 def _json_response(code: str, message: str, status: int) -> Response:
-    return Response(content=_error_body(code, message), status_code=status, media_type="application/json")
+    return Response(
+        content=_error_body(code, message), status_code=status, media_type="application/json"
+    )
 
 
 def http_exception_handler(_: Request, exc: HTTPException) -> Response:
@@ -54,7 +56,11 @@ def http_exception_handler(_: Request, exc: HTTPException) -> Response:
         HTTPStatus.BAD_REQUEST: "BAD_REQUEST",
     }
     status = exc.status_code
-    code = code_map.get(HTTPStatus(status), "HTTP_ERROR") if status in {s.value for s in HTTPStatus} else "HTTP_ERROR"
+    code = (
+        code_map.get(HTTPStatus(status), "HTTP_ERROR")
+        if status in {s.value for s in HTTPStatus}
+        else "HTTP_ERROR"
+    )
     return _json_response(code, exc.detail or HTTPStatus(status).phrase, status)
 
 
@@ -91,9 +97,15 @@ def validation_handler(_: Request, exc: ValidationException) -> Response:
 
 
 def value_error_handler(_: Request, exc: ValueError) -> Response:
+    # Don't echo the raw ValueError text to the client — an unhandled ValueError
+    # may carry internal detail (column names, IDs, paths). Intentional,
+    # user-facing validation in this codebase uses structured error_response /
+    # ClientException, not raw ValueError reaching this catch-all. Log the
+    # detail server-side for operators; return a generic message.
+    logger.warning("Unhandled ValueError surfaced to client: %s", exc, exc_info=True)
     return _json_response(
         "VALIDATION_ERROR",
-        f"Validation failed: {exc}",
+        "Invalid request",
         HTTPStatus.UNPROCESSABLE_ENTITY,
     )
 
