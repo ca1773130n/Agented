@@ -407,8 +407,25 @@ class GitOpsSyncService:
         else:
             # Fresh clone
             os.makedirs(local_path, exist_ok=True)
+            # Reject a repo_url / branch that git would parse as an option
+            # (e.g. a "--upload-pack=..."-leading value) and only allow known
+            # remote URL schemes. The trailing "--" stops option parsing so the
+            # positional repo_url/local_path can never be treated as flags.
+            if repo_url.startswith("-") or branch.startswith("-"):
+                raise ValueError("Invalid repo_url or branch (leading dash)")
+            if not repo_url.startswith(("https://", "http://", "git://", "ssh://", "git@")):
+                raise ValueError(f"Unsupported repo URL scheme: {repo_url!r}")
             subprocess.run(
-                ["git", "clone", "--branch", branch, "--single-branch", repo_url, local_path],
+                [
+                    "git",
+                    "clone",
+                    "--branch",
+                    branch,
+                    "--single-branch",
+                    "--",
+                    repo_url,
+                    local_path,
+                ],
                 capture_output=True,
                 text=True,
                 check=True,

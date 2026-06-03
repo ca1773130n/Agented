@@ -425,17 +425,26 @@ _RATE_LIMITS: list[tuple[str, str, int, float]] = [
 
 
 def _client_ip(scope: Scope) -> str:
+    # Only trust forwarding headers when explicitly behind a known proxy
+    # (AGENTED_TRUST_PROXY=1). Otherwise an attacker rotates X-Forwarded-For per
+    # request to mint unlimited fresh rate-limit buckets and defeat the
+    # login/reset throttle. Default: use the un-spoofable socket peer.
+    client = scope.get("client")
+    peer = client[0] if client else "unknown"
+    if os.environ.get("AGENTED_TRUST_PROXY") != "1":
+        return peer
     headers = {
         k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers", ())
     }
     forwarded = headers.get("x-forwarded-for")
     if forwarded:
-        return forwarded.split(",")[0].strip()
+        # Right-most hop is the one our trusted proxy appended; left-most is
+        # client-supplied and spoofable.
+        return forwarded.split(",")[-1].strip()
     real = headers.get("x-real-ip")
     if real:
         return real.strip()
-    client = scope.get("client")
-    return client[0] if client else "unknown"
+    return peer
 
 
 def _resolve_rate_key(scope: Scope) -> tuple[str, str]:

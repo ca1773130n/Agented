@@ -11,6 +11,7 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -222,6 +223,43 @@ class McpSyncService:
         return (True, "")
 
     @staticmethod
+    def _unsafe_http_target(url: str) -> Optional[str]:
+        """Return a reason string if *url* is an unsafe SSRF target, else None.
+
+        MCP HTTP servers legitimately run on localhost/LAN, so loopback and
+        private ranges are allowed. We block non-http(s) schemes and link-local /
+        multicast addresses — link-local covers the 169.254.169.254 cloud
+        metadata endpoint, the highest-value SSRF target.
+        """
+        import ipaddress
+        import socket
+        from urllib.parse import urlparse
+
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return f"Unsupported URL scheme: {parsed.scheme!r}"
+        host = parsed.hostname
+        if not host:
+            return "URL has no host"
+        try:
+            infos = socket.getaddrinfo(host, parsed.port or None)
+        except OSError as exc:
+            return f"Cannot resolve host: {exc}"
+        for info in infos:
+            ip_str = info[4][0]
+            try:
+                ip = ipaddress.ip_address(ip_str)
+            except ValueError:
+                continue
+            # Block link-local (covers 169.254.169.254 cloud metadata + IPv6
+            # fe80::) and multicast. Loopback/private are allowed — MCP servers
+            # legitimately run on localhost/LAN. (is_reserved is intentionally
+            # NOT blocked: it flags IPv6 loopback ::1.)
+            if ip.is_link_local or ip.is_multicast:
+                return f"Refusing to connect to blocked address {ip_str}"
+        return None
+
+    @staticmethod
     def test_connection(server: dict) -> dict:
         """Probe reachability for an MCP server config row.
 
@@ -241,6 +279,9 @@ class McpSyncService:
                     "success": False,
                     "message": "HTTP server has no URL configured.",
                 }
+            unsafe = McpSyncService._unsafe_http_target(url)
+            if unsafe:
+                return {"success": False, "message": unsafe}
             try:
                 with httpx.Client(timeout=2.0) as client:
                     resp = client.get(url)
