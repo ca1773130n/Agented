@@ -441,13 +441,6 @@ onMounted(loadSecrets);
   justify-content: flex-end;
 }
 
-.list-empty {
-  padding: 32px 24px;
-  text-align: center;
-  font-size: 0.875rem;
-  color: var(--text-tertiary);
-}
-
 .secrets-list {
   display: flex;
   flex-direction: column;
