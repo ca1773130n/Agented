@@ -85,18 +85,27 @@ describe('PromptSnippetLibrary', () => {
     expect(wrapper.find('.empty-state').exists()).toBe(true)
   })
 
-  it('toasts the error message and shows no list when loading fails', async () => {
+  it('shows a distinct error state (not empty) when loading fails, and retries', async () => {
     const { promptSnippetApi, ApiError } = await import('../../services/api')
     vi.mocked(promptSnippetApi.list).mockRejectedValueOnce(new ApiError(500, 'boom'))
 
     const wrapper = mountComponent()
     await flushPromises()
 
-    // This page reports load errors via toast only — no .ds-error-state.
-    expect(mockShowToast).toHaveBeenCalledWith('boom', 'error')
+    // A failed load must show a real error state, NOT masquerade as an empty library.
+    expect(wrapper.find('.ds-error-state').exists()).toBe(true)
+    expect(wrapper.find('.empty-state').exists()).toBe(false)
     expect(wrapper.find('.snippet-table').exists()).toBe(false)
-    // With zero snippets loaded it falls through to the empty state, not the table.
-    expect(wrapper.find('.empty-state').exists()).toBe(true)
+    expect(mockShowToast).toHaveBeenCalledWith('boom', 'error')
+
+    // Retry re-fetches and recovers.
+    vi.mocked(promptSnippetApi.list).mockResolvedValueOnce({ snippets: mockSnippets })
+    await wrapper.find('.ds-error-state button').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.ds-error-state').exists()).toBe(false)
+    expect(wrapper.text()).toContain('{{greeting}}')
+    expect(promptSnippetApi.list).toHaveBeenCalledTimes(2)
   })
 
   it('deletes a snippet after confirmation', async () => {

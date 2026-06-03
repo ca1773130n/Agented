@@ -5985,6 +5985,7 @@
     "deleteConfirmMid": "吗?使用",
     "deleteConfirmSuffix": "的任何提示词将出现未解析的引用。",
     "loadError": "加载片段失败",
+    "loadErrorTitle": "无法加载片段",
     "updated": "片段已更新",
     "created": "片段已创建",
     "saveError": "保存片段失败",
