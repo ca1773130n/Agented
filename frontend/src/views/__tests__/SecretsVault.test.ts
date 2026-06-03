@@ -93,14 +93,12 @@ describe('SecretsVault', () => {
     expect(wrapper.text()).toContain('2 secrets')
   })
 
-  it('shows the empty list message when there are no secrets', async () => {
+  it('shows the shared EmptyState when there are no secrets', async () => {
     const { secretsApi } = await import('../../services/api')
     vi.mocked(secretsApi.list).mockResolvedValue({ secrets: [] })
     const wrapper = mountComponent()
     await flushPromises()
-    // NOTE: this view uses a plain `.list-empty` div, NOT the shared DS
-    // EmptyState component, so there is no `.ds-empty-state` to assert on.
-    expect(wrapper.find('.list-empty').exists()).toBe(true)
+    expect(wrapper.find('.ds-empty-state').exists()).toBe(true)
     expect(wrapper.find('.secret-row').exists()).toBe(false)
   })
 
@@ -157,6 +155,27 @@ describe('SecretsVault', () => {
     expect(secretsApi.reveal).toHaveBeenCalledWith('sec-1')
     expect(wrapper.find('.revealed-value').exists()).toBe(true)
     expect(wrapper.text()).toContain('ghp_supersecretvalue')
+  })
+
+  it('auto-re-masks a revealed secret after the timeout window', async () => {
+    vi.useFakeTimers()
+    try {
+      const wrapper = mountComponent()
+      await flushPromises()
+
+      const targetRow = wrapper.findAll('.secret-row').find((r) => r.text().includes('GITHUB_TOKEN'))
+      await targetRow!.find('.btn-reveal').trigger('click')
+      await flushPromises()
+      expect(wrapper.find('.revealed-value').exists()).toBe(true)
+
+      // Plaintext must not linger in the DOM — it re-masks after the window.
+      vi.advanceTimersByTime(30_000)
+      await flushPromises()
+      expect(wrapper.find('.revealed-value').exists()).toBe(false)
+      expect(wrapper.text()).not.toContain('ghp_supersecretvalue')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('deletes a secret via secretsApi.delete', async () => {
