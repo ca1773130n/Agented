@@ -7562,6 +7562,8 @@
     "executions": "Executions",
     "emptyTitle": "No usage data found",
     "emptyDescription": "No usage data found for the selected range.",
+    "loadErrorTitle": "Couldn't load usage history",
+    "loadError": "Failed to load usage history. Try again.",
     "weeklyBreakdown": "Weekly Breakdown",
     "monthlyBreakdown": "Monthly Breakdown",
     "columns": {

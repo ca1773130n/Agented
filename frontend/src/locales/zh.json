@@ -7562,6 +7562,8 @@
     "executions": "执行次数",
     "emptyTitle": "未找到使用数据",
     "emptyDescription": "未找到所选范围的使用数据。",
+    "loadErrorTitle": "无法加载使用历史",
+    "loadError": "加载使用历史失败，请重试。",
     "weeklyBreakdown": "每周明细",
     "monthlyBreakdown": "每月明细",
     "columns": {

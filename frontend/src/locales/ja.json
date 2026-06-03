@@ -7562,6 +7562,8 @@
     "executions": "実行回数",
     "emptyTitle": "使用データが見つかりません",
     "emptyDescription": "選択した期間の使用データがありません。",
+    "loadErrorTitle": "使用履歴を読み込めません",
+    "loadError": "使用履歴の読み込みに失敗しました。もう一度お試しください。",
     "weeklyBreakdown": "週次内訳",
     "monthlyBreakdown": "月次内訳",
     "columns": {
