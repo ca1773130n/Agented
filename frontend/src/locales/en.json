@@ -5985,6 +5985,7 @@
     "deleteConfirmMid": "? Any prompts using",
     "deleteConfirmSuffix": "will have unresolved references.",
     "loadError": "Failed to load snippets",
+    "loadErrorTitle": "Couldn't load snippets",
     "updated": "Snippet updated",
     "created": "Snippet created",
     "saveError": "Failed to save snippet",

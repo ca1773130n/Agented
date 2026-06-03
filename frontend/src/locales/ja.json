@@ -5985,6 +5985,7 @@
     "deleteConfirmMid": "を削除してもよろしいですか?",
     "deleteConfirmSuffix": "を使用するプロンプトは未解決の参照を持つことになります。",
     "loadError": "スニペットの読み込みに失敗しました",
+    "loadErrorTitle": "スニペットを読み込めません",
     "updated": "スニペットを更新しました",
     "created": "スニペットを作成しました",
     "saveError": "スニペットの保存に失敗しました",

@@ -4,12 +4,14 @@ import type { PromptSnippet, CreateSnippetRequest, UpdateSnippetRequest } from '
 import { promptSnippetApi, ApiError } from '../services/api';
 import { useToast } from '../composables/useToast';
 import { useI18n } from 'vue-i18n';
+import ErrorState from '../components/base/ErrorState.vue';
 
 const showToast = useToast();
 const { t } = useI18n();
 
 const snippets = ref<PromptSnippet[]>([]);
 const isLoading = ref(true);
+const loadError = ref<string | null>(null);
 
 // Modal state
 const showModal = ref(false);
@@ -26,11 +28,15 @@ const pendingDeleteName = ref('');
 
 async function loadSnippets() {
   isLoading.value = true;
+  loadError.value = null;
   try {
     const data = await promptSnippetApi.list();
     snippets.value = data.snippets || [];
   } catch (err) {
     const message = err instanceof ApiError ? err.message : t('promptSnippetLibrary.loadError');
+    // Surface a persistent, retryable error state — not just a transient toast
+    // that leaves the page looking like an empty library.
+    loadError.value = message;
     showToast(message, 'error');
   } finally {
     isLoading.value = false;
@@ -141,6 +147,13 @@ onMounted(loadSnippets);
       <div class="spinner"></div>
       <span>{{ t('promptSnippetLibrary.loading') }}</span>
     </div>
+
+    <ErrorState
+      v-else-if="loadError"
+      :title="t('promptSnippetLibrary.loadErrorTitle')"
+      :message="loadError"
+      @retry="loadSnippets"
+    />
 
     <div v-else-if="snippets.length === 0" class="empty-state">
       <div class="empty-icon">
