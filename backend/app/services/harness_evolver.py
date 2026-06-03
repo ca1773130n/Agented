@@ -1031,6 +1031,42 @@ def apply_patch(patch: EvolutionPatch, project_id: str) -> tuple[list[dict], lis
     """
     applied: list[dict] = []
     journal: list[dict] = []
+    try:
+        _apply_patch_entries(patch, project_id, applied, journal)
+    except Exception:
+        # C1: a mid-loop failure must not leave a half-applied harness mutation
+        # with a lost journal. Compensate by reversing the entries already
+        # applied (best-effort), then re-raise so the caller's mark_failed path
+        # runs against a now-clean state.
+        if journal:
+            try:
+                from app.services.harness_evolution_rollback import reverse_apply_journal
+
+                reversed_count, failures = reverse_apply_journal(project_id, journal)
+                logger.error(
+                    "apply_patch failed mid-loop; reversed %d/%d journal entries "
+                    "(%d reversal failures)",
+                    reversed_count,
+                    len(journal),
+                    len(failures),
+                    exc_info=True,
+                )
+            except Exception:
+                logger.error(
+                    "apply_patch: compensating rollback itself failed; partial journal=%r",
+                    journal,
+                    exc_info=True,
+                )
+        raise
+    return applied, journal
+
+
+def _apply_patch_entries(
+    patch: EvolutionPatch, project_id: str, applied: list[dict], journal: list[dict]
+) -> None:
+    """Apply each patch entry in order, appending to ``applied``/``journal`` in
+    place. Raises on the first entry that fails; apply_patch's compensating
+    rollback reverses the partial journal."""
     for entry in patch.entries:
         kind = entry.kind
         payload = entry.payload or {}
@@ -1117,8 +1153,6 @@ def apply_patch(patch: EvolutionPatch, project_id: str) -> tuple[list[dict], lis
                     "before": before,
                 }
             )
-
-    return applied, journal
 
 
 # _PAYLOAD_KEYS maps each primitive kind to the payload keys accepted by its
