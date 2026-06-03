@@ -67,15 +67,11 @@ def start_setup(data: dict) -> dict[str, Any]:
     if not get_project(project_id):
         raise NotFoundException(detail="Project not found")
     try:
-        execution_id = SetupExecutionService.start_setup(
-            project_id=project_id, command=command
-        )
+        execution_id = SetupExecutionService.start_setup(project_id=project_id, command=command)
     except ValueError as e:
         raise ClientException(detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to start setup: {e}"
-        ) from e
+        raise HTTPException(status_code=500, detail=f"Failed to start setup: {e}") from e
     return {"execution_id": execution_id, "status": "running"}
 
 
@@ -172,9 +168,7 @@ def send_agent_message(super_agent_id: str, data: dict) -> dict[str, Any]:
 
 
 @get("/{super_agent_id:str}/messages/inbox", sync_to_thread=False)
-def get_inbox(
-    super_agent_id: str, status: Optional[str] = None
-) -> dict[str, Any]:
+def get_inbox(super_agent_id: str, status: Optional[str] = None) -> dict[str, Any]:
     from app.db.messages import get_inbox_messages
 
     return {"messages": get_inbox_messages(super_agent_id, status=status)}
@@ -240,9 +234,7 @@ def generate_team_config(data: dict) -> dict[str, Any]:
     body = data or {}
     description = body.get("description", "")
     if not description or len(description) < 10:
-        raise ClientException(
-            detail="description is required and must be at least 10 characters"
-        )
+        raise ClientException(detail="description is required and must be at least 10 characters")
 
     job_id = f"gen-{uuid.uuid4().hex[:8]}"
     with _jobs_lock:
@@ -312,6 +304,9 @@ team_generation_router = Router(
 
 _chunk_semaphore = threading.Semaphore(3)
 
+# 07.M3 — upper bound on chunks (= spawned threads) per run_chunked request.
+_MAX_CHUNKS_PER_REQUEST = 200
+
 
 def _process_chunk(
     chunked_execution_id: str,
@@ -346,9 +341,7 @@ def _process_chunk(
                                 break
                             time.sleep(1)
             except Exception as e:
-                logger.warning(
-                    "Bot execution for chunk %s failed: %s", chunk_result_id, e
-                )
+                logger.warning("Bot execution for chunk %s failed: %s", chunk_result_id, e)
                 bot_output = f"Error processing chunk: {e}"
             update_chunk_result(chunk_result_id, bot_output, token_count)
     except Exception as e:
@@ -397,11 +390,18 @@ def run_chunked(bot_id: str, data: dict) -> dict[str, Any]:
     if not content:
         raise ClientException(detail="Missing required field: content")
     chunks = ChunkService.chunk_code(content, max_chars=body.get("max_chunk_chars"))
+    # 07.M3 — bound the number of chunks/threads spawned per request so a huge
+    # payload can't fan out into an unbounded thread storm.
+    if len(chunks) > _MAX_CHUNKS_PER_REQUEST:
+        raise ClientException(
+            detail=(
+                f"Content produces too many chunks "
+                f"({len(chunks)} > {_MAX_CHUNKS_PER_REQUEST}); split the request"
+            )
+        )
     chunked_execution_id = create_chunked_execution(bot_id, len(chunks))
     if not chunked_execution_id:
-        raise HTTPException(
-            status_code=500, detail="Failed to create chunked execution"
-        )
+        raise HTTPException(status_code=500, detail="Failed to create chunked execution")
     for idx, chunk_content in enumerate(chunks):
         chunk_result_id = create_chunk_result(chunked_execution_id, idx, chunk_content)
         if chunk_result_id:
@@ -472,9 +472,7 @@ chunks_router = Router(
 # ===========================================================================
 
 
-def _resolve_chat_session(
-    data: dict, super_agent_id: str, session_id: str
-) -> dict[str, Any]:
+def _resolve_chat_session(data: dict, super_agent_id: str, session_id: str) -> dict[str, Any]:
     from app.db.project_sa_instances import get_project_sa_instance
 
     session = get_super_agent_session(session_id)

@@ -14,8 +14,13 @@ class HarnessPluginInstaller:
     """Ensures custom marketplace and bundle plugins are installed in a Claude config dir."""
 
     @classmethod
-    def ensure_plugins_installed(cls, config_path: str) -> None:
-        """Ensure custom marketplace + bundle plugins are installed in config dir."""
+    def ensure_plugins_installed(cls, config_path: str) -> dict:
+        """Ensure custom marketplace + bundle plugins are installed in config dir.
+
+        [04.H4] Returns ``{"installed": [...], "failed": [...]}`` and inspects
+        the ``claude plugin install`` exit code for each plugin — a non-zero
+        exit previously went unnoticed, leaving provisioning silently broken.
+        """
         expanded = os.path.expanduser(config_path)
         env = {**os.environ, "CLAUDE_CONFIG_DIR": expanded}
 
@@ -41,15 +46,31 @@ class HarnessPluginInstaller:
         installed_output = result.stdout if result.returncode == 0 else ""
 
         # Step 3: Install each missing plugin
+        installed: list[str] = []
+        failed: list[str] = []
         for plugin_name in BUNDLE_PLUGINS:
             if plugin_name.lower() in installed_output.lower():
                 logger.debug("Plugin %s already installed in %s", plugin_name, expanded)
+                installed.append(plugin_name)
                 continue
             logger.info("Installing plugin %s into %s", plugin_name, expanded)
-            subprocess.run(
+            res = subprocess.run(
                 ["claude", "plugin", "install", plugin_name],
                 env=env,
                 capture_output=True,
                 text=True,
                 timeout=120,
             )
+            # [04.H4] Inspect the exit code; log stderr on failure.
+            if res.returncode != 0:
+                logger.warning(
+                    "Plugin install %s failed (exit %d): %s",
+                    plugin_name,
+                    res.returncode,
+                    (res.stderr or "").strip()[:500],
+                )
+                failed.append(plugin_name)
+            else:
+                installed.append(plugin_name)
+
+        return {"installed": installed, "failed": failed}

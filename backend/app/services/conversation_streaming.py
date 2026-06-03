@@ -16,6 +16,7 @@ import gzip
 import json
 import logging
 import os
+import signal
 import subprocess
 import threading
 from dataclasses import dataclass, field
@@ -27,6 +28,35 @@ import yaml
 logger = logging.getLogger(__name__)
 
 SUBPROCESS_TIMEOUT = 120
+
+
+def _terminate_proc_group(proc: "subprocess.Popen") -> None:
+    """Best-effort SIGTERM→SIGKILL of a Popen's process group, then reap.
+
+    Used by the CLI streaming generators so a timeout or an abandoned generator
+    (SSE client disconnect) doesn't leak the child + its tool grandchildren
+    (03 H1). The Popen must have been created with start_new_session=True.
+    """
+    if proc.poll() is not None:
+        return
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+    except (ProcessLookupError, OSError):
+        try:
+            proc.kill()
+        except OSError:
+            return
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, OSError):
+            pass
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            logger.warning("conversation_streaming: process did not exit after SIGKILL")
 
 
 @dataclass
@@ -49,6 +79,7 @@ class ToolUseEvent:
     string fragment for proxy responses that stream tool-call args as
     incomplete JSON chunks (operator UI shows whichever it gets).
     """
+
     name: str
     input: Any = field(default_factory=dict)
     id: Optional[str] = None
@@ -74,6 +105,7 @@ class ProxyAccountError(Exception):
         self.status_code = status_code
         self.account_email = account_email
         super().__init__(detail)
+
 
 # CLIProxyAPI config location
 _CLIPROXY_CONFIG = Path.home() / ".cli-proxy-api" / "config.yaml"
@@ -287,8 +319,12 @@ def stream_llm_response(
     if proxy_result:
         proxy_base, proxy_key = proxy_result
         yield from _stream_via_proxy_with_fallback(
-            messages, resolved_model, proxy_base, proxy_key,
-            account_email, effective_backend,
+            messages,
+            resolved_model,
+            proxy_base,
+            proxy_key,
+            account_email,
+            effective_backend,
         )
         return
 
@@ -456,18 +492,20 @@ def _stream_via_proxy_with_fallback(
 
         logger.info(
             "Streaming via CLIProxyAPI at %s (backend=%s, account=%s)",
-            proxy_base, backend_type, current_email,
+            proxy_base,
+            backend_type,
+            current_email,
         )
 
         try:
-            yield from _stream_via_proxy(
-                messages, model, proxy_base, proxy_key, current_email
-            )
+            yield from _stream_via_proxy(messages, model, proxy_base, proxy_key, current_email)
             return
         except ProxyAccountError as e:
             logger.warning(
                 "Account %s failed (HTTP %d): %s — trying fallback",
-                current_email, e.status_code, e.detail,
+                current_email,
+                e.status_code,
+                e.detail,
             )
             if account:
                 # 429 = rate limit cooldown; 401/403 = longer cooldown (expired token)
@@ -550,17 +588,14 @@ def _stream_via_proxy(
                             }
                         )
                     logger.warning(
-                        "Empty-content-block proxy error — request shape: model=%s, "
-                        "messages=%s",
+                        "Empty-content-block proxy error — request shape: model=%s, messages=%s",
                         payload.get("model"),
                         debug_messages,
                     )
 
                 # Account-level errors — raise so caller can try another account
                 if response.status_code in (429, 401, 403) or "rate" in error_detail.lower():
-                    raise ProxyAccountError(
-                        error_detail, response.status_code, account_email
-                    )
+                    raise ProxyAccountError(error_detail, response.status_code, account_email)
 
                 # Detect "unknown provider" and guide the user to register the backend
                 if "unknown provider" in error_detail.lower():
@@ -614,7 +649,9 @@ def _stream_via_proxy(
                 except json.JSONDecodeError:
                     parsed = raw_args  # surface fragment as-is
                 return ToolUseEvent(
-                    name=buf["name"], input=parsed, id=buf.get("id"),
+                    name=buf["name"],
+                    input=parsed,
+                    id=buf.get("id"),
                 )
 
             for line in response.iter_lines():
@@ -653,9 +690,7 @@ def _stream_via_proxy(
                             if fn.get("name"):
                                 buf["name"] = fn["name"]
                             if fn.get("arguments"):
-                                buf["arguments"] = (
-                                    buf.get("arguments", "") + fn["arguments"]
-                                )
+                                buf["arguments"] = buf.get("arguments", "") + fn["arguments"]
 
                         # finish_reason=tool_calls or stop → flush
                         finish_reason = choices[0].get("finish_reason")
@@ -759,6 +794,9 @@ def _stream_via_cli(
             stderr=subprocess.PIPE,
             bufsize=0,
             cwd=cwd,
+            # Own process group so a timeout/disconnect can kill tool
+            # grandchildren too (03 H1).
+            start_new_session=True,
         )
 
         timed_out = False
@@ -766,43 +804,55 @@ def _stream_via_cli(
         def _on_timeout() -> None:
             nonlocal timed_out
             timed_out = True
-            try:
-                proc.kill()
-            except OSError:
-                pass  # Intentionally silenced: cleanup/IO operation is best-effort
+            _terminate_proc_group(proc)
 
         timer = threading.Timer(SUBPROCESS_TIMEOUT, _on_timeout)
         timer.start()
 
-        while True:
-            if timed_out:
-                break
+        completed = False
+        try:
+            while True:
+                if timed_out:
+                    break
 
-            raw_line = proc.stdout.readline()
-            if not raw_line:
-                break
+                raw_line = proc.stdout.readline()
+                if not raw_line:
+                    break
 
-            line = raw_line.decode("utf-8", errors="replace").strip()
-            if not line:
-                continue
+                line = raw_line.decode("utf-8", errors="replace").strip()
+                if not line:
+                    continue
 
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
-                continue
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
 
-            # Tool-use blocks land alongside text in the same event;
-            # yield them as typed ToolUseEvent so the chat streaming
-            # helper can dispatch a separate ChatStateService delta.
-            for tu in _extract_tool_uses_from_event(event):
-                yield tu
+                # Tool-use blocks land alongside text in the same event;
+                # yield them as typed ToolUseEvent so the chat streaming
+                # helper can dispatch a separate ChatStateService delta.
+                for tu in _extract_tool_uses_from_event(event):
+                    yield tu
 
-            text = _extract_text_from_event(event)
-            if text:
-                yield text
+                text = _extract_text_from_event(event)
+                if text:
+                    yield text
 
-        proc.wait()
-        timer.cancel()
+            proc.wait()
+            completed = True
+        finally:
+            # Always disarm the timer; on an abandoned generator (SSE client
+            # disconnect → GeneratorExit) tear down the orphaned process group
+            # and pipes instead of leaking them for the full timeout (03 H1).
+            timer.cancel()
+            if not completed:
+                _terminate_proc_group(proc)
+                for stream in (proc.stdout, proc.stderr):
+                    try:
+                        if stream is not None:
+                            stream.close()
+                    except OSError:
+                        pass
 
         if timed_out:
             yield "\n\n[Request timed out]"
@@ -871,6 +921,7 @@ def _stream_via_opencode_cli(
             stderr=subprocess.PIPE,
             bufsize=0,
             cwd=cwd,
+            start_new_session=True,  # killable process group (03 H1)
         )
 
         timed_out = False
@@ -878,42 +929,53 @@ def _stream_via_opencode_cli(
         def _on_timeout() -> None:
             nonlocal timed_out
             timed_out = True
-            try:
-                proc.kill()
-            except OSError:
-                pass  # Intentionally silenced: cleanup/IO operation is best-effort
+            _terminate_proc_group(proc)
 
         timer = threading.Timer(SUBPROCESS_TIMEOUT, _on_timeout)
         timer.start()
 
-        # Read stdout line-by-line. OpenCode outputs the response as text.
-        while True:
-            if timed_out:
-                break
+        completed = False
+        try:
+            # Read stdout line-by-line. OpenCode outputs the response as text.
+            while True:
+                if timed_out:
+                    break
 
-            raw_line = proc.stdout.readline()
-            if not raw_line:
-                break
+                raw_line = proc.stdout.readline()
+                if not raw_line:
+                    break
 
-            line = raw_line.decode("utf-8", errors="replace")
-            if line:
-                # Try parsing as JSON (opencode --format json)
-                stripped = line.strip()
-                if stripped.startswith("{"):
+                line = raw_line.decode("utf-8", errors="replace")
+                if line:
+                    # Try parsing as JSON (opencode --format json)
+                    stripped = line.strip()
+                    if stripped.startswith("{"):
+                        try:
+                            data = json.loads(stripped)
+                            # OpenCode JSON output may have "output"/"result" key
+                            text = (
+                                data.get("output") or data.get("result") or data.get("content", "")
+                            )
+                            if text:
+                                yield text
+                                continue
+                        except json.JSONDecodeError:
+                            pass  # Intentionally silenced: malformed data handled gracefully
+                    # Plain text output — yield directly
+                    yield line
+
+            proc.wait()
+            completed = True
+        finally:
+            timer.cancel()
+            if not completed:
+                _terminate_proc_group(proc)
+                for stream in (proc.stdout, proc.stderr):
                     try:
-                        data = json.loads(stripped)
-                        # OpenCode JSON output may have "output" or "result" key
-                        text = data.get("output") or data.get("result") or data.get("content", "")
-                        if text:
-                            yield text
-                            continue
-                    except json.JSONDecodeError:
-                        pass  # Intentionally silenced: malformed data handled gracefully
-                # Plain text output — yield directly
-                yield line
-
-        proc.wait()
-        timer.cancel()
+                        if stream is not None:
+                            stream.close()
+                    except OSError:
+                        pass
 
         if timed_out:
             yield "\n\n[Request timed out]"
@@ -1015,9 +1077,11 @@ def _extract_tool_uses_from_event(event: dict) -> list[ToolUseEvent]:
         name = block.get("name")
         if not isinstance(name, str):
             continue
-        out.append(ToolUseEvent(
-            name=name,
-            input=block.get("input") or {},
-            id=block.get("id"),
-        ))
+        out.append(
+            ToolUseEvent(
+                name=name,
+                input=block.get("input") or {},
+                id=block.get("id"),
+            )
+        )
     return out

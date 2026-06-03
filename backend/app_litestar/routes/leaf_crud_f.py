@@ -119,6 +119,8 @@ def add_thread_messages(agent_id: str, thread_id: str, data: dict) -> dict[str, 
     messages = (data or {}).get("messages") or []
     if not messages:
         raise ClientException(detail="messages array is required")
+    if not isinstance(messages, list) or len(messages) > 500:  # 07.M3 — cap array size
+        raise ClientException(detail="messages must be an array of at most 500 entries")
     saved = save_messages(thread_id, messages)
     return {"messages": saved, "count": len(saved)}
 
@@ -350,11 +352,11 @@ def _bulk(entity_type: str, data: dict) -> dict[str, Any]:
     action = data.get("action")
     items = data.get("items")
     if not action:
-        raise ClientException(
-            detail="The 'action' field is required (create, update, or delete)"
-        )
+        raise ClientException(detail="The 'action' field is required (create, update, or delete)")
     if items is None or not isinstance(items, list):
         raise ClientException(detail="The 'items' field must be a JSON array")
+    if len(items) > 500:  # 07.M3 — cap bulk item count
+        raise ClientException(detail="The 'items' array must contain at most 500 entries")
     try:
         results = BulkService.process(entity_type, action, items)
     except ValueError as e:

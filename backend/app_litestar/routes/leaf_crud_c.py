@@ -34,6 +34,23 @@ from app.db.findings import (
 )
 from app.db.products import get_products_for_user
 from app.logging_config import current_user_var
+from app_litestar.route_helpers import MAX_LIST_LIMIT, clamp_limit
+
+# 07.H3 — explicit field allowlist for finding writers (no mass-assignment).
+_FINDING_CREATE_FIELDS = (
+    "title",
+    "description",
+    "severity",
+    "bot_id",
+    "file_ref",
+    "owner",
+    "execution_id",
+)
+# update_finding only honors status/owner — allowlist mirrors the writer.
+_FINDING_UPDATE_FIELDS = ("status", "owner")
+
+# 07.M4 — string length caps for the product creator.
+_NAME_MAX_LEN = 255
 from app.services.analytics_service import AnalyticsService
 from app.services.config_export_service import (
     export_all_triggers,
@@ -68,6 +85,8 @@ def create_product(data: dict, caller: Caller) -> dict[str, Any]:
     name = (data.get("name") or "").strip()
     if not name:
         raise ClientException(detail="name is required")
+    if len(name) > _NAME_MAX_LEN:  # 07.M4 — bound name length
+        raise ClientException(detail=f"name must be at most {_NAME_MAX_LEN} characters")
     user_id = caller.user_id or current_user_var.get()
     product_id = db_create_product(
         name=name,
@@ -207,16 +226,24 @@ def list_findings_route(
     status: Optional[str] = None,
     bot_id: Optional[str] = None,
     owner: Optional[str] = None,
+    limit: Optional[int] = None,
+    offset: int = 0,
 ) -> dict[str, Any]:
     items = list_findings(status=status, bot_id=bot_id, owner=owner)
-    return {"findings": items}
+    # 07.M2 — list_findings has no limit param; slice at the route layer so a
+    # huge findings table can't flood one response.
+    capped = clamp_limit(limit, default=MAX_LIST_LIMIT)
+    start = max(offset, 0)
+    return {"findings": items[start : start + capped]}
 
 
 @post("/", status_code=201, sync_to_thread=False)
 def create_finding_route(data: dict) -> Any:
     if not data:
         raise ClientException(detail="JSON body required")
-    finding_id = create_finding(data)
+    # 07.H3 — forward only allowlisted fields to the writer (no mass-assignment).
+    payload = {k: data[k] for k in _FINDING_CREATE_FIELDS if k in data}
+    finding_id = create_finding(payload)
     finding = get_finding(finding_id)
     if not finding:
         raise HTTPException(status_code=500, detail="Failed to create finding")
@@ -227,7 +254,9 @@ def create_finding_route(data: dict) -> Any:
 def update_finding_route(finding_id: str, data: dict) -> Any:
     if not get_finding(finding_id):
         raise NotFoundException(detail="Finding not found")
-    if not update_finding(finding_id, data or {}):
+    # 07.H3 — allowlist update fields (writer only honors status/owner anyway).
+    updates = {k: (data or {})[k] for k in _FINDING_UPDATE_FIELDS if k in (data or {})}
+    if not update_finding(finding_id, updates):
         raise ClientException(detail="No changes applied")
     return get_finding(finding_id)
 

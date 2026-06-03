@@ -275,6 +275,16 @@ const { showApiKeyBanner, appReady, onAuthenticated, handleTourRetry } = useAppB
 <style>
 @import './assets/global-spinner.css';
 @import './assets/markdown-content.css';
+/*
+ * [08.L2] EXTERNAL DEPENDENCY — Geist / Geist Mono are loaded from the Google
+ * Fonts CDN at runtime. This is a third-party request on every page load and a
+ * privacy/availability dependency; it SHOULD be self-hosted (ship the woff2
+ * files under src/assets/fonts/ and @font-face them locally). Deferred here
+ * because self-hosting requires adding binary font assets, which is out of
+ * scope for this CSS-only change. The CSP (see backend SecurityHeaders
+ * middleware) must continue to allow fonts.googleapis.com (style) +
+ * fonts.gstatic.com (font) for this @import to load.
+ */
 @import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600;700&family=Geist:wght@400;500;600;700&display=swap');
 
 :root {

@@ -256,9 +256,25 @@ class SecretVaultService:
                 env_name = f"AGENTED_SECRET_{secret_meta['name'].upper()}"
                 result[env_name] = plaintext
             except Exception as e:
+                # A secret that can't be decrypted (e.g. key rotated out of
+                # AGENTED_VAULT_KEYS) is skipped, so the job runs WITHOUT it —
+                # surface this as an audit event rather than only a WARNING so an
+                # operator can see a job launched with a missing credential (02 M5).
                 logger.warning(
                     "Failed to decrypt secret '%s' for execution: %s", secret_meta["name"], e
                 )
+                try:
+                    from app.services.audit_log_service import AuditLogService
+
+                    AuditLogService.log(
+                        action="secret.decrypt_failed",
+                        entity_type="secret",
+                        entity_id=secret_meta["id"],
+                        outcome="error",
+                        details={"name": secret_meta["name"], "scope": scope},
+                    )
+                except Exception:
+                    logger.debug("audit of secret.decrypt_failed failed", exc_info=True)
         return result
 
     @classmethod

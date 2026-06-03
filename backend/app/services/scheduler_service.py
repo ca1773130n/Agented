@@ -210,17 +210,24 @@ class SchedulerService:
         """Execute a scheduled trigger. Called by APScheduler."""
         logger.info(f"Executing scheduled trigger: {trigger_id}")
 
-        # Update last_run_at
-        update_trigger_last_run(trigger_id, datetime.now(timezone.utc).isoformat())
-
+        # Resolve + validate BEFORE stamping last_run (06 M1) — otherwise a
+        # disabled or deleted trigger records a phantom run each time its
+        # still-registered cron fires. Unschedule a deleted trigger's job.
         trigger_data = get_trigger(trigger_id)
         if not trigger_data:
-            logger.error(f"Trigger not found: {trigger_id}")
+            logger.error(f"Trigger not found: {trigger_id}; unscheduling its job")
+            try:
+                cls.unschedule_trigger(trigger_id)
+            except Exception:
+                logger.debug("unschedule of missing trigger %s failed", trigger_id, exc_info=True)
             return
 
         if not trigger_data.get("enabled"):
             logger.info(f"Trigger {trigger_id} is disabled, skipping execution")
             return
+
+        # Only stamp last_run once we know the trigger is real + enabled.
+        update_trigger_last_run(trigger_id, datetime.now(timezone.utc).isoformat())
 
         if trigger_data.get("dispatch_type") == "super_agent" and trigger_data.get(
             "super_agent_id"

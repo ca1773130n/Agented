@@ -54,25 +54,34 @@ def _json_error_body(code: str, message: str) -> bytes:
     return _json.dumps(payload, separators=(",", ":")).encode("utf-8")
 
 
+# Doc/health surfaces legitimately have sub-paths (e.g. /schema/openapi.json,
+# /docs/swagger) — matched by prefix.
 _AUTH_BYPASS_PREFIXES = (
     "/health",
     "/docs",
     "/openapi",
     "/schema",
-    "/api/webhooks/github",
-    "/api/oauth-callback",
-    # Auth-establishing routes — caller has no credentials yet. v0.5.12:
-    # these must skip authentication entirely so unauthenticated users
-    # can sign up, log in, and recover passwords.
-    "/api/auth/login",
-    "/api/auth/signup",
-    "/api/auth/forgot-password",
-    "/api/auth/reset-password",
+)
+# API endpoints that must skip auth, matched EXACTLY so a future handler mounted
+# under one of these prefixes isn't silently made public (02-auth M2). The
+# webhook/oauth receivers are HMAC/state-gated; the auth routes establish a
+# session for a caller that has no credentials yet.
+_AUTH_BYPASS_EXACT = frozenset(
+    {
+        "/api/webhooks/github",
+        "/api/oauth-callback",
+        "/api/auth/login",
+        "/api/auth/signup",
+        "/api/auth/forgot-password",
+        "/api/auth/reset-password",
+    }
 )
 
 
 def _path_requires_auth(path: str) -> bool:
     if not (path.startswith("/admin") or path.startswith("/api")):
+        return False
+    if path in _AUTH_BYPASS_EXACT:
         return False
     for prefix in _AUTH_BYPASS_PREFIXES:
         if path == prefix or path.startswith(prefix + "/"):
@@ -345,10 +354,22 @@ class RequestLoggingMiddleware(ASGIMiddleware):
 # OWASP-aligned defaults that match the Flask-Talisman config wave 80 retired.
 _FORCE_HTTPS = os.environ.get("FORCE_HTTPS", "false").lower() == "true"
 _HSTS_MAX_AGE = "31536000"  # 1 year
+# Strict default for the app: NO inline scripts (the Vite-built SPA loads
+# module scripts from files). style-src keeps 'unsafe-inline' because Vue's
+# `:style` bindings emit inline style attributes. (03-core L1)
 _CSP = "; ".join(
     [
         "default-src 'self'",
-        # Swagger / Litestar's /schema/swagger needs inline scripts + styles.
+        "script-src 'self'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data:",
+        "connect-src 'self'",
+    ]
+)
+# Relaxed CSP scoped to Swagger UI under /schema/*, which needs inline scripts.
+_CSP_SCHEMA = "; ".join(
+    [
+        "default-src 'self'",
         "script-src 'self' 'unsafe-inline'",
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' data:",
@@ -373,13 +394,16 @@ class SecurityHeadersMiddleware(ASGIMiddleware):
             await next_app(scope, receive, send)
             return
 
+        path = scope.get("path", "")
+        csp = _CSP_SCHEMA if path.startswith("/schema") or path.startswith("/docs") else _CSP
+
         async def add_headers(message: Any) -> None:
             if message["type"] == "http.response.start":
                 headers = list(message.get("headers", []))
                 headers.append((b"x-frame-options", b"DENY"))
                 headers.append((b"x-content-type-options", b"nosniff"))
                 headers.append((b"referrer-policy", b"strict-origin-when-cross-origin"))
-                headers.append((b"content-security-policy", _CSP.encode("latin-1")))
+                headers.append((b"content-security-policy", csp.encode("latin-1")))
                 if _FORCE_HTTPS:
                     headers.append(
                         (

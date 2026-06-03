@@ -25,6 +25,10 @@ class ProcessInfo:
     trigger_id: str
     paused_at: Optional[float] = None
     pause_timer: Optional[threading.Timer] = field(default=None, repr=False)
+    # False when the pgid lookup failed at register time and we fell back to the
+    # pid — killpg(pid) could then signal a recycled/unrelated group, so we only
+    # ever process.kill() the pid for these (06 M6).
+    pgid_valid: bool = True
 
 
 class ProcessManager:
@@ -33,18 +37,34 @@ class ProcessManager:
     _processes: Dict[str, ProcessInfo] = {}
     _cancelled: set = set()
     _lock = threading.Lock()
+    # Bound the cancelled-id set so it can't grow without limit if `cleanup`
+    # is never reached for a cancelled execution (e.g. runner thread died) (06 M5).
+    _CANCELLED_MAX = 10000
+
+    @classmethod
+    def _mark_cancelled(cls, execution_id: str) -> None:
+        """Caller must hold cls._lock."""
+        cls._cancelled.add(execution_id)
+        if len(cls._cancelled) > cls._CANCELLED_MAX:
+            # Drop arbitrary excess entries — a stale cancelled id only matters
+            # until its (never-arriving) cleanup, and is_cancelled tolerates a miss.
+            for _ in range(len(cls._cancelled) - cls._CANCELLED_MAX):
+                cls._cancelled.pop()
+            logger.warning("ProcessManager._cancelled exceeded %d; trimmed", cls._CANCELLED_MAX)
 
     @classmethod
     def register(cls, execution_id: str, process: subprocess.Popen, trigger_id: str) -> None:
         """Register a running process for tracking."""
         with cls._lock:
+            pgid_valid = True
             try:
                 pgid = os.getpgid(process.pid)
             except ProcessLookupError:
                 pgid = process.pid  # Fallback if process already exited between Popen and register
+                pgid_valid = False
                 logger.warning(
                     "Process %d exited before pgid lookup for execution %s; "
-                    "using pid as pgid fallback — kill signals to this pgid may fail silently",
+                    "pgid unknown — will process.kill() the pid only, not killpg",
                     process.pid,
                     execution_id,
                 )
@@ -53,6 +73,7 @@ class ProcessManager:
                 pgid=pgid,
                 execution_id=execution_id,
                 trigger_id=trigger_id,
+                pgid_valid=pgid_valid,
             )
         logger.info(
             f"Registered process for execution {execution_id} (pid={process.pid}, pgid={pgid})"
@@ -63,12 +84,20 @@ class ProcessManager:
         """Cancel a running execution by killing its process group. Returns True if killed."""
         with cls._lock:
             info = cls._processes.get(execution_id)
-            cls._cancelled.add(execution_id)
+            cls._mark_cancelled(execution_id)
         if not info:
             return False
         try:
-            os.killpg(info.pgid, signal.SIGKILL)
-            logger.info(f"Killed process group {info.pgid} for execution {execution_id}")
+            if info.pgid_valid:
+                os.killpg(info.pgid, signal.SIGKILL)
+                logger.info(f"Killed process group {info.pgid} for execution {execution_id}")
+            else:
+                info.process.kill()  # pgid unknown — kill only the pid (06 M6)
+            # Reap so the killed child doesn't linger as a zombie (01 M1).
+            try:
+                info.process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                logger.warning("cancelled process %s did not reap after kill", execution_id)
             return True
         except ProcessLookupError:
             logger.info(f"Process group {info.pgid} already dead for execution {execution_id}")
@@ -82,18 +111,24 @@ class ProcessManager:
         """Gracefully cancel: send SIGTERM then SIGKILL after timeout. Returns True if signal sent."""
         with cls._lock:
             info = cls._processes.get(execution_id)
-            cls._cancelled.add(execution_id)
+            cls._mark_cancelled(execution_id)
         if not info:
             return False
         try:
-            os.killpg(info.pgid, signal.SIGTERM)
+            if info.pgid_valid:
+                os.killpg(info.pgid, signal.SIGTERM)
+            else:
+                info.process.terminate()  # pgid unknown — pid only (06 M6)
             logger.info(f"Sent SIGTERM to process group {info.pgid} for execution {execution_id}")
 
             # Schedule SIGKILL fallback if process does not exit within sigterm_timeout
             def _force_kill() -> None:
                 try:
                     if info.process.poll() is None:
-                        os.killpg(info.pgid, signal.SIGKILL)
+                        if info.pgid_valid:
+                            os.killpg(info.pgid, signal.SIGKILL)
+                        else:
+                            info.process.kill()
                         logger.info(
                             f"SIGTERM timed out; force-killed process group "
                             f"{info.pgid} for execution {execution_id}"
@@ -248,7 +283,7 @@ class ProcessManager:
             logger.error(f"SIGCONT failed during auto-cancel of {execution_id}: {e}", exc_info=True)
 
         # Now gracefully cancel
-        cls._cancelled.add(execution_id)
+        cls._mark_cancelled(execution_id)
         try:
             os.killpg(info.pgid, signal.SIGTERM)
             logger.info(f"Sent SIGTERM for auto-cancel of execution {execution_id}")

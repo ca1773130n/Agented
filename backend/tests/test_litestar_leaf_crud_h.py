@@ -59,16 +59,18 @@ def test_browse_directory_outside_allowed_403(isolated_db):
     assert resp.status_code == 403
 
 
-def test_create_directory_requires_path(isolated_db):
+def test_create_directory_requires_admin(isolated_db):
+    # 07.L2: create-directory (FS mkdir) is now admin-gated, so a request with
+    # no admin principal is rejected at the guard (403) before body validation.
     with _client() as c:
         resp = c.post("/api/create-directory", json={})
-    assert resp.status_code == 400
+    assert resp.status_code == 403
 
 
-def test_create_directory_relative_400(isolated_db):
+def test_create_directory_relative_admin_gated(isolated_db):
     with _client() as c:
         resp = c.post("/api/create-directory", json={"path": "relative/path"})
-    assert resp.status_code == 400
+    assert resp.status_code == 403
 
 
 # Backends

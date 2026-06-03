@@ -50,7 +50,27 @@ class WorktreeService:
 
         Raises:
             RuntimeError: If concurrent limit reached or git commands fail.
+            ValueError: If worktree_name or branch_name fail validation.
         """
+        # Path-traversal + ref-injection guard (01 M5): worktree_name must be a
+        # single safe path segment under .worktrees/, branch_name a sane git ref.
+        if (
+            not worktree_name
+            or worktree_name in (".", "..")
+            or "/" in worktree_name
+            or "\\" in worktree_name
+            or worktree_name.startswith("-")
+        ):
+            raise ValueError(f"Invalid worktree_name: {worktree_name!r}")
+        if (
+            not branch_name
+            or branch_name.startswith("-")
+            or ".." in branch_name
+            or any(c.isspace() for c in branch_name)
+            or any(c in branch_name for c in ("~", "^", ":", "?", "*", "[", "\\"))
+        ):
+            raise ValueError(f"Invalid branch_name: {branch_name!r}")
+
         lock = cls._get_project_lock(project_path)
         with lock:
             # Check concurrent worktree limit

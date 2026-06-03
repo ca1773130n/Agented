@@ -5,7 +5,7 @@
  * - Configurable request timeout (default 30s) via AbortController
  * - Retry with exponential backoff for transient failures (429, 502, 503, 504)
  * - Safe empty response handling (null instead of {} as T)
- * - API key authentication via X-API-Key header (read from localStorage)
+ * - API key authentication via X-API-Key header (read from sessionStorage)
  * - Authenticated SSE streams via @microsoft/fetch-event-source
  */
 
@@ -15,30 +15,63 @@ export const API_BASE = '';  // Use proxy in development, same origin in product
 
 const API_KEY_STORAGE_KEY = 'agented-api-key';
 
-/** Read the API key from localStorage. Returns null when unset. */
+// [08.H1-residual] The long-lived admin API key used to live in localStorage,
+// where it was readable by any XSS payload for the lifetime of the origin.
+// It now lives in sessionStorage (cleared when the tab closes) so the exposure
+// window is one tab session instead of forever, and an in-memory cache holds it
+// for the current page so reads don't keep hitting storage. We deliberately
+// migrate any pre-existing localStorage key forward (read-once, then delete) so
+// already-onboarded users aren't logged out by this change. Cookie+CSRF is the
+// preferred auth path for new sessions; this key remains only for the legacy
+// api-key flow (welcome-page bootstrap, SSE headers).
+let _apiKeyMemo: string | null = null;
+
+/** Read the API key. Returns null when unset. */
 export function getApiKey(): string | null {
   if (typeof window === 'undefined') return null;
+  if (_apiKeyMemo !== null) return _apiKeyMemo;
   try {
-    return localStorage.getItem(API_KEY_STORAGE_KEY);
+    const fromSession = sessionStorage.getItem(API_KEY_STORAGE_KEY);
+    if (fromSession) {
+      _apiKeyMemo = fromSession;
+      return fromSession;
+    }
+    // One-time migration of a legacy localStorage key into sessionStorage.
+    const legacy = localStorage.getItem(API_KEY_STORAGE_KEY);
+    if (legacy) {
+      try {
+        sessionStorage.setItem(API_KEY_STORAGE_KEY, legacy);
+        localStorage.removeItem(API_KEY_STORAGE_KEY);
+      } catch {
+        // ignore migration failures — return the legacy value regardless
+      }
+      _apiKeyMemo = legacy;
+      return legacy;
+    }
+    return null;
   } catch {
     return null;
   }
 }
 
-/** Store the API key in localStorage for subsequent requests. */
+/** Store the API key in sessionStorage (cleared on tab close) for subsequent requests. */
 export function setApiKey(key: string): void {
   if (typeof window === 'undefined') return;
+  _apiKeyMemo = key;
   try {
-    localStorage.setItem(API_KEY_STORAGE_KEY, key);
+    sessionStorage.setItem(API_KEY_STORAGE_KEY, key);
   } catch {
-    // localStorage unavailable or full — ignore
+    // sessionStorage unavailable or full — in-memory memo still serves reads
   }
 }
 
-/** Remove the stored API key from localStorage. */
+/** Remove the stored API key (from both storages and the in-memory cache). */
 export function clearApiKey(): void {
+  _apiKeyMemo = null;
   if (typeof window === 'undefined') return;
   try {
+    sessionStorage.removeItem(API_KEY_STORAGE_KEY);
+    // Also clear any stale legacy copy.
     localStorage.removeItem(API_KEY_STORAGE_KEY);
   } catch {
     // ignore
@@ -176,11 +209,11 @@ async function apiFetchSingle<T>(url: string, options?: ApiFetchOptions): Promis
 
     clearTimeout(timeoutId);
 
-    // v0.5.12: consume rotated session token from response header.
-    const newToken = response.headers.get('x-new-session-token');
-    if (newToken) {
-      setSessionToken(newToken);
-    }
+    // [08.H1-residual] Session-token rotation now happens via Set-Cookie on the
+    // HttpOnly session cookie, so we no longer persist the rotated token from the
+    // ``x-new-session-token`` header into localStorage (it would only re-introduce
+    // an XSS-readable bearer credential). Any pre-migration localStorage token is
+    // still read below for backward-compat, but new sessions never write one.
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
@@ -308,9 +341,12 @@ function createEventQueue(): EventQueue {
         const now = Date.now();
         if (now - lastQueueThresholdWarnAt >= SSE_QUEUE_WARN_INTERVAL_MS) {
           lastQueueThresholdWarnAt = now;
-          console.warn(
-            `[SSE] Event queue at ${Math.round((queueSize / SSE_MAX_QUEUE_SIZE) * 100)}% capacity (${queueSize}/${SSE_MAX_QUEUE_SIZE}). UI rendering may be falling behind.`
-          );
+          // [08.L1] Diagnostic only — gate behind DEV so prod stays quiet.
+          if (import.meta.env.DEV) {
+            console.warn(
+              `[SSE] Event queue at ${Math.round((queueSize / SSE_MAX_QUEUE_SIZE) * 100)}% capacity (${queueSize}/${SSE_MAX_QUEUE_SIZE}). UI rendering may be falling behind.`
+            );
+          }
         }
       }
 
@@ -320,9 +356,12 @@ function createEventQueue(): EventQueue {
         const now = Date.now();
         if (now - lastQueueWarnAt >= SSE_QUEUE_WARN_INTERVAL_MS) {
           lastQueueWarnAt = now;
-          console.warn(
-            `[SSE] Event queue full (${SSE_MAX_QUEUE_SIZE} events). Oldest events are being dropped — UI may miss execution log entries.`
-          );
+          // [08.L1] Diagnostic only — gate behind DEV so prod stays quiet.
+          if (import.meta.env.DEV) {
+            console.warn(
+              `[SSE] Event queue full (${SSE_MAX_QUEUE_SIZE} events). Oldest events are being dropped — UI may miss execution log entries.`
+            );
+          }
           if (onOverflow) {
             try { onOverflow(overflowDropCount); } catch { /* ignore callback errors */ }
             overflowDropCount = 0;
@@ -393,7 +432,7 @@ class FatalSSEError extends Error {
  *
  * Unlike native EventSource, this supports custom headers (X-API-Key) for
  * authenticated SSE streams. Features:
- *   1. Injects X-API-Key from localStorage on every connection/reconnection.
+ *   1. Injects X-API-Key (from sessionStorage) on every connection/reconnection.
  *   2. Exponential backoff with jitter on connection failures.
  *   3. Stops reconnecting after SSE_MAX_ATTEMPTS consecutive failures.
  *   4. Fatal 401 responses stop retrying immediately.
@@ -425,6 +464,14 @@ export function createAuthenticatedEventSource(
     if (closed) return;
     attempt++;
     if (attempt > SSE_MAX_ATTEMPTS) {
+      // [08.L3] Give-up must never be silent. Always log in DEV so a missing
+      // onGiveUp wiring is visible during development, then forward to the
+      // consumer so it can surface a "connection lost" state to the user.
+      if (import.meta.env.DEV) {
+        console.warn(
+          `[SSE] Giving up after ${SSE_MAX_ATTEMPTS} reconnect attempts for ${url}. The stream is now disconnected.`,
+        );
+      }
       if (options?.onGiveUp) {
         try { options.onGiveUp(); } catch { /* ignore */ }
       }

@@ -522,7 +522,8 @@ class ExecutionService:
                 )
             except Exception:
                 logger.debug(
-                    "harness snapshot capture raised for %s", execution_id,
+                    "harness snapshot capture raised for %s",
+                    execution_id,
                     exc_info=True,
                 )
 
@@ -580,6 +581,11 @@ class ExecutionService:
                     os.killpg(os.getpgid(process.pid), signal.SIGKILL)
                 except OSError as e:
                     tlog.debug("Process already exited during timeout cleanup: %s", e)
+                # Reap the killed child so it doesn't linger as a zombie (01 M1).
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    tlog.warning("timed-out process did not reap after SIGKILL")
                 stdout_thread.join(timeout=SIGTERM_GRACE_SECONDS)
                 stderr_thread.join(timeout=SIGTERM_GRACE_SECONDS)
                 if stdout_thread.is_alive():
@@ -765,7 +771,8 @@ class ExecutionService:
                 except Exception:
                     logger.debug(
                         "session_events emit failed for %s",
-                        execution_id, exc_info=True,
+                        execution_id,
+                        exc_info=True,
                     )
 
         return execution_id

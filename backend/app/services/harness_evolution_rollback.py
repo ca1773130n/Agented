@@ -43,7 +43,10 @@ def _already_restored(project_id: str, kind: str, name: str) -> bool:
             from app.services.harness_evolver import _find_mcp_server_id_by_name
 
             return _find_mcp_server_id_by_name(name) is not None
-    except Exception:
+    except (ImportError, KeyError, AttributeError, TypeError, ValueError) as exc:
+        # [04.M4] Narrowed from bare ``except`` — only swallow lookup/shape
+        # errors; never mask e.g. a DB OperationalError as "not restored".
+        logger.warning("_already_restored lookup failed for %s %r: %s", kind, name, exc)
         return False
     return False
 
@@ -57,6 +60,7 @@ def reverse_apply_journal(project_id: str, journal: list[dict]) -> tuple[int, li
         _asset_to_payload,
         _create_dispatch,
         _delete_dispatch,
+        _fetch_primitive,
         _update_dispatch,
     )
 
@@ -67,6 +71,24 @@ def reverse_apply_journal(project_id: str, journal: list[dict]) -> tuple[int, li
         before = entry.get("before")
         try:
             if op == "create":
+                # [04.M4] Identity check before delete-by-asset_id: confirm the
+                # row currently at ``asset_id`` is still the asset this round
+                # created. If the id was reused by a different asset, refuse to
+                # delete it (it would clobber an unrelated primitive).
+                expected = entry.get("created_identity")
+                if expected is not None:
+                    current = _fetch_primitive(kind, asset_id)
+                    current_name = (current or {}).get("name") or (current or {}).get("skill_name")
+                    if current is None:
+                        # Already gone — nothing to delete; treat as reversed.
+                        _unbind(project_id, kind, asset_id)
+                        reversed_count += 1
+                        continue
+                    if current_name != expected:
+                        raise ValueError(
+                            f"create-reversal identity mismatch: asset {asset_id} is "
+                            f"{current_name!r}, expected {expected!r}; refusing to delete"
+                        )
                 _delete_dispatch[kind](asset_id=asset_id)
                 _unbind(project_id, kind, asset_id)
             elif op == "update":
@@ -139,8 +161,22 @@ def _git_revert(project_id: str, sha: str) -> bool:
     root = (proj or {}).get("local_path") or (proj or {}).get("clone_path")
     if not root or not (Path(root) / ".git").exists():
         return False
-    # Clear any in-progress revert from a prior failed attempt (best-effort).
-    subprocess.run(["git", "revert", "--abort"], cwd=root, capture_output=True, text=True)
+    # [04.M3] Only abort an ACTUAL in-progress revert — an unconditional
+    # `git revert --abort` errors (or worse, disturbs unrelated state) when
+    # no revert is in flight. REVERT_HEAD exists iff a revert is mid-flight.
+    if (Path(root) / ".git" / "REVERT_HEAD").exists():
+        subprocess.run(["git", "revert", "--abort"], cwd=root, capture_output=True, text=True)
+    # [04.M3] Refuse to revert onto a dirty tree — a non-clean working tree
+    # would let `git revert` mix unrelated local changes into the revert
+    # commit (or fail mid-way). Require a clean tree first.
+    status = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+    )
+    if (status.stdout or "").strip():
+        raise RuntimeError("working tree not clean; refusing to git revert")
     subprocess.run(
         ["git", "revert", "--no-edit", sha],
         cwd=root,

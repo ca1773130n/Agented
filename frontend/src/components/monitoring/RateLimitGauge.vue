@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue';
 import { Chart, registerables } from 'chart.js';
+import DOMPurify from 'dompurify';
 
 Chart.register(...registerables);
 
@@ -37,6 +38,13 @@ const gaugeColor = computed(() => {
   if (props.percentage >= 50) return '#3b82f6';  // info - blue
   return '#10b981';                               // normal - green
 });
+
+// [08.M2] `label` carries small `<span class="gauge-model/window">` markup
+// derived from the server-provided window type. It isn't provably constant, so
+// DOMPurify-sanitize it (allow only span + class) before it reaches v-html.
+const safeLabel = computed(() =>
+  DOMPurify.sanitize(props.label, { ALLOWED_TAGS: ['span'], ALLOWED_ATTR: ['class'] }),
+);
 
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
@@ -102,7 +110,7 @@ watch(
         </span>
       </div>
     </div>
-    <div class="gauge-label" v-html="label"></div>
+    <div class="gauge-label" v-html="safeLabel"></div>
     <div class="gauge-tokens" v-if="tokensLimit > 0">
       {{ formatTokens(tokensUsed) }} / {{ formatTokens(tokensLimit) }}
     </div>

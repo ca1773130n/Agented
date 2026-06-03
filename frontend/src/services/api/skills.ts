@@ -2,7 +2,7 @@
  * Skills, user skills, skills.sh, harness, and skill conversation API modules.
  */
 import { API_BASE, apiFetch, createAuthenticatedEventSource } from './client';
-import type { AuthenticatedEventSource } from './client';
+import type { AuthenticatedEventSource, AuthenticatedEventSourceOptions } from './client';
 import type {
   SkillInfo,
   UserSkill,
@@ -172,8 +172,8 @@ export const skillConversationApi = {
       body: JSON.stringify({ message, ...options }),
     }),
 
-  stream: (convId: string): AuthenticatedEventSource => {
-    return createAuthenticatedEventSource(`${API_BASE}/api/skills/conversations/${convId}/stream`);
+  stream: (convId: string, options?: AuthenticatedEventSourceOptions): AuthenticatedEventSource => {
+    return createAuthenticatedEventSource(`${API_BASE}/api/skills/conversations/${convId}/stream`, options);
   },
 
   // v0.7.77 — dry-run that returns the rendered package tree

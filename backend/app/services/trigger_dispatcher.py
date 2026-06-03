@@ -7,6 +7,7 @@ import datetime
 import hashlib
 import json
 import logging
+import os
 from typing import Optional
 
 from app.config import WEBHOOK_DEDUP_WINDOW
@@ -19,6 +20,16 @@ from ..db.webhook_dedup import check_and_insert_dedup_key
 from ..utils.json_path import get_nested_value
 
 logger = logging.getLogger(__name__)
+
+# Untrusted webhook text (PR/comment bodies, authors) is substituted into the
+# operator's prompt template. Fence it so the agent treats it as data, not
+# instructions, and bound its length (05 M1).
+_MAX_UNTRUSTED_LEN = 50000
+
+
+def _fence_untrusted(text: str) -> str:
+    body = (text or "")[:_MAX_UNTRUSTED_LEN]
+    return f"<untrusted_user_input>\n{body}\n</untrusted_user_input>"
 
 
 def match_payload(config: dict, payload: dict) -> Optional[str]:
@@ -86,6 +97,19 @@ def dispatch_webhook_event(
         # require a valid signature. Skip trigger if signature is missing or invalid.
         # Admin replay bypasses this — see skip_signature_validation docstring.
         webhook_secret = trigger.get("webhook_secret")
+        # 05 M5: a deployment can require every webhook trigger to be signed.
+        # Default-off so existing unsigned triggers keep working.
+        if (
+            not webhook_secret
+            and not skip_signature_validation
+            and os.environ.get("AGENTED_REQUIRE_WEBHOOK_SIGNATURE") == "1"
+        ):
+            logger.warning(
+                "Unsigned webhook trigger '%s' (%s) rejected (AGENTED_REQUIRE_WEBHOOK_SIGNATURE=1)",
+                trigger["name"],
+                trigger["id"],
+            )
+            continue
         if webhook_secret and not skip_signature_validation:
             from .webhook_validation_service import WebhookValidationService
 
@@ -139,7 +163,7 @@ def dispatch_webhook_event(
 
             # Render prompt template with matched text
             prompt_template = trigger.get("prompt_template") or "{message}"
-            rendered_prompt = prompt_template.replace("{message}", text)
+            rendered_prompt = prompt_template.replace("{message}", _fence_untrusted(text))
 
             execution_id = generate_execution_id(trigger["id"])
             started_at = datetime.datetime.now().isoformat()
@@ -321,7 +345,7 @@ def dispatch_github_event(repo_url: str, pr_data: dict, save_trigger_event_fn=No
             from ..db.ids import generate_execution_id
 
             prompt_template = trigger.get("prompt_template") or "{message}"
-            rendered_prompt = prompt_template.replace("{message}", message_text)
+            rendered_prompt = prompt_template.replace("{message}", _fence_untrusted(message_text))
             execution_id = generate_execution_id(trigger["id"])
             started_at = datetime.datetime.now().isoformat()
 
@@ -471,7 +495,7 @@ def dispatch_pr_comment_commands(
             from ..db.ids import generate_execution_id
 
             prompt_template = trigger.get("prompt_template") or "{message}"
-            rendered_prompt = prompt_template.replace("{message}", message_text)
+            rendered_prompt = prompt_template.replace("{message}", _fence_untrusted(message_text))
             execution_id = generate_execution_id(trigger["id"])
             started_at = datetime.datetime.now().isoformat()
 

@@ -8,6 +8,14 @@ import {
 } from '../services/api/grd';
 import { useEventSource } from './useEventSource';
 
+// [08.L1] DEV-only diagnostic logger. Prod must not log raw SSE `event.data`
+// payloads; in development these parse-failure warnings remain visible.
+function warnParse(...args: unknown[]): void {
+  if (import.meta.env.DEV) {
+    console.warn(...args);
+  }
+}
+
 // v0.7.63 — shape of one ``AskUserQuestion`` entry as emitted by
 // claude's stream-json. ``options`` may also carry ``preview`` and
 // ``annotations`` fields; we treat them as opaque ``unknown`` here
@@ -158,14 +166,15 @@ export function useProjectSession(projectId: Ref<string>) {
   let _streamSessionId: string | null = null;
 
   const { connect: sseConnect, close: sseClose } = useEventSource({
-    sourceFactory: () => grdApi.streamSession(projectId.value, _streamSessionId!),
+    // [08.L3] forward give-up options so a terminal disconnect surfaces visibly.
+    sourceFactory: (opts) => grdApi.streamSession(projectId.value, _streamSessionId!, opts),
     events: {
       output: (event: MessageEvent) => {
         try {
           const data = JSON.parse(event.data);
           onOutputCb?.(data.line);
         } catch (e) {
-          console.warn('[useProjectSession] Failed to parse output event:', e, event.data);
+          warnParse('[useProjectSession] Failed to parse output event:', e, event.data);
         }
       },
       output_delta: (event: MessageEvent) => {
@@ -173,7 +182,7 @@ export function useProjectSession(projectId: Ref<string>) {
           const data = JSON.parse(event.data);
           onOutputDeltaCb?.(data.text ?? '');
         } catch (e) {
-          console.warn(
+          warnParse(
             '[useProjectSession] Failed to parse output_delta event:',
             e,
             event.data,
@@ -188,7 +197,7 @@ export function useProjectSession(projectId: Ref<string>) {
             questions: data.questions ?? [],
           });
         } catch (e) {
-          console.warn(
+          warnParse(
             '[useProjectSession] Failed to parse ask_user_question event:',
             e,
             event.data,
@@ -203,7 +212,7 @@ export function useProjectSession(projectId: Ref<string>) {
             plan: data.plan ?? '',
           });
         } catch (e) {
-          console.warn(
+          warnParse(
             '[useProjectSession] Failed to parse exit_plan_mode event:',
             e,
             event.data,
@@ -218,7 +227,7 @@ export function useProjectSession(projectId: Ref<string>) {
             max_iterations: data.max_iterations ?? 0,
           });
         } catch (e) {
-          console.warn(
+          warnParse(
             '[useProjectSession] Failed to parse goal_iteration_started event:',
             e,
             event.data,
@@ -235,7 +244,7 @@ export function useProjectSession(projectId: Ref<string>) {
             source: data.source ?? 'llm',
           });
         } catch (e) {
-          console.warn(
+          warnParse(
             '[useProjectSession] Failed to parse goal_iteration_completed event:',
             e,
             event.data,
@@ -250,7 +259,7 @@ export function useProjectSession(projectId: Ref<string>) {
             detail: data.detail ?? '',
           });
         } catch (e) {
-          console.warn(
+          warnParse(
             '[useProjectSession] Failed to parse goal_loop_ended event:',
             e,
             event.data,
@@ -267,7 +276,7 @@ export function useProjectSession(projectId: Ref<string>) {
             streak: data.streak ?? 0,
           });
         } catch (e) {
-          console.warn(
+          warnParse(
             '[useProjectSession] Failed to parse goal_check_disagreement event:',
             e,
             event.data,
@@ -286,7 +295,7 @@ export function useProjectSession(projectId: Ref<string>) {
             outcome: data.outcome ?? null,
           });
         } catch (e) {
-          console.warn(
+          warnParse(
             '[useProjectSession] Failed to parse hook_decision event:',
             e,
             event.data,
@@ -298,7 +307,7 @@ export function useProjectSession(projectId: Ref<string>) {
           const data = JSON.parse(event.data);
           onThinkingCb?.(data.text ?? '');
         } catch (e) {
-          console.warn(
+          warnParse(
             '[useProjectSession] Failed to parse thinking event:',
             e,
             event.data,
@@ -315,7 +324,7 @@ export function useProjectSession(projectId: Ref<string>) {
             cwd: data.cwd ?? null,
           });
         } catch (e) {
-          console.warn(
+          warnParse(
             '[useProjectSession] Failed to parse permission_request event:',
             e,
             event.data,
@@ -341,7 +350,7 @@ export function useProjectSession(projectId: Ref<string>) {
           // session ended normally, not from a network failure.
           closeStream();
         } catch (e) {
-          console.warn('[useProjectSession] Failed to parse complete event:', e, event.data);
+          warnParse('[useProjectSession] Failed to parse complete event:', e, event.data);
         }
       },
       ralph_iteration: (event: MessageEvent) => {
@@ -353,7 +362,7 @@ export function useProjectSession(projectId: Ref<string>) {
             circuitBreakerTriggered: false,
           };
         } catch (e) {
-          console.warn('[useProjectSession] Failed to parse ralph_iteration event:', e, event.data);
+          warnParse('[useProjectSession] Failed to parse ralph_iteration event:', e, event.data);
         }
       },
       circuit_breaker: (event: MessageEvent) => {
@@ -364,7 +373,7 @@ export function useProjectSession(projectId: Ref<string>) {
           }
           onErrorCb?.(`Circuit breaker: ${data.reason}`);
         } catch (e) {
-          console.warn('[useProjectSession] Failed to parse circuit_breaker event:', e, event.data);
+          warnParse('[useProjectSession] Failed to parse circuit_breaker event:', e, event.data);
         }
       },
       team_update: (event: MessageEvent) => {
@@ -391,7 +400,7 @@ export function useProjectSession(projectId: Ref<string>) {
             }
           }
         } catch (e) {
-          console.warn('[useProjectSession] Failed to parse team_update event:', e, event.data);
+          warnParse('[useProjectSession] Failed to parse team_update event:', e, event.data);
         }
       },
     },
@@ -402,6 +411,13 @@ export function useProjectSession(projectId: Ref<string>) {
         error.value = 'Connection lost';
         onErrorCb?.('Connection lost after 3 retries');
       }
+    },
+    // [08.L3] Terminal give-up after the max reconnect attempts — surface the
+    // same visible "connection lost" state instead of dropping silently.
+    onGiveUp: () => {
+      closeStream();
+      error.value = 'Connection lost';
+      onErrorCb?.('Connection lost — reconnection gave up');
     },
   });
 

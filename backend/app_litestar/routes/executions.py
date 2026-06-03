@@ -35,7 +35,13 @@ def _ensure_running(execution: dict, action: str) -> None:
 def _get_sigterm_grace(execution: dict, default: float = 10.0) -> float:
     trigger = get_trigger(execution.get("trigger_id", ""))
     if trigger and trigger.get("sigterm_grace_seconds"):
-        return float(trigger["sigterm_grace_seconds"])
+        # 07.L4 — clamp the DB/body-derived grace to a sane non-negative range
+        # (0..300s) so a corrupt/hostile value can't hang or zero out the kill.
+        try:
+            grace = float(trigger["sigterm_grace_seconds"])
+        except (TypeError, ValueError):
+            return default
+        return max(0.0, min(grace, 300.0))
     return default
 
 
@@ -513,8 +519,10 @@ def get_annotation_summary(
     capped_limit = max(1, min(int(limit or 10), 100))
     counts = summary_counts(since=since, project_id=project_id)
     failures = recent_with_layer(
-        since=since, primary_layer=primary_layer,
-        project_id=project_id, limit=capped_limit,
+        since=since,
+        primary_layer=primary_layer,
+        project_id=project_id,
+        limit=capped_limit,
     )
     return {
         "since": since,
@@ -539,8 +547,7 @@ def get_execution_annotation(execution_id: str) -> dict[str, Any]:
     return {"annotation": annotation, "incidents": incidents}
 
 
-@get("/sessions/{session_kind:str}/{session_id:str}/annotation",
-     sync_to_thread=False)
+@get("/sessions/{session_kind:str}/{session_id:str}/annotation", sync_to_thread=False)
 def get_session_annotation(session_kind: str, session_id: str) -> dict[str, Any]:
     """Polymorphic session annotation lookup. ``session_kind`` ∈
     {trigger_execution, workflow, super_agent, project_session}."""

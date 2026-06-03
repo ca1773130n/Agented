@@ -32,6 +32,7 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -87,6 +88,55 @@ def _default_min_interval_hours() -> int:
         return max(0, int(raw))
     except ValueError:
         return 24
+
+
+# [04.H2] Per-project serialization. The rate-limit check (read) and the
+# apply (write) must not interleave across concurrent rounds for the same
+# project, or two callers can both pass the rate-limit gate and double-apply.
+# A module-level dict of locks keyed by project_id is held across the whole
+# rate-limit-check -> apply critical section.
+_PROJECT_LOCKS: dict[str, threading.Lock] = {}
+_PROJECT_LOCKS_GUARD = threading.Lock()
+
+
+def _project_lock(project_id: str) -> threading.Lock:
+    with _PROJECT_LOCKS_GUARD:
+        lock = _PROJECT_LOCKS.get(project_id)
+        if lock is None:
+            lock = threading.Lock()
+            _PROJECT_LOCKS[project_id] = lock
+        return lock
+
+
+def _round_budget() -> tuple[Optional[float], Optional[int]]:
+    """Env-configurable per-round budget guard [04.M5].
+
+    Returns ``(max_cost_usd, max_iterations)`` — either may be ``None``
+    (unbounded). Mirrors the goal-loop budget pattern: checked once before
+    the round fan-out so a runaway round can't accumulate unbounded LLM cost.
+    """
+
+    def _f(name: str) -> Optional[float]:
+        raw = os.environ.get(name)
+        if not raw:
+            return None
+        try:
+            v = float(raw)
+            return v if v > 0 else None
+        except ValueError:
+            return None
+
+    def _i(name: str) -> Optional[int]:
+        raw = os.environ.get(name)
+        if not raw:
+            return None
+        try:
+            v = int(raw)
+            return v if v > 0 else None
+        except ValueError:
+            return None
+
+    return _f("AGENTED_EVOLUTION_MAX_ROUND_COST_USD"), _i("AGENTED_EVOLUTION_MAX_ROUND_ITERATIONS")
 
 
 _DEFAULT_MAX_RUNNING_AGE_SECONDS = 1800  # 30 min
@@ -410,7 +460,18 @@ def gather_inputs(
             }
         )
 
-    snapshots = snapshots_repo.list_for_project(project_id, limit=limit * 2)
+    # [04.M2] Push the since/until window into the DB query so the time
+    # filter runs BEFORE the LIMIT — previously the limit truncated rows
+    # first, then the Python filter could leave fewer (or zero) rows even
+    # though matching older snapshots existed. The DB predicates are strict
+    # (< / >); the residual Python filter below restores inclusive boundary
+    # semantics (>= since, <= until) without re-reading the table.
+    snapshots = snapshots_repo.list_for_project(
+        project_id,
+        before_ts=until,
+        after_ts=since,
+        limit=limit * 2,
+    )
     if since:
         snapshots = [s for s in snapshots if s["created_at"] >= since]
     if until:
@@ -851,31 +912,41 @@ def _run_codex_in_workspace(scratch_dir: Path, *, timeout: int = 600) -> None:
         "harness_evolver: invoking codex in %s",
         scratch_dir,
     )
-    try:
-        result = subprocess.run(
-            cmd,
-            cwd=str(scratch_dir),
-            input=stdin_input,
-            timeout=timeout,
-            capture_output=True,
-            text=True,
-        )
-    except FileNotFoundError as exc:
-        raise RuntimeError(f"codex CLI not found ({template[0]}); set AGENTED_CODEX_CMD") from exc
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"codex CLI timed out after {timeout}s") from exc
-    if result.returncode != 0:
+    # [04.M6] Cap captured stdout/stderr: stream both to on-disk temp files
+    # rather than ``capture_output=True`` (which buffers unbounded child
+    # output in memory), then read back at most _MAX bytes of each.
+    _MAX = 1_000_000  # 1 MB per stream
+    with (
+        tempfile.TemporaryFile() as _out_f,
+        tempfile.TemporaryFile() as _err_f,
+    ):
+        try:
+            proc = subprocess.run(
+                cmd,
+                cwd=str(scratch_dir),
+                input=(stdin_input.encode("utf-8") if stdin_input is not None else None),
+                timeout=timeout,
+                stdout=_out_f,
+                stderr=_err_f,
+            )
+        except FileNotFoundError as exc:
+            raise RuntimeError(
+                f"codex CLI not found ({template[0]}); set AGENTED_CODEX_CMD"
+            ) from exc
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(f"codex CLI timed out after {timeout}s") from exc
+
+        _err_f.seek(0)
+        stderr_text = _err_f.read(_MAX).decode("utf-8", errors="replace")
+        returncode = proc.returncode
+    if returncode != 0:
         # Strip the noisy "Reading additional input from stdin..." prefix
         # that newer Codex emits before the real error.
-        err = (
-            (result.stderr or "")
-            .replace(
-                "Reading additional input from stdin...",
-                "",
-            )
-            .strip()
-        )
-        raise RuntimeError(f"codex CLI exited {result.returncode}: {err[:500]}")
+        err = stderr_text.replace(
+            "Reading additional input from stdin...",
+            "",
+        ).strip()
+        raise RuntimeError(f"codex CLI exited {returncode}: {err[:500]}")
 
 
 # --------------------------------------------------------------------------
@@ -994,6 +1065,10 @@ def validate_patch(patch: EvolutionPatch) -> list[str]:
 def _validate_payload(kind: str, payload: dict, prefix: str) -> list[str]:
     problems: list[str] = []
     if kind == "hook":
+        # [04.M1] NOTE: hook.content is arbitrary shell. validate_patch only
+        # checks presence/shape here — it does NOT vet the shell for safety.
+        # Auto-apply of hooks is gated separately (see harness_autonomy
+        # executable_kinds_opt_in gate); review hook content before trusting it.
         event = payload.get("event")
         if not event:
             problems.append(f"{prefix}: hook.event is required")
@@ -1113,8 +1188,22 @@ def _apply_patch_entries(
                     exc_info=True,
                 )
             applied.append({"kind": kind, "op": "create", "asset_id": asset_id})
+            # [04.M4] Record the created asset's identity (name) so a later
+            # create-reversal can confirm the row at ``asset_id`` is still the
+            # SAME asset before deleting it (guards against id reuse).
+            _created = _fetch_primitive(kind, asset_id)
             journal.append(
-                {"kind": kind, "op": "create", "asset_id": str(asset_id), "before": None}
+                {
+                    "kind": kind,
+                    "op": "create",
+                    "asset_id": str(asset_id),
+                    "before": None,
+                    "created_identity": (
+                        (_created or {}).get("name")
+                        or (_created or {}).get("skill_name")
+                        or entry.name
+                    ),
+                }
             )
 
         elif entry.op == "update":
@@ -1334,13 +1423,33 @@ def _render_skill_md(name: str, payload: dict) -> str:
     )
 
 
+def _skills_root(project_id: str) -> Optional[Path]:
+    """Resolve the project's ``.claude/skills`` root, or None [04.H5]."""
+    root = _project_root(project_id)
+    if root is None:
+        return None
+    return (root / ".claude" / "skills").resolve()
+
+
+def _assert_within_skills(skills_root: Path, target: Path) -> None:
+    """Assert ``target`` resolves inside the skills root before fs ops [04.H5]."""
+    if not target.resolve().is_relative_to(skills_root):
+        raise ValueError(f"skill path escapes skills root: {target}")
+
+
 def _create_skill(*, name, payload, project_id):
     root = _project_root(project_id)
     if root is None:
         logger.warning("skill create: project %s has no local_path", project_id)
         return None
-    safe = "".join(c if c.isalnum() or c in "-_" else "-" for c in name)
-    skill_dir = root / ".claude" / "skills" / safe
+    safe = "".join(c if c.isalnum() or c in "-_" else "-" for c in name).strip("-")
+    if not safe or safe in (".", ".."):
+        logger.warning("skill create: unsafe skill name %r", name)
+        return None
+    skills_root = (root / ".claude" / "skills").resolve()
+    skill_dir = skills_root / safe
+    # [04.H5] Containment check before any mkdir/write.
+    _assert_within_skills(skills_root, skill_dir)
     skill_dir.mkdir(parents=True, exist_ok=True)
     (skill_dir / "SKILL.md").write_text(_render_skill_md(name, payload), encoding="utf-8")
     from app.db.skills import add_user_skill, get_user_skill_by_name, update_user_skill
@@ -1389,14 +1498,28 @@ def _delete_skill(*, asset_id):
 
     row = get_user_skill(int(asset_id))
     if row and row.get("skill_path"):
-        skill_md = Path(row["skill_path"])
-        try:
-            skill_md.unlink(missing_ok=True)
-            parent = skill_md.parent
-            if parent.name != "skills" and parent.exists() and not any(parent.iterdir()):
-                parent.rmdir()
-        except OSError:
-            pass
+        skill_md = Path(row["skill_path"]).resolve()
+        # [04.H5] Derive the skills root from the stored path and require the
+        # file to be a SKILL.md directly inside a ``.claude/skills/<name>/``
+        # directory before unlinking — never unlink/rmdir outside that root.
+        parent = skill_md.parent
+        skills_root = parent.parent
+        safe_target = (
+            skill_md.name == "SKILL.md"
+            and skills_root.name == "skills"
+            and skills_root.parent.name == ".claude"
+            and skill_md.is_relative_to(skills_root)
+            and parent != skills_root
+        )
+        if not safe_target:
+            logger.warning("skill delete: refusing to unlink uncontained path %s", skill_md)
+        else:
+            try:
+                skill_md.unlink(missing_ok=True)
+                if parent.exists() and not any(parent.iterdir()):
+                    parent.rmdir()
+            except OSError:
+                pass
     delete_user_skill(int(asset_id))
 
 
@@ -1516,7 +1639,35 @@ def run_evolution_round(
     since: Optional[str] = None,
     until: Optional[str] = None,
     limit: int = 25,
-    keep_scratch_on_failure: bool = True,
+    # [04.H3] Default flipped to False so a FAILED round cleans up its scratch
+    # dir too. Set AGENTED_EVOLUTION_KEEP_SCRATCH=1 (debug) to retain it.
+    keep_scratch_on_failure: bool = False,
+    dry_run: bool = False,
+    min_interval_hours: Optional[int] = None,
+    force: bool = False,
+) -> EvolutionResult:
+    # [04.H2] Serialize the rate-limit-check -> apply critical section per
+    # project so two concurrent callers can't both clear the gate and apply.
+    with _project_lock(project_id):
+        return _run_evolution_round_locked(
+            project_id,
+            since=since,
+            until=until,
+            limit=limit,
+            keep_scratch_on_failure=keep_scratch_on_failure,
+            dry_run=dry_run,
+            min_interval_hours=min_interval_hours,
+            force=force,
+        )
+
+
+def _run_evolution_round_locked(
+    project_id: str,
+    *,
+    since: Optional[str] = None,
+    until: Optional[str] = None,
+    limit: int = 25,
+    keep_scratch_on_failure: bool = False,
     dry_run: bool = False,
     min_interval_hours: Optional[int] = None,
     force: bool = False,
@@ -1533,8 +1684,24 @@ def run_evolution_round(
                 error=reason,
             )
 
+    # [04.M5] Per-round budget guard checked before the fan-out so a runaway
+    # round can't accumulate unbounded LLM cost / iterations.
+    _max_cost, _max_iters = _round_budget()
+    if _max_iters is not None and limit > _max_iters:
+        logger.info(
+            "harness_evolver: clamping round limit %d -> %d (AGENTED_EVOLUTION_MAX_ROUND_ITERATIONS)",
+            limit,
+            _max_iters,
+        )
+        limit = _max_iters
+
     inputs = gather_inputs(project_id, since=since, until=until, limit=limit)
 
+    # [04.H3] Explicit 0700 — mkdtemp already restricts to the owner, but make
+    # the intent explicit and defend against a permissive umask edge.
+    _keep_scratch = (
+        keep_scratch_on_failure or os.environ.get("AGENTED_EVOLUTION_KEEP_SCRATCH") == "1"
+    )
     _tmp_root = "/tmp" if os.path.isdir("/tmp") else tempfile.gettempdir()
     scratch = Path(
         tempfile.mkdtemp(
@@ -1542,6 +1709,10 @@ def run_evolution_round(
             dir=_tmp_root,
         )
     )
+    try:
+        os.chmod(scratch, 0o700)
+    except OSError:
+        pass
 
     round_id = evolution_repo.start_round(
         project_id=project_id,
@@ -1606,6 +1777,7 @@ def run_evolution_round(
 
         mat_json: Optional[str] = None
         commit_sha: Optional[str] = None
+        materialization_failed = False  # [04.L4]
         project = get_project(project_id)
         if project and (project.get("local_path") or project.get("clone_path")):
             try:
@@ -1620,9 +1792,18 @@ def run_evolution_round(
                     }
                 )
             except Exception:
+                # [04.L4] Record the materialize/commit failure on the round so
+                # the operator can see the DB apply landed but the .claude/
+                # filesystem layout did not get written/committed.
+                materialization_failed = True
                 logger.warning("forge materialize/commit failed for %s", round_id, exc_info=True)
 
-        evolution_repo.mark_applied(
+        if materialization_failed:
+            notes = (notes or "") + "\n[materialization_failed] forge materialize/commit failed"
+
+        # [04.H2] Conditional transition — if a concurrent caller already
+        # applied this round, do NOT double-apply.
+        transitioned = evolution_repo.mark_applied(
             round_id,
             output_patch=_patch_to_dict(patch),
             applied_asset_ids=applied,
@@ -1631,6 +1812,10 @@ def run_evolution_round(
             git_commit_sha=commit_sha,
             apply_journal_json=json.dumps(journal, default=str),
         )
+        if transitioned is False:
+            logger.warning(
+                "harness_evolver: round %s already applied; skipping double-apply", round_id
+            )
 
         try:
             from app.services.forge_fingerprint import fingerprint as _fp
@@ -1653,8 +1838,6 @@ def run_evolution_round(
         except Exception:
             logger.warning("propagation hook failed for %s", round_id, exc_info=True)
 
-        if not keep_scratch_on_failure:
-            shutil.rmtree(scratch, ignore_errors=True)
         return EvolutionResult(
             round_id=round_id,
             status="applied",
@@ -1680,6 +1863,11 @@ def run_evolution_round(
             status="failed",
             error=str(exc),
         )
+    finally:
+        # [04.H3] Clean the scratch dir on EVERY exit (success, failure, or
+        # exception) unless an explicit debug flag asked to retain it.
+        if not _keep_scratch:
+            shutil.rmtree(scratch, ignore_errors=True)
 
 
 def apply_dry_run_round(

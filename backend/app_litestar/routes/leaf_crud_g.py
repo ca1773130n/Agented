@@ -10,7 +10,10 @@ across all conversation endpoints in one pass.
 from __future__ import annotations
 
 import json
+import logging
+import os
 import tempfile
+from pathlib import Path
 from typing import Any, Optional
 
 from litestar import Router, delete, get, post, put
@@ -38,12 +41,41 @@ from app.services.sketch_execution_service import execute_sketch, find_team_supe
 
 from ..auth import Caller
 
+logger = logging.getLogger(__name__)
+
+# 07.M4 — bound sketch content length.
+_CONTENT_MAX_LEN = 100_000
+
+# 07.L3 — replicate the browse_directory path allowlist (leaf_crud_h._ALLOWED_BASES
+# is module-private) so plugin import/sync can't read/write arbitrary host paths.
+_ALLOWED_BASES = [Path.home(), Path("/tmp"), Path("/opt")]
+
+
+def _ensure_path_allowed(raw_path: str) -> str:
+    """Resolve *raw_path* and confirm it lives under an allowed base, else 400/403."""
+    try:
+        resolved = Path(raw_path).expanduser().resolve()
+    except (OSError, ValueError) as e:
+        raise ClientException(detail="Invalid path") from e
+    resolved_str = str(resolved)
+    if not any(
+        resolved_str == str(base) or resolved_str.startswith(str(base) + os.sep)
+        for base in _ALLOWED_BASES
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Path must be under home directory, /tmp, or /opt",
+        )
+    return resolved_str
+
 
 def _result_or_raise(payload: tuple[Any, int]) -> Any:
     body, status = payload
     if status >= 400:
         if status == 404:
-            raise NotFoundException(detail=str(body.get("error") if isinstance(body, dict) else body))
+            raise NotFoundException(
+                detail=str(body.get("error") if isinstance(body, dict) else body)
+            )
         raise HTTPException(
             status_code=status,
             detail=str(body.get("error") if isinstance(body, dict) else body),
@@ -68,9 +100,7 @@ def list_sketches(
     if user_id:
         rows = get_for_user("sketches", user_id, limit=limit, offset=offset)
         return {"sketches": rows, "total_count": len(rows)}
-    sketches = get_all_sketches(
-        status=status, project_id=project_id, limit=limit, offset=offset
-    )
+    sketches = get_all_sketches(status=status, project_id=project_id, limit=limit, offset=offset)
     total_count = count_sketches(status=status, project_id=project_id)
     return {"sketches": sketches, "total_count": total_count}
 
@@ -82,9 +112,14 @@ def create_sketch(data: dict) -> dict[str, Any]:
     title = (data.get("title") or "").strip()
     if not title:
         raise ClientException(detail="title is required")
+    if len(title) > 255:  # 07.M4 — bound title length
+        raise ClientException(detail="title must be at most 255 characters")
+    content = data.get("content", "") or ""
+    if len(content) > _CONTENT_MAX_LEN:  # 07.M4 — bound content length
+        raise ClientException(detail=f"content must be at most {_CONTENT_MAX_LEN} characters")
     sketch_id = db_create_sketch(
         title=title,
-        content=data.get("content", "") or "",
+        content=content,
         project_id=data.get("project_id"),
     )
     if not sketch_id:
@@ -221,9 +256,7 @@ def _agent_caller_user_id(caller: Caller | None) -> Optional[str]:
 @post("/start", sync_to_thread=False)
 def start_conversation(caller: Caller) -> Any:
     return _result_or_raise(
-        AgentConversationService.start_conversation(
-            user_id=_agent_caller_user_id(caller)
-        )
+        AgentConversationService.start_conversation(user_id=_agent_caller_user_id(caller))
     )
 
 
@@ -277,9 +310,7 @@ def list_active_agent_conversations(caller: Caller) -> Any:
     so /agents/new can auto-resume on cold-cache loads.
     """
     return _result_or_raise(
-        AgentConversationService.list_active(
-            user_id=_agent_caller_user_id(caller)
-        )
+        AgentConversationService.list_active(user_id=_agent_caller_user_id(caller))
     )
 
 
@@ -318,13 +349,12 @@ def export_plugin(data: dict) -> dict[str, Any]:
         if export_format == "claude":
             result = ExportService.export_as_claude_plugin(team_id=team_id, output_dir=output_dir)
         else:
-            result = ExportService.export_as_agented_package(
-                team_id=team_id, output_dir=output_dir
-            )
+            result = ExportService.export_as_agented_package(team_id=team_id, output_dir=output_dir)
     except ValueError as e:
         raise NotFoundException(detail=str(e)) from e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Export failed: {e}") from e
+    except Exception as e:  # 07.L1 — log internals, return a generic message
+        logger.error("Plugin export failed", exc_info=True)
+        raise HTTPException(status_code=500, detail="Export failed") from e
     result["format"] = export_format
     return result
 
@@ -338,6 +368,7 @@ def import_plugin(data: dict) -> dict[str, Any]:
     source_path = data.get("source_path")
     if not source_path:
         raise ClientException(detail="source_path is required")
+    source_path = _ensure_path_allowed(source_path)  # 07.L3 — gate host path
     try:
         return ImportService.import_plugin_directory(
             plugin_dir=source_path,
@@ -347,8 +378,9 @@ def import_plugin(data: dict) -> dict[str, Any]:
         raise NotFoundException(detail=str(e)) from e
     except NotADirectoryError as e:
         raise ClientException(detail=str(e)) from e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Import failed: {e}") from e
+    except Exception as e:  # 07.L1 — log internals, return a generic message
+        logger.error("Plugin import failed", exc_info=True)
+        raise HTTPException(status_code=500, detail="Import failed") from e
 
 
 @post("/import-from-marketplace", status_code=201, sync_to_thread=False)
@@ -371,8 +403,9 @@ def import_from_marketplace(data: dict) -> dict[str, Any]:
         raise NotFoundException(detail=str(e)) from e
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Marketplace import failed: {e}") from e
+    except Exception as e:  # 07.L1 — log internals, return a generic message
+        logger.error("Marketplace import failed", exc_info=True)
+        raise HTTPException(status_code=500, detail="Marketplace import failed") from e
 
 
 @post("/deploy", sync_to_thread=False)
@@ -396,8 +429,9 @@ def deploy_plugin(data: dict) -> dict[str, Any]:
         raise NotFoundException(detail=str(e)) from e
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Deploy failed: {e}") from e
+    except Exception as e:  # 07.L1 — log internals, return a generic message
+        logger.error("Plugin deploy failed", exc_info=True)
+        raise HTTPException(status_code=500, detail="Deploy failed") from e
 
 
 @post("/test-connection", sync_to_thread=False)
@@ -431,10 +465,12 @@ def sync_to_disk(data: dict) -> dict[str, Any]:
     plugin_dir = data.get("plugin_dir")
     if not plugin_id or not plugin_dir:
         raise ClientException(detail="plugin_id and plugin_dir are required")
+    plugin_dir = _ensure_path_allowed(plugin_dir)  # 07.L3 — gate host path
     try:
         summary = SyncService.sync_all_to_disk(plugin_id, plugin_dir)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Sync failed: {e}") from e
+    except Exception as e:  # 07.L1 — log internals, return a generic message
+        logger.error("Plugin sync failed", exc_info=True)
+        raise HTTPException(status_code=500, detail="Sync failed") from e
     return {"message": "Sync complete", **summary}
 
 
@@ -452,10 +488,12 @@ def sync_entity(data: dict) -> dict[str, Any]:
         raise ClientException(
             detail="entity_type, entity_id, plugin_id, and plugin_dir are required"
         )
+    plugin_dir = _ensure_path_allowed(plugin_dir)  # 07.L3 — gate host path
     try:
         synced = SyncService.sync_entity_to_disk(entity_type, entity_id, plugin_id, plugin_dir)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Sync failed: {e}") from e
+    except Exception as e:  # 07.L1 — log internals, return a generic message
+        logger.error("Plugin entity sync failed", exc_info=True)
+        raise HTTPException(status_code=500, detail="Sync failed") from e
     return {"synced": synced}
 
 
@@ -474,13 +512,15 @@ def toggle_watcher(data: dict) -> dict[str, Any]:
         if enabled:
             if not plugin_dir:
                 raise ClientException(detail="plugin_dir is required when enabling watch")
+            plugin_dir = _ensure_path_allowed(plugin_dir)  # 07.L3 — gate host path
             SyncService.start_watching(plugin_id, plugin_dir)
         else:
             SyncService.stop_watching(plugin_id)
-    except ClientException:
+    except (ClientException, HTTPException):
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Watch toggle failed: {e}") from e
+    except Exception as e:  # 07.L1 — log internals, return a generic message
+        logger.error("Watch toggle failed", exc_info=True)
+        raise HTTPException(status_code=500, detail="Watch toggle failed") from e
     return {"watching": enabled, "plugin_id": plugin_id}
 
 
@@ -491,10 +531,9 @@ def get_plugin_sync_status(plugin_id: str) -> dict[str, Any]:
     try:
         status = SyncService.get_sync_status(plugin_id)
         status["watching"] = SyncService.is_watching(plugin_id)
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get sync status: {e}"
-        ) from e
+    except Exception as e:  # 07.L1 — log internals, return a generic message
+        logger.error("Failed to get sync status", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to get sync status") from e
     return status
 
 

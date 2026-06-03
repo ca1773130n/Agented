@@ -4,6 +4,7 @@ import type { SuperAgentDocument, DocumentType } from '../../services/api';
 import { superAgentDocumentApi } from '../../services/api';
 import ConfirmModal from '../base/ConfirmModal.vue';
 import { useToast } from '../../composables/useToast';
+import { renderMarkdown as renderMarkdownSafe } from '../../composables/useMarkdown';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
@@ -103,39 +104,14 @@ function hasDocument(docType: DocumentType): boolean {
   return documents.value.some(d => d.doc_type === docType);
 }
 
+// [08.M1] The old hand-rolled regex renderer re-introduced raw HTML — notably
+// `[text](url) -> <a href="$2">` with no scheme validation, enabling self-XSS
+// via `javascript:` hrefs or attribute breakout. Replaced with the shared
+// DOMPurify-backed renderMarkdown() from composables/useMarkdown.ts, which
+// sanitizes output and strips dangerous hrefs.
 function renderMarkdown(md: string): string {
   if (!md) return `<p style="color:var(--text-tertiary)">${t('documentEditor.noContent')}</p>`;
-  let html = md
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-  // Code blocks (fenced)
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
-  // Inline code
-  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-  // Headings
-  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-  html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-  // Bold and italic
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-  // Unordered lists
-  html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
-  html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
-  // Links
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
-  // Paragraphs (double newline)
-  html = html.replace(/\n\n/g, '</p><p>');
-  html = '<p>' + html + '</p>';
-  // Clean up empty paragraphs around block elements
-  html = html.replace(/<p>\s*(<h[1-3]>)/g, '$1');
-  html = html.replace(/(<\/h[1-3]>)\s*<\/p>/g, '$1');
-  html = html.replace(/<p>\s*(<pre>)/g, '$1');
-  html = html.replace(/(<\/pre>)\s*<\/p>/g, '$1');
-  html = html.replace(/<p>\s*(<ul>)/g, '$1');
-  html = html.replace(/(<\/ul>)\s*<\/p>/g, '$1');
-  return html;
+  return renderMarkdownSafe(md);
 }
 
 const renderedMarkdown = computed(() => renderMarkdown(editContent.value));

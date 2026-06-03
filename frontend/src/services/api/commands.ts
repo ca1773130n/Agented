@@ -2,7 +2,7 @@
  * Command and command conversation API modules.
  */
 import { API_BASE, apiFetch, createAuthenticatedEventSource } from './client';
-import type { AuthenticatedEventSource } from './client';
+import type { AuthenticatedEventSource, AuthenticatedEventSourceOptions } from './client';
 import type {
   Command,
   CommandConversation,
@@ -76,7 +76,7 @@ export const commandConversationApi = {
   start: () => apiFetch<{ conversation_id: string; message: string }>('/api/commands/conversations/start', { method: 'POST' }),
   get: (convId: string) => apiFetch<CommandConversation>(`/api/commands/conversations/${convId}`),
   sendMessage: (convId: string, message: string, options?: { backend?: string; account_id?: string; model?: string; use_cli_agent?: boolean }) => apiFetch<{ message_id: string; status: string }>(`/api/commands/conversations/${convId}/message`, { method: 'POST', body: JSON.stringify({ message, ...options }) }),
-  stream: (convId: string): AuthenticatedEventSource => createAuthenticatedEventSource(`${API_BASE}/api/commands/conversations/${convId}/stream`),
+  stream: (convId: string, options?: AuthenticatedEventSourceOptions): AuthenticatedEventSource => createAuthenticatedEventSource(`${API_BASE}/api/commands/conversations/${convId}/stream`, options),
   finalize: (convId: string) => apiFetch<{ message: string; command_id: number; command: Command }>(`/api/commands/conversations/${convId}/finalize`, { method: 'POST' }),
   resume: (convId: string) => apiFetch<{ message: string; conversation_id: string }>(`/api/commands/conversations/${convId}/resume`, { method: 'POST' }),
   abandon: (convId: string) => apiFetch<{ message: string }>(`/api/commands/conversations/${convId}/abandon`, { method: 'POST' }),

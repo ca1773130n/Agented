@@ -268,7 +268,21 @@ def fetch_pr_diff(event: dict) -> Optional[str]:
     if not pr_url:
         return None
 
+    # SSRF guard (01 M7): the pr_url comes from a webhook event, so only fetch
+    # from the known GitHub diff hosts over https, and cap the read size.
+    import urllib.parse
+
+    parsed = urllib.parse.urlparse(pr_url)
+    allowed_hosts = {"github.com", "www.github.com"}
+    ghe_host = os.environ.get("AGENTED_GITHUB_HOST")
+    if ghe_host:
+        allowed_hosts.add(ghe_host.lower())
+    if parsed.scheme != "https" or (parsed.hostname or "").lower() not in allowed_hosts:
+        logger.warning("Refusing to fetch PR diff from untrusted URL: %s", pr_url)
+        return None
+
     diff_url = f"{pr_url}.diff"
+    max_bytes = int(os.environ.get("AGENTED_MAX_PR_DIFF_BYTES", str(10 * 1024 * 1024)))
     try:
         import urllib.request
 
@@ -277,7 +291,8 @@ def fetch_pr_diff(event: dict) -> Optional[str]:
             headers={"Accept": "text/plain", "User-Agent": "Agented/1.0"},
         )
         with urllib.request.urlopen(req, timeout=15) as response:
-            return response.read().decode("utf-8", errors="replace")
+            raw = response.read(max_bytes)
+            return raw.decode("utf-8", errors="replace")
     except Exception as e:
         logger.debug("Could not fetch PR diff from %s: %s", diff_url, e)
         return None

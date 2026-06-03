@@ -11,6 +11,7 @@ Architecture follows persist-queue (2025) SQLite-backed queue patterns.
 
 import json
 import logging
+import os
 import threading
 from typing import ClassVar, Dict, Optional
 
@@ -42,6 +43,14 @@ class ExecutionQueueService:
     _stop_event: ClassVar[threading.Event] = threading.Event()
     _concurrency_caps: ClassVar[Dict[str, int]] = {}
     _default_concurrency_cap: ClassVar[int] = 1
+    # Global cap across ALL triggers (01 H6): per-trigger caps alone don't bound
+    # total heavy CLI subprocesses (N triggers × their caps). Counts in-flight
+    # dispatched threads; the dispatcher stops the batch once saturated.
+    _GLOBAL_CONCURRENCY_CAP: ClassVar[int] = int(
+        os.environ.get("AGENTED_MAX_GLOBAL_EXECUTIONS", "20")
+    )
+    _active_global: ClassVar[int] = 0
+    _active_lock: ClassVar[threading.Lock] = threading.Lock()
 
     @classmethod
     def start_dispatcher(cls) -> None:
@@ -151,6 +160,16 @@ class ExecutionQueueService:
             trigger_id = entry["trigger_id"]
             entry_id = entry["id"]
 
+            # Global concurrency cap (01 H6) — stop dispatching this batch once
+            # the host is saturated; remaining entries stay queued for next poll.
+            with cls._active_lock:
+                if cls._active_global >= cls._GLOBAL_CONCURRENCY_CAP:
+                    logger.debug(
+                        "Global concurrency cap (%d) reached; deferring dispatch",
+                        cls._GLOBAL_CONCURRENCY_CAP,
+                    )
+                    break
+
             # Check concurrency cap
             cap = cls.get_concurrency_cap(trigger_id)
             active = count_active_for_trigger(trigger_id)
@@ -182,7 +201,10 @@ class ExecutionQueueService:
             if not updated:
                 continue  # Another thread got it first
 
-            # Spawn thread to execute
+            # Spawn thread to execute (count it toward the global cap; the
+            # thread decrements in its finally).
+            with cls._active_lock:
+                cls._active_global += 1
             thread = threading.Thread(
                 target=cls._dispatch_entry,
                 args=(entry,),
@@ -237,6 +259,10 @@ class ExecutionQueueService:
         except Exception:
             logger.exception("Queue entry %s failed", entry_id)
             update_entry_status(entry_id, "failed", expected_status="dispatching")
+        finally:
+            # Release the global-concurrency slot taken at dispatch time (01 H6).
+            with cls._active_lock:
+                cls._active_global = max(0, cls._active_global - 1)
 
     @classmethod
     def get_concurrency_cap(cls, trigger_id: str) -> int:
