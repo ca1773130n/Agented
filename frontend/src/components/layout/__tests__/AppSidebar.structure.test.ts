@@ -68,23 +68,22 @@ function buildRouter(): Router {
     'hooks', 'hook-design',
     'rules', 'rule-design',
     // Trigger facets (new section in PR-B)
-    'triggers', 'bot-templates', 'bot-clone-fork', 'cross-team-bot-sharing',
-    'incident-response-playbooks', 'inline-prompt-editor', 'visual-cron-wizard',
+    'triggers', 'bot-templates', 'visual-cron-wizard',
     'conditional-trigger-rules', 'repo-scope-filters', 'structured-output',
     'prompt-ab-testing', 'multi-provider-fallback', 'multi-repo-fan-out',
     'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions',
-    'webhook-recorder', 'dependency-impact-bot', 'bot-recommendation-engine',
-    'bot-dependency-graph', 'bot-performance-benchmarks', 'bot-runbooks',
+    'bot-recommendation-engine',
+    'bot-dependency-graph', 'bot-performance-benchmarks',
     'execution-tagging', 'changelog-generator', 'prompt-snippets',
     // PR-J2 — KEEP+WIRE routes wired into the sidebar.
     // Plugins child (PR-K kept Plugin SDK only).
     'plugin-sdk',
     // Triggers submenu additions (PR-K kept these — low marginal cost
     // inside the existing busy submenu).
-    'bot-dry-run', 'bot-output-piping', 'bot-output-webhook-forwarding',
+    'bot-dry-run', 'bot-output-webhook-forwarding',
     'nl-trigger-rule-editor', 'webhook-payload-transformer',
     // System / Analytics group (PR-K dropped alert-grouping).
-    'ai-cost-dashboard', 'provider-benchmark-dashboard',
+    'ai-cost-dashboard',
     'traces-list',
     // External integrations
     'slack-notifications', 'integration-ticketing', 'notification-channels',
@@ -95,8 +94,7 @@ function buildRouter(): Router {
     'usage-history',
     'ai-backends', 'backend-detail',
     'secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets',
-    'execution-quota-controls', 'report-digests', 'mobile-execution-monitor',
-    'bot-sla-uptime', 'api-keys', 'findings-triage-board',
+    'api-keys', 'findings-triage-board',
     'skill-version-pinning', 'conversation-history-viewer', 'system-errors',
     'settings',
   ];
@@ -177,19 +175,16 @@ describe('AppSidebar — PR-B structure', () => {
     expect(labels).not.toContain('Triggers');
   });
 
-  it('Triggers section contains exactly 21 sub-items (PR-N trimmed 9 specialty surfaces from 30)', () => {
-    // PR-N removed the following 9 sidebar entries (routes still
-    // reachable by URL — only the sidebar shortcuts were dropped):
-    //   Configuration block (5):
-    //     Repo Scope Filters, Structured Output, Prompt A/B Testing,
-    //     Provider Fallback, Multi-Repo Fan-Out
-    //   Ops block (1): Smart Suggestions
-    //   Introspection block (3):
-    //     Dependency Graph, Bot Benchmarks, Changelog Generator
-    // Resulting blocks: Core (5) + Configuration (5) + PR-Review (3)
-    // + Ops (5) + Introspection (2) + Authoring (1) = 21.
+  it('Triggers section contains exactly 13 sub-items (Phase-1 prune removed 8 toy/duplicate surfaces)', () => {
+    // Phase-1 prune (2026-06-02) dropped 8 Triggers entries whose
+    // backends were 404/stub or pure duplicates: Clone/Fork Bot,
+    // Cross-Team Sharing, Incident Playbooks, Live Prompt Sandbox
+    // (inline-prompt-editor), Webhook Recorder, Dependency Updates,
+    // Output Piping, Bot Runbooks.
+    // Resulting blocks: Core (2) + Configuration (4) + PR-Review (3)
+    // + Ops (2) + Introspection (1) + Authoring (1) = 13.
     const items = submenuItems(wrapper, 'Triggers');
-    expect(items.length).toBe(21);
+    expect(items.length).toBe(13);
   });
 
   it('Triggers section contains spot-checked items from different blocks', () => {
@@ -200,7 +195,7 @@ describe('AppSidebar — PR-B structure', () => {
     // PR-Review block
     expect(texts).toContain('GitHub Actions');
     // Ops block
-    expect(texts).toContain('Webhook Recorder');
+    expect(texts).toContain('Bot Dry-Run');
     // Authoring block (folded-in Prompt Snippets)
     expect(texts).toContain('Prompt Snippets');
   });
@@ -497,7 +492,7 @@ describe('AppSidebar — PR-B structure', () => {
     expect(texts).toContain('Plugin SDK');
   });
 
-  it('PR-J2: Triggers submenu includes the 5 KEEP+WIRE additions', () => {
+  it('Triggers submenu includes the 4 KEEP+WIRE additions (Output Piping pruned in Phase 1)', () => {
     const texts = submenuItems(wrapper, 'Triggers').map(
       (b) => b.textContent?.trim().replace(/\s+/g, ' ') ?? '',
     );
@@ -506,7 +501,6 @@ describe('AppSidebar — PR-B structure', () => {
     expect(texts).toContain('Payload Transformer');
     // Ops block
     expect(texts).toContain('Bot Dry-Run');
-    expect(texts).toContain('Output Piping');
     expect(texts).toContain('Webhook Forwarding');
   });
 
@@ -538,7 +532,7 @@ describe('AppSidebar — PR-B structure', () => {
     expect(labels).not.toContain('Multi-Agent Collab');
   });
 
-  it('PR-K: Analytics expandable contains the 3 kept KEEP+WIRE dashboards (Alert Grouping removed)', () => {
+  it('Analytics expandable contains the 2 kept dashboards (Provider Benchmarks pruned in Phase 1)', () => {
     const region = submenuOf(wrapper, 'Analytics');
     expect(region).not.toBeNull();
     const texts = submenuItems(wrapper, 'Analytics').map(
@@ -546,7 +540,6 @@ describe('AppSidebar — PR-B structure', () => {
     );
     expect(texts).toEqual([
       'AI Cost',
-      'Provider Benchmarks',
       'Traces',
     ]);
   });

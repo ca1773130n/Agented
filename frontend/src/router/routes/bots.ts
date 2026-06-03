@@ -15,20 +15,6 @@ export const botRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/BotDryRun.vue'),
     meta: { title: 'Bot Dry Run' },
   },
-  // Cross-Team Bot Sharing
-  {
-    path: '/bots/sharing',
-    name: 'cross-team-bot-sharing',
-    component: () => import('../../views/CrossTeamBotSharing.vue'),
-    meta: { title: 'Cross-Team Bot Sharing' },
-  },
-  // Dependency Impact Bot
-  {
-    path: '/tools/dependency-impact',
-    name: 'dependency-impact-bot',
-    component: () => import('../../views/DependencyImpactBot.vue'),
-    meta: { title: 'Dependency Impact Bot' },
-  },
   // Bot Dependency Graph
   {
     path: '/bots/dependency-graph',
@@ -50,33 +36,12 @@ export const botRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/BotRecommendationEngine.vue'),
     meta: { title: 'Bot Recommendations' },
   },
-  // Bot Clone & Fork
-  {
-    path: '/bots/clone',
-    name: 'bot-clone-fork',
-    component: () => import('../../views/BotCloneForkPage.vue'),
-    meta: { title: 'Clone & Fork Bot' },
-  },
-  // Bot Output Piping (Feature 20)
-  {
-    path: '/bots/piping',
-    name: 'bot-output-piping',
-    component: () => import('../../views/BotOutputPipingPage.vue'),
-    meta: { title: 'Bot Output Piping' },
-  },
   // Bot Test Sandbox Environments (Feature 29)
   {
     path: '/bots/sandbox',
     name: 'bot-sandbox',
     component: () => import('../../views/BotSandboxPage.vue'),
     meta: { title: 'Bot Test Sandboxes' },
-  },
-  // Bot-Linked Runbooks (Feature 33)
-  {
-    path: '/bots/runbooks',
-    name: 'bot-runbooks',
-    component: () => import('../../views/BotRunbooksPage.vue'),
-    meta: { title: 'Bot Runbooks' },
   },
   // On-Demand Code Explanation Bot (Feature 10)
   {
@@ -91,13 +56,6 @@ export const botRoutes: RouteRecordRaw[] = [
     name: 'cross-repo-impact-bot',
     component: () => import('../../views/CrossRepoImpactBotPage.vue'),
     meta: { title: 'Cross-Repo Impact Analysis' },
-  },
-  // Bot SLA & Uptime Tracking (Feature 39)
-  {
-    path: '/dashboards/bot-sla',
-    name: 'bot-sla-uptime',
-    component: () => import('../../views/BotSlaUptimePage.vue'),
-    meta: { title: 'Bot SLA & Uptime' },
   },
   // Repository-Level Default Bots (feature 21)
   {

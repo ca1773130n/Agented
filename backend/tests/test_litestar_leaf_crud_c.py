@@ -8,7 +8,6 @@ from app_litestar.routes.leaf_crud_c import (
     config_export_router,
     findings_router,
     products_router,
-    report_digests_router,
 )
 
 
@@ -18,7 +17,6 @@ def _client():
             products_router,
             analytics_router,
             findings_router,
-            report_digests_router,
             config_export_router,
         ],
         dependencies={"caller": provide_caller},
@@ -110,34 +108,6 @@ def test_delete_unknown_finding_404(isolated_db):
     with _client() as c:
         resp = c.delete("/api/findings/missing")
     assert resp.status_code == 404
-
-
-# Report digests
-
-
-# PR-G: silent-success stubs flipped to 501. The GET /digests read stays as
-# an honest empty 200 — the UI renders an empty state for it. The create and
-# update handlers previously echoed input back as if persisted; they now
-# return 501 ("Feature not yet enabled") so the UI can render a banner.
-
-
-def test_list_digests_returns_empty_200(isolated_db):
-    with _client() as c:
-        resp = c.get("/admin/reports/digests")
-    assert resp.status_code == 200
-    assert resp.json() == {"digests": []}
-
-
-def test_create_digest_returns_501(isolated_db):
-    with _client() as c:
-        resp = c.post("/admin/reports/digests", json={"team_name": "Demo"})
-    assert resp.status_code == 501
-
-
-def test_update_digest_returns_501(isolated_db):
-    with _client() as c:
-        resp = c.put("/admin/reports/digests/team-x", json={"enabled": True})
-    assert resp.status_code == 501
 
 
 # Config export/import

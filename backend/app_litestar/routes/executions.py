@@ -1,7 +1,7 @@
 """Wave 75 — execution log routes (~20 routes).
 
 Everything except /admin/executions/{id}/stream (SSE — deferred to the
-streaming wave) plus the queue, retries, anomaly stubs, and quota stubs.
+streaming wave) plus the queue, retries, and anomaly stubs.
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import Any, List, Optional
 
-from litestar import Router, delete, get, post, put
+from litestar import Router, delete, get, post
 from litestar.exceptions import (
     ClientException,
     HTTPException,
@@ -445,7 +445,7 @@ def cancel_queue_for_trigger(trigger_id: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Retries / anomalies / quotas
+# Retries / anomalies
 # ---------------------------------------------------------------------------
 
 
@@ -478,35 +478,6 @@ def execution_anomalies() -> dict[str, Any]:
 @post("/executions/anomalies/{anomaly_id:str}/acknowledge", sync_to_thread=False)
 def acknowledge_anomaly(anomaly_id: str) -> dict[str, Any]:
     del anomaly_id
-    # PR-G: silent-success stub flipped to 501.
-    raise HTTPException(status_code=501, detail="Feature not yet enabled")
-
-
-@get("/executions/quotas", sync_to_thread=False)
-def execution_quotas() -> dict[str, Any]:
-    # Honest empty read kept as-is (PR-G): UI renders an empty-state when the
-    # list is empty, which is truthful for an un-shipped feature. Only the
-    # mutating quota handlers below return 501.
-    return {"rules": []}
-
-
-@post("/executions/quotas", sync_to_thread=False)
-def create_execution_quota(data: dict) -> dict[str, Any]:
-    del data
-    # PR-G: silent-success stub flipped to 501.
-    raise HTTPException(status_code=501, detail="Feature not yet enabled")
-
-
-@put("/executions/quotas/{quota_id:str}", sync_to_thread=False)
-def update_execution_quota(quota_id: str, data: dict) -> dict[str, Any]:
-    del quota_id, data
-    # PR-G: silent-success stub flipped to 501.
-    raise HTTPException(status_code=501, detail="Feature not yet enabled")
-
-
-@delete("/executions/quotas/{quota_id:str}", status_code=200, sync_to_thread=False)
-def delete_execution_quota(quota_id: str) -> dict[str, Any]:
-    del quota_id
     # PR-G: silent-success stub flipped to 501.
     raise HTTPException(status_code=501, detail="Feature not yet enabled")
 
@@ -600,10 +571,6 @@ executions_router = Router(
         pending_retries,
         execution_anomalies,
         acknowledge_anomaly,
-        execution_quotas,
-        create_execution_quota,
-        update_execution_quota,
-        delete_execution_quota,
         execution_artifacts,
         get_annotation_summary,
         get_execution_annotation,

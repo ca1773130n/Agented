@@ -86,10 +86,6 @@
     "blockIntrospection": "イントロスペクション",
     "blockAuthoring": "オーサリング",
     "botTemplates": "ボットテンプレート",
-    "cloneForkBot": "ボットの複製 & フォーク",
-    "crossTeamSharing": "チーム間共有",
-    "incidentPlaybooks": "インシデントプレイブック",
-    "livePromptSandbox": "ライブプロンプトサンドボックス",
     "nlCronBuilder": "自然言語 Cron ビルダー",
     "triggerConditions": "トリガー条件",
     "nlRuleEditor": "自然言語ルールエディター",
@@ -97,12 +93,8 @@
     "prAutoAssignment": "PR 自動割り当て",
     "prReviewLearning": "PR レビュー学習",
     "githubActions": "GitHub Actions",
-    "webhookRecorder": "Webhook レコーダー",
-    "dependencyUpdates": "依存関係の更新",
     "botDryRun": "ボットのドライラン",
-    "outputPiping": "出力パイピング",
     "webhookForwarding": "Webhook 転送",
-    "botRunbooks": "ボットランブック",
     "executionTagging": "実行タグ付け",
     "promptSnippets": "プロンプトスニペット",
     "allPlugins": "すべてのプラグイン",
@@ -121,7 +113,6 @@
     "tokenUsage": "トークン使用量",
     "allBackends": "すべてのバックエンド",
     "aiCost": "AI コスト",
-    "providerBenchmarks": "プロバイダーベンチマーク",
     "traces": "トレース",
     "slackNotifications": "Slack 通知",
     "jiraLinear": "Jira / Linear",
@@ -130,10 +121,6 @@
     "rbacSettings": "RBAC 設定",
     "ssoSaml": "SSO / SAML",
     "teamBudgets": "チーム予算",
-    "executionQuotas": "実行クォータ",
-    "digestReports": "ダイジェストレポート",
-    "mobileMonitor": "モバイルモニター",
-    "botSlaUptime": "ボット SLA & 稼働率",
     "apiKeys": "API キー",
     "findingsTriage": "検出結果のトリアージ",
     "versionPinning": "バージョン固定",
@@ -3559,49 +3546,6 @@
       "saveFailed": "保存に失敗しました"
     }
   },
-  "botCloneFork": {
-    "title": "ボットの複製とフォーク",
-    "subtitle": "任意のボットを新しいボットの出発点として複製します。オプションで別のチームのワークスペースに複製できます。",
-    "loading": "トリガーとチームを読み込み中...",
-    "loadFailed": "データの読み込みに失敗しました",
-    "copyName": "{name} (コピー)",
-    "chooseSource": "ソースボットを選択",
-    "searchPlaceholder": "ボットを検索...",
-    "tag": {
-      "team": "チーム",
-      "predefined": "事前定義"
-    },
-    "paths": "パス{count}件",
-    "noMatch": "検索に一致するボットがありません",
-    "cloneConfig": "複製構成",
-    "selectPrompt": "複製を構成するにはソースボットを選択してください",
-    "cloningFrom": "複製元",
-    "previewDesc": "{source} トリガー · {mode} モード",
-    "newBotName": "新しいボット名",
-    "newBotNamePlaceholder": "マイフォークボット",
-    "targetTeam": "対象チーム",
-    "noTeam": "チームなし (直接)",
-    "noneDirect": "なし (直接)",
-    "copyPrompt": "プロンプトテンプレートをコピー",
-    "copyTrigger": "トリガー構成をコピー",
-    "copySchedule": "スケジュール設定をコピー",
-    "summary": {
-      "newName": "新しい名前",
-      "targetTeam": "対象チーム",
-      "copying": "コピー対象",
-      "prompt": "プロンプト",
-      "trigger": "トリガー",
-      "schedule": "スケジュール",
-      "configOnly": "構成のみ"
-    },
-    "cloning": "複製中...",
-    "cloneBot": "ボットを複製",
-    "toast": {
-      "nameRequired": "ボット名が必要です",
-      "created": "「{name}」が正常に作成されました",
-      "cloneFailed": "複製に失敗しました"
-    }
-  },
   "botDependencyGraph": {
     "title": "ボット依存関係グラフ",
     "subtitle": "ボット、トリガー、チーム、エージェント間の関係を視覚化します。",
@@ -3693,35 +3637,6 @@
       "deleteFailed": "メモリエントリの削除に失敗しました",
       "allCleared": "{bot} のすべてのメモリをクリアしました",
       "clearFailed": "メモリのクリアに失敗しました"
-    }
-  },
-  "botOutputPiping": {
-    "title": "ボット出力パイピング",
-    "subtitle": "ボットの実行を順次連結します — 1つのボットの出力が次のボットの入力コンテキストになります。",
-    "configuredPipes": "構成済みのパイプ",
-    "createNewPipe": "新しいパイプを作成",
-    "enabled": "有効",
-    "disabled": "無効",
-    "pipeDiagram": "パイプ図",
-    "recentExecutions": "最近のパイプ実行",
-    "transform": {
-      "passthrough": "そのまま渡す",
-      "trim": "空白を除去",
-      "jsonExtract": "JSON 抽出"
-    },
-    "node": {
-      "sourceBot": "ソースボット",
-      "stdoutCaptured": "stdout をキャプチャ",
-      "transform": "変換",
-      "outputProcessed": "出力を処理",
-      "destBot": "宛先ボット",
-      "stdinInjected": "stdin に注入"
-    },
-    "col": {
-      "pipe": "パイプ",
-      "triggered": "トリガー日時",
-      "sourcePreview": "ソースのプレビュー",
-      "destStatus": "宛先のステータス"
     }
   },
   "botOutputWebhookForwarding": {
@@ -3826,39 +3741,6 @@
       "enableFailed": "{name} の有効化に失敗しました"
     }
   },
-  "botRunbooks": {
-    "loading": "ランブックを読み込み中...",
-    "bots": "ボット",
-    "runbook": "ランブック",
-    "noRunbook": "ランブックなし",
-    "lastUpdated": "最終更新:",
-    "onCall": "オンコール:",
-    "severityMatrix": "重大度別アクションマトリクス",
-    "noRunbookFor": "{bot} のランブックがありません",
-    "emptyHint": "このボットが重大な問題を発生させたときにオンコールエンジニアが正確に何をすべきかわかるよう、ランブックを追加してください。",
-    "createRunbook": "ランブックを作成",
-    "editRunbook": "ランブックを編集",
-    "saving": "保存中...",
-    "saveRunbook": "ランブックを保存",
-    "sections": "セクション",
-    "addSection": "+ セクションを追加",
-    "selectBotHint": "左からボットを選択してランブックを表示または作成してください。",
-    "never": "なし",
-    "field": {
-      "title": "タイトル",
-      "description": "説明",
-      "descriptionPlaceholder": "このランブックは何のためのものですか？",
-      "onCallContact": "オンコール連絡先",
-      "onCallPlaceholder": "#slack-チャンネル またはメール",
-      "sectionTitle": "セクションタイトル",
-      "sectionTitlePlaceholder": "ステップ {num} のタイトル",
-      "content": "内容",
-      "contentPlaceholder": "手順..."
-    },
-    "toast": {
-      "saved": "ランブックを保存しました"
-    }
-  },
   "botSandbox": {
     "loading": "サンドボックスを読み込み中...",
     "introTitle": "ボットテストサンドボックス環境",
@@ -3892,50 +3774,6 @@
       "created": "サンドボックスを作成しました",
       "runComplete": "サンドボックスの実行が完了しました",
       "deleted": "サンドボックスを削除しました"
-    }
-  },
-  "botSlaUptime": {
-    "title": "ボット SLA・稼働時間トラッキング",
-    "subtitle": "ボットごとの期待される実行頻度を定義し、コンプライアンスを監視します。スケジュールされたボットが時間どおりに実行されないとき — 監査の見落としやレポートの遅延が気づかれる前に通知を受け取れます。",
-    "loading": "SLA データを読み込み中...",
-    "empty": "構成された SLA エントリがありません。ボットにスケジュールされた実行があると、ここにボット SLA トラッキングが表示されます。",
-    "noMatch": "このフィルターに一致するボットがありません。",
-    "on": "オン",
-    "off": "オフ",
-    "never": "なし",
-    "justNow": "たった今",
-    "hoursAgo": "{h}時間前",
-    "daysAgo": "{d}日前",
-    "na": "該当なし",
-    "overdueBy": "{h}時間遅延",
-    "soon": "まもなく",
-    "inHours": "{h}時間後",
-    "inDays": "{d}日後",
-    "filter": {
-      "allBots": "すべてのボット"
-    },
-    "stat": {
-      "onSchedule": "予定通り",
-      "overdue": "遅延",
-      "avgUptime": "平均30日稼働時間",
-      "trackedBots": "追跡中のボット"
-    },
-    "col": {
-      "bot": "ボット",
-      "lastRun": "最終実行",
-      "nextExpected": "次回予定",
-      "uptime7d": "7日稼働時間",
-      "uptime30d": "30日稼働時間",
-      "successRate": "成功率",
-      "alerts": "アラート"
-    },
-    "error": {
-      "timeout": "リクエストがタイムアウトしました。バックエンドに到達できない可能性があります。",
-      "loadFailed": "SLA データの読み込みに失敗しました"
-    },
-    "toast": {
-      "alertsEnabled": "{bot} の SLA アラートを有効化しました",
-      "alertsDisabled": "{bot} の SLA アラートを無効化しました"
     }
   },
   "botTemplateMarketplace": {
@@ -4221,49 +4059,6 @@
       "saveFailed": "ルールの保存に失敗しました",
       "deleted": "ルールを削除しました",
       "deleteFailed": "ルールの削除に失敗しました"
-    }
-  },
-  "executionQuotaControls": {
-    "loading": "クォータルールを読み込み中...",
-    "rulesTitle": "クォータルール",
-    "rulesDescription": "ボットごとの時間/日あたりの最大実行回数を設定します。ハードストップはブロックし、ソフトアラートは通知のみです。",
-    "newRule": "新しいルール",
-    "createRuleTitle": "クォータルールを作成",
-    "createRule": "ルールを作成",
-    "saveChanges": "変更を保存",
-    "nearingLimit": "上限に近づいているクォータ {count} 件",
-    "hardStop": "ハードストップ",
-    "thisHour": "この1時間",
-    "today": "今日",
-    "emptyTitle": "設定されたクォータルールがありません",
-    "emptyDescription": "「ルールを追加」をクリックして作成してください。",
-    "notEnabledShort": "クォータ適用はまだ有効になっていません",
-    "notEnabledDeployment": "クォータ適用はこのデプロイではまだ有効になっていません",
-    "notEnabled": {
-      "feature": "クォータ適用",
-      "detail": "バックエンドが永続的なクォータ適用をリリースするまで、クォータルールの作成、編集、削除は無効になっています。"
-    },
-    "form": {
-      "targetType": "対象タイプ",
-      "bot": "ボット",
-      "team": "チーム",
-      "global": "グローバル",
-      "targetName": "対象名 / ID",
-      "targetNamePlaceholder": "例: bot-security",
-      "maxPerHour": "時間あたり最大",
-      "maxPerHourPlaceholder": "例: 10",
-      "maxPerDay": "日あたり最大",
-      "maxPerDayPlaceholder": "例: 100",
-      "alertAt": "アラート閾値 (%)",
-      "alertThreshold": "アラート閾値 (%)",
-      "hardStopFull": "ハードストップ (上限到達時に実行をブロック)",
-      "hardStopShort": "ハードストップ"
-    },
-    "toast": {
-      "updated": "クォータルールを更新しました",
-      "updatedDemo": "クォータを更新しました (デモ)",
-      "created": "クォータルールを作成しました",
-      "deleted": "クォータルールを削除しました"
     }
   },
   "executionTagging": {
@@ -4869,55 +4664,6 @@
       "rejectFailed": "却下に失敗しました"
     }
   },
-  "incidentResponsePlaybooks": {
-    "title": "インシデント対応プレイブック",
-    "subtitle": "一般的なインシデント対応手順向けの事前構築済みボットテンプレートです。機械的な部分を自動化して、問題に集中できます。",
-    "loading": "プレイブックを読み込み中...",
-    "searchPlaceholder": "プレイブックを検索...",
-    "noMatch": "フィルターに一致するプレイブックがありません。",
-    "selectPrompt": "詳細を表示して実行するにはプレイブックを選択してください",
-    "steps": "手順",
-    "running": "実行中...",
-    "runPlaybook": "プレイブックを実行",
-    "executionLog": "実行ログ",
-    "lastRun": "最終実行",
-    "never": "なし",
-    "categories": {
-      "all": "すべて",
-      "outage": "障害",
-      "performance": "パフォーマンス",
-      "security": "セキュリティ",
-      "documentation": "ドキュメント",
-      "deployment": "デプロイ"
-    },
-    "toast": {
-      "loadFailed": "プレイブックの読み込みに失敗しました",
-      "completed": "プレイブック \"{name}\" が完了しました",
-      "executionFailed": "プレイブックの実行に失敗しました"
-    }
-  },
-  "inlinePromptEditor": {
-    "title": "ライブプレビュー付きインラインプロンプトエディター",
-    "subtitle": "テンプレート変数のハイライト、テストペイロードインジェクター、レンダリングプレビューを備えた分割ペインエディターです。",
-    "loadingTriggers": "トリガーを読み込み中...",
-    "noTriggers": "トリガーが見つかりません。まずトリガーを作成してください。",
-    "triggerLabel": "トリガー:",
-    "loadingPrompt": "プロンプトを読み込み中...",
-    "variables": "変数:",
-    "promptTemplate": "プロンプトテンプレート",
-    "saving": "保存中...",
-    "testPayload": "テストペイロード (JSON)",
-    "renderedPreview": "レンダリングプレビュー",
-    "unresolvedCount": "{count}件未解決",
-    "invalidJson": "無効な JSON",
-    "loadTriggersFailed": "トリガーの読み込みに失敗しました",
-    "loadPromptFailed": "プロンプトの読み込みに失敗しました",
-    "selectTriggerFirst": "まずトリガーを選択してください",
-    "savePromptFailed": "プロンプトの保存に失敗しました",
-    "toast": {
-      "saved": "プロンプトテンプレートを保存しました"
-    }
-  },
   "integrationTicketing": {
     "title": "チケット連携",
     "subtitle": "ボットの検出結果からチケットを自動作成するように Jira と Linear を構成します。",
@@ -5128,36 +4874,6 @@
     "recall": "リコール",
     "threads": "スレッド",
     "loadFailed": "ワーキングメモリの読み込みに失敗しました"
-  },
-  "mobileExecutionMonitor": {
-    "title": "実行モニター",
-    "autoRefresh": "15秒ごとに自動更新",
-    "alertsOn": "アラート オン",
-    "enableAlerts": "アラートを有効化",
-    "loading": "実行を読み込み中...",
-    "running": "実行中",
-    "failed": "失敗",
-    "succeeded": "成功",
-    "secondsAgo": "{count}秒前",
-    "minutesAgo": "{count}分前",
-    "hoursAgo": "{count}時間前",
-    "emptyAll": "実行が見つかりません。",
-    "emptyFiltered": "{status} の実行が見つかりません。",
-    "mobileHint": "このビューはモバイル向けに最適化されています。プッシュアラートを有効にすると、深夜2時の障害も通知されます。",
-    "detail": {
-      "id": "ID",
-      "bot": "ボット",
-      "status": "ステータス",
-      "started": "開始",
-      "finished": "終了",
-      "error": "エラー"
-    },
-    "toast": {
-      "notSupported": "このブラウザーではプッシュ通知がサポートされていません",
-      "disabled": "プッシュ通知を無効化しました",
-      "enabled": "ボット障害のプッシュ通知を有効化しました",
-      "permissionDenied": "通知の許可が拒否されました"
-    }
   },
   "multiAgentCollaboration": {
     "title": "マルチエージェント協調モード",
@@ -6311,37 +6027,6 @@
       "rollbackFailed": "ロールバックに失敗しました"
     }
   },
-  "providerBenchmarkDashboard": {
-    "title": "プロバイダーベンチマークダッシュボード",
-    "subtitle": "同じボットを複数のAIプロバイダーで同時に実行し、品質、レイテンシ、コストを比較します。",
-    "loading": "プロバイダーの状態とバックエンドデータを読み込み中...",
-    "empty": "プロバイダーアカウントが見つかりません。ベンチマークデータを表示するにはバックエンドとアカウントを設定してください。",
-    "unknown": "不明",
-    "unknownError": "不明なエラー",
-    "liveAccountHealth": "ライブアカウント状態",
-    "livePrompt": "状態、レイテンシ、コスト指標に基づくプロバイダーアカウントのリアルタイム比較。",
-    "benchmarks": "ベンチマーク",
-    "providersCount": "{count} プロバイダー",
-    "bestQuality": "最高品質",
-    "fastest": "最速",
-    "cheapest": "最安",
-    "costPer1k": "${cost}/1k トークン",
-    "comparisonResults": "比較結果",
-    "refreshing": "更新中...",
-    "refreshData": "▶ データを更新",
-    "benchmarkDescription": "ベンチマークの説明",
-    "cols": {
-      "provider": "プロバイダー",
-      "quality": "品質",
-      "latency": "レイテンシ",
-      "cost": "コスト /1k",
-      "tokensOut": "出力トークン"
-    },
-    "toasts": {
-      "refreshed": "ベンチマークデータを更新しました",
-      "refreshFailed": "更新に失敗しました"
-    }
-  },
   "rbacSettings": {
     "title": "ロールベースアクセス制御",
     "subtitle": "APIキーのロールを管理し、権限マトリックスを表示します",
@@ -6506,54 +6191,6 @@
       "switchedTo": "{mode} に切り替えました",
       "updateModeFailed": "フィルターモードの更新に失敗しました",
       "enterTestValue": "最初にテスト値を入力してください"
-    }
-  },
-  "reportDigests": {
-    "title": "レポートダイジェスト",
-    "subtitle": "AIが生成した要約をメールまたはSlackで配信するようにスケジュールします",
-    "addDigest": "+ ダイジェストを追加",
-    "newDigest": "新しいレポートダイジェスト",
-    "creating": "作成中...",
-    "createDigest": "ダイジェストを作成",
-    "saving": "保存中...",
-    "loading": "ダイジェスト構成を読み込み中...",
-    "active": "アクティブ",
-    "disabled": "無効",
-    "never": "なし",
-    "lastLabel": "最終: {time}",
-    "enableForTeam": "このチームのダイジェストを有効にする",
-    "previewTitle": "最後に生成されたダイジェストのプレビュー",
-    "platformTeam": "プラットフォームチーム",
-    "notEnabledTooltipShort": "ダイジェスト配信はまだ有効になっていません",
-    "notEnabledTooltip": "このデプロイではダイジェスト配信はまだ有効になっていません",
-    "notEnabled": {
-      "feature": "ダイジェスト配信",
-      "detail": "バックエンドがダイジェストの永続化と配信を提供するまで、ダイジェストスケジュールの作成または編集は無効です。"
-    },
-    "fields": {
-      "teamName": "チーム名",
-      "frequency": "頻度",
-      "channel": "チャネル",
-      "slackChannel": "Slackチャネル",
-      "emailRecipients": "メール受信者"
-    },
-    "frequency": {
-      "daily": "毎日",
-      "weekly": "毎週"
-    },
-    "channel": {
-      "email": "メール"
-    },
-    "empty": {
-      "title": "構成されたレポートダイジェストがありません",
-      "description": "自動レポートを受け取るには、チームのダイジェストスケジュールを構成してください。"
-    },
-    "toasts": {
-      "saved": "ダイジェスト設定を保存しました",
-      "savedDemo": "保存しました (デモモード)",
-      "teamNameRequired": "チーム名が必要です",
-      "created": "ダイジェスト構成を作成しました",
-      "createdDemo": "作成しました (デモモード)"
     }
   },
   "resetPassword": {
@@ -8072,43 +7709,6 @@
       "desc": "これらのプレースホルダーを使ってプロンプトテンプレート内で変換後の値を参照します:"
     }
   },
-  "webhookRecorder": {
-    "title": "Webhookレコーダー",
-    "subtitle": "キャプチャしたWebhookペイロードを参照、検査、再送信します。",
-    "loading": "Webhook記録を読み込み中...",
-    "errors": {
-      "load": "Webhook記録の読み込みに失敗しました",
-      "loadWithDetail": "Webhook記録の読み込みに失敗しました: {message}"
-    },
-    "toast": {
-      "replayed": "Webhook {id} を正常に再送信しました",
-      "triggerNotFound": "再送信できません: トリガーが見つかりません",
-      "replayFailed": "再送信に失敗しました"
-    },
-    "filters": {
-      "title": "フィルター",
-      "source": "ソース",
-      "allSources": "すべてのソース",
-      "bot": "ボット",
-      "allBots": "すべてのボット",
-      "date": "日付",
-      "clear": "フィルターをクリア"
-    },
-    "records": {
-      "count": "{count}件のWebhook",
-      "empty": "フィルターに一致するWebhookはありません"
-    },
-    "detail": {
-      "selectPrompt": "ペイロードを検査するWebhookを選択してください",
-      "titleSuffix": "{source} Webhook",
-      "replay": "再送信",
-      "replaying": "再送信中...",
-      "method": "メソッド: {method}",
-      "status": "ステータス: {status}",
-      "bot": "ボット: {bot}",
-      "payload": "ペイロード"
-    }
-  },
   "workflowBuilder": {
     "untitled": "無題のワークフロー",
     "errors": {
@@ -8980,68 +8580,6 @@
     "importComingSoon": "インポート (近日提供)",
     "toast": {
       "importComingSoon": "SuperAgentのインポートは今後のアップデートで提供されます"
-    }
-  },
-  "crossTeamBotSharing": {
-    "title": "チーム間 Bot 共有",
-    "subtitle": "組織全体のチームに割り当てられた trigger を参照します。",
-    "loading": "チームと trigger を読み込み中...",
-    "searchPlaceholder": "trigger 名、チーム、またはソースで検索...",
-    "triggerCount": "trigger {count} 件 | trigger {count} 件",
-    "noMatch": "検索に一致する trigger がありません。",
-    "noAssignments": "まだチームに割り当てられた trigger はありません。",
-    "backendLabel": "Backend",
-    "modelLabel": "Model",
-    "idLabel": "ID",
-    "enabled": "有効",
-    "disabled": "無効",
-    "view": "表示",
-    "unassigned": "未割り当て",
-    "triggerSourceLabel": "{source} trigger",
-    "tabs": {
-      "browse": "trigger を参照",
-      "assignments": "チーム割り当て"
-    },
-    "errors": {
-      "load": "読み込みに失敗しました: {message}",
-      "unexpected": "データの読み込み中に予期しないエラーが発生しました。"
-    }
-  },
-  "dependencyImpactBot": {
-    "title": "Dependency Impact Bot",
-    "subtitle": "PR のインターフェース変更によって影響を受けるダウンストリームサービスを分析します。",
-    "loadingTriggers": "trigger データを読み込み中...",
-    "analyzePr": "PR を分析",
-    "analyzeImpact": "影響を分析",
-    "analyzing": "分析中...",
-    "triggersLoaded": "trigger {count} 件読み込み済み",
-    "activeTriggers": "アクティブな Trigger",
-    "recentExecutionsSummary": "最近の実行 {count} 件 — {failed} 件失敗",
-    "warning": "警告",
-    "healthy": "正常",
-    "prLabel": "PR",
-    "prTitle": "PR #{num} — Dependency Impact 分析",
-    "impactScore": "影響スコア",
-    "changedInterfaces": "変更されたインターフェース",
-    "noneDetected": "検出されませんでした",
-    "impactedServices": "影響を受けるサービス",
-    "legend": {
-      "breaking": "Breaking",
-      "potential": "潜在的",
-      "safe": "安全"
-    },
-    "reasons": {
-      "noFailures": "Trigger「{name}」に最近の失敗はありません。",
-      "breaking": "最近の実行 {failed}/{total} 件が失敗 — 高い失敗率は breaking な依存関係を示します。",
-      "potential": "最近の実行 {failed}/{total} 件で失敗が発生 — 依存関係の問題の可能性があります。",
-      "noExecutions": "最近の実行が見つかりません — 依存関係の互換性を確認できません。"
-    },
-    "errors": {
-      "loadTriggers": "trigger の読み込みに失敗しました"
-    },
-    "toast": {
-      "enterPr": "PR の URL を入力してください",
-      "analysisFailed": "分析に失敗しました"
     }
   },
   "executionCostEstimator": {

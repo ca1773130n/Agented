@@ -86,12 +86,6 @@ def activity_feed(
     return {"activities": [_map_event_to_activity(e) for e in events], "total": total}
 
 
-@get("/admin/bots/sla", sync_to_thread=False)
-def bot_sla() -> dict[str, list]:
-    """Stub — bot SLA / uptime is not yet tracked."""
-    return {"entries": []}
-
-
 @get("/admin/analytics/cross-team-insights", sync_to_thread=False)
 def cross_team_insights() -> dict[str, Any]:
     """Per-team execution stats + org-level findings."""
@@ -255,7 +249,6 @@ misc_router = Router(
     path="/",
     route_handlers=[
         activity_feed,
-        bot_sla,
         cross_team_insights,
         model_pricing,
         scheduling_suggestions,

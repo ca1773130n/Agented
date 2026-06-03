@@ -88,8 +88,7 @@ export function formatApiError(status: number, serverMessage?: string): string {
 /**
  * PR-G — detects a 501 "Feature not yet enabled" response from a backend stub.
  *
- * Used by `AnomalyDetectionCard`, `ExecutionQuotaControls`, and
- * `ReportDigestsPage` so they can render a static "not yet enabled" banner
+ * Used by `AnomalyDetectionCard` so it can render a static "not yet enabled" banner
  * instead of falling through to a generic error toast or — worse — the
  * legacy demo-on-failure fallback that masked the missing feature.
  *

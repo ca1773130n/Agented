@@ -131,17 +131,17 @@ function autoExpandForRoute() {
   }
   // Auto-expand only for sidebar-visible Triggers children; URL-only
   // routes (still reachable, just not in this submenu) don't trigger expand.
-  if (['triggers', 'bot-templates', 'bot-clone-fork', 'cross-team-bot-sharing', 'incident-response-playbooks', 'inline-prompt-editor', 'visual-cron-wizard', 'conditional-trigger-rules', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'webhook-recorder', 'dependency-impact-bot', 'bot-runbooks', 'execution-tagging', 'prompt-snippets', 'bot-dry-run', 'bot-output-piping', 'bot-output-webhook-forwarding', 'nl-trigger-rule-editor', 'webhook-payload-transformer'].includes(name)) {
+  if (['triggers', 'bot-templates', 'visual-cron-wizard', 'conditional-trigger-rules', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'execution-tagging', 'prompt-snippets', 'bot-dry-run', 'bot-output-webhook-forwarding', 'nl-trigger-rule-editor', 'webhook-payload-transformer'].includes(name)) {
     expandedSections.value.triggers = true;
   }
   // PR-J2 — Analytics dashboards (System).
-  if (['ai-cost-dashboard', 'provider-benchmark-dashboard', 'traces-list', 'trace-detail'].includes(name)) {
+  if (['ai-cost-dashboard', 'traces-list', 'trace-detail'].includes(name)) {
     expandedSections.value.analytics = true;
   }
   if (['slack-notifications', 'integration-ticketing', 'notification-channels', 'github-app-install'].includes(name)) {
     expandedSections.value.externalIntegrations = true;
   }
-  if (['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'report-digests', 'execution-quota-controls', 'bot-sla-uptime', 'mobile-execution-monitor', 'audit-history', 'findings-triage-board', 'skill-version-pinning', 'conversation-history-viewer'].includes(name)) {
+  if (['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'audit-history', 'findings-triage-board', 'skill-version-pinning', 'conversation-history-viewer'].includes(name)) {
     expandedSections.value.platform = true;
   }
 }
@@ -241,12 +241,12 @@ function isWorkflowsSectionActive(): boolean {
 function isTriggersSectionActive(): boolean {
   // Only the 21 currently-visible Triggers children. URL-only routes
   // (still reachable) don't paint this toggle active.
-  return ['triggers', 'bot-templates', 'bot-clone-fork', 'cross-team-bot-sharing', 'incident-response-playbooks', 'inline-prompt-editor', 'visual-cron-wizard', 'conditional-trigger-rules', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'webhook-recorder', 'dependency-impact-bot', 'bot-runbooks', 'execution-tagging', 'prompt-snippets', 'bot-dry-run', 'bot-output-piping', 'bot-output-webhook-forwarding', 'nl-trigger-rule-editor', 'webhook-payload-transformer'].includes(currentRouteName.value);
+  return ['triggers', 'bot-templates', 'visual-cron-wizard', 'conditional-trigger-rules', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'execution-tagging', 'prompt-snippets', 'bot-dry-run', 'bot-output-webhook-forwarding', 'nl-trigger-rule-editor', 'webhook-payload-transformer'].includes(currentRouteName.value);
 }
 
 // PR-J2 — Analytics dashboards group under System.
 function isAnalyticsSectionActive(): boolean {
-  return ['ai-cost-dashboard', 'provider-benchmark-dashboard', 'traces-list', 'trace-detail'].includes(currentRouteName.value);
+  return ['ai-cost-dashboard', 'traces-list', 'trace-detail'].includes(currentRouteName.value);
 }
 
 function isExternalIntegrationsSectionActive(): boolean {
@@ -254,7 +254,7 @@ function isExternalIntegrationsSectionActive(): boolean {
 }
 
 function isPlatformSectionActive(): boolean {
-  return ['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'report-digests', 'execution-quota-controls', 'bot-sla-uptime', 'mobile-execution-monitor', 'audit-history', 'findings-triage-board', 'skill-version-pinning', 'conversation-history-viewer', 'system-errors'].includes(currentRouteName.value);
+  return ['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'audit-history', 'findings-triage-board', 'skill-version-pinning', 'conversation-history-viewer', 'system-errors'].includes(currentRouteName.value);
 }
 
 // Helper: navigate via router (mobile auto-close handled by router.afterEach)
@@ -685,20 +685,8 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-templates') }" :aria-current="sidebarActive('bot-templates') ? 'page' : undefined" @click="navTo('bot-templates')">
           {{ t('nav.botTemplates') }}
         </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-clone-fork') }" :aria-current="sidebarActive('bot-clone-fork') ? 'page' : undefined" @click="navTo('bot-clone-fork')">
-          {{ t('nav.cloneForkBot') }}
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('cross-team-bot-sharing') }" :aria-current="sidebarActive('cross-team-bot-sharing') ? 'page' : undefined" @click="navTo('cross-team-bot-sharing')">
-          {{ t('nav.crossTeamSharing') }}
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('incident-response-playbooks') }" :aria-current="sidebarActive('incident-response-playbooks') ? 'page' : undefined" @click="navTo('incident-response-playbooks')">
-          {{ t('nav.incidentPlaybooks') }}
-        </button>
 
         <div class="submenu-block-label" aria-hidden="true">{{ t('nav.blockConfiguration') }}</div>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('inline-prompt-editor') }" :aria-current="sidebarActive('inline-prompt-editor') ? 'page' : undefined" @click="navTo('inline-prompt-editor')">
-          {{ t('nav.livePromptSandbox') }}
-        </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('visual-cron-wizard') }" :aria-current="sidebarActive('visual-cron-wizard') ? 'page' : undefined" @click="navTo('visual-cron-wizard')">
           {{ t('nav.nlCronBuilder') }}
         </button>
@@ -726,27 +714,15 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
 
         <div class="submenu-block-label" aria-hidden="true">{{ t('nav.blockOps') }}</div>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('webhook-recorder') }" :aria-current="sidebarActive('webhook-recorder') ? 'page' : undefined" @click="navTo('webhook-recorder')">
-          {{ t('nav.webhookRecorder') }}
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('dependency-impact-bot') }" :aria-current="sidebarActive('dependency-impact-bot') ? 'page' : undefined" @click="navTo('dependency-impact-bot')">
-          {{ t('nav.dependencyUpdates') }}
-        </button>
         <!-- Bot dry-run: simulate a trigger without side-effects. -->
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-dry-run') }" :aria-current="sidebarActive('bot-dry-run') ? 'page' : undefined" @click="navTo('bot-dry-run')">
           {{ t('nav.botDryRun') }}
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-output-piping') }" :aria-current="sidebarActive('bot-output-piping') ? 'page' : undefined" @click="navTo('bot-output-piping')">
-          {{ t('nav.outputPiping') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-output-webhook-forwarding') }" :aria-current="sidebarActive('bot-output-webhook-forwarding') ? 'page' : undefined" @click="navTo('bot-output-webhook-forwarding')">
           {{ t('nav.webhookForwarding') }}
         </button>
 
         <div class="submenu-block-label" aria-hidden="true">{{ t('nav.blockIntrospection') }}</div>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-runbooks') }" :aria-current="sidebarActive('bot-runbooks') ? 'page' : undefined" @click="navTo('bot-runbooks')">
-          {{ t('nav.botRunbooks') }}
-        </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('execution-tagging') }" :aria-current="sidebarActive('execution-tagging') ? 'page' : undefined" @click="navTo('execution-tagging')">
           {{ t('nav.executionTagging') }}
         </button>
@@ -1111,9 +1087,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('ai-cost-dashboard') }" :aria-current="sidebarActive('ai-cost-dashboard') ? 'page' : undefined" @click="navTo('ai-cost-dashboard')">
           {{ t('nav.aiCost') }}
         </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('provider-benchmark-dashboard') }" :aria-current="sidebarActive('provider-benchmark-dashboard') ? 'page' : undefined" @click="navTo('provider-benchmark-dashboard')">
-          {{ t('nav.providerBenchmarks') }}
-        </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('traces-list') }" :aria-current="sidebarActive('traces-list') ? 'page' : undefined" @click="navTo('traces-list')">
           {{ t('nav.traces') }}
         </button>
@@ -1177,18 +1150,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('team-budgets') }" :aria-current="sidebarActive('team-budgets') ? 'page' : undefined" @click="navTo('team-budgets')">
           {{ t('nav.teamBudgets') }}
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('execution-quota-controls') }" :aria-current="sidebarActive('execution-quota-controls') ? 'page' : undefined" @click="navTo('execution-quota-controls')">
-          {{ t('nav.executionQuotas') }}
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('report-digests') }" :aria-current="sidebarActive('report-digests') ? 'page' : undefined" @click="navTo('report-digests')">
-          {{ t('nav.digestReports') }}
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('mobile-execution-monitor') }" :aria-current="sidebarActive('mobile-execution-monitor') ? 'page' : undefined" @click="navTo('mobile-execution-monitor')">
-          {{ t('nav.mobileMonitor') }}
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-sla-uptime') }" :aria-current="sidebarActive('bot-sla-uptime') ? 'page' : undefined" @click="navTo('bot-sla-uptime')">
-          {{ t('nav.botSlaUptime') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('api-keys') }" :aria-current="sidebarActive('api-keys') ? 'page' : undefined" @click="navTo('api-keys')">
           {{ t('nav.apiKeys') }}

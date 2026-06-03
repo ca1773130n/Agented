@@ -23,13 +23,6 @@ def test_activity_feed_caps_limit_at_500(isolated_db):
     assert resp.status_code == 200
 
 
-def test_bot_sla_stub(isolated_db):
-    with _client() as c:
-        resp = c.get("/admin/bots/sla")
-    assert resp.status_code == 200
-    assert resp.json() == {"entries": []}
-
-
 def test_cross_team_insights_returns_dict(isolated_db):
     with _client() as c:
         resp = c.get("/admin/analytics/cross-team-insights")

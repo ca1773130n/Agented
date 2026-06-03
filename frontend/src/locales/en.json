@@ -86,10 +86,6 @@
     "blockIntrospection": "Introspection",
     "blockAuthoring": "Authoring",
     "botTemplates": "Bot Templates",
-    "cloneForkBot": "Clone & Fork Bot",
-    "crossTeamSharing": "Cross-Team Sharing",
-    "incidentPlaybooks": "Incident Playbooks",
-    "livePromptSandbox": "Live Prompt Sandbox",
     "nlCronBuilder": "NL Cron Builder",
     "triggerConditions": "Trigger Conditions",
     "nlRuleEditor": "NL Rule Editor",
@@ -97,12 +93,8 @@
     "prAutoAssignment": "PR Auto-Assignment",
     "prReviewLearning": "PR Review Learning",
     "githubActions": "GitHub Actions",
-    "webhookRecorder": "Webhook Recorder",
-    "dependencyUpdates": "Dependency Updates",
     "botDryRun": "Bot Dry-Run",
-    "outputPiping": "Output Piping",
     "webhookForwarding": "Webhook Forwarding",
-    "botRunbooks": "Bot Runbooks",
     "executionTagging": "Execution Tagging",
     "promptSnippets": "Prompt Snippets",
     "allPlugins": "All Plugins",
@@ -121,7 +113,6 @@
     "tokenUsage": "Token Usage",
     "allBackends": "All Backends",
     "aiCost": "AI Cost",
-    "providerBenchmarks": "Provider Benchmarks",
     "traces": "Traces",
     "slackNotifications": "Slack Notifications",
     "jiraLinear": "Jira / Linear",
@@ -130,10 +121,6 @@
     "rbacSettings": "RBAC Settings",
     "ssoSaml": "SSO / SAML",
     "teamBudgets": "Team Budgets",
-    "executionQuotas": "Execution Quotas",
-    "digestReports": "Digest Reports",
-    "mobileMonitor": "Mobile Monitor",
-    "botSlaUptime": "Bot SLA & Uptime",
     "apiKeys": "API Keys",
     "findingsTriage": "Findings Triage",
     "versionPinning": "Version Pinning",
@@ -3559,49 +3546,6 @@
       "saveFailed": "Save failed"
     }
   },
-  "botCloneFork": {
-    "title": "Bot Clone & Fork",
-    "subtitle": "Duplicate any bot as a starting point for a new one — optionally into a different team's workspace.",
-    "loading": "Loading triggers and teams...",
-    "loadFailed": "Failed to load data",
-    "copyName": "{name} (Copy)",
-    "chooseSource": "Choose Source Bot",
-    "searchPlaceholder": "Search bots...",
-    "tag": {
-      "team": "team",
-      "predefined": "predefined"
-    },
-    "paths": "{count} paths",
-    "noMatch": "No bots match your search",
-    "cloneConfig": "Clone Configuration",
-    "selectPrompt": "Select a source bot to configure the clone",
-    "cloningFrom": "Cloning from",
-    "previewDesc": "{source} trigger · {mode} mode",
-    "newBotName": "New Bot Name",
-    "newBotNamePlaceholder": "My Forked Bot",
-    "targetTeam": "Target Team",
-    "noTeam": "No team (direct)",
-    "noneDirect": "None (direct)",
-    "copyPrompt": "Copy prompt template",
-    "copyTrigger": "Copy trigger configuration",
-    "copySchedule": "Copy schedule settings",
-    "summary": {
-      "newName": "New name",
-      "targetTeam": "Target team",
-      "copying": "Copying",
-      "prompt": "Prompt",
-      "trigger": "Trigger",
-      "schedule": "Schedule",
-      "configOnly": "Config only"
-    },
-    "cloning": "Cloning...",
-    "cloneBot": "Clone Bot",
-    "toast": {
-      "nameRequired": "Bot name is required",
-      "created": "\"{name}\" created successfully",
-      "cloneFailed": "Clone failed"
-    }
-  },
   "botDependencyGraph": {
     "title": "Bot Dependency Graph",
     "subtitle": "Visualize relationships between bots, triggers, teams, and agents.",
@@ -3693,35 +3637,6 @@
       "deleteFailed": "Failed to delete memory entry",
       "allCleared": "All memory cleared for {bot}",
       "clearFailed": "Failed to clear memory"
-    }
-  },
-  "botOutputPiping": {
-    "title": "Bot Output Piping",
-    "subtitle": "Chain bot executions sequentially — the output of one bot becomes the input context for the next.",
-    "configuredPipes": "Configured Pipes",
-    "createNewPipe": "Create New Pipe",
-    "enabled": "Enabled",
-    "disabled": "Disabled",
-    "pipeDiagram": "Pipe Diagram",
-    "recentExecutions": "Recent Pipe Executions",
-    "transform": {
-      "passthrough": "Passthrough",
-      "trim": "Trim Whitespace",
-      "jsonExtract": "JSON Extract"
-    },
-    "node": {
-      "sourceBot": "Source Bot",
-      "stdoutCaptured": "stdout captured",
-      "transform": "Transform",
-      "outputProcessed": "output processed",
-      "destBot": "Destination Bot",
-      "stdinInjected": "stdin injected"
-    },
-    "col": {
-      "pipe": "Pipe",
-      "triggered": "Triggered",
-      "sourcePreview": "Source Preview",
-      "destStatus": "Destination Status"
     }
   },
   "botOutputWebhookForwarding": {
@@ -3826,39 +3741,6 @@
       "enableFailed": "Failed to enable {name}"
     }
   },
-  "botRunbooks": {
-    "loading": "Loading runbooks...",
-    "bots": "Bots",
-    "runbook": "Runbook",
-    "noRunbook": "No runbook",
-    "lastUpdated": "Last updated:",
-    "onCall": "On-call:",
-    "severityMatrix": "Severity Action Matrix",
-    "noRunbookFor": "No runbook for {bot}",
-    "emptyHint": "Add a runbook so on-call engineers know exactly what to do when this bot fires a critical issue.",
-    "createRunbook": "Create Runbook",
-    "editRunbook": "Edit Runbook",
-    "saving": "Saving...",
-    "saveRunbook": "Save Runbook",
-    "sections": "Sections",
-    "addSection": "+ Add Section",
-    "selectBotHint": "Select a bot from the left to view or create its runbook.",
-    "never": "Never",
-    "field": {
-      "title": "Title",
-      "description": "Description",
-      "descriptionPlaceholder": "What is this runbook for?",
-      "onCallContact": "On-Call Contact",
-      "onCallPlaceholder": "#slack-channel or email",
-      "sectionTitle": "Section Title",
-      "sectionTitlePlaceholder": "Step {num} title",
-      "content": "Content",
-      "contentPlaceholder": "Instructions..."
-    },
-    "toast": {
-      "saved": "Runbook saved"
-    }
-  },
   "botSandbox": {
     "loading": "Loading sandboxes...",
     "introTitle": "Bot Test Sandbox Environments",
@@ -3892,50 +3774,6 @@
       "created": "Sandbox created",
       "runComplete": "Sandbox run complete",
       "deleted": "Sandbox deleted"
-    }
-  },
-  "botSlaUptime": {
-    "title": "Bot SLA & Uptime Tracking",
-    "subtitle": "Define expected execution frequency per bot and monitor compliance. Get alerted when a scheduled bot hasn't run on time — before a missed audit or late report is noticed.",
-    "loading": "Loading SLA data...",
-    "empty": "No SLA entries configured. Bot SLA tracking will appear here once bots have scheduled runs.",
-    "noMatch": "No bots match this filter.",
-    "on": "On",
-    "off": "Off",
-    "never": "Never",
-    "justNow": "Just now",
-    "hoursAgo": "{h}h ago",
-    "daysAgo": "{d}d ago",
-    "na": "N/A",
-    "overdueBy": "{h}h overdue",
-    "soon": "Soon",
-    "inHours": "In {h}h",
-    "inDays": "In {d}d",
-    "filter": {
-      "allBots": "All Bots"
-    },
-    "stat": {
-      "onSchedule": "On Schedule",
-      "overdue": "Overdue",
-      "avgUptime": "Avg 30d Uptime",
-      "trackedBots": "Tracked Bots"
-    },
-    "col": {
-      "bot": "Bot",
-      "lastRun": "Last Run",
-      "nextExpected": "Next Expected",
-      "uptime7d": "7d Uptime",
-      "uptime30d": "30d Uptime",
-      "successRate": "Success Rate",
-      "alerts": "Alerts"
-    },
-    "error": {
-      "timeout": "Request timed out. The backend may be unreachable.",
-      "loadFailed": "Failed to load SLA data"
-    },
-    "toast": {
-      "alertsEnabled": "SLA alerts enabled for {bot}",
-      "alertsDisabled": "SLA alerts disabled for {bot}"
     }
   },
   "botTemplateMarketplace": {
@@ -4221,49 +4059,6 @@
       "saveFailed": "Failed to save rule",
       "deleted": "Rule deleted",
       "deleteFailed": "Failed to delete rule"
-    }
-  },
-  "executionQuotaControls": {
-    "loading": "Loading quota rules...",
-    "rulesTitle": "Quota Rules",
-    "rulesDescription": "Set max executions per bot per hour/day. Hard stops block; soft alerts notify only.",
-    "newRule": "New Rule",
-    "createRuleTitle": "Create Quota Rule",
-    "createRule": "Create Rule",
-    "saveChanges": "Save Changes",
-    "nearingLimit": "{count} quotas nearing limit",
-    "hardStop": "Hard Stop",
-    "thisHour": "This Hour",
-    "today": "Today",
-    "emptyTitle": "No quota rules configured",
-    "emptyDescription": "Click \"Add Rule\" to create one.",
-    "notEnabledShort": "Quota enforcement is not yet enabled",
-    "notEnabledDeployment": "Quota enforcement is not yet enabled in this deployment",
-    "notEnabled": {
-      "feature": "Quota enforcement",
-      "detail": "Creating, editing, or deleting quota rules is disabled until the backend ships persistent quota enforcement."
-    },
-    "form": {
-      "targetType": "Target Type",
-      "bot": "Bot",
-      "team": "Team",
-      "global": "Global",
-      "targetName": "Target Name / ID",
-      "targetNamePlaceholder": "e.g. bot-security",
-      "maxPerHour": "Max per Hour",
-      "maxPerHourPlaceholder": "e.g. 10",
-      "maxPerDay": "Max per Day",
-      "maxPerDayPlaceholder": "e.g. 100",
-      "alertAt": "Alert at (%)",
-      "alertThreshold": "Alert Threshold (%)",
-      "hardStopFull": "Hard stop (block executions when limit hit)",
-      "hardStopShort": "Hard stop"
-    },
-    "toast": {
-      "updated": "Quota rule updated",
-      "updatedDemo": "Quota updated (demo)",
-      "created": "Quota rule created",
-      "deleted": "Quota rule deleted"
     }
   },
   "executionTagging": {
@@ -4869,55 +4664,6 @@
       "rejectFailed": "Failed to reject"
     }
   },
-  "incidentResponsePlaybooks": {
-    "title": "Incident Response Playbooks",
-    "subtitle": "Pre-built bot templates for common incident response steps. Automate the mechanical parts so you can focus on the problem.",
-    "loading": "Loading playbooks...",
-    "searchPlaceholder": "Search playbooks...",
-    "noMatch": "No playbooks match your filters.",
-    "selectPrompt": "Select a playbook to view details and run it",
-    "steps": "Steps",
-    "running": "Running...",
-    "runPlaybook": "Run Playbook",
-    "executionLog": "Execution Log",
-    "lastRun": "Last run",
-    "never": "Never",
-    "categories": {
-      "all": "All",
-      "outage": "Outage",
-      "performance": "Performance",
-      "security": "Security",
-      "documentation": "Documentation",
-      "deployment": "Deployment"
-    },
-    "toast": {
-      "loadFailed": "Failed to load playbooks",
-      "completed": "Playbook \"{name}\" completed",
-      "executionFailed": "Playbook execution failed"
-    }
-  },
-  "inlinePromptEditor": {
-    "title": "Inline Prompt Editor with Live Preview",
-    "subtitle": "Split-pane editor with template variable highlighting, test payload injector, and rendered preview.",
-    "loadingTriggers": "Loading triggers...",
-    "noTriggers": "No triggers found. Create a trigger first.",
-    "triggerLabel": "Trigger:",
-    "loadingPrompt": "Loading prompt...",
-    "variables": "Variables:",
-    "promptTemplate": "Prompt Template",
-    "saving": "Saving...",
-    "testPayload": "Test Payload (JSON)",
-    "renderedPreview": "Rendered Preview",
-    "unresolvedCount": "{count} unresolved",
-    "invalidJson": "Invalid JSON",
-    "loadTriggersFailed": "Failed to load triggers",
-    "loadPromptFailed": "Failed to load prompt",
-    "selectTriggerFirst": "Select a trigger first",
-    "savePromptFailed": "Failed to save prompt",
-    "toast": {
-      "saved": "Prompt template saved"
-    }
-  },
   "integrationTicketing": {
     "title": "Ticketing Integrations",
     "subtitle": "Configure Jira and Linear to auto-create tickets from bot findings.",
@@ -5128,36 +4874,6 @@
     "recall": "Recall",
     "threads": "Threads",
     "loadFailed": "Failed to load working memory"
-  },
-  "mobileExecutionMonitor": {
-    "title": "Execution Monitor",
-    "autoRefresh": "Auto-refreshes every 15s",
-    "alertsOn": "Alerts On",
-    "enableAlerts": "Enable Alerts",
-    "loading": "Loading executions...",
-    "running": "Running",
-    "failed": "Failed",
-    "succeeded": "Succeeded",
-    "secondsAgo": "{count}s ago",
-    "minutesAgo": "{count}m ago",
-    "hoursAgo": "{count}h ago",
-    "emptyAll": "No executions found.",
-    "emptyFiltered": "No {status} executions found.",
-    "mobileHint": "This view is optimized for mobile. Enable push alerts to get notified of failures at 2am.",
-    "detail": {
-      "id": "ID",
-      "bot": "Bot",
-      "status": "Status",
-      "started": "Started",
-      "finished": "Finished",
-      "error": "Error"
-    },
-    "toast": {
-      "notSupported": "Push notifications not supported in this browser",
-      "disabled": "Push notifications disabled",
-      "enabled": "Push notifications enabled for bot failures",
-      "permissionDenied": "Notification permission denied"
-    }
   },
   "multiAgentCollaboration": {
     "title": "Multi-Agent Collaboration Mode",
@@ -6311,37 +6027,6 @@
       "rollbackFailed": "Rollback failed"
     }
   },
-  "providerBenchmarkDashboard": {
-    "title": "Provider Benchmarking Dashboard",
-    "subtitle": "Run the same bot against multiple AI providers simultaneously and compare quality, latency, and cost.",
-    "loading": "Loading provider health and backend data...",
-    "empty": "No provider accounts found. Configure backends and accounts to see benchmark data.",
-    "unknown": "Unknown",
-    "unknownError": "Unknown error",
-    "liveAccountHealth": "Live Account Health",
-    "livePrompt": "Real-time comparison of provider accounts based on health, latency, and cost metrics.",
-    "benchmarks": "Benchmarks",
-    "providersCount": "{count} providers",
-    "bestQuality": "Best Quality",
-    "fastest": "Fastest",
-    "cheapest": "Cheapest",
-    "costPer1k": "${cost}/1k tokens",
-    "comparisonResults": "Comparison Results",
-    "refreshing": "Refreshing...",
-    "refreshData": "▶ Refresh Data",
-    "benchmarkDescription": "Benchmark Description",
-    "cols": {
-      "provider": "Provider",
-      "quality": "Quality",
-      "latency": "Latency",
-      "cost": "Cost /1k",
-      "tokensOut": "Tokens Out"
-    },
-    "toasts": {
-      "refreshed": "Benchmark data refreshed",
-      "refreshFailed": "Refresh failed"
-    }
-  },
   "rbacSettings": {
     "title": "Role-Based Access Control",
     "subtitle": "Manage API key roles and view the permission matrix",
@@ -6506,54 +6191,6 @@
       "switchedTo": "Switched to {mode}",
       "updateModeFailed": "Failed to update filter mode",
       "enterTestValue": "Enter a test value first"
-    }
-  },
-  "reportDigests": {
-    "title": "Report Digests",
-    "subtitle": "Schedule AI-generated summaries delivered to email or Slack",
-    "addDigest": "+ Add Digest",
-    "newDigest": "New Report Digest",
-    "creating": "Creating...",
-    "createDigest": "Create Digest",
-    "saving": "Saving...",
-    "loading": "Loading digest configurations...",
-    "active": "Active",
-    "disabled": "Disabled",
-    "never": "Never",
-    "lastLabel": "Last: {time}",
-    "enableForTeam": "Enable digest for this team",
-    "previewTitle": "Last Generated Digest Preview",
-    "platformTeam": "Platform Team",
-    "notEnabledTooltipShort": "Digest delivery is not yet enabled",
-    "notEnabledTooltip": "Digest delivery is not yet enabled in this deployment",
-    "notEnabled": {
-      "feature": "Digest delivery",
-      "detail": "Creating or editing digest schedules is disabled until the backend ships digest persistence and delivery."
-    },
-    "fields": {
-      "teamName": "Team Name",
-      "frequency": "Frequency",
-      "channel": "Channel",
-      "slackChannel": "Slack Channel",
-      "emailRecipients": "Email Recipients"
-    },
-    "frequency": {
-      "daily": "Daily",
-      "weekly": "Weekly"
-    },
-    "channel": {
-      "email": "Email"
-    },
-    "empty": {
-      "title": "No report digests configured",
-      "description": "Configure digest schedules for your teams to receive automated reports."
-    },
-    "toasts": {
-      "saved": "Digest settings saved",
-      "savedDemo": "Saved (demo mode)",
-      "teamNameRequired": "Team name is required",
-      "created": "Digest configuration created",
-      "createdDemo": "Created (demo mode)"
     }
   },
   "resetPassword": {
@@ -8072,43 +7709,6 @@
       "desc": "Reference transformed values in your prompt template using these placeholders:"
     }
   },
-  "webhookRecorder": {
-    "title": "Webhook Recorder",
-    "subtitle": "Browse, inspect, and replay captured webhook payloads.",
-    "loading": "Loading webhook records...",
-    "errors": {
-      "load": "Failed to load webhook records",
-      "loadWithDetail": "Failed to load webhook records: {message}"
-    },
-    "toast": {
-      "replayed": "Webhook {id} replayed successfully",
-      "triggerNotFound": "Cannot replay: trigger not found",
-      "replayFailed": "Replay failed"
-    },
-    "filters": {
-      "title": "Filters",
-      "source": "Source",
-      "allSources": "All sources",
-      "bot": "Bot",
-      "allBots": "All bots",
-      "date": "Date",
-      "clear": "Clear filters"
-    },
-    "records": {
-      "count": "{count} webhook | {count} webhooks",
-      "empty": "No webhooks match filters"
-    },
-    "detail": {
-      "selectPrompt": "Select a webhook to inspect its payload",
-      "titleSuffix": "{source} webhook",
-      "replay": "Replay",
-      "replaying": "Replaying...",
-      "method": "Method: {method}",
-      "status": "Status: {status}",
-      "bot": "Bot: {bot}",
-      "payload": "Payload"
-    }
-  },
   "workflowBuilder": {
     "untitled": "Untitled Workflow",
     "errors": {
@@ -8980,68 +8580,6 @@
     "importComingSoon": "Import (coming soon)",
     "toast": {
       "importComingSoon": "SuperAgent import coming in a future update"
-    }
-  },
-  "crossTeamBotSharing": {
-    "title": "Cross-Team Bot Sharing",
-    "subtitle": "Browse triggers assigned to teams across your organization.",
-    "loading": "Loading teams and triggers...",
-    "searchPlaceholder": "Search by trigger name, team, or source...",
-    "triggerCount": "{count} trigger | {count} triggers",
-    "noMatch": "No triggers match your search.",
-    "noAssignments": "No triggers are assigned to teams yet.",
-    "backendLabel": "Backend",
-    "modelLabel": "Model",
-    "idLabel": "ID",
-    "enabled": "enabled",
-    "disabled": "disabled",
-    "view": "View",
-    "unassigned": "Unassigned",
-    "triggerSourceLabel": "{source} trigger",
-    "tabs": {
-      "browse": "Browse Triggers",
-      "assignments": "Team Assignments"
-    },
-    "errors": {
-      "load": "Failed to load: {message}",
-      "unexpected": "An unexpected error occurred while loading data."
-    }
-  },
-  "dependencyImpactBot": {
-    "title": "Dependency Impact Bot",
-    "subtitle": "Analyze which downstream services are affected by interface changes in a PR.",
-    "loadingTriggers": "Loading trigger data...",
-    "analyzePr": "Analyze PR",
-    "analyzeImpact": "Analyze Impact",
-    "analyzing": "Analyzing...",
-    "triggersLoaded": "{count} triggers loaded",
-    "activeTriggers": "Active Triggers",
-    "recentExecutionsSummary": "{count} recent executions — {failed} failed",
-    "warning": "warning",
-    "healthy": "healthy",
-    "prLabel": "PR",
-    "prTitle": "PR #{num} — Dependency Impact Analysis",
-    "impactScore": "Impact Score",
-    "changedInterfaces": "Changed Interfaces",
-    "noneDetected": "None detected",
-    "impactedServices": "Impacted Services",
-    "legend": {
-      "breaking": "Breaking",
-      "potential": "Potential",
-      "safe": "Safe"
-    },
-    "reasons": {
-      "noFailures": "Trigger \"{name}\" has no recent failures.",
-      "breaking": "{failed}/{total} recent executions failed — high failure rate indicates breaking dependency.",
-      "potential": "{failed}/{total} recent executions had failures — possible dependency issue.",
-      "noExecutions": "No recent executions found — unable to verify dependency compatibility."
-    },
-    "errors": {
-      "loadTriggers": "Failed to load triggers"
-    },
-    "toast": {
-      "enterPr": "Enter a PR URL",
-      "analysisFailed": "Analysis failed"
     }
   },
   "executionCostEstimator": {
