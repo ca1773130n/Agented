@@ -89,7 +89,7 @@ function autoExpandForRoute() {
   if (name === 'usage-history') {
     expandedSections.value.usage = true;
   }
-  if (['skills-playground', 'skill-create', 'my-skills', 'skill-detail', 'explore-skills'].includes(name)) {
+  if (['skills-playground', 'skill-create', 'my-skills', 'skill-detail', 'explore-skills', 'skill-version-pinning'].includes(name)) {
     expandedSections.value.skills = true;
   }
   if (['plugins', 'plugin-design', 'harness-integration', 'explore-plugins', 'plugin-detail'].includes(name)) {
@@ -107,7 +107,7 @@ function autoExpandForRoute() {
   if (['teams', 'team-dashboard', 'team-settings', 'team-builder'].includes(name)) {
     expandedSections.value.teams = true;
   }
-  if (['agents', 'agent-create', 'agent-design'].includes(name)) {
+  if (['agents', 'agent-create', 'agent-design', 'conversation-history-viewer'].includes(name)) {
     expandedSections.value.agents = true;
   }
   if (['super-agents', 'super-agent-playground', 'explore-super-agents'].includes(name)) {
@@ -137,7 +137,7 @@ function autoExpandForRoute() {
   if (['ai-cost-dashboard', 'traces-list', 'trace-detail'].includes(name)) {
     expandedSections.value.analytics = true;
   }
-  if (['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'audit-history', 'findings-triage-board', 'skill-version-pinning', 'conversation-history-viewer'].includes(name)) {
+  if (['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'audit-history', 'findings-triage-board'].includes(name)) {
     expandedSections.value.platform = true;
   }
 }
@@ -187,7 +187,7 @@ function isHistorySectionActive(): boolean {
 }
 
 function isSkillsSectionActive(): boolean {
-  return ['skills-playground', 'skill-create', 'my-skills', 'explore-skills', 'skill-detail'].includes(currentRouteName.value);
+  return ['skills-playground', 'skill-create', 'my-skills', 'explore-skills', 'skill-detail', 'skill-version-pinning'].includes(currentRouteName.value);
 }
 
 function isPluginsSectionActive(): boolean {
@@ -207,7 +207,7 @@ function isTeamsSectionActive(): boolean {
 }
 
 function isAgentsSectionActive(): boolean {
-  return ['agents', 'agent-create', 'agent-design'].includes(currentRouteName.value);
+  return ['agents', 'agent-create', 'agent-design', 'conversation-history-viewer'].includes(currentRouteName.value);
 }
 
 function isSuperAgentsSectionActive(): boolean {
@@ -246,7 +246,7 @@ function isAnalyticsSectionActive(): boolean {
 }
 
 function isPlatformSectionActive(): boolean {
-  return ['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'audit-history', 'findings-triage-board', 'skill-version-pinning', 'conversation-history-viewer', 'system-errors'].includes(currentRouteName.value);
+  return ['secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets', 'audit-history', 'findings-triage-board', 'system-errors'].includes(currentRouteName.value);
 }
 
 // Helper: navigate via router (mobile auto-close handled by router.afterEach)
@@ -598,6 +598,10 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('agent-create') }" :aria-current="sidebarActive('agent-create') ? 'page' : undefined" @click="navToAgentCreate()">
           {{ t('nav.designAnAgent') }}
         </button>
+        <!-- P2: Conversation History relocated here from Platform (it views agent conversations). -->
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('conversation-history-viewer') }" :aria-current="sidebarActive('conversation-history-viewer') ? 'page' : undefined" @click="navTo('conversation-history-viewer')">
+          {{ t('nav.conversationHistory') }}
+        </button>
       </div>
 
       <!-- SuperAgents (expandable) -->
@@ -785,6 +789,10 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('my-skills') }" :aria-current="sidebarActive('my-skills') ? 'page' : undefined" @click="navTo('my-skills')">
           {{ t('nav.skillLibrary') }}
+        </button>
+        <!-- P2: Version Pinning relocated here from Platform (a skill/plugin version concern). -->
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('skill-version-pinning') }" :aria-current="sidebarActive('skill-version-pinning') ? 'page' : undefined" @click="navTo('skill-version-pinning')">
+          {{ t('nav.versionPinning') }}
         </button>
       </div>
 
@@ -1096,12 +1104,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('findings-triage-board') }" :aria-current="sidebarActive('findings-triage-board') ? 'page' : undefined" @click="navTo('findings-triage-board')">
           {{ t('nav.findingsTriage') }}
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('skill-version-pinning') }" :aria-current="sidebarActive('skill-version-pinning') ? 'page' : undefined" @click="navTo('skill-version-pinning')">
-          {{ t('nav.versionPinning') }}
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('conversation-history-viewer') }" :aria-current="sidebarActive('conversation-history-viewer') ? 'page' : undefined" @click="navTo('conversation-history-viewer')">
-          {{ t('nav.conversationHistory') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('system-errors') }" :aria-current="sidebarActive('system-errors') ? 'page' : undefined" @click="navTo('system-errors')">
           {{ t('nav.systemErrors') }}
