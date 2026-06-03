@@ -91,7 +91,7 @@ function buildRouter(): Router {
     'on-call-escalation',
     // History (security-history route still exists; sidebar entry removed)
     'security-history', 'trigger-history', 'audit-history',
-    'execution-replay-diff', 'execution-annotation', 'execution-search',
+    'execution-tools', 'execution-replay-diff', 'execution-annotation', 'execution-search',
     'usage-history',
     'ai-backends', 'backend-detail',
     'secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets',
@@ -176,14 +176,14 @@ describe('AppSidebar — PR-B structure', () => {
     expect(labels).not.toContain('Triggers');
   });
 
-  it('Triggers section contains exactly 9 sub-items (P2 folded 5 editors into Trigger Tools)', () => {
-    // P2 (Trigger Tools) folded Conditions, NL Rule Editor, Schedule (cron),
-    // Payload Transformer, and Bot Dry-Run into one Trigger Tools tabbed page,
-    // replacing those 5 Configuration/Ops entries with a single item.
+  it('Triggers section contains exactly 8 sub-items (editors + execution-tagging folded out)', () => {
+    // P2 folded the 5 trigger editors into Trigger Tools (Configuration) and
+    // execution-tagging into the Execution Tools page — which empties and
+    // removes the Introspection block.
     // Resulting blocks: Core (2) + Configuration (1) + PR-Review (3)
-    // + Ops (1) + Introspection (1) + Authoring (1) = 9.
+    // + Ops (1) + Authoring (1) = 8.
     const items = submenuItems(wrapper, 'Triggers');
-    expect(items.length).toBe(9);
+    expect(items.length).toBe(8);
   });
 
   it('Triggers section contains spot-checked items from different blocks', () => {
@@ -219,7 +219,7 @@ describe('AppSidebar — PR-B structure', () => {
     expect(texts).not.toContain('Changelog Generator');
   });
 
-  it('Triggers section renders 6 visual block labels (Core, Configuration, PR-Review, Ops, Introspection, Authoring)', () => {
+  it('Triggers section renders 5 visual block labels (Introspection dropped in P2)', () => {
     const region = submenuOf(wrapper, 'Triggers');
     expect(region).not.toBeNull();
     const blockLabels = Array.from(
@@ -230,7 +230,6 @@ describe('AppSidebar — PR-B structure', () => {
       'Configuration',
       'PR-Review',
       'Ops',
-      'Introspection',
       'Authoring',
     ]);
   });
