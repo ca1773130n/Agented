@@ -56,7 +56,7 @@ requires-dist = [
     { name = "ai-accounts-core", editable = "../../ai-accounts/packages/core" },
     { name = "ai-accounts-litestar", editable = "../../ai-accounts/packages/litestar" },
     { name = "apscheduler", specifier = ">=3.10.0" },
-    { name = "autoresearch-core", editable = "../../autoresearch-core" },
+    { name = "autoresearch-core", specifier = ">=0.1.1,<0.2" },
     { name = "bcrypt", specifier = ">=5.0.0" },
     { name = "cryptography", specifier = ">=41.0.0" },
     { name = "flask", specifier = ">=2.2.3,<3.0" },
@@ -317,14 +317,11 @@ wheels = [
 [[package]]
 name = "autoresearch-core"
 version = "0.1.1"
-source = { editable = "../../autoresearch-core" }
-
-[package.metadata]
-requires-dist = [
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d4/0a/4e415b9881b3acf2938864c6b0579babcf9cb70e198811d2bc267dbee46e/autoresearch_core-0.1.1.tar.gz", hash = "sha256:690cb6156ba19df9802b13c36f691fde51dc55bfee45484c04b9742cbbe9b199", size = 12451, upload-time = "2026-06-03T16:05:40.628Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a4/8a/351dece7bc32fdc866f94dd9e4e129a62e1a5ba7a2376c6b54897169ddf7/autoresearch_core-0.1.1-py3-none-any.whl", hash = "sha256:64fd824fca06e1ad3a0211b73d788c567c6aa7235855da6d172ac6c1977a5b4d", size = 11054, upload-time = "2026-06-03T16:05:38.985Z" },
 ]
-provides-extras = ["dev"]
 
 [[package]]
 name = "bcrypt"
