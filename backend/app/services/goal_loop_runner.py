@@ -162,6 +162,7 @@ class _RunnerState:
     started_at: float
     iteration: int = 0
     not_met_streak: int = 0
+    total_cost_usd: float = 0.0
     stop_event: threading.Event = field(default_factory=threading.Event)
 
 
@@ -242,6 +243,12 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
     model_override = config.get("judge_model_override")
     max_iterations = int(config.get("max_iterations") or 20)
     max_wall_seconds = int(config.get("max_wall_seconds") or 1800)
+    # Optional cost ceiling (USD). 0/unset disables — the loop is then bounded
+    # only by iteration + wall caps (06 H1). Each judge verdict records cost_usd.
+    try:
+        max_cost_usd = float(config.get("max_cost_usd") or 0.0)
+    except (TypeError, ValueError):
+        max_cost_usd = 0.0
     # v0.7.87 — Ouroboros is the default goal-loop mode. The
     # config flag is preserved so operators can disable it
     # (``"ouroboros": false``) when the agent backend is a poor
@@ -369,6 +376,21 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
 
             if verdict.met:
                 _broadcast_end(session_id, reason="met", detail=verdict.reason)
+                ProjectSessionManager.stop_session(session_id)
+                break
+
+            # Budget guard (06 H1): accumulate judge cost and stop if a
+            # configured ceiling is exceeded, so a misconfigured large
+            # max_iterations × expensive model can't burn unbounded spend
+            # within the wall-clock window. Checked AFTER the met-break so a
+            # successful final iteration is never denied.
+            state.total_cost_usd += float(verdict.cost_usd or 0.0)
+            if max_cost_usd > 0 and state.total_cost_usd >= max_cost_usd:
+                _broadcast_end(
+                    session_id,
+                    reason="budget_cap",
+                    detail=f"cost ${state.total_cost_usd:.4f} reached cap ${max_cost_usd:.4f}",
+                )
                 ProjectSessionManager.stop_session(session_id)
                 break
 

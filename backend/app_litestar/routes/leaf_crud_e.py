@@ -48,6 +48,7 @@ from app.db.triggers import (
     remove_github_repo,
     update_trigger,
 )
+from app_litestar.route_helpers import clamp_limit
 from app.services.health_monitor_service import HealthMonitorService
 from app.services.instance_service import InstanceService
 from app.services.monitoring_service import MonitoringService
@@ -80,9 +81,7 @@ def save_monitoring_config(data: dict) -> dict[str, Any]:
         raise ClientException(detail="accounts must be a JSON object")
     for key, value in accounts.items():
         if not isinstance(key, str):
-            raise ClientException(
-                detail=f"accounts keys must be strings, got {type(key).__name__}"
-            )
+            raise ClientException(detail=f"accounts keys must be strings, got {type(key).__name__}")
         if not isinstance(value, dict):
             raise ClientException(
                 detail=f"accounts[{key!r}] must be a JSON object, got {type(value).__name__}"
@@ -158,11 +157,13 @@ def monitoring_history(
     offset: int = 0,
 ) -> dict[str, Any]:
     if account_id is None or not window_type:
-        raise ClientException(
-            detail="account_id and window_type are required query parameters"
-        )
+        raise ClientException(detail="account_id and window_type are required query parameters")
     history = get_snapshot_history(
-        account_id, window_type, since_minutes=minutes, limit=limit, offset=offset
+        account_id,
+        window_type,
+        since_minutes=minutes,
+        limit=clamp_limit(limit, default=50),
+        offset=offset,
     )
     formatted = [
         {
@@ -265,7 +266,9 @@ def list_health_alerts(
     ack = None
     if acknowledged is not None:
         ack = acknowledged.lower() in ("1", "true", "yes")
-    alerts = get_recent_alerts(limit=limit, trigger_id=trigger_id, acknowledged=ack)
+    alerts = get_recent_alerts(
+        limit=clamp_limit(limit, default=50), trigger_id=trigger_id, acknowledged=ack
+    )
     return {"alerts": alerts}
 
 
@@ -444,9 +447,7 @@ def create_instance(project_id: str, data: dict) -> Any:
     team_id = body.get("team_id")
     super_agent_id = body.get("super_agent_id")
     if not team_id and not super_agent_id:
-        raise ClientException(
-            detail="At least one of team_id or super_agent_id must be provided"
-        )
+        raise ClientException(detail="At least one of team_id or super_agent_id must be provided")
     try:
         if team_id:
             result = InstanceService.create_team_instances(project_id, team_id)
@@ -458,9 +459,7 @@ def create_instance(project_id: str, data: dict) -> Any:
             detail="Instance already exists for this project and template",
         ) from e
     if result is None:
-        raise ClientException(
-            detail="Failed to create instance (project or template not found)"
-        )
+        raise ClientException(detail="Failed to create instance (project or template not found)")
     return result
 
 
@@ -548,7 +547,12 @@ def _build_bindings(triggers: list) -> list:
 
 
 def _available_bots(triggers: list) -> list:
-    type_map = {"github": "review", "webhook": "security", "scheduled": "security", "manual": "docs"}
+    type_map = {
+        "github": "review",
+        "webhook": "security",
+        "scheduled": "security",
+        "manual": "docs",
+    }
     return [
         {
             "id": t["id"],
@@ -652,9 +656,7 @@ def create_bot_pipe(data: dict) -> dict[str, Any]:
     source_bot_id = (data.get("source_bot_id") or "").strip()
     dest_bot_id = (data.get("dest_bot_id") or "").strip()
     if not name or not source_bot_id or not dest_bot_id:
-        raise ClientException(
-            detail="name, source_bot_id and dest_bot_id are required"
-        )
+        raise ClientException(detail="name, source_bot_id and dest_bot_id are required")
     pipe = create_pipe(
         {
             "name": name,

@@ -11,6 +11,7 @@ from litestar.exceptions import HTTPException, NotFoundException
 from litestar.response import Stream
 
 from app.db.owned_entities import can_access, get_for_user
+from app_litestar.route_helpers import clamp_limit
 from app.db.tracing import (
     count_traces,
     create_span,
@@ -138,6 +139,7 @@ def list_all_traces(
     limit: int = 100,
     offset: int = 0,
 ) -> dict[str, Any]:
+    limit = clamp_limit(limit, default=100)
     return {
         "traces": list_traces(
             entity_type=entity_type,
