@@ -20,12 +20,11 @@ export const observabilityExtRoutes: RouteRecordRaw[] = [
     name: 'bot-health',
     redirect: () => ({ name: 'dashboards-health', hash: '#bot-health' }),
   },
-  // AI Cost Dashboard (Feature 4)
+  // AI Cost Dashboard — folded into the Cost lane (P2).
   {
     path: '/dashboards/ai-cost',
     name: 'ai-cost-dashboard',
-    component: () => import('../../views/AiCostDashboard.vue'),
-    meta: { title: 'AI Cost Dashboard' },
+    redirect: () => ({ name: 'dashboards-cost', hash: '#ai-cost' }),
   },
   // PR-D — Execution Anomaly Detection folded into the Quality lane.
   {

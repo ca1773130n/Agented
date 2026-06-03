@@ -551,16 +551,13 @@ describe('AppSidebar — PR-B structure', () => {
     expect(labels).not.toContain('Multi-Agent Collab');
   });
 
-  it('Analytics expandable contains the 2 kept dashboards (Provider Benchmarks pruned in Phase 1)', () => {
+  it('Analytics expandable contains only Traces (AI Cost folded into the Cost lane in P2)', () => {
     const region = submenuOf(wrapper, 'Analytics');
     expect(region).not.toBeNull();
     const texts = submenuItems(wrapper, 'Analytics').map(
       (b) => b.textContent?.trim().replace(/\s+/g, ' ') ?? '',
     );
-    expect(texts).toEqual([
-      'AI Cost',
-      'Traces',
-    ]);
+    expect(texts).toEqual(['Traces']);
   });
 
   it('"security-history" sidebar entry is absent (the route still exists, only the sidebar row is removed)', () => {

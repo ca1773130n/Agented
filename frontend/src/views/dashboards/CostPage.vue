@@ -9,6 +9,7 @@ import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import PageHeader from '../../components/base/PageHeader.vue';
 import TokenUsageCard from './cards/TokenUsageCard.vue';
+import AiCostDashboard from '../AiCostDashboard.vue';
 
 const { t } = useI18n();
 const route = useRoute();
@@ -41,6 +42,10 @@ onMounted(maybeScroll);
     </div>
     <div class="lane-cards">
       <TokenUsageCard @loaded="onCardLoaded" />
+      <!-- P2: the AI Cost dashboard is folded into the Cost lane (one cost surface). -->
+      <section id="ai-cost" class="ai-cost-section">
+        <AiCostDashboard />
+      </section>
     </div>
   </div>
 </template>
