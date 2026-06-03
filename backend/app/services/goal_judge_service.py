@@ -168,7 +168,7 @@ class GoalJudgeService:
         This branch ALWAYS returns — it never falls through to check_cmd
         (shell=True) or the LLM judges.
         """
-        if AUTORESEARCH_KERNEL_ENABLED and metric_spec:
+        if AUTORESEARCH_KERNEL_ENABLED and metric_spec is not None:
             # metric_spec is authoritative — this branch ALWAYS returns; it never
             # falls through to check_cmd (shell=True) or the LLM judges.
             try:

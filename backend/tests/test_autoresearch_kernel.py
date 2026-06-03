@@ -43,6 +43,23 @@ def test_flag_off_ignores_metric_spec(monkeypatch):
     assert v.source == "deterministic"   # check_cmd path, kernel skipped
 
 
+def test_kernel_empty_dict_spec_does_not_reach_shell(monkeypatch):
+    # BLOCKING regression (Codex): metric_spec={} is falsy; with `is not None` gating it
+    # must stay in the kernel (invalid-spec verdict), never fall through to check_cmd (shell).
+    monkeypatch.setattr("app.services.goal_judge_service.AUTORESEARCH_KERNEL_ENABLED", True)
+    called = {"n": 0}
+    monkeypatch.setattr(GoalJudgeService, "_run_deterministic",
+                        classmethod(lambda cls, *a, **k: called.__setitem__("n", 1)))
+    v = GoalJudgeService.judge("goal", "x", metric_spec={}, check_cmd="true")
+    assert v.source == "kernel" and v.met is False and called["n"] == 0
+
+
+def test_result_instruction_tolerates_non_dict():
+    from app.services import goal_loop_runner as glr
+    assert "<metric>" in glr._result_instruction("not-a-dict")
+    assert "<metric>" in glr._result_instruction(None)
+
+
 def test_kernel_wins_over_check_cmd(monkeypatch):
     # flag on + metric_spec → kernel decides; check_cmd (shell) is NEVER invoked.
     monkeypatch.setattr("app.services.goal_judge_service.AUTORESEARCH_KERNEL_ENABLED", True)

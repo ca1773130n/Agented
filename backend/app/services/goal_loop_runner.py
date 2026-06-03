@@ -154,7 +154,7 @@ _OUROBOROS_HYPOTHESIS_BLOCK = (
 
 def _result_instruction(metric_spec) -> str:
     """Build the __RESULT__ reporting instruction for the agent prompt."""
-    key = (metric_spec or {}).get("metric_key", "<metric>")
+    key = metric_spec.get("metric_key", "<metric>") if isinstance(metric_spec, dict) else "<metric>"
     return (
         f"\n\nWhen you have measured the target metric, print it as a final line "
         f'exactly: `__RESULT__ {{"{key}": <number>}}`.'
@@ -311,7 +311,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
     # judge falls back to its legacy binary mode for that
     # iteration without losing the audit row.
     ouroboros = bool(config.get("ouroboros", True))
-    result_block = _result_instruction(metric_spec) if (AUTORESEARCH_KERNEL_ENABLED and metric_spec) else ""
+    result_block = _result_instruction(metric_spec) if (AUTORESEARCH_KERNEL_ENABLED and metric_spec is not None) else ""
 
     queue = ProjectSessionManager.subscribe_raw(session_id)
     try:
@@ -454,7 +454,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
             )
 
             state.not_met_streak += 1
-            if not (AUTORESEARCH_KERNEL_ENABLED and metric_spec):
+            if not (AUTORESEARCH_KERNEL_ENABLED and metric_spec is not None):
                 _maybe_stale_check(
                     session_id,
                     state,
