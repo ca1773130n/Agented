@@ -41,6 +41,17 @@ class ProcessManager:
     # is never reached for a cancelled execution (e.g. runner thread died) (06 M5).
     _CANCELLED_MAX = 10000
 
+    @staticmethod
+    def _signal_group(info: "ProcessInfo", sig: int) -> None:
+        """Send ``sig`` to the process GROUP when the pgid is trusted, else only
+        to the pid — a pid-as-pgid fallback (register ProcessLookupError) could
+        otherwise signal a recycled/unrelated group (06 M6). Used by pause /
+        resume / auto-cancel / shutdown, mirroring the cancel paths' guard."""
+        if info.pgid_valid:
+            os.killpg(info.pgid, sig)
+        else:
+            os.kill(info.process.pid, sig)
+
     @classmethod
     def _mark_cancelled(cls, execution_id: str) -> None:
         """Caller must hold cls._lock."""
@@ -180,7 +191,7 @@ class ProcessManager:
             return False
 
         try:
-            os.killpg(info.pgid, signal.SIGSTOP)
+            cls._signal_group(info, signal.SIGSTOP)
             logger.info(f"Sent SIGSTOP to process group {info.pgid} for execution {execution_id}")
         except ProcessLookupError:
             logger.warning(f"Process group {info.pgid} already dead when pausing {execution_id}")
@@ -225,7 +236,7 @@ class ProcessManager:
             return False
 
         try:
-            os.killpg(info.pgid, signal.SIGCONT)
+            cls._signal_group(info, signal.SIGCONT)
             logger.info(f"Sent SIGCONT to process group {info.pgid} for execution {execution_id}")
         except ProcessLookupError:
             logger.warning(f"Process group {info.pgid} already dead when resuming {execution_id}")
@@ -274,7 +285,7 @@ class ProcessManager:
 
         # Must SIGCONT before SIGTERM — stopped processes cannot receive SIGTERM
         try:
-            os.killpg(info.pgid, signal.SIGCONT)
+            cls._signal_group(info, signal.SIGCONT)
             logger.info(f"Sent SIGCONT before cancel for auto-cancel of execution {execution_id}")
         except ProcessLookupError:
             logger.info(f"Process already dead during auto-cancel of {execution_id}")
@@ -285,13 +296,13 @@ class ProcessManager:
         # Now gracefully cancel
         cls._mark_cancelled(execution_id)
         try:
-            os.killpg(info.pgid, signal.SIGTERM)
+            cls._signal_group(info, signal.SIGTERM)
             logger.info(f"Sent SIGTERM for auto-cancel of execution {execution_id}")
 
             def _force_kill() -> None:
                 try:
                     if info.process.poll() is None:
-                        os.killpg(info.pgid, signal.SIGKILL)
+                        ProcessManager._signal_group(info, signal.SIGKILL)
                         logger.info(f"Force-killed execution {execution_id} after auto-cancel")
                 except (ProcessLookupError, OSError):
                     pass  # Intentionally silenced: process already terminated
@@ -358,7 +369,7 @@ class ProcessManager:
                     f"Execution {info.execution_id} timed out during shutdown, force-killing"
                 )
                 try:
-                    os.killpg(info.pgid, signal.SIGKILL)
+                    cls._signal_group(info, signal.SIGKILL)
                 except ProcessLookupError as e:
                     logger.debug("Process already exited during shutdown: %s", e)
                 except Exception as e:

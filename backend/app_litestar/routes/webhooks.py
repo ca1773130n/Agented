@@ -108,12 +108,16 @@ def _handle_issue_comment(data: Any) -> dict[str, Any]:
         return {"message": "issue_comment: no slash command"}
 
     # Parity with the PR path: per-repo rate limit + dedup so a comment can't
-    # trigger unbounded fan-out or duplicate executions (05 H2).
+    # trigger unbounded fan-out or duplicate executions (05 H2). Key on the
+    # comment's updated_at (changes on every edit) so a user CAN re-run a command
+    # by editing the comment — only an identical redelivery is suppressed. True
+    # replays of one delivery are already blocked by the X-GitHub-Delivery dedup.
     if _repo_rate_limited(repo_full_name):
         return {"message": "issue_comment: rate limited"}
     comment_id = comment.get("id")
+    comment_updated = comment.get("updated_at") or comment.get("created_at") or ""
     if comment_id is not None and _is_duplicate_key(
-        f"comment:{repo_full_name}:{comment_id}:{action}"
+        f"comment:{repo_full_name}:{comment_id}:{comment_updated}"
     ):
         return {"message": "issue_comment: duplicate ignored"}
 

@@ -1437,6 +1437,20 @@ def _assert_within_skills(skills_root: Path, target: Path) -> None:
         raise ValueError(f"skill path escapes skills root: {target}")
 
 
+def _is_skill_md_path(target: Path) -> bool:
+    """True iff ``target`` resolves to a ``<…>/.claude/skills/<name>/SKILL.md``.
+
+    ``_update_skill`` has no project_id to anchor a root, and the stored
+    ``skill_path`` is operator-supplied via the skills API — so without this a
+    crafted path is an arbitrary file-write sink (04.H5 update path). A ``..``
+    escape resolves away from this structure and is rejected."""
+    resolved = target.resolve()
+    if resolved.name != "SKILL.md":
+        return False
+    parents = list(resolved.parents)
+    return len(parents) >= 3 and parents[1].name == "skills" and parents[2].name == ".claude"
+
+
 def _create_skill(*, name, payload, project_id):
     root = _project_root(project_id)
     if root is None:
@@ -1484,12 +1498,20 @@ def _update_skill(*, asset_id, payload):
         return
     if payload.get("content") or payload.get("description"):
         path = row.get("skill_path")
-        if path:
-            Path(path).write_text(_render_skill_md(row["skill_name"], payload), encoding="utf-8")
-        else:
+        if not path:
             logger.warning(
                 "skill update: row %s has no skill_path; SKILL.md not rewritten", asset_id
             )
+        elif not _is_skill_md_path(Path(path)):
+            # Containment (04.H5): refuse to rewrite a stored path that isn't a
+            # SKILL.md under a .claude/skills/ tree — blocks arbitrary file write.
+            logger.warning(
+                "skill update: row %s skill_path %r is not a contained SKILL.md; refusing write",
+                asset_id,
+                path,
+            )
+        else:
+            Path(path).write_text(_render_skill_md(row["skill_name"], payload), encoding="utf-8")
     update_user_skill(int(asset_id), description=payload.get("description"))
 
 
@@ -1904,40 +1926,67 @@ def apply_dry_run_round(
             error=f"stored patch unreadable: {exc}",
         )
 
-    try:
-        applied, journal = apply_patch(patch, row["project_id"])
-    except PartialApplyError as exc:
-        # Incomplete rollback — persist the residual journal for a later revert.
-        evolution_repo.mark_failed(
-            round_id,
-            error_message=f"apply failed (incomplete rollback): {exc}",
-            apply_journal_json=json.dumps(exc.residual_journal, default=str),
-        )
-        return EvolutionResult(
-            round_id=round_id,
-            status="failed",
-            error=f"apply failed (incomplete rollback): {exc}",
-        )
-    except Exception as exc:  # noqa: BLE001
-        evolution_repo.mark_failed(
-            round_id,
-            error_message=f"apply failed: {exc}",
-        )
-        return EvolutionResult(
-            round_id=round_id,
-            status="failed",
-            error=f"apply failed: {exc}",
-        )
+    # Serialize the approval/apply per project and re-check status under the
+    # lock so two concurrent approvals can't both mutate Forge + files (BLOCKER:
+    # the apply has side effects before the conditional mark_applied). The
+    # second approver re-reads "applied" and short-circuits; the mark_applied CAS
+    # return is also checked as defense-in-depth.
+    with _project_lock(row["project_id"]):
+        fresh = evolution_repo.get_round(round_id)
+        if fresh is None or fresh["status"] != "awaiting_approval":
+            return EvolutionResult(
+                round_id=round_id,
+                status="failed",
+                error=(
+                    "round no longer awaiting approval "
+                    f"(status={(fresh or {}).get('status', 'gone')!r})"
+                ),
+            )
 
-    evolution_repo.mark_applied(
-        round_id,
-        output_patch=patch_data,
-        applied_asset_ids=applied,
-        notes=row.get("notes"),
-        apply_journal_json=json.dumps(journal, default=str),
-        auto_applied=auto_applied,
-        auto_apply_reason=auto_apply_reason,
-    )
+        try:
+            applied, journal = apply_patch(patch, row["project_id"])
+        except PartialApplyError as exc:
+            # Incomplete rollback — persist the residual journal for a later revert.
+            evolution_repo.mark_failed(
+                round_id,
+                error_message=f"apply failed (incomplete rollback): {exc}",
+                apply_journal_json=json.dumps(exc.residual_journal, default=str),
+            )
+            return EvolutionResult(
+                round_id=round_id,
+                status="failed",
+                error=f"apply failed (incomplete rollback): {exc}",
+            )
+        except Exception as exc:  # noqa: BLE001
+            evolution_repo.mark_failed(
+                round_id,
+                error_message=f"apply failed: {exc}",
+            )
+            return EvolutionResult(
+                round_id=round_id,
+                status="failed",
+                error=f"apply failed: {exc}",
+            )
+
+        transitioned = evolution_repo.mark_applied(
+            round_id,
+            output_patch=patch_data,
+            applied_asset_ids=applied,
+            notes=row.get("notes"),
+            apply_journal_json=json.dumps(journal, default=str),
+            auto_applied=auto_applied,
+            auto_apply_reason=auto_apply_reason,
+        )
+        if not transitioned:
+            logger.error(
+                "apply_dry_run_round: mark_applied CAS lost for %s after side effects", round_id
+            )
+            return EvolutionResult(
+                round_id=round_id,
+                status="failed",
+                error="apply raced with another approval; round already applied",
+            )
+
     return EvolutionResult(
         round_id=round_id,
         status="applied",

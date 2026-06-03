@@ -227,10 +227,12 @@ class SchedulerService:
             return
 
         # Overlap guard (06 L2): APScheduler's max_instances=1 only serializes the
-        # cron job itself, but team/workflow strategies fork their own daemon
-        # threads, so the job "returns" while work continues — letting the next
-        # tick start a concurrent run. Skip (coalesce) if the prior run is still
-        # in flight, and audit the skip so coalescing is visible.
+        # cron job itself. This skip coalesces a tick when the trigger's latest
+        # execution is still 'running' — which covers standard (synchronous)
+        # triggers reliably. Team/workflow strategies fork their own daemons and
+        # may not always surface as a 'running' execution for this trigger_id, so
+        # host-level overload from those is bounded instead by the global
+        # concurrency cap in execution_queue_service (01 H6), not by this check.
         try:
             from .audit_log_service import AuditLogService
             from .execution_service import ExecutionService

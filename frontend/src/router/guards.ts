@@ -138,12 +138,15 @@ export function registerGuards(router: Router): void {
         return { name: 'welcome' };
       }
 
-      // Track B (wave 35): when no API key is stored, require a session.
-      // The legacy api-key-only path stays valid as long as the key is set.
-      const { getApiKey, getSessionToken } = await import('../services/api');
-      const hasApiKey = !!getApiKey();
-      const hasSession = !!getSessionToken();
-      if (!hasApiKey && !hasSession) {
+      // A usable credential is any of: a stored API key, a legacy localStorage
+      // session token, OR a cookie session. The session cookie is HttpOnly (not
+      // readable here), so the readable CSRF cookie — set alongside it on login
+      // and persisted across reloads — is the client-visible signal of a cookie
+      // session. Without this, cookie-auth users (no localStorage token) are
+      // bounced back to login after a successful login.
+      const { getApiKey, getSessionToken, getCsrfToken } = await import('../services/api');
+      const hasCredential = !!getApiKey() || !!getSessionToken() || !!getCsrfToken();
+      if (!hasCredential) {
         return { name: 'login', query: { next: to.fullPath } };
       }
     }

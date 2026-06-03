@@ -162,13 +162,28 @@ class ExecutionQueueService:
 
             # Global concurrency cap (01 H6) — stop dispatching this batch once
             # the host is saturated; remaining entries stay queued for next poll.
+            # Gate on the MAX of the DB running-execution count and the in-memory
+            # dispatch counter: the DB count reflects ALL real running work —
+            # including team/workflow strategies that fork their own daemons and
+            # return from the dispatcher early — while the in-memory counter
+            # covers the window after dispatch but before the 'running' row is
+            # written. Either alone undercounts.
+            from app.db.execution_logs import get_active_execution_count
+
             with cls._active_lock:
-                if cls._active_global >= cls._GLOBAL_CONCURRENCY_CAP:
-                    logger.debug(
-                        "Global concurrency cap (%d) reached; deferring dispatch",
-                        cls._GLOBAL_CONCURRENCY_CAP,
-                    )
-                    break
+                in_flight = cls._active_global
+            try:
+                db_running = get_active_execution_count()
+            except Exception:
+                db_running = 0
+            if max(in_flight, db_running) >= cls._GLOBAL_CONCURRENCY_CAP:
+                logger.debug(
+                    "Global concurrency cap (%d) reached (in_flight=%d, db_running=%d); deferring",
+                    cls._GLOBAL_CONCURRENCY_CAP,
+                    in_flight,
+                    db_running,
+                )
+                break
 
             # Check concurrency cap
             cap = cls.get_concurrency_cap(trigger_id)

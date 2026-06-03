@@ -54,22 +54,24 @@ def _json_error_body(code: str, message: str) -> bytes:
     return _json.dumps(payload, separators=(",", ":")).encode("utf-8")
 
 
-# Doc/health surfaces legitimately have sub-paths (e.g. /schema/openapi.json,
-# /docs/swagger) — matched by prefix.
+# Surfaces that legitimately have sub-paths — matched by prefix. /schema,/docs
+# host Swagger; /api/oauth-callback is a `{rest:path}` route the provider
+# redirects into (state-gated by the proxy), so it must match its subpaths.
 _AUTH_BYPASS_PREFIXES = (
     "/health",
     "/docs",
     "/openapi",
     "/schema",
+    "/api/oauth-callback",
 )
 # API endpoints that must skip auth, matched EXACTLY so a future handler mounted
 # under one of these prefixes isn't silently made public (02-auth M2). The
-# webhook/oauth receivers are HMAC/state-gated; the auth routes establish a
-# session for a caller that has no credentials yet.
+# github webhook receiver is HMAC-gated; the auth routes establish a session for
+# a caller that has no credentials yet. (oauth-callback is prefix-matched above
+# because it is a path-param route the provider redirects into.)
 _AUTH_BYPASS_EXACT = frozenset(
     {
         "/api/webhooks/github",
-        "/api/oauth-callback",
         "/api/auth/login",
         "/api/auth/signup",
         "/api/auth/forgot-password",
