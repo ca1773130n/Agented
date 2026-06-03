@@ -43,9 +43,11 @@ def test_midloop_failure_reverses_partial_journal(isolated_db):
         "hook": lambda **kw: (_ for _ in ()).throw(RuntimeError("hook create blew up")),
     }
 
-    with patch.dict(hv._create_dispatch, create_dispatch), patch(
-        "app.services.harness_evolution_rollback.reverse_apply_journal", _fake_reverse
-    ), patch.object(hv.bindings_repo, "add_binding", lambda *a, **k: None):
+    with (
+        patch.dict(hv._create_dispatch, create_dispatch),
+        patch("app.services.harness_evolution_rollback.reverse_apply_journal", _fake_reverse),
+        patch.object(hv.bindings_repo, "add_binding", lambda *a, **k: None),
+    ):
         with pytest.raises(RuntimeError, match="hook create blew up"):
             hv.apply_patch(_Patch(entries), project_id="proj-xyz")
 
@@ -61,8 +63,9 @@ def test_midloop_failure_reverses_partial_journal(isolated_db):
 def test_clean_patch_returns_applied_and_journal(isolated_db):
     entries = [_Entry("create", "rule", name="ok", payload={"description": "fine"})]
     create_dispatch = {"rule": lambda **kw: "rule-ok"}
-    with patch.dict(hv._create_dispatch, create_dispatch), patch.object(
-        hv.bindings_repo, "add_binding", lambda *a, **k: None
+    with (
+        patch.dict(hv._create_dispatch, create_dispatch),
+        patch.object(hv.bindings_repo, "add_binding", lambda *a, **k: None),
     ):
         applied, journal = hv.apply_patch(_Patch(entries), project_id="proj-1")
     assert applied == [{"kind": "rule", "op": "create", "asset_id": "rule-ok"}]

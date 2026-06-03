@@ -116,9 +116,7 @@ def test_logs_endpoint(isolated_db):
 def _admin_secrets_client():
     from app_litestar.middleware import ApiKeyMiddleware
 
-    return create_test_client(
-        route_handlers=[secrets_router], middleware=[ApiKeyMiddleware()]
-    )
+    return create_test_client(route_handlers=[secrets_router], middleware=[ApiKeyMiddleware()])
 
 
 def _seed_admin_key(email: str = "vaultadmin@test") -> str:
