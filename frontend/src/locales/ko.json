@@ -88,6 +88,7 @@
     "botTemplates": "봇 템플릿",
     "nlCronBuilder": "자연어 크론 빌더",
     "triggerConditions": "트리거 조건",
+    "triggerTools": "트리거 도구",
     "nlRuleEditor": "자연어 규칙 편집기",
     "payloadTransformer": "페이로드 변환기",
     "prAutoAssignment": "PR 자동 할당",

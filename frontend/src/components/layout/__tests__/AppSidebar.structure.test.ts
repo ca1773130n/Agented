@@ -68,7 +68,7 @@ function buildRouter(): Router {
     'hooks', 'hook-design',
     'rules', 'rule-design',
     // Trigger facets (new section in PR-B)
-    'triggers', 'bot-templates', 'visual-cron-wizard',
+    'triggers', 'bot-templates', 'trigger-tools', 'visual-cron-wizard',
     'conditional-trigger-rules', 'repo-scope-filters', 'structured-output',
     'prompt-ab-testing', 'multi-provider-fallback', 'multi-repo-fan-out',
     'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions',
@@ -176,16 +176,14 @@ describe('AppSidebar — PR-B structure', () => {
     expect(labels).not.toContain('Triggers');
   });
 
-  it('Triggers section contains exactly 13 sub-items (Phase-1 prune removed 8 toy/duplicate surfaces)', () => {
-    // Phase-1 prune (2026-06-02) dropped 8 Triggers entries whose
-    // backends were 404/stub or pure duplicates: Clone/Fork Bot,
-    // Cross-Team Sharing, Incident Playbooks, Live Prompt Sandbox
-    // (inline-prompt-editor), Webhook Recorder, Dependency Updates,
-    // Output Piping, Bot Runbooks.
-    // Resulting blocks: Core (2) + Configuration (4) + PR-Review (3)
-    // + Ops (2) + Introspection (1) + Authoring (1) = 13.
+  it('Triggers section contains exactly 9 sub-items (P2 folded 5 editors into Trigger Tools)', () => {
+    // P2 (Trigger Tools) folded Conditions, NL Rule Editor, Schedule (cron),
+    // Payload Transformer, and Bot Dry-Run into one Trigger Tools tabbed page,
+    // replacing those 5 Configuration/Ops entries with a single item.
+    // Resulting blocks: Core (2) + Configuration (1) + PR-Review (3)
+    // + Ops (1) + Introspection (1) + Authoring (1) = 9.
     const items = submenuItems(wrapper, 'Triggers');
-    expect(items.length).toBe(13);
+    expect(items.length).toBe(9);
   });
 
   it('Triggers section contains spot-checked items from different blocks', () => {
@@ -193,10 +191,12 @@ describe('AppSidebar — PR-B structure', () => {
     const texts = items.map((b) => b.textContent?.trim().replace(/\s+/g, ' ') ?? '');
     // Core block
     expect(texts).toContain('Triggers');
+    // Configuration block (P2 — the folded Trigger Tools page)
+    expect(texts).toContain('Trigger Tools');
     // PR-Review block
     expect(texts).toContain('GitHub Actions');
     // Ops block
-    expect(texts).toContain('Bot Dry-Run');
+    expect(texts).toContain('Webhook Forwarding');
     // Authoring block (folded-in Prompt Snippets)
     expect(texts).toContain('Prompt Snippets');
   });
@@ -508,15 +508,19 @@ describe('AppSidebar — PR-B structure', () => {
     expect(texts).toContain('Plugin SDK');
   });
 
-  it('Triggers submenu includes the 4 KEEP+WIRE additions (Output Piping pruned in Phase 1)', () => {
+  it('P2: the 5 trigger editors are folded into Trigger Tools (no longer standalone submenu items)', () => {
     const texts = submenuItems(wrapper, 'Triggers').map(
       (b) => b.textContent?.trim().replace(/\s+/g, ' ') ?? '',
     );
-    // Configuration block
-    expect(texts).toContain('NL Rule Editor');
-    expect(texts).toContain('Payload Transformer');
-    // Ops block
-    expect(texts).toContain('Bot Dry-Run');
+    // The single folded entry is present...
+    expect(texts).toContain('Trigger Tools');
+    // ...and the former standalone editors are gone from the submenu (still
+    // reachable via /trigger-tools?tab= redirects).
+    expect(texts).not.toContain('NL Rule Editor');
+    expect(texts).not.toContain('Payload Transformer');
+    expect(texts).not.toContain('Bot Dry-Run');
+    expect(texts).not.toContain('Trigger Conditions');
+    // Webhook Forwarding is NOT part of the fold — it stays in Ops.
     expect(texts).toContain('Webhook Forwarding');
   });
 

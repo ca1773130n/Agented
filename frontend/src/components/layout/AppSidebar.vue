@@ -130,7 +130,7 @@ function autoExpandForRoute() {
   }
   // Auto-expand only for sidebar-visible Triggers children; URL-only
   // routes (still reachable, just not in this submenu) don't trigger expand.
-  if (['triggers', 'bot-templates', 'visual-cron-wizard', 'conditional-trigger-rules', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'execution-tagging', 'prompt-snippets', 'bot-dry-run', 'bot-output-webhook-forwarding', 'nl-trigger-rule-editor', 'webhook-payload-transformer'].includes(name)) {
+  if (['triggers', 'bot-templates', 'trigger-tools', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'execution-tagging', 'prompt-snippets', 'bot-output-webhook-forwarding'].includes(name)) {
     expandedSections.value.triggers = true;
   }
   // PR-J2 — Analytics dashboards (System).
@@ -237,7 +237,7 @@ function isWorkflowsSectionActive(): boolean {
 function isTriggersSectionActive(): boolean {
   // Only the 21 currently-visible Triggers children. URL-only routes
   // (still reachable) don't paint this toggle active.
-  return ['triggers', 'bot-templates', 'visual-cron-wizard', 'conditional-trigger-rules', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'execution-tagging', 'prompt-snippets', 'bot-dry-run', 'bot-output-webhook-forwarding', 'nl-trigger-rule-editor', 'webhook-payload-transformer'].includes(currentRouteName.value);
+  return ['triggers', 'bot-templates', 'trigger-tools', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'execution-tagging', 'prompt-snippets', 'bot-output-webhook-forwarding'].includes(currentRouteName.value);
 }
 
 // PR-J2 — Analytics dashboards group under System.
@@ -679,19 +679,9 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
 
         <div class="submenu-block-label" aria-hidden="true">{{ t('nav.blockConfiguration') }}</div>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('visual-cron-wizard') }" :aria-current="sidebarActive('visual-cron-wizard') ? 'page' : undefined" @click="navTo('visual-cron-wizard')">
-          {{ t('nav.nlCronBuilder') }}
-        </button>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('conditional-trigger-rules') }" :aria-current="sidebarActive('conditional-trigger-rules') ? 'page' : undefined" @click="navTo('conditional-trigger-rules')">
-          {{ t('nav.triggerConditions') }}
-        </button>
-        <!-- NL rule editor: free-text -> trigger rule. -->
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('nl-trigger-rule-editor') }" :aria-current="sidebarActive('nl-trigger-rule-editor') ? 'page' : undefined" @click="navTo('nl-trigger-rule-editor')">
-          {{ t('nav.nlRuleEditor') }}
-        </button>
-        <!-- PR-J2 — Webhook payload transformer for normalising incoming JSON. -->
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('webhook-payload-transformer') }" :aria-current="sidebarActive('webhook-payload-transformer') ? 'page' : undefined" @click="navTo('webhook-payload-transformer')">
-          {{ t('nav.payloadTransformer') }}
+        <!-- P2: Conditions / NL / Schedule / Payload / Dry-Run folded into one Trigger Tools page. -->
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('trigger-tools') }" :aria-current="sidebarActive('trigger-tools') ? 'page' : undefined" @click="navTo('trigger-tools')">
+          {{ t('nav.triggerTools') }}
         </button>
 
         <div class="submenu-block-label" aria-hidden="true">{{ t('nav.blockPrReview') }}</div>
@@ -706,10 +696,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </button>
 
         <div class="submenu-block-label" aria-hidden="true">{{ t('nav.blockOps') }}</div>
-        <!-- Bot dry-run: simulate a trigger without side-effects. -->
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-dry-run') }" :aria-current="sidebarActive('bot-dry-run') ? 'page' : undefined" @click="navTo('bot-dry-run')">
-          {{ t('nav.botDryRun') }}
-        </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('bot-output-webhook-forwarding') }" :aria-current="sidebarActive('bot-output-webhook-forwarding') ? 'page' : undefined" @click="navTo('bot-output-webhook-forwarding')">
           {{ t('nav.webhookForwarding') }}
         </button>

@@ -8,12 +8,11 @@ export const botRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/TestCoverageBot.vue'),
     meta: { title: 'Test Coverage Bot' },
   },
-  // Bot Dry Run
+  // Bot Dry Run — folded into the Trigger Tools page (P2).
   {
     path: '/bots/dry-run',
     name: 'bot-dry-run',
-    component: () => import('../../views/BotDryRun.vue'),
-    meta: { title: 'Bot Dry Run' },
+    redirect: (to) => ({ name: 'trigger-tools', query: { ...to.query, tab: 'dry-run' } }),
   },
   // Bot Dependency Graph
   {

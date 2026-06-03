@@ -88,6 +88,7 @@
     "botTemplates": "机器人模板",
     "nlCronBuilder": "自然语言 Cron 构建器",
     "triggerConditions": "触发条件",
+    "triggerTools": "触发器工具",
     "nlRuleEditor": "自然语言规则编辑器",
     "payloadTransformer": "载荷转换器",
     "prAutoAssignment": "PR 自动分配",

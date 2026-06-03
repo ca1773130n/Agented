@@ -88,6 +88,7 @@
     "botTemplates": "ボットテンプレート",
     "nlCronBuilder": "自然言語 Cron ビルダー",
     "triggerConditions": "トリガー条件",
+    "triggerTools": "トリガーツール",
     "nlRuleEditor": "自然言語ルールエディター",
     "payloadTransformer": "ペイロード変換",
     "prAutoAssignment": "PR 自動割り当て",
