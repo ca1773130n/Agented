@@ -165,13 +165,19 @@ class BackendCLIService:
         # Create fake browser script BEFORE fork so parent knows the URL file path
         import tempfile as _tf
 
+        import shlex as _shlex
+
         _url_dir = _tf.mkdtemp(prefix="agented-oauth-")
         _url_file = os.path.join(_url_dir, "url.txt")
         _fake_browser = os.path.join(_url_dir, "browser")
         with open(_fake_browser, "w") as _fb:
             # Echo URL to stdout (flows through PTY, keeps idle timer reset)
-            # AND write to file (clean URL for file-based capture)
-            _fb.write(f'#!/bin/sh\necho "$1" >> {_url_file}\necho "$1"\nsleep 300 &\n')
+            # AND write to file (clean URL for file-based capture). shlex.quote
+            # the path so a space/metachar in the temp root can never break out
+            # of the redirect into command execution (latent injection sink).
+            _fb.write(
+                f'#!/bin/sh\necho "$1" >> {_shlex.quote(_url_file)}\necho "$1"\nsleep 300 &\n'
+            )
         os.chmod(_fake_browser, 0o755)
 
         # Open a pseudo-terminal so the CLI sees a real TTY
@@ -262,6 +268,7 @@ class BackendCLIService:
                 "account_name": account_name,
                 "config_path": config_path,
                 "oauth_url_file": _url_file,
+                "oauth_url_dir": _url_dir,
             }
             cls._subscribers[session_id] = []
 
@@ -346,11 +353,17 @@ class BackendCLIService:
                     # Flush pending OAuth URL after 2s idle
                     if pending_oauth_url is not None and idle_ticks >= 2:
                         rewritten_url = cls._rewrite_oauth_url(session_id, pending_oauth_url)
-                        logger.info("CLI %s: OAuth URL (flushed): %s…", session_id, rewritten_url[:80])
+                        logger.info(
+                            "CLI %s: OAuth URL (flushed): %s…", session_id, rewritten_url[:80]
+                        )
                         cls._broadcast(
-                            session_id, "oauth_url",
-                            {"url": rewritten_url, "content": rewritten_url,
-                             "timestamp": datetime.datetime.now().isoformat()},
+                            session_id,
+                            "oauth_url",
+                            {
+                                "url": rewritten_url,
+                                "content": rewritten_url,
+                                "timestamp": datetime.datetime.now().isoformat(),
+                            },
                         )
                         pending_oauth_url = None
                     # After 2s of idle with accumulated lines, check for multi-line menus
@@ -413,7 +426,9 @@ class BackendCLIService:
                             can_complete = False
                             if login_completed and idle_ticks >= 2:
                                 can_complete = True  # Auth succeeded
-                            elif not _oauth_url_sent and interaction_count >= 1 and idle_ticks >= 10:
+                            elif (
+                                not _oauth_url_sent and interaction_count >= 1 and idle_ticks >= 10
+                            ):
                                 can_complete = True  # No OAuth, just idle
                             if can_complete:
                                 logger.info(
@@ -577,7 +592,9 @@ class BackendCLIService:
                             url_match = re.search(r"https://\S+", stripped)
                             logger.info(
                                 "CLI %s: paste prompt line=%r url_found=%s",
-                                session_id, stripped[:200], bool(url_match),
+                                session_id,
+                                stripped[:200],
+                                bool(url_match),
                             )
                             if url_match:
                                 url = url_match.group(0)
@@ -585,7 +602,8 @@ class BackendCLIService:
                                 with cls._lock:
                                     cls._last_oauth_url[session_id] = url
                                 cls._broadcast(
-                                    session_id, "oauth_url",
+                                    session_id,
+                                    "oauth_url",
                                     {
                                         "url": url,
                                         "content": url,
@@ -599,7 +617,9 @@ class BackendCLIService:
                                 "options": None,
                                 "is_json_tool_use": False,
                             }
-                            logger.info("CLI %s: detected paste-code prompt: %r", session_id, stripped[:80])
+                            logger.info(
+                                "CLI %s: detected paste-code prompt: %r", session_id, stripped[:80]
+                            )
                             recent_lines.clear()
                             cls._handle_interaction(session_id, master_fd, interaction)
                             interaction_count += 1
@@ -649,10 +669,12 @@ class BackendCLIService:
                                 )
                                 logger.info(
                                     "CLI %s: OAuth URL (assembled): %s…",
-                                    session_id, rewritten_url[:80],
+                                    session_id,
+                                    rewritten_url[:80],
                                 )
                                 cls._broadcast(
-                                    session_id, "oauth_url",
+                                    session_id,
+                                    "oauth_url",
                                     {
                                         "url": rewritten_url,
                                         "content": rewritten_url,
@@ -1034,6 +1056,16 @@ class BackendCLIService:
             cls._current_question.pop(session_id, None)
             cls._last_oauth_url.pop(session_id, None)
 
+        # Remove the per-session OAuth temp dir (fake-browser script + captured
+        # URL). Previously these mkdtemp dirs leaked one-per-login forever,
+        # holding sensitive OAuth URLs on disk (C2).
+        _url_dir = session_info.get("oauth_url_dir")
+        if _url_dir:
+            import shutil as _shutil
+
+            _shutil.rmtree(_url_dir, ignore_errors=True)
+
+        with cls._lock:
             cls._completed[session_id] = {
                 "session_id": session_id,
                 "backend_id": session_info.get("backend_id"),
@@ -1260,11 +1292,14 @@ class BackendCLIService:
             pending_question = cls._current_question.get(session_id)
 
         if last_url:
-            yield cls._format_sse("oauth_url", {
-                "url": last_url,
-                "content": last_url,
-                "timestamp": datetime.datetime.now().isoformat(),
-            })
+            yield cls._format_sse(
+                "oauth_url",
+                {
+                    "url": last_url,
+                    "content": last_url,
+                    "timestamp": datetime.datetime.now().isoformat(),
+                },
+            )
         if pending_question:
             yield cls._format_sse("question", pending_question)
 
@@ -1424,7 +1459,8 @@ class BackendCLIService:
             if event_type == "oauth_url":
                 logger.info(
                     "CLI %s: BROADCAST oauth_url to %d subscribers",
-                    session_id, len(subs),
+                    session_id,
+                    len(subs),
                 )
             for q in subs:
                 q.put(message)
