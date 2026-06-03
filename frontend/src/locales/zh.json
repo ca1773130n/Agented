@@ -3398,6 +3398,8 @@
     "subtitle": "生成 API 密钥，以便从 CI/CD 流水线、脚本和工具以编程方式访问 Agented。",
     "loading": "正在加载 API 密钥...",
     "loadFailed": "加载 API 密钥失败",
+    "copied": "已复制到剪贴板",
+    "copyFailed": "复制失败",
     "activeKeys": "活跃的 API 密钥",
     "createNew": "创建新 API 密钥",
     "col": {
@@ -4173,6 +4175,8 @@
   },
   "findingsTriageBoard": {
     "title": "检测项分诊看板",
+    "loading": "正在加载检测项...",
+    "loadErrorTitle": "无法加载检测项",
     "description": "分诊、分配和跟踪来自所有安全、代码审查和分析机器人的可执行检测项。",
     "viewTrends": "查看趋势 →",
     "assignMe": "分配给我",
@@ -6921,7 +6925,7 @@
       "scopes": "作用域"
     },
     "test": {
-      "verified": "连接已验证。身份提供商已成功响应。",
+      "verified": "配置看起来有效 — 已设置 IdP URL 且可访问已保存的设置（此处不执行完整的登录握手）。",
       "missingFields": "缺少必填字段。请填写 IdP URL 以进行测试。",
       "failed": "连接测试失败"
     },
