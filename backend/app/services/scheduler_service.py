@@ -227,17 +227,24 @@ class SchedulerService:
             return
 
         # Overlap guard (06 L2): APScheduler's max_instances=1 only serializes the
-        # cron job itself. This skip coalesces a tick when the trigger's latest
-        # execution is still 'running' — which covers standard (synchronous)
-        # triggers reliably. Team/workflow strategies fork their own daemons and
-        # may not always surface as a 'running' execution for this trigger_id, so
-        # host-level overload from those is bounded instead by the global
-        # concurrency cap in execution_queue_service (01 H6), not by this check.
+        # cron job itself. This skip coalesces a tick when the trigger's prior work
+        # is still running. Standard (synchronous) triggers surface as a 'running'
+        # execution_logs row for this trigger_id; team-mode triggers fork their own
+        # daemons and surface in team_executions keyed by team_id, so we check both.
+        # Workflow strategies that surface as neither remain bounded by the global
+        # concurrency cap in execution_queue_service (01 H6).
         try:
             from .audit_log_service import AuditLogService
             from .execution_service import ExecutionService
 
-            if ExecutionService.get_status(trigger_id).get("status") == "running":
+            overlapping = ExecutionService.get_status(trigger_id).get("status") == "running"
+            if not overlapping and trigger_data.get("execution_mode") == "team":
+                team_id = trigger_data.get("team_id")
+                if team_id:
+                    from ..db.team_executions import count_running_for_team
+
+                    overlapping = count_running_for_team(team_id) > 0
+            if overlapping:
                 logger.info("Scheduled trigger %s still running; skipping overlap", trigger_id)
                 AuditLogService.log(
                     action="scheduler.skip_overlap",
@@ -256,11 +263,11 @@ class SchedulerService:
             "super_agent_id"
         ):
             try:
+                from ..db.triggers import create_execution_log
                 from .super_agent_session_service import (
                     SessionLimitError,
                     SuperAgentSessionService,
                 )
-                from ..db.triggers import create_execution_log
 
                 session_id = SuperAgentSessionService.get_or_create_session(
                     trigger_data["super_agent_id"]

@@ -28,15 +28,15 @@ def resolve_project_id_for_team(team_id: str) -> Optional[str]:
     try:
         with get_connection() as conn:
             row = conn.execute(
-                "SELECT project_id FROM project_teams "
-                "WHERE team_id = ? ORDER BY id ASC LIMIT 1",
+                "SELECT project_id FROM project_teams WHERE team_id = ? ORDER BY id ASC LIMIT 1",
                 (team_id,),
             ).fetchone()
         return row["project_id"] if row else None
     except Exception:
         logger.warning(
             "team_executions: project_id resolution failed for team %s",
-            team_id, exc_info=True,
+            team_id,
+            exc_info=True,
         )
         return None
 
@@ -126,6 +126,23 @@ def get_team_execution(team_exec_id: str) -> Optional[dict]:
     return out
 
 
+def count_running_for_team(team_id: str) -> int:
+    """Number of team executions currently 'running' for ``team_id``.
+
+    Lets the scheduler overlap guard (06 L2) cover team-mode triggers, whose
+    work surfaces here rather than as a 'running' execution_logs row for the
+    trigger_id. Best-effort: returns 0 on any query error."""
+    try:
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM team_executions WHERE team_id = ? AND status = 'running'",
+                (team_id,),
+            ).fetchone()
+        return int(row[0]) if row else 0
+    except Exception:
+        return 0
+
+
 def backfill_project_id_from_components(team_exec_id: str) -> Optional[str]:
     """If the team_executions row has no project_id but at least one
     component execution does, copy it onto the team row. Returns the
@@ -154,8 +171,7 @@ def backfill_project_id_from_components(team_exec_id: str) -> Optional[str]:
     resolved = comp["project_id"]
     with get_connection() as conn:
         conn.execute(
-            "UPDATE team_executions SET project_id = ? WHERE id = ? "
-            "AND project_id IS NULL",
+            "UPDATE team_executions SET project_id = ? WHERE id = ? AND project_id IS NULL",
             (resolved, team_exec_id),
         )
         conn.commit()

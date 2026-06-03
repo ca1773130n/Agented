@@ -63,3 +63,48 @@ def test_process_manager_signal_group_respects_pgid_valid(monkeypatch):
     ProcessManager._signal_group(invalid, signal.SIGCONT)
     # pgid unknown → signal the pid only, never killpg.
     assert calls["kill"] == [(4242, signal.SIGCONT)] and len(calls["killpg"]) == 1
+
+
+def test_count_running_work_sums_all_three_tables(monkeypatch):
+    # Round-3 HIGH: global cap (01 H6) must count team_executions /
+    # workflow_executions, not just execution_logs — else team/workflow
+    # strategies that fork their own daemons slip past the host cap.
+    import app.services.execution_queue_service as eqs
+
+    monkeypatch.setattr(
+        "app.db.execution_logs.get_active_execution_count", lambda: 2, raising=False
+    )
+
+    class _Conn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def execute(self, sql):
+            # team_executions → 3 running, workflow_executions → 1 running.
+            count = 3 if "team_executions" in sql else 1
+            return type("R", (), {"fetchone": lambda _self: [count]})()
+
+    monkeypatch.setattr(eqs, "get_connection", lambda: _Conn(), raising=False)
+    monkeypatch.setattr("app.db.connection.get_connection", lambda: _Conn(), raising=False)
+
+    assert eqs.ExecutionQueueService._count_running_work() == 2 + 3 + 1
+
+
+def test_skill_write_anchored_to_owning_project(monkeypatch, tmp_path):
+    # Round-3 HIGH: the skill UPDATE write must be contained to the OWNING
+    # project's skills root, not merely a skills-shaped path. A SKILL.md that is
+    # shape-valid but lives outside the bound project's root is refused.
+    import app.services.harness_evolver as he
+
+    proj_root = tmp_path / "proj"
+    inside = proj_root / ".claude" / "skills" / "s" / "SKILL.md"
+    outside = tmp_path / "other" / ".claude" / "skills" / "s" / "SKILL.md"
+
+    monkeypatch.setattr(he, "_owning_project_id_for_skill", lambda _aid: "proj-1")
+    monkeypatch.setattr(he, "_project_root", lambda _pid: proj_root)
+
+    assert he._skill_write_allowed("42", inside) is True
+    assert he._skill_write_allowed("42", outside) is False

@@ -1440,9 +1440,11 @@ def _assert_within_skills(skills_root: Path, target: Path) -> None:
 def _is_skill_md_path(target: Path) -> bool:
     """True iff ``target`` resolves to a ``<…>/.claude/skills/<name>/SKILL.md``.
 
-    ``_update_skill`` has no project_id to anchor a root, and the stored
-    ``skill_path`` is operator-supplied via the skills API — so without this a
-    crafted path is an arbitrary file-write sink (04.H5 update path). A ``..``
+    Structural fallback used by ``_skill_write_allowed`` only when the skill's
+    OWNING PROJECT (and thus its real skills root) can't be resolved — the
+    primary containment now anchors to that project root. The stored
+    ``skill_path`` is operator-supplied via the skills API, so without an anchor
+    a crafted path is an arbitrary file-write sink (04.H5 update path); a ``..``
     escape resolves away from this structure and is rejected."""
     resolved = target.resolve()
     if resolved.name != "SKILL.md":
@@ -1490,6 +1492,24 @@ def _create_skill(*, name, payload, project_id):
     return existing["id"]
 
 
+def _owning_project_id_for_skill(asset_id) -> Optional[str]:
+    """Project this skill is bound to (project_forge_bindings reverse lookup),
+    used to anchor the update-write containment (04.H5)."""
+    try:
+        from app.db.connection import get_connection
+
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT project_id FROM project_forge_bindings "
+                "WHERE kind = 'skill' AND asset_id = ? LIMIT 1",
+                (str(asset_id),),
+            ).fetchone()
+        return row["project_id"] if row else None
+    except Exception:
+        logger.debug("skill update: binding lookup failed for %s", asset_id, exc_info=True)
+        return None
+
+
 def _update_skill(*, asset_id, payload):
     from app.db.skills import get_user_skill, update_user_skill
 
@@ -1502,17 +1522,35 @@ def _update_skill(*, asset_id, payload):
             logger.warning(
                 "skill update: row %s has no skill_path; SKILL.md not rewritten", asset_id
             )
-        elif not _is_skill_md_path(Path(path)):
-            # Containment (04.H5): refuse to rewrite a stored path that isn't a
-            # SKILL.md under a .claude/skills/ tree — blocks arbitrary file write.
+        elif not _skill_write_allowed(asset_id, Path(path)):
             logger.warning(
-                "skill update: row %s skill_path %r is not a contained SKILL.md; refusing write",
+                "skill update: row %s skill_path %r not contained in owning project's "
+                "skills root; refusing write",
                 asset_id,
                 path,
             )
         else:
             Path(path).write_text(_render_skill_md(row["skill_name"], payload), encoding="utf-8")
     update_user_skill(int(asset_id), description=payload.get("description"))
+
+
+def _skill_write_allowed(asset_id, target: Path) -> bool:
+    """Containment for the skill UPDATE write (04.H5): the stored skill_path must
+    resolve inside the OWNING PROJECT's ``.claude/skills`` root — not merely have
+    a skills-shaped path. ``skill_path`` is caller-controllable via the skills
+    API, so anchoring to the project root is what actually blocks an arbitrary
+    file write. Falls back to the structural shape check only when the owning
+    project / its local_path can't be resolved."""
+    project_id = _owning_project_id_for_skill(asset_id)
+    if project_id:
+        skills_root = _skills_root(project_id)
+        if skills_root is not None:
+            try:
+                return target.resolve().is_relative_to(skills_root)
+            except OSError:
+                return False
+    # No resolvable project root — fall back to the structural check.
+    return _is_skill_md_path(target)
 
 
 def _delete_skill(*, asset_id):

@@ -149,6 +149,34 @@ class ExecutionQueueService:
 
         logger.info("Dispatcher loop exiting")
 
+    @staticmethod
+    def _count_running_work() -> int:
+        """Count in-flight executions across ALL three execution tables so the
+        global cap (01 H6) covers team/workflow strategies that fork their own
+        daemons (recorded in team_executions / workflow_executions, not
+        execution_logs). Best-effort; a query failure contributes 0."""
+        total = 0
+        try:
+            from app.db.execution_logs import get_active_execution_count
+
+            total += get_active_execution_count()
+        except Exception:
+            logger.debug("running-count: execution_logs failed", exc_info=True)
+        try:
+            from app.db.connection import get_connection
+
+            with get_connection() as conn:
+                for table in ("team_executions", "workflow_executions"):
+                    try:
+                        total += conn.execute(
+                            f"SELECT COUNT(*) FROM {table} WHERE status = 'running'"
+                        ).fetchone()[0]
+                    except Exception:
+                        logger.debug("running-count: %s failed", table, exc_info=True)
+        except Exception:
+            logger.debug("running-count: connection failed", exc_info=True)
+        return total
+
     @classmethod
     def _dispatch_batch(cls) -> None:
         """Fetch pending entries and dispatch eligible ones."""
@@ -162,20 +190,15 @@ class ExecutionQueueService:
 
             # Global concurrency cap (01 H6) — stop dispatching this batch once
             # the host is saturated; remaining entries stay queued for next poll.
-            # Gate on the MAX of the DB running-execution count and the in-memory
-            # dispatch counter: the DB count reflects ALL real running work —
-            # including team/workflow strategies that fork their own daemons and
-            # return from the dispatcher early — while the in-memory counter
-            # covers the window after dispatch but before the 'running' row is
-            # written. Either alone undercounts.
-            from app.db.execution_logs import get_active_execution_count
-
+            # Gate on max(in-memory dispatch counter, running rows across ALL
+            # execution tables). _count_running_work() sums execution_logs +
+            # team_executions + workflow_executions, so team/workflow strategies
+            # that fork their own daemons (and leave the dispatcher early) are
+            # counted; the in-memory counter covers the window after dispatch but
+            # before a 'running' row is written. Either source alone undercounts.
             with cls._active_lock:
                 in_flight = cls._active_global
-            try:
-                db_running = get_active_execution_count()
-            except Exception:
-                db_running = 0
+            db_running = cls._count_running_work()
             if max(in_flight, db_running) >= cls._GLOBAL_CONCURRENCY_CAP:
                 logger.debug(
                     "Global concurrency cap (%d) reached (in_flight=%d, db_running=%d); deferring",
