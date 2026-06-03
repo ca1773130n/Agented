@@ -66,6 +66,24 @@ def test_harness_plugin_get(isolated_db):
     assert "plugin_id" in body
 
 
+def test_sensitive_setting_value_is_redacted(isolated_db):
+    # H4: a viewer can read settings; credential-like values must be redacted.
+    with _client() as c:
+        c.put("/api/settings/github_api_token", json={"value": "ghp_supersecret"})
+        single = c.get("/api/settings/github_api_token").json()
+        listing = c.get("/api/settings/").json()["settings"]
+    assert single["value"] != "ghp_supersecret"
+    assert single["value"]  # redacted placeholder, not empty
+    assert listing.get("github_api_token") != "ghp_supersecret"
+
+
+def test_non_sensitive_setting_value_passthrough(isolated_db):
+    with _client() as c:
+        c.put("/api/settings/theme", json={"value": "dark"})
+        single = c.get("/api/settings/theme").json()
+    assert single["value"] == "dark"
+
+
 # System
 def test_list_errors(isolated_db):
     with _client() as c:

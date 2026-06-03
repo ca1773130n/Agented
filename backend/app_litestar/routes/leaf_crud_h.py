@@ -379,7 +379,13 @@ def proxy_callback_forward(data: dict) -> dict[str, Any]:
     qs = parse_qs(parsed.query)
     code = qs.get("code", [""])[0]
     state = qs.get("state", [""])[0]
-    port = parsed.port or 54545
+    # SSRF hardening (H5): never trust the URL's port/path. The port is pinned to
+    # the value captured when the proxy login started; the path is constrained to
+    # the known OAuth callback path. Otherwise this becomes a loopback
+    # port-scanner / request-forger against any local service (e.g. the sidecar).
+    port = BackendCLIService.get_callback_port()
+    _ALLOWED_CALLBACK_PATHS = ("/callback", "/oauth/callback", "/")
+    path = parsed.path if parsed.path in _ALLOWED_CALLBACK_PATHS else "/callback"
 
     if not code:
         raise ClientException(detail="No 'code' parameter found in URL")
@@ -388,10 +394,10 @@ def proxy_callback_forward(data: dict) -> dict[str, Any]:
     for host in ("[::1]", "127.0.0.1", "localhost"):
         try:
             resp = httpx.get(
-                f"http://{host}:{port}{parsed.path}",
+                f"http://{host}:{port}{path}",
                 params={"code": code, "state": state},
                 timeout=15,
-                follow_redirects=True,
+                follow_redirects=False,
             )
             if resp.status_code < 400:
                 return {"status": "completed", "message": "Callback forwarded successfully"}

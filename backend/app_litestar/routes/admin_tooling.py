@@ -53,10 +53,37 @@ from app.services.secret_vault_service import SecretVaultService
 # /api/settings/* (6)
 # ===========================================================================
 
+# Settings keys whose values may hold credentials/tokens. Their values are
+# redacted in read responses (a viewer can read settings); the presence of a
+# value is still observable, but never the secret itself (H4).
+_SENSITIVE_SETTING_MARKERS = ("token", "secret", "key", "password", "credential")
+_REDACTED = "••••••••"
+
+
+def _is_sensitive_setting(key: str) -> bool:
+    k = (key or "").lower()
+    return any(marker in k for marker in _SENSITIVE_SETTING_MARKERS)
+
+
+def _redact_setting_value(key: str, value: Any) -> Any:
+    if value and _is_sensitive_setting(key):
+        return _REDACTED
+    return value
+
 
 @get("/", sync_to_thread=False)
 def list_settings() -> dict[str, Any]:
-    return {"settings": get_all_settings()}
+    settings = get_all_settings()
+    if isinstance(settings, dict):
+        settings = {k: _redact_setting_value(k, v) for k, v in settings.items()}
+    elif isinstance(settings, list):
+        settings = [
+            {**row, "value": _redact_setting_value(row.get("key", ""), row.get("value"))}
+            if isinstance(row, dict)
+            else row
+            for row in settings
+        ]
+    return {"settings": settings}
 
 
 @get("/harness-plugin", sync_to_thread=False)
@@ -85,7 +112,7 @@ def set_harness_plugin(data: dict) -> dict[str, Any]:
 
 @get("/{key:str}", sync_to_thread=False)
 def get_setting_endpoint(key: str) -> dict[str, Any]:
-    return {"key": key, "value": get_setting(key) or ""}
+    return {"key": key, "value": _redact_setting_value(key, get_setting(key) or "")}
 
 
 @put("/{key:str}", sync_to_thread=False)
