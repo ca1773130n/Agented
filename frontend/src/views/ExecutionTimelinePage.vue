@@ -263,7 +263,7 @@ const summary = computed(() => ({
         </div>
         <div class="detail-actions">
           <button class="btn btn-ghost" @click="router.push({ name: 'live-execution-terminal' })">{{ t('executionTimeline.detail.viewLogs') }}</button>
-          <button class="btn btn-ghost" @click="router.push({ name: 'execution-replay-diff' })">{{ t('executionTimeline.detail.replay') }}</button>
+          <button class="btn btn-ghost" @click="router.push({ name: 'execution-tools', query: { tab: 'replay' } })">{{ t('executionTimeline.detail.replay') }}</button>
         </div>
       </div>
     </div>

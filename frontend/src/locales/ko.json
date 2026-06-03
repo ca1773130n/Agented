@@ -84,7 +84,6 @@
     "blockConfiguration": "구성",
     "blockPrReview": "PR 리뷰",
     "blockOps": "운영",
-    "blockIntrospection": "내부 점검",
     "blockAuthoring": "작성",
     "botTemplates": "봇 템플릿",
     "nlCronBuilder": "자연어 크론 빌더",

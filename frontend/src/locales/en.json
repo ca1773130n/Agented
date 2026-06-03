@@ -84,7 +84,6 @@
     "blockConfiguration": "Configuration",
     "blockPrReview": "PR-Review",
     "blockOps": "Ops",
-    "blockIntrospection": "Introspection",
     "blockAuthoring": "Authoring",
     "botTemplates": "Bot Templates",
     "nlCronBuilder": "NL Cron Builder",

@@ -84,7 +84,6 @@
     "blockConfiguration": "配置",
     "blockPrReview": "PR 审查",
     "blockOps": "运维",
-    "blockIntrospection": "内省",
     "blockAuthoring": "编写",
     "botTemplates": "机器人模板",
     "nlCronBuilder": "自然语言 Cron 构建器",
