@@ -190,16 +190,24 @@ class ExecutionQueueService:
 
             # Global concurrency cap (01 H6) — stop dispatching this batch once
             # the host is saturated; remaining entries stay queued for next poll.
-            # Gate on max(in-memory dispatch counter, running rows across ALL
-            # execution tables). _count_running_work() sums execution_logs +
-            # team_executions + workflow_executions, so team/workflow strategies
-            # that fork their own daemons (and leave the dispatcher early) are
-            # counted; the in-memory counter covers the window after dispatch but
-            # before a 'running' row is written. Either source alone undercounts.
+            # Gate CONSERVATIVELY on in_flight + db_running (never max()):
+            #   - db_running = _count_running_work() sums 'running' rows across
+            #     execution_logs + team_executions + workflow_executions, so
+            #     team/workflow strategies that fork their own daemons (and leave
+            #     the dispatcher early) are counted, as is work started outside
+            #     this queue (manual / super-agent executions).
+            #   - in_flight = _active_global covers freshly dispatched entries in
+            #     the window before their 'running' row is visible.
+            # A synchronous standard execution is counted in BOTH for its run (its
+            # in-memory reservation AND its execution_logs row), so the sum can
+            # over-count and defer slightly early — the safe direction for a cap.
+            # max() was wrong: when db_running is dominated by daemons that aren't
+            # in the in-memory counter, fresh reservations stacked invisibly under
+            # it and could blow past the cap (Codex #193 round-3 HIGH).
             with cls._active_lock:
                 in_flight = cls._active_global
             db_running = cls._count_running_work()
-            if max(in_flight, db_running) >= cls._GLOBAL_CONCURRENCY_CAP:
+            if in_flight + db_running >= cls._GLOBAL_CONCURRENCY_CAP:
                 logger.debug(
                     "Global concurrency cap (%d) reached (in_flight=%d, db_running=%d); deferring",
                     cls._GLOBAL_CONCURRENCY_CAP,

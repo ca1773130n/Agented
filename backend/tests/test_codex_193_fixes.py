@@ -93,6 +93,69 @@ def test_count_running_work_sums_all_three_tables(monkeypatch):
     assert eqs.ExecutionQueueService._count_running_work() == 2 + 3 + 1
 
 
+def test_global_cap_gate_uses_conservative_sum_not_max(monkeypatch):
+    # Round-3 (round-2 of codex on round-3) HIGH: the gate must add in_flight +
+    # db_running, never max(). With max(), fresh in-memory reservations stack
+    # invisibly under a large db_running and blow past the cap. The dispatcher
+    # must defer once the SUM reaches the cap.
+    import app.services.execution_queue_service as eqs
+
+    Q = eqs.ExecutionQueueService
+    monkeypatch.setattr(Q, "_GLOBAL_CONCURRENCY_CAP", 20, raising=False)
+    monkeypatch.setattr(Q, "_active_global", 3, raising=False)
+    # db has 18 running across the three tables.
+    monkeypatch.setattr(Q, "_count_running_work", staticmethod(lambda: 18))
+
+    dispatched = []
+    monkeypatch.setattr(
+        eqs, "get_pending_entries", lambda limit=10: [{"id": "q1", "trigger_id": "t1"}]
+    )
+    monkeypatch.setattr(
+        Q, "_dispatch_entry", classmethod(lambda cls, entry: dispatched.append(entry))
+    )
+
+    Q._dispatch_batch()
+    # 3 + 18 = 21 >= 20 → deferred. max(3,18)=18 < 20 would have WRONGLY dispatched.
+    assert dispatched == []
+
+
+def test_scheduled_team_overlap_skips_when_already_running(monkeypatch):
+    # Round-3 (codex re-review) MEDIUM: the scheduled-team path _execute_team()
+    # must coalesce overlapping cron ticks via count_running_for_team(), like the
+    # trigger path does.
+    import app.services.scheduler_service as ss
+
+    monkeypatch.setattr(ss, "get_team", lambda tid: {"id": tid, "enabled": 1})
+    monkeypatch.setattr(
+        "app.db.team_executions.count_running_for_team", lambda tid: 1, raising=False
+    )
+    logged = {}
+    monkeypatch.setattr(
+        "app.services.audit_log_service.AuditLogService.log",
+        lambda **kw: logged.update(kw),
+        raising=False,
+    )
+    started = []
+
+    class _TES:
+        @staticmethod
+        def execute_team(**kw):
+            started.append(kw)
+
+    import sys
+
+    monkeypatch.setitem(
+        sys.modules,
+        "app.services.team_execution_service",
+        type("M", (), {"TeamExecutionService": _TES}),
+    )
+
+    ss.SchedulerService._execute_team("team-1")
+    assert started == []  # overlap → not started
+    assert logged.get("action") == "scheduler.skip_overlap"
+    assert logged.get("entity_type") == "team"
+
+
 def test_skill_write_anchored_to_owning_project(monkeypatch, tmp_path):
     # Round-3 HIGH: the skill UPDATE write must be contained to the OWNING
     # project's skills root, not merely a skills-shaped path. A SKILL.md that is

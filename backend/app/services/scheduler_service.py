@@ -402,6 +402,27 @@ class SchedulerService:
             logger.info(f"Team {team_id} is disabled, skipping execution")
             return
 
+        # Overlap guard (06 L2): execute_team() forks a daemon and returns
+        # immediately, so without this a cron tick can stack a second team run on
+        # top of one already in flight. Coalesce when a prior run is still
+        # 'running' in team_executions for this team.
+        try:
+            from ..db.team_executions import count_running_for_team
+
+            if count_running_for_team(team_id) > 0:
+                logger.info("Scheduled team %s still running; skipping overlap", team_id)
+                from .audit_log_service import AuditLogService
+
+                AuditLogService.log(
+                    action="scheduler.skip_overlap",
+                    entity_type="team",
+                    entity_id=team_id,
+                    outcome="skipped",
+                )
+                return
+        except Exception:
+            logger.debug("team overlap check failed for %s", team_id, exc_info=True)
+
         try:
             from .team_execution_service import TeamExecutionService
 
