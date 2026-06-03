@@ -68,7 +68,41 @@ def count_for_user(table: str, user_id: str) -> int:
     if table not in _VALID_TABLES:
         raise ValueError(f"unknown owned-entity table: {table!r}")
     with get_connection() as conn:
-        row = conn.execute(
-            f"SELECT COUNT(*) FROM {table} WHERE user_id = ?", (user_id,)
-        ).fetchone()
+        row = conn.execute(f"SELECT COUNT(*) FROM {table} WHERE user_id = ?", (user_id,)).fetchone()
         return row[0] if row else 0
+
+
+# Backfilled sentinel for rows that predate per-user ownership. Such rows are
+# treated as shared/unowned so the move to per-object enforcement doesn't lock
+# existing data away from non-admin users.
+LEGACY_OWNER = "legacy@local"
+
+
+def get_owner(table: str, entity_id: str) -> Optional[str]:
+    """Return the owning user_id for a row, or None if the row doesn't exist
+    or has no owner set. Allow-listed table names only."""
+    if table not in _VALID_TABLES:
+        raise ValueError(f"unknown owned-entity table: {table!r}")
+    with get_connection() as conn:
+        row = conn.execute(f"SELECT user_id FROM {table} WHERE id = ?", (entity_id,)).fetchone()
+    if not row:
+        return None
+    try:
+        return row["user_id"]
+    except (KeyError, IndexError, TypeError):
+        return row[0]
+
+
+def can_access(table: str, entity_id: str, user_id: Optional[str], role: Optional[str]) -> bool:
+    """Per-object access decision for owned entities.
+
+    Admins always pass. Rows with no owner or the legacy sentinel are shared
+    (backward compat). A non-existent row passes here so the handler can return
+    its own 404. Otherwise only the owner passes.
+    """
+    if role == "admin":
+        return True
+    owner = get_owner(table, entity_id)
+    if owner is None or owner == LEGACY_OWNER:
+        return True
+    return owner == user_id

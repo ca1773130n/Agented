@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
+import { escapeHtml } from '../composables/useMarkdown';
 import { executionTaggingApi } from '../services/api/execution-tagging';
 
 const { t } = useI18n();
@@ -221,13 +222,16 @@ async function deleteTag(tagId: string) {
 }
 
 function highlightMatch(text: string, query: string): string {
-  if (!query.trim()) return text;
+  // text is agent-controlled log output and query is operator input; both must
+  // be HTML-escaped before reaching the v-html sink. Only the literal <mark>
+  // tags are real HTML.
+  if (!query.trim()) return escapeHtml(text);
   const idx = text.toLowerCase().indexOf(query.toLowerCase());
-  if (idx === -1) return text;
+  if (idx === -1) return escapeHtml(text);
   return (
-    text.slice(0, idx) +
-    `<mark>${text.slice(idx, idx + query.length)}</mark>` +
-    text.slice(idx + query.length)
+    escapeHtml(text.slice(0, idx)) +
+    `<mark>${escapeHtml(text.slice(idx, idx + query.length))}</mark>` +
+    escapeHtml(text.slice(idx + query.length))
   );
 }
 
@@ -351,7 +355,7 @@ const tagColors: TagColor[] = ['blue', 'green', 'amber', 'red', 'purple'];
         <div
           class="exec-log"
           :class="{ highlight: exec.hasMatch }"
-          v-html="exec.hasMatch ? highlightMatch(exec.logSnippet, searchQuery) : exec.logSnippet"
+          v-html="highlightMatch(exec.logSnippet, exec.hasMatch ? searchQuery : '')"
         ></div>
         <div v-if="exec.hasMatch && searchQuery" class="match-note">
           {{ t('executionTagging.logMatchFound', { query: searchQuery }) }}

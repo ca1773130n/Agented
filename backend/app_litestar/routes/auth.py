@@ -201,12 +201,39 @@ def forgot_password(data: ForgotPasswordBody) -> None:
     if user is not None and user.get("is_active"):
         token = request_reset(user["id"])
         if token:
-            _auth_logger.info(
-                "Password reset requested for %s — link: /reset-password?token=%s",
-                user["email"],
-                token,
-            )
+            # Never log the token to the general app log: it grants account
+            # takeover and persists in log aggregation/SIEM far beyond its TTL
+            # (H4). With no SMTP yet, write the link to a restricted 0600 file
+            # that only operators with filesystem access can read. Log only
+            # the user id, no token.
+            _deliver_reset_token(user["id"], token)
+            _auth_logger.info("Password reset requested for user %s", user["id"])
     return None
+
+
+def _deliver_reset_token(user_id: str, token: str) -> None:
+    """Out-of-band delivery of a reset token until SMTP exists.
+
+    Writes the reset link to a per-user, owner-only (0600) file under a
+    restricted directory rather than the shared application log.
+    """
+    import os
+    import tempfile
+
+    out_dir = os.environ.get(
+        "AGENTED_RESET_TOKEN_DIR", os.path.join(tempfile.gettempdir(), "agented-reset-tokens")
+    )
+    try:
+        os.makedirs(out_dir, mode=0o700, exist_ok=True)
+        path = os.path.join(out_dir, f"{user_id}.link")
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            os.write(fd, f"/reset-password?token={token}\n".encode())
+        finally:
+            os.close(fd)
+    except OSError as exc:
+        # Don't leak the token into the failure log either.
+        _auth_logger.error("Failed to write reset token for user %s: %s", user_id, exc)
 
 
 @post(

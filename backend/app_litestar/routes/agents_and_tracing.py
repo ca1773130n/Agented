@@ -10,7 +10,7 @@ from litestar import Router, delete, get, post, put
 from litestar.exceptions import HTTPException, NotFoundException
 from litestar.response import Stream
 
-from app.db.owned_entities import get_for_user
+from app.db.owned_entities import can_access, get_for_user
 from app.db.tracing import (
     count_traces,
     create_span,
@@ -53,45 +53,53 @@ def list_agents(
     return _result_or_raise(AgentService.list_agents(limit=limit, offset=offset or 0))
 
 
+def _assert_agent_access(agent_id: str, caller: Caller) -> None:
+    """Enforce per-object ownership on a single agent (IDOR, H2). Admins and the
+    owner pass; legacy/unowned rows are shared. 404 on denial to avoid leaking
+    which ids exist."""
+    if not can_access("agents", agent_id, caller.user_id, caller.role):
+        raise NotFoundException(detail="Agent not found")
+
+
 @post("/", sync_to_thread=False)
 def create_agent(data: dict, caller: Caller) -> dict[str, Any]:
-    del caller
-    return _result_or_raise(
-        AgentService.create_agent({k: v for k, v in (data or {}).items() if v is not None})
-    )
+    # Strip any client-supplied user_id; ownership is the authenticated caller.
+    payload = {k: v for k, v in (data or {}).items() if v is not None and k != "user_id"}
+    return _result_or_raise(AgentService.create_agent(payload, user_id=caller.user_id))
 
 
 @get("/{agent_id:str}", sync_to_thread=False)
 def get_agent_detail(agent_id: str, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_agent_access(agent_id, caller)
     return _result_or_raise(AgentService.get_agent_detail(agent_id))
 
 
 @put("/{agent_id:str}", sync_to_thread=False)
 def update_agent(agent_id: str, data: dict, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_agent_access(agent_id, caller)
     return _result_or_raise(
         AgentService.update_agent_data(
-            agent_id, {k: v for k, v in (data or {}).items() if v is not None}
+            agent_id,
+            {k: v for k, v in (data or {}).items() if v is not None and k != "user_id"},
         )
     )
 
 
 @delete("/{agent_id:str}", status_code=200, sync_to_thread=False)
 def delete_agent(agent_id: str, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_agent_access(agent_id, caller)
     return _result_or_raise(AgentService.delete_agent_by_id(agent_id))
 
 
 @post("/{agent_id:str}/run", sync_to_thread=False)
 def run_agent(agent_id: str, data: dict, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_agent_access(agent_id, caller)
     return _result_or_raise(AgentService.run_agent(agent_id, (data or {}).get("message", "")))
 
 
 @get("/{agent_id:str}/export", sync_to_thread=False)
 def export_agent(agent_id: str, caller: Caller) -> dict[str, Any]:
-    del caller
+    _assert_agent_access(agent_id, caller)
     return _result_or_raise(SkillsService.export_agent_to_harness(agent_id))
 
 

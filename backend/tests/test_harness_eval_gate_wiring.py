@@ -56,7 +56,10 @@ def test_eval_pass_returns_none_to_continue(isolated_db, tmp_path):
     assert evo.get_round(rid)["status"] == "evaluating"  # stored verdict, not terminal
 
 
-def test_gate_error_records_bypass_verdict_and_continues(isolated_db, tmp_path):
+def test_gate_error_fails_closed(isolated_db, tmp_path):
+    """An eval infra error must FAIL CLOSED — never auto-apply an unvetted
+    mutation. Previously this stored passed=True and continued (fail-open),
+    which a confidence_threshold=0.0 project would auto-apply."""
     rid = _round()
 
     def _boom(**kwargs):
@@ -64,11 +67,13 @@ def test_gate_error_records_bypass_verdict_and_continues(isolated_db, tmp_path):
 
     with patch.object(hv, "evaluate_patch", _boom, create=True):
         result = hv._eval_gate(rid, patch=_FakePatch(), inputs={"incidents": []}, scratch=tmp_path)
-    assert result is None  # fail-open: continue
+    # Short-circuits with an eval_failed result instead of returning None.
+    assert result is not None
+    assert result.status == "eval_failed"
     row = evo.get_round(rid)
     assert row["eval_verdict"] is not None
-    assert row["eval_verdict"]["score"] == 0.0  # untrusted → autonomy won't auto-apply
-    assert "bypass" in (row["eval_verdict"]["notes"] or "").lower()
+    assert row["eval_verdict"]["passed"] is False
+    assert "fail" in (row["eval_verdict"]["notes"] or "").lower()
 
 
 def test_reaper_reaps_stale_evaluating_round(isolated_db):

@@ -78,10 +78,26 @@ def provide_caller(request: Request) -> Caller:
       3. X-API-Key header against user_roles.
       4. Otherwise 401.
     """
-    if count_user_roles() == 0:
+    import hmac
+    import os
+
+    # Break-glass env key: a static shared admin credential. Recognised here
+    # (matching the middleware) so env-key admin flows work even with no
+    # user_roles rows, without relying on the fail-open bootstrap branch below.
+    env_key = os.environ.get("AGENTED_API_KEY", "")
+    api_key = request.headers.get("X-API-Key")
+    if env_key and api_key and hmac.compare_digest(api_key, env_key):
         return Caller(
-            api_key="bootstrap", role="admin", user_id=None, auth_method="bootstrap"
+            api_key=api_key, role="admin", user_id="service:env-api-key", auth_method="api_key"
         )
+
+    if count_user_roles() == 0:
+        # Fail-open bootstrap — only honoured with explicit opt-in (M1), mirroring
+        # the middleware. Never silently grant admin when roles are simply absent
+        # (e.g. a bad restore wiped user_roles).
+        if os.environ.get("AGENTED_ALLOW_BOOTSTRAP") == "1":
+            return Caller(api_key="bootstrap", role="admin", user_id=None, auth_method="bootstrap")
+        raise NotAuthorizedException(detail="Authentication required")
 
     token = _resolve_session_token(request)
     if token is not None:
@@ -89,7 +105,6 @@ def provide_caller(request: Request) -> Caller:
         if caller is not None:
             return caller
 
-    api_key = request.headers.get("X-API-Key")
     if api_key:
         resolved = get_role_and_user_for_api_key(api_key)
         if resolved is not None:

@@ -36,6 +36,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import signal
 import subprocess
 import threading
 from typing import Callable, Generator, List, Optional
@@ -86,9 +87,7 @@ def _run_subprocess(
     / ``CODEX_HOME`` / ``GEMINI_HOME``). When ``None`` the subprocess
     inherits the harness's env unchanged.
     """
-    logger.info(
-        "CLI agent: spawning %s (cwd=%s) cmd=%s", backend_label, cwd, " ".join(cmd)
-    )
+    logger.info("CLI agent: spawning %s (cwd=%s) cmd=%s", backend_label, cwd, " ".join(cmd))
     try:
         proc = subprocess.Popen(
             cmd,
@@ -97,6 +96,9 @@ def _run_subprocess(
             bufsize=0,
             cwd=cwd,
             env=env,
+            # Own process group so tool grandchildren can be killed too — a bare
+            # proc.kill() leaves them orphaned (H5).
+            start_new_session=True,
         )
     except FileNotFoundError:
         logger.error("CLI agent: %s CLI not found", backend_label)
@@ -112,14 +114,21 @@ def _run_subprocess(
     def _on_timeout() -> None:
         nonlocal timed_out
         timed_out = True
+        # Kill the whole process group, not just the direct child — otherwise
+        # tool grandchildren survive the timeout (start_new_session gives the
+        # child its own group). proc.kill() alone leaves them orphaned.
         try:
-            proc.kill()
-        except OSError:
-            pass
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, OSError):
+            try:
+                proc.kill()
+            except OSError:
+                pass
 
     timer = threading.Timer(SUBPROCESS_TIMEOUT_SECONDS, _on_timeout)
     timer.start()
 
+    completed = False
     try:
         assert proc.stdout is not None  # bufsize=0 guarantees a stream
         while True:
@@ -135,8 +144,39 @@ def _run_subprocess(
             if chunk:
                 yield chunk
         proc.wait()
+        completed = True
     finally:
         timer.cancel()
+        # If the consumer abandoned the generator (SSE client disconnect →
+        # GeneratorExit) or we broke out early, the child + its tool
+        # grandchildren would otherwise keep running for up to the timeout,
+        # leaking the process group and both pipes (H5). Tear it all down.
+        # Only tear down on the abandon/kill path. On normal completion the
+        # post-loop block below still needs to read proc.stderr, so leave the
+        # streams open (Popen closes them on GC).
+        if not completed:
+            if proc.poll() is None:
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                except (ProcessLookupError, OSError):
+                    pass
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    try:
+                        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    except (ProcessLookupError, OSError):
+                        pass
+                    try:
+                        proc.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        logger.warning("CLI agent: %s did not exit after SIGKILL", backend_label)
+            for stream in (proc.stdout, proc.stderr):
+                try:
+                    if stream is not None:
+                        stream.close()
+                except OSError:
+                    pass
 
     if timed_out:
         yield "\n\n[Request timed out]"
@@ -325,9 +365,7 @@ _BACKEND_KIND_TO_TYPE = {
 }
 
 
-def resolve_account_config_dir(
-    account_id: Optional[str], backend_kind: str
-) -> Optional[str]:
+def resolve_account_config_dir(account_id: Optional[str], backend_kind: str) -> Optional[str]:
     """Look up the config directory for a chat account.
 
     The frontend's account picker passes the sidecar's string id (e.g.

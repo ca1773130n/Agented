@@ -44,6 +44,18 @@ class TriggerService:
     """Service for trigger CRUD operations."""
 
     @staticmethod
+    def _redact_secret(trigger: dict) -> dict:
+        """Strip the HMAC webhook_secret from a trigger row before it leaves the
+        service layer. The secret authenticates inbound webhooks; returning it in
+        any read/list API lets a viewer forge signed payloads (H1). We expose a
+        boolean `has_webhook_secret` so the UI can still show whether one is set.
+        """
+        if "webhook_secret" in trigger:
+            trigger["has_webhook_secret"] = bool(trigger.get("webhook_secret"))
+            trigger.pop("webhook_secret", None)
+        return trigger
+
+    @staticmethod
     def list_triggers(limit=None, offset=0) -> Tuple[dict, HTTPStatus]:
         """Get all triggers with path counts and execution status."""
         triggers = get_all_triggers(limit=limit, offset=offset)
@@ -51,6 +63,7 @@ class TriggerService:
         # Add execution status to each trigger
         for trigger in triggers:
             trigger["execution_status"] = ExecutionService.get_status(trigger["id"])
+            TriggerService._redact_secret(trigger)
         return {"triggers": triggers, "total_count": total_count}, HTTPStatus.OK
 
     @staticmethod
@@ -62,6 +75,7 @@ class TriggerService:
 
         trigger["paths"] = list_paths_for_trigger(trigger_id)
         trigger["execution_status"] = ExecutionService.get_status(trigger_id)
+        TriggerService._redact_secret(trigger)
         return trigger, HTTPStatus.OK
 
     @staticmethod

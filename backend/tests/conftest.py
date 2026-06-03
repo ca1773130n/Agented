@@ -22,6 +22,17 @@ if shutil.which("claude") is None:
 
 
 @pytest.fixture(autouse=True)
+def _allow_bootstrap(monkeypatch):
+    """Bootstrap (empty-DB) auth is fail-closed in production and requires an
+    explicit opt-in (AGENTED_ALLOW_BOOTSTRAP=1, see auth middleware/provide_caller).
+    The test suite drives routes against an empty user_roles table, so opt in
+    here. Tests that specifically assert fail-closed behaviour can override by
+    deleting the env var via their own monkeypatch."""
+    monkeypatch.setenv("AGENTED_ALLOW_BOOTSTRAP", "1")
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _reset_rate_limit_overrides():
     """v0.5.14: rate_limit_guard._PER_ROUTE_OVERRIDES is module-global.
     Tests that spin up the full Litestar app via on_startup populate it

@@ -4,7 +4,7 @@ import datetime
 import json
 import logging
 import threading
-from queue import Empty, Queue
+from queue import Empty, Full, Queue
 from typing import Dict, Generator, List, Optional
 
 from ..db.messages import (
@@ -25,6 +25,9 @@ class AgentMessageBusService:
     _subscribers: Dict[str, List[Queue]] = {}
     _lock = threading.Lock()
     _shutdown_event = threading.Event()
+    # Per-subscriber SSE backpressure bound. A slow/stalled client drops oldest
+    # events past this; messages stay durable in the DB for re-delivery.
+    _SUBSCRIBER_QUEUE_MAXSIZE = 1000
     _flush_thread: Optional[threading.Thread] = None
 
     @classmethod
@@ -182,7 +185,20 @@ class AgentMessageBusService:
                 },
             )
             for q in queues:
-                q.put(event)
+                try:
+                    q.put_nowait(event)
+                except Full:
+                    # Backpressure: a stalled-but-connected SSE client must not
+                    # grow the queue without bound (single-worker OOM). Drop the
+                    # oldest event to make room; the message remains durable in
+                    # the DB and is re-delivered via pending prompt injection.
+                    try:
+                        q.get_nowait()
+                        q.put_nowait(event)
+                    except (Empty, Full):
+                        logger.warning(
+                            "message bus: dropping event for slow subscriber %s", agent_id
+                        )
 
         # Mark as delivered AFTER successful push
         update_message_status(msg_id, "delivered")
@@ -193,7 +209,7 @@ class AgentMessageBusService:
 
         Yields SSE-formatted events. Sends keepalive every 30 seconds.
         """
-        queue: Queue = Queue()
+        queue: Queue = Queue(maxsize=cls._SUBSCRIBER_QUEUE_MAXSIZE)
 
         with cls._lock:
             if agent_id not in cls._subscribers:
@@ -211,13 +227,17 @@ class AgentMessageBusService:
                     # Send keepalive comment
                     yield ": keepalive\n\n"
         finally:
-            # Cleanup: remove queue from subscribers
+            # Cleanup: remove queue from subscribers, and evict the agent's key
+            # entirely when it has no remaining subscribers — otherwise every
+            # agent that ever connected leaks a permanent empty-list entry.
             with cls._lock:
                 if agent_id in cls._subscribers:
                     try:
                         cls._subscribers[agent_id].remove(queue)
                     except ValueError:
                         pass  # Intentionally silenced: invalid value handled gracefully
+                    if not cls._subscribers[agent_id]:
+                        del cls._subscribers[agent_id]
 
     @staticmethod
     def _format_sse(event_type: str, data: dict) -> str:

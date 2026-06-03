@@ -388,10 +388,18 @@ class GitOpsSyncService:
         Raises:
             subprocess.CalledProcessError: If git commands fail.
         """
+        # Reject a repo_url / branch that git would parse as an option (e.g. a
+        # "--upload-pack=..."-leading value). Applies to BOTH the existing-clone
+        # fetch path and the fresh-clone path.
+        if repo_url.startswith("-") or branch.startswith("-"):
+            raise ValueError("Invalid repo_url or branch (leading dash)")
+        if not repo_url.startswith(("https://", "http://", "git://", "ssh://", "git@")):
+            raise ValueError(f"Unsupported repo URL scheme: {repo_url!r}")
+
         if os.path.isdir(os.path.join(local_path, ".git")):
-            # Pull latest changes
+            # Pull latest changes ("--" stops option parsing for the ref).
             subprocess.run(
-                ["git", "-C", local_path, "fetch", "origin", branch],
+                ["git", "-C", local_path, "fetch", "origin", "--", branch],
                 capture_output=True,
                 text=True,
                 check=True,
@@ -405,10 +413,20 @@ class GitOpsSyncService:
                 timeout=30,
             )
         else:
-            # Fresh clone
+            # Fresh clone. The trailing "--" stops option parsing so the
+            # positional repo_url/local_path can never be treated as flags.
             os.makedirs(local_path, exist_ok=True)
             subprocess.run(
-                ["git", "clone", "--branch", branch, "--single-branch", repo_url, local_path],
+                [
+                    "git",
+                    "clone",
+                    "--branch",
+                    branch,
+                    "--single-branch",
+                    "--",
+                    repo_url,
+                    local_path,
+                ],
                 capture_output=True,
                 text=True,
                 check=True,

@@ -407,7 +407,15 @@ def on_startup(app: Any) -> None:
             logger.warning("cliproxyapi version check: %s", msg)
     except Exception:
         logger.warning("cliproxyapi version check raised", exc_info=True)
-    _detect_backends()
+    # Guard non-critical startup steps: with workers=1, an unhandled exception
+    # in on_startup kills the only worker → full boot outage. Backend detection
+    # is best-effort and must not take the worker down. (_init_database above is
+    # intentionally NOT guarded — a broken DB should fail startup loudly rather
+    # than serve traffic.)
+    try:
+        _detect_backends()
+    except Exception:
+        logger.error("backend detection failed at startup; continuing", exc_info=True)
     # Wire WorkflowTriggerService into the execution_events channel —
     # decouples workflow_execution_service from importing the trigger service
     # directly (one-way runtime dep instead of two-way).
@@ -468,8 +476,14 @@ def on_startup(app: Any) -> None:
     # Pass `None` because SchedulerService.init expects a Flask-style object
     # only for testing-mode detection, which doesn't apply when Litestar
     # runs standalone. The service tolerates None via attribute getattr.
-    _setup_scheduler(None)
-    _register_cleanup_handlers()
+    try:
+        _setup_scheduler(None)
+    except Exception:
+        logger.error("scheduler setup failed at startup; continuing", exc_info=True)
+    try:
+        _register_cleanup_handlers()
+    except Exception:
+        logger.error("cleanup handler registration failed at startup; continuing", exc_info=True)
     # v0.5.14: pre-populate the rate-limit override registry from the app's
     # route table so the very first cold request to a guarded path sees
     # the right limit (instead of the more permissive coarse default).

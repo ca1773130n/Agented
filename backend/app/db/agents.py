@@ -47,8 +47,12 @@ def create_agent(
     matched_skills: str = None,
     preferred_model: str = None,
     effort_level: str = "medium",
+    user_id: str = None,
 ) -> Optional[str]:
-    """Add a new agent. Returns agent_id (string) on success, None on failure."""
+    """Add a new agent. Returns agent_id (string) on success, None on failure.
+
+    ``user_id`` records the creating principal as the owner for per-object
+    access control. None leaves the row unowned (shared)."""
     if backend_type not in VALID_BACKENDS:
         backend_type = "claude"
     if creation_status not in VALID_AGENT_STATUSES:
@@ -64,8 +68,8 @@ def create_agent(
                 INSERT INTO agents (id, name, description, role, goals, context, backend_type,
                                     skills, documents, system_prompt, creation_conversation_id, creation_status,
                                     triggers, color, icon, model, temperature, tools, autonomous, allowed_tools,
-                                    layer, detected_role, matched_skills, preferred_model, effort_level)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    layer, detected_role, matched_skills, preferred_model, effort_level, user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     agent_id,
@@ -93,6 +97,7 @@ def create_agent(
                     matched_skills,
                     preferred_model,
                     effort_level,
+                    user_id,
                 ),
             )
             conn.commit()
@@ -355,9 +360,7 @@ def get_active_conversations(user_id: str | None = None) -> List[dict]:
 # =============================================================================
 
 
-def create_design_conversation(
-    conv_id: str, entity_type: str, user_id: str | None = None
-) -> bool:
+def create_design_conversation(conv_id: str, entity_type: str, user_id: str | None = None) -> bool:
     """Create a new design conversation record. Returns True on success.
 
     v0.7.83 — accepts an optional ``user_id`` so multi-tenant
@@ -369,8 +372,7 @@ def create_design_conversation(
     with get_connection() as conn:
         try:
             conn.execute(
-                "INSERT INTO design_conversations (id, entity_type, user_id) "
-                "VALUES (?, ?, ?)",
+                "INSERT INTO design_conversations (id, entity_type, user_id) VALUES (?, ?, ?)",
                 (conv_id, entity_type, user_id),
             )
             conn.commit()
