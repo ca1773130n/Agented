@@ -33,6 +33,11 @@ from app.db import (
 
 from .goal_judge_service import GoalJudgeService
 from .project_session_manager import ProjectSessionManager
+from app.config import AUTORESEARCH_KERNEL_ENABLED
+
+# autoresearch_core.should_promote_dead_end is imported lazily inside
+# _maybe_promote_kernel_dead_end so flag-off deployments don't require the
+# editable sibling package at import time.
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +103,42 @@ def _approach_hash(hypothesis: str) -> str:
     return hashlib.sha1(hypothesis.lower().strip().encode("utf-8")).hexdigest()[:16]
 
 
+def _maybe_promote_kernel_dead_end(
+    session_id: str,
+    iteration_no: int,
+    hypothesis: Optional[str],
+    verdict,
+    turn_text: str,
+) -> None:
+    """Promote a deterministic-refutation kernel verdict to the dead-end registry.
+
+    Guards:
+    - AUTORESEARCH_KERNEL_ENABLED must be True (flag-off skips entirely)
+    - verdict.source must be "kernel" (not deterministic/llm paths)
+    - hypothesis must be non-empty (no hypothesis → nothing to record)
+    - verdict.kernel_record must not be None (invalid-spec errors have no record)
+    - should_promote_dead_end(kernel_record) must return True (refuted, not inconclusive)
+    """
+    if not (AUTORESEARCH_KERNEL_ENABLED and verdict.source == "kernel" and hypothesis):
+        return
+    if verdict.kernel_record is None:
+        return
+    try:
+        from autoresearch_core import should_promote_dead_end
+    except ImportError:
+        return
+    if not should_promote_dead_end(verdict.kernel_record):
+        return
+    add_goal_loop_dead_end(
+        session_id=session_id,
+        iteration=iteration_no,
+        approach=hypothesis,
+        reason=verdict.reason,
+        evidence=(turn_text or "")[-1024:] or None,
+        approach_hash=_approach_hash(hypothesis),
+    )
+
+
 def _dead_ends_context(session_id: str, limit: int = 5) -> str:
     """Render the last few dead-ends as a bullet list the agent can
     read in its next prompt. Returns empty string when the registry
@@ -120,12 +161,22 @@ _OUROBOROS_HYPOTHESIS_BLOCK = (
 )
 
 
+def _result_instruction(metric_spec) -> str:
+    """Build the __RESULT__ reporting instruction for the agent prompt."""
+    key = metric_spec.get("metric_key", "<metric>") if isinstance(metric_spec, dict) else "<metric>"
+    return (
+        f"\n\nWhen you have measured the target metric, print it as a final line "
+        f'exactly: `__RESULT__ {{"{key}": <number>}}`.'
+    )
+
+
 def _continue_prompt(
     goal: str,
     reason: str,
     *,
     ouroboros: bool = True,
     dead_ends_block: str = "",
+    result_block: str = "",
 ) -> str:
     """Synthesize the user message that drives the next turn.
 
@@ -135,24 +186,32 @@ def _continue_prompt(
     prior dead-ends. Operators who explicitly disable Ouroboros
     via ``goal_loop_config["ouroboros"]: false`` get the legacy
     plain-continue shape.
+
+    v0.7.88 — ``result_block`` appends the ``__RESULT__`` reporting
+    instruction when the kernel is active (non-empty string).
     """
     base = f"Goal: {goal}\n\nLast check: {reason}\n\n"
     if not ouroboros:
-        return f"{base}Address the gap and continue."
+        return f"{base}Address the gap and continue.{result_block}"
     if dead_ends_block:
-        return f"{base}{dead_ends_block}\n\n{_OUROBOROS_HYPOTHESIS_BLOCK}"
-    return f"{base}{_OUROBOROS_HYPOTHESIS_BLOCK}"
+        return f"{base}{dead_ends_block}\n\n{_OUROBOROS_HYPOTHESIS_BLOCK}{result_block}"
+    return f"{base}{_OUROBOROS_HYPOTHESIS_BLOCK}{result_block}"
 
 
-def _initial_prompt(goal: str, *, ouroboros: bool = True) -> str:
+def _initial_prompt(goal: str, *, ouroboros: bool = True, result_block: str = "") -> str:
     """First user message that kicks off the goal-loop session.
 
     v0.7.87 — ``ouroboros`` defaults to ``True``. When enabled,
     requests the first iteration's hypothesis + predicted outcome.
+
+    v0.7.88 — ``result_block`` appends the ``__RESULT__`` reporting
+    instruction when the kernel is active (non-empty string).
     """
     if not ouroboros:
-        return f"Goal: {goal}\n\nStart working toward the goal. Make progress this turn."
-    return f"Goal: {goal}\n\nStart working toward the goal. {_OUROBOROS_HYPOTHESIS_BLOCK}"
+        return (
+            f"Goal: {goal}\n\nStart working toward the goal. Make progress this turn.{result_block}"
+        )
+    return f"Goal: {goal}\n\nStart working toward the goal. {_OUROBOROS_HYPOTHESIS_BLOCK}{result_block}"
 
 
 @dataclass
@@ -239,6 +298,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
         return
 
     check_cmd = config.get("check_cmd")
+    metric_spec = config.get("metric_spec")
     backend_kind = config.get("judge_backend_kind", "claude")
     model_override = config.get("judge_model_override")
     max_iterations = int(config.get("max_iterations") or 20)
@@ -263,6 +323,18 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
     # judge falls back to its legacy binary mode for that
     # iteration without losing the audit row.
     ouroboros = bool(config.get("ouroboros", True))
+    if metric_spec is not None and not AUTORESEARCH_KERNEL_ENABLED:
+        # Operator configured a metric_spec but the kernel flag is off — it's
+        # silently ignored. Log once so this isn't a confusing no-op.
+        logger.warning(
+            "goal_loop %s has metric_spec but AUTORESEARCH_KERNEL_ENABLED is off; ignoring it",
+            session_id,
+        )
+    result_block = (
+        _result_instruction(metric_spec)
+        if (AUTORESEARCH_KERNEL_ENABLED and metric_spec is not None)
+        else ""
+    )
 
     queue = ProjectSessionManager.subscribe_raw(session_id)
     try:
@@ -272,7 +344,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
         # respond to until something hits its stdin. The reply
         # will trigger the first ``turn_done`` and the normal
         # judge-then-continue loop takes over from there.
-        _send_initial(session_id, goal, ouroboros=ouroboros)
+        _send_initial(session_id, goal, ouroboros=ouroboros, result_block=result_block)
         while not state.stop_event.is_set():
             if time.time() - state.started_at > max_wall_seconds:
                 _broadcast_end(
@@ -331,6 +403,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                 model_override=model_override,
                 hypothesis=hypothesis,
                 predicted_outcome=predicted_outcome,
+                metric_spec=metric_spec,
             )
 
             # If the operator clicked Stop while the judge was
@@ -410,16 +483,19 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                     approach_hash=_approach_hash(hypothesis),
                 )
 
+            _maybe_promote_kernel_dead_end(session_id, iteration_no, hypothesis, verdict, turn_text)
+
             state.not_met_streak += 1
-            _maybe_stale_check(
-                session_id,
-                state,
-                check_cmd,
-                goal,
-                turn_text,
-                backend_kind,
-                model_override,
-            )
+            if not (AUTORESEARCH_KERNEL_ENABLED and metric_spec is not None):
+                _maybe_stale_check(
+                    session_id,
+                    state,
+                    check_cmd,
+                    goal,
+                    turn_text,
+                    backend_kind,
+                    model_override,
+                )
 
             if iteration_no >= max_iterations:
                 _broadcast_end(
@@ -463,6 +539,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                 verdict.reason,
                 ouroboros=ouroboros,
                 dead_ends_block=_dead_ends_context(session_id) if ouroboros else "",
+                result_block=result_block,
             )
     except Exception as exc:
         # The normal termination paths (met / iteration_cap / convergence /
@@ -489,22 +566,33 @@ def _send_continue(
     *,
     ouroboros: bool = True,
     dead_ends_block: str = "",
+    result_block: str = "",
 ) -> None:
     """Write the synthetic continue prompt to claude's stdin."""
     _send_user_text(
         session_id,
-        _continue_prompt(goal, reason, ouroboros=ouroboros, dead_ends_block=dead_ends_block),
+        _continue_prompt(
+            goal,
+            reason,
+            ouroboros=ouroboros,
+            dead_ends_block=dead_ends_block,
+            result_block=result_block,
+        ),
     )
 
 
-def _send_initial(session_id: str, goal: str, *, ouroboros: bool = True) -> None:
+def _send_initial(
+    session_id: str, goal: str, *, ouroboros: bool = True, result_block: str = ""
+) -> None:
     """Write the initial kickoff prompt to claude's stdin.
 
     Called once per goal-loop session before the polling loop
     begins so claude has something to respond to and the first
     ``turn_done`` actually arrives.
     """
-    _send_user_text(session_id, _initial_prompt(goal, ouroboros=ouroboros))
+    _send_user_text(
+        session_id, _initial_prompt(goal, ouroboros=ouroboros, result_block=result_block)
+    )
 
 
 def _send_user_text(session_id: str, text: str) -> None:

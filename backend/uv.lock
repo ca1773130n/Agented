@@ -10,6 +10,7 @@ dependencies = [
     { name = "ai-accounts-core" },
     { name = "ai-accounts-litestar" },
     { name = "apscheduler" },
+    { name = "autoresearch-core" },
     { name = "bcrypt" },
     { name = "cryptography" },
     { name = "flask" },
@@ -55,6 +56,7 @@ requires-dist = [
     { name = "ai-accounts-core", editable = "../../ai-accounts/packages/core" },
     { name = "ai-accounts-litestar", editable = "../../ai-accounts/packages/litestar" },
     { name = "apscheduler", specifier = ">=3.10.0" },
+    { name = "autoresearch-core", editable = "../../autoresearch-core" },
     { name = "bcrypt", specifier = ">=5.0.0" },
     { name = "cryptography", specifier = ">=41.0.0" },
     { name = "flask", specifier = ">=2.2.3,<3.0" },
@@ -311,6 +313,18 @@ sdist = { url = "https://files.pythonhosted.org/packages/6b/5c/685e6633917e101e5
 wheels = [
     { url = "https://files.pythonhosted.org/packages/3a/2a/7cc015f5b9f5db42b7d48157e23356022889fc354a2813c15934b7cb5c0e/attrs-25.4.0-py3-none-any.whl", hash = "sha256:adcf7e2a1fb3b36ac48d97835bb6d8ade15b8dcce26aba8bf1d14847b57a3373", size = 67615, upload-time = "2025-10-06T13:54:43.17Z" },
 ]
+
+[[package]]
+name = "autoresearch-core"
+version = "0.1.1"
+source = { editable = "../../autoresearch-core" }
+
+[package.metadata]
+requires-dist = [
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
+]
+provides-extras = ["dev"]
 
 [[package]]
 name = "bcrypt"
