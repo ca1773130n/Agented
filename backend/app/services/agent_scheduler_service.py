@@ -280,6 +280,19 @@ class AgentSchedulerService:
                 new_state = "stopped"
                 new_polls = polls
 
+            # Capture the to-persist snapshot in the SAME critical section as the
+            # mutation (H6). Reading it back under a second lock acquisition let
+            # a concurrent evaluate_all_accounts/_set_state overwrite the key
+            # in-between, persisting a snapshot that didn't match this transition.
+            persist_snapshot = {
+                "state": session.get("state", new_state),
+                "stop_reason": session.get("stop_reason"),
+                "stop_window_type": session.get("stop_window_type"),
+                "stop_eta_minutes": session.get("stop_eta_minutes"),
+                "resume_estimate": session.get("resume_estimate"),
+                "consecutive_safe_polls": session.get("consecutive_safe_polls", new_polls),
+            }
+
         if new_state == "queued":
             logger.info(
                 f"Scheduler: account {account_id} state stopped -> queued "
@@ -291,17 +304,16 @@ class AgentSchedulerService:
                 f"(safe polls: {polls}/{hysteresis_polls})"
             )
 
-        # Persist to DB (outside lock)
-        with cls._lock:
-            current = cls._session_states.get(key, {})
+        # Persist the snapshot captured atomically with the mutation (outside
+        # the lock — the DB write must not hold the in-memory lock).
         upsert_agent_session(
             account_id=account_id,
-            state=current.get("state", new_state),
-            stop_reason=current.get("stop_reason"),
-            stop_window_type=current.get("stop_window_type"),
-            stop_eta_minutes=current.get("stop_eta_minutes"),
-            resume_estimate=current.get("resume_estimate"),
-            consecutive_safe_polls=current.get("consecutive_safe_polls", new_polls),
+            state=persist_snapshot["state"],
+            stop_reason=persist_snapshot["stop_reason"],
+            stop_window_type=persist_snapshot["stop_window_type"],
+            stop_eta_minutes=persist_snapshot["stop_eta_minutes"],
+            resume_estimate=persist_snapshot["resume_estimate"],
+            consecutive_safe_polls=persist_snapshot["consecutive_safe_polls"],
         )
 
     @classmethod

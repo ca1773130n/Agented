@@ -151,14 +151,8 @@ def _initial_prompt(goal: str, *, ouroboros: bool = True) -> str:
     requests the first iteration's hypothesis + predicted outcome.
     """
     if not ouroboros:
-        return (
-            f"Goal: {goal}\n\nStart working toward the goal. "
-            "Make progress this turn."
-        )
-    return (
-        f"Goal: {goal}\n\nStart working toward the goal. "
-        f"{_OUROBOROS_HYPOTHESIS_BLOCK}"
-    )
+        return f"Goal: {goal}\n\nStart working toward the goal. Make progress this turn."
+    return f"Goal: {goal}\n\nStart working toward the goal. {_OUROBOROS_HYPOTHESIS_BLOCK}"
 
 
 @dataclass
@@ -384,11 +378,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
             # could falsify. The ``UNIQUE(session_id, approach_hash)``
             # constraint keeps repeat attempts of the same approach
             # from multiplying rows.
-            if (
-                ouroboros
-                and hypothesis
-                and verdict.ouroboros_verdict == "falsified"
-            ):
+            if ouroboros and hypothesis and verdict.ouroboros_verdict == "falsified":
                 add_goal_loop_dead_end(
                     session_id=session_id,
                     iteration=iteration_no,
@@ -427,9 +417,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
             # fires when the agent has been consistently producing
             # hypotheses but they're stuck.
             if ouroboros and verdict.ouroboros_verdict:
-                recent = recent_iteration_verdicts(
-                    session_id, limit=_OUROBOROS_CONVERGENCE_WINDOW
-                )
+                recent = recent_iteration_verdicts(session_id, limit=_OUROBOROS_CONVERGENCE_WINDOW)
                 if (
                     len(recent) >= _OUROBOROS_CONVERGENCE_WINDOW
                     and len(set(recent)) == 1
@@ -454,8 +442,19 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                 ouroboros=ouroboros,
                 dead_ends_block=_dead_ends_context(session_id) if ouroboros else "",
             )
-    except Exception:
+    except Exception as exc:
+        # The normal termination paths (met / iteration_cap / convergence /
+        # operator stop) all break out of the loop and reach `finally`, never
+        # here. Reaching this except means an UNHANDLED error — without an end
+        # broadcast the operator is left with a "stuck" session that never
+        # progresses (H5). Emit an error end and stop the session so the failure
+        # is visible rather than silent.
         logger.error("goal_loop runner crashed for %s", session_id, exc_info=True)
+        try:
+            _broadcast_end(session_id, reason="error", detail=str(exc)[:300])
+            ProjectSessionManager.stop_session(session_id)
+        except Exception:
+            logger.error("goal_loop: failed to emit error-end for %s", session_id, exc_info=True)
     finally:
         ProjectSessionManager.unsubscribe_raw(session_id, queue)
         _cleanup(session_id)
@@ -472,9 +471,7 @@ def _send_continue(
     """Write the synthetic continue prompt to claude's stdin."""
     _send_user_text(
         session_id,
-        _continue_prompt(
-            goal, reason, ouroboros=ouroboros, dead_ends_block=dead_ends_block
-        ),
+        _continue_prompt(goal, reason, ouroboros=ouroboros, dead_ends_block=dead_ends_block),
     )
 
 
