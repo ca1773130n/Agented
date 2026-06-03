@@ -94,6 +94,16 @@ describe('AgentsPage', () => {
     expect(agentApi.run).toHaveBeenCalledWith('agent-1')
   })
 
+  it('disables the run button for a disabled agent', async () => {
+    const wrapper = mountComponent()
+    await flushPromises()
+    // agent-2 has enabled: 0 -> its run button must be disabled (the guard
+    // against running a disabled agent, since a real click can't fire).
+    const runButtons = wrapper.findAll('.agent-card .btn-success')
+    expect(runButtons.length).toBe(2)
+    expect(runButtons[1].attributes('disabled')).toBeDefined()
+  })
+
   it('deletes an agent after confirmation', async () => {
     const { agentApi } = await import('../../services/api')
     const wrapper = mountComponent()
