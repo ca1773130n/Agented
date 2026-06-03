@@ -7432,7 +7432,7 @@
       "descriptionTooShort": "请提供至少 10 个字符的描述",
       "generateFailed": "生成团队配置失败",
       "creationFailed": "团队创建失败",
-      "agentCreateSkipped": "无法创建代理“{name}” — 已跳过",
+      "createdWithIssues": "团队已创建，但有 {count} 个步骤未能应用 — 请检查团队并补充缺失项",
       "createdFromGenerated": "已根据生成的配置创建团队",
       "saveGeneratedFailed": "保存生成的团队失败"
     }

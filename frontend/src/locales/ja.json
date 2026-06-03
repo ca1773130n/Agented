@@ -7432,7 +7432,7 @@
       "descriptionTooShort": "10文字以上の説明を入力してください",
       "generateFailed": "チーム構成の生成に失敗しました",
       "creationFailed": "チームの作成に失敗しました",
-      "agentCreateSkipped": "エージェント「{name}」を作成できません — スキップ",
+      "createdWithIssues": "チームは作成されましたが、{count} 件のステップを適用できませんでした — チームを確認し、不足分を追加してください",
       "createdFromGenerated": "生成された構成からチームを作成しました",
       "saveGeneratedFailed": "生成されたチームの保存に失敗しました"
     }

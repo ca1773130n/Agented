@@ -2,7 +2,8 @@
 import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { Team, Agent, TopologyType, GeneratedTeamConfig } from '../services/api';
-import { teamApi, agentApi, userSkillsApi, ApiError } from '../services/api';
+import { teamApi, agentApi, ApiError } from '../services/api';
+import { applyGeneratedConfig } from '../composables/useTeamGeneration';
 import TopologyPicker from '../components/teams/TopologyPicker.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
@@ -279,95 +280,29 @@ async function generateTeamConfig() {
 async function saveGeneratedConfig(config: GeneratedTeamConfig) {
   isSavingGenerated.value = true;
   try {
-    // 1. Create the team
-    const result = await teamApi.create({
-      name: config.name,
-      description: config.description || undefined,
-      color: config.color || undefined,
+    const outcome = await applyGeneratedConfig(config, {
+      autoAgentDescription: (name) => t('teams.autoCreatedForTeam', { name }),
     });
 
-    const teamId = result.team?.id;
-    if (!teamId) {
+    if (!outcome.teamId) {
+      // Team shell itself could not be created — nothing else was attempted.
       showToast(t('teams.toast.creationFailed'), 'error');
       return;
     }
 
-    // 2. Set topology if provided
-    if (config.topology) {
-      try {
-        await teamApi.updateTopology(teamId, {
-          topology: config.topology,
-          topology_config: JSON.stringify(config.topology_config || {}),
-        });
-      } catch {
-        showToast(t('teams.toast.topologyNotSaved'), 'info');
-      }
-    }
-
-    // 3. Process each agent — create new agents if needed, then add as members
-    for (const agentCfg of config.agents) {
-      let agentId = agentCfg.agent_id;
-
-      // Auto-create agent if agent_id is null (AI suggested a new agent)
-      if (!agentId) {
-        try {
-          const agentResult = await agentApi.create({
-            name: agentCfg.name,
-            role: agentCfg.role || 'member',
-            description: t('teams.autoCreatedForTeam', { name: config.name }),
-          });
-          agentId = agentResult.agent_id;
-        } catch {
-          showToast(t('teams.toast.agentCreateSkipped', { name: agentCfg.name }), 'info');
-          continue;
-        }
-      }
-
-      // Add agent as team member
-      try {
-        await teamApi.addMember(teamId, {
-          name: agentCfg.name,
-          role: agentCfg.role || 'member',
-          agent_id: agentId,
-        });
-      } catch {
-        // Member may already exist — skip
-      }
-
-      // Auto-create skills that need creation, then create all assignments
-      for (const assignment of agentCfg.assignments) {
-        if (assignment.valid === false) continue;
-
-        // Auto-create skills that don't exist yet
-        if (assignment.needs_creation && assignment.entity_type === 'skill') {
-          try {
-            await userSkillsApi.add({
-              skill_name: assignment.entity_id,
-              skill_path: `generated/${assignment.entity_id}`,
-              description: assignment.entity_name || assignment.entity_id,
-            });
-          } catch {
-            // Skill creation failed — still try assignment in case it already exists
-          }
-        }
-
-        try {
-          await teamApi.addAssignment(teamId, agentId, {
-            entity_type: assignment.entity_type,
-            entity_id: assignment.entity_id,
-            entity_name: assignment.entity_name || undefined,
-          });
-        } catch {
-          // Assignment may be duplicate — skip
-        }
-      }
-    }
-
-    showToast(t('teams.toast.createdFromGenerated'), 'success');
+    // The team now exists, so close the review regardless: re-saving would
+    // create a duplicate team. But report honestly when sub-steps failed
+    // instead of always claiming a clean import.
     showConfigReview.value = false;
     generatedConfig.value = null;
     generatedWarnings.value = [];
     await loadTeams();
+
+    if (outcome.issues.length > 0) {
+      showToast(t('teams.toast.createdWithIssues', { count: outcome.issues.length }), 'error');
+    } else {
+      showToast(t('teams.toast.createdFromGenerated'), 'success');
+    }
   } catch (e) {
     if (e instanceof ApiError) {
       showToast(e.message, 'error');
