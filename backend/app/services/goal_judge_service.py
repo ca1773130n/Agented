@@ -31,6 +31,9 @@ from typing import Optional
 import httpx
 
 from .cliproxy_manager import CLIProxyManager
+from autoresearch_core import ExperimentResult, MetricSpec, measure
+from autoresearch_core import parse_metrics_line, validate_metric_spec
+from app.config import AUTORESEARCH_KERNEL_ENABLED
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +134,8 @@ class JudgeVerdict:
     tokens_out: int = 0
     cost_usd: float = 0.0
     ouroboros_verdict: Optional[str] = None
+    metric_spec: Optional[dict] = None
+    kernel_record: Optional[object] = None   # transient autoresearch_core.VerdictRecord; not persisted
 
 
 class GoalJudgeService:
@@ -148,6 +153,7 @@ class GoalJudgeService:
         model_override: Optional[str] = None,
         hypothesis: Optional[str] = None,
         predicted_outcome: Optional[str] = None,
+        metric_spec: Optional[dict] = None,
     ) -> JudgeVerdict:
         """v0.7.86 — when both ``hypothesis`` and ``predicted_outcome``
         are supplied, the LLM judge runs in Ouroboros mode and
@@ -155,7 +161,34 @@ class GoalJudgeService:
         binary ``met``. Deterministic checks ignore Ouroboros
         inputs — the operator's shell command is the source of
         truth there.
+
+        v0.7.88 — when ``AUTORESEARCH_KERNEL_ENABLED`` and ``metric_spec``
+        are both set, the kernel is the authoritative judge: it parses
+        ``__RESULT__`` from the agent turn and compares against target.
+        This branch ALWAYS returns — it never falls through to check_cmd
+        (shell=True) or the LLM judges.
         """
+        if AUTORESEARCH_KERNEL_ENABLED and metric_spec:
+            # metric_spec is authoritative — this branch ALWAYS returns; it never
+            # falls through to check_cmd (shell=True) or the LLM judges.
+            try:
+                spec = MetricSpec(**metric_spec)
+                validate_metric_spec(spec)
+            except (TypeError, ValueError) as exc:
+                return JudgeVerdict(
+                    met=False, source="kernel",
+                    reason=f"invalid metric_spec: {exc}", metric_spec=metric_spec,
+                )
+            rec = measure(spec, ExperimentResult(
+                metrics=parse_metrics_line(last_assistant_text), exit_code=0))
+            return JudgeVerdict(
+                met=(rec.verdict == "supported"), source="kernel", reason=rec.detail,
+                metric_spec=metric_spec, kernel_record=rec,
+                stdout=json.dumps({
+                    "verdict": rec.verdict, "evidence_level": rec.evidence_level,
+                    "strategy": rec.strategy, "detail": rec.detail,
+                }),
+            )
         if check_cmd:
             return cls._run_deterministic(check_cmd, cwd)
         model = model_override or DEFAULT_JUDGE_MODEL.get(backend_kind, "auto")
