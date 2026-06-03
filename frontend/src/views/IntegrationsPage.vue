@@ -10,7 +10,7 @@
  * router-free and bring their own PageHeader + actions), so all existing
  * functionality is preserved; only the active tab mounts.
  */
-import { ref, computed, watch, markRaw } from 'vue';
+import { ref, computed, watch, markRaw, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import ChannelsViewSrc from './TeamsNotificationChannelsPage.vue';
@@ -56,6 +56,25 @@ function selectTab(key: string) {
   router.replace({ query: { ...route.query, tab: key } });
 }
 
+// ARIA tabs keyboard pattern: arrows cycle, Home/End jump to the ends.
+function onTabKeydown(e: KeyboardEvent) {
+  const NAV = ['ArrowRight', 'ArrowLeft', 'Home', 'End'];
+  if (!NAV.includes(e.key)) return;
+  e.preventDefault();
+  const idx = validTabs.indexOf(activeTab.value);
+  const last = validTabs.length - 1;
+  let nextIdx = idx;
+  if (e.key === 'ArrowRight') nextIdx = idx >= last ? 0 : idx + 1;
+  else if (e.key === 'ArrowLeft') nextIdx = idx <= 0 ? last : idx - 1;
+  else if (e.key === 'Home') nextIdx = 0;
+  else if (e.key === 'End') nextIdx = last;
+  const nextKey = validTabs[nextIdx];
+  selectTab(nextKey);
+  nextTick(() => {
+    document.getElementById(`integrations-tab-${nextKey}`)?.focus();
+  });
+}
+
 // Keep the active tab in sync when the `?tab=` query changes externally
 // (redirect landings from the old routes, browser back/forward).
 watch(
@@ -69,21 +88,29 @@ watch(
 
 <template>
   <div class="integrations-page">
-    <div class="integrations-tabs" role="tablist" :aria-label="t('nav.integrations')">
+    <div class="integrations-tabs" role="tablist" :aria-label="t('nav.integrations')" @keydown="onTabKeydown">
       <button
         v-for="tab in TABS"
+        :id="`integrations-tab-${tab.key}`"
         :key="tab.key"
         type="button"
         role="tab"
         :class="['integrations-tab', { active: activeTab === tab.key }]"
         :aria-selected="activeTab === tab.key"
+        aria-controls="integrations-panel"
+        :tabindex="activeTab === tab.key ? 0 : -1"
         @click="selectTab(tab.key)"
       >
         {{ t(tab.labelKey) }}
       </button>
     </div>
 
-    <div class="integrations-panel" role="tabpanel">
+    <div
+      id="integrations-panel"
+      class="integrations-panel"
+      role="tabpanel"
+      :aria-labelledby="`integrations-tab-${activeTab}`"
+    >
       <component :is="activeView" />
     </div>
   </div>

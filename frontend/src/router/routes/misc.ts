@@ -4,11 +4,8 @@ import type { RouteRecordRaw } from 'vue-router';
 // New routes should be added to a domain-specific file (auth, bots, executions,
 // prompts, github, etc.) — this file should stay small.
 export const miscRoutes: RouteRecordRaw[] = [
-  // Base redirects for expandable sidebar sections
-  {
-    path: '/integrations',
-    redirect: '/integrations/slack-notifications',
-  },
+  // Base redirect for the Platform expandable sidebar section.
+  // (`/integrations` is now a real route — the unified Integrations page.)
   {
     path: '/platform',
     redirect: '/settings',

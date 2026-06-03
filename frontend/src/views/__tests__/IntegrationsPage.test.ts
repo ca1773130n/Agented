@@ -73,4 +73,38 @@ describe('IntegrationsPage', () => {
     expect(wrapper.find('.stub-ticketing').exists()).toBe(true);
     expect(wrapper.find('[role="tab"][aria-selected="true"]').text()).toBe('Jira / Linear');
   });
+
+  it('wires ARIA tab/panel relationships (aria-controls, roving tabindex, aria-labelledby)', async () => {
+    const { wrapper } = await mountPage();
+    const tabs = wrapper.findAll('[role="tab"]');
+    for (const tab of tabs) {
+      expect(tab.attributes('aria-controls')).toBe('integrations-panel');
+    }
+    const active = wrapper.find('[role="tab"][aria-selected="true"]');
+    expect(active.attributes('tabindex')).toBe('0');
+    for (const tab of tabs.filter((t) => t.attributes('aria-selected') !== 'true')) {
+      expect(tab.attributes('tabindex')).toBe('-1');
+    }
+    const panel = wrapper.find('#integrations-panel');
+    expect(panel.attributes('role')).toBe('tabpanel');
+    expect(panel.attributes('aria-labelledby')).toBe('integrations-tab-channels');
+  });
+
+  it('supports Arrow/Home/End keyboard navigation across tabs', async () => {
+    const { wrapper, router } = await mountPage();
+    const tablist = wrapper.find('[role="tablist"]');
+    // channels -> slack (ArrowRight)
+    await tablist.trigger('keydown', { key: 'ArrowRight' });
+    await flushPromises();
+    expect(wrapper.find('[role="tab"][aria-selected="true"]').text()).toBe('Slack Notifications');
+    expect(router.currentRoute.value.query.tab).toBe('slack');
+    // End -> ticketing (last)
+    await tablist.trigger('keydown', { key: 'End' });
+    await flushPromises();
+    expect(wrapper.find('[role="tab"][aria-selected="true"]').text()).toBe('Jira / Linear');
+    // ArrowRight wraps ticketing -> channels
+    await tablist.trigger('keydown', { key: 'ArrowRight' });
+    await flushPromises();
+    expect(wrapper.find('[role="tab"][aria-selected="true"]').text()).toBe('Notification Channels');
+  });
 });
