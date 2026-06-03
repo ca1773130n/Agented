@@ -3261,6 +3261,7 @@
     "createAgent": "Create Agent",
     "searchPlaceholder": "Search agents...",
     "loading": "Loading agents...",
+    "loadErrorTitle": "Couldn't load agents",
     "empty": {
       "title": "No agents yet",
       "description": "Create your first AI agent to get started"
@@ -5569,6 +5570,7 @@
     "searchPlaceholder": "Search products...",
     "loading": "Loading products...",
     "loadFailed": "Failed to load products",
+    "loadError": "Failed to load products",
     "loadError": "Failed to load products",
     "emptyTitle": "No products yet",
     "emptyDescription": "Create your first product to organize your projects",
