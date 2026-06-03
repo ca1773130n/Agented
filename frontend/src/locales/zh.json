@@ -121,7 +121,6 @@
     "secretsVault": "密钥保管库",
     "rbacSettings": "RBAC 设置",
     "ssoSaml": "SSO / SAML",
-    "teamBudgets": "团队预算",
     "apiKeys": "API 密钥",
     "findingsTriage": "发现项分诊",
     "versionPinning": "版本锁定",
@@ -7190,34 +7189,6 @@
     "time": {
       "justNow": "刚刚",
       "hoursAgo": "{n} 小时前"
-    }
-  },
-  "teamBudgets": {
-    "title": "团队预算",
-    "subtitle": "每个团队的月度执行上限和告警阈值",
-    "addBudget": "+ 添加预算",
-    "newBudget": "新团队预算",
-    "teamName": "团队名称",
-    "teamNamePlaceholder": "例如：Platform",
-    "monthlyLimit": "月度上限",
-    "executions": "次执行",
-    "alertThreshold": "告警阈值",
-    "creating": "创建中...",
-    "createBudget": "创建预算",
-    "loading": "正在加载预算...",
-    "emptyState": "尚未配置团队预算。",
-    "percentUsed": "已用 {pct}%",
-    "remaining": "剩余 {count} 次",
-    "alertAt": "告警于",
-    "sending": "发送中...",
-    "sendAlert": "发送告警",
-    "toast": {
-      "testAlertSent": "测试告警已发送",
-      "testAlertSentDemo": "测试告警已发送（演示模式）",
-      "thresholdSaved": "阈值已保存",
-      "savedDemo": "已保存（演示模式）",
-      "teamNameRequired": "团队名称为必填项",
-      "budgetCreated": "预算已创建"
     }
   },
   "teamBuilder": {

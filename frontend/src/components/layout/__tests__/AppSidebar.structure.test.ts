@@ -94,7 +94,7 @@ function buildRouter(): Router {
     'execution-tools', 'execution-replay-diff', 'execution-annotation', 'execution-search',
     'usage-history',
     'ai-backends', 'backend-detail',
-    'secrets-vault', 'rbac-settings', 'sso-settings', 'team-budgets',
+    'secrets-vault', 'rbac-settings', 'sso-settings',
     'api-keys', 'findings-triage-board',
     'skill-version-pinning', 'conversation-history-viewer', 'system-errors',
     'settings',

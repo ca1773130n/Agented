@@ -121,7 +121,6 @@
     "secretsVault": "시크릿 볼트",
     "rbacSettings": "RBAC 설정",
     "ssoSaml": "SSO / SAML",
-    "teamBudgets": "팀 예산",
     "apiKeys": "API 키",
     "findingsTriage": "발견 항목 분류",
     "versionPinning": "버전 고정",
@@ -7190,34 +7189,6 @@
     "time": {
       "justNow": "방금 전",
       "hoursAgo": "{n}시간 전"
-    }
-  },
-  "teamBudgets": {
-    "title": "팅 예산",
-    "subtitle": "팅별 월간 실행 한도 및 알림 임계값",
-    "addBudget": "+ 예산 추가",
-    "newBudget": "새 팅 예산",
-    "teamName": "팅 이름",
-    "teamNamePlaceholder": "예: Platform",
-    "monthlyLimit": "월간 한도",
-    "executions": "회 실행",
-    "alertThreshold": "알림 임계값",
-    "creating": "생성 중...",
-    "createBudget": "예산 생성",
-    "loading": "예산 불러오는 중...",
-    "emptyState": "아직 구성된 팅 예산이 없습니다.",
-    "percentUsed": "{pct}% 사용",
-    "remaining": "{count}회 남음",
-    "alertAt": "알림 기준",
-    "sending": "전송 중...",
-    "sendAlert": "알림 보내기",
-    "toast": {
-      "testAlertSent": "테스트 알림을 보냈습니다",
-      "testAlertSentDemo": "테스트 알림을 보냈습니다 (데모 모드)",
-      "thresholdSaved": "임계값이 저장되었습니다",
-      "savedDemo": "저장됨 (데모 모드)",
-      "teamNameRequired": "팅 이름은 필수입니다",
-      "budgetCreated": "예산이 생성되었습니다"
     }
   },
   "teamBuilder": {
