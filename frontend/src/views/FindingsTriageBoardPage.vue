@@ -3,7 +3,10 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
+import LoadingState from '../components/base/LoadingState.vue';
+import ErrorState from '../components/base/ErrorState.vue';
 import { useToast } from '../composables/useToast';
+import { ApiError } from '../services/api';
 import { findingsApi } from '../services/api/findings';
 import type { TriageFinding } from '../services/api/findings';
 
@@ -29,15 +32,25 @@ const columns: { key: Status; labelKey: string; icon: string }[] = [
 ];
 
 const findings = ref<TriageFinding[]>([]);
+const isLoading = ref(true);
+const loadError = ref<string | null>(null);
 
-onMounted(async () => {
+async function loadFindings() {
+  isLoading.value = true;
+  loadError.value = null;
   try {
     const resp = await findingsApi.list();
     findings.value = resp.findings;
-  } catch {
-    showToast(t('findingsTriageBoard.toast.loadFailed'), 'error');
+  } catch (e) {
+    // Don't render an empty kanban as if there are no findings — surface it.
+    loadError.value = e instanceof ApiError ? e.message : t('findingsTriageBoard.toast.loadFailed');
+    showToast(loadError.value, 'error');
+  } finally {
+    isLoading.value = false;
   }
-});
+}
+
+onMounted(loadFindings);
 
 const filterSeverity = ref<Severity | 'all'>('all');
 const filterBot = ref<string>('all');
@@ -154,8 +167,17 @@ const criticalOpen = computed(
       :description="t('findingsTriageBoard.description')"
     />
 
+    <LoadingState v-if="isLoading" :message="t('findingsTriageBoard.loading')" />
+
+    <ErrorState
+      v-else-if="loadError"
+      :title="t('findingsTriageBoard.loadErrorTitle')"
+      :message="loadError"
+      @retry="loadFindings"
+    />
+
     <!-- Summary bar -->
-    <div class="ftb-summary">
+    <div v-if="!isLoading && !loadError" class="ftb-summary">
       <div class="summary-stat">
         <span class="stat-value" style="color: var(--accent-red)">{{ criticalOpen }}</span>
         <span class="stat-label">{{ t('findingsTriageBoard.stats.criticalOpen') }}</span>
@@ -177,7 +199,7 @@ const criticalOpen = computed(
     </div>
 
     <!-- Filters -->
-    <div class="ftb-filters">
+    <div v-if="!isLoading && !loadError" class="ftb-filters">
       <select v-model="filterSeverity" class="ftb-select">
         <option value="all">{{ t('findingsTriageBoard.filter.allSeverities') }}</option>
         <option value="critical">{{ t('findingsTriageBoard.severity.critical') }}</option>
@@ -199,7 +221,7 @@ const criticalOpen = computed(
     </div>
 
     <!-- Kanban board -->
-    <div class="kanban-board">
+    <div v-if="!isLoading && !loadError" class="kanban-board">
       <div
         v-for="col in columns"
         :key="col.key"

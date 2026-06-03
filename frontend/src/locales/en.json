@@ -3398,6 +3398,8 @@
     "subtitle": "Generate API keys for programmatic access to Agented from CI/CD pipelines, scripts, and tools.",
     "loading": "Loading API keys...",
     "loadFailed": "Failed to load API keys",
+    "copied": "Copied to clipboard",
+    "copyFailed": "Failed to copy",
     "activeKeys": "Active API Keys",
     "createNew": "Create New API Key",
     "col": {
@@ -4173,6 +4175,8 @@
   },
   "findingsTriageBoard": {
     "title": "Findings Triage Board",
+    "loading": "Loading findings...",
+    "loadErrorTitle": "Couldn't load findings",
     "description": "Triage, assign, and track actionable findings from all security, code review, and analysis bots.",
     "viewTrends": "View Trends →",
     "assignMe": "Assign me",
@@ -6921,7 +6925,7 @@
       "scopes": "Scopes"
     },
     "test": {
-      "verified": "Connection verified. Identity provider responded successfully.",
+      "verified": "Configuration looks valid — the IdP URL is set and saved settings are reachable (a full sign-in handshake is not performed here).",
       "missingFields": "Missing required fields. Fill in the IdP URL to test.",
       "failed": "Test connection failed"
     },

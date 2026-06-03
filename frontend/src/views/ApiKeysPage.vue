@@ -122,9 +122,9 @@ const curlExample = computed(
 async function copyCurlExample() {
   try {
     await navigator.clipboard.writeText(curlExample.value);
-    showToast('Copied to clipboard', 'success');
+    showToast(t('apiKeys.copied'), 'success');
   } catch {
-    showToast('Failed to copy', 'error');
+    showToast(t('apiKeys.copyFailed'), 'error');
   }
 }
 
