@@ -47,8 +47,23 @@ class SignupBody(Struct):
 _MIN_PASSWORD_LEN = 8
 
 
+def _session_response(payload: dict, session_token: str, request: Request):
+    """Wrap a login/signup payload in a Response that sets the HttpOnly session
+    cookie + readable CSRF cookie. The CSRF token is also echoed in the body so
+    the SPA can use it immediately. The bearer ``token`` stays in the body for
+    backward compatibility with header-auth clients during rollout."""
+    from litestar import Response
+
+    from app_litestar.cookie_auth import cookie_secure, generate_csrf_token, litestar_cookies
+
+    csrf = generate_csrf_token()
+    secure = cookie_secure(request.url.scheme)
+    body = {**payload, "csrf_token": csrf}
+    return Response(content=body, cookies=litestar_cookies(session_token, csrf, secure=secure))
+
+
 @post("/signup", sync_to_thread=False, guards=[requires_rate_limit(5, 60.0)])
-def signup(data: SignupBody) -> dict:
+def signup(data: SignupBody, request: Request) -> Any:
     """Open registration: create user + immediately issue a session token.
 
     Validation:
@@ -80,7 +95,7 @@ def signup(data: SignupBody) -> dict:
     if session is None or user is None:
         raise ClientException(detail="Session creation failed")
 
-    return {
+    payload = {
         "token": session["token"],
         "expires_at": session["expires_at"],
         "user": {
@@ -89,10 +104,11 @@ def signup(data: SignupBody) -> dict:
             "display_name": user.get("display_name"),
         },
     }
+    return _session_response(payload, session["token"], request)
 
 
 @post("/login", sync_to_thread=False, guards=[requires_rate_limit(5, 60.0)])
-def login(data: LoginBody) -> dict[str, Any]:
+def login(data: LoginBody, request: Request) -> Any:
     """Verify credentials and issue a session token.
 
     401 on bad credentials (same response shape regardless of the cause —
@@ -106,7 +122,7 @@ def login(data: LoginBody) -> dict[str, Any]:
     if session is None:
         raise NotAuthorizedException(detail="Session creation failed")
 
-    return {
+    payload = {
         "token": session["token"],
         "expires_at": session["expires_at"],
         "user": {
@@ -115,6 +131,7 @@ def login(data: LoginBody) -> dict[str, Any]:
             "display_name": user.get("display_name"),
         },
     }
+    return _session_response(payload, session["token"], request)
 
 
 @get("/me", sync_to_thread=False)
@@ -154,25 +171,35 @@ def logout(request: Request) -> None:
     the token to a user and still revoke ALL their sessions — same
     contract as the authenticated path.
     """
+    from litestar import Response
+
     from app.db.sessions import get_session_by_token
+    from app_litestar.cookie_auth import cookie_secure, litestar_clear_cookies, parse_cookies
+
+    # Clear the auth cookies on the way out regardless of which path revokes.
+    cleared = Response(
+        content=None,
+        status_code=HTTP_204_NO_CONTENT,
+        cookies=litestar_clear_cookies(secure=cookie_secure(request.url.scheme)),
+    )
 
     principal = request.scope.get("state", {}).get("principal")
     user_id = principal.get("user_id") if principal else None
     if not user_id:
+        # Header bearer first, then the session cookie (browser SPA).
         token = _resolve_session_token(request)
+        if not token:
+            token = parse_cookies(request.headers.get("cookie", "")).get("agented_session")
         if token:
             session = get_session_by_token(token)
             if session:
                 user_id = session["user_id"]
             else:
-                # Token didn't resolve — keep prior behavior of revoking
-                # the literal token if it still exists by primary token
-                # match. Returns False quietly when not found.
                 revoke_session(token, reason="logout")
-                return None
+                return cleared
     if user_id:
         revoke_user_sessions(user_id, reason="logout")
-    return None
+    return cleared
 
 
 class ForgotPasswordBody(Struct):

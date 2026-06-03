@@ -100,6 +100,12 @@ def provide_caller(request: Request) -> Caller:
         raise NotAuthorizedException(detail="Authentication required")
 
     token = _resolve_session_token(request)
+    if token is None:
+        # Browser SPA path: session token in the HttpOnly cookie. (CSRF is
+        # enforced for mutations by ApiKeyMiddleware, not here.)
+        from app_litestar.cookie_auth import SESSION_COOKIE, parse_cookies
+
+        token = parse_cookies(request.headers.get("cookie", "")).get(SESSION_COOKIE) or None
     if token is not None:
         caller = _caller_from_session(token)
         if caller is not None:

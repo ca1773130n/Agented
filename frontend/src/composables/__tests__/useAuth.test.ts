@@ -33,9 +33,10 @@ describe('useAuth', () => {
   });
 
   describe('login', () => {
-    it('stores the token and current user on success', async () => {
+    it('sets current user on success without persisting the token to localStorage', async () => {
       loginMock.mockResolvedValue({
         token: 'tok-123',
+        csrf_token: 'csrf-123',
         expires_at: '2099-01-01',
         user: { id: 'user-abc', email: 'a@b.com', display_name: 'A' },
       });
@@ -45,7 +46,8 @@ describe('useAuth', () => {
       expect(user.id).toBe('user-abc');
       expect(currentUser.value?.id).toBe('user-abc');
       expect(isAuthenticated.value).toBe(true);
-      expect(localStorage.getItem('agented-session-token')).toBe('tok-123');
+      // Session now lives in an HttpOnly cookie — NOT in localStorage.
+      expect(localStorage.getItem('agented-session-token')).toBe(null);
     });
 
     it('rethrows on failure and leaves state empty', async () => {
@@ -92,11 +94,14 @@ describe('useAuth', () => {
   });
 
   describe('restore', () => {
-    it('no-op when no token is stored', async () => {
+    it('probes me() via the cookie and stays logged out when there is no session', async () => {
+      // Cookie auth: restore always probes me() (the HttpOnly cookie is auto-sent).
+      // A bootstrap/api-key caller returns a null id → stays logged out.
+      meMock.mockResolvedValue({ id: null, email: null, display_name: null });
       const { restore, currentUser } = useAuth();
       await restore();
+      expect(meMock).toHaveBeenCalled();
       expect(currentUser.value).toBe(null);
-      expect(meMock).not.toHaveBeenCalled();
     });
 
     it('hydrates currentUser from /api/auth/me when token is valid', async () => {
