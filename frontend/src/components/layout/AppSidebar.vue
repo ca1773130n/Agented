@@ -130,7 +130,7 @@ function autoExpandForRoute() {
   }
   // Auto-expand only for sidebar-visible Triggers children; URL-only
   // routes (still reachable, just not in this submenu) don't trigger expand.
-  if (['triggers', 'bot-templates', 'trigger-tools', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'execution-tagging', 'prompt-snippets', 'bot-output-webhook-forwarding'].includes(name)) {
+  if (['triggers', 'bot-templates', 'trigger-tools', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'prompt-snippets', 'bot-output-webhook-forwarding'].includes(name)) {
     expandedSections.value.triggers = true;
   }
   // PR-J2 — Analytics dashboards (System).
@@ -237,7 +237,7 @@ function isWorkflowsSectionActive(): boolean {
 function isTriggersSectionActive(): boolean {
   // Only the 21 currently-visible Triggers children. URL-only routes
   // (still reachable) don't paint this toggle active.
-  return ['triggers', 'bot-templates', 'trigger-tools', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'execution-tagging', 'prompt-snippets', 'bot-output-webhook-forwarding'].includes(currentRouteName.value);
+  return ['triggers', 'bot-templates', 'trigger-tools', 'pr-auto-assignment', 'pr-review-learning-loop', 'github-actions', 'prompt-snippets', 'bot-output-webhook-forwarding'].includes(currentRouteName.value);
 }
 
 // PR-J2 — Analytics dashboards group under System.
@@ -700,11 +700,6 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           {{ t('nav.webhookForwarding') }}
         </button>
 
-        <div class="submenu-block-label" aria-hidden="true">{{ t('nav.blockIntrospection') }}</div>
-        <button type="button" class="submenu-item" :class="{ active: sidebarActive('execution-tagging') }" :aria-current="sidebarActive('execution-tagging') ? 'page' : undefined" @click="navTo('execution-tagging')">
-          {{ t('nav.executionTagging') }}
-        </button>
-
         <div class="submenu-block-label" aria-hidden="true">{{ t('nav.blockAuthoring') }}</div>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('prompt-snippets') }" :aria-current="sidebarActive('prompt-snippets') ? 'page' : undefined" @click="navTo('prompt-snippets')">
           {{ t('nav.promptSnippets') }}
@@ -934,47 +929,21 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </template>
       </SidebarFlatLink>
 
-      <!-- Execution Replay (standalone nav item) -->
+      <!-- Execution Tools (flat link) — P2: Search / Tagging / Replay-Diff /
+           Annotations folded into one tabbed page at /execution-tools. -->
       <SidebarFlatLink
-        :label="t('nav.replayDiff')"
-        :active="sidebarActive('execution-replay-diff')"
+        :label="t('nav.executionTools')"
+        :active="sidebarActive('execution-tools')"
         :collapsed-desktop="isCollapsedDesktop()"
-        @click="navTo('execution-replay-diff')"
+        @click="navTo('execution-tools')"
       >
         <template #icon>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M1 4v6h6M23 20v-6h-6"/>
-            <path d="M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15"/>
-          </svg>
-        </template>
-      </SidebarFlatLink>
-
-      <!-- Execution Annotations -->
-      <SidebarFlatLink
-        :label="t('nav.annotations')"
-        :active="sidebarActive('execution-annotation')"
-        :collapsed-desktop="isCollapsedDesktop()"
-        @click="navTo('execution-annotation')"
-      >
-        <template #icon>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-          </svg>
-        </template>
-      </SidebarFlatLink>
-
-      <!-- Execution Search (standalone nav item) -->
-      <button type="button" class="nav-group-toggle" :class="{ active: currentRouteName === 'execution-search' }" :aria-current="currentRouteName === 'execution-search' ? 'page' : undefined" :title="isCollapsedDesktop() ? t('nav.executionSearch') : undefined" @click="navTo('execution-search')">
-        <span class="nav-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <circle cx="11" cy="11" r="8"/>
             <line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
-        </span>
-        <span class="nav-text">{{ t('nav.executionSearch') }}</span>
-        <span class="nav-indicator"></span>
-      </button>
+        </template>
+      </SidebarFlatLink>
 
       <!-- Usage History (expandable) -->
       <button type="button" class="nav-group-toggle" :class="{ active: currentRouteName === 'usage-history' }" :aria-expanded="expandedSections.usage" :aria-current="sidebarActive('usage-history') ? 'page' : undefined" :title="isCollapsedDesktop() ? t('nav.usage') : undefined" @click="toggleSection( 'usage')">

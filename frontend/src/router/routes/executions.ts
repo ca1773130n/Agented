@@ -1,19 +1,24 @@
 import type { RouteRecordRaw } from 'vue-router';
 
 export const executionRoutes: RouteRecordRaw[] = [
-  // Execution Search
+  // Execution Tools — unified Search / Tagging / Replay-Diff / Annotations (P2).
+  {
+    path: '/execution-tools',
+    name: 'execution-tools',
+    component: () => import('../../views/ExecutionToolsPage.vue'),
+    meta: { title: 'Execution Tools' },
+  },
+  // Execution Search — folded into the Execution Tools page (P2).
   {
     path: '/execution-search',
     name: 'execution-search',
-    component: () => import('../../views/ExecutionSearchPage.vue'),
-    meta: { title: 'Execution Search' },
+    redirect: (to) => ({ name: 'execution-tools', query: { ...to.query, tab: 'search' } }),
   },
-  // Execution Replay & Diff
+  // Execution Replay & Diff — folded into the Execution Tools page (P2).
   {
     path: '/executions/replay',
     name: 'execution-replay-diff',
-    component: () => import('../../views/ExecutionReplayDiff.vue'),
-    meta: { title: 'Execution Replay & Diff' },
+    redirect: (to) => ({ name: 'execution-tools', query: { ...to.query, tab: 'replay' } }),
   },
   // Execution Cost Estimator
   {
@@ -35,12 +40,11 @@ export const executionRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/ExecutionFileDiffViewer.vue'),
     meta: { title: 'Execution File Diff Viewer' },
   },
-  // Execution Annotation & Quality Feedback
+  // Execution Annotation & Quality Feedback — folded into Execution Tools (P2).
   {
     path: '/executions/annotations',
     name: 'execution-annotation',
-    component: () => import('../../views/ExecutionAnnotation.vue'),
-    meta: { title: 'Execution Annotations' },
+    redirect: (to) => ({ name: 'execution-tools', query: { ...to.query, tab: 'annotations' } }),
   },
   // Execution Time-Travel Debugger
   {
@@ -71,11 +75,10 @@ export const executionRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/ExecutionTimelinePage.vue'),
     meta: { title: 'Execution Timeline' },
   },
-  // Execution Tagging & Full-Text Search (feature 23)
+  // Execution Tagging & Full-Text Search — folded into Execution Tools (P2).
   {
     path: '/executions/tagging',
     name: 'execution-tagging',
-    component: () => import('../../views/ExecutionTaggingPage.vue'),
-    meta: { title: 'Execution Tagging & Search' },
+    redirect: (to) => ({ name: 'execution-tools', query: { ...to.query, tab: 'tagging' } }),
   },
 ];
