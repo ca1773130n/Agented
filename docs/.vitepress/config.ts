@@ -93,6 +93,7 @@ export default defineConfig({
         nav: [
           { text: 'ホーム', link: '/ja/' },
           { text: 'アーキテクチャ', link: '/ja/self-improving-harness-architecture' },
+          { text: 'チュートリアル', link: '/ja/self-improving-harness-tutorial' },
           { text: 'ブログ', link: `${GITHUB}/blob/main/BLOG-self-improving-harness.md` },
         ],
         sidebar: [
@@ -102,6 +103,10 @@ export default defineConfig({
               {
                 text: '自己改善ハーネス',
                 link: '/ja/self-improving-harness-architecture',
+              },
+              {
+                text: 'チュートリアル: 自己改善の流れを見る',
+                link: '/ja/self-improving-harness-tutorial',
               },
             ],
           },
@@ -117,6 +122,7 @@ export default defineConfig({
         nav: [
           { text: '首页', link: '/zh/' },
           { text: '架构', link: '/zh/self-improving-harness-architecture' },
+          { text: '教程', link: '/zh/self-improving-harness-tutorial' },
           { text: '博客', link: `${GITHUB}/blob/main/BLOG-self-improving-harness.md` },
         ],
         sidebar: [
@@ -126,6 +132,10 @@ export default defineConfig({
               {
                 text: '自我改进 harness',
                 link: '/zh/self-improving-harness-architecture',
+              },
+              {
+                text: '教程：观察 harness 的自我改进',
+                link: '/zh/self-improving-harness-tutorial',
               },
             ],
           },
