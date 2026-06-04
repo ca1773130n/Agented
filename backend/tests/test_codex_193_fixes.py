@@ -156,6 +156,69 @@ def test_scheduled_team_overlap_skips_when_already_running(monkeypatch):
     assert logged.get("entity_type") == "team"
 
 
+def test_scheduled_super_agent_log_marked_terminal(monkeypatch):
+    # Round-4 MEDIUM: the scheduled super-agent branch logs its dispatch as
+    # 'running' and nothing ever updates that row — so the overlap guard would
+    # skip every future tick of the trigger and the global cap would count a
+    # phantom execution forever. The dispatch must be recorded terminal.
+    import sys
+
+    import app.services.scheduler_service as ss
+
+    trigger = {
+        "id": "trg-sa",
+        "enabled": 1,
+        "dispatch_type": "super_agent",
+        "super_agent_id": "sa-1",
+        "prompt_template": "do it: {message}",
+        "backend_type": "claude",
+    }
+    monkeypatch.setattr(ss, "get_trigger", lambda tid: trigger)
+    monkeypatch.setattr(ss, "update_trigger_last_run", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "app.services.execution_service.ExecutionService.get_status",
+        staticmethod(lambda tid: {"status": "idle"}),
+        raising=False,
+    )
+
+    created, updated = [], []
+    # The scheduler imports these via app.db.triggers' re-export binding, so
+    # patch THAT module's attributes (patching execution_logs wouldn't take).
+    monkeypatch.setattr(
+        "app.db.triggers.create_execution_log",
+        lambda **kw: created.append(kw) or True,
+    )
+    monkeypatch.setattr(
+        "app.db.triggers.update_execution_log",
+        lambda eid, **kw: updated.append((eid, kw)) or True,
+    )
+
+    class _SLE(Exception):
+        pass
+
+    class _SAS:
+        @staticmethod
+        def get_or_create_session(said):
+            return "sess-1"
+
+        @staticmethod
+        def send_message(sid, msg):
+            return None
+
+    monkeypatch.setitem(
+        sys.modules,
+        "app.services.super_agent_session_service",
+        type("M", (), {"SuperAgentSessionService": _SAS, "SessionLimitError": _SLE}),
+    )
+
+    ss.SchedulerService._execute_trigger("trg-sa")
+    assert created, "dispatch log row was created"
+    assert updated, "dispatch log row was marked terminal"
+    eid, kw = updated[0]
+    assert eid == created[0]["execution_id"]
+    assert kw.get("status") == "success" and kw.get("finished_at")
+
+
 def test_skill_write_anchored_to_owning_project(monkeypatch, tmp_path):
     # Round-3 HIGH: the skill UPDATE write must be contained to the OWNING
     # project's skills root, not merely a skills-shaped path. A SKILL.md that is

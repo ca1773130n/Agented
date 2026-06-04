@@ -263,7 +263,7 @@ class SchedulerService:
             "super_agent_id"
         ):
             try:
-                from ..db.triggers import create_execution_log
+                from ..db.triggers import create_execution_log, update_execution_log
                 from .super_agent_session_service import (
                     SessionLimitError,
                     SuperAgentSessionService,
@@ -278,18 +278,27 @@ class SchedulerService:
                     "{message}", f"Scheduled execution of trigger {trigger_id}"
                 )
                 SuperAgentSessionService.send_message(session_id, rendered_prompt)
+                now_iso = datetime.now(timezone.utc).isoformat()
                 exec_id = f"exec-{trigger_id}-{int(time.time())}"
                 create_execution_log(
                     execution_id=exec_id,
                     trigger_id=trigger_id,
                     trigger_type="scheduled",
-                    started_at=datetime.now(timezone.utc).isoformat(),
+                    started_at=now_iso,
                     prompt=rendered_prompt,
                     backend_type=trigger_data.get("backend_type", "claude"),
                     command="",
                     source_type="super_agent",
                     session_id=session_id,
                 )
+                # The dispatch IS the work here: send_message() already handed the
+                # prompt to the long-lived session, and nothing ever updates this
+                # row afterwards. Without marking it terminal, the row stays
+                # 'running' forever — the overlap guard above would then skip
+                # every future tick of this trigger, and the global concurrency
+                # cap (01 H6) would count a phantom execution indefinitely
+                # (Codex #193 round-4 MEDIUM).
+                update_execution_log(exec_id, status="success", finished_at=now_iso)
             except SessionLimitError as e:
                 logger.warning(f"Scheduled trigger {trigger_id} session limit: {e}")
             return
