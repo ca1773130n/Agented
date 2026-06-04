@@ -61,11 +61,14 @@ def test_expected_tables_present(isolated_db):
 
 # Bump only when intentionally adding/removing a table. A drift here means a
 # CREATE TABLE statement was added, removed, or renamed in the schema package.
-EXPECTED_TABLE_COUNT = 125
+# Re-baselined after accumulated feature growth (budgets, traces, findings,
+# system_errors, rbac, secrets, sso, etc.) since the v0.7.6 baseline of 125.
+EXPECTED_TABLE_COUNT = 136
 
 # Bump only when intentionally adding/removing an index. A drift here means a
 # CREATE INDEX statement was added, removed, or renamed in the schema package.
-EXPECTED_INDEX_COUNT = 162
+# Re-baselined alongside the table growth above (was 162 at v0.7.6).
+EXPECTED_INDEX_COUNT = 184
 
 
 def test_table_count_parity():
