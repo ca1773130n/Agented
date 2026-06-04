@@ -31,7 +31,7 @@ dependencies = [
     "ai-accounts-core",
     "ai-accounts-litestar",
     "bcrypt>=5.0.0",
-    "autoresearch-core",
+    "autoresearch-core>=0.1.1,<0.2",
 ]
 
 [project.optional-dependencies]
@@ -43,7 +43,6 @@ dev = [
 [tool.uv.sources]
 ai-accounts-core = { path = "../../ai-accounts/packages/core", editable = true }
 ai-accounts-litestar = { path = "../../ai-accounts/packages/litestar", editable = true }
-autoresearch-core = { path = "../../autoresearch-core", editable = true }
 
 [build-system]
 requires = ["setuptools>=61.0"]

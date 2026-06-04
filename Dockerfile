@@ -47,9 +47,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_LINK_MODE=copy
 RUN pip install --no-cache-dir uv
 WORKDIR /build
-# Copy ai-accounts so the file:../../ path deps resolve.
+# Copy ai-accounts so the file:../../ path deps resolve. autoresearch-core is
+# now a published PyPI dependency (>=0.1.1), resolved by uv from the registry —
+# no local source copy needed.
 COPY ai-accounts/ /build/ai-accounts/
-COPY autoresearch-core/ /build/autoresearch-core/
 COPY Agented/backend/pyproject.toml Agented/backend/uv.lock* /build/Agented/backend/
 WORKDIR /build/Agented/backend
 RUN uv sync --frozen --no-dev --no-editable || uv sync --no-dev --no-editable
