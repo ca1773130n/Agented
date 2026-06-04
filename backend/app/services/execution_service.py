@@ -329,9 +329,14 @@ class ExecutionService:
         env_overrides: dict = None,
         account_id: int = None,
         working_directory: str = None,
+        execution_id: str = None,
     ) -> Optional[str]:
-        """Execute a trigger's prompt with real-time log streaming. Returns execution_id."""
+        """Execute a trigger's prompt with real-time log streaming. Returns execution_id.
+
+        ``execution_id`` may be pre-allocated by the caller (06 L1) so a
+        background runner is trackable before start_execution runs."""
         trigger_id = trigger["id"]
+        preallocated_execution_id = execution_id
         execution_id = None
         cloned_dirs = []  # temp dirs to clean up
         github_repo_map = {}  # clone_dir -> repo_url (for auto-resolve PR flow)
@@ -406,6 +411,7 @@ class ExecutionService:
                 command=cmd_str,
                 trigger_config_snapshot=trigger_config_snapshot,
                 account_id=account_id,
+                execution_id=preallocated_execution_id,
             )
             # Trace logger — prefixes all subsequent log lines with the execution ID
             # so that trigger receipt -> subprocess output -> completion can be correlated.
@@ -522,7 +528,8 @@ class ExecutionService:
                 )
             except Exception:
                 logger.debug(
-                    "harness snapshot capture raised for %s", execution_id,
+                    "harness snapshot capture raised for %s",
+                    execution_id,
                     exc_info=True,
                 )
 
@@ -580,6 +587,11 @@ class ExecutionService:
                     os.killpg(os.getpgid(process.pid), signal.SIGKILL)
                 except OSError as e:
                     tlog.debug("Process already exited during timeout cleanup: %s", e)
+                # Reap the killed child so it doesn't linger as a zombie (01 M1).
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    tlog.warning("timed-out process did not reap after SIGKILL")
                 stdout_thread.join(timeout=SIGTERM_GRACE_SECONDS)
                 stderr_thread.join(timeout=SIGTERM_GRACE_SECONDS)
                 if stdout_thread.is_alive():
@@ -765,7 +777,8 @@ class ExecutionService:
                 except Exception:
                     logger.debug(
                         "session_events emit failed for %s",
-                        execution_id, exc_info=True,
+                        execution_id,
+                        exc_info=True,
                     )
 
         return execution_id

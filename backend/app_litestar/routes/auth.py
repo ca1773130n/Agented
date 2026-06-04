@@ -46,6 +46,33 @@ class SignupBody(Struct):
 
 _MIN_PASSWORD_LEN = 8
 
+# Per-email fixed-window throttle (02 H1), complementing the per-IP limiter:
+# the IP key alone is defeatable behind NAT/proxies, so also cap attempts per
+# target email for login + password-reset (credential stuffing / reset spam).
+import threading as _threading  # noqa: E402
+import time as _time  # noqa: E402
+
+_email_attempts: dict[str, list[float]] = {}
+_email_attempts_lock = _threading.Lock()
+_EMAIL_WINDOW_SECONDS = 300.0
+_EMAIL_MAX_ATTEMPTS = 10
+
+
+def _email_throttled(email: str) -> bool:
+    """Record an attempt for *email*; return True if over the window limit."""
+    key = (email or "").strip().lower()
+    if not key:
+        return False
+    now = _time.time()
+    with _email_attempts_lock:
+        # Opportunistic eviction so the dict stays bounded.
+        if len(_email_attempts) > 10000:
+            _email_attempts.clear()
+        hits = [t for t in _email_attempts.get(key, []) if now - t < _EMAIL_WINDOW_SECONDS]
+        hits.append(now)
+        _email_attempts[key] = hits
+        return len(hits) > _EMAIL_MAX_ATTEMPTS
+
 
 def _session_response(payload: dict, session_token: str, request: Request):
     """Wrap a login/signup payload in a Response that sets the HttpOnly session
@@ -114,6 +141,8 @@ def login(data: LoginBody, request: Request) -> Any:
     401 on bad credentials (same response shape regardless of the cause —
     user not found, wrong password, inactive, no hash set).
     """
+    if _email_throttled(data.email):
+        raise ClientException(detail="Too many attempts for this account; try again later")
     user = authenticate(data.email, data.password)
     if user is None:
         raise NotAuthorizedException(detail="Invalid email or password")
@@ -224,6 +253,10 @@ def forgot_password(data: ForgotPasswordBody) -> None:
     Defends against email enumeration. The reset link is logged to
     stderr (no SMTP in this codebase yet — operators read the log).
     """
+    # Per-email throttle (02 H1) — still return 204 to preserve enumeration
+    # resistance, but silently skip issuing when the email is over the limit.
+    if _email_throttled(data.email):
+        return None
     user = get_user_by_email(data.email)
     if user is not None and user.get("is_active"):
         token = request_reset(user["id"])

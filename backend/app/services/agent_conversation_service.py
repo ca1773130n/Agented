@@ -92,9 +92,7 @@ class AgentConversationService:
         return {"messages": initial_messages, "processing": False}
 
     @classmethod
-    def _initialize_conversation_record(
-        cls, context: dict, user_id: Optional[str] = None
-    ) -> str:
+    def _initialize_conversation_record(cls, context: dict, user_id: Optional[str] = None) -> str:
         """Create the DB record and in-memory state, returns conv_id.
 
         v0.7.83 — passes ``user_id`` through to the DB so list and
@@ -118,9 +116,7 @@ class AgentConversationService:
         return conv_id
 
     @classmethod
-    def start_conversation(
-        cls, user_id: Optional[str] = None
-    ) -> Tuple[dict, HTTPStatus]:
+    def start_conversation(cls, user_id: Optional[str] = None) -> Tuple[dict, HTTPStatus]:
         """Start a new agent creation conversation."""
         context = cls._prepare_conversation_context()
         conv_id = cls._initialize_conversation_record(context, user_id=user_id)
@@ -155,9 +151,7 @@ class AgentConversationService:
         return conv, None
 
     @classmethod
-    def list_active(
-        cls, user_id: Optional[str] = None
-    ) -> Tuple[dict, HTTPStatus]:
+    def list_active(cls, user_id: Optional[str] = None) -> Tuple[dict, HTTPStatus]:
         """v0.7.83 — list the operator's recent active agent
         conversations so the wizard can resume on cold-cache loads.
         """
@@ -406,6 +400,10 @@ class AgentConversationService:
                         cls._subscribers[conv_id].remove(queue)
                     except ValueError:
                         pass  # Intentionally silenced: invalid value handled gracefully
+                    # Evict the now-empty conv_id key so the map can't grow one
+                    # permanent entry per conversation that ever subscribed (06 C2).
+                    if not cls._subscribers[conv_id]:
+                        del cls._subscribers[conv_id]
 
     @classmethod
     def finalize_agent(
@@ -533,9 +531,7 @@ class AgentConversationService:
         return conv, HTTPStatus.OK
 
     @classmethod
-    def can_subscribe(
-        cls, conv_id: str, caller_user_id: Optional[str]
-    ) -> bool:
+    def can_subscribe(cls, conv_id: str, caller_user_id: Optional[str]) -> bool:
         """v0.7.83 — precheck for the SSE route so unauthorized
         subscribers get a real HTTP 404.
         """
@@ -543,7 +539,9 @@ class AgentConversationService:
         if not conv:
             return False
         owner = conv.get("user_id")
-        return owner == caller_user_id  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
+        return (
+            owner == caller_user_id
+        )  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
 
     @classmethod
     def _broadcast(cls, conv_id: str, event_type: str, data: dict) -> None:

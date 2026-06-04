@@ -129,7 +129,16 @@ function continueToApp() {
           <div class="bento-cell">
             <span class="bento-tag">{{ t('welcome.bento.workforce') }}</span>
             <span class="bento-label">{{ t('welcome.bento.agentTeams') }}</span>
-            <span class="bento-desc" v-html="t('welcome.bento.teamsDesc', { command: '<span class=\'hl\'>Command</span>', dev: '<span class=\'hl\'>Dev</span>', research: '<span class=\'hl\'>Research</span>', ops: '<span class=\'hl\'>Ops</span>', qa: '<span class=\'hl\'>QA</span>' })"></span>
+            <!-- [08.M2] Use <i18n-t> slot interpolation so the translated string is
+                 never fed to v-html — the <span class="hl"> markup is static
+                 template, and only plain-text labels flow through translation. -->
+            <i18n-t keypath="welcome.bento.teamsDesc" tag="span" class="bento-desc" scope="global">
+              <template #command><span class="hl">Command</span></template>
+              <template #dev><span class="hl">Dev</span></template>
+              <template #research><span class="hl">Research</span></template>
+              <template #ops><span class="hl">Ops</span></template>
+              <template #qa><span class="hl">QA</span></template>
+            </i18n-t>
           </div>
           <div class="bento-cell">
             <span class="bento-tag">{{ t('welcome.bento.autonomous') }}</span>

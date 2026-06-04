@@ -2,6 +2,7 @@ import { ref, onUnmounted, type Ref } from 'vue';
 import {
   createAuthenticatedEventSource,
   type AuthenticatedEventSource,
+  type AuthenticatedEventSourceOptions,
 } from '../services/api/client';
 
 /**
@@ -30,8 +31,9 @@ export function safeParseSSE<T = unknown>(event: MessageEvent, label?: string): 
  * - open: connection established and receiving events
  * - error: connection encountered an error (may auto-reconnect)
  * - closed: connection explicitly closed
+ * - lost: reconnection gave up after the max attempts (terminal; [08.L3])
  */
-export type SSEStatus = 'idle' | 'connecting' | 'open' | 'error' | 'closed';
+export type SSEStatus = 'idle' | 'connecting' | 'open' | 'error' | 'closed' | 'lost';
 
 /**
  * Options for the useEventSource composable.
@@ -46,14 +48,27 @@ export type SSEStatus = 'idle' | 'connecting' | 'open' | 'error' | 'closed';
 export interface UseEventSourceOptions {
   /** Static URL or getter function. Composable calls createAuthenticatedEventSource(url). */
   url?: string | (() => string);
-  /** Factory that returns an already-connected AuthenticatedEventSource. */
-  sourceFactory?: () => AuthenticatedEventSource;
+  /**
+   * Factory that returns an already-connected AuthenticatedEventSource.
+   * Receives source options ([08.L3]: onGiveUp/onQueueOverflow) so the factory
+   * can forward them to createAuthenticatedEventSource and the give-up flips
+   * `status` to 'lost'. Factories may ignore the argument for back-compat.
+   */
+  sourceFactory?: (options?: AuthenticatedEventSourceOptions) => AuthenticatedEventSource;
   /** Named event handlers mapped by SSE event type. */
   events?: Record<string, (event: MessageEvent) => void>;
   /** Called when the SSE connection opens successfully. */
   onOpen?: () => void;
   /** Called on SSE connection error. */
   onError?: (event: Event) => void;
+  /**
+   * Called when reconnection gives up after the max attempts ([08.L3]).
+   * The composable also flips `status` to 'lost' so consumers can render a
+   * "connection lost" state without wiring this callback. Only fires for the
+   * `url` path (the composable owns source creation there). When you pass a
+   * pre-built source via `sourceFactory`, wire `onGiveUp` on that source.
+   */
+  onGiveUp?: () => void;
   /** Called on default/message events (property-assignment style). */
   onMessage?: (event: MessageEvent) => void;
   /** If true, connect immediately on composable creation. Default: false. */
@@ -89,12 +104,21 @@ export function useEventSource(options: UseEventSourceOptions): UseEventSourceRe
 
     status.value = 'connecting';
 
+    // [08.L3] Give-up handler shared by both creation paths: flip to a visible
+    // 'lost' status and notify the consumer so the drop is never silent.
+    const giveUpOptions: AuthenticatedEventSourceOptions = {
+      onGiveUp: () => {
+        status.value = 'lost';
+        options.onGiveUp?.();
+      },
+    };
+
     // Create the source via factory or URL
     if (options.sourceFactory) {
-      source = options.sourceFactory();
+      source = options.sourceFactory(giveUpOptions);
     } else if (options.url) {
       const resolvedUrl = typeof options.url === 'function' ? options.url() : options.url;
-      source = createAuthenticatedEventSource(resolvedUrl);
+      source = createAuthenticatedEventSource(resolvedUrl, giveUpOptions);
     } else {
       console.warn('[useEventSource] Neither url nor sourceFactory provided');
       status.value = 'error';

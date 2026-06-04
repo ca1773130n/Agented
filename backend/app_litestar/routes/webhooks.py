@@ -39,7 +39,44 @@ _repo_rate_limit_lock = threading.Lock()
 _repo_last_event: dict[str, float] = {}
 _REPO_RATE_LIMIT_SECONDS = 60
 
+# Seen GitHub delivery / comment-dedup keys, bounded + insertion-ordered so we
+# can evict the oldest. Blocks replay of a captured signed webhook (02 H2) and
+# duplicate issue_comment dispatch (05 H2).
+from collections import OrderedDict  # noqa: E402
+
+_seen_delivery_keys: "OrderedDict[str, float]" = OrderedDict()
+_SEEN_DELIVERY_MAX = 5000
+
 _SLASH_COMMAND_PATTERN = re.compile(r"^/([a-z][a-z0-9_-]*)(?:\s|$)", re.IGNORECASE | re.MULTILINE)
+
+
+def _is_duplicate_key(key: str) -> bool:
+    """Record `key`; return True if it was already seen (replay/dup). Bounded."""
+    if not key:
+        return False
+    with _repo_rate_limit_lock:
+        if key in _seen_delivery_keys:
+            return True
+        _seen_delivery_keys[key] = time.time()
+        while len(_seen_delivery_keys) > _SEEN_DELIVERY_MAX:
+            _seen_delivery_keys.popitem(last=False)
+    return False
+
+
+def _repo_rate_limited(repo_full_name: str) -> bool:
+    """Per-repo fixed-window rate limit; evicts stale entries so the dict can't
+    grow without bound on attacker-influenced repo names (05 H2 / 05 L4)."""
+    if not repo_full_name:
+        return False
+    now = time.time()
+    with _repo_rate_limit_lock:
+        for k in [k for k, t in _repo_last_event.items() if now - t > _REPO_RATE_LIMIT_SECONDS]:
+            del _repo_last_event[k]
+        last = _repo_last_event.get(repo_full_name, 0)
+        if now - last < _REPO_RATE_LIMIT_SECONDS:
+            return True
+        _repo_last_event[repo_full_name] = now
+        return False
 
 
 # ===========================================================================
@@ -69,6 +106,20 @@ def _handle_issue_comment(data: Any) -> dict[str, Any]:
     matches = _SLASH_COMMAND_PATTERN.findall(comment_body)
     if not matches:
         return {"message": "issue_comment: no slash command"}
+
+    # Parity with the PR path: per-repo rate limit + dedup so a comment can't
+    # trigger unbounded fan-out or duplicate executions (05 H2). Key on the
+    # comment's updated_at (changes on every edit) so a user CAN re-run a command
+    # by editing the comment — only an identical redelivery is suppressed. True
+    # replays of one delivery are already blocked by the X-GitHub-Delivery dedup.
+    if _repo_rate_limited(repo_full_name):
+        return {"message": "issue_comment: rate limited"}
+    comment_id = comment.get("id")
+    comment_updated = comment.get("updated_at") or comment.get("created_at") or ""
+    if comment_id is not None and _is_duplicate_key(
+        f"comment:{repo_full_name}:{comment_id}:{comment_updated}"
+    ):
+        return {"message": "issue_comment: duplicate ignored"}
 
     commands = [f"/{m.lower()}" for m in matches]
     pr_url = issue.get("pull_request", {}).get("html_url", issue.get("html_url", ""))
@@ -123,6 +174,13 @@ async def github_webhook(request: Request) -> Any:
         raise HTTPException(
             status_code=HTTPStatus.FORBIDDEN, detail="Invalid GitHub webhook signature"
         )
+
+    # Replay protection: GitHub doesn't send a timestamp, but every delivery has
+    # a unique X-GitHub-Delivery id — reject one we've already processed (02 H2).
+    delivery_id = request.headers.get("X-GitHub-Delivery", "")
+    if delivery_id and _is_duplicate_key(f"delivery:{delivery_id}"):
+        logger.info("Ignoring duplicate GitHub delivery %s", delivery_id)
+        return {"message": "duplicate delivery ignored"}
 
     event_type = request.headers.get("X-GitHub-Event", "")
     if event_type == "ping":
@@ -217,7 +275,10 @@ def oauth_callback_proxy(rest: str, request: Request) -> Response:
 
     logger.info("OAuth callback proxy: forwarding to %s", target_url)
     try:
-        resp = httpx.get(target_url, timeout=15, follow_redirects=True)
+        # Don't follow redirects (05 M4): the loopback CLI server is the only
+        # intended hop — following a 3xx would let it bounce httpx to an
+        # arbitrary URL whose body we'd reflect to the unauthenticated caller.
+        resp = httpx.get(target_url, timeout=15, follow_redirects=False)
         excluded_headers = {"transfer-encoding", "content-encoding", "connection"}
         headers = {k: v for k, v in resp.headers.items() if k.lower() not in excluded_headers}
         return Response(
@@ -227,9 +288,7 @@ def oauth_callback_proxy(rest: str, request: Request) -> Response:
             media_type=resp.headers.get("content-type", "text/html"),
         )
     except httpx.ConnectError:
-        logger.warning(
-            "OAuth callback proxy: CLI callback server not reachable on port %d", port
-        )
+        logger.warning("OAuth callback proxy: CLI callback server not reachable on port %d", port)
         return Response(
             content=(
                 "<html><body><h2>OAuth callback failed</h2>"

@@ -234,19 +234,28 @@ class TestTeamFileHandler:
         return_value={"members": ["a"]},
     )
     def test_process_config_event(self, mock_parse, mock_update, tmp_path):
+        from app.services.team_monitor_service import TeamMonitorService
+
         handler = TeamFileHandler("sess-1", "myteam")
+        # The mtime-gated helper needs a registered monitor + an existing file.
+        TeamMonitorService._monitors["sess-1"] = {"last_config_mtime": 0.0, "known_task_files": {}}
+        cfg = tmp_path / "myteam" / "config.json"
+        cfg.parent.mkdir(parents=True, exist_ok=True)
+        cfg.write_text("{}")
+        try:
+            with patch("app.services.project_session_manager.ProjectSessionManager") as MockPSM:
+                src = str(cfg)
+                handler._process_event(src)
 
-        with patch("app.services.project_session_manager.ProjectSessionManager") as MockPSM:
-            src = str(tmp_path / "myteam" / "config.json")
-            handler._process_event(src)
-
-            mock_parse.assert_called_once_with(src)
-            mock_update.assert_called_once_with("sess-1", {"members": ["a"]})
-            MockPSM._broadcast.assert_called_once_with(
-                "sess-1",
-                "team_update",
-                {"type": "config", "data": {"members": ["a"]}},
-            )
+                mock_parse.assert_called_once_with(src)
+                mock_update.assert_called_once_with("sess-1", {"members": ["a"]})
+                MockPSM._broadcast.assert_called_once_with(
+                    "sess-1",
+                    "team_update",
+                    {"type": "config", "data": {"members": ["a"]}},
+                )
+        finally:
+            TeamMonitorService._monitors.pop("sess-1", None)
 
     @patch("app.services.team_monitor_service.TeamMonitorService._update_task")
     @patch(
@@ -254,19 +263,27 @@ class TestTeamFileHandler:
         return_value={"id": "t1", "status": "done"},
     )
     def test_process_task_event(self, mock_parse, mock_update, tmp_path):
+        from app.services.team_monitor_service import TeamMonitorService
+
         handler = TeamFileHandler("sess-1", "myteam")
+        TeamMonitorService._monitors["sess-1"] = {"last_config_mtime": 0.0, "known_task_files": {}}
+        task = tmp_path / "tasks" / "myteam" / "task-1.json"
+        task.parent.mkdir(parents=True, exist_ok=True)
+        task.write_text("{}")
+        try:
+            with patch("app.services.project_session_manager.ProjectSessionManager") as MockPSM:
+                src = str(task)
+                handler._process_event(src)
 
-        with patch("app.services.project_session_manager.ProjectSessionManager") as MockPSM:
-            src = str(tmp_path / "tasks" / "myteam" / "task-1.json")
-            handler._process_event(src)
-
-            mock_parse.assert_called_once_with(src)
-            mock_update.assert_called_once_with("sess-1", {"id": "t1", "status": "done"})
-            MockPSM._broadcast.assert_called_once_with(
-                "sess-1",
-                "team_update",
-                {"type": "task", "data": {"id": "t1", "status": "done"}},
-            )
+                mock_parse.assert_called_once_with(src)
+                mock_update.assert_called_once_with("sess-1", {"id": "t1", "status": "done"})
+                MockPSM._broadcast.assert_called_once_with(
+                    "sess-1",
+                    "team_update",
+                    {"type": "task", "data": {"id": "t1", "status": "done"}},
+                )
+        finally:
+            TeamMonitorService._monitors.pop("sess-1", None)
 
     def test_on_modified_ignores_directory(self):
         handler = TeamFileHandler("sess-1", "team")

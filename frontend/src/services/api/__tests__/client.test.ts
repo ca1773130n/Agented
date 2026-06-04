@@ -1,13 +1,21 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { apiFetch, setSessionToken, getSessionToken } from '../client';
 
+// [08.H1-residual] The `x-new-session-token` rotation handler no longer writes
+// rotated tokens to localStorage — rotation now happens via the HttpOnly
+// session cookie (Set-Cookie). The client still *reads* any pre-migration
+// localStorage token for backward-compat, but never persists a new one.
 describe('apiFetch — X-New-Session-Token rotation handling', () => {
   beforeEach(() => {
     setSessionToken('initial-token');
     vi.restoreAllMocks();
   });
 
-  it('updates stored token when response includes X-New-Session-Token', async () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('does NOT persist a rotated token from X-New-Session-Token (cookie-driven now)', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response('{}', {
         status: 200,
@@ -18,7 +26,8 @@ describe('apiFetch — X-New-Session-Token rotation handling', () => {
       }),
     );
     await apiFetch('/admin/agents');
-    expect(getSessionToken()).toBe('rotated-token-v2');
+    // Stored token is untouched — the header is ignored.
+    expect(getSessionToken()).toBe('initial-token');
     expect(fetchSpy).toHaveBeenCalled();
   });
 
@@ -33,19 +42,16 @@ describe('apiFetch — X-New-Session-Token rotation handling', () => {
     expect(getSessionToken()).toBe('initial-token');
   });
 
-  it('updates token even when the response is an error status', async () => {
-    // Server may rotate on a 4xx response too — frontend should still
-    // pick up the new token so subsequent requests use the latest.
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response('{"error":"FORBIDDEN"}', {
-        status: 403,
-        headers: {
-          'content-type': 'application/json',
-          'x-new-session-token': 'rotated-on-403',
-        },
+  it('still sends a pre-existing localStorage bearer token for backward-compat', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('{}', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
       }),
     );
-    try { await apiFetch('/admin/agents'); } catch { /* expected */ }
-    expect(getSessionToken()).toBe('rotated-on-403');
+    await apiFetch('/admin/agents');
+    const init = fetchSpy.mock.calls[0][1] as RequestInit;
+    const headers = init.headers as Record<string, string>;
+    expect(headers['Authorization']).toBe('Bearer initial-token');
   });
 });

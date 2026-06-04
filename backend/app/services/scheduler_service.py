@@ -210,27 +210,64 @@ class SchedulerService:
         """Execute a scheduled trigger. Called by APScheduler."""
         logger.info(f"Executing scheduled trigger: {trigger_id}")
 
-        # Update last_run_at
-        update_trigger_last_run(trigger_id, datetime.now(timezone.utc).isoformat())
-
+        # Resolve + validate BEFORE stamping last_run (06 M1) — otherwise a
+        # disabled or deleted trigger records a phantom run each time its
+        # still-registered cron fires. Unschedule a deleted trigger's job.
         trigger_data = get_trigger(trigger_id)
         if not trigger_data:
-            logger.error(f"Trigger not found: {trigger_id}")
+            logger.error(f"Trigger not found: {trigger_id}; unscheduling its job")
+            try:
+                cls.unschedule_trigger(trigger_id)
+            except Exception:
+                logger.debug("unschedule of missing trigger %s failed", trigger_id, exc_info=True)
             return
 
         if not trigger_data.get("enabled"):
             logger.info(f"Trigger {trigger_id} is disabled, skipping execution")
             return
 
+        # Overlap guard (06 L2): APScheduler's max_instances=1 only serializes the
+        # cron job itself. This skip coalesces a tick when the trigger's prior work
+        # is still running. Standard (synchronous) triggers surface as a 'running'
+        # execution_logs row for this trigger_id; team-mode triggers fork their own
+        # daemons and surface in team_executions keyed by team_id, so we check both.
+        # Workflow strategies that surface as neither remain bounded by the global
+        # concurrency cap in execution_queue_service (01 H6).
+        try:
+            from .audit_log_service import AuditLogService
+            from .execution_service import ExecutionService
+
+            overlapping = ExecutionService.get_status(trigger_id).get("status") == "running"
+            if not overlapping and trigger_data.get("execution_mode") == "team":
+                team_id = trigger_data.get("team_id")
+                if team_id:
+                    from ..db.team_executions import count_running_for_team
+
+                    overlapping = count_running_for_team(team_id) > 0
+            if overlapping:
+                logger.info("Scheduled trigger %s still running; skipping overlap", trigger_id)
+                AuditLogService.log(
+                    action="scheduler.skip_overlap",
+                    entity_type="trigger",
+                    entity_id=trigger_id,
+                    outcome="skipped",
+                )
+                return
+        except Exception:
+            logger.debug("overlap check failed for %s", trigger_id, exc_info=True)
+
+        # Only stamp last_run once we know the trigger is real + enabled.
+        update_trigger_last_run(trigger_id, datetime.now(timezone.utc).isoformat())
+
         if trigger_data.get("dispatch_type") == "super_agent" and trigger_data.get(
             "super_agent_id"
         ):
             try:
+                from ..db.triggers import create_execution_log, update_execution_log
                 from .super_agent_session_service import (
                     SessionLimitError,
                     SuperAgentSessionService,
                 )
-                from ..db.triggers import create_execution_log
 
                 session_id = SuperAgentSessionService.get_or_create_session(
                     trigger_data["super_agent_id"]
@@ -241,18 +278,27 @@ class SchedulerService:
                     "{message}", f"Scheduled execution of trigger {trigger_id}"
                 )
                 SuperAgentSessionService.send_message(session_id, rendered_prompt)
+                now_iso = datetime.now(timezone.utc).isoformat()
                 exec_id = f"exec-{trigger_id}-{int(time.time())}"
                 create_execution_log(
                     execution_id=exec_id,
                     trigger_id=trigger_id,
                     trigger_type="scheduled",
-                    started_at=datetime.now(timezone.utc).isoformat(),
+                    started_at=now_iso,
                     prompt=rendered_prompt,
                     backend_type=trigger_data.get("backend_type", "claude"),
                     command="",
                     source_type="super_agent",
                     session_id=session_id,
                 )
+                # The dispatch IS the work here: send_message() already handed the
+                # prompt to the long-lived session, and nothing ever updates this
+                # row afterwards. Without marking it terminal, the row stays
+                # 'running' forever — the overlap guard above would then skip
+                # every future tick of this trigger, and the global concurrency
+                # cap (01 H6) would count a phantom execution indefinitely
+                # (Codex #193 round-4 MEDIUM).
+                update_execution_log(exec_id, status="success", finished_at=now_iso)
             except SessionLimitError as e:
                 logger.warning(f"Scheduled trigger {trigger_id} session limit: {e}")
             return
@@ -364,6 +410,27 @@ class SchedulerService:
         if not team.get("enabled", 1):
             logger.info(f"Team {team_id} is disabled, skipping execution")
             return
+
+        # Overlap guard (06 L2): execute_team() forks a daemon and returns
+        # immediately, so without this a cron tick can stack a second team run on
+        # top of one already in flight. Coalesce when a prior run is still
+        # 'running' in team_executions for this team.
+        try:
+            from ..db.team_executions import count_running_for_team
+
+            if count_running_for_team(team_id) > 0:
+                logger.info("Scheduled team %s still running; skipping overlap", team_id)
+                from .audit_log_service import AuditLogService
+
+                AuditLogService.log(
+                    action="scheduler.skip_overlap",
+                    entity_type="team",
+                    entity_id=team_id,
+                    outcome="skipped",
+                )
+                return
+        except Exception:
+            logger.debug("team overlap check failed for %s", team_id, exc_info=True)
 
         try:
             from .team_execution_service import TeamExecutionService

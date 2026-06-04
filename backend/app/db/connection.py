@@ -51,5 +51,16 @@ def get_connection():
         pass
     try:
         yield conn
+    except Exception:
+        # Roll back any half-applied transaction on error so a failed
+        # multi-statement write can't leave a partial commit pending for the
+        # next caller on this connection (03-core M2). Auto-commit is
+        # intentionally NOT added — callers commit explicitly, and committing
+        # here would change semantics for read-only/uncommitted-on-purpose paths.
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
     finally:
         conn.close()

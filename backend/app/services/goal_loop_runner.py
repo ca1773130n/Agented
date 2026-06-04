@@ -497,6 +497,11 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                     model_override,
                 )
 
+            # If the operator stopped the session concurrently, don't also
+            # broadcast a cap/convergence end (avoids a double end event) (06 M7).
+            if state.stop_event.is_set():
+                break
+
             if iteration_no >= max_iterations:
                 _broadcast_end(
                     session_id,

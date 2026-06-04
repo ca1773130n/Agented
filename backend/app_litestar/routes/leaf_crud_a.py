@@ -55,6 +55,10 @@ from app.services.bookmark_service import (
     update_bookmark,
 )
 from app.services.prompt_snippet_service import SnippetService
+from app_litestar.route_helpers import MAX_LIST_LIMIT, clamp_limit
+
+# 07.M4 — string length caps for the snippet creator.
+_CONTENT_MAX_LEN = 100_000
 
 
 # ===========================================================================
@@ -150,8 +154,10 @@ _SNIPPET_NAME_RE = re.compile(r"^[\w][\w-]*$")
 
 
 @get("/", sync_to_thread=False)
-def list_snippets() -> dict[str, Any]:
-    return {"snippets": get_all_snippets()}
+def list_snippets(limit: Optional[int] = None, offset: int = 0) -> dict[str, Any]:
+    # 07.M2 — get_all_snippets supports native limit/offset.
+    capped = clamp_limit(limit, default=MAX_LIST_LIMIT)
+    return {"snippets": get_all_snippets(limit=capped, offset=max(offset, 0))}
 
 
 @post("/", sync_to_thread=False)
@@ -164,14 +170,14 @@ def create_snippet(data: dict) -> Any:
         raise ClientException(detail="name is required")
     if not content:
         raise ClientException(detail="content is required")
+    if len(content) > _CONTENT_MAX_LEN:  # 07.M4 — bound content length
+        raise ClientException(detail=f"content must be at most {_CONTENT_MAX_LEN} characters")
     if not _SNIPPET_NAME_RE.match(name):
         raise ClientException(
             detail="name must start with a word character and contain only word characters and hyphens"
         )
     if get_snippet_by_name(name):
-        raise HTTPException(
-            status_code=409, detail=f"A snippet named '{name}' already exists"
-        )
+        raise HTTPException(status_code=409, detail=f"A snippet named '{name}' already exists")
     snippet_id = db_create_snippet(
         name=name, content=content, description=data.get("description", "")
     )
@@ -211,9 +217,7 @@ def update_snippet_endpoint(snippet_id: str, data: dict) -> Any:
                 detail="name must start with a word character and contain only word characters and hyphens"
             )
         if name != snippet["name"] and get_snippet_by_name(name):
-            raise HTTPException(
-                status_code=409, detail=f"A snippet named '{name}' already exists"
-            )
+            raise HTTPException(status_code=409, detail=f"A snippet named '{name}' already exists")
     if not update_snippet(
         snippet_id,
         name=data.get("name"),
@@ -252,9 +256,13 @@ prompt_snippets_router = Router(
 
 
 @get("/scope-filters", sync_to_thread=False)
-def list_filters() -> dict[str, Any]:
+def list_filters(limit: Optional[int] = None, offset: int = 0) -> dict[str, Any]:
     filters = list_scope_filters()
-    return {"filters": filters, "total": len(filters)}
+    total = len(filters)
+    # 07.M2 — list_scope_filters has no limit param; slice at the route layer.
+    capped = clamp_limit(limit, default=MAX_LIST_LIMIT)
+    start = max(offset, 0)
+    return {"filters": filters[start : start + capped], "total": total}
 
 
 @get("/scope-filters/{filter_id:str}", sync_to_thread=False)
@@ -358,9 +366,7 @@ def create_condition(trigger_id: str, data: dict) -> dict[str, Any]:
         conditions=data.get("conditions", []),
     )
     if not condition_id:
-        raise HTTPException(
-            status_code=500, detail="Failed to create condition rule"
-        )
+        raise HTTPException(status_code=500, detail="Failed to create condition rule")
     return {
         "message": "Condition rule created",
         "rule": get_trigger_condition(condition_id),

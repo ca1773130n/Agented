@@ -65,7 +65,7 @@ describe('useEventSource', () => {
   it('auto-connects when autoConnect is true', async () => {
     const wrapper = mount(createTestComponent({ url: '/test', autoConnect: true }));
     await nextTick();
-    expect(mockCreateSource).toHaveBeenCalledWith('/test');
+    expect(mockCreateSource).toHaveBeenCalledWith('/test', expect.objectContaining({ onGiveUp: expect.any(Function) }));
     wrapper.unmount();
   });
 
@@ -145,7 +145,7 @@ describe('useEventSource', () => {
   it('supports function-form URL (getter function)', () => {
     const wrapper = mount(createTestComponent({ url: () => '/dynamic/url' }));
     wrapper.vm.connect();
-    expect(mockCreateSource).toHaveBeenCalledWith('/dynamic/url');
+    expect(mockCreateSource).toHaveBeenCalledWith('/dynamic/url', expect.objectContaining({ onGiveUp: expect.any(Function) }));
     wrapper.unmount();
   });
 
@@ -180,6 +180,32 @@ describe('useEventSource', () => {
     wrapper.unmount();
   });
 
+  // [08.L3] Give-up must surface a visible 'lost' status, even if the consumer
+  // omits onGiveUp. The composable injects an onGiveUp into the source options.
+  it('flips status to "lost" and calls onGiveUp when reconnection gives up (url path)', async () => {
+    const onGiveUp = vi.fn();
+    const wrapper = mount(createTestComponent({ url: '/test', onGiveUp }));
+    wrapper.vm.connect();
+    // The composable passes a give-up handler as the 2nd arg to the factory.
+    const passedOptions = mockCreateSource.mock.calls[0][1];
+    expect(passedOptions?.onGiveUp).toEqual(expect.any(Function));
+    passedOptions!.onGiveUp!();
+    await nextTick();
+    expect(wrapper.vm.status).toBe('lost' satisfies SSEStatus);
+    expect(onGiveUp).toHaveBeenCalledTimes(1);
+    wrapper.unmount();
+  });
+
+  it('forwards give-up options to sourceFactory so it can wire onGiveUp', () => {
+    const factorySource = createMockSource();
+    const sourceFactory = vi.fn().mockReturnValue(factorySource);
+    const wrapper = mount(createTestComponent({ sourceFactory }));
+    wrapper.vm.connect();
+    const passedOptions = sourceFactory.mock.calls[0][0];
+    expect(passedOptions?.onGiveUp).toEqual(expect.any(Function));
+    wrapper.unmount();
+  });
+
   it('sets status to "error" when neither url nor sourceFactory is provided', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const wrapper = mount(createTestComponent({}));
@@ -211,7 +237,7 @@ describe('useEventSource', () => {
       autoConnect: true,
     }));
     await nextTick();
-    expect(mockCreateSource).toHaveBeenCalledWith('/api/stream/123');
+    expect(mockCreateSource).toHaveBeenCalledWith('/api/stream/123', expect.objectContaining({ onGiveUp: expect.any(Function) }));
     wrapper.unmount();
   });
 

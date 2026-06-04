@@ -1,4 +1,14 @@
 import '@mcp-b/global'
+// [08.L2] Self-host Geist / Geist Mono via @fontsource instead of the Google
+// Fonts CDN — removes a third-party request + privacy/availability dependency.
+import '@fontsource/geist-sans/400.css'
+import '@fontsource/geist-sans/500.css'
+import '@fontsource/geist-sans/600.css'
+import '@fontsource/geist-sans/700.css'
+import '@fontsource/geist-mono/400.css'
+import '@fontsource/geist-mono/500.css'
+import '@fontsource/geist-mono/600.css'
+import '@fontsource/geist-mono/700.css'
 import { createApp } from 'vue'
 import './style.css'
 import '@ai-accounts/vue-styled/styles.css'
@@ -27,9 +37,9 @@ app.use(i18n)
  * and that is exactly what caused the "skips to next backend after paste
  * code" bug, so do NOT reintroduce auto-advance in that bridge.
  *
- * The `token` is sourced from localStorage via `getApiKey()`.  Pass the
- * function (not its result) so the client re-reads localStorage on every
- * request — capturing at construction time leaves the client permanently
+ * The `token` is sourced from sessionStorage via `getApiKey()` ([08.H1-residual]
+ * moved it off localStorage). Pass the function (not its result) so the client
+ * re-reads storage on every request — capturing at construction time leaves the client permanently
  * unauthenticated when boot races the welcome-page key generation, which
  * surfaced as a single ``GET /api/v1/backends/_meta 401`` immediately
  * after onboarding.
@@ -47,7 +57,10 @@ app.use(aiAccountsPlugin as any, {
       notifyAiAccountsEvent(event)
     } catch (err) {
       // Tour bridging is best-effort; never let it break the wizard.
-      console.warn('[ai-accounts] tour bridge error', err)
+      // [08.L1] Diagnostic only — gate behind DEV so prod doesn't log raw errors.
+      if (import.meta.env.DEV) {
+        console.warn('[ai-accounts] tour bridge error', err)
+      }
     }
   },
 })
@@ -58,11 +71,15 @@ app.use(aiAccountsPlugin as any, {
  * so that uncaught component errors are never silently swallowed.
  */
 app.config.errorHandler = (err, instance, info) => {
-  const componentName = instance?.$options?.name || instance?.$options?.__name || 'anonymous';
-  console.error(
-    `[Vue Error] ${err}\n  Component: ${componentName}\n  Info: ${info}`,
-    err,
-  );
+  // [08.L1] Diagnostic logging is DEV-only — prod must not dump raw error
+  // objects to the console. The user-facing toast below always fires.
+  if (import.meta.env.DEV) {
+    const componentName = instance?.$options?.name || instance?.$options?.__name || 'anonymous';
+    console.error(
+      `[Vue Error] ${err}\n  Component: ${componentName}\n  Info: ${info}`,
+      err,
+    );
+  }
 
   // Surface a user-visible toast when the app's provide/inject toast system is available.
   // Because errorHandler fires outside the component tree, we reach into the app context.

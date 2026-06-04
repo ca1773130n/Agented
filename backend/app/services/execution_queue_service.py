@@ -11,6 +11,7 @@ Architecture follows persist-queue (2025) SQLite-backed queue patterns.
 
 import json
 import logging
+import os
 import threading
 from typing import ClassVar, Dict, Optional
 
@@ -42,6 +43,14 @@ class ExecutionQueueService:
     _stop_event: ClassVar[threading.Event] = threading.Event()
     _concurrency_caps: ClassVar[Dict[str, int]] = {}
     _default_concurrency_cap: ClassVar[int] = 1
+    # Global cap across ALL triggers (01 H6): per-trigger caps alone don't bound
+    # total heavy CLI subprocesses (N triggers × their caps). Counts in-flight
+    # dispatched threads; the dispatcher stops the batch once saturated.
+    _GLOBAL_CONCURRENCY_CAP: ClassVar[int] = int(
+        os.environ.get("AGENTED_MAX_GLOBAL_EXECUTIONS", "20")
+    )
+    _active_global: ClassVar[int] = 0
+    _active_lock: ClassVar[threading.Lock] = threading.Lock()
 
     @classmethod
     def start_dispatcher(cls) -> None:
@@ -140,6 +149,34 @@ class ExecutionQueueService:
 
         logger.info("Dispatcher loop exiting")
 
+    @staticmethod
+    def _count_running_work() -> int:
+        """Count in-flight executions across ALL three execution tables so the
+        global cap (01 H6) covers team/workflow strategies that fork their own
+        daemons (recorded in team_executions / workflow_executions, not
+        execution_logs). Best-effort; a query failure contributes 0."""
+        total = 0
+        try:
+            from app.db.execution_logs import get_active_execution_count
+
+            total += get_active_execution_count()
+        except Exception:
+            logger.debug("running-count: execution_logs failed", exc_info=True)
+        try:
+            from app.db.connection import get_connection
+
+            with get_connection() as conn:
+                for table in ("team_executions", "workflow_executions"):
+                    try:
+                        total += conn.execute(
+                            f"SELECT COUNT(*) FROM {table} WHERE status = 'running'"
+                        ).fetchone()[0]
+                    except Exception:
+                        logger.debug("running-count: %s failed", table, exc_info=True)
+        except Exception:
+            logger.debug("running-count: connection failed", exc_info=True)
+        return total
+
     @classmethod
     def _dispatch_batch(cls) -> None:
         """Fetch pending entries and dispatch eligible ones."""
@@ -150,6 +187,34 @@ class ExecutionQueueService:
         for entry in entries:
             trigger_id = entry["trigger_id"]
             entry_id = entry["id"]
+
+            # Global concurrency cap (01 H6) — stop dispatching this batch once
+            # the host is saturated; remaining entries stay queued for next poll.
+            # Gate CONSERVATIVELY on in_flight + db_running (never max()):
+            #   - db_running = _count_running_work() sums 'running' rows across
+            #     execution_logs + team_executions + workflow_executions, so
+            #     team/workflow strategies that fork their own daemons (and leave
+            #     the dispatcher early) are counted, as is work started outside
+            #     this queue (manual / super-agent executions).
+            #   - in_flight = _active_global covers freshly dispatched entries in
+            #     the window before their 'running' row is visible.
+            # A synchronous standard execution is counted in BOTH for its run (its
+            # in-memory reservation AND its execution_logs row), so the sum can
+            # over-count and defer slightly early — the safe direction for a cap.
+            # max() was wrong: when db_running is dominated by daemons that aren't
+            # in the in-memory counter, fresh reservations stacked invisibly under
+            # it and could blow past the cap (Codex #193 round-3 HIGH).
+            with cls._active_lock:
+                in_flight = cls._active_global
+            db_running = cls._count_running_work()
+            if in_flight + db_running >= cls._GLOBAL_CONCURRENCY_CAP:
+                logger.debug(
+                    "Global concurrency cap (%d) reached (in_flight=%d, db_running=%d); deferring",
+                    cls._GLOBAL_CONCURRENCY_CAP,
+                    in_flight,
+                    db_running,
+                )
+                break
 
             # Check concurrency cap
             cap = cls.get_concurrency_cap(trigger_id)
@@ -182,7 +247,10 @@ class ExecutionQueueService:
             if not updated:
                 continue  # Another thread got it first
 
-            # Spawn thread to execute
+            # Spawn thread to execute (count it toward the global cap; the
+            # thread decrements in its finally).
+            with cls._active_lock:
+                cls._active_global += 1
             thread = threading.Thread(
                 target=cls._dispatch_entry,
                 args=(entry,),
@@ -237,6 +305,10 @@ class ExecutionQueueService:
         except Exception:
             logger.exception("Queue entry %s failed", entry_id)
             update_entry_status(entry_id, "failed", expected_status="dispatching")
+        finally:
+            # Release the global-concurrency slot taken at dispatch time (01 H6).
+            with cls._active_lock:
+                cls._active_global = max(0, cls._active_global - 1)
 
     @classmethod
     def get_concurrency_cap(cls, trigger_id: str) -> int:

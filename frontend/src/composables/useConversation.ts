@@ -14,7 +14,12 @@ export interface ConversationApi {
   start: () => Promise<{ conversation_id: string; message: string }>;
   get?: (convId: string) => Promise<{ id: string; status: string; messages_parsed?: ConversationMessage[] }>;
   sendMessage: (convId: string, message: string, options?: { backend?: string; account_id?: string; model?: string; use_cli_agent?: boolean }) => Promise<{ message_id: string; status: string }>;
-  stream: (convId: string) => import('../services/api/client').AuthenticatedEventSource;
+  // [08.L3] `options` is optional so consumers can forward onGiveUp; entity
+  // stream factories that ignore it keep working unchanged.
+  stream: (
+    convId: string,
+    options?: import('../services/api/client').AuthenticatedEventSourceOptions,
+  ) => import('../services/api/client').AuthenticatedEventSource;
   // v0.7.77 — optional ``expectedConfigHash`` lets the
   // SkillCreatePreviewDrawer prevent committing a config the
   // operator never reviewed (claude emitted a new SKILL_CONFIG
@@ -114,7 +119,7 @@ export function useConversation<TConfig>(
 
   // SSE lifecycle managed by useEventSource
   const { connect: sseConnect, close: sseClose } = useEventSource({
-    sourceFactory: () => api.stream(conversationId.value!),
+    sourceFactory: (opts) => api.stream(conversationId.value!, opts),
     events: {
       message: (event) => {
         const data = safeParseSSE<ConversationMessage>(event, 'conversation/message');
@@ -188,6 +193,12 @@ export function useConversation<TConfig>(
     onError: () => {
       // Native EventSource connection error (network drop, server close).
       // EventSource auto-reconnects by default; no toast needed.
+    },
+    // [08.L3] Terminal give-up after the max reconnect attempts is no longer
+    // silent — surface a user-visible toast and stop the spinner.
+    onGiveUp: () => {
+      isProcessing.value = false;
+      showToast('Connection lost. Please refresh to reconnect.', 'error');
     },
   });
 

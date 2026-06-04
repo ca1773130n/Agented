@@ -2,9 +2,17 @@
 
 import logging
 import threading
+import time
 from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
+
+# Terminal states + bounds for the sweep backstop (06 H3): cleanup_execution is
+# normally called by a 5-min Timer, but that is lost on restart / daemon kill.
+# A TTL + size-cap sweep on register guarantees the map can't grow unbounded.
+_TERMINAL_STATES = {"completed", "failed", "approval_timeout"}
+_ENTRY_TTL_SECONDS = 1800
+_MAX_ENTRIES = 5000
 
 
 class TeamExecutionTracker:
@@ -15,15 +23,37 @@ class TeamExecutionTracker:
     _lock = threading.Lock()
 
     @classmethod
+    def _sweep_locked(cls) -> None:
+        """Evict old terminal entries; hard-cap total size. Caller holds _lock."""
+        now = time.time()
+        stale = [
+            k
+            for k, e in cls._executions.items()
+            if e.get("status") in _TERMINAL_STATES and now - e.get("_ts", now) > _ENTRY_TTL_SECONDS
+        ]
+        for k in stale:
+            del cls._executions[k]
+        if len(cls._executions) > _MAX_ENTRIES:
+            # Drop oldest terminal entries first.
+            terminal = sorted(
+                (k for k, e in cls._executions.items() if e.get("status") in _TERMINAL_STATES),
+                key=lambda k: cls._executions[k].get("_ts", 0),
+            )
+            for k in terminal[: len(cls._executions) - _MAX_ENTRIES]:
+                del cls._executions[k]
+
+    @classmethod
     def register(cls, team_exec_id: str, team_id: str, topology: str, trigger_type: str) -> None:
         """Register a new team execution entry."""
         with cls._lock:
+            cls._sweep_locked()
             cls._executions[team_exec_id] = {
                 "team_id": team_id,
                 "topology": topology,
                 "trigger_type": trigger_type,
                 "status": "running",
                 "execution_ids": [],
+                "_ts": time.time(),
             }
 
     @classmethod

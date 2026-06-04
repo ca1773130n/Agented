@@ -48,7 +48,7 @@ from app.db.triggers import (
     remove_github_repo,
     update_trigger,
 )
-from app_litestar.route_helpers import clamp_limit
+from app_litestar.route_helpers import MAX_LIST_LIMIT, clamp_limit
 from app.services.health_monitor_service import HealthMonitorService
 from app.services.instance_service import InstanceService
 from app.services.monitoring_service import MonitoringService
@@ -198,7 +198,15 @@ def monitoring_history_batch(data: dict[str, Any]) -> dict[str, Any]:
              {account_id, window_type, history: [...]}}}``.
     """
     windows = data.get("windows") or []
-    minutes = int(data.get("minutes", 360))
+    # 07.L4 — clamp minutes to a non-negative, bounded range (max ~1 year).
+    try:
+        minutes = int(data.get("minutes", 360))
+    except (TypeError, ValueError):
+        minutes = 360
+    minutes = max(0, min(minutes, 525_600))
+    # 07.M3 — cap the number of windows processed per request.
+    if len(windows) > MAX_LIST_LIMIT:
+        raise ClientException(detail=f"windows must contain at most {MAX_LIST_LIMIT} entries")
     # Max points returned per window. The chart needs the trend to span the
     # WHOLE selected window (e.g. 30 days), evenly downsampled — not the
     # oldest 50 rows that ``get_snapshot_history`` (ORDER BY ASC LIMIT 50)
@@ -644,8 +652,12 @@ repo_bot_defaults_router = Router(
 
 
 @get("/", sync_to_thread=False)
-def list_bot_pipes() -> dict[str, Any]:
-    return {"pipes": get_all_pipes()}
+def list_bot_pipes(limit: Optional[int] = None, offset: int = 0) -> dict[str, Any]:
+    # 07.M2 — get_all_pipes has no limit param; slice at the route layer.
+    pipes = get_all_pipes()
+    capped = clamp_limit(limit, default=MAX_LIST_LIMIT)
+    start = max(offset, 0)
+    return {"pipes": pipes[start : start + capped]}
 
 
 @post("/", status_code=201, sync_to_thread=False)
@@ -657,6 +669,8 @@ def create_bot_pipe(data: dict) -> dict[str, Any]:
     dest_bot_id = (data.get("dest_bot_id") or "").strip()
     if not name or not source_bot_id or not dest_bot_id:
         raise ClientException(detail="name, source_bot_id and dest_bot_id are required")
+    if len(name) > 255:  # 07.M4 — bound name length
+        raise ClientException(detail="name must be at most 255 characters")
     pipe = create_pipe(
         {
             "name": name,

@@ -74,9 +74,13 @@ class ExecutionLogService:
         command: str,
         trigger_config_snapshot: str = None,
         account_id: int = None,
+        execution_id: str = None,
     ) -> str:
-        """Create a new execution record and return execution_id."""
-        execution_id = generate_execution_id(trigger_id)
+        """Create a new execution record and return execution_id.
+
+        ``execution_id`` lets the caller pre-allocate the id synchronously so a
+        background runner is trackable/cancellable immediately (06 L1)."""
+        execution_id = execution_id or generate_execution_id(trigger_id)
         started_at = datetime.datetime.now().isoformat()
 
         create_execution_log(

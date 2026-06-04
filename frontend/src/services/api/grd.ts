@@ -5,7 +5,7 @@
  * phases, plans, and updating plan status.
  */
 import { apiFetch, createAuthenticatedEventSource } from './client';
-import type { AuthenticatedEventSource } from './client';
+import type { AuthenticatedEventSource, AuthenticatedEventSourceOptions } from './client';
 
 export interface GrdMilestone {
   id: string;
@@ -477,8 +477,14 @@ export const grdApi = {
    * this returns an EventSource instance. Caller manages lifecycle
    * by attaching onmessage/onerror handlers and calling .close().
    */
-  streamSession: (projectId: string, sessionId: string): AuthenticatedEventSource =>
-    createAuthenticatedEventSource(`/api/projects/${projectId}/sessions/${sessionId}/stream`),
+  // [08.L3] `options` is forwarded so callers can wire onGiveUp / onQueueOverflow
+  // and surface a visible "connection lost" state instead of a silent give-up.
+  streamSession: (
+    projectId: string,
+    sessionId: string,
+    options?: AuthenticatedEventSourceOptions,
+  ): AuthenticatedEventSource =>
+    createAuthenticatedEventSource(`/api/projects/${projectId}/sessions/${sessionId}/stream`, options),
 
   // Project AI Chat
   sendProjectChat: (

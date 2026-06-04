@@ -275,7 +275,11 @@ const { showApiKeyBanner, appReady, onAuthenticated, handleTourRetry } = useAppB
 <style>
 @import './assets/global-spinner.css';
 @import './assets/markdown-content.css';
-@import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600;700&family=Geist:wght@400;500;600;700&display=swap');
+/*
+ * [08.L2] Geist / Geist Mono are now SELF-HOSTED via @fontsource (imported in
+ * main.ts) — no runtime third-party request to the Google Fonts CDN, and the
+ * strict CSP needs no external font/style origins.
+ */
 
 :root {
   /* Base colors */
@@ -322,7 +326,7 @@ const { showApiKeyBanner, appReady, onAuthenticated, handleTourRetry } = useAppB
   --content-padding: 32px;
 
   /* Typography */
-  --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-sans: 'Geist Sans', 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'Geist Mono', 'SF Mono', 'Monaco', monospace;
 
   /* Shadows */

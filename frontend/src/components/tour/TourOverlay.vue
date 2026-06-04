@@ -259,7 +259,14 @@ onUnmounted(() => {
 
     <!-- Element-not-found fallback (OB-41) — takes precedence over loading timeout -->
     <div v-if="!targetEl && elementNotFoundTimeout" class="tour-element-fallback">
-      <p v-html="t('tour.elementNotFound', { element: `<strong>${currentTargetName}</strong>` })"></p>
+      <!-- [08.M2] <i18n-t> slot interpolation: the <strong> wrapper is static
+           template markup and currentTargetName is plain-text-escaped by Vue,
+           so no interpolated translation value reaches v-html. -->
+      <p>
+        <i18n-t keypath="tour.elementNotFound" scope="global">
+          <template #element><strong>{{ currentTargetName }}</strong></template>
+        </i18n-t>
+      </p>
       <div class="fallback-actions">
         <button class="btn-fallback-skip" @click="$emit('skip')">{{ t('common.skip') }}</button>
         <button class="btn-fallback-retry" @click="handleElementRetry">{{ t('common.retry') }}</button>

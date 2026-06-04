@@ -6,6 +6,7 @@ preserved error semantics from the Flask versions.
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -48,6 +49,9 @@ from app.db.version_pins import (
 from app.services.error_capture import capture_error
 from app.services.gitops_sync_service import GitOpsSyncService
 from app.services.secret_vault_service import SecretVaultService
+from app_litestar.route_helpers import MAX_LIST_LIMIT, clamp_limit
+
+logger = logging.getLogger(__name__)
 
 # ===========================================================================
 # /api/settings/* (6)
@@ -319,7 +323,9 @@ def create_secret(data: dict) -> dict[str, Any]:
             raise HTTPException(
                 status_code=409, detail=f"Secret with name '{name}' already exists"
             ) from None
-        raise HTTPException(status_code=500, detail=str(exc)) from None
+        # 07.L1 — log internals, return a generic message (don't leak exc text).
+        logger.error("Secret creation failed", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to create secret") from None
     from app.db.secrets import get_secret
 
     secret = get_secret(secret_id)
@@ -418,6 +424,8 @@ secrets_router = Router(
 def create_repo(data: dict) -> dict[str, Any]:
     if not data:
         raise ClientException(detail="JSON body required")
+    # 07.H3 — build the writer args explicitly from allowlisted fields only
+    # (no mass-assignment); poll_interval comes from the poll_interval_seconds key.
     repo_id = create_gitops_repo(
         name=data.get("name", ""),
         repo_url=data.get("repo_url", ""),
@@ -429,8 +437,12 @@ def create_repo(data: dict) -> dict[str, Any]:
 
 
 @get("/gitops/repos", sync_to_thread=False)
-def list_repos() -> Any:
-    return list_gitops_repos()
+def list_repos(limit: Optional[int] = None, offset: int = 0) -> Any:
+    # 07.M2 — list_gitops_repos has no limit param; slice at the route layer.
+    repos = list_gitops_repos()
+    capped = clamp_limit(limit, default=MAX_LIST_LIMIT)
+    start = max(offset, 0)
+    return repos[start : start + capped]
 
 
 @get("/gitops/repos/{repo_id:str}", sync_to_thread=False)
@@ -499,9 +511,13 @@ gitops_router = Router(
 
 
 @get("/", sync_to_thread=False)
-def list_version_pins() -> dict[str, Any]:
+def list_version_pins(limit: Optional[int] = None, offset: int = 0) -> dict[str, Any]:
     pins = get_all_version_pins()
-    return {"pins": pins, "total": len(pins)}
+    total = len(pins)
+    # 07.M2 — get_all_version_pins has no limit param; slice at the route layer.
+    capped = clamp_limit(limit, default=MAX_LIST_LIMIT)
+    start = max(offset, 0)
+    return {"pins": pins[start : start + capped], "total": total}
 
 
 @put("/{pin_id:str}", sync_to_thread=False)

@@ -336,6 +336,46 @@ class WorkflowExecutionService:
         trigger_type: str,
         timeout_seconds: int,
     ) -> None:
+        """Background-thread entry point. Guards _run_workflow_impl so an
+        exception OUTSIDE the per-node handlers can't leave the execution stuck
+        in 'running' forever (06 M3) — it's finalized as failed + a completion
+        event is emitted."""
+        try:
+            cls._run_workflow_impl(
+                execution_id,
+                workflow_id,
+                graph_parsed,
+                input_json,
+                trigger_type,
+                timeout_seconds,
+            )
+        except Exception:
+            logger.exception(
+                "Workflow %s crashed outside node handling; marking failed", execution_id
+            )
+            try:
+                from ..db.workflows import update_workflow_execution
+                from .execution_events import emit_execution_complete
+
+                cls._update_status(execution_id, "failed")
+                update_workflow_execution(
+                    execution_id, status="failed", ended_at=datetime.now().isoformat()
+                )
+                emit_execution_complete("workflow", execution_id, "failed", None)
+                cls._schedule_cleanup(execution_id)
+            except Exception:
+                logger.error("Failed to finalize crashed workflow %s", execution_id, exc_info=True)
+
+    @classmethod
+    def _run_workflow_impl(
+        cls,
+        execution_id: str,
+        workflow_id: str,
+        graph_parsed: dict,
+        input_json: Optional[str],
+        trigger_type: str,
+        timeout_seconds: int,
+    ) -> None:
         """Execute the workflow DAG in topological order.
 
         This method runs in a background daemon thread. It:

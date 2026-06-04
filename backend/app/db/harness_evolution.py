@@ -161,10 +161,17 @@ def mark_applied(
     apply_journal_json: Optional[str] = None,
     auto_applied: bool = False,
     auto_apply_reason: Optional[dict] = None,
-) -> None:
+) -> bool:
+    """Transition a round to ``applied``.
+
+    [04.H2] The transition is now CONDITIONAL on the round not already
+    being ``applied`` / ``reverted`` — guards against a double-apply where
+    two concurrent callers both reach this point. Returns ``True`` iff this
+    call performed the transition (rowcount == 1).
+    """
     with get_connection() as conn:
         _ensure_kg_signals_column(conn)
-        conn.execute(
+        cur = conn.execute(
             """UPDATE harness_evolution_rounds SET
                    status                      = 'applied',
                    finished_at                 = datetime('now'),
@@ -176,7 +183,8 @@ def mark_applied(
                    apply_journal_json          = ?,
                    auto_applied                = ?,
                    auto_apply_reason           = ?
-               WHERE id = ?""",
+               WHERE id = ?
+                 AND status NOT IN ('applied', 'reverted')""",
             (
                 json.dumps(output_patch, default=str),
                 json.dumps(applied_asset_ids, default=str),
@@ -190,6 +198,7 @@ def mark_applied(
             ),
         )
         conn.commit()
+        return cur.rowcount == 1
 
 
 def mark_awaiting_approval(

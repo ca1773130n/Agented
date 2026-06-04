@@ -17,7 +17,6 @@ import json
 import logging
 import os
 import threading
-import time
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -52,29 +51,19 @@ class TeamFileHandler(FileSystemEventHandler):
         self._process_event(event.src_path)
 
     def _process_event(self, src_path: str) -> None:
-        """Process a file event, broadcasting team or task updates."""
-        from .project_session_manager import ProjectSessionManager
+        """Process a file event, broadcasting team or task updates.
 
+        Routes through the same mtime-gated helpers as the polling loop so the
+        two never double-broadcast the same change (06 M4)."""
         try:
             if src_path.endswith("config.json") and self.team_name in src_path:
-                team_state = TeamMonitorService._parse_team_config(src_path)
-                if team_state is not None:
-                    # Update stored members
-                    TeamMonitorService._update_members(self.session_id, team_state)
-                    ProjectSessionManager._broadcast(
-                        self.session_id,
-                        "team_update",
-                        {"type": "config", "data": team_state},
-                    )
+                TeamMonitorService._broadcast_config_if_newer(self.session_id, src_path)
             elif "/tasks/" in src_path and self.team_name in src_path:
-                task_state = TeamMonitorService._parse_task(src_path)
-                if task_state is not None:
-                    TeamMonitorService._update_task(self.session_id, task_state)
-                    ProjectSessionManager._broadcast(
-                        self.session_id,
-                        "team_update",
-                        {"type": "task", "data": task_state},
-                    )
+                import os as _os
+
+                TeamMonitorService._broadcast_task_if_newer(
+                    self.session_id, src_path, _os.path.basename(src_path)
+                )
         except Exception:
             logger.warning(
                 f"Error processing team file event for {src_path}",
@@ -138,6 +127,8 @@ class TeamMonitorService:
             "tasks_dir": str(tasks_dir),
             "last_config_mtime": 0.0,
             "known_task_files": {},
+            # Set on stop so the poll loop wakes immediately (06 M4).
+            "stop_event": threading.Event(),
         }
 
         with cls._lock:
@@ -149,6 +140,55 @@ class TeamMonitorService:
             f"Started team monitor for session {session_id} "
             f"(team={team_name}, teams_dir={teams_dir}, tasks_dir={tasks_dir})"
         )
+
+    @classmethod
+    def _broadcast_config_if_newer(cls, session_id: str, config_path: str) -> None:
+        """Mtime-gated config broadcast shared by the watchdog handler AND the
+        polling loop, so a change is broadcast at most once no matter which one
+        observes it first (06 M4 — eliminates double broadcasts)."""
+        from .project_session_manager import ProjectSessionManager
+
+        try:
+            if not os.path.exists(config_path):
+                return
+            mtime = os.path.getmtime(config_path)
+        except OSError:
+            return
+        with cls._lock:
+            state = cls._monitors.get(session_id)
+            if not state or mtime <= state.get("last_config_mtime", 0):
+                return
+            state["last_config_mtime"] = mtime
+        team_data = cls._parse_team_config(config_path)
+        if team_data is not None:
+            cls._update_members(session_id, team_data)
+            ProjectSessionManager._broadcast(
+                session_id, "team_update", {"type": "config", "data": team_data}
+            )
+
+    @classmethod
+    def _broadcast_task_if_newer(cls, session_id: str, fpath: str, fname: str) -> None:
+        """Mtime-gated task broadcast shared by watchdog + polling loop (06 M4)."""
+        from .project_session_manager import ProjectSessionManager
+
+        try:
+            mtime = os.path.getmtime(fpath)
+        except OSError:
+            return
+        with cls._lock:
+            state = cls._monitors.get(session_id)
+            if not state:
+                return
+            known = state.get("known_task_files", {})
+            if mtime <= known.get(fname, 0):
+                return
+            known[fname] = mtime
+        task_data = cls._parse_task(fpath)
+        if task_data is not None:
+            cls._update_task(session_id, task_data)
+            ProjectSessionManager._broadcast(
+                session_id, "team_update", {"type": "task", "data": task_data}
+            )
 
     @classmethod
     def _polling_loop(
@@ -163,64 +203,33 @@ class TeamMonitorService:
         Checks team config and task files every 5 seconds. Exits when
         state["active"] is False.
         """
-        from .project_session_manager import ProjectSessionManager
+        with cls._lock:
+            s0 = cls._monitors.get(session_id)
+            stop_event = s0["stop_event"] if s0 else None
+        if stop_event is None:
+            return
 
         while True:
-            time.sleep(5)
-
+            # Interruptible wait so stop_monitoring takes effect immediately
+            # instead of after the full 5s (06 M4).
+            if stop_event.wait(5):
+                return
             with cls._lock:
                 state = cls._monitors.get(session_id)
                 if not state or not state["active"]:
                     return
 
-            # Check team config
-            config_path = os.path.join(teams_dir, "config.json")
-            try:
-                if os.path.exists(config_path):
-                    mtime = os.path.getmtime(config_path)
-                    with cls._lock:
-                        state = cls._monitors.get(session_id)
-                        if state and mtime > state.get("last_config_mtime", 0):
-                            state["last_config_mtime"] = mtime
-                            team_data = cls._parse_team_config(config_path)
-                            if team_data is not None:
-                                cls._update_members(session_id, team_data)
-                                ProjectSessionManager._broadcast(
-                                    session_id,
-                                    "team_update",
-                                    {"type": "config", "data": team_data},
-                                )
-            except Exception:
-                pass  # Intentionally silenced: failure is non-critical
-
-            # Check task files
+            # Both checks go through the shared mtime-gated helpers, which also
+            # serve the watchdog handler — so a change is broadcast once total.
+            cls._broadcast_config_if_newer(session_id, os.path.join(teams_dir, "config.json"))
             try:
                 if os.path.isdir(tasks_dir):
                     for fname in os.listdir(tasks_dir):
                         fpath = os.path.join(tasks_dir, fname)
-                        if not os.path.isfile(fpath):
-                            continue
-                        try:
-                            mtime = os.path.getmtime(fpath)
-                            with cls._lock:
-                                state = cls._monitors.get(session_id)
-                                if not state:
-                                    return
-                                known = state.get("known_task_files", {})
-                                if mtime > known.get(fname, 0):
-                                    known[fname] = mtime
-                                    task_data = cls._parse_task(fpath)
-                                    if task_data is not None:
-                                        cls._update_task(session_id, task_data)
-                                        ProjectSessionManager._broadcast(
-                                            session_id,
-                                            "team_update",
-                                            {"type": "task", "data": task_data},
-                                        )
-                        except Exception:
-                            pass  # Intentionally silenced: failure is non-critical
-            except Exception:
-                pass  # Intentionally silenced: failure is non-critical
+                        if os.path.isfile(fpath):
+                            cls._broadcast_task_if_newer(session_id, fpath, fname)
+            except OSError as exc:
+                logger.debug("team_monitor poll: tasks dir scan failed: %s", exc, exc_info=True)
 
     @classmethod
     def stop_monitoring(cls, session_id: str) -> None:
@@ -234,6 +243,10 @@ class TeamMonitorService:
             if not state:
                 return
             state["active"] = False
+        # Wake the poll loop immediately (06 M4).
+        ev = state.get("stop_event")
+        if ev is not None:
+            ev.set()
 
         # Stop observer outside lock
         observer = state.get("observer")

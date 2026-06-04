@@ -19,6 +19,7 @@ from litestar.params import Parameter
 
 from app.db import integrations as db_integrations
 from app.models.common import PaginationQuery
+
 # AuditLogService → activity-event log (who did what; /admin/audit-events).
 # AuditService    → security-scan findings (bot-security results; /admin/audit-history).
 # Two services, two domains — see each module's docstring for the boundary.
@@ -40,8 +41,38 @@ from app.database import (
 from app.database import (
     create_marketplace as db_create_marketplace,
 )
+from app_litestar.route_helpers import MAX_LIST_LIMIT, clamp_limit
 
 logger = logging.getLogger(__name__)
+
+# 07.H3 — explicit field allowlists so handlers never forward an arbitrary
+# client dict to the service writers (mass-assignment guard).
+_PR_REVIEW_CREATE_FIELDS = (
+    "project_name",
+    "pr_number",
+    "pr_url",
+    "pr_title",
+    "github_repo_url",
+    "pr_author",
+)
+_PR_REVIEW_UPDATE_FIELDS = (
+    "pr_status",
+    "review_status",
+    "review_comment",
+    "fixes_applied",
+    "fix_comment",
+)
+_AUDIT_CREATE_FIELDS = (
+    "project_path",
+    "project_name",
+    "audit_date",
+    "audit_week",
+    "group_id",
+    "trigger_id",
+    "trigger_name",
+    "trigger_content",
+    "findings",
+)
 
 
 def _result_or_raise(payload: tuple[dict, int]) -> Any:
@@ -60,8 +91,12 @@ def _result_or_raise(payload: tuple[dict, int]) -> Any:
 
 
 @get("/", sync_to_thread=False)
-def list_marketplaces() -> dict[str, Any]:
-    return {"marketplaces": get_all_marketplaces()}
+def list_marketplaces(limit: Optional[int] = None, offset: int = 0) -> dict[str, Any]:
+    # 07.M2 — get_all_marketplaces has no limit param; slice at the route layer.
+    items = get_all_marketplaces()
+    capped = clamp_limit(limit, default=MAX_LIST_LIMIT)
+    start = max(offset, 0)
+    return {"marketplaces": items[start : start + capped]}
 
 
 @get("/search", sync_to_thread=False)
@@ -244,8 +279,14 @@ def create_integration(data: dict) -> Any:
 def list_integrations(
     type: Optional[str] = None,
     trigger_id: Optional[str] = None,
+    limit: Optional[int] = None,
+    offset: int = 0,
 ) -> list[dict]:
-    return db_integrations.list_integrations(integration_type=type, trigger_id=trigger_id)
+    items = db_integrations.list_integrations(integration_type=type, trigger_id=trigger_id)
+    # 07.M2 — list_integrations has no limit param; slice at the route layer.
+    capped = clamp_limit(limit, default=MAX_LIST_LIMIT)
+    start = max(offset, 0)
+    return items[start : start + capped]
 
 
 @get("/integrations/{integration_id:str}", sync_to_thread=False)
@@ -408,7 +449,9 @@ def audit_detail(audit_id: str) -> Any:
 def add_audit(data: dict) -> Any:
     if not data:
         raise ClientException(detail="JSON body required")
-    return _result_or_raise(AuditService.add_audit(data))
+    # 07.H3 — forward only allowlisted fields to the writer.
+    payload = {k: data[k] for k in _AUDIT_CREATE_FIELDS if k in data}
+    return _result_or_raise(AuditService.add_audit(payload))
 
 
 @get("/reports/{audit_week:str}", sync_to_thread=False)
@@ -514,14 +557,18 @@ def get_pr_review(review_id: int) -> Any:
 def create_pr_review(data: dict) -> Any:
     if not data:
         raise ClientException(detail="JSON body required")
-    return _result_or_raise(PrReviewService.create_review(data))
+    # 07.H3 — forward only allowlisted fields to the writer.
+    payload = {k: data[k] for k in _PR_REVIEW_CREATE_FIELDS if k in data}
+    return _result_or_raise(PrReviewService.create_review(payload))
 
 
 @put("/{review_id:int}", sync_to_thread=False)
 def update_pr_review(review_id: int, data: dict) -> Any:
     if not data:
         raise ClientException(detail="JSON body required")
-    return _result_or_raise(PrReviewService.update_review(review_id, data))
+    # 07.H3 — forward only allowlisted fields to the writer.
+    payload = {k: data[k] for k in _PR_REVIEW_UPDATE_FIELDS if k in data}
+    return _result_or_raise(PrReviewService.update_review(review_id, payload))
 
 
 @delete("/{review_id:int}", status_code=200, sync_to_thread=False)

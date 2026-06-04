@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import shlex
+import signal
 import subprocess
 import tempfile
 import threading
@@ -16,6 +17,39 @@ from ..models.workflow import WorkflowMessage
 from .workflow_expression_evaluator import evaluate_condition
 
 logger = logging.getLogger(__name__)
+
+
+def _run_in_process_group(args: list, *, timeout: float, cwd: str = None):
+    """Run a subprocess in its own process group; on timeout, kill the WHOLE
+    group so command/script tool grandchildren don't outlive the node (06 L3).
+
+    Returns a CompletedProcess-like object (returncode/stdout/stderr str).
+    Raises subprocess.TimeoutExpired on timeout (after killing the group).
+    """
+    proc = subprocess.Popen(
+        args,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=cwd,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, OSError):
+            try:
+                proc.kill()
+            except OSError:
+                pass
+        try:
+            proc.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+        raise
+    return subprocess.CompletedProcess(args, proc.returncode, stdout, stderr)
 
 
 class NodeExecutor:
@@ -154,14 +188,7 @@ class NodeExecutor:
         cwd = node_config.get("cwd")
 
         try:
-            result = subprocess.run(
-                shlex.split(command),
-                shell=False,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                cwd=cwd,
-            )
+            result = _run_in_process_group(shlex.split(command), timeout=timeout, cwd=cwd)
             stdout = result.stdout[:10000] if result.stdout else ""
             stderr = result.stderr[:10000] if result.stderr else ""
 
@@ -309,12 +336,7 @@ class NodeExecutor:
             tmp_file.flush()
             tmp_file.close()
 
-            result = subprocess.run(
-                [interpreter, tmp_file.name],
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-            )
+            result = _run_in_process_group([interpreter, tmp_file.name], timeout=timeout)
             stdout = result.stdout[:10000] if result.stdout else ""
             stderr = result.stderr[:10000] if result.stderr else ""
 

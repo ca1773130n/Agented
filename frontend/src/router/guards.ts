@@ -30,7 +30,10 @@ function makeEntityValidator(fetchFn: (id: string) => Promise<unknown>): (id: st
       await fetchFn(id);
       return true;
     } catch (err) {
-      console.warn(`[Router Guard] Entity validation failed for id="${id}":`, err);
+      // [08.L1] Diagnostic only — gate behind DEV so prod doesn't log raw errors.
+      if (import.meta.env.DEV) {
+        console.warn(`[Router Guard] Entity validation failed for id="${id}":`, err);
+      }
       return false;
     }
   };
@@ -90,11 +93,23 @@ export function resetAuthGuard(): void {
 /**
  * Register global navigation guards on the router.
  *
+ * [08.M4] This guard is UX-only, NOT a security boundary. The server enforces
+ * authentication and authorization on every API call; a client-side router
+ * guard can always be bypassed (devtools, direct fetch) and exists purely to
+ * route the operator to a sensible page (login / not-found) before the
+ * components mount. Accordingly:
+ *   - Entity-existence validation fails OPEN on network errors (the component
+ *     will surface the real error) — a missing entity is a UX 404, not an
+ *     authz decision.
+ *   - The auth gate fails toward the login path: if we cannot positively
+ *     confirm a usable credential for a genuinely-protected route, we send the
+ *     user to login rather than letting them through.
+ *
  * The beforeEach guard:
  * 1. Sets document.title based on route meta
  * 2. Validates entity IDs for routes with meta.requiresEntity
  * 3. Redirects to not-found for invalid/missing entity IDs
- * 4. Fails open on network errors (allows navigation)
+ * 4. Fails open on entity network errors; fails toward login on auth-gate misses
  */
 export function registerGuards(router: Router): void {
   router.beforeEach(async (to) => {
@@ -123,12 +138,15 @@ export function registerGuards(router: Router): void {
         return { name: 'welcome' };
       }
 
-      // Track B (wave 35): when no API key is stored, require a session.
-      // The legacy api-key-only path stays valid as long as the key is set.
-      const { getApiKey, getSessionToken } = await import('../services/api');
-      const hasApiKey = !!getApiKey();
-      const hasSession = !!getSessionToken();
-      if (!hasApiKey && !hasSession) {
+      // A usable credential is any of: a stored API key, a legacy localStorage
+      // session token, OR a cookie session. The session cookie is HttpOnly (not
+      // readable here), so the readable CSRF cookie — set alongside it on login
+      // and persisted across reloads — is the client-visible signal of a cookie
+      // session. Without this, cookie-auth users (no localStorage token) are
+      // bounced back to login after a successful login.
+      const { getApiKey, getSessionToken, getCsrfToken } = await import('../services/api');
+      const hasCredential = !!getApiKey() || !!getSessionToken() || !!getCsrfToken();
+      if (!hasCredential) {
         return { name: 'login', query: { next: to.fullPath } };
       }
     }
@@ -166,8 +184,11 @@ export function registerGuards(router: Router): void {
       }
       validatedCache.set(cacheKey, Date.now());
     } catch (err) {
-      // Fail open on network errors -- let the component handle it
-      console.warn(`[Router Guard] Network error validating ${entityParam}="${entityId}", failing open:`, err);
+      // Fail open on network errors -- let the component handle it ([08.M4]).
+      // [08.L1] Diagnostic only — gate behind DEV so prod doesn't log raw errors.
+      if (import.meta.env.DEV) {
+        console.warn(`[Router Guard] Network error validating ${entityParam}="${entityId}", failing open:`, err);
+      }
     }
   });
 }

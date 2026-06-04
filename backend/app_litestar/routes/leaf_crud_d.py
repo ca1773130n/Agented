@@ -48,9 +48,13 @@ from app.db.settings import get_setting, set_setting
 from app.db.triggers import get_pr_reviews_for_trigger
 from app.db.viewer_comments import delete_comment as db_delete_comment
 from app.db.viewer_comments import get_comment
-from app_litestar.route_helpers import clamp_limit
+from app_litestar.route_helpers import MAX_LIST_LIMIT, clamp_limit
 from app.services.campaign_service import get_campaign_results, start_campaign
 from app.services.collaborative_viewer_service import CollaborativeViewerService
+from app_litestar.auth import Caller
+
+# 07.M4 — bound the campaign name length.
+_NAME_MAX_LEN = 255
 
 
 # ===========================================================================
@@ -172,29 +176,37 @@ knowledge_graph_router = Router(
 # ===========================================================================
 
 
+def _viewer_id_from_caller(caller: Caller, data: dict) -> str:
+    """07.M1 — derive the viewer id from the authenticated caller, never from
+    the request body (impersonation guard). Falls back to a body-supplied id
+    only in bootstrap mode (no authenticated user)."""
+    if caller.user_id:
+        return caller.user_id
+    body_id = (data or {}).get("viewer_id")
+    if not body_id:
+        raise ClientException(detail="viewer_id is required")
+    return body_id
+
+
 @post("/executions/{execution_id:str}/viewers/join", sync_to_thread=False)
-def viewer_join(execution_id: str, data: dict) -> dict[str, Any]:
-    viewer_id = (data or {}).get("viewer_id")
+def viewer_join(execution_id: str, data: dict, caller: Caller) -> dict[str, Any]:
+    viewer_id = _viewer_id_from_caller(caller, data)
     name = (data or {}).get("name")
-    if not viewer_id or not name:
-        raise ClientException(detail="viewer_id and name are required")
+    if not name:
+        raise ClientException(detail="name is required")
     return {"viewers": CollaborativeViewerService.join(execution_id, viewer_id, name)}
 
 
 @post("/executions/{execution_id:str}/viewers/leave", sync_to_thread=False)
-def viewer_leave(execution_id: str, data: dict) -> dict[str, Any]:
-    viewer_id = (data or {}).get("viewer_id")
-    if not viewer_id:
-        raise ClientException(detail="viewer_id is required")
+def viewer_leave(execution_id: str, data: dict, caller: Caller) -> dict[str, Any]:
+    viewer_id = _viewer_id_from_caller(caller, data)
     CollaborativeViewerService.leave(execution_id, viewer_id)
     return {"status": "left"}
 
 
 @post("/executions/{execution_id:str}/viewers/heartbeat", sync_to_thread=False)
-def viewer_heartbeat(execution_id: str, data: dict) -> dict[str, Any]:
-    viewer_id = (data or {}).get("viewer_id")
-    if not viewer_id:
-        raise ClientException(detail="viewer_id is required")
+def viewer_heartbeat(execution_id: str, data: dict, caller: Caller) -> dict[str, Any]:
+    viewer_id = _viewer_id_from_caller(caller, data)
     CollaborativeViewerService.heartbeat(execution_id, viewer_id)
     return {"status": "ok"}
 
@@ -205,16 +217,16 @@ def list_viewers(execution_id: str) -> dict[str, Any]:
 
 
 @post("/executions/{execution_id:str}/comments", status_code=201, sync_to_thread=False)
-def post_inline_comment(execution_id: str, data: dict) -> Any:
+def post_inline_comment(execution_id: str, data: dict, caller: Caller) -> Any:
     body = data or {}
-    viewer_id = body.get("viewer_id")
-    viewer_name = body.get("viewer_name")
+    # 07.M1 — author the comment as the authenticated caller, not body-supplied
+    # viewer_id (impersonation guard). viewer_name remains a display label.
+    viewer_id = _viewer_id_from_caller(caller, body)
+    viewer_name = body.get("viewer_name") or viewer_id
     line_number = body.get("line_number")
     content = body.get("content")
-    if not all([viewer_id, viewer_name, content]) or line_number is None:
-        raise ClientException(
-            detail="viewer_id, viewer_name, line_number, and content are required"
-        )
+    if not content or line_number is None:
+        raise ClientException(detail="line_number and content are required")
     try:
         return CollaborativeViewerService.post_comment(
             execution_id=execution_id,
@@ -268,6 +280,8 @@ def create_campaign(data: dict) -> dict[str, Any]:
     repo_urls = data.get("repo_urls", [])
     if not name or not trigger_id:
         raise ClientException(detail="name and trigger_id are required")
+    if len(name) > _NAME_MAX_LEN:  # 07.M4 — bound name length
+        raise ClientException(detail=f"name must be at most {_NAME_MAX_LEN} characters")
     campaign_id = start_campaign(name=name, trigger_id=trigger_id, repo_urls=repo_urls)
     if not campaign_id:
         raise HTTPException(status_code=500, detail="Failed to create campaign")
@@ -278,9 +292,15 @@ def create_campaign(data: dict) -> dict[str, Any]:
 def list_all_campaigns(
     trigger_id: Optional[str] = None,
     status: Optional[str] = None,
+    limit: Optional[int] = None,
+    offset: int = 0,
 ) -> dict[str, Any]:
     items = list_campaigns(trigger_id=trigger_id, status=status)
-    return {"campaigns": items, "total": len(items)}
+    total = len(items)
+    # 07.M2 — list_campaigns has no limit param; slice at the route layer.
+    capped = clamp_limit(limit, default=MAX_LIST_LIMIT)
+    start = max(offset, 0)
+    return {"campaigns": items[start : start + capped], "total": total}
 
 
 @get("/campaigns/{campaign_id:str}", sync_to_thread=False)
@@ -334,9 +354,13 @@ _VALID_TAG_COLORS = {"blue", "green", "amber", "red", "purple"}
 
 
 @get("/execution-tags", sync_to_thread=False)
-def list_execution_tags() -> dict[str, Any]:
+def list_execution_tags(limit: Optional[int] = None, offset: int = 0) -> dict[str, Any]:
     tags = list_tags()
-    return {"tags": tags, "total": len(tags)}
+    total = len(tags)
+    # 07.M2 — list_tags has no limit param; slice at the route layer.
+    capped = clamp_limit(limit, default=MAX_LIST_LIMIT)
+    start = max(offset, 0)
+    return {"tags": tags[start : start + capped], "total": total}
 
 
 @post("/execution-tags", status_code=201, sync_to_thread=False)
@@ -441,7 +465,12 @@ def create_pr_rule(data: dict) -> dict[str, Any]:
     pattern = (body.get("pattern") or "").strip()
     team = (body.get("team") or "").strip()
     reviewers = body.get("reviewers", [])
-    priority = int(body.get("priority", 0))
+    # 07.L4 — clamp priority to a sane non-negative range (avoid overflow / abuse).
+    try:
+        priority = int(body.get("priority", 0))
+    except (TypeError, ValueError):
+        priority = 0
+    priority = max(0, min(priority, 1000))
     if not pattern or not team:
         raise ClientException(detail="pattern and team are required")
     if isinstance(reviewers, str):

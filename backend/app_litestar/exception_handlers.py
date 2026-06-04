@@ -72,19 +72,30 @@ def permission_denied_handler(_: Request, exc: PermissionDeniedException) -> Res
     return _json_response("FORBIDDEN", exc.detail or "Permission denied", HTTPStatus.FORBIDDEN)
 
 
+_SPA_INDEX_BYTES: bytes | None = None
+
+
+def _spa_index_bytes() -> bytes | None:
+    """Read + cache the SPA index once instead of re-reading the file on every
+    non-API 404 (03-core L4). Logs (not swallows) a genuine read error."""
+    global _SPA_INDEX_BYTES
+    if _SPA_INDEX_BYTES is None:
+        try:
+            _SPA_INDEX_BYTES = _SPA_INDEX.read_bytes()
+        except OSError as exc:
+            logger.warning("SPA index unreadable (%s): %s", _SPA_INDEX, exc)
+            return None
+    return _SPA_INDEX_BYTES
+
+
 def not_found_handler(request: Request, exc: NotFoundException) -> Response:
     """Serve SPA index.html for non-API 404s; JSON for API 404s."""
     path = request.url.path
     is_api = any(path == p.rstrip("/") or path.startswith(p) for p in _API_PREFIXES)
-    if not is_api and _SPA_INDEX.exists():
-        try:
-            return Response(
-                content=_SPA_INDEX.read_bytes(),
-                status_code=HTTPStatus.OK,
-                media_type="text/html",
-            )
-        except OSError:
-            pass
+    if not is_api:
+        body = _spa_index_bytes()
+        if body is not None:
+            return Response(content=body, status_code=HTTPStatus.OK, media_type="text/html")
     return _json_response("NOT_FOUND", exc.detail or "Not found", HTTPStatus.NOT_FOUND)
 
 
@@ -151,8 +162,14 @@ def session_persist_error_handler(_: Request, exc: Exception) -> Response:
     when a parent FK target was deleted mid-spawn, instead of a
     generic ``500 INTERNAL_SERVER_ERROR``.
     """
-    detail = str(exc) or "Session persist failed"
-    return _json_response("SESSION_PERSIST_RACE", detail, HTTPStatus.CONFLICT)
+    # Don't echo the raw exception text to the client (it may carry internal
+    # FK/SQL detail) — log it server-side, return a controlled message (03 M1).
+    logger.warning("Session persist race: %s", exc, exc_info=True)
+    return _json_response(
+        "SESSION_PERSIST_RACE",
+        "The parent resource was modified during session creation; please retry.",
+        HTTPStatus.CONFLICT,
+    )
 
 
 def unhandled_handler(_: Request, exc: Exception) -> Response:

@@ -25,6 +25,19 @@ def _kill_switch_on() -> bool:
     return os.environ.get("AGENTED_AUTONOMY", "1") == "0"
 
 
+# [04.M1] Hook shell ``content`` and mcp_server ``command``/``args`` are
+# arbitrary executable surfaces — validate_patch only checks they're
+# present, not that they're safe. These kinds are excluded from autonomous
+# apply by default (the AutonomyPolicy default allowed_kinds is
+# ["rule", "memory"]); even if an operator widens allowed_kinds, autonomy
+# requires an explicit opt-in env flag before auto-applying executable kinds.
+_EXECUTABLE_KINDS = frozenset({"hook", "mcp_server"})
+
+
+def _executable_kinds_opt_in() -> bool:
+    return os.environ.get("AGENTED_AUTONOMY_ALLOW_EXECUTABLE_KINDS", "0") == "1"
+
+
 def autonomous_apply_eligible(
     round_row: dict,
     policy: AutonomyPolicy,
@@ -83,6 +96,19 @@ def autonomous_apply_eligible(
             name="allowed_kinds",
             passed=not bad_kinds,
             detail="" if not bad_kinds else f"disallowed: {bad_kinds}",
+        )
+    )
+    # [04.M1] Executable kinds (hook/mcp_server) require explicit opt-in for
+    # autonomous apply, independent of policy.allowed_kinds.
+    exec_kinds = [k for k in kinds if k in _EXECUTABLE_KINDS]
+    exec_ok = (not exec_kinds) or _executable_kinds_opt_in()
+    gates.append(
+        GateResult(
+            name="executable_kinds_opt_in",
+            passed=exec_ok,
+            detail=""
+            if exec_ok
+            else f"executable kinds {exec_kinds} need AGENTED_AUTONOMY_ALLOW_EXECUTABLE_KINDS=1",
         )
     )
     del_block = policy.block_deletes and has_delete
@@ -151,6 +177,16 @@ def process_project_autonomy(project_id: str) -> list[dict]:
             "score": float((rnd.get("eval_verdict") or {}).get("score", 0.0)),
         }
         if decision.eligible:
+            # [04.L1] Re-check the kill switch right before apply — the
+            # decision above may have been computed moments earlier; an
+            # operator flipping AGENTED_AUTONOMY=0 must take effect here.
+            if _kill_switch_on():
+                blocked = {**reason, "eligible": False, "reason": "kill_switch:AGENTED_AUTONOMY=0"}
+                evo_repo.mark_auto_apply_blocked(rnd["id"], blocked)
+                results.append(
+                    {"round_id": rnd["id"], "action": "blocked", "reason": "kill_switch"}
+                )
+                continue
             try:
                 apply_dry_run_round(rnd["id"], auto_applied=True, auto_apply_reason=reason)
                 results.append({"round_id": rnd["id"], "action": "auto_applied"})

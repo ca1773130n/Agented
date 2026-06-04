@@ -36,6 +36,7 @@ from app.services.backend_cli_service import BackendCLIService
 from app.services.backend_service import BackendService
 from app.services.execution_service import ExecutionService
 from app.services.github_service import GitHubService
+from app.services.audit_log_service import AuditLogService
 from app.services.skill_discovery_service import SkillDiscoveryService
 from app_litestar.auth_guards import requires_role
 from app_litestar.rate_limit_guard import requires_rate_limit
@@ -93,20 +94,6 @@ def resolve_issues(data: dict) -> dict[str, Any]:
     }
 
 
-@get("/discover-skills", sync_to_thread=False)
-def discover_skills(trigger_id: str = "", paths: str = "") -> dict[str, Any]:
-    scan_paths: list[str] = []
-    if trigger_id:
-        if not get_trigger(trigger_id):
-            raise NotFoundException(detail="Trigger not found")
-        scan_paths = get_paths_for_trigger(trigger_id)
-    elif paths:
-        scan_paths = [p.strip() for p in paths.split(",") if p.strip()]
-    if PROJECT_ROOT not in scan_paths:
-        scan_paths.append(PROJECT_ROOT)
-    return {"skills": SkillDiscoveryService.discover_cli_skills(scan_paths)}
-
-
 _ALLOWED_BASES = [Path.home(), Path("/tmp"), Path("/opt")]
 
 
@@ -118,7 +105,37 @@ def _is_path_allowed(resolved: Path) -> bool:
     )
 
 
-@get("/browse-directory", sync_to_thread=False)
+@get("/discover-skills", sync_to_thread=False)
+def discover_skills(trigger_id: str = "", paths: str = "") -> dict[str, Any]:
+    scan_paths: list[str] = []
+    if trigger_id:
+        if not get_trigger(trigger_id):
+            raise NotFoundException(detail="Trigger not found")
+        scan_paths = get_paths_for_trigger(trigger_id)
+    elif paths:
+        # 07.L3 — validate each client-supplied scan path through the same
+        # allowlist gate browse_directory uses; reject arbitrary host paths.
+        for raw in (p.strip() for p in paths.split(",") if p.strip()):
+            try:
+                resolved = Path(raw).expanduser().resolve()
+            except (OSError, ValueError) as e:
+                raise ClientException(detail="Invalid path") from e
+            if not _is_path_allowed(resolved):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Path must be under home directory, /tmp, or /opt",
+                )
+            scan_paths.append(str(resolved))
+    if PROJECT_ROOT not in scan_paths:
+        scan_paths.append(PROJECT_ROOT)
+    return {"skills": SkillDiscoveryService.discover_cli_skills(scan_paths)}
+
+
+@get(
+    "/browse-directory",
+    sync_to_thread=False,
+    guards=[requires_role("admin")],  # 07.L2 — filesystem browse is admin-only
+)
 def browse_directory(path: Optional[str] = None) -> dict[str, Any]:
     raw_path = path or str(Path.home())
     try:
@@ -132,6 +149,14 @@ def browse_directory(path: Optional[str] = None) -> dict[str, Any]:
         )
     if not resolved.is_dir():
         raise NotFoundException(detail="Directory does not exist")
+
+    # 07.L2 — audit filesystem browse access.
+    AuditLogService.log(
+        action="filesystem.browse",
+        entity_type="directory",
+        entity_id=str(resolved),
+        outcome="read",
+    )
 
     parent = resolved.parent
     parent_path = str(parent) if _is_path_allowed(parent) else None
@@ -156,7 +181,12 @@ def browse_directory(path: Optional[str] = None) -> dict[str, Any]:
     return {"current_path": str(resolved), "parent_path": parent_path, "entries": entries}
 
 
-@post("/create-directory", status_code=201, sync_to_thread=False)
+@post(
+    "/create-directory",
+    status_code=201,
+    sync_to_thread=False,
+    guards=[requires_role("admin")],  # 07.L2 — filesystem mkdir is admin-only
+)
 def create_directory(data: dict) -> dict[str, Any]:
     if not data or not data.get("path"):
         raise ClientException(detail="path is required in JSON body")
@@ -180,6 +210,13 @@ def create_directory(data: dict) -> dict[str, Any]:
         ) from e
     except OSError as exc:
         raise ClientException(detail=f"Cannot create directory: {exc}") from exc
+    # 07.L2 — audit filesystem mkdir.
+    AuditLogService.log(
+        action="filesystem.create_directory",
+        entity_type="directory",
+        entity_id=str(resolved),
+        outcome="created",
+    )
     return {"created": True, "path": str(resolved)}
 
 

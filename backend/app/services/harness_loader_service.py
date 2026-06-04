@@ -92,12 +92,17 @@ class HarnessLoaderService(LayerDetectionService):
                 "github_repo": github_repo,
             }, HTTPStatus.OK
 
-        except Exception as e:
-            return {
-                "exists": False,
-                "error": str(e),
-                "project_id": project_id,
-            }, HTTPStatus.OK
+        except Exception:
+            # [04.L2] A clone/IO failure is NOT the same as "the repo has no
+            # .claude/ directory". Surface a generic 500 instead of a 200
+            # exists:False, and do not leak the raw exception string to the
+            # client (it can carry tokens / internal paths). Details are logged.
+            logger.warning("check_harness_exists failed for project %s", project_id, exc_info=True)
+            return error_response(
+                "HARNESS_CHECK_FAILED",
+                "Failed to check harness existence",
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
         finally:
             if clone_path:
                 GitHubService.cleanup_clone(clone_path)
@@ -355,6 +360,10 @@ class HarnessLoaderService(LayerDetectionService):
                 event = "PreToolUse"
 
             try:
+                # [04.L3] UNTRUSTED CONTENT: ``body``/``content`` is shell that
+                # came verbatim from a cloned (possibly third-party) repo. It is
+                # stored as-is and must be treated as untrusted until an operator
+                # reviews it — do not execute loaded hook content unreviewed.
                 create_hook(
                     name=hook_name,
                     event=event,
@@ -388,6 +397,9 @@ class HarnessLoaderService(LayerDetectionService):
             command_name = frontmatter.get("name", item.replace(".md", ""))
 
             try:
+                # [04.L3] UNTRUSTED CONTENT: command ``body``/``content`` is
+                # imported verbatim from a cloned (possibly third-party) repo;
+                # treat as untrusted until an operator reviews it.
                 create_command(
                     name=command_name,
                     description=frontmatter.get("description"),
