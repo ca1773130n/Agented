@@ -541,4 +541,9 @@ def test_ouroboros_run_returns_409_when_persist_fails_on_race(client, isolated_d
     assert resp.status_code == 409, (
         f"persist-race must surface as 409, got {resp.status_code}: {resp.text}"
     )
-    assert "parent resource missing" in resp.text.lower()
+    # The route translates the raw SessionPersistError into a clean, machine-
+    # readable race response (it intentionally does NOT leak the internal
+    # "parent resource missing" detail to the API consumer).
+    body = resp.text.lower()
+    assert "session_persist_race" in body
+    assert "parent resource was modified" in body

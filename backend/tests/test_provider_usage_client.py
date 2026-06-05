@@ -615,6 +615,11 @@ class TestCheckCredentials:
         # No file, no keychain — must report missing + give the
         # operator a copy-pasteable ``CLAUDE_CONFIG_DIR=... claude``
         # command and the keychain entry that was checked.
+        # Isolate $HOME too (not just Path.home): the resolver expands the
+        # ``~/.claude-personal2`` config_path via ``os.path.expanduser``, which
+        # reads $HOME — without this the test reads the developer's real
+        # ~/.claude-personal2 creds and wrongly resolves to "ok".
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
         monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
         monkeypatch.setattr(
             "app.services.provider_usage_client.platform.system", lambda: "Linux"

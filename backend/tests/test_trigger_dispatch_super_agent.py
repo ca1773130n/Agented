@@ -62,7 +62,13 @@ class TestTriggerDispatchSuperAgent:
 
             assert result is True
             mock_sa_service.get_or_create_session.assert_called_once_with("sa-abc123")
-            mock_sa_service.send_message.assert_called_once_with("sess-001", "Process: hello world")
+            # Trigger payload is wrapped in <untrusted_user_input> delimiters
+            # before dispatch (prompt-injection defense) so the SA treats it as
+            # data, not instructions.
+            mock_sa_service.send_message.assert_called_once_with(
+                "sess-001",
+                "Process: <untrusted_user_input>\nhello world\n</untrusted_user_input>",
+            )
             mock_create_log.assert_called_once()
             kwargs = mock_create_log.call_args.kwargs
             assert kwargs["source_type"] == "super_agent"
