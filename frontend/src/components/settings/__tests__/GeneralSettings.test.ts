@@ -26,4 +26,12 @@ describe('GeneralSettings — restart-tour wiring (OB-35a)', () => {
     expect(source).toMatch(/class="[^"]*restart-tour-btn[^"]*"/)
     expect(source).toMatch(/@click="handleRestartTour"/)
   })
+
+  // Saving the workspace path completes the workspace tour step; it must
+  // auto-advance the tour instead of leaving it stuck (regression guard).
+  it('auto-advances the tour after saving the workspace during onboarding', () => {
+    const save = source.slice(source.indexOf('async function saveWorkspaceRoot'))
+    expect(save).toMatch(/currentStep\.value === 'workspace'/)
+    expect(save).toMatch(/tourMachine\.nextStep\(\)/)
+  })
 })
