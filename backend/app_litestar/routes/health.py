@@ -26,6 +26,7 @@ from app.db.rbac import (
     get_role_for_api_key,
     has_any_keys,
     invalidate_key_cache,
+    registration_open,
 )
 
 
@@ -187,6 +188,7 @@ def auth_status(request: Request) -> dict[str, bool]:
         "needs_setup": not auth_configured,
         "auth_required": auth_configured,
         "authenticated": _is_authenticated_request(request),
+        "signup_enabled": registration_open(),
     }
 
 

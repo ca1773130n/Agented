@@ -21,6 +21,7 @@ the product is the autonomous-agent workflow on top.
 | `AI_ACCOUNTS_ALLOW_NOAUTH` | sidecar | unset (refuse) | Set to `1` only to run the sidecar locally with no keyed identity (e.g. just after `just reset`). Otherwise it refuses to start — prevents a silent NoAuth fallback through Vite's `/api/v1` proxy. |
 | `VITE_HOST` | frontend dev | `127.0.0.1` | Bind interface for `vite dev`. Set `0.0.0.0` to demo from another device (also set `AI_ACCOUNTS_API_KEY` + `VITE_ALLOWED_HOSTS`). |
 | `VITE_ALLOWED_HOSTS` | frontend dev | unset (any host) | Comma-separated `Host` allowlist. Use with `VITE_HOST=0.0.0.0` for LAN access without permitting arbitrary hostnames. |
+| `AGENTED_DISABLE_SIGNUP` | backend | unset (open) | Set to `1` to close open self-registration (`POST /api/auth/signup` → 403). Open by default for single-operator onboarding (the **first** registrant becomes admin). **Set this once you've registered, and always before exposing the instance to an untrusted network** — otherwise an attacker could race to be the first signup and gain admin. Surfaced to the SPA via `signup_enabled` in `/health/auth-status`. |
 
 ## ai-accounts dev linking
 

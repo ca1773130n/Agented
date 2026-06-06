@@ -11,14 +11,18 @@ from __future__ import annotations
 from typing import Any
 
 from litestar import Request, Router, get, post
-from litestar.exceptions import ClientException, NotAuthorizedException
+from litestar.exceptions import (
+    ClientException,
+    NotAuthorizedException,
+    PermissionDeniedException,
+)
 from litestar.status_codes import HTTP_204_NO_CONTENT
 from msgspec import Struct
 
 import logging
 
 from app.db.password_resets import consume_token, request_reset
-from app.db.rbac import ensure_user_admin
+from app.db.rbac import ensure_user_admin, registration_open
 from app.db.sessions import create_session, revoke_session, revoke_user_sessions
 from app_litestar.rate_limit_guard import requires_rate_limit
 from app.db.users import (
@@ -101,6 +105,9 @@ def signup(data: SignupBody, request: Request) -> Any:
     Returns the same shape as /login so the frontend can use one
     success handler.
     """
+    if not registration_open():
+        raise PermissionDeniedException(detail="Registration is closed.")
+
     email = data.email.strip()
     if not email or "@" not in email:
         raise ClientException(detail="Invalid email")

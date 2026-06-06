@@ -15,6 +15,7 @@ from app.db.rbac import (
     ensure_user_admin,
     generate_api_key,
     get_highest_role_for_user,
+    registration_open,
     user_bound_admin_exists,
 )
 from app.db.users import create_user, set_password
@@ -125,3 +126,31 @@ class TestSignupGrantsFirstOperatorAdmin:
 
         assert get_highest_role_for_user(uid1) == "admin"
         assert get_highest_role_for_user(uid2) is None
+
+
+class TestRegistrationGate:
+    def test_open_by_default(self, isolated_db):
+        assert registration_open() is True
+        with _client(isolated_db) as ls:
+            r = ls.post(
+                "/api/auth/signup",
+                json={"email": "a@b.com", "password": "supersecret", "display_name": ""},
+            )
+            assert r.status_code == 201
+
+    def test_disable_flag_closes_signup(self, isolated_db, monkeypatch):
+        monkeypatch.setenv("AGENTED_DISABLE_SIGNUP", "1")
+        assert registration_open() is False
+        with _client(isolated_db) as ls:
+            r = ls.post(
+                "/api/auth/signup",
+                json={"email": "a@b.com", "password": "supersecret", "display_name": ""},
+            )
+            assert r.status_code == 403
+
+    def test_disable_flag_accepts_truthy_variants(self, isolated_db, monkeypatch):
+        for val in ("1", "true", "YES", "on"):
+            monkeypatch.setenv("AGENTED_DISABLE_SIGNUP", val)
+            assert registration_open() is False
+        monkeypatch.setenv("AGENTED_DISABLE_SIGNUP", "0")
+        assert registration_open() is True
