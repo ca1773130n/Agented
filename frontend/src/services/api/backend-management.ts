@@ -418,7 +418,18 @@ export async function listGroupedBackends(): Promise<{ backends: AIBackend[] }> 
  */
 export async function getGroupedBackend(legacyIdOrKind: string): Promise<AIBackendWithAccounts> {
   const kind = legacyIdToKind(legacyIdOrKind);
-  const { items } = await aiAccountsClient.listBackends();
+  let items: BackendDTO[] = [];
+  try {
+    ({ items } = await aiAccountsClient.listBackends());
+  } catch (err) {
+    // A known backend's card is built from LOCAL metadata; the sidecar only
+    // supplies its accounts. If the sidecar list fails (unreachable / not yet
+    // authed during onboarding), still render the card with no accounts so the
+    // operator can register their first one — instead of hard-erroring with
+    // "cannot find backend". Unknown kinds are a genuine not-found → rethrow.
+    if (!KNOWN_KINDS.includes(kind)) throw err;
+    console.warn(`[backends] sidecar listBackends failed; showing "${kind}" with no accounts`, err);
+  }
   const kindDtos = items.filter((dto) => dto.kind === kind);
   const detection = await tryDetect(kind, kindDtos);
   const base = buildGroupedBackend(kind, kindDtos, detection);
