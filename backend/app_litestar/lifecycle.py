@@ -56,10 +56,17 @@ def _init_database() -> None:
         seed_preset_mcp_servers,
     )
     from app.db.bundle_seeds import seed_bundled_teams_and_agents
+    from app.db.rbac import backfill_bootstrap_admin
     from app.services.instance_service import InstanceService
     from app.services.super_agent_session_service import SuperAgentSessionService
 
     init_db()
+    # Self-heal a locked-out install: if a human signed up before the
+    # first-operator-admin bootstrap existed (so no user holds admin), promote
+    # the earliest real login account. No-op once any user is admin.
+    promoted = backfill_bootstrap_admin()
+    if promoted:
+        _startup_warnings.append(f"bootstrap_admin_promoted:{promoted}")
     seed_predefined_triggers()
     seed_preset_mcp_servers()
     seed_bot_templates()
