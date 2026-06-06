@@ -151,7 +151,9 @@ class ModelDiscoveryService:
                 from ..db.connection import get_connection
                 with get_connection() as conn:
                     row = conn.execute(
-                        "SELECT api_key FROM user_roles WHERE role = 'admin' LIMIT 1"
+                        # Oldest admin key, deterministically (see sidecar sync).
+                        "SELECT api_key FROM user_roles WHERE role = 'admin' "
+                        "ORDER BY created_at ASC, id ASC LIMIT 1"
                     ).fetchone()
                 if row:
                     api_key = row["api_key"] if hasattr(row, "keys") else row[0]

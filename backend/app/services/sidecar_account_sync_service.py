@@ -53,7 +53,12 @@ def _resolve_admin_key() -> Optional[str]:
 
         with get_connection() as conn:
             row = conn.execute(
-                "SELECT api_key FROM user_roles WHERE role = 'admin' LIMIT 1"
+                # Deterministic: the OLDEST admin key (the original bootstrap the
+                # sidecar's accounts are scoped under). Without ORDER BY, a second
+                # admin row (e.g. from the first-operator backfill) could make this
+                # pick a different key and the sidecar would return 0 accounts.
+                "SELECT api_key FROM user_roles WHERE role = 'admin' "
+                "ORDER BY created_at ASC, id ASC LIMIT 1"
             ).fetchone()
         if row:
             return row["api_key"] if hasattr(row, "keys") else row[0]
