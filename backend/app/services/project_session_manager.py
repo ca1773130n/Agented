@@ -241,7 +241,9 @@ def _resolve_admin_api_key() -> Optional[str]:
     try:
         with get_connection() as conn:
             row = conn.execute(
-                "SELECT api_key FROM user_roles WHERE role='admin' LIMIT 1"
+                # Oldest admin key, deterministically (see sidecar sync).
+                "SELECT api_key FROM user_roles WHERE role='admin' "
+                "ORDER BY created_at ASC, id ASC LIMIT 1"
             ).fetchone()
         if row and row["api_key"]:
             return row["api_key"]
