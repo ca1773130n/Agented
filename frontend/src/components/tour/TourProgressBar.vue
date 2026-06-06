@@ -159,17 +159,19 @@ watch([() => props.skippable, () => props.stepTitle], () => {
 }
 
 .tour-dismiss-btn {
-  width: 28px;
-  height: 28px;
+  /* OB-32 replaced the glyph with the text label "Exit Tour", so this is a
+     text button (the old 28x28 icon box squashed the label into bare text). */
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
+  padding: 6px 12px;
   background: transparent;
-  border: 1px solid transparent;
+  border: 1px solid var(--border-default);
   border-radius: 6px;
   color: var(--text-tertiary);
   font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
   transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
   font-family: inherit;
