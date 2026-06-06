@@ -80,23 +80,26 @@ def ensure_user_admin(user_id: str) -> bool:
     if not user_id:
         return False
     with get_connection() as conn:
-        existing = conn.execute(
-            "SELECT 1 FROM user_roles "
-            "WHERE role = 'admin' AND user_id IS NOT NULL AND user_id != '' "
-            "LIMIT 1"
-        ).fetchone()
-        if existing:
-            return False
         role_id = _get_unique_role_id(conn)
-        conn.execute(
+        # Single atomic statement: the row is inserted only when no user-bound
+        # admin exists, so two concurrent first-signups can't both win the grant
+        # (SQLite serializes the write; the loser's NOT EXISTS sees the winner's
+        # committed row). rowcount tells us whether we were the one to grant it.
+        cur = conn.execute(
             "INSERT INTO user_roles (id, api_key, label, role, user_id) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (role_id, generate_api_key(), "bootstrap admin", "admin", user_id),
+            "SELECT ?, ?, ?, 'admin', ? "
+            "WHERE NOT EXISTS ("
+            "  SELECT 1 FROM user_roles "
+            "  WHERE role = 'admin' AND user_id IS NOT NULL AND user_id != ''"
+            ")",
+            (role_id, generate_api_key(), "bootstrap admin", user_id),
         )
         conn.commit()
-    invalidate_key_cache()
-    logger.info("Bootstrap: granted admin to first operator user_id=%s", user_id)
-    return True
+        granted = cur.rowcount > 0
+    if granted:
+        invalidate_key_cache()
+        logger.info("Bootstrap: granted admin to first operator user_id=%s", user_id)
+    return granted
 
 
 def backfill_bootstrap_admin() -> Optional[str]:
