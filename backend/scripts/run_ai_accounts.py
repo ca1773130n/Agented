@@ -194,6 +194,12 @@ class LazyFlaskKeyAuth:
     # Picked 5s — short enough that key rotation is felt in <1 redirect,
     # long enough to absorb hot bursts (one fetch per 5s under steady load).
     _CACHE_TTL_SECONDS = 5.0
+    # On a cache MISS (presented key not in the cached set) we force one fresh
+    # DB read so a just-minted key — e.g. the admin key created on the welcome
+    # page — is honored on the very next request instead of after up to
+    # _CACHE_TTL_SECONDS. Throttled to at most one forced read per this many
+    # seconds so a flood of bogus keys can't hammer SQLite.
+    _MISS_REFRESH_MIN_INTERVAL = 1.0
 
     def __init__(self, db_path: str) -> None:
         self._db_path = db_path
@@ -204,6 +210,20 @@ class LazyFlaskKeyAuth:
         )
         self._cache: set[str] | None = None
         self._cache_at: float = 0.0
+        self._last_miss_refresh: float = 0.0
+
+    def _force_refresh_if_due(self) -> bool:
+        """Re-read keys from the DB outside the TTL, throttled. Returns True if
+        a refresh happened (so the caller should re-check the presented key)."""
+        import time
+
+        now = time.monotonic()
+        if (now - self._last_miss_refresh) < self._MISS_REFRESH_MIN_INTERVAL:
+            return False
+        self._last_miss_refresh = now
+        self._cache = self._read_keys_from_db()
+        self._cache_at = now
+        return True
 
     def _read_keys_from_db(self) -> set[str]:
         if not os.path.exists(self._db_path):
@@ -249,6 +269,13 @@ class LazyFlaskKeyAuth:
         for stored in self._allowed_keys():
             if hmac.compare_digest(presented, stored):
                 return self._principal
+        # Cache miss — the key may have been minted within the TTL window (the
+        # admin key the welcome page just created). Force one throttled DB read
+        # and re-check before rejecting, so onboarding isn't blocked for ~5s.
+        if self._force_refresh_if_due():
+            for stored in self._allowed_keys():
+                if hmac.compare_digest(presented, stored):
+                    return self._principal
         return None
 
 
