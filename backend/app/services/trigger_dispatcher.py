@@ -29,9 +29,11 @@ _MAX_UNTRUSTED_LEN = 50000
 
 # A crafted payload that itself contains the fence delimiter could otherwise
 # close the fence early and smuggle instructions past it (fence breakout).
-# Neutralize any opening/closing fence tag in the body before wrapping —
-# case-insensitive and tolerant of internal whitespace.
-_FENCE_TAG_RE = re.compile(r"<\s*/?\s*untrusted_user_input\s*>", re.IGNORECASE)
+# Neutralize any opening/closing fence tag in the body before wrapping. The
+# ``[^>]*`` tail also catches tags an LLM would still parse as a close despite
+# attributes or a self-close — e.g. ``</untrusted_user_input foo="bar">`` or
+# ``<untrusted_user_input/>`` — case-insensitive and whitespace-tolerant.
+_FENCE_TAG_RE = re.compile(r"<\s*/?\s*untrusted_user_input[^>]*>", re.IGNORECASE)
 
 
 def _fence_untrusted(text: str) -> str:
