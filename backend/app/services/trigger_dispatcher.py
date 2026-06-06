@@ -8,6 +8,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 from typing import Optional
 
 from app.config import WEBHOOK_DEDUP_WINDOW
@@ -26,9 +27,18 @@ logger = logging.getLogger(__name__)
 # instructions, and bound its length (05 M1).
 _MAX_UNTRUSTED_LEN = 50000
 
+# A crafted payload that itself contains the fence delimiter could otherwise
+# close the fence early and smuggle instructions past it (fence breakout).
+# Neutralize any opening/closing fence tag in the body before wrapping. The
+# ``[^>]*`` tail also catches tags an LLM would still parse as a close despite
+# attributes or a self-close — e.g. ``</untrusted_user_input foo="bar">`` or
+# ``<untrusted_user_input/>`` — case-insensitive and whitespace-tolerant.
+_FENCE_TAG_RE = re.compile(r"<\s*/?\s*untrusted_user_input[^>]*>", re.IGNORECASE)
+
 
 def _fence_untrusted(text: str) -> str:
     body = (text or "")[:_MAX_UNTRUSTED_LEN]
+    body = _FENCE_TAG_RE.sub("[filtered-fence-tag]", body)
     return f"<untrusted_user_input>\n{body}\n</untrusted_user_input>"
 
 
