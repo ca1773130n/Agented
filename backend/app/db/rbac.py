@@ -5,6 +5,7 @@ Manages user_roles table: maps API keys to roles (viewer, operator, editor, admi
 
 import hmac
 import logging
+import os
 import secrets
 import threading
 import time
@@ -68,6 +69,22 @@ def user_bound_admin_exists() -> bool:
             "LIMIT 1"
         ).fetchone()
     return row is not None
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def registration_open() -> bool:
+    """Whether open self-registration (`POST /api/auth/signup`) is permitted.
+
+    Open by default (preserving existing single-operator onboarding). Set
+    ``AGENTED_DISABLE_SIGNUP=1`` to close it — recommended once the operator has
+    registered, and required if the instance is reachable from an untrusted
+    network (the first signup becomes admin, so open signup on an exposed,
+    not-yet-bootstrapped instance is an escalation vector).
+    """
+    return not _env_flag("AGENTED_DISABLE_SIGNUP")
 
 
 def ensure_user_admin(user_id: str) -> bool:
