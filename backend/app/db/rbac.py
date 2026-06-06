@@ -52,6 +52,92 @@ def invalidate_key_cache():
         _has_any_keys_cache.clear()
 
 
+def user_bound_admin_exists() -> bool:
+    """True if any real user (non-empty user_id) holds the admin role.
+
+    The bootstrap API-key admin seeded with an empty/NULL user_id does NOT
+    count: it can't be resolved from a session login, so a console operator
+    authenticating via the SPA would still be locked out of /admin/* despite
+    that row existing. "Is the install bootstrapped for human admins?" must
+    therefore ignore orphan API-key admin rows.
+    """
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM user_roles "
+            "WHERE role = 'admin' AND user_id IS NOT NULL AND user_id != '' "
+            "LIMIT 1"
+        ).fetchone()
+    return row is not None
+
+
+def ensure_user_admin(user_id: str) -> bool:
+    """Grant ``user_id`` the admin role iff no user currently holds admin
+    (first-operator bootstrap). Returns True when a grant was made.
+
+    The check + insert run in a single connection so concurrent first-time
+    signups converge on a single admin rather than silently multiplying.
+    """
+    if not user_id:
+        return False
+    with get_connection() as conn:
+        role_id = _get_unique_role_id(conn)
+        # Single atomic statement: the row is inserted only when no user-bound
+        # admin exists, so two concurrent first-signups can't both win the grant
+        # (SQLite serializes the write; the loser's NOT EXISTS sees the winner's
+        # committed row). rowcount tells us whether we were the one to grant it.
+        cur = conn.execute(
+            "INSERT INTO user_roles (id, api_key, label, role, user_id) "
+            "SELECT ?, ?, ?, 'admin', ? "
+            "WHERE NOT EXISTS ("
+            "  SELECT 1 FROM user_roles "
+            "  WHERE role = 'admin' AND user_id IS NOT NULL AND user_id != ''"
+            ")",
+            (role_id, generate_api_key(), "bootstrap admin", user_id),
+        )
+        conn.commit()
+        granted = cur.rowcount > 0
+    if granted:
+        invalidate_key_cache()
+        logger.info("Bootstrap: granted admin to first operator user_id=%s", user_id)
+    return granted
+
+
+def backfill_bootstrap_admin() -> Optional[str]:
+    """Self-heal a locked-out install: if no user holds admin, promote the
+    earliest real login account (a user with a password) to admin. Skips
+    synthetic/passwordless accounts like the migration's ``legacy@local``.
+
+    Returns the promoted user_id, or None if no action was taken (an admin
+    user already exists, or there is no real login account to promote).
+    Idempotent — safe to call on every startup.
+    """
+    with get_connection() as conn:
+        admin = conn.execute(
+            "SELECT 1 FROM user_roles "
+            "WHERE role = 'admin' AND user_id IS NOT NULL AND user_id != '' "
+            "LIMIT 1"
+        ).fetchone()
+        if admin:
+            return None
+        row = conn.execute(
+            "SELECT id FROM users "
+            "WHERE password_hash IS NOT NULL AND length(password_hash) > 0 "
+            "  AND is_active = 1 "
+            "ORDER BY created_at ASC, id ASC LIMIT 1"
+        ).fetchone()
+    if not row:
+        return None
+    user_id = row[0]
+    if ensure_user_admin(user_id):
+        logger.warning(
+            "Bootstrap recovery: no user held admin; promoted earliest login "
+            "account user_id=%s to admin. Review in RBAC settings if unexpected.",
+            user_id,
+        )
+        return user_id
+    return None
+
+
 def create_user_role(
     api_key: str,
     label: str,

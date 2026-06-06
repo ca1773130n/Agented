@@ -18,6 +18,7 @@ from msgspec import Struct
 import logging
 
 from app.db.password_resets import consume_token, request_reset
+from app.db.rbac import ensure_user_admin
 from app.db.sessions import create_session, revoke_session, revoke_user_sessions
 from app_litestar.rate_limit_guard import requires_rate_limit
 from app.db.users import (
@@ -116,6 +117,11 @@ def signup(data: SignupBody, request: Request) -> Any:
         raise ClientException(detail="Could not create account")
     if not set_password(user_id, data.password):
         raise ClientException(detail="Could not set password")
+
+    # First real operator to register becomes admin, so a fresh self-hosted
+    # install isn't locked out of /admin/* (the bootstrap API-key admin can't
+    # be resolved from a session login). No-op once any user holds admin.
+    ensure_user_admin(user_id)
 
     user = get_user(user_id)
     session = create_session(user_id)
