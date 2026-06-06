@@ -90,6 +90,11 @@ async function saveWorkspaceRoot() {
     await settingsApi.set('workspace_root', workspaceRoot.value);
     originalWorkspaceRoot.value = workspaceRoot.value;
     showToast(t('settings.general.toastWorkspaceSaved'), 'success');
+    // During onboarding, saving the workspace completes the workspace step, so
+    // auto-advance the tour to the next step instead of leaving it stuck here.
+    if (tourMachine.isActive.value && tourMachine.currentStep.value === 'workspace') {
+      tourMachine.nextStep();
+    }
   } catch (err) {
     const message = err instanceof ApiError ? err.message : t('settings.general.toastWorkspaceFailed');
     showToast(message, 'error');
