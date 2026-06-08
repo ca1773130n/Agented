@@ -128,7 +128,10 @@ def _run_subprocess(
     timer = threading.Timer(SUBPROCESS_TIMEOUT_SECONDS, _on_timeout)
     timer.start()
 
+    from .account_rotation_service import RateLimitEvent
+
     completed = False
+    rate_limited = False
     try:
         assert proc.stdout is not None  # bufsize=0 guarantees a stream
         while True:
@@ -142,6 +145,8 @@ def _run_subprocess(
                 continue
             chunk = line_handler(line)
             if chunk:
+                if isinstance(chunk, RateLimitEvent):
+                    rate_limited = True
                 yield chunk
         proc.wait()
         completed = True
@@ -183,6 +188,17 @@ def _run_subprocess(
         return
 
     if proc.returncode and proc.returncode != 0:
+        if rate_limited:
+            # The non-zero exit is the provider's 429 (already surfaced as a
+            # RateLimitEvent so the caller can rotate). Don't also emit the
+            # cryptic "[Claude CLI error: exit code 1]" — that's the silent
+            # failure that hid the real "weekly limit" reason.
+            logger.info(
+                "CLI agent: %s exited rc=%d due to rate limit (rotation signalled)",
+                backend_label,
+                proc.returncode,
+            )
+            return
         stderr_output = ""
         try:
             if proc.stderr is not None:
@@ -199,19 +215,36 @@ def _run_subprocess(
         yield f"\n\n[{backend_label} CLI error: {detail}]"
 
 
-def _claude_line_handler(line: str) -> Optional[str]:
-    """Parse Claude's ``--output-format stream-json --verbose`` NDJSON."""
+def _claude_line_handler(line: str):
+    """Parse Claude's ``--output-format stream-json --verbose`` NDJSON.
+
+    Returns a :class:`RateLimitEvent` (and suppresses the duplicate text)
+    when the event signals a provider rate limit, so the streaming loop
+    rotates accounts instead of rendering "You've hit your weekly limit"
+    as the assistant's answer.
+    """
+    from .account_rotation_service import RateLimitEvent, detect_rate_limit_from_event
     from .conversation_streaming import _extract_text_from_event
 
     try:
         event = json.loads(line)
     except json.JSONDecodeError:
         return None
+    rl = detect_rate_limit_from_event(event)
+    if rl is not None:
+        return RateLimitEvent(rl)
     return _extract_text_from_event(event)
 
 
-def _passthrough_line_handler(line: str) -> Optional[str]:
-    """Codex/Gemini emit human-readable progress; pass each line through."""
+def _passthrough_line_handler(line: str):
+    """Codex/Gemini emit human-readable progress; pass each line through —
+    but surface a :class:`RateLimitEvent` when a line reads as a rate limit
+    so those backends rotate too."""
+    from .account_rotation_service import RateLimitEvent, detect_rate_limit_from_text
+
+    rl = detect_rate_limit_from_text(line)
+    if rl is not None:
+        return RateLimitEvent(rl)
     return line + "\n"
 
 

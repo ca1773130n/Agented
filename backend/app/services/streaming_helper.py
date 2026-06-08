@@ -15,6 +15,35 @@ from .super_agent_session_service import SuperAgentSessionService
 logger = logging.getLogger(__name__)
 
 
+def _mark_account_rate_limited(candidate, rl_info) -> None:
+    """Persist a rate limit for the candidate's account so the scheduler /
+    next turn skips it. Uses the provider's parsed reset time when present,
+    else a default cooldown. A candidate with no local account id (the
+    default-vault fallback) can't be marked — nothing to do."""
+    if candidate.account_id is None:
+        return
+    try:
+        from .account_rotation_service import DEFAULT_COOLDOWN_SECONDS
+        from .rate_limit_service import RateLimitService
+
+        if rl_info.reset_at:
+            RateLimitService.mark_blocked_until(
+                candidate.account_id, rl_info.reset_at, rl_info.reason
+            )
+        else:
+            RateLimitService.mark_rate_limited(
+                candidate.account_id, DEFAULT_COOLDOWN_SECONDS
+            )
+        logger.info(
+            "Marked account %s (%s) rate-limited until %s",
+            candidate.account_id,
+            candidate.display_name,
+            rl_info.reset_at or f"+{1}h",
+        )
+    except Exception:
+        logger.warning("Failed to mark account rate-limited", exc_info=True)
+
+
 def run_streaming_response(
     session_id: str,
     super_agent_id: str,
@@ -77,7 +106,7 @@ def run_streaming_response(
                 should_route_via_cli_agent,
                 stream_via_cli_agent,
             )
-            from .conversation_streaming import stream_llm_response
+            from .conversation_streaming import ToolUseEvent, stream_llm_response
 
             ChatStateService.push_status(_session_id, "streaming")
 
@@ -99,34 +128,33 @@ def run_streaming_response(
                     drop_empty_content_messages(state["conversation_log"])
                 )
 
+            def _finalize(accumulated: list, used_backend: str) -> None:
+                full_response = "".join(accumulated)
+                if full_response:
+                    SuperAgentSessionService.add_assistant_message(
+                        _session_id, full_response, backend=used_backend
+                    )
+                    if used_backend:
+                        try:
+                            from ..db.backends import update_backend_last_used
+
+                            update_backend_last_used(used_backend)
+                        except Exception:
+                            logger.error("Failed to update backend last used", exc_info=True)
+                ChatStateService.push_delta(
+                    _session_id, "finish", {"content": full_response, "backend": used_backend}
+                )
+                ChatStateService.push_status(_session_id, "idle")
+                if on_complete:
+                    on_complete()
+
             # Routing decision lives in `should_route_via_cli_agent` so the
             # three streaming sites (this one, design conversations, project
-            # chat) make the same choice. The helper also flips to the CLI
-            # runner when CLIProxy is unreachable so a missing proxy can't
-            # silently drop the SSE — see its docstring for the matrix.
-            accumulated = []
-            if should_route_via_cli_agent(backend, use_cli_agent):
-                # Resolve the account's config directory so the spawned
-                # CLI sees the right credential vault. Without this the
-                # CLI loads ``~/.claude`` / ``~/.codex`` and reports
-                # "Not logged in" — fatal because the harness has no
-                # TTY to retry the login flow.
-                config_dir = resolve_account_config_dir(account_id, backend)
-                logger.info(
-                    "Streaming via CLI agent runner (backend=%s, cwd=%s, config=%s)",
-                    backend,
-                    cwd,
-                    config_dir,
-                )
-                stream_iter = stream_via_cli_agent(
-                    llm_messages,
-                    backend=backend,
-                    cwd=cwd,
-                    yolo=is_yolo_mode_enabled(),
-                    model=model,
-                    config_dir=config_dir,
-                )
-            else:
+            # chat) make the same choice. See its docstring for the matrix.
+            if not should_route_via_cli_agent(backend, use_cli_agent):
+                # CLIProxy path — single attempt (it marks its own rate
+                # limits in conversation_streaming; cross-account retry for
+                # this path is a follow-up).
                 stream_iter = stream_llm_response(
                     llm_messages,
                     model=model,
@@ -135,45 +163,130 @@ def run_streaming_response(
                     cwd=cwd,
                     chat_mode=chat_mode,
                 )
+                accumulated = []
+                for chunk in stream_iter:
+                    if isinstance(chunk, ToolUseEvent):
+                        ChatStateService.push_delta(_session_id, "tool_use", chunk.to_dict())
+                        continue
+                    if chunk:
+                        accumulated.append(chunk)
+                        ChatStateService.push_delta(
+                            _session_id, "content_delta", {"content": chunk}
+                        )
+                _finalize(accumulated, backend)
+                return
 
-            # Typed chunk dispatch — ``stream_llm_response`` yields
-            # ``Union[str, ToolUseEvent]``. Text accumulates as today;
-            # tool_use events get their own ChatStateService delta so
-            # the operator UI can render a citation badge with the
-            # tool name + args (which Tesserae query the leader ran).
-            from .conversation_streaming import ToolUseEvent
-
-            for chunk in stream_iter:
-                if isinstance(chunk, ToolUseEvent):
-                    ChatStateService.push_delta(
-                        _session_id, "tool_use", chunk.to_dict(),
-                    )
-                    continue
-                if chunk:
-                    accumulated.append(chunk)
-                    ChatStateService.push_delta(_session_id, "content_delta", {"content": chunk})
-
-            full_response = "".join(accumulated)
-            if full_response:
-                SuperAgentSessionService.add_assistant_message(
-                    _session_id, full_response, backend=backend
-                )
-                # Track backend usage
-                if backend:
-                    try:
-                        from ..db.backends import update_backend_last_used
-
-                        update_backend_last_used(backend)
-                    except Exception:
-                        logger.error("Failed to update backend last used", exc_info=True)
-
-            ChatStateService.push_delta(
-                _session_id, "finish", {"content": full_response, "backend": backend}
+            # ---- CLI-agent path with rate-limit rotation --------------------
+            # When an account hits a provider rate limit (429 / weekly cap),
+            # rotate to the next eligible account — same backend first, then
+            # other backends — and retry the turn. A 429 fires with zero
+            # output tokens, so we only rotate when nothing has streamed yet;
+            # that guarantees a retry never duplicates assistant text.
+            from .account_rotation_service import (
+                RateLimitEvent,
+                RotationCandidate,
+                rotation_candidates,
+                soonest_reset_message,
             )
-            ChatStateService.push_status(_session_id, "idle")
 
-            if on_complete:
-                on_complete()
+            attempts = rotation_candidates(backend, exclude_account_ids=set())
+            # Honor an explicit account pick by trying it first.
+            requested_cfg = resolve_account_config_dir(account_id, backend)
+            if requested_cfg:
+                for i, cand in enumerate(attempts):
+                    if cand.config_dir == requested_cfg:
+                        attempts.insert(0, attempts.pop(i))
+                        break
+            if not attempts:
+                # No eligible local accounts at all — fall back to the CLI's
+                # default vault (preserves behavior when no accounts are
+                # registered). A single attempt; no rotation possible.
+                attempts = [
+                    RotationCandidate(
+                        account_id=None,
+                        backend=(backend or "").lower(),
+                        config_dir=requested_cfg,
+                        display_name="default",
+                    )
+                ]
+
+            attempted_ids: set = set()
+            prev_name = None
+            last_reason = None
+            for idx, cand in enumerate(attempts):
+                if cand.account_id is not None:
+                    if cand.account_id in attempted_ids:
+                        continue
+                    attempted_ids.add(cand.account_id)
+
+                if idx > 0:
+                    logger.info(
+                        "Chat rotation: %s rate-limited → trying %s (%s)",
+                        prev_name,
+                        cand.display_name,
+                        cand.backend,
+                    )
+                    ChatStateService.push_delta(
+                        _session_id,
+                        "rotation",
+                        {
+                            "from": prev_name,
+                            "to": cand.display_name,
+                            "backend": cand.backend,
+                            "reason": last_reason or "rate limit reached",
+                        },
+                    )
+                prev_name = cand.display_name
+
+                logger.info(
+                    "Streaming via CLI agent runner (backend=%s, cwd=%s, config=%s, account=%s)",
+                    cand.backend,
+                    cwd,
+                    cand.config_dir,
+                    cand.display_name,
+                )
+                stream_iter = stream_via_cli_agent(
+                    llm_messages,
+                    backend=cand.backend,
+                    cwd=cwd,
+                    yolo=is_yolo_mode_enabled(),
+                    model=model,
+                    config_dir=cand.config_dir,
+                )
+
+                accumulated = []
+                rl_info = None
+                for chunk in stream_iter:
+                    if isinstance(chunk, RateLimitEvent):
+                        rl_info = chunk.info
+                        break  # stop consuming this account; rotate
+                    if isinstance(chunk, ToolUseEvent):
+                        ChatStateService.push_delta(_session_id, "tool_use", chunk.to_dict())
+                        continue
+                    if chunk:
+                        accumulated.append(chunk)
+                        ChatStateService.push_delta(
+                            _session_id, "content_delta", {"content": chunk}
+                        )
+
+                if rl_info is not None and not accumulated:
+                    # Rate-limited before any content → record + rotate.
+                    last_reason = rl_info.reason
+                    _mark_account_rate_limited(cand, rl_info)
+                    continue
+
+                # Success (or content already streamed before a late limit).
+                _finalize(accumulated, cand.backend)
+                return
+
+            # Every eligible account is rate-limited. Phase 2 will queue +
+            # auto-retry; for now surface a clear, actionable message.
+            msg = soonest_reset_message(backend)
+            logger.warning("Chat: all accounts rate-limited for backend=%s", backend)
+            ChatStateService.push_delta(_session_id, "error", {"error": msg, "kind": "rate_limited"})
+            ChatStateService.push_status(_session_id, "error")
+            if on_error:
+                on_error(msg)
 
         except Exception as e:
             error_msg = str(e)
