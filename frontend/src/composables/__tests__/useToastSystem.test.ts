@@ -9,6 +9,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { computed, ref, type ComputedRef, type Ref } from 'vue';
 import { useToastSystem } from '../useToastSystem';
+import { i18n } from '../../i18n';
 
 // Build a minimal tour-machine fake matching the shape useToastSystem reads.
 // We only need `isActive` (boolean ref) and `currentStep` (string ref) plus
@@ -150,5 +151,31 @@ describe('useToastSystem', () => {
     showToast('Something else happened', 'success');
     vi.advanceTimersByTime(2000);
     expect(tour.nextStep).not.toHaveBeenCalled();
+  });
+
+  // -- Locale-independent auto-advance (the monitoring/ko regression) -------
+
+  it('auto-advances on a NON-English toast by resolving the step i18n key', () => {
+    // Simulate a non-English operator: register a fake locale whose
+    // monitoring-saved toast is a distinctive non-English string, switch to
+    // it, and fire that exact toast on the monitoring step. The old code
+    // matched only the English literal 'Monitoring settings saved' and so
+    // never advanced in ko/ja/zh — wedging the step.
+    const prev = (i18n.global.locale as unknown as { value: string }).value;
+    i18n.global.setLocaleMessage('xx-test', {
+      settings: { general: { toastMonitoringSaved: '모니터링-설정-저장됨-UNIQUE' } },
+    } as never);
+    (i18n.global.locale as unknown as { value: string }).value = 'xx-test';
+    try {
+      const tour = makeTour({ active: true, step: 'monitoring' });
+      const { showToast } = useToastSystem(tour as never);
+
+      showToast('모니터링-설정-저장됨-UNIQUE', 'success');
+      expect(tour.nextStep).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(800);
+      expect(tour.nextStep).toHaveBeenCalledTimes(1);
+    } finally {
+      (i18n.global.locale as unknown as { value: string }).value = prev;
+    }
   });
 });

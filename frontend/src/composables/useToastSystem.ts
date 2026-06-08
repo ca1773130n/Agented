@@ -10,6 +10,7 @@
 import { ref, type Ref } from 'vue';
 import type { useTourMachine } from './useTourMachine';
 import { TOUR_STEP_MAP } from '../constants/tourSteps';
+import { i18n } from '../i18n';
 
 export type ToastType = 'success' | 'error' | 'info' | 'infrastructure';
 
@@ -52,7 +53,18 @@ export function useToastSystem(tour: TourMachine): UseToastSystem {
       const isBackendStep = step.startsWith('backends.');
       if (!isBackendStep) {
         const meta = TOUR_STEP_MAP[step];
-        if (meta?.autoAdvanceOnToast && message.includes(meta.autoAdvanceOnToast)) {
+        // Match against the LOCALIZED toast text first (resolve the step's
+        // i18n key in the active locale) so auto-advance works in ko/ja/zh —
+        // the raw English `autoAdvanceOnToast` only matched the en catalog,
+        // which silently wedged steps like "monitoring" for non-English
+        // operators. Fall back to the English literal for safety.
+        const localized = meta?.autoAdvanceI18nKey
+          ? (i18n.global.t(meta.autoAdvanceI18nKey) as string)
+          : null;
+        const matches =
+          (localized && message.includes(localized)) ||
+          (meta?.autoAdvanceOnToast ? message.includes(meta.autoAdvanceOnToast) : false);
+        if (meta && matches) {
           setTimeout(() => tour.nextStep(), 800);
         }
       }

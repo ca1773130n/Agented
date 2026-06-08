@@ -221,6 +221,19 @@ export const tourMachine = setup({
       },
     },
 
-    complete: { type: 'final' },
+    // NOT a `type: 'final'` state. A final top-level state STOPS the actor
+    // (status → 'done'), after which it ignores ALL events — including the
+    // RESTART that the completion screen's "Go to dashboard" button sends to
+    // dismiss itself. That left the completion popup stuck on screen forever
+    // (App.vue `tourComplete = state === 'complete'` never flipped back).
+    // Keeping it a normal state lets RESTART reset to idle (clearing
+    // progress) and START re-run the tour. The auto-skip walker still
+    // terminates here because `stateValueToKey('complete')` returns null.
+    complete: {
+      on: {
+        RESTART: { target: 'idle', actions: ['clearProgress'] },
+        START: { target: 'welcome' },
+      },
+    },
   },
 })

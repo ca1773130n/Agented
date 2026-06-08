@@ -329,7 +329,7 @@ describe('TourOverlay', () => {
   })
 
   describe('loading timeout fallback (OB-40)', () => {
-    it('shows loading timeout fallback after 5s without target', async () => {
+    it('shows the element-not-found fallback once past the 45s threshold', async () => {
       vi.useFakeTimers()
       const wrapper = mount(TourOverlay, {
         props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
@@ -338,25 +338,60 @@ describe('TourOverlay', () => {
       expect(wrapper.find('.tour-spinner').exists()).toBe(true)
       expect(wrapper.find('.tour-timeout-fallback').exists()).toBe(false)
 
-      // Advance past retry sequence (~11.8s) + observer timeouts (3s element-not-found)
-      await vi.advanceTimersByTimeAsync(17000)
+      // Past 45s element-not-found threshold (and 30s page-slow before it).
+      await vi.advanceTimersByTimeAsync(50000)
 
       expect(wrapper.find('.tour-spinner').exists()).toBe(false)
-      // Element-not-found (3s) fires before loading timeout (5s), so element fallback shows
+      // Element-not-found takes precedence over the page-slow hint.
       expect(wrapper.find('.tour-element-fallback').exists()).toBe(true)
 
       wrapper.unmount()
       vi.useRealTimers()
     })
 
-    it('shows element-not-found fallback after 3s (before 5s loading timeout)', async () => {
+    it('shows the gentle page-slow hint (not the error) during a slow load (30–45s window)', async () => {
       vi.useFakeTimers()
       const wrapper = mount(TourOverlay, {
         props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
       })
 
-      // Advance past retry sequence (~7.3s) + 3s element-not-found timeout
-      await vi.advanceTimersByTimeAsync(15000)
+      // 35s: page-slow (30s) has fired, element-not-found (45s) has not.
+      // Operator-requested: the slow-load popup must NOT show early — a
+      // busy machine routinely takes >10s to route+render+fetch a step's
+      // target, and an early popup reads as a broken onboarding.
+      await vi.advanceTimersByTimeAsync(35000)
+
+      expect(wrapper.find('.tour-element-fallback').exists()).toBe(false)
+      expect(wrapper.find('.tour-timeout-fallback').exists()).toBe(true)
+      expect(wrapper.text()).not.toContain("We couldn't find")
+
+      wrapper.unmount()
+      vi.useRealTimers()
+    })
+
+    it('shows NO popup at all before 30s (busy-machine patience)', async () => {
+      vi.useFakeTimers()
+      const wrapper = mount(TourOverlay, {
+        props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
+      })
+
+      await vi.advanceTimersByTimeAsync(29000)
+
+      expect(wrapper.find('.tour-timeout-fallback').exists()).toBe(false)
+      expect(wrapper.find('.tour-element-fallback').exists()).toBe(false)
+      expect(wrapper.find('.tour-spinner').exists()).toBe(true)
+
+      wrapper.unmount()
+      vi.useRealTimers()
+    })
+
+    it('shows element-not-found fallback after 45s', async () => {
+      vi.useFakeTimers()
+      const wrapper = mount(TourOverlay, {
+        props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
+      })
+
+      await vi.advanceTimersByTimeAsync(50000)
 
       expect(wrapper.find('.tour-element-fallback').exists()).toBe(true)
       expect(wrapper.text()).toContain("We couldn't find")
@@ -372,7 +407,7 @@ describe('TourOverlay', () => {
         props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
       })
 
-      await vi.advanceTimersByTimeAsync(15000)
+      await vi.advanceTimersByTimeAsync(50000)
 
       const skipBtn = wrapper.find('.btn-fallback-skip')
       expect(skipBtn.exists()).toBe(true)
@@ -389,7 +424,7 @@ describe('TourOverlay', () => {
         props: { active: true, step: workspaceStep, effectiveTarget: workspaceStep, substepLabel: null, stepNumber: 2, totalSteps: 8 },
       })
 
-      await vi.advanceTimersByTimeAsync(15000)
+      await vi.advanceTimersByTimeAsync(50000)
 
       expect(wrapper.find('.tour-element-fallback').exists()).toBe(true)
 

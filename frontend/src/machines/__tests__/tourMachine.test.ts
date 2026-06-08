@@ -179,15 +179,41 @@ describe('forward navigation (NEXT)', () => {
     expect(snap.context.completedSteps).toContain('create_project')
   })
 
-  it('create_team -> NEXT -> complete (final state)', () => {
+  it('create_team -> NEXT -> complete (reachable, NOT a final state)', () => {
     const actor = startActor()
     navigateTo(actor, [...toCreateTeam])
     actor.send({ type: 'NEXT' })
 
     const snap = actor.getSnapshot()
     expect(snap.value).toBe('complete')
-    expect(snap.status).toBe('done')
+    // complete must NOT be a final state — a final state stops the actor and
+    // the completion screen's RESTART would be ignored, wedging the popup.
+    expect(snap.status).toBe('active')
     expect(snap.context.completedSteps).toContain('create_team')
+  })
+
+  it('complete -> RESTART -> idle with cleared progress (dismiss the completion screen)', () => {
+    const actor = startActor()
+    navigateTo(actor, [...toCreateTeam])
+    actor.send({ type: 'NEXT' })
+    expect(actor.getSnapshot().value).toBe('complete')
+
+    // Regression: "Go to dashboard" sends RESTART. When complete was final
+    // the actor was stopped and ignored it, so App.vue's tourComplete stayed
+    // true and the popup never closed.
+    actor.send({ type: 'RESTART' })
+    const snap = actor.getSnapshot()
+    expect(snap.value).toBe('idle')
+    expect(snap.status).toBe('active')
+    expect(snap.context.completedSteps).toEqual([])
+  })
+
+  it('complete -> START -> welcome (re-run the tour from the completion screen)', () => {
+    const actor = startActor()
+    navigateTo(actor, [...toCreateTeam])
+    actor.send({ type: 'NEXT' })
+    actor.send({ type: 'START' })
+    expect(actor.getSnapshot().value).toBe('welcome')
   })
 
   it('complete forward path accumulates all completed steps', () => {
@@ -378,7 +404,7 @@ describe('skip navigation (SKIP)', () => {
 
     const snap = actor.getSnapshot()
     expect(snap.value).toBe('complete')
-    expect(snap.status).toBe('done')
+    expect(snap.status).toBe('active')
   })
 
   it('skip-all path results in empty completedSteps', () => {
@@ -450,7 +476,7 @@ describe('SKIP_ALL global event', () => {
     actor.send({ type: 'SKIP_ALL' })
     const snap = actor.getSnapshot()
     expect(snap.value).toBe('complete')
-    expect(snap.status).toBe('done')
+    expect(snap.status).toBe('active')
   })
 
   it('with guard override: SKIP_ALL from workspace -> complete', () => {
@@ -671,42 +697,47 @@ describe('event rejection in invalid states', () => {
     expect(actor.getSnapshot().value).toBe('idle')
   })
 
-  it('complete: NEXT is ignored (final state)', () => {
+  // complete is a normal (non-final) state: it has no NEXT/BACK/SKIP handler
+  // so those are inert, but it DOES handle RESTART/START so the completion
+  // screen can dismiss itself or re-run the tour.
+  it('complete: NEXT is ignored (no handler)', () => {
     const actor = startActor()
     navigateTo(actor, [...toComplete])
     actor.send({ type: 'NEXT' })
     expect(actor.getSnapshot().value).toBe('complete')
-    expect(actor.getSnapshot().status).toBe('done')
+    expect(actor.getSnapshot().status).toBe('active')
   })
 
-  it('complete: BACK is ignored (final state)', () => {
+  it('complete: BACK is ignored (no handler)', () => {
     const actor = startActor()
     navigateTo(actor, [...toComplete])
     actor.send({ type: 'BACK' })
     expect(actor.getSnapshot().value).toBe('complete')
   })
 
-  it('complete: SKIP is ignored (final state)', () => {
+  it('complete: SKIP is ignored (no handler)', () => {
     const actor = startActor()
     navigateTo(actor, [...toComplete])
     actor.send({ type: 'SKIP' })
     expect(actor.getSnapshot().value).toBe('complete')
   })
 
-  it('complete: SKIP_ALL is ignored (final state)', () => {
+  it('complete: SKIP_ALL is ignored (canSkipAll guard false)', () => {
     const actor = startActor()
     navigateTo(actor, [...toComplete])
     actor.send({ type: 'SKIP_ALL' })
     expect(actor.getSnapshot().value).toBe('complete')
   })
 
-  it('complete: RESTART is ignored (final state)', () => {
+  it('complete: RESTART resets to idle (completion screen dismiss)', () => {
     const actor = startActor()
     navigateTo(actor, [...toComplete])
     actor.send({ type: 'RESTART' })
-    // Final states do not process events
-    expect(actor.getSnapshot().value).toBe('complete')
-    expect(actor.getSnapshot().status).toBe('done')
+    // Non-final state DOES process RESTART — this is the fix for the stuck
+    // completion popup.
+    expect(actor.getSnapshot().value).toBe('idle')
+    expect(actor.getSnapshot().status).toBe('active')
+    expect(actor.getSnapshot().context.completedSteps).toEqual([])
   })
 
   it('welcome: BACK is ignored (no BACK handler)', () => {
