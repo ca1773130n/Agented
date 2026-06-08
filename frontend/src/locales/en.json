@@ -1788,6 +1788,9 @@
     }
   },
   "projectTeamLeaderChat": {
+    "rotatedNotice": "{from} hit its rate limit — switched to {to}",
+    "allRateLimited": "All accounts are rate-limited. {detail}",
+    "streamError": "The response stream ended with an error.",
     "title": "Ask the team leader",
     "groundedBadge": "grounded by Tesserae",
     "conversationWith": "Conversation with",

@@ -1788,6 +1788,9 @@
     }
   },
   "projectTeamLeaderChat": {
+    "rotatedNotice": "{from} 已达到速率限制，已切换到 {to}",
+    "allRateLimited": "所有账户都已达到速率限制。{detail}",
+    "streamError": "响应流以错误结束。",
     "title": "向团队负责人提问",
     "groundedBadge": "由 Tesserae 支撑",
     "conversationWith": "对话对象:",

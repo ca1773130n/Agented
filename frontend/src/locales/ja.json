@@ -1788,6 +1788,9 @@
     }
   },
   "projectTeamLeaderChat": {
+    "rotatedNotice": "{from} がレート制限に達したため {to} に切り替えました",
+    "allRateLimited": "すべてのアカウントがレート制限に達しています。{detail}",
+    "streamError": "応答ストリームがエラーで終了しました。",
     "title": "チームリーダーに質問",
     "groundedBadge": "Tesserae による裏付け",
     "conversationWith": "会話相手:",

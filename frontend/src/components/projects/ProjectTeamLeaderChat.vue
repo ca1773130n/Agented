@@ -44,12 +44,14 @@ interface ToolUseRecord {
 }
 
 interface ChatMessage {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
   message_id?: string;
   timestamp?: string;
   citations?: Citation[];
   tool_uses?: ToolUseRecord[];
+  // System notices: account rotation on rate limit / terminal errors.
+  variant?: 'rotation' | 'error';
 }
 
 const messages = ref<ChatMessage[]>([]);
@@ -142,6 +144,36 @@ function connectStream(session: TeamLeaderChatSession) {
       activeAssistant.tool_uses = activeAssistant.tool_uses
         ? [...activeAssistant.tool_uses, tu]
         : [tu];
+      scrollToBottom();
+    } else if (deltaType === 'rotation') {
+      // The backend hit a rate limit on one account and switched to
+      // another (same backend, then other backends). Close the current
+      // turn and drop in a system notice so the user understands why the
+      // replying account/model changed mid-thread.
+      activeAssistant = null;
+      messages.value.push({
+        role: 'system',
+        variant: 'rotation',
+        content: t('projectTeamLeaderChat.rotatedNotice', {
+          from: data.from || '?',
+          to: data.to || '?',
+        }),
+      });
+      scrollToBottom();
+    } else if (deltaType === 'error') {
+      // Terminal stream error — most importantly "all accounts
+      // rate-limited". Previously dropped silently (the chat just went
+      // quiet); surface it as a system notice.
+      activeAssistant = null;
+      messages.value.push({
+        role: 'system',
+        variant: 'error',
+        content:
+          data.kind === 'rate_limited'
+            ? t('projectTeamLeaderChat.allRateLimited', { detail: data.error || '' })
+            : data.error || t('projectTeamLeaderChat.streamError'),
+      });
+      isStreaming.value = false;
       scrollToBottom();
     } else if (deltaType === 'finish') {
       if (activeAssistant) {
@@ -310,9 +342,20 @@ onUnmounted(closeStream);
         <p v-if="!messages.length" class="empty muted">
           {{ t('projectTeamLeaderChat.emptyHint') }}
         </p>
+        <template v-for="(m, i) in messages" :key="i">
+        <!-- System notices: rate-limit account rotation / terminal errors. -->
+        <div
+          v-if="m.role === 'system'"
+          :class="['msg-notice', `msg-notice--${m.variant || 'rotation'}`]"
+          data-role="system"
+          :data-variant="m.variant"
+          data-testid="chat-system-notice"
+        >
+          <span class="msg-notice__icon" aria-hidden="true">{{ m.variant === 'error' ? '⚠' : '↻' }}</span>
+          <span class="msg-notice__text">{{ m.content }}</span>
+        </div>
         <article
-          v-for="(m, i) in messages"
-          :key="i"
+          v-else
           :class="['msg', `msg--${m.role}`]"
           :data-role="m.role"
         >
@@ -351,6 +394,7 @@ onUnmounted(closeStream);
             >{{ c.value }}</code>
           </div>
         </article>
+        </template>
         <div v-if="isStreaming" class="streaming">…</div>
       </div>
 
@@ -421,6 +465,27 @@ onUnmounted(closeStream);
 .msg__role {
   font-size: 10px; text-transform: uppercase;
   letter-spacing: 0.06em; color: var(--text-tertiary);
+}
+/* Inline system notices (rate-limit rotation + terminal errors) —
+   centered, full-width, visually distinct from user/assistant bubbles. */
+.msg-notice {
+  align-self: center;
+  display: flex; align-items: center; gap: 8px;
+  max-width: 92%;
+  padding: 6px 12px; border-radius: 8px;
+  font-size: 12px; line-height: 1.4;
+}
+.msg-notice__icon { flex: 0 0 auto; font-size: 13px; }
+.msg-notice__text { white-space: pre-wrap; }
+.msg-notice--rotation {
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid rgba(234, 179, 8, 0.28);
+  color: var(--accent-amber, #eab308);
+}
+.msg-notice--error {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--accent-red, #ef4444);
 }
 .msg__content { font-size: 13px; white-space: pre-wrap; line-height: 1.5; }
 .msg__cites {
