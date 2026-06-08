@@ -1788,6 +1788,8 @@
     }
   },
   "projectTeamLeaderChat": {
+    "thinkingLabel": "思考过程",
+    "toolsLabel": "{count} 次工具执行",
     "queuedNotice": "所有账户都已达到速率限制 — 已加入队列，待有账户空闲后重试。{detail}",
     "retrying": "有账户空闲 — 正在重试…",
     "rotatedNotice": "{from} 已达到速率限制，已切换到 {to}",

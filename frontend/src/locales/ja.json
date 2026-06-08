@@ -1788,6 +1788,8 @@
     }
   },
   "projectTeamLeaderChat": {
+    "thinkingLabel": "思考プロセス",
+    "toolsLabel": "ツール実行 {count}件",
     "queuedNotice": "すべてのアカウントがレート制限中です — キューに入れ、空き次第再試行します。{detail}",
     "retrying": "アカウントが空きました — 再試行中…",
     "rotatedNotice": "{from} がレート制限に達したため {to} に切り替えました",

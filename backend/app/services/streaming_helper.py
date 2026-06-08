@@ -106,7 +106,11 @@ def run_streaming_response(
                 should_route_via_cli_agent,
                 stream_via_cli_agent,
             )
-            from .conversation_streaming import ToolUseEvent, stream_llm_response
+            from .conversation_streaming import (
+                ThinkingEvent,
+                ToolUseEvent,
+                stream_llm_response,
+            )
 
             ChatStateService.push_status(_session_id, "streaming")
 
@@ -260,6 +264,9 @@ def run_streaming_response(
                     if isinstance(chunk, RateLimitEvent):
                         rl_info = chunk.info
                         break  # stop consuming this account; rotate
+                    if isinstance(chunk, ThinkingEvent):
+                        ChatStateService.push_delta(_session_id, "thinking", chunk.to_dict())
+                        continue
                     if isinstance(chunk, ToolUseEvent):
                         ChatStateService.push_delta(_session_id, "tool_use", chunk.to_dict())
                         continue

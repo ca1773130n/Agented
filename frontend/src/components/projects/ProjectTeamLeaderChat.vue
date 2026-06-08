@@ -52,6 +52,8 @@ interface ChatMessage {
   timestamp?: string;
   citations?: Citation[];
   tool_uses?: ToolUseRecord[];
+  /** Extended-thinking / reasoning text, shown folded above the answer. */
+  thinking?: string;
   // System notices: account rotation / queued-for-retry / terminal errors.
   variant?: 'rotation' | 'queued' | 'error';
 }
@@ -139,6 +141,14 @@ function connectStream(session: TeamLeaderChatSession) {
         messages.value.push(activeAssistant);
       }
       activeAssistant.content += data.content || '';
+      scrollToBottom();
+    } else if (deltaType === 'thinking') {
+      // Reasoning tokens — accumulate into the active turn, shown folded.
+      if (!activeAssistant) {
+        activeAssistant = { role: 'assistant', content: '', timestamp: new Date().toISOString() };
+        messages.value.push(activeAssistant);
+      }
+      activeAssistant.thinking = (activeAssistant.thinking || '') + (data.text || '');
       scrollToBottom();
     } else if (deltaType === 'tool_use') {
       // Real tool-use event surfaced by the backend stream — Anthropic
@@ -324,15 +334,6 @@ function formatTime(iso?: string): string {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function formatToolInput(tu: ToolUseRecord): string {
-  // Full args as JSON for the badge hover tooltip.
-  try {
-    return JSON.stringify(tu.input, null, 2).slice(0, 600);
-  } catch {
-    return String(tu.input);
-  }
-}
-
 function formatToolPreview(tu: ToolUseRecord): string {
   // One-line summary for inline display next to the tool name.
   // For tesserae_ask / search_* the first arg is the operative one;
@@ -423,25 +424,38 @@ onUnmounted(closeStream);
             <span class="msg__role">{{ m.role }}</span>
             <span v-if="m.timestamp" class="msg__time">{{ formatTime(m.timestamp) }}</span>
           </div>
-          <div
+          <!-- Reasoning — folded by default; expand to read the thinking. -->
+          <details
+            v-if="m.role === 'assistant' && m.thinking"
+            class="msg__fold msg__fold--thinking"
+            data-testid="msg-thinking"
+          >
+            <summary>{{ t('projectTeamLeaderChat.thinkingLabel') }}</summary>
+            <div class="msg__fold-body">{{ m.thinking }}</div>
+          </details>
+          <!-- Tool executions — folded; expand to see each call + its args. -->
+          <details
             v-if="m.role === 'assistant' && m.tool_uses?.length"
-            class="msg__tools"
+            class="msg__fold msg__fold--tools"
             data-testid="msg-tool-uses"
           >
-            <span class="tool-label">{{ t('projectTeamLeaderChat.queriedLabel') }}</span>
-            <span
-              v-for="(tu, ti) in m.tool_uses"
-              :key="(tu.id || tu.name) + ':' + ti"
-              class="tool-badge"
-              :data-tool="tu.name"
-              :title="formatToolInput(tu)"
-            >
-              <code>{{ tu.name }}</code>
-              <span v-if="formatToolPreview(tu)" class="tool-preview">
-                {{ formatToolPreview(tu) }}
-              </span>
-            </span>
-          </div>
+            <summary>
+              {{ t('projectTeamLeaderChat.toolsLabel', { count: m.tool_uses.length }) }}
+            </summary>
+            <div class="msg__fold-body">
+              <div
+                v-for="(tu, ti) in m.tool_uses"
+                :key="(tu.id || tu.name) + ':' + ti"
+                class="tool-row"
+                :data-tool="tu.name"
+              >
+                <code class="tool-row__name">{{ tu.name }}</code>
+                <span v-if="formatToolPreview(tu)" class="tool-row__args">{{
+                  formatToolPreview(tu)
+                }}</span>
+              </div>
+            </div>
+          </details>
           <!-- Assistant replies render markdown; user input stays literal so
                accidental markdown in a question isn't reinterpreted. -->
           <MarkdownContent
@@ -630,6 +644,49 @@ onUnmounted(closeStream);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Collapsible folds — reasoning + tool executions, closed by default. */
+.msg__fold {
+  margin: 2px 0 4px;
+  border: 1px solid var(--border-subtle, rgba(255,255,255,0.08));
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 11px;
+}
+.msg__fold > summary {
+  cursor: pointer; list-style: none;
+  padding: 4px 8px;
+  color: var(--text-tertiary);
+  user-select: none;
+  display: flex; align-items: center; gap: 6px;
+}
+.msg__fold > summary::-webkit-details-marker { display: none; }
+.msg__fold > summary::before {
+  content: '▸'; font-size: 9px; transition: transform 0.15s ease;
+}
+.msg__fold[open] > summary::before { transform: rotate(90deg); }
+.msg__fold--thinking > summary { color: var(--accent-purple, #8b5cf6); }
+.msg__fold-body {
+  padding: 6px 10px 8px;
+  border-top: 1px solid var(--border-subtle, rgba(255,255,255,0.06));
+  white-space: pre-wrap; line-height: 1.5;
+  color: var(--text-secondary, var(--text-tertiary));
+  font-size: 12px;
+  max-height: 320px; overflow: auto;
+}
+.tool-row {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 2px 0;
+}
+.tool-row__name {
+  font-family: var(--font-mono, monospace);
+  color: var(--accent-green, #10b981);
+  font-size: 11px;
+}
+.tool-row__args {
+  font-size: 11px; opacity: 0.8;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 /* Typing indicator — three pulsing dots while the assistant streams. */

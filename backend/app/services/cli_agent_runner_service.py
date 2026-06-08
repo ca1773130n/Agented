@@ -143,11 +143,16 @@ def _run_subprocess(
             line = raw.decode("utf-8", errors="replace").rstrip("\n")
             if not line:
                 continue
-            chunk = line_handler(line)
-            if chunk:
-                if isinstance(chunk, RateLimitEvent):
+            result = line_handler(line)
+            if result is None:
+                continue
+            # A handler may return a single item or a list (e.g. one Claude
+            # assistant event → tool_use + thinking + text). Normalize + emit.
+            items = result if isinstance(result, list) else [result]
+            for item in items:
+                if isinstance(item, RateLimitEvent):
                     rate_limited = True
-                yield chunk
+                yield item
         proc.wait()
         completed = True
     finally:
@@ -229,9 +234,17 @@ def _make_claude_line_handler():
     fresh handler must be created per stream — see ``stream_via_cli_agent``.
     """
     from .account_rotation_service import RateLimitEvent, detect_rate_limit_from_event
-    from .conversation_streaming import _extract_text_from_event
+    from .conversation_streaming import (
+        ThinkingEvent,
+        _extract_text_from_event,
+        _extract_thinking_from_event,
+        _extract_tool_uses_from_event,
+    )
 
-    state = {"streamed": False}
+    # ``streamed``/``thought`` track whether answer/thinking tokens have
+    # already streamed this turn, so the final ``assistant`` event's full
+    # copies are dropped instead of doubling the bubble.
+    state = {"streamed": False, "thought": False}
 
     def handler(line: str):
         try:
@@ -246,18 +259,33 @@ def _make_claude_line_handler():
         # Terminal summary — always a duplicate of the assistant text.
         if etype == "result":
             return None
-        # Final full message. Skip its text when we already streamed deltas
-        # (avoids the doubled bubble); use it only as the no-partial fallback.
+
+        items: list = []
         if etype == "assistant":
-            if state["streamed"]:
-                return None
-            return _extract_text_from_event(event)
-        # Token deltas (stream_event → content_block_delta, or a bare
-        # content_block_delta) — the live stream.
-        text = _extract_text_from_event(event)
-        if text:
+            # The final message carries COMPLETE tool_use blocks (full input)
+            # — take them only here, not from the partial content_block_start
+            # deltas, so a tool isn't surfaced twice with empty args.
+            items.extend(_extract_tool_uses_from_event(event))
+            if not state["thought"]:
+                th = _extract_thinking_from_event(event)
+                if th:
+                    items.append(ThinkingEvent(th))
+            if not state["streamed"]:
+                txt = _extract_text_from_event(event)
+                if txt:
+                    items.append(txt)
+            return items or None
+
+        # stream_event / bare deltas — the live token stream.
+        th = _extract_thinking_from_event(event)
+        if th:
+            state["thought"] = True
+            items.append(ThinkingEvent(th))
+        txt = _extract_text_from_event(event)
+        if txt:
             state["streamed"] = True
-        return text
+            items.append(txt)
+        return items or None
 
     return handler
 

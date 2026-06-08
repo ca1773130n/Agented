@@ -145,6 +145,35 @@ def test_claude_streams_token_deltas_and_skips_duplicate_assistant(captured):
     assert "--include-partial-messages" in captured["cmd"]
 
 
+def test_claude_assistant_event_emits_thinking_and_tool_use(captured):
+    """A final assistant event with thinking + tool_use + text blocks surfaces
+    a ThinkingEvent + ToolUseEvent alongside the text (folded in the UI)."""
+    from app.services.conversation_streaming import ThinkingEvent, ToolUseEvent
+
+    captured["proc"] = _FakeProc(
+        [
+            (json.dumps({"type": "assistant", "message": {"content": [
+                {"type": "thinking", "thinking": "Let me plan the epics."},
+                {"type": "tool_use", "name": "tesserae_ask", "id": "tu1",
+                 "input": {"question": "prior art?"}},
+                {"type": "text", "text": "Here's the plan."},
+            ]}}) + "\n").encode(),
+            (json.dumps({"type": "result", "result": "Here's the plan."}) + "\n").encode(),
+        ]
+    )
+    out = list(
+        runner.stream_via_cli_agent(
+            [{"role": "user", "content": "plan it"}], backend="claude", cwd="/tmp", yolo=True,
+        )
+    )
+    thinking = [x for x in out if isinstance(x, ThinkingEvent)]
+    tools = [x for x in out if isinstance(x, ToolUseEvent)]
+    text = "".join(x for x in out if isinstance(x, str))
+    assert thinking and "plan the epics" in thinking[0].text
+    assert tools and tools[0].name == "tesserae_ask"
+    assert text == "Here's the plan."  # not doubled by the result event
+
+
 def test_claude_non_yolo_omits_skip_permissions(captured):
     captured["proc"] = _FakeProc([])
     list(
