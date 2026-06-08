@@ -22,6 +22,7 @@ import { apiFetch, ApiError, type AuthenticatedEventSource } from '../../service
 import { useToast } from '../../composables/useToast';
 import LoadingState from '../base/LoadingState.vue';
 import ErrorState from '../base/ErrorState.vue';
+import MarkdownContent from '../base/MarkdownContent.vue';
 
 const props = defineProps<{ projectId: string }>();
 const showToast = useToast();
@@ -441,7 +442,15 @@ onUnmounted(closeStream);
               </span>
             </span>
           </div>
-          <div class="msg__content">{{ m.content }}</div>
+          <!-- Assistant replies render markdown; user input stays literal so
+               accidental markdown in a question isn't reinterpreted. -->
+          <MarkdownContent
+            v-if="m.role === 'assistant'"
+            class="msg__content"
+            :content="m.content"
+            :breaks="true"
+          />
+          <div v-else class="msg__content">{{ m.content }}</div>
           <div
             v-if="m.role === 'assistant' && m.citations?.length"
             class="msg__cites"

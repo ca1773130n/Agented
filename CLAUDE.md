@@ -110,6 +110,19 @@ credentials/login flows.
 
 ## MCP tooling — reach for the right index before grep/Read
 
+**ALWAYS use CodeGraph MCP to find or modify code — before any grep/Read/edit.**
+It is the pre-built index of every symbol, edge, and file; a blind grep/Read
+loop (or delegating exploration to a sub-agent) repeats work it already did.
+
+- "what's the deal with X / this feature or bug" → `codegraph_context` (PRIMARY — one call composes search + node + callers + callees)
+- "where is symbol X?" → `codegraph_search`; "show its source/signature" → `codegraph_node`
+- "what calls X?" / "what would changing X break?" → `codegraph_callers` / `codegraph_impact`
+- survey several related symbols at once → `codegraph_explore`
+
+Reach for raw Read/Grep only to confirm a specific detail CodeGraph didn't
+cover, or when you already know the exact file+line to edit. CodeGraph can
+query other indexed repos via `projectPath` (e.g. `~/Developer/Projects/HypePaper`).
+
 This repo is wired to three MCP indexes plus context-mode routing. Pick by
 the question; don't duplicate a query across them.
 

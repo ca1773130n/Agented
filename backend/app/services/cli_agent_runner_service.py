@@ -215,33 +215,51 @@ def _run_subprocess(
         yield f"\n\n[{backend_label} CLI error: {detail}]"
 
 
-def _claude_line_handler(line: str):
-    """Parse Claude's ``--output-format stream-json --verbose`` NDJSON.
+def _make_claude_line_handler():
+    """Build a stateful per-stream handler for Claude's ``stream-json`` NDJSON.
 
-    Returns a :class:`RateLimitEvent` (and suppresses the duplicate text)
-    when the event signals a provider rate limit, so the streaming loop
-    rotates accounts instead of rendering "You've hit your weekly limit"
-    as the assistant's answer.
+    With ``--include-partial-messages`` claude streams the reply as
+    ``stream_event`` → ``content_block_delta`` token chunks, then repeats the
+    whole thing in a final ``assistant`` event and again in ``result``. We
+    stream the token deltas and DROP both duplicates, so the reply appears
+    live and exactly once. Falls back to the full ``assistant`` text when no
+    deltas streamed (older CLI without the flag).
+
+    State (whether any token delta has streamed) lives in the closure, so a
+    fresh handler must be created per stream — see ``stream_via_cli_agent``.
     """
     from .account_rotation_service import RateLimitEvent, detect_rate_limit_from_event
     from .conversation_streaming import _extract_text_from_event
 
-    try:
-        event = json.loads(line)
-    except json.JSONDecodeError:
-        return None
-    rl = detect_rate_limit_from_event(event)
-    if rl is not None:
-        return RateLimitEvent(rl)
-    # The terminal ``result`` event repeats the assistant message's full text
-    # (claude stream-json emits ``assistant`` THEN ``result`` with the same
-    # ``result`` string). Extracting both yielded every reply twice,
-    # concatenated into one bubble. The ``assistant``/``content_block_delta``
-    # events already carry the content, so skip ``result`` here. (Rate-limit
-    # results are handled above; other result subtypes carry no new content.)
-    if event.get("type") == "result":
-        return None
-    return _extract_text_from_event(event)
+    state = {"streamed": False}
+
+    def handler(line: str):
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            return None
+        rl = detect_rate_limit_from_event(event)
+        if rl is not None:
+            return RateLimitEvent(rl)
+
+        etype = event.get("type")
+        # Terminal summary — always a duplicate of the assistant text.
+        if etype == "result":
+            return None
+        # Final full message. Skip its text when we already streamed deltas
+        # (avoids the doubled bubble); use it only as the no-partial fallback.
+        if etype == "assistant":
+            if state["streamed"]:
+                return None
+            return _extract_text_from_event(event)
+        # Token deltas (stream_event → content_block_delta, or a bare
+        # content_block_delta) — the live stream.
+        text = _extract_text_from_event(event)
+        if text:
+            state["streamed"] = True
+        return text
+
+    return handler
 
 
 def _passthrough_line_handler(line: str):
@@ -326,13 +344,22 @@ def stream_via_cli_agent(
     env = _build_env(backend_norm, config_dir)
 
     if backend_norm == "claude":
-        cmd = ["claude", "-p", prompt, "--output-format", "stream-json", "--verbose"]
+        # --include-partial-messages makes claude emit token-by-token
+        # content_block_delta events instead of one big assistant message at
+        # the end, so the chat streams live instead of the user waiting
+        # minutes for the whole reply. A fresh stateful handler per call
+        # streams those deltas and drops the duplicate final assistant text.
+        cmd = [
+            "claude", "-p", prompt,
+            "--output-format", "stream-json", "--verbose",
+            "--include-partial-messages",
+        ]
         if yolo:
             cmd.append("--dangerously-skip-permissions")
         if model:
             cmd.extend(["--model", model])
         yield from _run_subprocess(
-            cmd, cwd=cwd, env=env, line_handler=_claude_line_handler, backend_label="Claude"
+            cmd, cwd=cwd, env=env, line_handler=_make_claude_line_handler(), backend_label="Claude"
         )
         return
 

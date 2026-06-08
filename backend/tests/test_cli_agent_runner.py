@@ -110,6 +110,41 @@ def test_claude_result_event_does_not_double_yield_text(captured):
     assert "".join(chunks) == reply  # exactly once, not doubled
 
 
+def test_claude_streams_token_deltas_and_skips_duplicate_assistant(captured):
+    """With --include-partial-messages claude streams content_block_delta
+    tokens, then repeats the whole text in a final `assistant` event. We must
+    stream the tokens and drop the duplicate — net text appears exactly once."""
+    tokens = ["Hello", " from", " streaming"]
+    lines = []
+    for tok in tokens:
+        lines.append(
+            (json.dumps({
+                "type": "stream_event",
+                "event": {
+                    "type": "content_block_delta",
+                    "delta": {"type": "text_delta", "text": tok},
+                },
+            }) + "\n").encode()
+        )
+    # Final full assistant message (the duplicate) + result (also duplicate).
+    full = "".join(tokens)
+    lines.append((json.dumps({"type": "assistant", "message": {
+        "content": [{"type": "text", "text": full}]
+    }}) + "\n").encode())
+    lines.append((json.dumps({"type": "result", "result": full}) + "\n").encode())
+
+    captured["proc"] = _FakeProc(lines)
+    chunks = list(
+        runner.stream_via_cli_agent(
+            [{"role": "user", "content": "hi"}], backend="claude", cwd="/tmp", yolo=True,
+        )
+    )
+    # Streamed token-by-token (3 chunks), and the full text appears once.
+    assert chunks == tokens
+    assert "".join(chunks) == full
+    assert "--include-partial-messages" in captured["cmd"]
+
+
 def test_claude_non_yolo_omits_skip_permissions(captured):
     captured["proc"] = _FakeProc([])
     list(
