@@ -279,14 +279,47 @@ def run_streaming_response(
                 _finalize(accumulated, cand.backend)
                 return
 
-            # Every eligible account is rate-limited. Phase 2 will queue +
-            # auto-retry; for now surface a clear, actionable message.
+            # Every eligible account is rate-limited. Park the turn in the
+            # persistent retry queue; the chat_retry_queue scheduler job
+            # re-dispatches it once any account's cooldown expires (survives
+            # restarts). Fall back to a hard error only if queuing fails.
             msg = soonest_reset_message(backend)
-            logger.warning("Chat: all accounts rate-limited for backend=%s", backend)
-            ChatStateService.push_delta(_session_id, "error", {"error": msg, "kind": "rate_limited"})
-            ChatStateService.push_status(_session_id, "error")
-            if on_error:
-                on_error(msg)
+            try:
+                from .chat_retry_service import ChatRetryService
+
+                ChatRetryService.enqueue(
+                    session_id=_session_id,
+                    super_agent_id=_super_agent_id,
+                    backend=backend,
+                    account_id=account_id,
+                    model=model,
+                    cwd=cwd,
+                    chat_mode=chat_mode,
+                    instance_id=instance_id,
+                    use_cli_agent=use_cli_agent,
+                    reason=last_reason or msg,
+                )
+                logger.warning(
+                    "Chat: all accounts rate-limited for backend=%s — turn queued", backend
+                )
+                ChatStateService.push_delta(
+                    _session_id,
+                    "queued",
+                    {"message": msg, "reason": last_reason or msg},
+                )
+                # Stop the spinner; the queued notice tells the user it will
+                # auto-resume. The scheduler re-dispatch re-enters streaming.
+                ChatStateService.push_status(_session_id, "idle")
+            except Exception:
+                logger.warning(
+                    "Failed to queue chat retry; surfacing error instead", exc_info=True
+                )
+                ChatStateService.push_delta(
+                    _session_id, "error", {"error": msg, "kind": "rate_limited"}
+                )
+                ChatStateService.push_status(_session_id, "error")
+                if on_error:
+                    on_error(msg)
 
         except Exception as e:
             error_msg = str(e)

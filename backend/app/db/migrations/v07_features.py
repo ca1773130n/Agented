@@ -992,6 +992,35 @@ def _migrate_146_project_autonomy_config(conn):
     create_forge_promotion_tables(conn)
 
 
+def _migrate_147_chat_retry_queue(conn):
+    """Chat rate-limit rotation Phase 2 — persistent retry queue. When every
+    eligible account is rate-limited, a chat turn is parked in
+    ``chat_retry_queue`` and re-dispatched by the ``chat_retry_queue``
+    scheduler job once any account's cooldown expires. Added to
+    ``create_fresh_schema`` (_misc); this migration creates it idempotently on
+    existing DBs."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS chat_retry_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL UNIQUE,
+            super_agent_id TEXT NOT NULL,
+            backend TEXT,
+            account_id TEXT,
+            model TEXT,
+            cwd TEXT,
+            chat_mode TEXT,
+            instance_id TEXT,
+            use_cli_agent INTEGER,
+            attempts INTEGER DEFAULT 0,
+            reason TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_attempt_at TIMESTAMP
+        )
+        """
+    )
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -1080,4 +1109,7 @@ V07_MIGRATIONS: list = [
     # Backfill Phase D autonomy table on pre-Phase-D DBs (was fresh-schema
     # only) so autonomous_apply_job stops crashing with "no such table".
     (146, "project_autonomy_config", _migrate_146_project_autonomy_config),
+    # Chat rate-limit rotation Phase 2: persistent retry queue for turns
+    # parked when every eligible account is rate-limited.
+    (147, "chat_retry_queue", _migrate_147_chat_retry_queue),
 ]

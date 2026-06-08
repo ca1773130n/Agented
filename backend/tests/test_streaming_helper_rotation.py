@@ -138,7 +138,10 @@ def test_rotates_to_next_account_on_rate_limit(monkeypatch, two_claude_accounts)
     assert RateLimitService.is_rate_limited(accts["Personal2"]["id"]) is False
 
 
-def test_all_accounts_rate_limited_surfaces_error(monkeypatch, two_claude_accounts):
+def test_all_accounts_rate_limited_queues_the_turn(monkeypatch, two_claude_accounts):
+    """Phase 2: exhaustion parks the turn in the retry queue and emits a
+    `queued` delta instead of a hard error."""
+    from app.db import chat_retry_queue as q
     from app.services import cli_agent_runner_service as runner
     from app.services import streaming_helper as sh
 
@@ -152,19 +155,16 @@ def test_all_accounts_rate_limited_surfaces_error(monkeypatch, two_claude_accoun
     monkeypatch.setattr(runner, "stream_via_cli_agent", fake_stream)
     monkeypatch.setattr(runner, "resolve_account_config_dir", lambda aid, backend: None)
 
-    errors: list = []
     sh.run_streaming_response(
         session_id="sess-2",
         super_agent_id="psa-2",
         backend="claude",
         account_id=None,
-        on_error=lambda m: errors.append(m),
     )
 
     kinds = [k for k, _ in deltas]
-    assert "error" in kinds
-    err = next(p for k, p in deltas if k == "error")
-    assert err.get("kind") == "rate_limited"
-    assert errors  # on_error called
-    # No assistant content was finalized.
-    assert "finish" not in kinds
+    assert "queued" in kinds
+    assert "finish" not in kinds  # no content finalized
+    # The turn is persisted for the scheduler to re-dispatch.
+    pending = q.list_pending_chat_retries()
+    assert any(r["session_id"] == "sess-2" for r in pending)

@@ -223,6 +223,7 @@ def _setup_scheduler(app: Any) -> None:
     if SchedulerService._scheduler:
         from app.db.webhook_dedup import cleanup_expired_keys
         from app.services.agent_conversation_service import AgentConversationService
+        from app.services.chat_retry_service import ChatRetryService
         from app.services.memory_evolution import (
             process_pending_extractions,
             run_consolidation_check,
@@ -267,6 +268,9 @@ def _setup_scheduler(app: Any) -> None:
             ),
             # Phase D: periodic autonomy poller — auto-apply eligible rounds.
             (autonomous_apply_job, {"minutes": 5}, "harness_autonomous_apply"),
+            # Chat rate-limit rotation Phase 2: re-dispatch parked chat turns
+            # once a rate-limited account frees up.
+            (ChatRetryService.process_pending, {"seconds": 20}, "chat_retry_queue"),
         ]
         for func, interval_kwargs, job_id in periodic_jobs:
             SchedulerService._scheduler.add_job(

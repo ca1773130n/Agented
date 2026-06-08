@@ -1788,6 +1788,8 @@
     }
   },
   "projectTeamLeaderChat": {
+    "queuedNotice": "모든 계정이 사용 한도에 도달했어요 — 대기열에 넣었고 계정이 풀리면 다시 시도해요. {detail}",
+    "retrying": "계정이 풀렸어요 — 다시 시도 중…",
     "rotatedNotice": "{from}이(가) 사용 한도에 도달해 {to}(으)로 전환했어요",
     "allRateLimited": "모든 계정이 사용 한도에 도달했어요. {detail}",
     "streamError": "응답 스트림이 오류로 종료되었어요.",

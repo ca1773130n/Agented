@@ -229,6 +229,18 @@ export function useSketchChat() {
                 messages.value[msgIndex].content = streamingContent.value;
                 break;
               }
+              case 'queued': {
+                // All accounts rate-limited → turn parked for auto-retry.
+                isStreaming.value = false;
+                const m = (data.data || data).message || 'All accounts are rate-limited.';
+                streamingContent.value += `\n\n_⏳ ${m} Queued — will retry when an account frees._`;
+                messages.value[msgIndex].content = streamingContent.value;
+                if (eventSource) {
+                  eventSource.close();
+                  eventSource = null;
+                }
+                break;
+              }
               case 'finish':
                 isStreaming.value = false;
                 if (eventSource) {

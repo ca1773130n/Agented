@@ -1788,6 +1788,8 @@
     }
   },
   "projectTeamLeaderChat": {
+    "queuedNotice": "All accounts are rate-limited — queued, will retry when one frees. {detail}",
+    "retrying": "An account freed up — retrying…",
     "rotatedNotice": "{from} hit its rate limit — switched to {to}",
     "allRateLimited": "All accounts are rate-limited. {detail}",
     "streamError": "The response stream ended with an error.",

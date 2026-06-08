@@ -50,8 +50,8 @@ interface ChatMessage {
   timestamp?: string;
   citations?: Citation[];
   tool_uses?: ToolUseRecord[];
-  // System notices: account rotation on rate limit / terminal errors.
-  variant?: 'rotation' | 'error';
+  // System notices: account rotation / queued-for-retry / terminal errors.
+  variant?: 'rotation' | 'queued' | 'error';
 }
 
 const messages = ref<ChatMessage[]>([]);
@@ -159,6 +159,26 @@ function connectStream(session: TeamLeaderChatSession) {
           to: data.to || '?',
         }),
       });
+      scrollToBottom();
+    } else if (deltaType === 'queued') {
+      // Phase 2: every account is rate-limited, so the turn is parked and
+      // will auto-resume when one frees up (scheduler retries every ~20s).
+      activeAssistant = null;
+      messages.value.push({
+        role: 'system',
+        variant: 'queued',
+        content: t('projectTeamLeaderChat.queuedNotice', { detail: data.message || '' }),
+      });
+      isStreaming.value = false;
+      scrollToBottom();
+    } else if (deltaType === 'retry_dispatch') {
+      // A queued turn is being re-dispatched onto a freed account.
+      messages.value.push({
+        role: 'system',
+        variant: 'rotation',
+        content: t('projectTeamLeaderChat.retrying'),
+      });
+      isStreaming.value = true;
       scrollToBottom();
     } else if (deltaType === 'error') {
       // Terminal stream error — most importantly "all accounts
@@ -351,7 +371,7 @@ onUnmounted(closeStream);
           :data-variant="m.variant"
           data-testid="chat-system-notice"
         >
-          <span class="msg-notice__icon" aria-hidden="true">{{ m.variant === 'error' ? '⚠' : '↻' }}</span>
+          <span class="msg-notice__icon" aria-hidden="true">{{ m.variant === 'error' ? '⚠' : m.variant === 'queued' ? '⏳' : '↻' }}</span>
           <span class="msg-notice__text">{{ m.content }}</span>
         </div>
         <article
@@ -481,6 +501,11 @@ onUnmounted(closeStream);
   background: rgba(234, 179, 8, 0.08);
   border: 1px solid rgba(234, 179, 8, 0.28);
   color: var(--accent-amber, #eab308);
+}
+.msg-notice--queued {
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.28);
+  color: var(--accent-blue, #3b82f6);
 }
 .msg-notice--error {
   background: rgba(239, 68, 68, 0.08);
