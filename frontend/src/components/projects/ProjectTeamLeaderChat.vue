@@ -110,8 +110,17 @@ function connectStream(session: TeamLeaderChatSession) {
 
     if (deltaType === 'message') {
       if (data.role === 'user' && data.content) {
-        // De-dup against optimistic local push by message_id.
-        if (
+        // send() optimistically pushes the user's message (no message_id) so
+        // it shows instantly. The backend then echoes it WITH a message_id.
+        // Reconcile the two — adopt the id onto the optimistic bubble instead
+        // of pushing a second copy (the bug: every line showed twice).
+        const optimistic = messages.value.find(
+          (m) => m.role === 'user' && m.content === data.content && !m.message_id,
+        );
+        if (optimistic) {
+          optimistic.message_id = data.message_id;
+          if (data.timestamp) optimistic.timestamp = data.timestamp;
+        } else if (
           data.message_id &&
           !messages.value.some((m) => m.message_id === data.message_id)
         ) {
@@ -119,12 +128,13 @@ function connectStream(session: TeamLeaderChatSession) {
             role: 'user',
             content: data.content,
             message_id: data.message_id,
+            timestamp: data.timestamp || new Date().toISOString(),
           });
         }
       }
     } else if (deltaType === 'content_delta') {
       if (!activeAssistant) {
-        activeAssistant = { role: 'assistant', content: '' };
+        activeAssistant = { role: 'assistant', content: '', timestamp: new Date().toISOString() };
         messages.value.push(activeAssistant);
       }
       activeAssistant.content += data.content || '';
@@ -134,7 +144,7 @@ function connectStream(session: TeamLeaderChatSession) {
       // tool_use blocks or OpenAI tool_calls deltas, dispatched by
       // run_streaming_response. Attach to the active assistant turn.
       if (!activeAssistant) {
-        activeAssistant = { role: 'assistant', content: '' };
+        activeAssistant = { role: 'assistant', content: '', timestamp: new Date().toISOString() };
         messages.value.push(activeAssistant);
       }
       const tu: ToolUseRecord = {
@@ -284,7 +294,7 @@ async function send() {
   isSending.value = true;
   isStreaming.value = true;
 
-  messages.value.push({ role: 'user', content });
+  messages.value.push({ role: 'user', content, timestamp: new Date().toISOString() });
   scrollToBottom();
 
   try {
@@ -304,6 +314,13 @@ async function send() {
   } finally {
     isSending.value = false;
   }
+}
+
+function formatTime(iso?: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 function formatToolInput(tu: ToolUseRecord): string {
@@ -401,7 +418,10 @@ onUnmounted(closeStream);
           :class="['msg', `msg--${m.role}`]"
           :data-role="m.role"
         >
-          <div class="msg__role">{{ m.role }}</div>
+          <div class="msg__head">
+            <span class="msg__role">{{ m.role }}</span>
+            <span v-if="m.timestamp" class="msg__time">{{ formatTime(m.timestamp) }}</span>
+          </div>
           <div
             v-if="m.role === 'assistant' && m.tool_uses?.length"
             class="msg__tools"
@@ -437,7 +457,11 @@ onUnmounted(closeStream);
           </div>
         </article>
         </template>
-        <div v-if="isStreaming" class="streaming">…</div>
+        <div v-if="isStreaming" class="typing" data-testid="chat-typing" aria-label="assistant is typing">
+          <span class="typing__dot" />
+          <span class="typing__dot" />
+          <span class="typing__dot" />
+        </div>
       </div>
 
       <footer class="composer">
@@ -504,9 +528,16 @@ onUnmounted(closeStream);
   border: 1px solid var(--border-subtle, rgba(255,255,255,0.06));
   align-self: flex-start; max-width: 90%;
 }
+.msg__head {
+  display: flex; align-items: baseline; gap: 8px;
+}
 .msg__role {
   font-size: 10px; text-transform: uppercase;
   letter-spacing: 0.06em; color: var(--text-tertiary);
+}
+.msg__time {
+  font-size: 10px; color: var(--text-quaternary, var(--text-tertiary));
+  opacity: 0.7; font-variant-numeric: tabular-nums;
 }
 /* Inline system notices (rate-limit rotation + terminal errors) —
    centered, full-width, visually distinct from user/assistant bubbles. */
@@ -592,7 +623,26 @@ onUnmounted(closeStream);
   text-overflow: ellipsis;
 }
 
-.streaming { font-size: 14px; color: var(--text-tertiary); padding: 6px 12px; }
+/* Typing indicator — three pulsing dots while the assistant streams. */
+.typing {
+  display: inline-flex; align-items: center; gap: 4px;
+  align-self: flex-start;
+  padding: 8px 12px;
+}
+.typing__dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--text-tertiary, #888);
+  animation: typing-bounce 1.2s ease-in-out infinite;
+}
+.typing__dot:nth-child(2) { animation-delay: 0.18s; }
+.typing__dot:nth-child(3) { animation-delay: 0.36s; }
+@keyframes typing-bounce {
+  0%, 80%, 100% { opacity: 0.3; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-3px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .typing__dot { animation: none; opacity: 0.6; }
+}
 
 .composer {
   display: flex; gap: 8px; align-items: stretch;

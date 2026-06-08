@@ -233,6 +233,14 @@ def _claude_line_handler(line: str):
     rl = detect_rate_limit_from_event(event)
     if rl is not None:
         return RateLimitEvent(rl)
+    # The terminal ``result`` event repeats the assistant message's full text
+    # (claude stream-json emits ``assistant`` THEN ``result`` with the same
+    # ``result`` string). Extracting both yielded every reply twice,
+    # concatenated into one bubble. The ``assistant``/``content_block_delta``
+    # events already carry the content, so skip ``result`` here. (Rate-limit
+    # results are handled above; other result subtypes carry no new content.)
+    if event.get("type") == "result":
+        return None
     return _extract_text_from_event(event)
 
 

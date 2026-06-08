@@ -83,6 +83,33 @@ def test_claude_yolo_passes_skip_permissions(captured):
     assert "hello" in "".join(chunks)
 
 
+def test_claude_result_event_does_not_double_yield_text(captured):
+    """claude stream-json emits an ``assistant`` event then a ``result`` event
+    carrying the SAME text. Extracting both used to print every reply twice,
+    concatenated into one bubble. Only the assistant text should be yielded."""
+    reply = "Hey. What do you need?"
+    captured["proc"] = _FakeProc(
+        [
+            (json.dumps({"type": "assistant", "message": {
+                "content": [{"type": "text", "text": reply}]
+            }}) + "\n").encode(),
+            (json.dumps({
+                "type": "result", "subtype": "success", "is_error": False,
+                "result": reply,
+            }) + "\n").encode(),
+        ]
+    )
+    chunks = list(
+        runner.stream_via_cli_agent(
+            [{"role": "user", "content": "hi"}],
+            backend="claude",
+            cwd="/tmp/work",
+            yolo=True,
+        )
+    )
+    assert "".join(chunks) == reply  # exactly once, not doubled
+
+
 def test_claude_non_yolo_omits_skip_permissions(captured):
     captured["proc"] = _FakeProc([])
     list(
