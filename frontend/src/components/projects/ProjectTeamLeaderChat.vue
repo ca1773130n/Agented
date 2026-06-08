@@ -17,7 +17,8 @@ import {
   teamLeaderChatApi,
   type TeamLeaderChatSession,
 } from '../../services/api/team-leader-chat';
-import { apiFetch, ApiError } from '../../services/api/client';
+import { superAgentSessionApi } from '../../services/api/super-agents';
+import { apiFetch, ApiError, type AuthenticatedEventSource } from '../../services/api/client';
 import { useToast } from '../../composables/useToast';
 import LoadingState from '../base/LoadingState.vue';
 import ErrorState from '../base/ErrorState.vue';
@@ -59,7 +60,7 @@ const draft = ref('');
 const isSending = ref(false);
 const isStreaming = ref(false);
 
-const sseSource = ref<EventSource | null>(null);
+const sseSource = ref<AuthenticatedEventSource | null>(null);
 const scrollContainer = ref<HTMLDivElement | null>(null);
 
 const tesseraeBadge = computed(() =>
@@ -82,22 +83,22 @@ async function resolveAndConnect() {
 }
 
 function connectStream(session: TeamLeaderChatSession) {
-  // The chat SSE path lives on the existing super-agent surface.
-  // Use template SA id (matches what _resolve_chat_session expects).
-  const url =
-    `/admin/super-agents/${encodeURIComponent(session.super_agent_id)}` +
-    `/sessions/${encodeURIComponent(session.session_id)}/chat/stream`;
-
   closeStream();
 
-  // EventSource doesn't accept custom headers — auth flows via cookie
-  // when the dev server is set up properly.
-  const es = new EventSource(url, { withCredentials: true });
+  // Use the SAME authenticated SSE wrapper every other chat panel uses
+  // (superAgentSessionApi.chatStream → createAuthenticatedEventSource). A
+  // raw `new EventSource` can't send the X-API-Key header the API client
+  // signs every request with, so the /admin/.../chat/stream request was
+  // rejected 401 on any host without a cookie session (e.g. remote/DDNS).
+  // The backend emits NAMED `state_delta` events, so we must listen via
+  // addEventListener('state_delta') — `onmessage` only fires for unnamed
+  // events and never received these.
+  const es = superAgentSessionApi.chatStream(session.super_agent_id, session.session_id);
   sseSource.value = es;
 
   let activeAssistant: ChatMessage | null = null;
 
-  es.onmessage = (ev) => {
+  const handleDelta = (ev: MessageEvent) => {
     let payload: any;
     try {
       payload = JSON.parse(ev.data);
@@ -206,8 +207,29 @@ function connectStream(session: TeamLeaderChatSession) {
     }
   };
 
-  es.onerror = (err) => {
-    console.warn('[TeamLeaderChat] SSE error', err);
+  // Backend deltas (content/tool_use/rotation/queued/error/finish) all
+  // arrive on the named `state_delta` channel.
+  es.addEventListener('state_delta', handleDelta);
+
+  // Backend in-band terminal error (e.g. "Session not found"), distinct
+  // from a transport error — carries a JSON body.
+  es.addEventListener('error', (ev: MessageEvent) => {
+    try {
+      const payload = JSON.parse(ev.data);
+      activeAssistant = null;
+      messages.value.push({
+        role: 'system',
+        variant: 'error',
+        content: payload.error || t('projectTeamLeaderChat.streamError'),
+      });
+      isStreaming.value = false;
+      scrollToBottom();
+    } catch {
+      /* transport 'error' events have no JSON body — handled by onerror */
+    }
+  });
+
+  es.onerror = () => {
     isStreaming.value = false;
   };
 }
