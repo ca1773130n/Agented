@@ -141,13 +141,9 @@ class BaseConversationService(abc.ABC):
         # Load from DB if needed so cross-user probes that didn't
         # warm the in-memory cache still get a real 404.
         if conv_id not in cls._conversations:
-            resumed, status = cls.resume_conversation(
-                conv_id, caller_user_id=caller_user_id
-            )
+            resumed, status = cls.resume_conversation(conv_id, caller_user_id=caller_user_id)
             if status != HTTPStatus.OK:
-                return error_response(
-                    "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
-                )
+                return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
         owner_err = cls._check_owner(conv_id, caller_user_id)
         if owner_err is not None:
             return owner_err
@@ -175,9 +171,7 @@ class BaseConversationService(abc.ABC):
         return cls._get_conv_id_prefix() + "".join(secrets.choice(chars) for _ in range(16))
 
     @classmethod
-    def start_conversation(
-        cls, user_id: Optional[str] = None
-    ) -> Tuple[dict, HTTPStatus]:
+    def start_conversation(cls, user_id: Optional[str] = None) -> Tuple[dict, HTTPStatus]:
         """Start a new entity creation conversation.
 
         v0.7.83 — accepts an optional ``user_id`` from the route so
@@ -269,15 +263,11 @@ class BaseConversationService(abc.ABC):
         """
         conv = cls._conversations.get(conv_id)
         if not conv:
-            return error_response(
-                "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
-            )
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
         owner = conv.get("user_id")
         if caller_user_id == owner:
             return None
-        return error_response(
-            "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
-        )
+        return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
     @classmethod
     def list_active(cls, user_id: Optional[str] = None) -> Tuple[dict, HTTPStatus]:
@@ -331,6 +321,11 @@ class BaseConversationService(abc.ABC):
         threading.Thread(
             target=cls._process_with_claude,
             args=(conv_id, kickoff_msg.content),
+            # daemon: a conversation thread blocked on a CLI subprocess must
+            # not pin the interpreter at exit — a single hung worker keeps
+            # the process alive forever while the APScheduler daemon thread
+            # spams a torn-down executor pool (zombie-backend log spam).
+            daemon=True,
         ).start()
 
     @classmethod
@@ -358,9 +353,7 @@ class BaseConversationService(abc.ABC):
         # messages from a different operator.
         owner = db_conv.get("user_id")
         if owner != caller_user_id:  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
-            return error_response(
-                "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
-            )
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         try:
             messages_raw = json.loads(db_conv["messages"] or "[]")
@@ -424,6 +417,7 @@ class BaseConversationService(abc.ABC):
                 "model": model,
                 "use_cli_agent": use_cli_agent,
             },
+            daemon=True,  # see kickoff thread above — never pin interpreter exit
         ).start()
 
         return {"message_id": conv_id, "status": "processing"}, HTTPStatus.OK
@@ -490,10 +484,10 @@ class BaseConversationService(abc.ABC):
             if not db_conv:
                 return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
             owner = db_conv.get("user_id")
-            if owner != caller_user_id:  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
-                return error_response(
-                    "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
-                )
+            if (
+                owner != caller_user_id
+            ):  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
+                return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
         else:
             owner_err = cls._check_owner(conv_id, caller_user_id)
             if owner_err is not None:
@@ -504,9 +498,7 @@ class BaseConversationService(abc.ABC):
         return {"message": "Conversation abandoned"}, HTTPStatus.OK
 
     @classmethod
-    def can_subscribe(
-        cls, conv_id: str, caller_user_id: Optional[str]
-    ) -> bool:
+    def can_subscribe(cls, conv_id: str, caller_user_id: Optional[str]) -> bool:
         """v0.7.83 — precheck used by SSE routes so an unauthorized
         subscriber gets a real HTTP 404 instead of a 200 + in-band
         error event. Mirrors skill's ``can_subscribe``.
@@ -520,7 +512,9 @@ class BaseConversationService(abc.ABC):
             if not db_conv:
                 return False
             owner = db_conv.get("user_id")
-            return owner == caller_user_id  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
+            return (
+                owner == caller_user_id
+            )  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
         return cls._check_owner(conv_id, caller_user_id) is None
 
     @classmethod
@@ -737,9 +731,7 @@ class BaseConversationService(abc.ABC):
 
         owner = db_conv.get("user_id")
         if owner != caller_user_id:  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
-            return error_response(
-                "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
-            )
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
         if db_conv["status"] != "active":
             return error_response(
@@ -791,9 +783,7 @@ class BaseConversationService(abc.ABC):
         }, HTTPStatus.OK
 
     @classmethod
-    def list_conversations(
-        cls, user_id: Optional[str] = None
-    ) -> Tuple[dict, HTTPStatus]:
+    def list_conversations(cls, user_id: Optional[str] = None) -> Tuple[dict, HTTPStatus]:
         """List active/recent conversations of this entity type.
 
         v0.7.83 — scopes by ``user_id`` so a list call doesn't

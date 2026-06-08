@@ -101,9 +101,7 @@ class PluginConversationService:
         return "plugin_" + "".join(secrets.choice(chars) for _ in range(16))
 
     @classmethod
-    def start_conversation(
-        cls, user_id: Optional[str] = None
-    ) -> Tuple[dict, HTTPStatus]:
+    def start_conversation(cls, user_id: Optional[str] = None) -> Tuple[dict, HTTPStatus]:
         """Start a new plugin creation conversation.
 
         v0.7.83 — accepts an optional ``user_id`` so the conv row
@@ -192,9 +190,7 @@ class PluginConversationService:
         if not row or row["status"] != "active":
             return False
         messages = [
-            ConversationMessage(
-                role=m["role"], content=m["content"], timestamp=m["timestamp"]
-            )
+            ConversationMessage(role=m["role"], content=m["content"], timestamp=m["timestamp"])
             for m in row["messages"]
         ]
         with cls._lock:
@@ -220,18 +216,14 @@ class PluginConversationService:
         """
         conv = cls._conversations.get(conv_id)
         if not conv:
-            return error_response(
-                "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
-            )
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
         owner = conv.get("user_id")
         # v0.7.83 (codex WARN 2 / 2nd pass) — strict match including
         # ``None == None``. Authenticated callers cannot touch
         # NULL-owner (legacy) rows.
         if owner == caller_user_id:
             return None
-        return error_response(
-            "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
-        )
+        return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
     @classmethod
     def _persist(
@@ -254,9 +246,7 @@ class PluginConversationService:
                 status=status,
             )
         except Exception:
-            logger.warning(
-                "plugin_conv: failed to persist conversation %s", conv_id, exc_info=True
-            )
+            logger.warning("plugin_conv: failed to persist conversation %s", conv_id, exc_info=True)
 
     @classmethod
     def list_active(cls, user_id: Optional[str] = None) -> Tuple[dict, HTTPStatus]:
@@ -282,9 +272,7 @@ class PluginConversationService:
         }, HTTPStatus.OK
 
     @classmethod
-    def can_subscribe(
-        cls, conv_id: str, caller_user_id: Optional[str]
-    ) -> bool:
+    def can_subscribe(cls, conv_id: str, caller_user_id: Optional[str]) -> bool:
         """Precheck used by the SSE route so an unauthorized
         subscriber gets a real HTTP 404 instead of 200 + in-band
         error event. Mirrors skill's ``can_subscribe``.
@@ -314,6 +302,7 @@ class PluginConversationService:
         threading.Thread(
             target=cls._process_with_claude,
             args=(conv_id, kickoff_msg.content),
+            daemon=True,  # never pin interpreter exit on a hung CLI conversation
         ).start()
 
     @classmethod
@@ -362,9 +351,7 @@ class PluginConversationService:
         with cls._lock:
             conv = cls._conversations[conv_id]
             if conv.get("processing"):
-                return error_response(
-                    "CONFLICT", "Conversation is processing", HTTPStatus.CONFLICT
-                )
+                return error_response("CONFLICT", "Conversation is processing", HTTPStatus.CONFLICT)
             conv["processing"] = True
             user_msg = ConversationMessage(
                 role="user",
@@ -385,11 +372,11 @@ class PluginConversationService:
                 target=cls._process_with_claude,
                 args=(conv_id, message),
                 kwargs={"backend": backend, "account_id": account_id, "model": model},
+                daemon=True,  # never pin interpreter exit on a hung CLI conversation
             ).start()
         except Exception:
             logger.error(
-                "plugin_conv: failed to start LLM thread for %s; "
-                "resetting processing flag",
+                "plugin_conv: failed to start LLM thread for %s; resetting processing flag",
                 conv_id,
                 exc_info=True,
             )
@@ -466,9 +453,7 @@ class PluginConversationService:
         with cls._lock:
             conv = cls._conversations.get(conv_id)
             if conv is None:
-                return error_response(
-                    "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
-                )
+                return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
             if conv.get("processing"):
                 return error_response(
                     "CONFLICT",
@@ -488,9 +473,7 @@ class PluginConversationService:
                     cls._conversations[conv_id]["processing"] = False
 
     @classmethod
-    def _do_finalize_plugin(
-        cls, conv_id: str, conv: dict
-    ) -> Tuple[dict, HTTPStatus]:
+    def _do_finalize_plugin(cls, conv_id: str, conv: dict) -> Tuple[dict, HTTPStatus]:
         """v0.7.83 (codex WARN C / 3rd pass) — extracted body of
         ``finalize_plugin`` so the wrapper can hold the
         ``processing`` flag across the whole call and reset it
@@ -579,15 +562,15 @@ class PluginConversationService:
                 row = get_plugin_conversation(conv_id)
                 if row:
                     owner = row.get("user_id")
-                    if owner != caller_user_id:  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
+                    if (
+                        owner != caller_user_id
+                    ):  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
                         return error_response(
                             "NOT_FOUND",
                             "Conversation not found",
                             HTTPStatus.NOT_FOUND,
                         )
-                    upsert_plugin_conversation(
-                        conv_id, row["messages"], status="abandoned"
-                    )
+                    upsert_plugin_conversation(conv_id, row["messages"], status="abandoned")
                     return {"message": "Conversation abandoned"}, HTTPStatus.OK
             except Exception:
                 pass
@@ -633,12 +616,11 @@ class PluginConversationService:
         )
 
         try:
-            from .conversation_streaming import stream_llm_response
-
             # Build messages from conversation history. Filter
             # out empty/whitespace turns — CLIProxyAPI rejects
             # them as "text content blocks must be non-empty".
             from .conversation_filters import drop_empty_content_messages
+            from .conversation_streaming import stream_llm_response
 
             messages = drop_empty_content_messages(conv["messages"])
             if not any(m["role"] == "user" for m in messages):
