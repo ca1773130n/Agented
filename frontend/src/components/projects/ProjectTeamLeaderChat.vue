@@ -17,10 +17,12 @@ import {
   teamLeaderChatApi,
   type TeamLeaderChatSession,
 } from '../../services/api/team-leader-chat';
-import { apiFetch, ApiError } from '../../services/api/client';
+import { superAgentSessionApi } from '../../services/api/super-agents';
+import { apiFetch, ApiError, type AuthenticatedEventSource } from '../../services/api/client';
 import { useToast } from '../../composables/useToast';
 import LoadingState from '../base/LoadingState.vue';
 import ErrorState from '../base/ErrorState.vue';
+import MarkdownContent from '../base/MarkdownContent.vue';
 
 const props = defineProps<{ projectId: string }>();
 const showToast = useToast();
@@ -44,12 +46,16 @@ interface ToolUseRecord {
 }
 
 interface ChatMessage {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
   message_id?: string;
   timestamp?: string;
   citations?: Citation[];
   tool_uses?: ToolUseRecord[];
+  /** Extended-thinking / reasoning text, shown folded above the answer. */
+  thinking?: string;
+  // System notices: account rotation / queued-for-retry / terminal errors.
+  variant?: 'rotation' | 'queued' | 'error';
 }
 
 const messages = ref<ChatMessage[]>([]);
@@ -57,7 +63,7 @@ const draft = ref('');
 const isSending = ref(false);
 const isStreaming = ref(false);
 
-const sseSource = ref<EventSource | null>(null);
+const sseSource = ref<AuthenticatedEventSource | null>(null);
 const scrollContainer = ref<HTMLDivElement | null>(null);
 
 const tesseraeBadge = computed(() =>
@@ -80,22 +86,22 @@ async function resolveAndConnect() {
 }
 
 function connectStream(session: TeamLeaderChatSession) {
-  // The chat SSE path lives on the existing super-agent surface.
-  // Use template SA id (matches what _resolve_chat_session expects).
-  const url =
-    `/admin/super-agents/${encodeURIComponent(session.super_agent_id)}` +
-    `/sessions/${encodeURIComponent(session.session_id)}/chat/stream`;
-
   closeStream();
 
-  // EventSource doesn't accept custom headers — auth flows via cookie
-  // when the dev server is set up properly.
-  const es = new EventSource(url, { withCredentials: true });
+  // Use the SAME authenticated SSE wrapper every other chat panel uses
+  // (superAgentSessionApi.chatStream → createAuthenticatedEventSource). A
+  // raw `new EventSource` can't send the X-API-Key header the API client
+  // signs every request with, so the /admin/.../chat/stream request was
+  // rejected 401 on any host without a cookie session (e.g. remote/DDNS).
+  // The backend emits NAMED `state_delta` events, so we must listen via
+  // addEventListener('state_delta') — `onmessage` only fires for unnamed
+  // events and never received these.
+  const es = superAgentSessionApi.chatStream(session.super_agent_id, session.session_id);
   sseSource.value = es;
 
   let activeAssistant: ChatMessage | null = null;
 
-  es.onmessage = (ev) => {
+  const handleDelta = (ev: MessageEvent) => {
     let payload: any;
     try {
       payload = JSON.parse(ev.data);
@@ -107,8 +113,17 @@ function connectStream(session: TeamLeaderChatSession) {
 
     if (deltaType === 'message') {
       if (data.role === 'user' && data.content) {
-        // De-dup against optimistic local push by message_id.
-        if (
+        // send() optimistically pushes the user's message (no message_id) so
+        // it shows instantly. The backend then echoes it WITH a message_id.
+        // Reconcile the two — adopt the id onto the optimistic bubble instead
+        // of pushing a second copy (the bug: every line showed twice).
+        const optimistic = messages.value.find(
+          (m) => m.role === 'user' && m.content === data.content && !m.message_id,
+        );
+        if (optimistic) {
+          optimistic.message_id = data.message_id;
+          if (data.timestamp) optimistic.timestamp = data.timestamp;
+        } else if (
           data.message_id &&
           !messages.value.some((m) => m.message_id === data.message_id)
         ) {
@@ -116,22 +131,31 @@ function connectStream(session: TeamLeaderChatSession) {
             role: 'user',
             content: data.content,
             message_id: data.message_id,
+            timestamp: data.timestamp || new Date().toISOString(),
           });
         }
       }
     } else if (deltaType === 'content_delta') {
       if (!activeAssistant) {
-        activeAssistant = { role: 'assistant', content: '' };
+        activeAssistant = { role: 'assistant', content: '', timestamp: new Date().toISOString() };
         messages.value.push(activeAssistant);
       }
       activeAssistant.content += data.content || '';
+      scrollToBottom();
+    } else if (deltaType === 'thinking') {
+      // Reasoning tokens — accumulate into the active turn, shown folded.
+      if (!activeAssistant) {
+        activeAssistant = { role: 'assistant', content: '', timestamp: new Date().toISOString() };
+        messages.value.push(activeAssistant);
+      }
+      activeAssistant.thinking = (activeAssistant.thinking || '') + (data.text || '');
       scrollToBottom();
     } else if (deltaType === 'tool_use') {
       // Real tool-use event surfaced by the backend stream — Anthropic
       // tool_use blocks or OpenAI tool_calls deltas, dispatched by
       // run_streaming_response. Attach to the active assistant turn.
       if (!activeAssistant) {
-        activeAssistant = { role: 'assistant', content: '' };
+        activeAssistant = { role: 'assistant', content: '', timestamp: new Date().toISOString() };
         messages.value.push(activeAssistant);
       }
       const tu: ToolUseRecord = {
@@ -142,6 +166,56 @@ function connectStream(session: TeamLeaderChatSession) {
       activeAssistant.tool_uses = activeAssistant.tool_uses
         ? [...activeAssistant.tool_uses, tu]
         : [tu];
+      scrollToBottom();
+    } else if (deltaType === 'rotation') {
+      // The backend hit a rate limit on one account and switched to
+      // another (same backend, then other backends). Close the current
+      // turn and drop in a system notice so the user understands why the
+      // replying account/model changed mid-thread.
+      activeAssistant = null;
+      messages.value.push({
+        role: 'system',
+        variant: 'rotation',
+        content: t('projectTeamLeaderChat.rotatedNotice', {
+          from: data.from || '?',
+          to: data.to || '?',
+        }),
+      });
+      scrollToBottom();
+    } else if (deltaType === 'queued') {
+      // Phase 2: every account is rate-limited, so the turn is parked and
+      // will auto-resume when one frees up (scheduler retries every ~20s).
+      activeAssistant = null;
+      messages.value.push({
+        role: 'system',
+        variant: 'queued',
+        content: t('projectTeamLeaderChat.queuedNotice', { detail: data.message || '' }),
+      });
+      isStreaming.value = false;
+      scrollToBottom();
+    } else if (deltaType === 'retry_dispatch') {
+      // A queued turn is being re-dispatched onto a freed account.
+      messages.value.push({
+        role: 'system',
+        variant: 'rotation',
+        content: t('projectTeamLeaderChat.retrying'),
+      });
+      isStreaming.value = true;
+      scrollToBottom();
+    } else if (deltaType === 'error') {
+      // Terminal stream error — most importantly "all accounts
+      // rate-limited". Previously dropped silently (the chat just went
+      // quiet); surface it as a system notice.
+      activeAssistant = null;
+      messages.value.push({
+        role: 'system',
+        variant: 'error',
+        content:
+          data.kind === 'rate_limited'
+            ? t('projectTeamLeaderChat.allRateLimited', { detail: data.error || '' })
+            : data.error || t('projectTeamLeaderChat.streamError'),
+      });
+      isStreaming.value = false;
       scrollToBottom();
     } else if (deltaType === 'finish') {
       if (activeAssistant) {
@@ -154,8 +228,29 @@ function connectStream(session: TeamLeaderChatSession) {
     }
   };
 
-  es.onerror = (err) => {
-    console.warn('[TeamLeaderChat] SSE error', err);
+  // Backend deltas (content/tool_use/rotation/queued/error/finish) all
+  // arrive on the named `state_delta` channel.
+  es.addEventListener('state_delta', handleDelta);
+
+  // Backend in-band terminal error (e.g. "Session not found"), distinct
+  // from a transport error — carries a JSON body.
+  es.addEventListener('error', (ev: MessageEvent) => {
+    try {
+      const payload = JSON.parse(ev.data);
+      activeAssistant = null;
+      messages.value.push({
+        role: 'system',
+        variant: 'error',
+        content: payload.error || t('projectTeamLeaderChat.streamError'),
+      });
+      isStreaming.value = false;
+      scrollToBottom();
+    } catch {
+      /* transport 'error' events have no JSON body — handled by onerror */
+    }
+  });
+
+  es.onerror = () => {
     isStreaming.value = false;
   };
 }
@@ -210,7 +305,7 @@ async function send() {
   isSending.value = true;
   isStreaming.value = true;
 
-  messages.value.push({ role: 'user', content });
+  messages.value.push({ role: 'user', content, timestamp: new Date().toISOString() });
   scrollToBottom();
 
   try {
@@ -232,13 +327,11 @@ async function send() {
   }
 }
 
-function formatToolInput(tu: ToolUseRecord): string {
-  // Full args as JSON for the badge hover tooltip.
-  try {
-    return JSON.stringify(tu.input, null, 2).slice(0, 600);
-  } catch {
-    return String(tu.input);
-  }
+function formatTime(iso?: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 function formatToolPreview(tu: ToolUseRecord): string {
@@ -310,33 +403,68 @@ onUnmounted(closeStream);
         <p v-if="!messages.length" class="empty muted">
           {{ t('projectTeamLeaderChat.emptyHint') }}
         </p>
+        <template v-for="(m, i) in messages" :key="i">
+        <!-- System notices: rate-limit account rotation / terminal errors. -->
+        <div
+          v-if="m.role === 'system'"
+          :class="['msg-notice', `msg-notice--${m.variant || 'rotation'}`]"
+          data-role="system"
+          :data-variant="m.variant"
+          data-testid="chat-system-notice"
+        >
+          <span class="msg-notice__icon" aria-hidden="true">{{ m.variant === 'error' ? '⚠' : m.variant === 'queued' ? '⏳' : '↻' }}</span>
+          <span class="msg-notice__text">{{ m.content }}</span>
+        </div>
         <article
-          v-for="(m, i) in messages"
-          :key="i"
+          v-else
           :class="['msg', `msg--${m.role}`]"
           :data-role="m.role"
         >
-          <div class="msg__role">{{ m.role }}</div>
-          <div
+          <div class="msg__head">
+            <span class="msg__role">{{ m.role }}</span>
+            <span v-if="m.timestamp" class="msg__time">{{ formatTime(m.timestamp) }}</span>
+          </div>
+          <!-- Reasoning — folded by default; expand to read the thinking. -->
+          <details
+            v-if="m.role === 'assistant' && m.thinking"
+            class="msg__fold msg__fold--thinking"
+            data-testid="msg-thinking"
+          >
+            <summary>{{ t('projectTeamLeaderChat.thinkingLabel') }}</summary>
+            <div class="msg__fold-body">{{ m.thinking }}</div>
+          </details>
+          <!-- Tool executions — folded; expand to see each call + its args. -->
+          <details
             v-if="m.role === 'assistant' && m.tool_uses?.length"
-            class="msg__tools"
+            class="msg__fold msg__fold--tools"
             data-testid="msg-tool-uses"
           >
-            <span class="tool-label">{{ t('projectTeamLeaderChat.queriedLabel') }}</span>
-            <span
-              v-for="(tu, ti) in m.tool_uses"
-              :key="(tu.id || tu.name) + ':' + ti"
-              class="tool-badge"
-              :data-tool="tu.name"
-              :title="formatToolInput(tu)"
-            >
-              <code>{{ tu.name }}</code>
-              <span v-if="formatToolPreview(tu)" class="tool-preview">
-                {{ formatToolPreview(tu) }}
-              </span>
-            </span>
-          </div>
-          <div class="msg__content">{{ m.content }}</div>
+            <summary>
+              {{ t('projectTeamLeaderChat.toolsLabel', { count: m.tool_uses.length }) }}
+            </summary>
+            <div class="msg__fold-body">
+              <div
+                v-for="(tu, ti) in m.tool_uses"
+                :key="(tu.id || tu.name) + ':' + ti"
+                class="tool-row"
+                :data-tool="tu.name"
+              >
+                <code class="tool-row__name">{{ tu.name }}</code>
+                <span v-if="formatToolPreview(tu)" class="tool-row__args">{{
+                  formatToolPreview(tu)
+                }}</span>
+              </div>
+            </div>
+          </details>
+          <!-- Assistant replies render markdown; user input stays literal so
+               accidental markdown in a question isn't reinterpreted. -->
+          <MarkdownContent
+            v-if="m.role === 'assistant'"
+            class="msg__content"
+            :content="m.content"
+            :breaks="true"
+          />
+          <div v-else class="msg__content">{{ m.content }}</div>
           <div
             v-if="m.role === 'assistant' && m.citations?.length"
             class="msg__cites"
@@ -351,7 +479,12 @@ onUnmounted(closeStream);
             >{{ c.value }}</code>
           </div>
         </article>
-        <div v-if="isStreaming" class="streaming">…</div>
+        </template>
+        <div v-if="isStreaming" class="typing" data-testid="chat-typing" aria-label="assistant is typing">
+          <span class="typing__dot" />
+          <span class="typing__dot" />
+          <span class="typing__dot" />
+        </div>
       </div>
 
       <footer class="composer">
@@ -418,9 +551,42 @@ onUnmounted(closeStream);
   border: 1px solid var(--border-subtle, rgba(255,255,255,0.06));
   align-self: flex-start; max-width: 90%;
 }
+.msg__head {
+  display: flex; align-items: baseline; gap: 8px;
+}
 .msg__role {
   font-size: 10px; text-transform: uppercase;
   letter-spacing: 0.06em; color: var(--text-tertiary);
+}
+.msg__time {
+  font-size: 10px; color: var(--text-quaternary, var(--text-tertiary));
+  opacity: 0.7; font-variant-numeric: tabular-nums;
+}
+/* Inline system notices (rate-limit rotation + terminal errors) —
+   centered, full-width, visually distinct from user/assistant bubbles. */
+.msg-notice {
+  align-self: center;
+  display: flex; align-items: center; gap: 8px;
+  max-width: 92%;
+  padding: 6px 12px; border-radius: 8px;
+  font-size: 12px; line-height: 1.4;
+}
+.msg-notice__icon { flex: 0 0 auto; font-size: 13px; }
+.msg-notice__text { white-space: pre-wrap; }
+.msg-notice--rotation {
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid rgba(234, 179, 8, 0.28);
+  color: var(--accent-amber, #eab308);
+}
+.msg-notice--queued {
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.28);
+  color: var(--accent-blue, #3b82f6);
+}
+.msg-notice--error {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--accent-red, #ef4444);
 }
 .msg__content { font-size: 13px; white-space: pre-wrap; line-height: 1.5; }
 .msg__cites {
@@ -480,7 +646,69 @@ onUnmounted(closeStream);
   text-overflow: ellipsis;
 }
 
-.streaming { font-size: 14px; color: var(--text-tertiary); padding: 6px 12px; }
+/* Collapsible folds — reasoning + tool executions, closed by default. */
+.msg__fold {
+  margin: 2px 0 4px;
+  border: 1px solid var(--border-subtle, rgba(255,255,255,0.08));
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 11px;
+}
+.msg__fold > summary {
+  cursor: pointer; list-style: none;
+  padding: 4px 8px;
+  color: var(--text-tertiary);
+  user-select: none;
+  display: flex; align-items: center; gap: 6px;
+}
+.msg__fold > summary::-webkit-details-marker { display: none; }
+.msg__fold > summary::before {
+  content: '▸'; font-size: 9px; transition: transform 0.15s ease;
+}
+.msg__fold[open] > summary::before { transform: rotate(90deg); }
+.msg__fold--thinking > summary { color: var(--accent-purple, #8b5cf6); }
+.msg__fold-body {
+  padding: 6px 10px 8px;
+  border-top: 1px solid var(--border-subtle, rgba(255,255,255,0.06));
+  white-space: pre-wrap; line-height: 1.5;
+  color: var(--text-secondary, var(--text-tertiary));
+  font-size: 12px;
+  max-height: 320px; overflow: auto;
+}
+.tool-row {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 2px 0;
+}
+.tool-row__name {
+  font-family: var(--font-mono, monospace);
+  color: var(--accent-green, #10b981);
+  font-size: 11px;
+}
+.tool-row__args {
+  font-size: 11px; opacity: 0.8;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Typing indicator — three pulsing dots while the assistant streams. */
+.typing {
+  display: inline-flex; align-items: center; gap: 4px;
+  align-self: flex-start;
+  padding: 8px 12px;
+}
+.typing__dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--text-tertiary, #888);
+  animation: typing-bounce 1.2s ease-in-out infinite;
+}
+.typing__dot:nth-child(2) { animation-delay: 0.18s; }
+.typing__dot:nth-child(3) { animation-delay: 0.36s; }
+@keyframes typing-bounce {
+  0%, 80%, 100% { opacity: 0.3; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-3px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .typing__dot { animation: none; opacity: 0.6; }
+}
 
 .composer {
   display: flex; gap: 8px; align-items: stretch;

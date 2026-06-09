@@ -83,6 +83,97 @@ def test_claude_yolo_passes_skip_permissions(captured):
     assert "hello" in "".join(chunks)
 
 
+def test_claude_result_event_does_not_double_yield_text(captured):
+    """claude stream-json emits an ``assistant`` event then a ``result`` event
+    carrying the SAME text. Extracting both used to print every reply twice,
+    concatenated into one bubble. Only the assistant text should be yielded."""
+    reply = "Hey. What do you need?"
+    captured["proc"] = _FakeProc(
+        [
+            (json.dumps({"type": "assistant", "message": {
+                "content": [{"type": "text", "text": reply}]
+            }}) + "\n").encode(),
+            (json.dumps({
+                "type": "result", "subtype": "success", "is_error": False,
+                "result": reply,
+            }) + "\n").encode(),
+        ]
+    )
+    chunks = list(
+        runner.stream_via_cli_agent(
+            [{"role": "user", "content": "hi"}],
+            backend="claude",
+            cwd="/tmp/work",
+            yolo=True,
+        )
+    )
+    assert "".join(chunks) == reply  # exactly once, not doubled
+
+
+def test_claude_streams_token_deltas_and_skips_duplicate_assistant(captured):
+    """With --include-partial-messages claude streams content_block_delta
+    tokens, then repeats the whole text in a final `assistant` event. We must
+    stream the tokens and drop the duplicate — net text appears exactly once."""
+    tokens = ["Hello", " from", " streaming"]
+    lines = []
+    for tok in tokens:
+        lines.append(
+            (json.dumps({
+                "type": "stream_event",
+                "event": {
+                    "type": "content_block_delta",
+                    "delta": {"type": "text_delta", "text": tok},
+                },
+            }) + "\n").encode()
+        )
+    # Final full assistant message (the duplicate) + result (also duplicate).
+    full = "".join(tokens)
+    lines.append((json.dumps({"type": "assistant", "message": {
+        "content": [{"type": "text", "text": full}]
+    }}) + "\n").encode())
+    lines.append((json.dumps({"type": "result", "result": full}) + "\n").encode())
+
+    captured["proc"] = _FakeProc(lines)
+    chunks = list(
+        runner.stream_via_cli_agent(
+            [{"role": "user", "content": "hi"}], backend="claude", cwd="/tmp", yolo=True,
+        )
+    )
+    # Streamed token-by-token (3 chunks), and the full text appears once.
+    assert chunks == tokens
+    assert "".join(chunks) == full
+    assert "--include-partial-messages" in captured["cmd"]
+
+
+def test_claude_assistant_event_emits_thinking_and_tool_use(captured):
+    """A final assistant event with thinking + tool_use + text blocks surfaces
+    a ThinkingEvent + ToolUseEvent alongside the text (folded in the UI)."""
+    from app.services.conversation_streaming import ThinkingEvent, ToolUseEvent
+
+    captured["proc"] = _FakeProc(
+        [
+            (json.dumps({"type": "assistant", "message": {"content": [
+                {"type": "thinking", "thinking": "Let me plan the epics."},
+                {"type": "tool_use", "name": "tesserae_ask", "id": "tu1",
+                 "input": {"question": "prior art?"}},
+                {"type": "text", "text": "Here's the plan."},
+            ]}}) + "\n").encode(),
+            (json.dumps({"type": "result", "result": "Here's the plan."}) + "\n").encode(),
+        ]
+    )
+    out = list(
+        runner.stream_via_cli_agent(
+            [{"role": "user", "content": "plan it"}], backend="claude", cwd="/tmp", yolo=True,
+        )
+    )
+    thinking = [x for x in out if isinstance(x, ThinkingEvent)]
+    tools = [x for x in out if isinstance(x, ToolUseEvent)]
+    text = "".join(x for x in out if isinstance(x, str))
+    assert thinking and "plan the epics" in thinking[0].text
+    assert tools and tools[0].name == "tesserae_ask"
+    assert text == "Here's the plan."  # not doubled by the result event
+
+
 def test_claude_non_yolo_omits_skip_permissions(captured):
     captured["proc"] = _FakeProc([])
     list(

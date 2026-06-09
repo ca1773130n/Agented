@@ -128,7 +128,10 @@ def _run_subprocess(
     timer = threading.Timer(SUBPROCESS_TIMEOUT_SECONDS, _on_timeout)
     timer.start()
 
+    from .account_rotation_service import RateLimitEvent
+
     completed = False
+    rate_limited = False
     try:
         assert proc.stdout is not None  # bufsize=0 guarantees a stream
         while True:
@@ -140,9 +143,16 @@ def _run_subprocess(
             line = raw.decode("utf-8", errors="replace").rstrip("\n")
             if not line:
                 continue
-            chunk = line_handler(line)
-            if chunk:
-                yield chunk
+            result = line_handler(line)
+            if result is None:
+                continue
+            # A handler may return a single item or a list (e.g. one Claude
+            # assistant event → tool_use + thinking + text). Normalize + emit.
+            items = result if isinstance(result, list) else [result]
+            for item in items:
+                if isinstance(item, RateLimitEvent):
+                    rate_limited = True
+                yield item
         proc.wait()
         completed = True
     finally:
@@ -183,6 +193,17 @@ def _run_subprocess(
         return
 
     if proc.returncode and proc.returncode != 0:
+        if rate_limited:
+            # The non-zero exit is the provider's 429 (already surfaced as a
+            # RateLimitEvent so the caller can rotate). Don't also emit the
+            # cryptic "[Claude CLI error: exit code 1]" — that's the silent
+            # failure that hid the real "weekly limit" reason.
+            logger.info(
+                "CLI agent: %s exited rc=%d due to rate limit (rotation signalled)",
+                backend_label,
+                proc.returncode,
+            )
+            return
         stderr_output = ""
         try:
             if proc.stderr is not None:
@@ -199,19 +220,85 @@ def _run_subprocess(
         yield f"\n\n[{backend_label} CLI error: {detail}]"
 
 
-def _claude_line_handler(line: str) -> Optional[str]:
-    """Parse Claude's ``--output-format stream-json --verbose`` NDJSON."""
-    from .conversation_streaming import _extract_text_from_event
+def _make_claude_line_handler():
+    """Build a stateful per-stream handler for Claude's ``stream-json`` NDJSON.
 
-    try:
-        event = json.loads(line)
-    except json.JSONDecodeError:
-        return None
-    return _extract_text_from_event(event)
+    With ``--include-partial-messages`` claude streams the reply as
+    ``stream_event`` → ``content_block_delta`` token chunks, then repeats the
+    whole thing in a final ``assistant`` event and again in ``result``. We
+    stream the token deltas and DROP both duplicates, so the reply appears
+    live and exactly once. Falls back to the full ``assistant`` text when no
+    deltas streamed (older CLI without the flag).
+
+    State (whether any token delta has streamed) lives in the closure, so a
+    fresh handler must be created per stream — see ``stream_via_cli_agent``.
+    """
+    from .account_rotation_service import RateLimitEvent, detect_rate_limit_from_event
+    from .conversation_streaming import (
+        ThinkingEvent,
+        _extract_text_from_event,
+        _extract_thinking_from_event,
+        _extract_tool_uses_from_event,
+    )
+
+    # ``streamed``/``thought`` track whether answer/thinking tokens have
+    # already streamed this turn, so the final ``assistant`` event's full
+    # copies are dropped instead of doubling the bubble.
+    state = {"streamed": False, "thought": False}
+
+    def handler(line: str):
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            return None
+        rl = detect_rate_limit_from_event(event)
+        if rl is not None:
+            return RateLimitEvent(rl)
+
+        etype = event.get("type")
+        # Terminal summary — always a duplicate of the assistant text.
+        if etype == "result":
+            return None
+
+        items: list = []
+        if etype == "assistant":
+            # The final message carries COMPLETE tool_use blocks (full input)
+            # — take them only here, not from the partial content_block_start
+            # deltas, so a tool isn't surfaced twice with empty args.
+            items.extend(_extract_tool_uses_from_event(event))
+            if not state["thought"]:
+                th = _extract_thinking_from_event(event)
+                if th:
+                    items.append(ThinkingEvent(th))
+            if not state["streamed"]:
+                txt = _extract_text_from_event(event)
+                if txt:
+                    items.append(txt)
+            return items or None
+
+        # stream_event / bare deltas — the live token stream.
+        th = _extract_thinking_from_event(event)
+        if th:
+            state["thought"] = True
+            items.append(ThinkingEvent(th))
+        txt = _extract_text_from_event(event)
+        if txt:
+            state["streamed"] = True
+            items.append(txt)
+        return items or None
+
+    return handler
 
 
-def _passthrough_line_handler(line: str) -> Optional[str]:
-    """Codex/Gemini emit human-readable progress; pass each line through."""
+def _passthrough_line_handler(line: str):
+    """Codex/Gemini emit human-readable progress; pass each line through —
+    but surface a :class:`RateLimitEvent` when a line reads as a rate limit
+    so those backends rotate too."""
+    from .account_rotation_service import RateLimitEvent, detect_rate_limit_from_text
+
+    rl = detect_rate_limit_from_text(line)
+    if rl is not None:
+        return RateLimitEvent(rl)
     return line + "\n"
 
 
@@ -285,13 +372,22 @@ def stream_via_cli_agent(
     env = _build_env(backend_norm, config_dir)
 
     if backend_norm == "claude":
-        cmd = ["claude", "-p", prompt, "--output-format", "stream-json", "--verbose"]
+        # --include-partial-messages makes claude emit token-by-token
+        # content_block_delta events instead of one big assistant message at
+        # the end, so the chat streams live instead of the user waiting
+        # minutes for the whole reply. A fresh stateful handler per call
+        # streams those deltas and drops the duplicate final assistant text.
+        cmd = [
+            "claude", "-p", prompt,
+            "--output-format", "stream-json", "--verbose",
+            "--include-partial-messages",
+        ]
         if yolo:
             cmd.append("--dangerously-skip-permissions")
         if model:
             cmd.extend(["--model", model])
         yield from _run_subprocess(
-            cmd, cwd=cwd, env=env, line_handler=_claude_line_handler, backend_label="Claude"
+            cmd, cwd=cwd, env=env, line_handler=_make_claude_line_handler(), backend_label="Claude"
         )
         return
 

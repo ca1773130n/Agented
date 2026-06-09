@@ -137,6 +137,29 @@ def create_misc_tables(conn):
         )
     """)
 
+    # Chat retry queue — when every eligible account is rate-limited, a chat
+    # turn is parked here and re-dispatched by the chat_retry_queue scheduler
+    # job once any account's cooldown expires. One pending row per session
+    # (UNIQUE) so a session can't pile up duplicate retries. Survives restarts.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS chat_retry_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL UNIQUE,
+            super_agent_id TEXT NOT NULL,
+            backend TEXT,
+            account_id TEXT,
+            model TEXT,
+            cwd TEXT,
+            chat_mode TEXT,
+            instance_id TEXT,
+            use_cli_agent INTEGER,
+            attempts INTEGER DEFAULT 0,
+            reason TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_attempt_at TIMESTAMP
+        )
+    """)
+
     # Design conversations table - for persisting conversation state
     conn.execute("""
         CREATE TABLE IF NOT EXISTS design_conversations (

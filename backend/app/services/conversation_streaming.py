@@ -88,10 +88,50 @@ class ToolUseEvent:
         return {"name": self.name, "input": self.input, "id": self.id}
 
 
+@dataclass
+class ThinkingEvent:
+    """The model's extended-thinking / reasoning text for a turn.
+
+    Surfaced by the Claude CLI stream-json path (``thinking`` content blocks
+    on the final ``assistant`` event, or ``thinking_delta`` tokens under
+    ``--include-partial-messages``). The chat helper dispatches it as a
+    ``thinking`` delta so the operator UI can show it folded, separate from
+    the answer.
+    """
+
+    text: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"text": self.text}
+
+
 # Tuple type for the chunk stream — what every helper yields and what
 # ``run_streaming_response`` dispatches on. New event types added by
 # extending this Union (and the callers that handle them).
-ChatChunk = Union[str, ToolUseEvent]
+ChatChunk = Union[str, ToolUseEvent, ThinkingEvent]
+
+
+def _extract_thinking_from_event(event: dict) -> Optional[str]:
+    """Pull reasoning text out of a Claude stream-json event: ``thinking``
+    content blocks on an ``assistant`` message, or a ``thinking_delta`` token
+    under ``--include-partial-messages``. Returns ``None`` when absent."""
+    etype = event.get("type", "")
+    if etype == "assistant":
+        message = event.get("message", {})
+        parts = []
+        for block in message.get("content") or []:
+            if isinstance(block, dict) and block.get("type") == "thinking":
+                t = block.get("thinking") or block.get("text")
+                if t:
+                    parts.append(t)
+        return "".join(parts) or None
+    if etype == "stream_event":
+        inner = event.get("event", {})
+        if inner.get("type") == "content_block_delta":
+            delta = inner.get("delta", {})
+            if delta.get("type") == "thinking_delta":
+                return delta.get("thinking", "") or None
+    return None
 
 
 class ProxyAccountError(Exception):
@@ -1036,11 +1076,15 @@ def _extract_text_from_event(event: dict) -> Optional[str]:
         if texts:
             return "".join(texts)
 
-    # "result" event (final message)
+    # "result" event (terminal turn summary) — DO NOT emit its text.
+    # In ``--output-format stream-json --verbose`` the answer has already
+    # been streamed via ``assistant`` / ``content_block_delta`` events; the
+    # ``result`` field merely echoes that same complete text. Both streaming
+    # loops accumulate every non-None yield, so returning it here appended
+    # the whole reply a second time — the "response shown twice in one
+    # bubble" bug. Treat ``result`` as terminal metadata only.
     if event_type == "result":
-        result_text = event.get("result", "")
-        if result_text:
-            return result_text
+        return None
 
     return None
 

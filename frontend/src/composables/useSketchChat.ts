@@ -219,6 +219,28 @@ export function useSketchChat() {
                 streamingContent.value += data.content || '';
                 messages.value[msgIndex].content = streamingContent.value;
                 break;
+              case 'rotation': {
+                // Account rate-limited → switched to another. Prefix the
+                // streaming turn with an inline notice so the user sees why
+                // the replying account/model changed mid-thread.
+                const from = (data.data || data).from || '?';
+                const to = (data.data || data).to || '?';
+                streamingContent.value += `\n\n_↻ ${from} hit its rate limit — switched to ${to}_\n\n`;
+                messages.value[msgIndex].content = streamingContent.value;
+                break;
+              }
+              case 'queued': {
+                // All accounts rate-limited → turn parked for auto-retry.
+                isStreaming.value = false;
+                const m = (data.data || data).message || 'All accounts are rate-limited.';
+                streamingContent.value += `\n\n_⏳ ${m} Queued — will retry when an account frees._`;
+                messages.value[msgIndex].content = streamingContent.value;
+                if (eventSource) {
+                  eventSource.close();
+                  eventSource = null;
+                }
+                break;
+              }
               case 'finish':
                 isStreaming.value = false;
                 if (eventSource) {
@@ -228,14 +250,20 @@ export function useSketchChat() {
                 // Check for delegations (team collaboration)
                 startDelegationPolling(sketchId);
                 break;
-              case 'error':
+              case 'error': {
                 isStreaming.value = false;
-                error.value = 'Streaming error occurred. You can retry by routing again.';
+                // Surface the backend reason (e.g. "all accounts
+                // rate-limited — soonest reset …") instead of a generic
+                // message so the user knows what actually happened.
+                const payload = data.data || data;
+                error.value =
+                  payload.error || 'Streaming error occurred. You can retry by routing again.';
                 if (eventSource) {
                   eventSource.close();
                   eventSource = null;
                 }
                 break;
+              }
             }
           } catch {
             // Ignore unparseable events
