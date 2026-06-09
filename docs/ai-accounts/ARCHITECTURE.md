@@ -95,7 +95,7 @@ graph TD
 | `login/events.py` | Discriminated-union event types: `UrlPrompt`, `TextPrompt`, `StdoutChunk`, `ProgressUpdate`, `LoginComplete`, `LoginFailed`, `LoginEvent` union alias, `PromptAnswer` |
 | `login/registry.py` | `LoginSessionRegistry` — asyncio-locked in-memory session store with TTL sweep |
 | `login/cli_orchestrator.py` | `CliOrchestrator` — PTY subprocess runner; `parse_menu_options()`, `strip_ansi()`, regex constants |
-| `login/interactive.py` | `run_interactive_cli_login()` — shared async generator driving any CLI through interactive menus → OAuth URL |
+| `login/interactive.py` | `run_interactive_cli_login()` — shared async generator driving any CLI through interactive menus → OAuth URL. Polls the fake-browser capture every iteration (the spinner never idles), rejects fragmented generic-regex URL matches, applies an optional `captured_url_transform` (Claude rewrites the CLI's localhost callback → paste page), and runs a URL-wait watchdog that fails the session instead of hanging |
 | **metadata/** | |
 | `metadata/__init__.py` | Re-exports metadata public symbols |
 | `metadata/types.py` | `InstallCheck`, `InputSpec`, `LoginFlowSpec`, `PlanOption`, `BackendMetadata` structs |

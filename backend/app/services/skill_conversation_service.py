@@ -22,7 +22,6 @@ from app.models.common import error_response
 from ..database import (
     add_user_skill,
     create_skill_conversation,
-    delete_skill_conversation,
     get_skill_conversation,
     get_user_skill,
     list_active_skill_conversations,
@@ -145,9 +144,7 @@ class SkillConversationService:
         return "skill_" + "".join(secrets.choice(chars) for _ in range(16))
 
     @classmethod
-    def start_conversation(
-        cls, user_id: Optional[str] = None
-    ) -> Tuple[dict, HTTPStatus]:
+    def start_conversation(cls, user_id: Optional[str] = None) -> Tuple[dict, HTTPStatus]:
         """Start a new skill creation conversation.
 
         v0.7.78 (codex BLOCK 1+2) — captures caller's ``user_id``
@@ -248,6 +245,7 @@ class SkillConversationService:
         threading.Thread(
             target=cls._process_with_claude,
             args=(conv_id, kickoff_msg.content),
+            daemon=True,  # never pin interpreter exit on a hung CLI conversation
         ).start()
 
     @classmethod
@@ -273,16 +271,12 @@ class SkillConversationService:
         try:
             row = get_skill_conversation(conv_id)
         except Exception:
-            logger.warning(
-                "skill_conv: DB lookup failed for %s", conv_id, exc_info=True
-            )
+            logger.warning("skill_conv: DB lookup failed for %s", conv_id, exc_info=True)
             return False
         if not row or row["status"] != "active":
             return False
         messages = [
-            ConversationMessage(
-                role=m["role"], content=m["content"], timestamp=m["timestamp"]
-            )
+            ConversationMessage(role=m["role"], content=m["content"], timestamp=m["timestamp"])
             for m in row["messages"]
         ]
         with cls._lock:
@@ -323,17 +317,13 @@ class SkillConversationService:
         """
         conv = cls._conversations.get(conv_id)
         if not conv:
-            return error_response(
-                "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
-            )
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
         owner = conv.get("user_id")
         if owner is None:
             return None
         if caller_user_id == owner:
             return None
-        return error_response(
-            "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
-        )
+        return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
 
     @classmethod
     def _persist(
@@ -436,9 +426,7 @@ class SkillConversationService:
         with cls._lock:
             conv = cls._conversations[conv_id]
             if conv.get("processing"):
-                return error_response(
-                    "CONFLICT", "Conversation is processing", HTTPStatus.CONFLICT
-                )
+                return error_response("CONFLICT", "Conversation is processing", HTTPStatus.CONFLICT)
             conv["processing"] = True
             user_msg = ConversationMessage(
                 role="user",
@@ -470,6 +458,7 @@ class SkillConversationService:
                 target=cls._process_with_claude,
                 args=(conv_id, message),
                 kwargs={"backend": backend, "account_id": account_id, "model": model},
+                daemon=True,  # never pin interpreter exit on a hung CLI conversation
             ).start()
         except Exception:
             # Reset processing under the lock so a follow-up
@@ -478,8 +467,7 @@ class SkillConversationService:
             # persisted) — re-emitting it would feel surprising
             # and the operator can decide whether to retry.
             logger.error(
-                "skill_conv: failed to start LLM thread for %s; "
-                "resetting processing flag",
+                "skill_conv: failed to start LLM thread for %s; resetting processing flag",
                 conv_id,
                 exc_info=True,
             )
@@ -491,9 +479,7 @@ class SkillConversationService:
         return {"message_id": conv_id, "status": "processing"}, HTTPStatus.OK
 
     @classmethod
-    def can_subscribe(
-        cls, conv_id: str, caller_user_id: Optional[str]
-    ) -> bool:
+    def can_subscribe(cls, conv_id: str, caller_user_id: Optional[str]) -> bool:
         """v0.7.78 (codex WARN B / 2nd pass) — precheck used by the
         SSE route so an unauthorized subscriber gets a real HTTP
         404 instead of a 200 with an ``event: error`` body. Returns
@@ -574,9 +560,7 @@ class SkillConversationService:
         are surfaced for UI display.
         """
         if not cls._ensure_loaded(conv_id):
-            return error_response(
-                "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
-            )
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
         owner_err = cls._check_owner(conv_id, caller_user_id)
         if owner_err is not None:
             return owner_err
@@ -616,9 +600,7 @@ class SkillConversationService:
         skill dir; the staging dir is cleaned up best-effort.
         """
         if not cls._ensure_loaded(conv_id):
-            return error_response(
-                "NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND
-            )
+            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
         owner_err = cls._check_owner(conv_id, caller_user_id)
         if owner_err is not None:
             return owner_err
@@ -628,10 +610,7 @@ class SkillConversationService:
         except _SkillConfigError as exc:
             return error_response(exc.code, exc.message, exc.status)
 
-        if (
-            expected_config_hash
-            and expected_config_hash != preview["config_hash"]
-        ):
+        if expected_config_hash and expected_config_hash != preview["config_hash"]:
             return error_response(
                 "CONFIG_HASH_MISMATCH",
                 "The skill config has changed since you opened the preview. "
@@ -688,10 +667,7 @@ class SkillConversationService:
                 abs_target = os.path.join(staging_dir, in_pkg)
                 resolved = os.path.realpath(abs_target)
                 root_resolved = os.path.realpath(staging_dir)
-                if not (
-                    resolved == root_resolved
-                    or resolved.startswith(root_resolved + os.sep)
-                ):
+                if not (resolved == root_resolved or resolved.startswith(root_resolved + os.sep)):
                     raise _SkillConfigError(
                         "INVALID_PATH",
                         f"Path escapes skill dir: {rel}",
@@ -734,9 +710,7 @@ class SkillConversationService:
         except _SkillConfigError as exc:
             return error_response(exc.code, exc.message, exc.status)
         except OSError as exc:
-            logger.error(
-                "Failed to write skill package to disk: %s", exc, exc_info=True
-            )
+            logger.error("Failed to write skill package to disk: %s", exc, exc_info=True)
             return error_response(
                 "INTERNAL_SERVER_ERROR",
                 f"Failed to write package to disk: {exc}",
@@ -872,13 +846,12 @@ class SkillConversationService:
         )
 
         try:
-            from .conversation_streaming import stream_llm_response
-
             # Build messages from conversation history. Filter
             # out empty/whitespace turns — CLIProxyAPI rejects
             # them as "text content blocks must be non-empty".
             # Bail below if nothing survives.
             from .conversation_filters import drop_empty_content_messages
+            from .conversation_streaming import stream_llm_response
 
             messages = drop_empty_content_messages(conv["messages"])
             if not any(m["role"] == "user" for m in messages):
@@ -990,13 +963,9 @@ class SkillConversationService:
 
         warnings: list[str] = []
         if "license" not in frontmatter:
-            warnings.append(
-                "license missing — defaulted to MIT in the rendered frontmatter"
-            )
+            warnings.append("license missing — defaulted to MIT in the rendered frontmatter")
         if not files:
-            warnings.append(
-                "no helper scripts or references — package is SKILL.md-only"
-            )
+            warnings.append("no helper scripts or references — package is SKILL.md-only")
 
         return {
             "skill_name": skill_name,
@@ -1039,9 +1008,7 @@ class SkillConversationService:
             try:
                 return json.loads(blob)
             except json.JSONDecodeError as exc:
-                last_parse_error = (
-                    f"invalid JSON at line {exc.lineno}, col {exc.colno}: {exc.msg}"
-                )
+                last_parse_error = f"invalid JSON at line {exc.lineno}, col {exc.colno}: {exc.msg}"
                 continue
         if saw_markers:
             raise _SkillConfigError(
@@ -1070,9 +1037,7 @@ class SkillConversationService:
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     @staticmethod
-    def _validate_frontmatter(
-        raw: dict, *, fallback_description: str | None = None
-    ) -> dict:
+    def _validate_frontmatter(raw: dict, *, fallback_description: str | None = None) -> dict:
         if not isinstance(raw, dict):
             raise _SkillConfigError(
                 "INVALID_FRONTMATTER",
@@ -1164,8 +1129,7 @@ class SkillConversationService:
             if byte_len > _FILE_BYTE_CAP:
                 raise _SkillConfigError(
                     "FILE_TOO_LARGE",
-                    f"files[{idx}] ({rel}) is {byte_len} bytes; "
-                    f"max per file is {_FILE_BYTE_CAP}",
+                    f"files[{idx}] ({rel}) is {byte_len} bytes; max per file is {_FILE_BYTE_CAP}",
                     HTTPStatus.BAD_REQUEST,
                 )
             full_path = f".claude/skills/{skill_name}/{rel}"
@@ -1206,9 +1170,7 @@ class SkillConversationService:
             fm_disk["allowed-tools"] = frontmatter["allowed_tools"]
         if frontmatter.get("tags"):
             fm_disk["tags"] = frontmatter["tags"]
-        yaml_block = _yaml.safe_dump(
-            fm_disk, sort_keys=False, default_flow_style=False
-        ).strip()
+        yaml_block = _yaml.safe_dump(fm_disk, sort_keys=False, default_flow_style=False).strip()
         return f"---\n{yaml_block}\n---\n\n{body.rstrip()}\n"
 
     @staticmethod

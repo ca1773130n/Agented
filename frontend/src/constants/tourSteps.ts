@@ -30,8 +30,14 @@ export interface TourStepDefinition {
   stepNumber: number
   /** Substep label if this step is part of a multi-step group */
   substepLabel?: string
-  /** Toast message substring that triggers auto-advance when matched */
+  /** Toast message substring that triggers auto-advance when matched.
+   *  NOTE: this is the raw English string. It only matches when the UI is in
+   *  English — prefer `autoAdvanceI18nKey`, which is resolved against the
+   *  active locale so auto-advance works in ko/ja/zh too. */
   autoAdvanceOnToast?: string
+  /** i18n key whose resolved translation (in the current locale) triggers
+   *  auto-advance when the success toast contains it. Locale-independent. */
+  autoAdvanceI18nKey?: string
 }
 
 export const TOUR_STEP_DEFINITIONS: TourStepDefinition[] = [
@@ -47,6 +53,7 @@ export const TOUR_STEP_DEFINITIONS: TourStepDefinition[] = [
     routeHash: '#general',
     stepNumber: 1,
     autoAdvanceOnToast: 'Workspace root saved',
+    autoAdvanceI18nKey: 'settings.general.toastWorkspaceSaved',
   },
   {
     key: 'backends.claude',
@@ -111,6 +118,7 @@ export const TOUR_STEP_DEFINITIONS: TourStepDefinition[] = [
     routeHash: '#general',
     stepNumber: 3,
     autoAdvanceOnToast: 'Monitoring settings saved',
+    autoAdvanceI18nKey: 'settings.general.toastMonitoringSaved',
   },
   {
     key: 'verification',

@@ -508,6 +508,20 @@ def on_startup(app: Any) -> None:
 
 def on_shutdown() -> None:
     """Best-effort process cleanup. atexit handlers cover most of this."""
+    # Stop the APScheduler thread FIRST. It is a daemon thread, so it never
+    # blocks exit by itself — but if anything else delays interpreter
+    # teardown (e.g. a non-daemon worker still draining), a still-running
+    # scheduler keeps firing into an executor pool whose workers were torn
+    # down by concurrent.futures' interpreter-exit hook, spamming
+    # "RuntimeError: cannot schedule new futures after shutdown" forever.
+    # Cheap: BlockingScheduler.shutdown sets the wakeup event, so the
+    # background-thread join returns immediately.
+    try:
+        from app.services.scheduler_service import SchedulerService
+
+        SchedulerService.shutdown()
+    except Exception:
+        logger.debug("SchedulerService.shutdown failed during shutdown", exc_info=True)
     try:
         from app.services.process_manager import ProcessManager
 

@@ -46,11 +46,20 @@ let unsubscribe: (() => void) | null = null
 let resizeObserver: ResizeObserver | null = null
 let scrollHandler: (() => void) | null = null
 
-// OB-40: 5s "page is slow" fallback
+// OB-40 "page is slow" (gentle hint) + OB-41 "element not found" (hard
+// error with retry/skip). The hint fires FIRST: on a loaded machine the
+// target page can take a long time to route + render + fetch (onboarding
+// steps wait on the backend/sidecar under load), and firing a popup early
+// flashed a scary fallback during perfectly normal slow loads. Both
+// thresholds are deliberately generous — the operator asked us to "just
+// wait" — and both clear automatically the instant the target element
+// appears, so a fast machine never sees either.
+const PAGE_SLOW_MS = 30000
+const ELEMENT_NOT_FOUND_MS = 45000
+
 const loadingTimedOut = ref(false)
 let loadingTimer: ReturnType<typeof setTimeout> | null = null
 
-// OB-41: 3s "element not found" fallback (precedence over OB-40)
 const elementNotFoundTimeout = ref(false)
 let elementTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -127,11 +136,11 @@ function startTimers() {
   elementTimer = setTimeout(() => {
     elementTimer = null
     if (!targetEl.value) elementNotFoundTimeout.value = true
-  }, 3000)
+  }, ELEMENT_NOT_FOUND_MS)
   loadingTimer = setTimeout(() => {
     loadingTimer = null
     if (!targetEl.value) loadingTimedOut.value = true
-  }, 5000)
+  }, PAGE_SLOW_MS)
 }
 
 function unsubscribeFromBus() {
