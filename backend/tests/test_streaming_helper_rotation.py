@@ -88,16 +88,15 @@ def _install_common_stubs(monkeypatch, deltas):
 
 
 def test_rotates_to_next_account_on_rate_limit(monkeypatch, two_claude_accounts):
+    from app.db.backends import get_accounts_for_backend_type
     from app.services import cli_agent_runner_service as runner
     from app.services import streaming_helper as sh
     from app.services.rate_limit_service import RateLimitService
-    from app.db.backends import get_accounts_for_backend_type
 
     deltas: list = []
     saved = _install_common_stubs(monkeypatch, deltas)
 
     p1_cfg = os.path.expanduser("~/.claude-personal1")
-    p2_cfg = os.path.expanduser("~/.claude-personal2")
 
     # Personal1 (requested/default) rate-limits; Personal2 answers.
     def fake_stream(messages, *, backend, cwd, yolo, model, config_dir):
@@ -168,3 +167,62 @@ def test_all_accounts_rate_limited_queues_the_turn(monkeypatch, two_claude_accou
     # The turn is persisted for the scheduler to re-dispatch.
     pending = q.list_pending_chat_retries()
     assert any(r["session_id"] == "sess-2" for r in pending)
+
+
+def test_callback_callers_surface_error_not_queue(monkeypatch, two_claude_accounts):
+    """[codex P1] A turn that passed on_complete/on_error (sketch/autofix/
+    delegation) must NOT be queued — the queue can't restore callbacks. It
+    surfaces an error so on_error runs instead of stranding the status."""
+    from app.db import chat_retry_queue as q
+    from app.services import cli_agent_runner_service as runner
+    from app.services import streaming_helper as sh
+
+    deltas: list = []
+    _install_common_stubs(monkeypatch, deltas)
+
+    def fake_stream(messages, *, backend, cwd, yolo, model, config_dir):
+        yield RateLimitEvent(RateLimitInfo(reason="429 weekly limit"))
+
+    monkeypatch.setattr(runner, "stream_via_cli_agent", fake_stream)
+    monkeypatch.setattr(runner, "resolve_account_config_dir", lambda aid, backend: None)
+
+    errors: list = []
+    sh.run_streaming_response(
+        session_id="sess-cb",
+        super_agent_id="psa-cb",
+        backend="claude",
+        account_id=None,
+        on_error=lambda m: errors.append(m),  # caller has a callback
+    )
+
+    kinds = [k for k, _ in deltas]
+    assert "error" in kinds and "queued" not in kinds
+    assert errors  # on_error fired
+    assert not any(r["session_id"] == "sess-cb" for r in q.list_pending_chat_retries())
+
+
+def test_no_registered_account_surfaces_error_not_queue(monkeypatch, isolated_db):
+    """[codex P2] With no registered accounts the only attempt is the
+    default-vault fallback (account_id=None); queuing it would wait forever
+    (rotation_candidates stays empty). Surface an error instead."""
+    from app.db import chat_retry_queue as q
+    from app.services import cli_agent_runner_service as runner
+    from app.services import streaming_helper as sh
+
+    # isolated_db with NO claude accounts seeded.
+    deltas: list = []
+    _install_common_stubs(monkeypatch, deltas)
+
+    def fake_stream(messages, *, backend, cwd, yolo, model, config_dir):
+        yield RateLimitEvent(RateLimitInfo(reason="429"))
+
+    monkeypatch.setattr(runner, "stream_via_cli_agent", fake_stream)
+    monkeypatch.setattr(runner, "resolve_account_config_dir", lambda aid, backend: None)
+
+    sh.run_streaming_response(
+        session_id="sess-nv", super_agent_id="psa-nv", backend="claude", account_id=None,
+    )
+
+    kinds = [k for k, _ in deltas]
+    assert "error" in kinds and "queued" not in kinds
+    assert q.count_pending_chat_retries() == 0

@@ -24,10 +24,13 @@ def enqueue_chat_retry(
     instance_id: Optional[str],
     use_cli_agent: Optional[bool],
     reason: Optional[str],
+    attempts: int = 0,
 ) -> None:
     """Upsert a pending retry for a session. On conflict (already queued)
     bump ``attempts`` and refresh the reason — a session never accrues
-    duplicate rows."""
+    duplicate rows. ``attempts`` seeds the count on a fresh insert so a
+    scheduler redispatch that re-exhausts carries the cap forward instead of
+    resetting to 0."""
     uca = None if use_cli_agent is None else (1 if use_cli_agent else 0)
     with get_connection() as conn:
         conn.execute(
@@ -35,7 +38,7 @@ def enqueue_chat_retry(
             INSERT INTO chat_retry_queue
                 (session_id, super_agent_id, backend, account_id, model, cwd,
                  chat_mode, instance_id, use_cli_agent, reason, attempts)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(session_id) DO UPDATE SET
                 attempts = attempts + 1,
                 reason = excluded.reason,
@@ -59,6 +62,7 @@ def enqueue_chat_retry(
                 instance_id,
                 uca,
                 reason,
+                max(0, int(attempts)),
             ),
         )
         conn.commit()

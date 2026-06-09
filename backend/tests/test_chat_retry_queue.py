@@ -55,6 +55,19 @@ def test_enqueue_is_idempotent_per_session_and_bumps_attempts(isolated_db):
     assert pending[0]["attempts"] == 1  # bumped on conflict
 
 
+def test_enqueue_seeds_attempts_so_redispatch_count_carries(isolated_db):
+    """[codex P2] A scheduler redispatch that re-exhausts re-enqueues with a
+    carried-forward attempt count (the row was deleted first, so no conflict);
+    enqueue must honor the seed instead of resetting to 0."""
+    q.enqueue_chat_retry(
+        session_id="sess-1", super_agent_id="psa-1", backend="claude",
+        account_id=None, model=None, cwd=None, chat_mode="management",
+        instance_id=None, use_cli_agent=True, reason="429", attempts=5,
+    )
+    pending = q.list_pending_chat_retries()
+    assert pending[0]["attempts"] == 5
+
+
 def test_use_cli_agent_tristate_roundtrip(isolated_db):
     _enqueue(session_id="a", use_cli_agent=None)
     _enqueue(session_id="b", use_cli_agent=False)

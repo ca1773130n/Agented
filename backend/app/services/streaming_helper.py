@@ -56,8 +56,13 @@ def run_streaming_response(
     chat_mode: Optional[str] = None,
     instance_id: Optional[str] = None,
     use_cli_agent: Optional[bool] = None,
+    retry_attempts: int = 0,
 ) -> None:
     """Launch a background thread that streams an LLM response.
+
+    ``retry_attempts`` carries the rate-limit retry count forward when the
+    scheduler re-dispatches a queued turn, so the MAX_ATTEMPTS cap actually
+    advances across "account frees → re-limited" cycles instead of resetting.
 
     Assembles system prompt, builds message history, calls stream_llm_response(),
     pushes content_delta chunks via ChatStateService (SSE), persists the
@@ -286,11 +291,42 @@ def run_streaming_response(
                 _finalize(accumulated, cand.backend)
                 return
 
-            # Every eligible account is rate-limited. Park the turn in the
-            # persistent retry queue; the chat_retry_queue scheduler job
-            # re-dispatches it once any account's cooldown expires (survives
-            # restarts). Fall back to a hard error only if queuing fails.
+            # Every eligible account is rate-limited.
             msg = soonest_reset_message(backend)
+
+            def _surface_rate_limit_error() -> None:
+                ChatStateService.push_delta(
+                    _session_id, "error", {"error": msg, "kind": "rate_limited"}
+                )
+                ChatStateService.push_status(_session_id, "error")
+                if on_error:
+                    on_error(msg)
+
+            # Park the turn for scheduler auto-retry ONLY when it's safe to:
+            #  (a) it's a pure chat turn — no on_complete/on_error side effects.
+            #      The queue persists routing args, not caller callbacks, so a
+            #      redispatch can't re-run them; queuing a sketch/autofix/
+            #      delegation turn would strand its status. Those surface an
+            #      error so their on_error fires instead.
+            #  (b) at least one registered account exists that could free up.
+            #      With no accounts (the default-vault fallback, account_id=None)
+            #      rotation_candidates() is always empty, so a queued row would
+            #      never dispatch or expire — "queued" forever. Surface an error.
+            had_real_account = any(c.account_id is not None for c in attempts)
+            can_queue = on_complete is None and on_error is None and had_real_account
+            if not can_queue:
+                logger.warning(
+                    "Chat: all accounts rate-limited for backend=%s — surfacing error "
+                    "(pure_chat=%s, has_account=%s)",
+                    backend,
+                    on_complete is None and on_error is None,
+                    had_real_account,
+                )
+                _surface_rate_limit_error()
+                return
+
+            # Persistent retry queue — the chat_retry_queue scheduler job
+            # re-dispatches once a cooldown expires (survives restarts).
             try:
                 from .chat_retry_service import ChatRetryService
 
@@ -305,6 +341,7 @@ def run_streaming_response(
                     instance_id=instance_id,
                     use_cli_agent=use_cli_agent,
                     reason=last_reason or msg,
+                    attempts=retry_attempts,
                 )
                 logger.warning(
                     "Chat: all accounts rate-limited for backend=%s — turn queued", backend
@@ -321,12 +358,7 @@ def run_streaming_response(
                 logger.warning(
                     "Failed to queue chat retry; surfacing error instead", exc_info=True
                 )
-                ChatStateService.push_delta(
-                    _session_id, "error", {"error": msg, "kind": "rate_limited"}
-                )
-                ChatStateService.push_status(_session_id, "error")
-                if on_error:
-                    on_error(msg)
+                _surface_rate_limit_error()
 
         except Exception as e:
             error_msg = str(e)
