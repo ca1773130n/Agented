@@ -378,12 +378,26 @@ def _make_execution(execution_id="exec-1", status="interrupted", backend="claude
     update_execution_log(execution_id, status=status, finished_at="2026-06-11T00:01:00")
 
 
+def _wait_for_call(mock, timeout: float = 2.0) -> None:
+    """Dispatch is async (background thread + preallocated id) — poll until
+    the patched run_trigger has been invoked."""
+    import time
+
+    deadline = time.time() + timeout
+    while not mock.called and time.time() < deadline:
+        time.sleep(0.01)
+    assert mock.called, "run_trigger was never invoked by the dispatch thread"
+
+
 def test_redispatch_interrupted_uses_stored_prompt():
     _make_execution()
     with patch.object(ExecutionService, "run_trigger", return_value="exec-new") as rt:
         result = ExecutionService.redispatch_execution("exec-1")
-    assert result["execution_id"] == "exec-new"
+        _wait_for_call(rt)
+    # The returned id is PREALLOCATED (dispatch is async) and threaded into
+    # run_trigger as execution_id.
     kwargs = rt.call_args.kwargs
+    assert result["execution_id"] == kwargs["execution_id"]
     assert kwargs["prompt_override"] == "ORIGINAL STORED PROMPT"
     assert kwargs["redispatched_from"] == "exec-1"
     assert kwargs.get("resume_session_id") is None  # interrupted run has no handle
@@ -394,6 +408,7 @@ def test_redispatch_failed_claude_with_session_resumes():
     set_execution_session_id("exec-1", "sess-abc")
     with patch.object(ExecutionService, "run_trigger", return_value="exec-new") as rt:
         ExecutionService.redispatch_execution("exec-1")
+        _wait_for_call(rt)
     kwargs = rt.call_args.kwargs
     assert kwargs["resume_session_id"] == "sess-abc"
     # Continuation prompt replaces the raw stored prompt when resuming.
@@ -406,7 +421,38 @@ def test_redispatch_codex_never_resumes():
     set_execution_session_id("exec-1", "sess-abc")  # even with a stored id
     with patch.object(ExecutionService, "run_trigger", return_value="exec-new") as rt:
         ExecutionService.redispatch_execution("exec-1")
+        _wait_for_call(rt)
     assert rt.call_args.kwargs.get("resume_session_id") is None
+
+
+def test_redispatch_replays_original_account_identity():
+    """claude --resume only works under the SAME account config dir; the
+    original account_id must be resolved and passed through."""
+    create_execution_log(
+        execution_id="exec-acct",
+        trigger_id="bot-pr-review",
+        trigger_type="manual",
+        started_at="2026-06-11T00:00:00",
+        prompt="p",
+        backend_type="claude",
+        command="echo hi",
+        account_id=42,
+    )
+    update_execution_log("exec-acct", status="interrupted", finished_at="2026-06-11T00:01:00")
+    with (
+        patch.object(ExecutionService, "run_trigger", return_value="exec-new") as rt,
+        # Patch the REAL env-override helper found at orchestration_service ~:157
+        # (adjust the patch target to its actual module/name):
+        patch(
+            "app.services.execution_service._build_account_env_overrides",
+            return_value={"CLAUDE_CONFIG_DIR": "/cfg/42"},
+        ) as env,
+    ):
+        ExecutionService.redispatch_execution("exec-acct")
+        _wait_for_call(rt)
+    env.assert_called_once_with(42)
+    assert rt.call_args.kwargs["account_id"] == 42
+    assert rt.call_args.kwargs["env_overrides"] == {"CLAUDE_CONFIG_DIR": "/cfg/42"}
 
 
 def test_redispatch_rejects_running_and_success():
@@ -441,6 +487,7 @@ def test_redispatch_prefers_trigger_config_snapshot():
     update_execution_log("exec-snap", status="interrupted", finished_at="2026-06-11T00:01:00")
     with patch.object(ExecutionService, "run_trigger", return_value="exec-new") as rt:
         ExecutionService.redispatch_execution("exec-snap")
+        _wait_for_call(rt)
     assert rt.call_args.args[0]["name"] == "AS-IT-WAS"  # snapshot, not current DB row
 
 
@@ -560,6 +607,16 @@ Add to `ExecutionService` (near `restore_pending_retries`):
                 "Continue from where you left off.\n\n" + stored_prompt
             )
 
+        # Identity: replay the original account so claude --resume runs against
+        # the SAME CLAUDE_CONFIG_DIR (a session id is unusable under another
+        # account's config dir) and usage attribution stays correct. Read how
+        # orchestration_service builds account env overrides (~:157, the fn it
+        # calls before run_trigger) and reuse that helper here.
+        account_id = original.get("account_id")
+        env_overrides = None
+        if account_id:
+            env_overrides = _build_account_env_overrides(account_id)  # the real helper found above
+
         AuditLogService.log(
             action="execution.redispatched",
             entity_type="trigger",
@@ -567,25 +624,43 @@ Add to `ExecutionService` (near `restore_pending_retries`):
             outcome="dispatched",
             details={"origin_execution_id": execution_id, "resumed": bool(resume_session_id)},
         )
-        new_id = cls.run_trigger(
-            trigger,
-            message_text="",
-            trigger_type=original.get("trigger_type") or "manual",
-            prompt_override=prompt_override,
-            resume_session_id=resume_session_id,
-            redispatched_from=execution_id,
-        )
-        if not new_id:
-            return {"error": "dispatch_failed"}
+
+        # run_trigger BLOCKS until the subprocess exits (~:609), so dispatch in
+        # a background thread with a PREALLOCATED execution id and return
+        # immediately — mirror the manual-run pattern in trigger_service.py:~521
+        # (read it first and match its thread/daemon/join-for-id idiom).
+        from ..database import generate_execution_id
+
+        new_id = generate_execution_id(trigger.get("id") or "redispatch")
+        threading.Thread(
+            target=cls.run_trigger,
+            args=(trigger, ""),
+            kwargs={
+                "trigger_type": original.get("trigger_type") or "manual",
+                "account_id": account_id,
+                "env_overrides": env_overrides,
+                "execution_id": new_id,
+                "prompt_override": prompt_override,
+                "resume_session_id": resume_session_id,
+                "redispatched_from": execution_id,
+            },
+            daemon=True,
+        ).start()
         return {"execution_id": new_id}
 ```
 
-(Confirm `get_trigger` import path — it's exported from `app.db.triggers`/`app.db`. Confirm `AuditLogService` is already imported in the module — it is, the budget paths use it.)
+(Confirm: `get_trigger` import path (`app.db.triggers`); `AuditLogService` already
+imported; `threading` already imported in the module; `generate_execution_id`'s
+real import location and signature — adjust the call to match. Replace
+`_build_account_env_overrides` with the REAL helper orchestration_service uses
+at ~:157 — import it from wherever it lives; if it is private to
+orchestration_service, import the module and call it explicitly rather than
+duplicating the logic.)
 
 - [ ] **Step 5: Run tests**
 
 Run: `cd backend && uv run pytest tests/test_redispatch_service.py tests/test_execution_service.py -q`
-Expected: PASS (6 new + regression green).
+Expected: PASS (8 new + regression green).
 
 - [ ] **Step 6: Commit**
 
@@ -956,7 +1031,8 @@ def _build_resume_context(session_id: str) -> str:
 def resume_goal_loop(session_id: str) -> dict:
     """Resume a dead goal-loop session by spawning a FRESH session seeded with
     the persisted goal config + accumulated knowledge. Eligible: execution_type
-    goal_loop/ralph_loop, status 'failed', no prior resume child."""
+    goal_loop ONLY (ralph_loop persists no resumable state), status 'failed',
+    no prior resume child."""
     from ..db.connection import get_connection
     from ..db.goal_loop import get_goal_loop_config
 
@@ -1055,7 +1131,7 @@ git commit -m "feat(harness): goal-loop re-entry from persisted knowledge (Phase
 - Modify: `frontend/src/services/api/triggers.ts` (`executionApi.redispatch`)
 - Modify: `frontend/src/views/ExecutionHistory.vue` (button on interrupted/failed rows or in the log modal actions)
 - Modify: `frontend/src/locales/{en,ko,ja,zh}.json` (`executionHistory.redispatch*` keys)
-- Test: extend the ExecutionHistory test if one exists (`ls frontend/src/views/__tests__/ 2>/dev/null; grep -rln "ExecutionHistory" frontend/src --include=*.test.ts`); otherwise create `frontend/src/views/__tests__/ExecutionHistory.redispatch.test.ts` is NOT required — instead add the api-level test below plus manual placement.
+- Test: REQUIRED — `frontend/src/views/__tests__/ExecutionHistory.redispatch.test.ts` (create the `__tests__` dir if absent; if an ExecutionHistory test already exists — check `grep -rln "ExecutionHistory" frontend/src --include=*.test.ts` — extend it instead). Mirror the mount/i18n/mock conventions of `components/executions/__tests__/HarnessStatePanel.test.ts`. Minimum coverage: (a) the Re-dispatch button renders for an `interrupted` and a `failed` execution row and NOT for `success`/`running`; (b) clicking it calls `executionApi.redispatch` with the execution id and triggers the view's refresh (mock `executionApi` wholesale — the view makes list calls on mount; have them resolve fixture data).
 
 - [ ] **Step 1: Study conventions**
 
@@ -1117,15 +1193,21 @@ a label key in the panel's existing namespace (all four catalogs, e.g.
 trigger api types in `services/api/types/triggers.ts` model the trigger fields,
 add `auto_redispatch?: number` there too.
 
-- [ ] **Step 3: Tests + build**
+- [ ] **Step 3: Write the view test (REQUIRED), then run tests + build**
 
+Write `frontend/src/views/__tests__/ExecutionHistory.redispatch.test.ts` per the
+Test bullet in this task's Files list (button visibility per status; click →
+`executionApi.redispatch` + refresh). TDD: write it first, watch it fail
+(button missing), then implement Step 2 and watch it pass.
+
+Run: `cd frontend && npm run test:run -- ExecutionHistory` → new test green.
 Run: `cd frontend && npm run test:run` → suite at baseline (no new failures).
 Run: `cd frontend && npx vue-tsc --noEmit` → exit 0.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add frontend/src/services/api/triggers.ts frontend/src/views/ExecutionHistory.vue frontend/src/locales/
+git add frontend/src/services/api/ frontend/src/views/ExecutionHistory.vue frontend/src/views/__tests__/ frontend/src/components/triggers/TriggerDetailPanel.vue frontend/src/locales/
 git commit -m "feat(harness): re-dispatch button in ExecutionHistory (Phase 4)"
 ```
 
