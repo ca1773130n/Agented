@@ -142,6 +142,52 @@ def get_execution(execution_id: str, q: Optional[str] = None) -> Any:
     return execution
 
 
+@get("/executions/{execution_id:str}/state", sync_to_thread=False)
+def get_execution_state(execution_id: str) -> dict[str, Any]:
+    """Composed harness-state snapshot (Harness-1 Phase 3, P7): execution
+    summary + Phase-1 run/checkpoints + Phase-2 verifications + live budget."""
+    from app.db import harness_state
+    from app.db import verification_records
+    from app.db.budgets import get_budget_limit
+    from app.db.execution_logs import get_execution_log
+
+    execution = get_execution_log(execution_id)
+    if not execution:
+        raise NotFoundException(detail=f"Execution {execution_id} not found")
+
+    run = harness_state.get_run(execution_id)
+    latest = harness_state.get_latest_checkpoint(execution_id)
+    # Per-run limit is trigger-scoped here; team-dispatched runs may use a
+    # different entity — acceptable for a display-only operator panel.
+    limit_row = get_budget_limit("trigger", execution.get("trigger_id") or "") or {}
+
+    return {
+        "execution": {
+            k: execution.get(k)
+            for k in (
+                "execution_id",
+                "status",
+                "exit_code",
+                "started_at",
+                "finished_at",
+                "duration_ms",
+                "backend_type",
+            )
+        },
+        "run": (
+            {k: run.get(k) for k in ("status", "step_cursor", "budget_used", "updated_at")}
+            if run
+            else None
+        ),
+        "latest_checkpoint": (
+            {"step": latest["step"], "created_at": latest["created_at"]} if latest else None
+        ),
+        "checkpoint_count": harness_state.count_checkpoints(execution_id),
+        "verifications": verification_records.list_verifications(execution_id),
+        "per_run_limit_usd": limit_row.get("per_run_limit_usd"),
+    }
+
+
 @get("/executions/{execution_id:str}/diff", sync_to_thread=False)
 def get_execution_diff(execution_id: str) -> dict[str, Any]:
     execution = ExecutionLogService.get_execution(execution_id)
@@ -565,6 +611,7 @@ executions_router = Router(
         list_trigger_executions,
         list_all_executions,
         get_execution,
+        get_execution_state,
         get_execution_diff,
         cancel_execution,
         cancel_execution_graceful,
