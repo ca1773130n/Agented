@@ -276,7 +276,7 @@ Expected: FAIL — unexpected keyword `resume_session_id`; `_capture_session_id`
 
 - [ ] **Step 3: CommandBuilder + facade**
 
-In `backend/app/services/command_builder.py`: add `resume_session_id: Optional[str] = None` as the last parameter of `CommandBuilder.build(...)` (check the exact signature first — it currently takes `backend, prompt, allowed_paths, model, codex_settings, allowed_tools`). In the **claude branch only**, after the base `cmd` list is built:
+In `backend/app/services/command_builder.py`: add `resume_session_id: Optional[str] = None` as the last parameter of `CommandBuilder.build(...)` (check the exact signature first — it currently takes `backend, prompt, allowed_paths, model, codex_settings, allowed_tools`). **The module imports only `logging` today — add `from typing import Optional`.** In the **claude branch only**, after the base `cmd` list is built:
 
 ```python
         if resume_session_id:
@@ -305,11 +305,28 @@ def _capture_session_id(execution_id: str, usage_data) -> None:
         logger.debug("session_id capture failed for %s: %s", execution_id, e)
 ```
 
-In the post-run usage block (~:714-718), immediately after `usage_data = BudgetService.extract_token_usage(...)`, add:
+**Wiring — capture must run for ALL terminal outcomes, not only success.** The
+current usage extraction lives under `elif exit_code == 0` (~:688/:711-718),
+but true resume mainly benefits *failed*-but-cleanly-exited claude runs, so
+hoist the capture ABOVE the status branch: after the output pipes have been
+joined / the process has exited (where `stdout_log` is obtainable via
+`ExecutionLogService.get_stdout_log(execution_id)`) and BEFORE the
+success/cancelled/failed branching, add:
 
 ```python
-                    _capture_session_id(execution_id, usage_data)
+            # Capture the harness session id for ANY terminal outcome (Phase 4):
+            # failed-but-cleanly-exited claude runs are the main resume audience.
+            _capture_session_id(
+                execution_id,
+                BudgetService.extract_token_usage(
+                    ExecutionLogService.get_stdout_log(execution_id), backend
+                ),
+            )
 ```
+
+(Inspect the exact local names — `backend` vs `backend_type` — at that point in
+`run_trigger`. Keep the existing `record_usage` call inside the `exit_code == 0`
+branch unchanged; double extraction is acceptable, correctness first.)
 
 - [ ] **Step 5: Run test to verify it passes**
 
@@ -404,6 +421,29 @@ def test_redispatch_rejects_unknown():
     assert ExecutionService.redispatch_execution("nope").get("error") == "not_found"
 
 
+def test_redispatch_prefers_trigger_config_snapshot():
+    """Deterministic replay: the trigger dict passed to run_trigger comes from
+    the stored snapshot, not the (possibly since-edited) DB trigger."""
+    import json
+
+    create_execution_log(
+        execution_id="exec-snap",
+        trigger_id="bot-pr-review",
+        trigger_type="manual",
+        started_at="2026-06-11T00:00:00",
+        prompt="stored prompt",
+        backend_type="claude",
+        command="echo hi",
+        trigger_config_snapshot=json.dumps(
+            {"id": "bot-pr-review", "name": "AS-IT-WAS", "prompt_template": "old tpl"}
+        ),
+    )
+    update_execution_log("exec-snap", status="interrupted", finished_at="2026-06-11T00:01:00")
+    with patch.object(ExecutionService, "run_trigger", return_value="exec-new") as rt:
+        ExecutionService.redispatch_execution("exec-snap")
+    assert rt.call_args.args[0]["name"] == "AS-IT-WAS"  # snapshot, not current DB row
+
+
 def test_redispatch_no_fan_out():
     _make_execution()
     with patch.object(ExecutionService, "run_trigger", return_value="exec-new"):
@@ -490,7 +530,23 @@ Add to `ExecutionService` (near `restore_pending_retries`):
         if get_redispatch_child(execution_id):
             return {"error": "already_redispatched"}
 
-        trigger = get_trigger(original.get("trigger_id")) if original.get("trigger_id") else None
+        # Deterministic replay: prefer the trigger as it was AT RUN TIME (the
+        # stored trigger_config_snapshot); fall back to the current DB trigger
+        # for legacy rows without a snapshot. Paths/cwd still resolve at
+        # re-dispatch time — documented semantics (spec Unit A).
+        trigger = None
+        snapshot = original.get("trigger_config_snapshot")
+        if snapshot:
+            try:
+                import json as _json
+
+                parsed = _json.loads(snapshot)
+                if isinstance(parsed, dict) and parsed.get("id"):
+                    trigger = parsed
+            except (TypeError, ValueError):
+                pass
+        if trigger is None and original.get("trigger_id"):
+            trigger = get_trigger(original["trigger_id"])
         if not trigger:
             return {"error": "trigger_missing"}
 
@@ -659,13 +715,40 @@ def redispatch_execution(execution_id: str) -> dict[str, Any]:
     if result.get("error") == "not_found":
         raise NotFoundException(detail=f"Execution {execution_id} not found")
     if "error" in result:
-        raise ClientException(status_code=409, detail=result["error"])
+        raise HTTPException(status_code=409, detail=result["error"])
     return result
 ```
 
-(Confirm `ClientException` import; mirror how siblings raise 409s — if they use a different exception for 409, use that.) Register in the `executions_router` handler list.
+(`executions.py` already imports `HTTPException` (~:24) and uses it for 409s — mirror that, NOT `ClientException`.) Register in the `executions_router` handler list.
 
-- [ ] **Step 4: `auto_redispatch_interrupted` + lifecycle wiring**
+- [ ] **Step 4: Make `auto_redispatch` settable through the normal trigger-update path**
+
+The flag is useless if nothing can set it. Trace how an existing boolean trigger
+field (`auto_resolve`) flows through `update_trigger` (`app/db/triggers.py` ~:277
+— check the allowed-fields handling), the trigger service payload
+(`app/services/trigger_service.py` ~:82), and the trigger update route's accepted
+body fields. Add `auto_redispatch` at each layer, mirroring `auto_resolve`
+exactly (int 0/1 coercion included). Append to the route/service test below —
+add to `tests/test_redispatch_route_and_startup.py`:
+
+```python
+def test_trigger_update_accepts_auto_redispatch():
+    from app.db.connection import get_connection
+    from app.db.triggers import get_trigger, update_trigger
+
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO triggers (id, name, prompt_template) VALUES ('trig-u', 'T', 'tpl')"
+        )
+        conn.commit()
+    assert update_trigger("trig-u", {"auto_redispatch": 1}) is not False
+    assert get_trigger("trig-u")["auto_redispatch"] == 1
+```
+
+(Adapt the `update_trigger` call shape to its real signature — it may take
+kwargs or a dict; mirror how `auto_resolve` is updated in existing tests.)
+
+- [ ] **Step 5: `auto_redispatch_interrupted` + lifecycle wiring**
 
 Add to `ExecutionService`:
 
@@ -712,15 +795,15 @@ In `backend/app_litestar/lifecycle.py`, immediately after the `restore_pending_r
         _startup_warnings.append(f"auto_redispatch: {exc}")
 ```
 
-- [ ] **Step 5: Run tests**
+- [ ] **Step 6: Run tests**
 
 Run: `cd backend && uv run pytest tests/test_redispatch_route_and_startup.py tests/test_execution_state_route.py -q`
-Expected: PASS (4 new + Phase-3 route regression green).
+Expected: PASS (5 new + Phase-3 route regression green).
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add backend/app_litestar/routes/executions.py backend/app_litestar/lifecycle.py backend/app/services/execution_service.py backend/tests/test_redispatch_route_and_startup.py
+git add backend/app_litestar/routes/executions.py backend/app_litestar/lifecycle.py backend/app/services/execution_service.py backend/app/db/triggers.py backend/app/services/trigger_service.py backend/tests/test_redispatch_route_and_startup.py
 git commit -m "feat(harness): redispatch route + opt-in startup auto-recovery (Phase 4 Unit A)"
 ```
 
@@ -762,10 +845,13 @@ def _make_failed_goal_session(session_id="gls-1", project_id="proj-1"):
             "VALUES (?, ?, 'failed', 'goal_loop')",
             (session_id, project_id),
         )
-        conn.execute(
+        conn.executemany(
             "INSERT INTO goal_loop_iterations (session_id, iteration, judge_source, verdict) "
-            "VALUES (?, 1, 'judge', 'not_achieved'), (?, 2, 'judge', 'not_achieved')",
-            (session_id, session_id),
+            "VALUES (?, ?, ?, ?)",
+            [
+                (session_id, 1, "judge", "not_achieved"),
+                (session_id, 2, "judge", "not_achieved"),
+            ],
         )
         conn.commit()
     set_goal_loop_config(session_id, {"goal": "make tests pass", "max_iterations": 10})
@@ -790,11 +876,14 @@ def test_resume_rejects_non_goal_or_active_sessions():
         conn.execute(
             "INSERT INTO project_sessions (id, project_id, status, execution_type) "
             "VALUES ('s-active', 'proj-1', 'active', 'goal_loop'), "
-            "       ('s-direct', 'proj-1', 'failed', 'direct')",
+            "       ('s-direct', 'proj-1', 'failed', 'direct'), "
+            "       ('s-ralph', 'proj-1', 'failed', 'ralph_loop')",
         )
         conn.commit()
     assert goal_loop_runner.resume_goal_loop("s-active").get("error") == "not_eligible"
     assert goal_loop_runner.resume_goal_loop("s-direct").get("error") == "not_eligible"
+    # ralph_loop excluded: no durable config/iterations to resume from.
+    assert goal_loop_runner.resume_goal_loop("s-ralph").get("error") == "not_eligible"
     assert goal_loop_runner.resume_goal_loop("nope").get("error") == "not_found"
 
 
@@ -881,7 +970,9 @@ def resume_goal_loop(session_id: str) -> dict:
         child = conn.execute(
             "SELECT id FROM project_sessions WHERE resumed_from = ? LIMIT 1", (session_id,)
         ).fetchone()
-    if session.get("execution_type") not in ("goal_loop", "ralph_loop"):
+    # goal_loop ONLY: ralph_loop persists no goal-loop config/iterations to
+    # re-enter from (its ralph_config is start-only) — excluded this phase.
+    if session.get("execution_type") != "goal_loop":
         return {"error": "not_eligible"}
     if session.get("status") != "failed":
         return {"error": "not_eligible"}
@@ -897,17 +988,19 @@ def resume_goal_loop(session_id: str) -> dict:
     return {"session_id": new_session_id, "resumed_from": session_id}
 ```
 
-`_spawn_resumed_session(origin_session_id, goal_config, origin_session) -> str`: mirror the spawn recipe pinned in Step 1 — `ProjectSessionManager.create_session(...)` with the origin session's project/cwd/execution_type, then set `resumed_from` on the new row (direct UPDATE or the allowlisted helper), `set_goal_loop_config(new_id, goal_config)`, `start_runner(new_id, goal_config, cwd=...)`, audit-log `session.loop_resumed`, return the new id. Use the REAL kwargs found in Step 1; keep it a module-level function so tests can patch it.
+`_spawn_resumed_session(origin_session_id, goal_config, origin_session) -> str`: mirror the spawn recipe pinned in Step 1 — `GoalLoopSessionHandler.start()`'s kwargs at `execution_type_handler.py:~468-495` are the template. **cwd derivation (the row does NOT store cwd):** use the origin row's `worktree_path` when set, else `ProjectWorkspaceService.resolve_working_directory(origin_session["project_id"])` (confirm that service/fn name via `grep -rn "resolve_working_directory" app/services/`). Then: `ProjectSessionManager.create_session(...)` with the mirrored kwargs, set `resumed_from` on the new row (direct UPDATE or the allowlisted helper), `set_goal_loop_config(new_id, goal_config)`, `start_runner(new_id, goal_config, cwd=derived_cwd)`, audit-log `session.loop_resumed`, return the new id. Keep it a module-level function so tests can patch it.
 
-Finally, make the initial prompt consume the context: in `_initial_prompt(goal, ...)` (or `_send_initial` — wherever the first message is composed), if the runner's config has `resume_context`, prepend it:
+Finally, make the initial prompt consume the context — the threading is explicit, do all three points:
+1. `_run()` (~`goal_loop_runner.py:347`) currently calls `_send_initial(session_id, goal, ouroboros=ouroboros, result_block=result_block)`; the config is on `_RunnerState` (~`:241`). Change the call to also pass `resume_context=(state.config or {}).get("resume_context")` (confirm the state attribute name holding the config — inspect `_RunnerState`).
+2. `_send_initial(...)` gains `resume_context: Optional[str] = None` and forwards it to `_initial_prompt(...)`.
+3. `_initial_prompt(...)` gains the same param and prepends when present:
 
 ```python
-    resume_context = config.get("resume_context") if config else None
     if resume_context:
         prompt = f"{resume_context}\n\n{prompt}"
 ```
 
-(Place per the real structure — `start_runner` stores config on `_RunnerState`; thread it to where the initial prompt is built. Inspect and do the minimal wiring.)
+(`prompt` = whatever local holds the composed initial prompt just before return — inspect and place accordingly.)
 
 - [ ] **Step 5: Route**
 
@@ -922,7 +1015,7 @@ def resume_goal_loop_route(project_id: str, session_id: str) -> dict[str, Any]:
     if result.get("error") == "not_found":
         raise NotFoundException(detail=f"Session {session_id} not found")
     if "error" in result:
-        raise ClientException(status_code=409, detail=result["error"])
+        raise HTTPException(status_code=409, detail=result["error"])
     return result
 ```
 
@@ -1013,6 +1106,16 @@ async function redispatchExecution(execution: Execution) {
 ```
 
 i18n (all four catalogs, in the existing `executionHistory` namespace): `"redispatch": "Re-dispatch"` (+ translated) and `"redispatchFailed": "Re-dispatch failed"` if the view's error pattern uses a message key.
+
+**Also: the `auto_redispatch` toggle in `TriggerDetailPanel.vue`** (the opt-in's
+UI half — the backend path landed in Task 4). Find how an existing boolean
+trigger setting (e.g. `auto_resolve` or `enabled`) is rendered/bound/saved in
+that panel and mirror it exactly for `auto_redispatch`: checkbox/switch bound to
+local state, loaded from the trigger payload, included in the save payload, with
+a label key in the panel's existing namespace (all four catalogs, e.g.
+`"autoRedispatch": "Auto re-dispatch interrupted runs"` + translations). If the
+trigger api types in `services/api/types/triggers.ts` model the trigger fields,
+add `auto_redispatch?: number` there too.
 
 - [ ] **Step 3: Tests + build**
 

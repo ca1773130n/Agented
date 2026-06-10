@@ -44,7 +44,9 @@ Decisions made with the user:
   execution to its origin. PRAGMA-guarded ALTER + fresh-DDL update
   (`schema/_core.py`).
 - `triggers.auto_redispatch INTEGER DEFAULT 0` — per-trigger opt-in for
-  automatic recovery. Same migration, same dual registration.
+  automatic recovery. Same migration, same dual registration. Settable through
+  the normal trigger-update path (DB `update_trigger` allowlist + service/route
+  payload) and a toggle in the TriggerDetailPanel settings UI.
 
 ### Re-dispatch semantics (service fn, used by route + startup)
 `ExecutionService.redispatch_execution(execution_id) -> ExecutionResult`-style
@@ -54,9 +56,13 @@ service entry point that:
 2. **No fan-out guard:** refuses (409) if any execution already has
    `redispatched_from = execution_id`.
 3. Launches a **new** execution (new `execution_id`) through the **existing
-   dispatch path** (the same `execute_with_fallback`/`run_trigger` machinery
-   the retry queue uses) with the original row's **stored** `prompt` and
-   `trigger_config_snapshot` — a deterministic re-run, no prompt re-render.
+   dispatch path** (`run_trigger`) with the original row's **stored** `prompt`
+   (no re-render) and the trigger parsed from the stored
+   `trigger_config_snapshot` (falling back to the current DB trigger for legacy
+   rows without a snapshot). **Documented semantics:** prompt + trigger config
+   replay from the snapshot; project paths and working directory resolve at
+   re-dispatch time (current state) — persisting/replaying the original cwd is
+   out of scope.
 4. Sets `redispatched_from` on the new row; audit-logs
    `execution.redispatched`.
 
@@ -98,8 +104,11 @@ service entry point that:
 - **`POST .../sessions/{session_id}/resume-loop`** (manual only; mounted on
   the same router family as the existing goal-loop session routes —
   `grd_routes.py` — exact path mirrors its siblings):
-  1. Eligible only for goal-loop-type sessions (`goal_loop`/`ralph_loop`) in
-     status `failed`; 409 otherwise; no-fan-out guard via provenance (below).
+  1. Eligible only for `goal_loop` sessions in status `failed`; 409 otherwise;
+     no-fan-out guard via provenance (below). **`ralph_loop` is excluded this
+     phase** — ralph persists no goal-loop config/iterations to re-enter from
+     (its `ralph_config` is start-only); a ralph resume path needs its own
+     durable state.
   2. Reads the session's persisted goal config (whatever
      `execution_type_handler.py:487-495` passes to `start_runner` — the plan
      pins the exact column/blob) + durable history: `goal_loop_iterations`
@@ -145,7 +154,9 @@ service entry point that:
 **Lint:** ruff on touched files — no new errors vs `main`.
 
 ## Out of scope
-Auto-redispatch beyond the opt-in flag; codex/gemini resume; stream-json
+`ralph_loop` re-entry (no durable config/iterations to resume from);
+replaying the original working directory/paths on re-dispatch;
+auto-redispatch beyond the opt-in flag; codex/gemini resume; stream-json
 migration for early session_id capture; goal-loop UI; PTY reattach;
 re-dispatch of `success` runs; retry-count/backoff policies for re-dispatch
 (one manual attempt, one auto attempt, period).
