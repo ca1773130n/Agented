@@ -168,6 +168,22 @@ function toggleReplay(executionId: string) {
   replayExpandedId.value = replayExpandedId.value === executionId ? null : executionId;
 }
 
+const redispatchInFlight = ref<string | null>(null);
+
+async function handleRedispatchExecution(execution: { execution_id: string }) {
+  if (redispatchInFlight.value) return;
+  redispatchInFlight.value = execution.execution_id;
+  try {
+    await executionApi.redispatch(execution.execution_id);
+    showToast(t('executionHistory.toast.redispatched'), 'success');
+    await loadData();
+  } catch (err: unknown) {
+    showToast(err instanceof Error ? err.message : t('executionHistory.errors.redispatch'), 'error');
+  } finally {
+    redispatchInFlight.value = null;
+  }
+}
+
 const cancellingId = ref<string | null>(null);
 
 async function handleCancelExecution(executionId: string) {
@@ -351,6 +367,18 @@ onMounted(loadData);
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M1 4v6h6M23 20v-6h-6"/>
                     <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+                  </svg>
+                </button>
+                <button
+                  v-if="['interrupted', 'failed'].includes(execution.status)"
+                  class="btn-icon btn-redispatch"
+                  :data-execution-id="execution.execution_id"
+                  :disabled="redispatchInFlight === execution.execution_id"
+                  @click.stop="handleRedispatchExecution(execution)"
+                  :title="t('executionHistory.actions.redispatch')"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
                   </svg>
                 </button>
                 <button

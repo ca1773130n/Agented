@@ -79,6 +79,7 @@ export const triggerApi = {
     webhook_secret: string | null;
     dispatch_type: 'bot' | 'super_agent';
     super_agent_id: string | null;
+    auto_redispatch: number;
   }>) => apiFetch<{ message: string }>(`/admin/triggers/${triggerId}`, {
     method: 'PUT',
     body: JSON.stringify(data),
@@ -339,6 +340,12 @@ export const executionApi = {
   // Get composed harness-state snapshot (Phase 1-3: run/checkpoints/verifications/budget)
   getState: (executionId: string) =>
     apiFetch<ExecutionStateSnapshot>(`/admin/executions/${executionId}/state`),
+
+  // Re-dispatch an interrupted/failed execution (Phase 4)
+  redispatch: (executionId: string) =>
+    apiFetch<{ execution_id: string }>(`/admin/executions/${executionId}/redispatch`, {
+      method: 'POST',
+    }),
 };
 
 // PR Review API

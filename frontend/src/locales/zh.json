@@ -2659,6 +2659,8 @@
       "promptHint": "使用 {'{'}paths{'}'} 表示项目路径，使用 {'{'}message{'}'} 表示原始消息",
       "autoResolve": "自动解决并提交 PR",
       "autoResolveDesc": "自动解决安全问题并为 GitHub 仓库创建拉取请求",
+      "autoRedispatch": "自动重新调度中断的运行",
+      "autoRedispatchDesc": "在启动时自动重新调度中断的执行",
       "executionMode": "执行模式",
       "executionModeDirect": "直接 (编排)",
       "executionModeTeam": "团队委派",
@@ -2711,6 +2713,9 @@
       "autoResolveEnabled": "已启用自动解决",
       "autoResolveDisabled": "已禁用自动解决",
       "autoResolveFailed": "更新自动解决失败",
+      "autoRedispatchEnabled": "已启用自动重新调度",
+      "autoRedispatchDisabled": "已禁用自动重新调度",
+      "autoRedispatchFailed": "更新自动重新调度失败",
       "pathAdded": "路径已添加",
       "pathAddFailed": "添加路径失败",
       "githubRepoAdded": "GitHub 仓库已添加",
@@ -8956,6 +8961,7 @@
       "viewLogs": "查看日志",
       "cancel": "取消执行",
       "retry": "重试执行",
+      "redispatch": "重新调度",
       "replay": "重放并比较",
       "chunkResults": "分块结果",
       "branches": "分支"
@@ -8963,11 +8969,13 @@
     "errors": {
       "load": "加载执行历史失败",
       "retry": "重试执行失败",
-      "cancel": "取消执行失败"
+      "cancel": "取消执行失败",
+      "redispatch": "重新调度失败"
     },
     "toast": {
       "retryStarted": "执行重试已开始",
-      "cancelled": "执行已取消"
+      "cancelled": "执行已取消",
+      "redispatched": "执行已重新调度"
     }
   },
   "harnessState": {

@@ -2659,6 +2659,8 @@
       "promptHint": "Use {'{'}paths{'}'} for project paths, {'{'}message{'}'} for the original message",
       "autoResolve": "Auto-resolve & PR",
       "autoResolveDesc": "Automatically resolve security issues and create pull requests for GitHub repos",
+      "autoRedispatch": "Auto re-dispatch interrupted runs",
+      "autoRedispatchDesc": "Automatically re-dispatch interrupted executions on startup",
       "executionMode": "Execution Mode",
       "executionModeDirect": "Direct (Orchestration)",
       "executionModeTeam": "Team Delegation",
@@ -2711,6 +2713,9 @@
       "autoResolveEnabled": "Auto-resolve enabled",
       "autoResolveDisabled": "Auto-resolve disabled",
       "autoResolveFailed": "Failed to update auto-resolve",
+      "autoRedispatchEnabled": "Auto re-dispatch enabled",
+      "autoRedispatchDisabled": "Auto re-dispatch disabled",
+      "autoRedispatchFailed": "Failed to update auto re-dispatch",
       "pathAdded": "Path added",
       "pathAddFailed": "Failed to add path",
       "githubRepoAdded": "GitHub repository added",
@@ -8956,6 +8961,7 @@
       "viewLogs": "View logs",
       "cancel": "Cancel execution",
       "retry": "Retry execution",
+      "redispatch": "Re-dispatch",
       "replay": "Replay & Compare",
       "chunkResults": "Chunk Results",
       "branches": "Branches"
@@ -8963,11 +8969,13 @@
     "errors": {
       "load": "Failed to load execution history",
       "retry": "Failed to retry execution",
-      "cancel": "Failed to cancel execution"
+      "cancel": "Failed to cancel execution",
+      "redispatch": "Re-dispatch failed"
     },
     "toast": {
       "retryStarted": "Execution retry started",
-      "cancelled": "Execution cancelled"
+      "cancelled": "Execution cancelled",
+      "redispatched": "Execution re-dispatched"
     }
   },
   "harnessState": {

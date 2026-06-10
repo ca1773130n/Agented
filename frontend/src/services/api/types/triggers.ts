@@ -45,6 +45,7 @@ export interface Trigger {
   is_predefined: number;
   enabled: number;
   auto_resolve: number;
+  auto_redispatch?: number;
   schedule_type?: ScheduleType;
   schedule_time?: string;
   schedule_day?: number;
