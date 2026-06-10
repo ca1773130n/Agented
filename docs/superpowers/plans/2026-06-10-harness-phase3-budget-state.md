@@ -193,12 +193,17 @@ def test_native_cost_passthrough():
     assert BudgetService.cost_from_usage(usage, "claude") == pytest.approx(0.42)
 
 
-def test_zero_native_cost_estimates_from_pricing():
-    # codex extraction reports total_cost_usd=0.0 — must estimate from MODEL_PRICING.
+def test_zero_native_cost_estimates_with_codex_pricing():
+    """codex extraction reports total_cost_usd=0.0 — must estimate using CODEX
+    pricing (session_cost_service), NOT the claude fallback rate."""
+    from app.services.session_cost_service import _PRICING
+
     usage = {"input_tokens": 1_000_000, "output_tokens": 0, "total_cost_usd": 0.0}
     cost = BudgetService.cost_from_usage(usage, "codex")
-    pricing = BudgetService.MODEL_PRICING["claude-sonnet-4"]  # default fallback rate
-    assert cost == pytest.approx(pricing["input"])
+    assert cost == pytest.approx(_PRICING["gpt-5.3-codex"]["input"])
+    # And claude-backend estimates use claude rates (when no native cost).
+    cost_claude = BudgetService.cost_from_usage(usage, "claude")
+    assert cost_claude == pytest.approx(_PRICING["claude-sonnet-4"]["input"])
 
 
 def test_none_usage_is_zero():
@@ -243,24 +248,43 @@ Expected: FAIL — `cost_from_usage`/`update_budget_used`/`count_checkpoints` do
 In `backend/app/services/budget_service.py`, add as a `@classmethod` near `estimate_cost`:
 
 ```python
+    # Backend-family default model for live cost estimation when the
+    # extractor reports tokens but no cost (codex/opencode report cost 0.0).
+    _ESTIMATE_MODEL_FOR_BACKEND = {
+        "codex": "gpt-5.3-codex",
+        "opencode": "gpt-5.3-codex",
+    }
+
     @classmethod
     def cost_from_usage(cls, usage: Optional[dict], backend_type: str) -> float:
         """USD cost of a usage dict (Harness-1 Phase 3 live accounting).
 
         Uses the extractor's native ``total_cost_usd`` when present (claude
-        reports it); otherwise estimates from MODEL_PRICING (codex reports
-        tokens but cost 0.0). An ESTIMATE for live discipline — the
-        authoritative record stays ``record_usage`` at finish."""
+        reports it); otherwise estimates via session_cost_service's canonical
+        pricing/_compute_cost, selecting the model family by backend (codex
+        reports tokens but cost 0.0 — it must NOT be priced at claude rates).
+        An ESTIMATE for live discipline — the authoritative record stays
+        ``record_usage`` at finish."""
         if not usage:
             return 0.0
         native = usage.get("total_cost_usd") or 0.0
         if native > 0:
             return float(native)
-        pricing = cls.MODEL_PRICING["claude-sonnet-4"]
-        return (usage.get("input_tokens", 0) * pricing["input"] / 1_000_000) + (
-            usage.get("output_tokens", 0) * pricing["output"] / 1_000_000
+        from .session_cost_service import _compute_cost
+
+        model = cls._ESTIMATE_MODEL_FOR_BACKEND.get(backend_type, "claude-sonnet-4")
+        return _compute_cost(
+            usage.get("input_tokens", 0),
+            usage.get("output_tokens", 0),
+            usage.get("cache_read_tokens", 0),
+            usage.get("cache_creation_tokens", 0),
+            model,
         )
 ```
+
+(Reuses `session_cost_service._compute_cost` / `_resolve_model_pricing` —
+the repo's canonical token→USD computation, which already knows codex/gpt-5
+family pricing — instead of duplicating rates in `MODEL_PRICING`.)
 
 - [ ] **Step 4: Implement the two `harness_state` fns**
 
@@ -1118,12 +1142,14 @@ git commit -m "feat(harness): HarnessStatePanel + /state api client + i18n (Phas
 ## Task 6: `per_run_limit_usd` through the budget-limits form chain
 
 **Files:**
-- Modify: `frontend/src/components/monitoring/BudgetLimitForm.vue`
+- Modify: `frontend/src/components/monitoring/BudgetLimitForm.vue` (field + the at-least-one guard at ~:80)
 - Modify: `frontend/src/components/monitoring/__tests__/BudgetLimitForm.test.ts`
+- Modify: `frontend/src/components/triggers/TriggerDetailPanel.vue` (the SECOND budget editor — load at ~:239, save payload at ~:262)
 - Modify: `frontend/src/services/api/budgets.ts` (`budgetApi.setLimit` at ~:28 — accept the new field)
 - Modify: `frontend/src/services/api/types/budgets.ts` (`BudgetLimit` at ~:5 — add `per_run_limit_usd: number | null`)
 - Modify: `backend/app_litestar/routes/budgets.py` (`set_limit` handler at ~:67 — parse/validate/pass)
-- Modify: `frontend/src/locales/{en,ko,ja,zh}.json` (field label, in the form's existing namespace)
+- Modify: `backend/app/models/budget.py` (de-stale `BudgetLimitRequest`/`BudgetLimitResponse`)
+- Modify: `frontend/src/locales/{en,ko,ja,zh}.json` (field labels for BOTH surfaces' namespaces)
 - Test (backend): extend `backend/tests/test_migration_151_per_run_limit.py`
 
 - [ ] **Step 1: Trace the existing chain (read, don't guess)**
@@ -1165,23 +1191,38 @@ extend the `set_limit` handler (~:67): add `per_run_limit_usd` to its body
 model/param parsing, include it in the handler's "at least one limit provided"
 guard if it has one, and pass it through to `set_budget_limit`. Re-run → PASS.
 
-- [ ] **Step 3: Frontend api + form field**
+- [ ] **Step 3: De-stale the backend Pydantic models**
+
+In `backend/app/models/budget.py`: add `per_run_limit_usd: Optional[float] = None`
+to BOTH `BudgetLimitRequest` and `BudgetLimitResponse`; widen
+`BudgetLimitRequest.entity_type` to `Literal["agent", "team", "trigger"]`; and
+update `validate_limits` so `per_run_limit_usd` counts toward the
+"at least one limit" check and rejects `<= 0`. (These models aren't on the live
+`PUT /admin/budgets/limits` path, but they're part of the model surface — keep
+them consistent rather than stale.)
+
+- [ ] **Step 4: Frontend api + BOTH budget editors**
 
 1. `frontend/src/services/api/types/budgets.ts` (~:5): add `per_run_limit_usd: number | null;` to `BudgetLimit`.
 2. `frontend/src/services/api/budgets.ts` (~:28): add `per_run_limit_usd?: number;` to `setLimit()`'s input shape and include it in the request body exactly like `soft_limit_usd`.
-3. In `BudgetLimitForm.vue`, add a number input mirroring the `soft_limit_usd` field's exact markup/binding/validation pattern, bound to `per_run_limit_usd`, labeled with a new i18n key in the form's existing namespace (add to all four catalogs), and included in the submit payload exactly like `soft_limit_usd`.
+3. `BudgetLimitForm.vue`: add a number input mirroring the `soft_limit_usd` field's exact markup/binding/validation pattern, bound to `per_run_limit_usd`, labeled with a new i18n key in the form's existing namespace (all four catalogs), included in the submit payload — **and update the at-least-one guard (~:80) so a per-run-only submission is valid** (it currently checks only soft/hard).
+4. `TriggerDetailPanel.vue` — the second, independent budget editor: add per-run state where the panel loads limits (~:239), display + input mirroring its soft/hard fields, include it in the save payload (~:262), update its own at-least-one guard the same way, and add the label key to its locale namespace in all four catalogs.
 
-- [ ] **Step 4: Extend the form's component test**
+- [ ] **Step 5: Extend the component tests — including the per-run-only path**
 
-In `BudgetLimitForm.test.ts`, extend the existing submit test (mirroring its style) to set the new field and assert the API payload includes `per_run_limit_usd`.
+In `BudgetLimitForm.test.ts` (mirroring its style):
+1. Extend the existing submit test to set the new field and assert the API payload includes `per_run_limit_usd`.
+2. Add a dedicated case: fill ONLY `per_run_limit_usd` (soft/hard empty) → the form submits successfully and the payload carries just the per-run value. This pins the guard fix; without it an implementation could reject per-run-only submissions while all tests pass.
+
+If `TriggerDetailPanel` has a test file (check `frontend/src/components/triggers/__tests__/`), extend it the same way; if not, the form tests + manual smoke cover it.
 
 Run: `cd frontend && npm run test:run -- BudgetLimitForm`
-Expected: PASS.
+Expected: PASS (including the new per-run-only case).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add frontend/src/components/monitoring/ backend/app_litestar/routes/budgets.py backend/tests/test_migration_151_per_run_limit.py frontend/src/locales/ frontend/src/services/api/
+git add frontend/src/components/monitoring/ frontend/src/components/triggers/ backend/app_litestar/routes/budgets.py backend/app/models/budget.py backend/tests/test_migration_151_per_run_limit.py frontend/src/locales/ frontend/src/services/api/
 git commit -m "feat(harness): per-run limit settable from budget form (Phase 3 P6)"
 ```
 

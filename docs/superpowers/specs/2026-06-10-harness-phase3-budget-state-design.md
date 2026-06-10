@@ -124,9 +124,11 @@ at `:125`), returning a composed snapshot:
   (follow its per-domain pattern) with `getExecutionState(executionId)`.
 - **i18n**: new `harnessState.*` namespace added to **all four** catalogs
   (`en`, `ko`, `ja`, `zh`), key-identical.
-- **Budget form field**: add `per_run_limit_usd` as one optional field to the
-  existing budget-limits form (the `budgetLimitsExtended` surface), wired
-  through the existing set-budget API.
+- **Budget form field**: add `per_run_limit_usd` as one optional field to BOTH
+  existing budget editors — `BudgetLimitForm.vue` (monitoring surface) and the
+  independent inline editor in `TriggerDetailPanel.vue` — wired through the
+  existing set-budget API, with each surface's at-least-one-limit guard updated
+  to count the new field (a per-run-only submission must be valid).
 - **Tests**: Vitest + @vue/test-utils component test for `HarnessStatePanel`
   (renders states; poll start/stop), following the sibling test convention.
 
