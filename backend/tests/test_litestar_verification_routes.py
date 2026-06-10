@@ -54,3 +54,16 @@ def test_post_records_a_verification(isolated_db):
     assert resp.status_code in (200, 201)
     rows = vr.list_verifications("exec-1")
     assert rows[0]["claim"] == "lint clean"
+
+
+def test_post_rejects_invalid_status_with_400(isolated_db):
+    """An out-of-range status must be rejected cleanly (ClientException 400),
+    not surface as a misleading IntegrityError/409 from the CHECK constraint."""
+    _make_execution()
+    with _client() as client:
+        resp = client.post(
+            "/api/executions/exec-1/verifications",
+            json={"claim": "x", "status": "bogus"},
+        )
+    assert resp.status_code == 400
+    assert vr.list_verifications("exec-1") == []
