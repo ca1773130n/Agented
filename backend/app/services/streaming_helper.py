@@ -9,6 +9,7 @@ import threading
 import traceback
 from typing import Callable, Optional
 
+from ..db import harness_evidence
 from .chat_state_service import ChatStateService
 from .super_agent_session_service import SuperAgentSessionService
 
@@ -42,6 +43,21 @@ def _mark_account_rate_limited(candidate, rl_info) -> None:
         )
     except Exception:
         logger.warning("Failed to mark account rate-limited", exc_info=True)
+
+
+def _record_tool_use_evidence(session_id: str, super_agent_id, event) -> None:
+    """Best-effort: persist a ToolUseEvent to the evidence ledger (Phase 2 P3).
+    Never raises — a ledger write must not disrupt streaming."""
+    try:
+        harness_evidence.record_tool_use(
+            session_id,
+            super_agent_id=super_agent_id,
+            tool_name=event.name,
+            tool_input=event.input,
+            tool_use_id=event.id,
+        )
+    except Exception as e:  # pragma: no cover - defensive
+        logger.debug("evidence ledger write failed for %s: %s", session_id, e)
 
 
 def run_streaming_response(
@@ -176,6 +192,7 @@ def run_streaming_response(
                 for chunk in stream_iter:
                     if isinstance(chunk, ToolUseEvent):
                         ChatStateService.push_delta(_session_id, "tool_use", chunk.to_dict())
+                        _record_tool_use_evidence(_session_id, _super_agent_id, chunk)
                         continue
                     if chunk:
                         accumulated.append(chunk)
@@ -274,6 +291,7 @@ def run_streaming_response(
                         continue
                     if isinstance(chunk, ToolUseEvent):
                         ChatStateService.push_delta(_session_id, "tool_use", chunk.to_dict())
+                        _record_tool_use_evidence(_session_id, _super_agent_id, chunk)
                         continue
                     if chunk:
                         accumulated.append(chunk)
