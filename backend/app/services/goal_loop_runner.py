@@ -802,6 +802,10 @@ def _spawn_resumed_session(origin_session_id: str, goal_config: dict, origin_ses
         execution_mode=origin_session.get("execution_mode") or "autonomous",
         stream_json=True,
         use_pty=False,
+        # Preserve the origin's yolo mode: a non-yolo respawn would activate
+        # the permission-hook overlay and block the unattended loop. The
+        # original handler expresses yolo solely via this flag — mirror it.
+        yolo_mode=bool(origin_session.get("yolo_mode")),
     )
 
     # Persist resumed_from provenance (direct UPDATE — not in update_project_session allowlist)

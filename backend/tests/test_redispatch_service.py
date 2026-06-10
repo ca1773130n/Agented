@@ -218,3 +218,28 @@ def test_redispatch_no_fan_out():
     second = ExecutionService.redispatch_execution("exec-1")
     assert second.get("error") == "already_redispatched"
     assert get_redispatch_child("exec-1")["execution_id"] == "exec-new"
+
+
+def test_account_env_overrides_include_backend_type():
+    """_build_account_env_overrides must JOIN the backend row: the canonical
+    _build_account_env decides CLAUDE_CONFIG_DIR vs GEMINI_CLI_HOME from
+    account['backend_type'], which lives on ai_backends, not backend_accounts.
+    Without it a claude --resume redispatch falls back to the default config
+    dir and the saved session id is unusable (codex PR review P2)."""
+    from app.db.connection import get_connection
+    from app.services.execution_service import _build_account_env_overrides
+
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO ai_backends (id, name, type) VALUES ('be-claude', 'Claude', 'claude')"
+        )
+        conn.execute(
+            "INSERT INTO backend_accounts (backend_id, account_name, config_path) "
+            "VALUES ('be-claude', 'acct', '/cfg/claude-acct')"
+        )
+        account_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.commit()
+
+    env = _build_account_env_overrides(account_id)
+    assert env is not None
+    assert env.get("CLAUDE_CONFIG_DIR") == "/cfg/claude-acct"

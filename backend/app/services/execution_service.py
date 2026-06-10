@@ -150,7 +150,16 @@ def _build_account_env_overrides(account_id: int) -> Optional[dict]:
     from .orchestration_service import OrchestrationService
 
     with get_connection() as conn:
-        row = conn.execute("SELECT * FROM backend_accounts WHERE id = ?", (account_id,)).fetchone()
+        # JOIN the backend row: _build_account_env branches on
+        # account['backend_type'] (CLAUDE_CONFIG_DIR vs GEMINI_CLI_HOME),
+        # which lives on ai_backends.type, not backend_accounts.
+        row = conn.execute(
+            "SELECT ba.*, ab.type AS backend_type "
+            "FROM backend_accounts ba "
+            "LEFT JOIN ai_backends ab ON ab.id = ba.backend_id "
+            "WHERE ba.id = ?",
+            (account_id,),
+        ).fetchone()
     if not row:
         return None
     return OrchestrationService._build_account_env(dict(row))

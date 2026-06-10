@@ -102,9 +102,7 @@ def test_resume_concurrent_double_call_single_spawn():
         release.set()
         t1.join(timeout=5)
         t2.join(timeout=5)
-    outcomes = sorted(
-        ("ok" if "session_id" in r else r.get("error", "unknown")) for r in results
-    )
+    outcomes = sorted(("ok" if "session_id" in r else r.get("error", "unknown")) for r in results)
     assert outcomes == ["already_resumed", "ok"]
 
 
@@ -132,3 +130,30 @@ def test_resume_loop_route_404_when_not_found():
     ) as client:
         resp = client.post("/api/projects/proj-1/sessions/nope/resume-loop")
     assert resp.status_code == 404
+
+
+def test_resume_preserves_yolo_mode():
+    """A yolo goal-loop must respawn as yolo: create_session(yolo_mode=False)
+    would activate the permission-hook overlay and block the unattended loop
+    (codex PR review P2). The original handler expresses yolo solely via the
+    create_session flag — mirror that."""
+    from unittest.mock import patch
+
+    from app.db.connection import get_connection
+
+    _make_failed_goal_session("gls-yolo")
+    with get_connection() as conn:
+        conn.execute("UPDATE project_sessions SET yolo_mode = 1 WHERE id = 'gls-yolo'")
+        conn.commit()
+
+    with (
+        patch(
+            "app.services.project_session_manager.ProjectSessionManager.create_session",
+            return_value="gls-yolo-child",
+        ) as create,
+        patch.object(goal_loop_runner, "start_runner"),
+        patch("app.db.goal_loop.set_goal_loop_config"),
+    ):
+        result = goal_loop_runner.resume_goal_loop("gls-yolo")
+    assert result.get("session_id") == "gls-yolo-child"
+    assert create.call_args.kwargs.get("yolo_mode") is True
