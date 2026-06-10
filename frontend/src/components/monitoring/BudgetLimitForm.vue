@@ -36,6 +36,7 @@ const entityId = ref('');
 const period = ref<'daily' | 'weekly' | 'monthly'>('monthly');
 const softLimit = ref<string>('');
 const hardLimit = ref<string>('');
+const perRunLimit = ref<string>('');
 const isSubmitting = ref(false);
 const errorMessage = ref('');
 const fieldErrors = ref<Record<string, string>>({});
@@ -48,6 +49,7 @@ function populateFromExisting() {
     period.value = props.existingLimit.period as 'daily' | 'weekly' | 'monthly';
     softLimit.value = props.existingLimit.soft_limit_usd != null ? String(props.existingLimit.soft_limit_usd) : '';
     hardLimit.value = props.existingLimit.hard_limit_usd != null ? String(props.existingLimit.hard_limit_usd) : '';
+    perRunLimit.value = props.existingLimit.per_run_limit_usd != null ? String(props.existingLimit.per_run_limit_usd) : '';
   }
 }
 
@@ -79,8 +81,9 @@ function validate(): boolean {
 
   const soft = softLimit.value.trim() ? parseFloat(softLimit.value) : null;
   const hard = hardLimit.value.trim() ? parseFloat(hardLimit.value) : null;
+  const perRun = perRunLimit.value.trim() ? parseFloat(perRunLimit.value) : null;
 
-  if (soft == null && hard == null) {
+  if (soft == null && hard == null && perRun == null) {
     fieldErrors.value.limits = t('budgetLimitForm.errors.atLeastOne');
   }
 
@@ -94,6 +97,10 @@ function validate(): boolean {
 
   if (soft != null && hard != null && !isNaN(soft) && !isNaN(hard) && hard < soft) {
     fieldErrors.value.hard = t('budgetLimitForm.errors.haltGteAlert');
+  }
+
+  if (perRun != null && (isNaN(perRun) || perRun <= 0)) {
+    fieldErrors.value.perRun = t('budgetLimitForm.errors.perRunPositive');
   }
 
   return Object.keys(fieldErrors.value).length === 0;
@@ -112,6 +119,7 @@ async function handleSubmit() {
       period: string;
       soft_limit_usd?: number;
       hard_limit_usd?: number;
+      per_run_limit_usd?: number;
     } = {
       entity_type: entityType.value,
       entity_id: entityId.value,
@@ -120,9 +128,11 @@ async function handleSubmit() {
 
     const soft = softLimit.value.trim() ? parseFloat(softLimit.value) : null;
     const hard = hardLimit.value.trim() ? parseFloat(hardLimit.value) : null;
+    const perRun = perRunLimit.value.trim() ? parseFloat(perRunLimit.value) : null;
 
     if (soft != null) data.soft_limit_usd = soft;
     if (hard != null) data.hard_limit_usd = hard;
+    if (perRun != null) data.per_run_limit_usd = perRun;
 
     await budgetApi.setLimit(data);
     emit('saved');
@@ -239,6 +249,24 @@ async function handleSubmit() {
           </div>
           <div class="field-hint">{{ t('budgetLimitForm.haltHint') }}</div>
           <div v-if="fieldErrors.hard" class="field-error">{{ fieldErrors.hard }}</div>
+        </div>
+
+        <!-- Per-Run Limit -->
+        <div class="form-group">
+          <label>{{ t('budgetLimitForm.perRunThreshold') }}</label>
+          <div class="currency-input">
+            <span class="currency-prefix">$</span>
+            <input
+              type="number"
+              v-model="perRunLimit"
+              step="0.01"
+              min="0"
+              :placeholder="t('budgetLimitForm.perRunPlaceholder')"
+              :class="{ error: fieldErrors.perRun }"
+            >
+          </div>
+          <div class="field-hint">{{ t('budgetLimitForm.perRunHint') }}</div>
+          <div v-if="fieldErrors.perRun" class="field-error">{{ fieldErrors.perRun }}</div>
         </div>
 
         <!-- General limit error -->

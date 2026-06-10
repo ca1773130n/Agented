@@ -1306,8 +1306,12 @@
       "alertPositive": "Alert threshold must be a positive number",
       "haltPositive": "Halt threshold must be a positive number",
       "haltGteAlert": "Halt threshold must be >= alert threshold",
-      "saveFailed": "Failed to save budget limit"
-    }
+      "saveFailed": "Failed to save budget limit",
+      "perRunPositive": "Per-run limit must be a positive number"
+    },
+    "perRunThreshold": "Per-Run Limit",
+    "perRunPlaceholder": "e.g., 2.00",
+    "perRunHint": "Each execution will be killed when its cost reaches this amount."
   },
   "budgetLimitsSection": {
     "title": "Budget Limits",
@@ -2686,7 +2690,9 @@
       "alertThresholdUsd": "Alert Threshold (USD)",
       "haltThresholdUsd": "Halt Threshold (USD)",
       "saving": "Saving...",
-      "saveBudget": "Save Budget"
+      "saveBudget": "Save Budget",
+      "perRunThreshold": "Per-run limit:",
+      "perRunThresholdUsd": "Per-Run Limit (USD)"
     },
     "paths": {
       "title": "Project Paths",

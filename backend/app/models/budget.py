@@ -8,22 +8,31 @@ from pydantic import BaseModel, model_validator
 class BudgetLimitRequest(BaseModel):
     """Request model for setting/updating a budget limit."""
 
-    entity_type: Literal["agent", "team"]
+    entity_type: Literal["agent", "team", "trigger"]
     entity_id: str
     period: Literal["daily", "weekly", "monthly"] = "monthly"
     soft_limit_usd: Optional[float] = None
     hard_limit_usd: Optional[float] = None
+    per_run_limit_usd: Optional[float] = None
 
     @model_validator(mode="after")
     def validate_limits(self):
-        if self.soft_limit_usd is None and self.hard_limit_usd is None:
-            raise ValueError("At least one of soft_limit_usd or hard_limit_usd must be set")
+        if (
+            self.soft_limit_usd is None
+            and self.hard_limit_usd is None
+            and self.per_run_limit_usd is None
+        ):
+            raise ValueError(
+                "At least one of soft_limit_usd, hard_limit_usd, or per_run_limit_usd must be set"
+            )
         if (
             self.soft_limit_usd is not None
             and self.hard_limit_usd is not None
             and self.hard_limit_usd < self.soft_limit_usd
         ):
             raise ValueError("hard_limit_usd must be >= soft_limit_usd")
+        if self.per_run_limit_usd is not None and self.per_run_limit_usd <= 0:
+            raise ValueError("per_run_limit_usd must be positive")
         return self
 
 
@@ -36,6 +45,7 @@ class BudgetLimitResponse(BaseModel):
     period: str
     soft_limit_usd: Optional[float] = None
     hard_limit_usd: Optional[float] = None
+    per_run_limit_usd: Optional[float] = None
     current_spend_usd: float = 0.0
     created_at: str
     updated_at: str

@@ -58,3 +58,25 @@ def test_set_rejects_nonpositive_per_run_limit():
     `if not limit` check is unambiguous (0.0 can never be stored)."""
     assert set_budget_limit("trigger", "t-2", per_run_limit_usd=-1.0) is False
     assert set_budget_limit("trigger", "t-2", per_run_limit_usd=0.0) is False
+
+
+def test_budget_route_accepts_per_run_limit():
+    from litestar.testing import create_test_client
+
+    from app.db.budgets import get_budget_limit
+    from app_litestar.auth import provide_caller
+    from app_litestar.routes.budgets import budgets_router  # confirm exact symbol via grep
+
+    with create_test_client(
+        route_handlers=[budgets_router], dependencies={"caller": provide_caller}
+    ) as client:
+        resp = client.put(
+            "/admin/budgets/limits",
+            json={
+                "entity_type": "trigger",
+                "entity_id": "bot-pr-review",
+                "per_run_limit_usd": 1.5,
+            },
+        )
+    assert resp.status_code in (200, 201)
+    assert get_budget_limit("trigger", "bot-pr-review")["per_run_limit_usd"] == 1.5

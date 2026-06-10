@@ -120,9 +120,10 @@ describe('BudgetLimitForm', () => {
     const wrapper = mountForm();
     const select = wrapper.find('select');
     await select.setValue('agent-abc');
-    const vm = wrapper.vm as unknown as { softLimit: string; hardLimit: string };
+    const vm = wrapper.vm as unknown as { softLimit: string; hardLimit: string; perRunLimit: string };
     vm.softLimit = '10';
     vm.hardLimit = '50';
+    vm.perRunLimit = '2.50';
     await wrapper.find('form').trigger('submit');
     await flushPromises();
     expect(mockSetLimit).toHaveBeenCalledWith({
@@ -131,6 +132,25 @@ describe('BudgetLimitForm', () => {
       period: 'monthly',
       soft_limit_usd: 10,
       hard_limit_usd: 50,
+      per_run_limit_usd: 2.5,
+    });
+    expect(wrapper.emitted('saved')).toBeTruthy();
+  });
+
+  it('submits successfully with per-run limit only (no soft/hard)', async () => {
+    const wrapper = mountForm();
+    const select = wrapper.find('select');
+    await select.setValue('agent-abc');
+    // Only set per-run limit — soft and hard remain empty
+    const vm = wrapper.vm as unknown as { perRunLimit: string };
+    vm.perRunLimit = '3.00';
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+    expect(mockSetLimit).toHaveBeenCalledWith({
+      entity_type: 'agent',
+      entity_id: 'agent-abc',
+      period: 'monthly',
+      per_run_limit_usd: 3,
     });
     expect(wrapper.emitted('saved')).toBeTruthy();
   });

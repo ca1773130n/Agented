@@ -54,6 +54,7 @@ const triggerBudget = ref<BudgetLimit | null>(null);
 const budgetPeriod = ref<'daily' | 'weekly' | 'monthly'>('monthly');
 const budgetSoftLimit = ref('');
 const budgetHardLimit = ref('');
+const budgetPerRunLimit = ref('');
 const isSavingBudget = ref(false);
 const showBudgetForm = ref(false);
 
@@ -245,21 +246,24 @@ async function loadTriggerBudget(triggerId: string) {
     budgetPeriod.value = (limit.period as 'daily' | 'weekly' | 'monthly') || 'monthly';
     budgetSoftLimit.value = limit.soft_limit_usd != null ? String(limit.soft_limit_usd) : '';
     budgetHardLimit.value = limit.hard_limit_usd != null ? String(limit.hard_limit_usd) : '';
+    budgetPerRunLimit.value = limit.per_run_limit_usd != null ? String(limit.per_run_limit_usd) : '';
   } catch {
     triggerBudget.value = null;
     budgetPeriod.value = 'monthly';
     budgetSoftLimit.value = '';
     budgetHardLimit.value = '';
+    budgetPerRunLimit.value = '';
   }
 }
 
 async function saveTriggerBudget() {
   const soft = budgetSoftLimit.value.trim() ? parseFloat(budgetSoftLimit.value) : undefined;
   const hard = budgetHardLimit.value.trim() ? parseFloat(budgetHardLimit.value) : undefined;
-  if (soft == null && hard == null) { showToast(t('triggerDetailPanel.toast.setAtLeastOneLimit'), 'error'); return; }
+  const perRun = budgetPerRunLimit.value.trim() ? parseFloat(budgetPerRunLimit.value) : undefined;
+  if (soft == null && hard == null && perRun == null) { showToast(t('triggerDetailPanel.toast.setAtLeastOneLimit'), 'error'); return; }
   isSavingBudget.value = true;
   try {
-    await budgetApi.setLimit({ entity_type: 'trigger', entity_id: props.selectedTrigger.id, period: budgetPeriod.value, soft_limit_usd: soft, hard_limit_usd: hard });
+    await budgetApi.setLimit({ entity_type: 'trigger', entity_id: props.selectedTrigger.id, period: budgetPeriod.value, soft_limit_usd: soft, hard_limit_usd: hard, per_run_limit_usd: perRun });
     await loadTriggerBudget(props.selectedTrigger.id);
     showBudgetForm.value = false;
     showToast(t('triggerDetailPanel.toast.budgetSaved'), 'success');
@@ -275,6 +279,7 @@ async function deleteTriggerBudget() {
     triggerBudget.value = null;
     budgetSoftLimit.value = '';
     budgetHardLimit.value = '';
+    budgetPerRunLimit.value = '';
     showBudgetForm.value = false;
     showToast(t('triggerDetailPanel.toast.budgetRemoved'), 'success');
   } catch (err) {
@@ -445,6 +450,7 @@ async function deleteTriggerBudget() {
           <div class="budget-info-row"><span class="budget-label">{{ t('triggerDetailPanel.budget.period') }}</span><span class="budget-value">{{ triggerBudget.period }}</span></div>
           <div v-if="triggerBudget.soft_limit_usd != null" class="budget-info-row"><span class="budget-label">{{ t('triggerDetailPanel.budget.alertThreshold') }}</span><span class="budget-value">${{ triggerBudget.soft_limit_usd.toFixed(2) }}</span></div>
           <div v-if="triggerBudget.hard_limit_usd != null" class="budget-info-row"><span class="budget-label">{{ t('triggerDetailPanel.budget.haltThreshold') }}</span><span class="budget-value">${{ triggerBudget.hard_limit_usd.toFixed(2) }}</span></div>
+          <div v-if="triggerBudget.per_run_limit_usd != null" class="budget-info-row"><span class="budget-label">{{ t('triggerDetailPanel.budget.perRunThreshold') }}</span><span class="budget-value">${{ triggerBudget.per_run_limit_usd.toFixed(2) }}</span></div>
           <div class="budget-actions">
             <button class="btn btn-secondary btn-sm" @click="showBudgetForm = true">{{ t('common.edit') }}</button>
             <button class="btn-icon btn-delete" @click="deleteTriggerBudget" :title="t('triggerDetailPanel.budget.removeBudget')">
@@ -458,6 +464,7 @@ async function deleteTriggerBudget() {
             <div class="form-group"><label>{{ t('triggerDetailPanel.budget.alertThresholdUsd') }}</label><input type="number" v-model="budgetSoftLimit" step="0.01" min="0" placeholder="e.g. 5.00"></div>
             <div class="form-group"><label>{{ t('triggerDetailPanel.budget.haltThresholdUsd') }}</label><input type="number" v-model="budgetHardLimit" step="0.01" min="0" placeholder="e.g. 10.00"></div>
           </div>
+          <div class="form-group"><label>{{ t('triggerDetailPanel.budget.perRunThresholdUsd') }}</label><input type="number" v-model="budgetPerRunLimit" step="0.01" min="0" placeholder="e.g. 2.00"></div>
           <div class="budget-form-actions">
             <button class="btn btn-secondary btn-sm" @click="showBudgetForm = false">{{ t('common.cancel') }}</button>
             <button class="btn btn-primary btn-sm" :disabled="isSavingBudget" @click="saveTriggerBudget">{{ isSavingBudget ? t('triggerDetailPanel.budget.saving') : t('triggerDetailPanel.budget.saveBudget') }}</button>

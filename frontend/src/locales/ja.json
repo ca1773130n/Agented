@@ -1306,8 +1306,12 @@
       "alertPositive": "アラートしきい値は正の数でなければなりません",
       "haltPositive": "停止しきい値は正の数でなければなりません",
       "haltGteAlert": "停止しきい値はアラートしきい値以上でなければなりません",
-      "saveFailed": "予算上限の保存に失敗しました"
-    }
+      "saveFailed": "予算上限の保存に失敗しました",
+      "perRunPositive": "実行ごとの上限は正の数である必要があります"
+    },
+    "perRunThreshold": "実行ごとの上限",
+    "perRunPlaceholder": "例: 2.00",
+    "perRunHint": "各実行がこの金額に達すると終了されます。"
   },
   "budgetLimitsSection": {
     "title": "予算上限",
@@ -2686,7 +2690,9 @@
       "alertThresholdUsd": "アラートしきい値 (USD)",
       "haltThresholdUsd": "停止しきい値 (USD)",
       "saving": "保存中...",
-      "saveBudget": "予算を保存"
+      "saveBudget": "予算を保存",
+      "perRunThreshold": "実行ごとの上限:",
+      "perRunThresholdUsd": "実行ごとの上限 (USD)"
     },
     "paths": {
       "title": "プロジェクトパス",

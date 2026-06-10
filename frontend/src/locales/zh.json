@@ -1306,8 +1306,12 @@
       "alertPositive": "警报阈值必须为正数",
       "haltPositive": "停止阈值必须为正数",
       "haltGteAlert": "停止阈值必须大于等于警报阈值",
-      "saveFailed": "保存预算限额失败"
-    }
+      "saveFailed": "保存预算限额失败",
+      "perRunPositive": "每次运行限额必须为正数"
+    },
+    "perRunThreshold": "每次运行限额",
+    "perRunPlaceholder": "例如 2.00",
+    "perRunHint": "当每次执行费用达到此金额时将被终止。"
   },
   "budgetLimitsSection": {
     "title": "预算限额",
@@ -2686,7 +2690,9 @@
       "alertThresholdUsd": "告警阈值 (USD)",
       "haltThresholdUsd": "停止阈值 (USD)",
       "saving": "保存中...",
-      "saveBudget": "保存预算"
+      "saveBudget": "保存预算",
+      "perRunThreshold": "每次运行限额:",
+      "perRunThresholdUsd": "每次运行限额 (USD)"
     },
     "paths": {
       "title": "项目路径",
