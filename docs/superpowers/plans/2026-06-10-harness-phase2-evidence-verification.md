@@ -109,6 +109,7 @@ def create_harness_evidence_tables(conn) -> None:
             tool_input_json TEXT    NOT NULL DEFAULT '{}',
             tool_use_id     TEXT,
             created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+            UNIQUE (session_id, seq),
             FOREIGN KEY (session_id)
                 REFERENCES super_agent_sessions(id) ON DELETE CASCADE
         )
@@ -119,6 +120,8 @@ def create_harness_evidence_tables(conn) -> None:
         "ON harness_evidence(session_id, seq)"
     )
 ```
+
+`UNIQUE (session_id, seq)` is a correctness backstop: `seq` is assigned atomically inside the INSERT (Task 2), and this constraint guarantees no two rows in a session can ever share an ordinal even under concurrent writers.
 
 - [ ] **Step 4: Register in `create_fresh_schema`**
 
@@ -186,7 +189,10 @@ from app.db.connection import get_connection
 
 
 def _make_session(session_id: str = "sess-1", super_agent_id: str = "sa-1") -> None:
+    # FKs are ON: super_agent_sessions.super_agent_id REFERENCES super_agents(id),
+    # so the parent must exist first.
     with get_connection() as conn:
+        conn.execute("INSERT INTO super_agents (id, name) VALUES (?, ?)", (super_agent_id, "Test SA"))
         conn.execute(
             "INSERT INTO super_agent_sessions (id, super_agent_id) VALUES (?, ?)",
             (session_id, super_agent_id),
@@ -234,6 +240,26 @@ def test_fk_cascade_delete_removes_evidence():
         conn.execute("DELETE FROM super_agent_sessions WHERE id = ?", ("sess-1",))
         conn.commit()
     assert harness_evidence.list_evidence("sess-1") == []
+
+
+def test_unique_session_seq_constraint_rejects_duplicate():
+    """The UNIQUE(session_id, seq) backstop forbids two rows sharing an ordinal."""
+    import sqlite3
+
+    import pytest
+
+    _make_session()
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO harness_evidence (session_id, seq, tool_name) VALUES ('sess-1', 1, 'a')"
+        )
+        conn.commit()
+    with pytest.raises(sqlite3.IntegrityError):
+        with get_connection() as conn:
+            conn.execute(
+                "INSERT INTO harness_evidence (session_id, seq, tool_name) VALUES ('sess-1', 1, 'b')"
+            )
+            conn.commit()
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -268,22 +294,27 @@ def record_tool_use(
     tool_input: Any,
     tool_use_id: Optional[str] = None,
 ) -> int:
-    """Append one tool_use row with the next per-session ``seq``. Returns seq."""
+    """Append one tool_use row with the next per-session ``seq``. Returns seq.
+
+    The ordinal is computed inside the INSERT (a correlated subquery), so it is
+    evaluated while SQLite holds the write lock — assignment is atomic and
+    cannot race across connections. ``UNIQUE(session_id, seq)`` is the backstop.
+    """
     payload = json.dumps(tool_input, default=str)
     with get_connection() as conn:
-        row = conn.execute(
-            "SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM harness_evidence WHERE session_id = ?",
-            (session_id,),
-        ).fetchone()
-        seq = int(row["next"])
-        conn.execute(
+        cur = conn.execute(
             "INSERT INTO harness_evidence "
             "(session_id, super_agent_id, seq, tool_name, tool_input_json, tool_use_id) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (session_id, super_agent_id, seq, tool_name, payload, tool_use_id),
+            "VALUES (?, ?, "
+            "  (SELECT COALESCE(MAX(seq), 0) + 1 FROM harness_evidence WHERE session_id = ?), "
+            "  ?, ?, ?)",
+            (session_id, super_agent_id, session_id, tool_name, payload, tool_use_id),
         )
+        seq = conn.execute(
+            "SELECT seq FROM harness_evidence WHERE id = ?", (cur.lastrowid,)
+        ).fetchone()[0]
         conn.commit()
-    return seq
+    return int(seq)
 
 
 def list_evidence(session_id: str) -> list[dict]:
@@ -315,7 +346,7 @@ def _row_to_dict(row) -> dict:
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd backend && uv run pytest tests/test_harness_evidence_repo.py -q`
-Expected: PASS (5 passed).
+Expected: PASS (6 passed).
 
 - [ ] **Step 5: Commit**
 
@@ -352,6 +383,7 @@ from app.services.streaming_helper import _record_tool_use_evidence
 
 def _make_session(session_id="sess-1", super_agent_id="sa-1"):
     with get_connection() as conn:
+        conn.execute("INSERT INTO super_agents (id, name) VALUES (?, ?)", (super_agent_id, "Test SA"))
         conn.execute(
             "INSERT INTO super_agent_sessions (id, super_agent_id) VALUES (?, ?)",
             (session_id, super_agent_id),
@@ -426,7 +458,7 @@ So each site becomes:
                         continue
 ```
 
-(The second site has no `continue`; preserve the existing control flow — only add the one new line after the `push_delta`.)
+(Both sites — `streaming_helper.py:177-179` and `:275-277` — already `continue` after the `push_delta`. Insert the one new `_record_tool_use_evidence(...)` line between the existing `push_delta` and `continue` at each site; do not change any other control flow.)
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -843,7 +875,7 @@ git commit -m "feat(harness): VerificationService write facade (Phase 2 P5)"
 - Modify: `backend/app/services/execution_service.py` (≈ line 672, the `auto_resolve_and_pr(trigger, github_repo_map, scan_output)` call)
 - Test: `backend/tests/test_verification_gate.py`
 
-The gate logic is small; expose it as a module-level helper `_verification_pr_gate(execution_id) -> bool` in `execution_service.py` so it is unit-testable without launching a full execution.
+Two pieces: a module-level predicate `_verification_pr_gate(execution_id) -> bool`, and a thin `ExecutionService._maybe_auto_resolve_and_pr(...)` classmethod that the call site at `:672` delegates to. The classmethod is what makes the *wiring* testable: a unit test asserts the side-effect is skipped/run based on records, without driving the full `run_trigger` subprocess flow. (Driving `run_trigger` end-to-end to reach line 672 needs heavy subprocess/github mocking; extracting the gate into a one-line classmethod is the cleaner, deterministic way to prove the call site is actually guarded.)
 
 - [ ] **Step 1: Write the failing test**
 
@@ -884,12 +916,38 @@ def test_gate_blocks_when_a_claim_failed():
     _make_execution()
     vr.record_verification("exec-1", "no high-sev CVEs", status="failed")
     assert _verification_pr_gate("exec-1") is False
+
+
+def test_call_site_runs_side_effect_when_gate_allows():
+    """_maybe_auto_resolve_and_pr (used by run_trigger at :672) invokes the
+    side-effect when no claim failed."""
+    from unittest.mock import patch
+
+    from app.services.execution_service import ExecutionService
+
+    _make_execution()
+    with patch("app.services.execution_service.auto_resolve_and_pr") as m:
+        ExecutionService._maybe_auto_resolve_and_pr("exec-1", {"id": "t"}, {"r": "x"}, "out")
+    m.assert_called_once_with({"id": "t"}, {"r": "x"}, "out")
+
+
+def test_call_site_skips_side_effect_when_a_claim_failed():
+    """The wiring is real: a failed verification record skips the PR side-effect."""
+    from unittest.mock import patch
+
+    from app.services.execution_service import ExecutionService
+
+    _make_execution()
+    vr.record_verification("exec-1", "no high-sev CVEs", status="failed")
+    with patch("app.services.execution_service.auto_resolve_and_pr") as m:
+        ExecutionService._maybe_auto_resolve_and_pr("exec-1", {"id": "t"}, {"r": "x"}, "out")
+    m.assert_not_called()
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `cd backend && uv run pytest tests/test_verification_gate.py -q`
-Expected: FAIL — `ImportError: cannot import name '_verification_pr_gate'`.
+Expected: FAIL — `ImportError: cannot import name '_verification_pr_gate'` (and `_maybe_auto_resolve_and_pr` missing).
 
 - [ ] **Step 3: Add the gate helper and guard the call site**
 
@@ -918,19 +976,33 @@ def _verification_pr_gate(execution_id: str) -> bool:
     return True
 ```
 
-At the call site (≈ line 672), wrap the existing call:
+Add the gated wrapper as a classmethod on `ExecutionService` (place it near the other private helpers in the class):
 
 ```python
-                    if _verification_pr_gate(execution_id):
-                        auto_resolve_and_pr(trigger, github_repo_map, scan_output)
+    @classmethod
+    def _maybe_auto_resolve_and_pr(cls, execution_id, trigger, github_repo_map, scan_output):
+        """Run the auto-resolve+PR side-effect unless a verification claim
+        failed (Harness-1 Phase 2, P5). The gate is advisory: with no records
+        it always proceeds."""
+        if _verification_pr_gate(execution_id):
+            auto_resolve_and_pr(trigger, github_repo_map, scan_output)
 ```
 
-(Confirm `execution_id` is the in-scope identifier at that call site; it is the execution being processed. If the local is named differently, use that name.)
+At the call site (≈ line 672), replace the bare call with the gated classmethod:
+
+```python
+                    scan_output = ExecutionLogService.get_stdout_log(execution_id)
+                    cls._maybe_auto_resolve_and_pr(
+                        execution_id, trigger, github_repo_map, scan_output
+                    )
+```
+
+`run_trigger` is a `@classmethod`, so `cls` and `execution_id` are both in scope at line 672 (confirmed). If the enclosing method is not a classmethod in the version you see, call `ExecutionService._maybe_auto_resolve_and_pr(...)` explicitly.
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd backend && uv run pytest tests/test_verification_gate.py -q`
-Expected: PASS (3 passed).
+Expected: PASS (5 passed).
 
 - [ ] **Step 5: Run execution_service regression check**
 
@@ -1053,10 +1125,10 @@ def create_verification(execution_id: str, data: VerificationCreate) -> dict[str
     return {"id": rid, "execution_id": execution_id, "claim": data.claim, "status": data.status}
 
 
-verification_router = Router(path="", route_handlers=[list_verifications, create_verification])
+verification_router = Router(path="/", route_handlers=[list_verifications, create_verification])
 ```
 
-Note: match the decorator/auth style of the sibling routers found in Step 1 (e.g. `quality_ratings.py`). If they use bare paths under a Router `path=` prefix rather than absolute paths, mirror that; the absolute-path form above is shown for clarity.
+Note: `Router(path="/")` matches the sibling pattern at `quality_ratings.py:60` (the handlers carry absolute paths). Match the decorator/auth style of the sibling routers found in Step 1; if they apply a guard/auth dependency, mirror it.
 
 - [ ] **Step 5: Register the router**
 

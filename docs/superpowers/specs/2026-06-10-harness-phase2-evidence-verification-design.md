@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS harness_evidence (
     tool_input_json TEXT    NOT NULL DEFAULT '{}',
     tool_use_id     TEXT,                       -- provider tool_use id (ToolUseEvent.id)
     created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (session_id, seq),                   -- backstop; seq assigned atomically in INSERT
     FOREIGN KEY (session_id)
         REFERENCES super_agent_sessions(id) ON DELETE CASCADE
 );
