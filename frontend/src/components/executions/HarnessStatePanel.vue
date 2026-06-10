@@ -6,7 +6,6 @@ import { executionApi } from '../../services/api';
 
 const props = defineProps<{
   executionId: string;
-  executionStatus?: string;
 }>();
 
 const { t } = useI18n();

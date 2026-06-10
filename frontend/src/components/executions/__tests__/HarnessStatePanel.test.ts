@@ -38,9 +38,9 @@ describe('HarnessStatePanel', () => {
     vi.clearAllMocks();
   });
 
-  function mountPanel(status = 'running') {
+  function mountPanel() {
     const wrapper = mount(HarnessStatePanel, {
-      props: { executionId: 'exec-1', executionStatus: status },
+      props: { executionId: 'exec-1' },
     });
     wrappers.push(wrapper);
     return wrapper;
@@ -89,7 +89,7 @@ describe('HarnessStatePanel', () => {
     vi.mocked(executionApi.getState).mockResolvedValue({
       ...SNAPSHOT, run: null, latest_checkpoint: null, checkpoint_count: 0, verifications: [],
     } as never);
-    const wrapper = mountPanel('success');
+    const wrapper = mountPanel();
     await flushPromises();
     expect(wrapper.find('.harness-state-empty').exists()).toBe(true);
   });

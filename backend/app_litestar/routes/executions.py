@@ -11,7 +11,6 @@ from typing import Any, List, Optional
 
 from litestar import Router, delete, get, post
 from litestar.exceptions import (
-    ClientException,
     HTTPException,
     NotFoundException,
 )
@@ -146,8 +145,7 @@ def get_execution(execution_id: str, q: Optional[str] = None) -> Any:
 def get_execution_state(execution_id: str) -> dict[str, Any]:
     """Composed harness-state snapshot (Harness-1 Phase 3, P7): execution
     summary + Phase-1 run/checkpoints + Phase-2 verifications + live budget."""
-    from app.db import harness_state
-    from app.db import verification_records
+    from app.db import harness_state, verification_records
     from app.db.budgets import get_budget_limit
     from app.db.execution_logs import get_execution_log
 

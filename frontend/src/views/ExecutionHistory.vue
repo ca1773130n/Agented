@@ -433,10 +433,7 @@ onMounted(loadData);
             </svg>
           </button>
         </div>
-        <HarnessStatePanel
-          :execution-id="selectedExecution.execution_id"
-          :execution-status="selectedExecution.status"
-        />
+        <HarnessStatePanel :execution-id="selectedExecution.execution_id" />
         <ExecutionLogViewer
           :execution-id="selectedExecution.execution_id"
           :is-live="selectedExecution.status === 'running'"

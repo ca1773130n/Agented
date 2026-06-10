@@ -36,8 +36,13 @@ def _usage(cost: float) -> dict:
 def _tick(execution_id: str, state: dict, cost: float) -> None:
     with patch.object(BudgetService, "extract_token_usage", return_value=_usage(cost)):
         _per_run_budget_tick(
-            execution_id, "bot-pr-review", "trigger", "bot-pr-review",
-            "codex", _fake_process(), state,
+            execution_id,
+            "bot-pr-review",
+            "trigger",
+            "bot-pr-review",
+            "codex",
+            _fake_process(),
+            state,
         )
 
 
@@ -54,8 +59,13 @@ def test_tick_noop_when_extraction_returns_none():
     _make_execution()
     with patch.object(BudgetService, "extract_token_usage", return_value=None):
         _per_run_budget_tick(
-            "exec-1", "bot-pr-review", "trigger", "bot-pr-review",
-            "claude", _fake_process(), {},
+            "exec-1",
+            "bot-pr-review",
+            "trigger",
+            "bot-pr-review",
+            "claude",
+            _fake_process(),
+            {},
         )
     assert harness_state.get_run("exec-1") is None  # nothing written
 
@@ -64,9 +74,7 @@ def test_tick_warns_once_at_80_percent():
     _make_execution()
     set_budget_limit("trigger", "bot-pr-review", per_run_limit_usd=1.0)
     state = {}
-    with patch(
-        "app.services.execution_log_service.ExecutionLogService.append_log"
-    ) as append:
+    with patch("app.services.execution_log_service.ExecutionLogService.append_log") as append:
         _tick("exec-1", state, 0.85)
         _tick("exec-1", state, 0.90)  # second tick must NOT warn again
     warn_calls = [c for c in append.call_args_list if "[BUDGET]" in str(c)]
@@ -100,8 +108,13 @@ def test_tick_fails_open_on_parser_error():
     with patch.object(BudgetService, "extract_token_usage", side_effect=RuntimeError("boom")):
         # Must not raise — the monitor's period check must never be disrupted.
         _per_run_budget_tick(
-            "exec-1", "bot-pr-review", "trigger", "bot-pr-review",
-            "codex", _fake_process(), {},
+            "exec-1",
+            "bot-pr-review",
+            "trigger",
+            "bot-pr-review",
+            "codex",
+            _fake_process(),
+            {},
         )
 
 
@@ -118,8 +131,13 @@ def test_budget_monitor_invokes_tick():
         patch.object(BudgetService, "check_execution_time_limit", return_value=False),
     ):
         budget_monitor(
-            "exec-1", "bot-pr-review", "trigger", "bot-pr-review", process,
-            interval_seconds=0, backend_type="codex",
+            "exec-1",
+            "bot-pr-review",
+            "trigger",
+            "bot-pr-review",
+            process,
+            interval_seconds=0,
+            backend_type="codex",
         )
     assert tick.call_count == 1
     assert tick.call_args[0][4] == "codex"  # backend_type positional

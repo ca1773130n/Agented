@@ -1,7 +1,6 @@
 """Migration 151: nullable per-run budget ceiling (Harness-1 Phase 3, P6)."""
 
 from app.db.budgets import get_budget_limit, set_budget_limit
-from app.db.connection import get_connection
 
 
 def test_migration_151_registered():
