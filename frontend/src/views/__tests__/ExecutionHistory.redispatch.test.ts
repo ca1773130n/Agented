@@ -150,9 +150,6 @@ describe('ExecutionHistory — Re-dispatch button', () => {
   it('renders re-dispatch button for interrupted executions', async () => {
     const wrapper = mountView();
     await flushPromises();
-    const rows = wrapper.findAll('tr.execution-row');
-    const interruptedRow = rows.find(r => r.text().includes('exec-interrupted') || r.html().includes('exec-interrupted'));
-    // Find the re-dispatch button specifically by data-testid or by looking in all rows
     const allBtns = wrapper.findAll('button.btn-redispatch');
     const ids = allBtns.map(b => b.attributes('data-execution-id') || '');
     expect(ids).toContain('exec-interrupted');
