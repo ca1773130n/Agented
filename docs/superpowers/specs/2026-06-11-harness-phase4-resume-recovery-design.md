@@ -89,16 +89,17 @@ service entry point that:
 
 ## Unit C — goal-loop re-entry (P8, orchestration layer)
 
-- **Distinguish interruption from failure:** `cleanup_dead_sessions`
-  (`project_session_manager.py:1969`) currently marks all dead sessions
-  `failed`. For sessions whose `execution_type` is a goal-loop type
-  (`goal_loop` / `ralph_loop`), mark them with a distinguishable resumable
-  state instead. The exact status value is pinned at plan time against the
-  `project_sessions` status CHECK constraint (add the value to the constraint
-  via migration 152 if required).
-- **`POST /admin/sessions/{session_id}/resume-loop`** (manual only):
-  1. Eligible only for goal-loop-type sessions in the resumable state; 409
-     otherwise; no-fan-out guard via provenance (below).
+- **Eligibility without a schema rebuild:** the `project_sessions` status
+  CHECK is `('active','paused','completed','failed')` (`_orgs.py`) and SQLite
+  cannot widen a CHECK without a table rebuild. So no new status and no
+  `cleanup_dead_sessions` change: **`failed` goal-loop sessions are
+  resume-eligible** — both restart-killed and genuinely-crashed loops are
+  legitimately resumable from accumulated knowledge, and the operator decides.
+- **`POST .../sessions/{session_id}/resume-loop`** (manual only; mounted on
+  the same router family as the existing goal-loop session routes —
+  `grd_routes.py` — exact path mirrors its siblings):
+  1. Eligible only for goal-loop-type sessions (`goal_loop`/`ralph_loop`) in
+     status `failed`; 409 otherwise; no-fan-out guard via provenance (below).
   2. Reads the session's persisted goal config (whatever
      `execution_type_handler.py:487-495` passes to `start_runner` — the plan
      pins the exact column/blob) + durable history: `goal_loop_iterations`
