@@ -1046,6 +1046,14 @@ def _migrate_149_harness_evidence(conn):
     create_harness_evidence_tables(conn)
 
 
+def _migrate_150_verification_records(conn):
+    """Harness-1 Phase 2 (P5): durable verification records keyed by
+    execution_id. Added to create_fresh_schema; idempotent on existing DBs."""
+    from app.db.schema._verification_records import create_verification_records_tables
+
+    create_verification_records_tables(conn)
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -1143,4 +1151,6 @@ V07_MIGRATIONS: list = [
     (148, "harness_state", _migrate_148_harness_state),
     # Harness-1 Phase 2: typed tool_use evidence ledger (chat substrate).
     (149, "harness_evidence", _migrate_149_harness_evidence),
+    # Harness-1 Phase 2: durable verification records (execution substrate).
+    (150, "verification_records", _migrate_150_verification_records),
 ]
