@@ -467,6 +467,24 @@ def test_redispatch_rejects_unknown():
     assert ExecutionService.redispatch_execution("nope").get("error") == "not_found"
 
 
+def test_redispatch_early_return_does_not_leak_in_flight():
+    """A trigger_missing (or any post-eligibility) early return must NOT leave
+    the origin stuck in the in-flight set — the claim happens last."""
+    create_execution_log(
+        execution_id="exec-orphan",
+        trigger_id="trig-deleted",  # no such trigger row
+        trigger_type="manual",
+        started_at="2026-06-11T00:00:00",
+        prompt="p",
+        backend_type="claude",
+        command="echo hi",
+    )
+    update_execution_log("exec-orphan", status="interrupted", finished_at="2026-06-11T00:01:00")
+    assert ExecutionService.redispatch_execution("exec-orphan").get("error") == "trigger_missing"
+    # Second call must report the SAME error — not already_redispatched.
+    assert ExecutionService.redispatch_execution("exec-orphan").get("error") == "trigger_missing"
+
+
 def test_redispatch_rapid_double_call_single_dispatch():
     """The async no-fan-out race: while the first dispatch thread is still
     in flight (no child row yet), a second call must be rejected by the
@@ -598,15 +616,6 @@ Add to `ExecutionService` (near `restore_pending_retries`):
             return {"error": "not_found"}
         if original.get("status") not in ("interrupted", "failed"):
             return {"error": "not_eligible"}
-        # No-fan-out guard. The DB child row only appears once the background
-        # thread reaches start_execution (after cloning/render/build), so the
-        # DB check alone is racy for rapid double-calls. An in-process
-        # in-flight set closes the window (workers=1 is the deployment model;
-        # the DB check covers restarts after the run persists).
-        with cls._redispatch_lock:
-            if execution_id in cls._redispatch_in_flight or get_redispatch_child(execution_id):
-                return {"error": "already_redispatched"}
-            cls._redispatch_in_flight.add(execution_id)
 
         # Deterministic replay: prefer the trigger as it was AT RUN TIME (the
         # stored trigger_config_snapshot); fall back to the current DB trigger
@@ -647,6 +656,17 @@ Add to `ExecutionService` (near `restore_pending_retries`):
         env_overrides = None
         if account_id:
             env_overrides = _build_account_env_overrides(account_id)  # the real helper found above
+
+        # No-fan-out guard — claimed LAST, after every early-return above, so
+        # no path can leak the in-flight marker. The DB child row only appears
+        # once the background thread reaches start_execution, so the DB check
+        # alone is racy for rapid double-calls; the in-process set closes the
+        # window (workers=1 deployment model; the DB check covers restarts).
+        # NOTHING between this claim and thread.start() may return early.
+        with cls._redispatch_lock:
+            if execution_id in cls._redispatch_in_flight or get_redispatch_child(execution_id):
+                return {"error": "already_redispatched"}
+            cls._redispatch_in_flight.add(execution_id)
 
         AuditLogService.log(
             action="execution.redispatched",
@@ -708,7 +728,7 @@ duplicating the logic.)
 - [ ] **Step 5: Run tests**
 
 Run: `cd backend && uv run pytest tests/test_redispatch_service.py tests/test_execution_service.py -q`
-Expected: PASS (9 new + regression green).
+Expected: PASS (10 new + regression green).
 
 - [ ] **Step 6: Commit**
 
@@ -1023,6 +1043,39 @@ def test_resume_no_fan_out():
     assert goal_loop_runner.resume_goal_loop("gls-3").get("error") == "already_resumed"
 
 
+def test_resume_concurrent_double_call_single_spawn():
+    """Two concurrent resume calls: exactly one spawns; the other is rejected
+    by the in-flight guard (the DB resumed_from child appears too late)."""
+    import threading
+
+    _make_failed_goal_session("gls-race")
+    release = threading.Event()
+    results = []
+
+    def _blocking_spawn(*args, **kwargs):
+        release.wait(timeout=5)
+        return "gls-race-child"
+
+    def _call():
+        results.append(goal_loop_runner.resume_goal_loop("gls-race"))
+
+    with patch.object(goal_loop_runner, "_spawn_resumed_session", side_effect=_blocking_spawn):
+        t1 = threading.Thread(target=_call)
+        t2 = threading.Thread(target=_call)
+        t1.start()
+        t2.start()
+        import time
+
+        time.sleep(0.1)  # let both threads pass validation and hit the claim
+        release.set()
+        t1.join(timeout=5)
+        t2.join(timeout=5)
+    outcomes = sorted(
+        ("ok" if "session_id" in r else r.get("error", "unknown")) for r in results
+    )
+    assert outcomes == ["already_resumed", "ok"]
+
+
 def test_resume_requires_config():
     from app.db.connection import get_connection
 
@@ -1108,8 +1161,33 @@ def resume_goal_loop(session_id: str) -> dict:
         return {"error": "config_missing"}
     config["resume_context"] = _build_resume_context(session_id)
 
-    new_session_id = _spawn_resumed_session(session_id, config, session)
+    # No-fan-out guard, claimed LAST (after every early return): create_session
+    # starts the subprocess before resumed_from persists, so the DB child check
+    # alone is racy for concurrent calls. Spawn is synchronous here — release
+    # in finally, after which the DB provenance covers restarts. workers=1.
+    with _resume_lock:
+        if session_id in _resume_in_flight:
+            return {"error": "already_resumed"}
+        _resume_in_flight.add(session_id)
+    try:
+        new_session_id = _spawn_resumed_session(session_id, config, session)
+    finally:
+        with _resume_lock:
+            _resume_in_flight.discard(session_id)
     return {"session_id": new_session_id, "resumed_from": session_id}
+```
+
+With the module-level state near the other module globals in
+`goal_loop_runner.py`:
+
+```python
+# Phase 4: in-flight resume origins (closes the concurrent no-fan-out race;
+# workers=1). The DB resumed_from check covers restarts.
+_resume_lock = threading.Lock()
+_resume_in_flight: set = set()
+```
+
+(`threading` is already imported in the module — verify.)
 ```
 
 `_spawn_resumed_session(origin_session_id, goal_config, origin_session) -> str`: mirror the spawn recipe pinned in Step 1 — `GoalLoopSessionHandler.start()`'s kwargs at `execution_type_handler.py:~468-495` are the template. **cwd derivation (the row does NOT store cwd):** use the origin row's `worktree_path` when set, else `ProjectWorkspaceService.resolve_working_directory(origin_session["project_id"])` (confirm that service/fn name via `grep -rn "resolve_working_directory" app/services/`). Then: `ProjectSessionManager.create_session(...)` with the mirrored kwargs, set `resumed_from` on the new row (direct UPDATE or the allowlisted helper), `set_goal_loop_config(new_id, goal_config)`, `start_runner(new_id, goal_config, cwd=derived_cwd)`, audit-log `session.loop_resumed`, return the new id. Keep it a module-level function so tests can patch it.
@@ -1162,7 +1240,7 @@ def test_resume_loop_route_409_when_not_eligible():
 - [ ] **Step 6: Run tests**
 
 Run: `cd backend && uv run pytest tests/test_goal_loop_reentry.py -q`
-Expected: PASS (5 passed).
+Expected: PASS (6 passed).
 
 - [ ] **Step 7: Commit**
 
