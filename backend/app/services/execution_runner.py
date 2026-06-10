@@ -108,6 +108,106 @@ def stream_pipe(
         pipe.close()
 
 
+def _per_run_budget_tick(
+    execution_id: str,
+    trigger_id: str,
+    entity_type: str,
+    entity_id: str,
+    backend_type: Optional[str],
+    process: "subprocess.Popen",
+    tick_state: dict,
+) -> None:
+    """One per-run live-accounting step (Harness-1 Phase 3, P6). Fail-open:
+    any error is swallowed so the monitor's period check is never disrupted.
+
+    claude/gemini emit usage only in their terminal JSON, so extraction
+    returns None mid-run and this whole tick no-ops for them (documented
+    limitation); codex JSONL accumulates and works incrementally.
+
+    Each tick re-parses the full buffered log (every 30s). Accepted for now:
+    cumulative cost on very long logs — revisit with a parsed-line offset in
+    tick_state if it shows up in profiles."""
+    if not backend_type:
+        return
+    try:
+        from ..db import harness_state
+        from ..db.budgets import get_budget_limit
+        from ..db.health_alerts import create_health_alert
+
+        partial_log = ExecutionLogService.get_stdout_log(execution_id)
+        usage = BudgetService.extract_token_usage(partial_log, backend_type)
+        if not usage:
+            return
+        cost = BudgetService.cost_from_usage(usage, backend_type)
+        harness_state.update_budget_used(execution_id, cost)
+        if cost <= 0:
+            return
+
+        limit_row = get_budget_limit(entity_type, entity_id) or {}
+        limit = limit_row.get("per_run_limit_usd")
+        if not limit:  # NULL = off; set_budget_limit rejects <= 0, so 0.0 can't be stored
+            return
+
+        if cost >= limit:
+            reason = f"per-run limit exceeded: ${cost:.2f} >= ${limit:.2f}"
+            logger.warning(
+                "Per-run budget limit exceeded during execution %s — terminating. %s",
+                execution_id,
+                reason,
+            )
+            try:
+                import os as _os
+
+                _os.killpg(_os.getpgid(process.pid), signal.SIGKILL)
+            except ProcessLookupError:
+                pass  # already terminated
+            except Exception as kill_err:
+                logger.error(
+                    "Failed to kill over-budget process for execution %s: %s",
+                    execution_id,
+                    kill_err,
+                    exc_info=True,
+                )
+            ExecutionLogService.append_log(
+                execution_id, "stderr", f"[BUDGET] Execution terminated: {reason}"
+            )
+            create_health_alert(
+                "budget_exceeded",
+                trigger_id,
+                reason,
+                details={"execution_id": execution_id, "per_run": True},
+                severity="critical",
+            )
+            AuditLogService.log(
+                action="execution.budget_exceeded",
+                entity_type=entity_type,
+                entity_id=entity_id,
+                outcome="killed",
+                details={"execution_id": execution_id, "reason": reason, "per_run": True},
+            )
+            tick_state["killed"] = True
+        elif cost >= 0.8 * limit and not tick_state.get("warned"):
+            tick_state["warned"] = True
+            message = f"[BUDGET] approaching per-run limit: ${cost:.2f} of ${limit:.2f}"
+            ExecutionLogService.append_log(execution_id, "stderr", message)
+            create_health_alert(
+                "budget_warning",
+                trigger_id,
+                message,
+                details={"execution_id": execution_id, "cost": cost, "limit": limit},
+                severity="warning",
+            )
+            AuditLogService.log(
+                action="execution.budget_warning",
+                entity_type=entity_type,
+                entity_id=entity_id,
+                outcome="warned",
+                details={"execution_id": execution_id, "cost": cost, "limit": limit},
+            )
+    except Exception as e:  # pragma: no cover - defensive fail-open
+        logger.debug("per-run budget tick failed for %s: %s", execution_id, e)
+
+
 def budget_monitor(
     execution_id: str,
     trigger_id: str,
@@ -115,11 +215,13 @@ def budget_monitor(
     entity_id: str,
     process: "subprocess.Popen",
     interval_seconds: int = 30,
+    backend_type: Optional[str] = None,
 ) -> None:
     """Periodically check budget during execution and kill process if hard limit exceeded."""
     import time as _time
 
     start_time = _time.time()
+    tick_state: dict = {"warned": False, "killed": False}
 
     while process.poll() is None:
         _time.sleep(interval_seconds)
@@ -211,6 +313,19 @@ def budget_monitor(
                     },
                     severity="critical",
                 )
+                break
+
+            # Per-run incremental accounting + ceiling (Harness-1 Phase 3, P6).
+            _per_run_budget_tick(
+                execution_id,
+                trigger_id,
+                entity_type,
+                entity_id,
+                backend_type,
+                process,
+                tick_state,
+            )
+            if tick_state.get("killed"):
                 break
         except Exception as monitor_err:
             logger.debug("Budget monitor check failed for %s: %s", execution_id, monitor_err)
