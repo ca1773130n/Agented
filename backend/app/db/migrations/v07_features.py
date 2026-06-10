@@ -1054,6 +1054,15 @@ def _migrate_150_verification_records(conn):
     create_verification_records_tables(conn)
 
 
+def _migrate_151_per_run_budget_limit(conn):
+    """Harness-1 Phase 3 (P6): nullable per-run cost ceiling on budget_limits.
+    NULL = feature off (default), so existing installs are unchanged.
+    PRAGMA-guarded ALTER — idempotent (pattern: _migrate_144)."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(budget_limits)")}
+    if "per_run_limit_usd" not in cols:
+        conn.execute("ALTER TABLE budget_limits ADD COLUMN per_run_limit_usd REAL")
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -1153,4 +1162,6 @@ V07_MIGRATIONS: list = [
     (149, "harness_evidence", _migrate_149_harness_evidence),
     # Harness-1 Phase 2: durable verification records (execution substrate).
     (150, "verification_records", _migrate_150_verification_records),
+    # Harness-1 Phase 3: per-run budget ceiling (soft warn 80% / hard kill 100%).
+    (151, "per_run_budget_limit", _migrate_151_per_run_budget_limit),
 ]
