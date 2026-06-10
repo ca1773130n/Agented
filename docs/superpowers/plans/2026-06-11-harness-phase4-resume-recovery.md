@@ -629,7 +629,7 @@ Add to `ExecutionService` (near `restore_pending_retries`):
         # a background thread with a PREALLOCATED execution id and return
         # immediately — mirror the manual-run pattern in trigger_service.py:~521
         # (read it first and match its thread/daemon/join-for-id idiom).
-        from ..database import generate_execution_id
+        from ..database import generate_execution_id  # re-export; canonical home is app/db/ids.py:222
 
         new_id = generate_execution_id(trigger.get("id") or "redispatch")
         threading.Thread(
@@ -1217,6 +1217,12 @@ git commit -m "feat(harness): re-dispatch button in ExecutionHistory (Phase 4)"
 
 - [ ] **Step 1: Backend — all Phase-4 tests + regressions**
 
+**Note on the repo's full-suite gate:** the project rule asks for a full
+`cd backend && uv run pytest`, but the full serial suite has a KNOWN HANG at
+~40-46% (documented project memory; Phases 1-3 all shipped with the
+comprehensive targeted substitute below — state this substitution explicitly
+in the PR description, do not present targeted runs as the full suite).
+
 ```bash
 cd backend && uv run pytest \
   tests/test_migration_152_resume_recovery.py tests/test_claude_resume_command.py \
@@ -1224,8 +1230,12 @@ cd backend && uv run pytest \
   tests/test_goal_loop_reentry.py \
   tests/test_execution_service.py tests/test_execution_state_route.py \
   tests/test_budget_monitor_per_run.py tests/test_harness_state_repo.py \
-  tests/test_litestar_streams.py -q
+  tests/test_execution_log_checkpoint.py tests/test_migration_151_per_run_limit.py \
+  tests/test_litestar_streams.py tests/test_execution_retry_manager.py -q
 ```
+(Drop `test_execution_retry_manager.py` from the list if no such file exists —
+check `ls tests/ | grep retry` and include whatever retry-related test files
+are present, since redispatch shares the dispatch path with the retry queue.)
 Expected: ALL PASS.
 
 - [ ] **Step 2: Lint**
@@ -1246,9 +1256,16 @@ Expected: suite at baseline; build green.
 
 - [ ] **Step 4: Final commit if needed**
 
+Inspect `git status` first and stage ONLY Phase-4 files (the worktree carries
+unrelated dirty files — never `git add -A`):
+
 ```bash
-git add -A backend/ frontend/ && git commit -m "chore(harness): format/lint pass for Phase 4"
+git status --short
+git add backend/app/db/ backend/app/services/execution_service.py backend/app/services/command_builder.py backend/app/services/goal_loop_runner.py backend/app/services/trigger_service.py backend/app_litestar/ backend/tests/ frontend/src/services/api/ frontend/src/views/ frontend/src/components/triggers/TriggerDetailPanel.vue frontend/src/locales/
+git commit -m "chore(harness): format/lint pass for Phase 4"
 ```
+
+(Trim the list to what `git status` actually shows as modified by this phase.)
 
 ---
 
