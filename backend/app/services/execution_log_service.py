@@ -23,6 +23,8 @@ from ..database import (
     get_running_execution_for_trigger,
     update_execution_log,
 )
+from ..db import harness_state
+from ..db.execution_logs import update_execution_status_cas
 
 
 @dataclass
@@ -43,6 +45,10 @@ class ExecutionLogService:
     _subscribers: Dict[str, List[Queue]] = {}
     # Per-subscriber SSE backpressure bound (drop-oldest past this).
     _SUBSCRIBER_QUEUE_MAXSIZE = 2000
+    # Harness-1 integration (P2): persist a recoverable checkpoint of the
+    # externalized log ledger every N appended lines. Throttled to bound
+    # SQLite write amplification on the hot streaming path.
+    _CHECKPOINT_EVERY_N_LINES = 50
 
     @staticmethod
     def _signal_end(q: Queue) -> None:
@@ -116,12 +122,49 @@ class ExecutionLogService:
             timestamp=datetime.datetime.now().isoformat(), stream=stream, content=content
         )
 
+        should_checkpoint = False
         with cls._lock:
             if execution_id in cls._log_buffers:
                 cls._log_buffers[execution_id].append(log_line)
+                # Persist a recoverable checkpoint on a throttled cadence so a
+                # crash mid-run leaves externalized state (Harness-1 P2).
+                buffered = len(cls._log_buffers[execution_id])
+                if buffered % cls._CHECKPOINT_EVERY_N_LINES == 0:
+                    should_checkpoint = True
 
         # Broadcast to SSE subscribers
         cls._broadcast(execution_id, "log", asdict(log_line))
+
+        # Checkpoint outside the lock — record_checkpoint opens its own DB
+        # connection and must not contend with the hot append path.
+        if should_checkpoint:
+            cls.checkpoint(execution_id)
+
+    @classmethod
+    def checkpoint(cls, execution_id: str, *, status: str = "running") -> Optional[int]:
+        """Persist a recoverable snapshot of the run's externalized state (the
+        buffered log ledger) WITHOUT finalizing the execution. Returns the new
+        step number, or None if the execution is no longer tracked.
+
+        Best-effort: a checkpoint failure must never disrupt streaming, so all
+        errors are swallowed — the in-memory buffer remains the live source."""
+        with cls._lock:
+            buffer = cls._log_buffers.get(execution_id)
+            if buffer is None:
+                return None
+            lines = [asdict(line) for line in buffer]
+
+        stdout_lines = sum(1 for line in lines if line["stream"] == "stdout")
+        ledger = {
+            "lines": lines,
+            "stdout_lines": stdout_lines,
+            "stderr_lines": len(lines) - stdout_lines,
+        }
+        try:
+            return harness_state.record_checkpoint(execution_id, ledger=ledger, status=status)
+        except Exception as e:  # pragma: no cover - defensive
+            logger.debug("harness checkpoint failed for %s: %s", execution_id, e)
+            return None
 
     @classmethod
     def finish_execution(
@@ -216,6 +259,14 @@ class ExecutionLogService:
                 for q in cls._subscribers[execution_id]:
                     cls._signal_end(q)
                 cls._subscribers.pop(execution_id, None)
+
+        # Mark the externalized run-state row terminal so its status tracks the
+        # execution's final outcome (Harness-1 P2). Best-effort: the row only
+        # exists if the run was checkpointed, and this must never fail finish.
+        try:
+            harness_state.mark_run_status(execution_id, status)
+        except Exception as e:  # pragma: no cover - defensive
+            logger.debug("harness run-state finalize failed for %s: %s", execution_id, e)
 
     @classmethod
     def subscribe(cls, execution_id: str) -> Generator[str, None, None]:
@@ -392,13 +443,39 @@ class ExecutionLogService:
         cleaned = 0
         for execution_id in stale_ids:
             logger.warning(f"Cleaning up stale execution buffer: {execution_id}")
+            # Capture buffered output before discarding so the tombstone keeps it.
+            stdout_lines: List[str] = []
+            stderr_lines: List[str] = []
             with cls._lock:
+                for line in cls._log_buffers.get(execution_id, []):
+                    if line.stream == "stdout":
+                        stdout_lines.append(line.content)
+                    else:
+                        stderr_lines.append(line.content)
                 cls._log_buffers.pop(execution_id, None)
                 cls._start_times.pop(execution_id, None)
                 if execution_id in cls._subscribers:
                     for q in cls._subscribers[execution_id]:
                         cls._signal_end(q)
                     cls._subscribers.pop(execution_id, None)
+
+            # A stale buffer means finish_execution was never called (crash/hang).
+            # Previously this left the DB row 'running' with NULL output forever.
+            # Tombstone it as failed, preserving any buffered output. CAS so we
+            # never clobber a row that completed concurrently (Harness-1 P2).
+            try:
+                update_execution_status_cas(
+                    execution_id,
+                    "failed",
+                    expected_status="running",
+                    finished_at=datetime.datetime.now().isoformat(),
+                    error_message="Execution abandoned (stale buffer cleaned up)",
+                    stdout_log="\n".join(stdout_lines) if stdout_lines else None,
+                    stderr_log="\n".join(stderr_lines) if stderr_lines else None,
+                )
+                harness_state.mark_run_status(execution_id, "failed")
+            except Exception as e:  # pragma: no cover - defensive
+                logger.warning("Stale execution tombstone failed for %s: %s", execution_id, e)
             cleaned += 1
 
         if cleaned > 0:

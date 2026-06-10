@@ -15,6 +15,7 @@ from ._harness_annotations import create_harness_annotation_tables
 from ._harness_evolution import create_harness_evolution_tables
 from ._harness_kg_signals import create_harness_kg_signals_tables
 from ._harness_snapshots import create_harness_snapshot_tables
+from ._harness_state import create_harness_state_tables
 from ._harness_takeaways import create_harness_takeaway_tables
 from ._misc import create_misc_tables
 from ._monitoring import create_monitoring_tables
@@ -66,6 +67,7 @@ def create_fresh_schema(conn):
     create_harness_snapshot_tables(conn)
     create_harness_evolution_tables(conn)
     create_harness_takeaway_tables(conn)
+    create_harness_state_tables(conn)
     create_team_execution_tables(conn)
     create_project_autonomy_tables(conn)
     create_forge_promotion_tables(conn)

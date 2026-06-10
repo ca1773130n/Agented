@@ -1021,6 +1021,23 @@ def _migrate_147_chat_retry_queue(conn):
     )
 
 
+def _migrate_148_harness_state(conn):
+    """Harness-1 integration Phase 1 (P1): durable run-state store.
+
+    Adds ``harness_runs`` (per-execution step cursor + running budget +
+    lifecycle status) and ``harness_checkpoints`` (append-only serialized
+    turn ledger), both FK'd to ``execution_logs(execution_id)``. Added to
+    ``create_fresh_schema`` (_harness_state); this migration creates them
+    idempotently on existing DBs so a crashed run leaves recoverable state
+    instead of a stale 'running' row.
+
+    Reference: docs/research/harness-1-integration.md; arXiv:2606.02373.
+    """
+    from app.db.schema._harness_state import create_harness_state_tables
+
+    create_harness_state_tables(conn)
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -1112,4 +1129,8 @@ V07_MIGRATIONS: list = [
     # Chat rate-limit rotation Phase 2: persistent retry queue for turns
     # parked when every eligible account is rate-limited.
     (147, "chat_retry_queue", _migrate_147_chat_retry_queue),
+    # Harness-1 integration Phase 1: durable harness run-state store
+    # (harness_runs step cursor + harness_checkpoints turn ledger) so a
+    # crash mid-run leaves recoverable state instead of a stale 'running' row.
+    (148, "harness_state", _migrate_148_harness_state),
 ]
