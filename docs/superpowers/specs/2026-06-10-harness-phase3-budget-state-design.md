@@ -91,7 +91,8 @@ at `:125`), returning a composed snapshot:
 {
   "execution": {"status", "exit_code", "started_at", "finished_at", "duration_ms", "backend_type"},
   "run": {"status", "step_cursor", "budget_used", "updated_at"} | null,
-  "latest_checkpoint": {"step", "created_at", "stdout_lines", "stderr_lines"} | null,
+  "latest_checkpoint": {"step", "created_at"} | null,
+  "checkpoint_count": number,
   "verifications": [ ...verification_records rows... ],
   "per_run_limit_usd": number | null
 }
@@ -100,8 +101,9 @@ at `:125`), returning a composed snapshot:
 - 404 if the execution doesn't exist; `run`/`latest_checkpoint` are `null` for
   runs that never checkpointed (pre-Phase-1 rows) — the endpoint must not 500
   on them.
-- Checkpoint summary only (step + timestamps + the ledger's stored line
-  counts) — **not** the raw ledger JSON.
+- Checkpoint summary only (step + timestamp + total count) — **not** the raw
+  ledger JSON. (Per-checkpoint line counts are delta-scoped since Phase 2's
+  delta fix, so totals would mislead; freshness = step + created_at.)
 - No `/resume` changes (an in-memory `POST /resume` already exists at `:353`).
   No new SSE channel — the `[BUDGET]` stderr line already streams live.
 
