@@ -101,3 +101,46 @@ def test_cleanup_stale_executions_tombstones_db_row():
     assert row["status"] == "failed"
     assert row["finished_at"] is not None
     assert "partial output" in (row["stdout_log"] or "")
+
+
+def test_checkpoints_store_deltas_not_cumulative_buffer():
+    """Each checkpoint must hold only the lines added since the previous one,
+    not re-serialize the whole buffer — otherwise storage and serialization
+    are quadratic in log length and stall the streaming path (codex P2)."""
+    eid = _start()
+    n = ExecutionLogService._CHECKPOINT_EVERY_N_LINES
+    for i in range(2 * n):
+        ExecutionLogService.append_log(eid, "stdout", f"line {i}")
+
+    cps = harness_state.list_checkpoints(eid)
+    assert len(cps) == 2  # auto-checkpoints fired at n and 2n
+    # Each checkpoint holds only its delta slice, never the cumulative buffer.
+    assert all(len(cp["ledger"]["lines"]) == n for cp in cps)
+    # Concatenating deltas reconstructs the full ledger with no duplication.
+    assert sum(len(cp["ledger"]["lines"]) for cp in cps) == 2 * n
+
+
+def test_stale_cleanup_does_not_clobber_completed_run_state():
+    """If stale cleanup races with normal completion, the CAS on
+    execution_logs fails (already terminal) — and the durable harness_runs
+    row must NOT then be flipped to 'failed', which would disagree with the
+    completed execution (codex P2)."""
+    from app.db.execution_logs import update_execution_log
+
+    eid = _start()
+    ExecutionLogService.append_log(eid, "stdout", "out")
+    ExecutionLogService.checkpoint(eid)
+
+    # Simulate finish having completed the execution + run-state concurrently...
+    update_execution_log(eid, status="success", finished_at="2026-06-10T00:00:01")
+    harness_state.mark_run_status(eid, "success")
+    # ...while a stale start-time entry still lingers (the race window).
+    past = datetime.datetime.now() - datetime.timedelta(days=1)
+    with ExecutionLogService._lock:
+        ExecutionLogService._start_times[eid] = past
+
+    ExecutionLogService.cleanup_stale_executions()
+
+    # CAS failed (already 'success'), so neither table may be flipped to failed.
+    assert ExecutionLogService.get_execution(eid)["status"] == "success"
+    assert harness_state.get_run(eid)["status"] == "success"

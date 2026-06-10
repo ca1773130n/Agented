@@ -66,8 +66,12 @@ class ExecutionLogService:
 
     # Track execution start times for cleanup: {execution_id: datetime}
     _start_times: Dict[str, datetime.datetime] = {}
-    # _lock guards all access to _log_buffers, _subscribers, and _start_times.
-    # Acquire before any read or write to those three dicts.
+    # Count of buffered lines already persisted to a checkpoint, per execution.
+    # Checkpoints store DELTAS (only lines since this offset) so serialization
+    # and table growth stay linear in log length, not quadratic.
+    _checkpoint_offsets: Dict[str, int] = {}
+    # _lock guards all access to _log_buffers, _subscribers, _start_times, and
+    # _checkpoint_offsets. Acquire before any read or write to those four dicts.
     _lock = threading.Lock()
 
     @classmethod
@@ -105,6 +109,7 @@ class ExecutionLogService:
             cls._log_buffers[execution_id] = []
             cls._subscribers[execution_id] = []
             cls._start_times[execution_id] = datetime.datetime.now()
+            cls._checkpoint_offsets[execution_id] = 0
 
         # Notify subscribers that execution started
         cls._broadcast(
@@ -146,19 +151,28 @@ class ExecutionLogService:
         buffered log ledger) WITHOUT finalizing the execution. Returns the new
         step number, or None if the execution is no longer tracked.
 
+        Each checkpoint stores only the DELTA — the lines appended since the
+        previous checkpoint — so serialization and table growth stay linear in
+        log length; the full ledger is reconstructed by concatenating
+        ``list_checkpoints`` in step order.
+
         Best-effort: a checkpoint failure must never disrupt streaming, so all
         errors are swallowed — the in-memory buffer remains the live source."""
         with cls._lock:
             buffer = cls._log_buffers.get(execution_id)
             if buffer is None:
                 return None
-            lines = [asdict(line) for line in buffer]
+            offset = cls._checkpoint_offsets.get(execution_id, 0)
+            new_lines = [asdict(line) for line in buffer[offset:]]
+            if not new_lines:
+                return None
+            cls._checkpoint_offsets[execution_id] = len(buffer)
 
-        stdout_lines = sum(1 for line in lines if line["stream"] == "stdout")
+        stdout_lines = sum(1 for line in new_lines if line["stream"] == "stdout")
         ledger = {
-            "lines": lines,
+            "lines": new_lines,
             "stdout_lines": stdout_lines,
-            "stderr_lines": len(lines) - stdout_lines,
+            "stderr_lines": len(new_lines) - stdout_lines,
         }
         try:
             return harness_state.record_checkpoint(execution_id, ledger=ledger, status=status)
@@ -254,6 +268,7 @@ class ExecutionLogService:
         with cls._lock:
             cls._log_buffers.pop(execution_id, None)
             cls._start_times.pop(execution_id, None)
+            cls._checkpoint_offsets.pop(execution_id, None)
             # Close all subscriber queues
             if execution_id in cls._subscribers:
                 for q in cls._subscribers[execution_id]:
@@ -454,6 +469,7 @@ class ExecutionLogService:
                         stderr_lines.append(line.content)
                 cls._log_buffers.pop(execution_id, None)
                 cls._start_times.pop(execution_id, None)
+                cls._checkpoint_offsets.pop(execution_id, None)
                 if execution_id in cls._subscribers:
                     for q in cls._subscribers[execution_id]:
                         cls._signal_end(q)
@@ -464,7 +480,7 @@ class ExecutionLogService:
             # Tombstone it as failed, preserving any buffered output. CAS so we
             # never clobber a row that completed concurrently (Harness-1 P2).
             try:
-                update_execution_status_cas(
+                tombstoned = update_execution_status_cas(
                     execution_id,
                     "failed",
                     expected_status="running",
@@ -473,7 +489,12 @@ class ExecutionLogService:
                     stdout_log="\n".join(stdout_lines) if stdout_lines else None,
                     stderr_log="\n".join(stderr_lines) if stderr_lines else None,
                 )
-                harness_state.mark_run_status(execution_id, "failed")
+                # Only flip the durable run-state row when the CAS actually
+                # tombstoned the execution. If it raced with normal completion
+                # (already success/cancelled), leave harness_runs alone so the
+                # two tables can't disagree (codex P2).
+                if tombstoned:
+                    harness_state.mark_run_status(execution_id, "failed")
             except Exception as e:  # pragma: no cover - defensive
                 logger.warning("Stale execution tombstone failed for %s: %s", execution_id, e)
             cleaned += 1
