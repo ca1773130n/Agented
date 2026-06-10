@@ -116,6 +116,7 @@ def _per_run_budget_tick(
     backend_type: Optional[str],
     process: "subprocess.Popen",
     tick_state: dict,
+    team_id: Optional[str] = None,
 ) -> None:
     """One per-run live-accounting step (Harness-1 Phase 3, P6). Fail-open:
     any error is swallowed so the monitor's period check is never disrupted.
@@ -145,6 +146,14 @@ def _per_run_budget_tick(
 
         limit_row = get_budget_limit(entity_type, entity_id) or {}
         limit = limit_row.get("per_run_limit_usd")
+
+        # Fix 2: also consider the team-scoped per-run limit; enforce the MIN.
+        if team_id:
+            team_row = get_budget_limit("team", team_id) or {}
+            team_limit = team_row.get("per_run_limit_usd")
+            if team_limit:
+                limit = min(limit, team_limit) if limit else team_limit
+
         if not limit:  # NULL = off; set_budget_limit rejects <= 0, so 0.0 can't be stored
             return
 
@@ -155,6 +164,24 @@ def _per_run_budget_tick(
                 execution_id,
                 reason,
             )
+            # Fix 1: persist spend BEFORE the kill — run_trigger only records on exit_code==0,
+            # so a SIGKILLed run's cost would otherwise be lost. Best-effort: must not block.
+            try:
+                usage["total_cost_usd"] = cost
+                BudgetService.record_usage(
+                    execution_id=execution_id,
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    backend_type=backend_type,
+                    account_id=None,
+                    usage_data=usage,
+                )
+            except Exception as rec_err:
+                logger.warning(
+                    "Failed to record usage for over-budget execution %s (best-effort): %s",
+                    execution_id,
+                    rec_err,
+                )
             try:
                 import os as _os
 
@@ -216,6 +243,7 @@ def budget_monitor(
     process: "subprocess.Popen",
     interval_seconds: int = 30,
     backend_type: Optional[str] = None,
+    team_id: Optional[str] = None,
 ) -> None:
     """Periodically check budget during execution and kill process if hard limit exceeded."""
     import time as _time
@@ -324,6 +352,7 @@ def budget_monitor(
                 backend_type,
                 process,
                 tick_state,
+                team_id=team_id,
             )
             if tick_state.get("killed"):
                 break

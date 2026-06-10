@@ -84,6 +84,8 @@ def set_limit(data: dict) -> dict[str, Any]:
         )
     if soft is not None and hard is not None and hard < soft:
         raise ClientException(detail="hard_limit_usd must be >= soft_limit_usd")
+    if per_run is not None and per_run <= 0:
+        raise ClientException(detail="per_run_limit_usd must be positive")
     if not set_budget_limit(
         entity_type=entity_type,
         entity_id=entity_id,
