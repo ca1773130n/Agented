@@ -467,6 +467,30 @@ def test_redispatch_rejects_unknown():
     assert ExecutionService.redispatch_execution("nope").get("error") == "not_found"
 
 
+def test_redispatch_rapid_double_call_single_dispatch():
+    """The async no-fan-out race: while the first dispatch thread is still
+    in flight (no child row yet), a second call must be rejected by the
+    in-process in-flight guard."""
+    import threading
+
+    _make_execution("exec-race")
+    release = threading.Event()
+    started = threading.Event()
+
+    def _blocking_run_trigger(*args, **kwargs):
+        started.set()
+        release.wait(timeout=5)
+        return "exec-new"
+
+    with patch.object(ExecutionService, "run_trigger", side_effect=_blocking_run_trigger):
+        first = ExecutionService.redispatch_execution("exec-race")
+        assert "execution_id" in first
+        assert started.wait(timeout=2)  # dispatch thread is now in flight
+        second = ExecutionService.redispatch_execution("exec-race")
+        release.set()
+    assert second.get("error") == "already_redispatched"
+
+
 def test_redispatch_prefers_trigger_config_snapshot():
     """Deterministic replay: the trigger dict passed to run_trigger comes from
     the stored snapshot, not the (possibly since-edited) DB trigger."""
@@ -574,8 +598,15 @@ Add to `ExecutionService` (near `restore_pending_retries`):
             return {"error": "not_found"}
         if original.get("status") not in ("interrupted", "failed"):
             return {"error": "not_eligible"}
-        if get_redispatch_child(execution_id):
-            return {"error": "already_redispatched"}
+        # No-fan-out guard. The DB child row only appears once the background
+        # thread reaches start_execution (after cloning/render/build), so the
+        # DB check alone is racy for rapid double-calls. An in-process
+        # in-flight set closes the window (workers=1 is the deployment model;
+        # the DB check covers restarts after the run persists).
+        with cls._redispatch_lock:
+            if execution_id in cls._redispatch_in_flight or get_redispatch_child(execution_id):
+                return {"error": "already_redispatched"}
+            cls._redispatch_in_flight.add(execution_id)
 
         # Deterministic replay: prefer the trigger as it was AT RUN TIME (the
         # stored trigger_config_snapshot); fall back to the current DB trigger
@@ -632,21 +663,38 @@ Add to `ExecutionService` (near `restore_pending_retries`):
         from ..database import generate_execution_id  # re-export; canonical home is app/db/ids.py:222
 
         new_id = generate_execution_id(trigger.get("id") or "redispatch")
-        threading.Thread(
-            target=cls.run_trigger,
-            args=(trigger, ""),
-            kwargs={
-                "trigger_type": original.get("trigger_type") or "manual",
-                "account_id": account_id,
-                "env_overrides": env_overrides,
-                "execution_id": new_id,
-                "prompt_override": prompt_override,
-                "resume_session_id": resume_session_id,
-                "redispatched_from": execution_id,
-            },
-            daemon=True,
-        ).start()
+
+        def _dispatch():
+            try:
+                cls.run_trigger(
+                    trigger,
+                    "",
+                    trigger_type=original.get("trigger_type") or "manual",
+                    account_id=account_id,
+                    env_overrides=env_overrides,
+                    execution_id=new_id,
+                    prompt_override=prompt_override,
+                    resume_session_id=resume_session_id,
+                    redispatched_from=execution_id,
+                )
+            finally:
+                # By now the child row exists (or the dispatch failed) — the
+                # DB-side guard takes over; release the in-flight marker.
+                with cls._redispatch_lock:
+                    cls._redispatch_in_flight.discard(execution_id)
+
+        threading.Thread(target=_dispatch, daemon=True).start()
         return {"execution_id": new_id}
+```
+
+And the two class-level attributes on `ExecutionService` (next to its other
+class state):
+
+```python
+    # Phase 4: in-flight redispatch origins (closes the async no-fan-out race;
+    # workers=1). The DB redispatched_from check covers restarts.
+    _redispatch_lock = threading.Lock()
+    _redispatch_in_flight: set = set()
 ```
 
 (Confirm: `get_trigger` import path (`app.db.triggers`); `AuditLogService` already
@@ -660,7 +708,7 @@ duplicating the logic.)
 - [ ] **Step 5: Run tests**
 
 Run: `cd backend && uv run pytest tests/test_redispatch_service.py tests/test_execution_service.py -q`
-Expected: PASS (8 new + regression green).
+Expected: PASS (9 new + regression green).
 
 - [ ] **Step 6: Commit**
 
@@ -1256,16 +1304,35 @@ Expected: suite at baseline; build green.
 
 - [ ] **Step 4: Final commit if needed**
 
-Inspect `git status` first and stage ONLY Phase-4 files (the worktree carries
-unrelated dirty files — never `git add -A`):
+The worktree carries unrelated dirty files — stage ONLY the exact files this
+plan touches (never `git add -A`, never directories). The complete Phase-4
+file universe is the union of the per-task **Files:** lists; if the format
+pass changed anything, it can only be these:
 
 ```bash
-git status --short
-git add backend/app/db/ backend/app/services/execution_service.py backend/app/services/command_builder.py backend/app/services/goal_loop_runner.py backend/app/services/trigger_service.py backend/app_litestar/ backend/tests/ frontend/src/services/api/ frontend/src/views/ frontend/src/components/triggers/TriggerDetailPanel.vue frontend/src/locales/
+git status --short   # inspect first; stage nothing that isn't listed below
+git add \
+  backend/app/db/schema/_core.py backend/app/db/schema/_orgs.py \
+  backend/app/db/migrations/v07_features.py backend/app/db/execution_logs.py \
+  backend/app/db/triggers.py \
+  backend/app/services/execution_service.py backend/app/services/command_builder.py \
+  backend/app/services/goal_loop_runner.py backend/app/services/trigger_service.py \
+  backend/app_litestar/routes/executions.py backend/app_litestar/routes/grd_routes.py \
+  backend/app_litestar/lifecycle.py \
+  backend/tests/test_migration_152_resume_recovery.py \
+  backend/tests/test_claude_resume_command.py backend/tests/test_redispatch_service.py \
+  backend/tests/test_redispatch_route_and_startup.py backend/tests/test_goal_loop_reentry.py \
+  frontend/src/services/api/triggers.ts frontend/src/services/api/types/triggers.ts \
+  frontend/src/services/api/index.ts \
+  frontend/src/views/ExecutionHistory.vue \
+  frontend/src/views/__tests__/ExecutionHistory.redispatch.test.ts \
+  frontend/src/components/triggers/TriggerDetailPanel.vue \
+  frontend/src/locales/en.json frontend/src/locales/ko.json \
+  frontend/src/locales/ja.json frontend/src/locales/zh.json
 git commit -m "chore(harness): format/lint pass for Phase 4"
 ```
 
-(Trim the list to what `git status` actually shows as modified by this phase.)
+(Omit any listed file `git status` shows as unchanged; add nothing else.)
 
 ---
 
