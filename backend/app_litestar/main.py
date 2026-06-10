@@ -121,6 +121,7 @@ from .routes.product_owner import product_owner_router
 from .routes.project_forge_bindings import forge_bindings_router
 from .routes.projects import projects_router
 from .routes.quality_ratings import quality_ratings_router
+from .routes.verification import verification_router
 from .routes.rbac import rbac_router
 from .routes.retention import retention_router
 from .routes.rules_plugins_hooks_commands import (
@@ -249,6 +250,7 @@ def create_app() -> Litestar:
             integrations_github_router,
             budgets_router,
             quality_ratings_router,
+            verification_router,
             scheduler_router,
             triggers_router,
             trigger_events_router,

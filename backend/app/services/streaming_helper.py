@@ -9,6 +9,7 @@ import threading
 import traceback
 from typing import Callable, Optional
 
+from ..db import harness_evidence
 from .chat_state_service import ChatStateService
 from .super_agent_session_service import SuperAgentSessionService
 
@@ -31,9 +32,7 @@ def _mark_account_rate_limited(candidate, rl_info) -> None:
                 candidate.account_id, rl_info.reset_at, rl_info.reason
             )
         else:
-            RateLimitService.mark_rate_limited(
-                candidate.account_id, DEFAULT_COOLDOWN_SECONDS
-            )
+            RateLimitService.mark_rate_limited(candidate.account_id, DEFAULT_COOLDOWN_SECONDS)
         logger.info(
             "Marked account %s (%s) rate-limited until %s",
             candidate.account_id,
@@ -42,6 +41,21 @@ def _mark_account_rate_limited(candidate, rl_info) -> None:
         )
     except Exception:
         logger.warning("Failed to mark account rate-limited", exc_info=True)
+
+
+def _record_tool_use_evidence(session_id: str, super_agent_id, event) -> None:
+    """Best-effort: persist a ToolUseEvent to the evidence ledger (Phase 2 P3).
+    Never raises — a ledger write must not disrupt streaming."""
+    try:
+        harness_evidence.record_tool_use(
+            session_id,
+            super_agent_id=super_agent_id,
+            tool_name=event.name,
+            tool_input=event.input,
+            tool_use_id=event.id,
+        )
+    except Exception as e:  # pragma: no cover - defensive
+        logger.debug("evidence ledger write failed for %s: %s", session_id, e)
 
 
 def run_streaming_response(
@@ -133,9 +147,7 @@ def run_streaming_response(
             if system_prompt:
                 llm_messages.append({"role": "system", "content": system_prompt})
             if state and state.get("conversation_log"):
-                llm_messages.extend(
-                    drop_empty_content_messages(state["conversation_log"])
-                )
+                llm_messages.extend(drop_empty_content_messages(state["conversation_log"]))
 
             def _finalize(accumulated: list, used_backend: str) -> None:
                 full_response = "".join(accumulated)
@@ -176,6 +188,7 @@ def run_streaming_response(
                 for chunk in stream_iter:
                     if isinstance(chunk, ToolUseEvent):
                         ChatStateService.push_delta(_session_id, "tool_use", chunk.to_dict())
+                        _record_tool_use_evidence(_session_id, _super_agent_id, chunk)
                         continue
                     if chunk:
                         accumulated.append(chunk)
@@ -274,6 +287,7 @@ def run_streaming_response(
                         continue
                     if isinstance(chunk, ToolUseEvent):
                         ChatStateService.push_delta(_session_id, "tool_use", chunk.to_dict())
+                        _record_tool_use_evidence(_session_id, _super_agent_id, chunk)
                         continue
                     if chunk:
                         accumulated.append(chunk)
@@ -355,9 +369,7 @@ def run_streaming_response(
                 # auto-resume. The scheduler re-dispatch re-enters streaming.
                 ChatStateService.push_status(_session_id, "idle")
             except Exception:
-                logger.warning(
-                    "Failed to queue chat retry; surfacing error instead", exc_info=True
-                )
+                logger.warning("Failed to queue chat retry; surfacing error instead", exc_info=True)
                 _surface_rate_limit_error()
 
         except Exception as e:

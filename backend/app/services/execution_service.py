@@ -30,6 +30,7 @@ from ..database import (
     get_latest_execution_for_trigger,
     get_paths_for_trigger_detailed,
 )
+from ..db import verification_records
 from .audit_log_service import AuditLogService
 from .budget_service import BudgetService
 from .command_builder import CommandBuilder
@@ -56,6 +57,20 @@ from .trigger_dispatcher import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _verification_pr_gate(execution_id: str) -> bool:
+    """Advisory post-hoc gate (Harness-1 Phase 2, P5): allow the downstream
+    PR side-effect unless a verification claim is marked 'failed'. Returns
+    True to proceed, False to skip. Best-effort: any error allows (fail-open),
+    since this must never block a healthy run on a gate-infra hiccup."""
+    try:
+        if verification_records.has_failed(execution_id):
+            logger.warning("Skipping auto-PR for %s: a verification claim failed", execution_id)
+            return False
+    except Exception as e:  # pragma: no cover - defensive
+        logger.debug("verification gate check failed for %s: %s", execution_id, e)
+    return True
 
 
 def _trace_logger(execution_id: str) -> logging.LoggerAdapter:
@@ -669,7 +684,9 @@ class ExecutionService:
                 ):
                     # Get scan output from execution logs
                     scan_output = ExecutionLogService.get_stdout_log(execution_id)
-                    auto_resolve_and_pr(trigger, github_repo_map, scan_output)
+                    cls._maybe_auto_resolve_and_pr(
+                        execution_id, trigger, github_repo_map, scan_output
+                    )
                 ExecutionLogService.finish_execution(
                     execution_id=execution_id, status=ExecutionState.SUCCESS, exit_code=exit_code
                 )
@@ -789,6 +806,15 @@ class ExecutionService:
     ) -> List[str]:
         """Resolve issues in GitHub repos and create PRs. Returns list of PR URLs."""
         return auto_resolve_and_pr(trigger, github_repo_map, scan_output)
+
+    @classmethod
+    def _maybe_auto_resolve_and_pr(cls, execution_id, trigger, github_repo_map, scan_output):
+        """Run the auto-resolve+PR side-effect unless a verification claim
+        failed (Harness-1 Phase 2, P5). The gate is advisory: with no records
+        it always proceeds. Delegates to the existing ``_auto_resolve_and_pr``
+        wrapper (DRY) rather than re-calling the module function."""
+        if _verification_pr_gate(execution_id):
+            cls._auto_resolve_and_pr(trigger, github_repo_map, scan_output)
 
     # ── Dispatchers (delegated to trigger_dispatcher) ─────────────────────────
 
