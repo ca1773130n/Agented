@@ -294,6 +294,7 @@ class TriggerService:
             sigterm_grace_seconds=data.get("sigterm_grace_seconds"),
             dispatch_type=data.get("dispatch_type"),
             super_agent_id=data.get("super_agent_id"),
+            auto_redispatch=data.get("auto_redispatch"),
         )
         if success:
             new_trigger = get_trigger(trigger_id) or {}

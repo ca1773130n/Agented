@@ -300,6 +300,7 @@ def update_trigger(
     sigterm_grace_seconds: int = None,
     dispatch_type: str = None,
     super_agent_id: str = None,
+    auto_redispatch: int = None,
 ) -> bool:
     """Update trigger fields. Returns True on success."""
     updates = []
@@ -419,6 +420,9 @@ def update_trigger(
         else:
             updates.append("super_agent_id = ?")
             values.append(super_agent_id)
+    if auto_redispatch is not None:
+        updates.append("auto_redispatch = ?")
+        values.append(1 if auto_redispatch else 0)
 
     if not updates:
         return False
@@ -580,32 +584,54 @@ def update_trigger_auto_resolve(trigger_id: str, auto_resolve: bool) -> bool:
         return cursor.rowcount > 0
 
 
-
 # --- Backward-compat re-exports (v0.7.3 split) ---
 # These imports preserve the existing public API. New code should
 # import from the focused module directly (e.g.
 # `from app.db.execution_logs import create_execution_log`).
 from .trigger_paths import (  # noqa: F401, E402
-    _create_symlink, _ensure_symlink_dir, _generate_symlink_name,
-    _remove_symlink, _sanitize_name,
-    add_project_path, remove_project_path, get_paths_for_trigger,
-    get_symlink_paths_for_trigger, list_paths_for_trigger,
-    count_paths_for_trigger, add_github_repo, remove_github_repo,
-    add_project_to_trigger, remove_project_from_trigger,
+    _create_symlink,
+    _ensure_symlink_dir,
+    _generate_symlink_name,
+    _remove_symlink,
+    _sanitize_name,
+    add_project_path,
+    remove_project_path,
+    get_paths_for_trigger,
+    get_symlink_paths_for_trigger,
+    list_paths_for_trigger,
+    count_paths_for_trigger,
+    add_github_repo,
+    remove_github_repo,
+    add_project_to_trigger,
+    remove_project_from_trigger,
     get_paths_for_trigger_detailed,
 )
 from .execution_logs import (  # noqa: F401, E402
-    create_execution_log, update_execution_log,
-    mark_stale_executions_interrupted, update_execution_status_cas,
-    get_execution_logs_filtered, get_execution_stats, get_execution_log,
-    get_execution_logs_for_trigger, get_all_execution_logs,
-    get_running_execution_for_trigger, get_latest_execution_for_trigger,
-    count_execution_logs_for_trigger, count_all_execution_logs,
-    get_active_execution_count, delete_old_execution_logs,
+    create_execution_log,
+    update_execution_log,
+    mark_stale_executions_interrupted,
+    update_execution_status_cas,
+    get_execution_logs_filtered,
+    get_execution_stats,
+    get_execution_log,
+    get_execution_logs_for_trigger,
+    get_all_execution_logs,
+    get_running_execution_for_trigger,
+    get_latest_execution_for_trigger,
+    count_execution_logs_for_trigger,
+    count_all_execution_logs,
+    get_active_execution_count,
+    delete_old_execution_logs,
 )
 from .pr_reviews import (  # noqa: F401, E402
-    add_pr_review, update_pr_review, get_pr_review,
-    get_pr_reviews_for_trigger, get_pr_reviews_count, get_pr_review_stats,
-    get_all_pr_reviews, delete_pr_review, get_pr_review_history,
+    add_pr_review,
+    update_pr_review,
+    get_pr_review,
+    get_pr_reviews_for_trigger,
+    get_pr_reviews_count,
+    get_pr_review_stats,
+    get_all_pr_reviews,
+    delete_pr_review,
+    get_pr_review_history,
     get_pr_review_learning_loop,
 )

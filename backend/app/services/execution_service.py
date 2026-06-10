@@ -318,6 +318,35 @@ class ExecutionService:
         threading.Thread(target=_dispatch, daemon=True).start()
         return {"execution_id": new_id}
 
+    @classmethod
+    def auto_redispatch_interrupted(cls) -> int:
+        """Startup recovery (Phase 4): one re-dispatch attempt for interrupted
+        executions whose trigger opted in via auto_redispatch=1. Returns count."""
+        from ..db.connection import get_connection
+
+        with get_connection() as conn:
+            rows = conn.execute(
+                """SELECT e.execution_id FROM execution_logs e
+                   JOIN triggers t ON t.id = e.trigger_id
+                   WHERE e.status = 'interrupted'
+                     AND t.auto_redispatch = 1
+                     AND NOT EXISTS (
+                         SELECT 1 FROM execution_logs c
+                         WHERE c.redispatched_from = e.execution_id
+                     )"""
+            ).fetchall()
+        count = 0
+        for row in rows:
+            try:
+                result = cls.redispatch_execution(row["execution_id"])
+                if "execution_id" in result:
+                    count += 1
+            except Exception as e:  # pragma: no cover - defensive
+                logger.warning("auto-redispatch failed for %s: %s", row["execution_id"], e)
+        if count:
+            logger.info("Auto-redispatched %d interrupted execution(s)", count)
+        return count
+
     # ── Status / event persistence ────────────────────────────────────────────
 
     @classmethod
