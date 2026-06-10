@@ -397,11 +397,7 @@ def update_plan_status(project_id: str, plan_id: str, data: dict) -> dict[str, A
         try:
             states = get_project_sync_states(project_id)
             match = next(
-                (
-                    s
-                    for s in states
-                    if s["entity_id"] == plan_id and s["entity_type"] == "plan"
-                ),
+                (s for s in states if s["entity_id"] == plan_id and s["entity_type"] == "plan"),
                 None,
             )
             if match:
@@ -453,9 +449,11 @@ def update_plan(project_id: str, plan_id: str, data: dict) -> dict[str, Any]:
     _ensure_project(project_id)
     if not get_project_plan(plan_id):
         raise NotFoundException(detail="Plan not found")
-    kwargs = {k: v for k, v in (data or {}).items() if v is not None and k in {
-        "title", "description", "status", "tasks_json"
-    }}
+    kwargs = {
+        k: v
+        for k, v in (data or {}).items()
+        if v is not None and k in {"title", "description", "status", "tasks_json"}
+    }
     if kwargs:
         update_project_plan(plan_id, **kwargs)
     return {"message": "Plan updated", "plan": get_project_plan(plan_id)}
@@ -481,9 +479,7 @@ def _resolve_manager_agent(project: dict) -> Optional[str]:
     project_name = project.get("name", "Unnamed Project")
     sa_id = create_super_agent(
         name=f"{project_name} Manager",
-        description=(
-            f"AI manager for project '{project_name}'. Manages kanban plans via chat."
-        ),
+        description=(f"AI manager for project '{project_name}'. Manages kanban plans via chat."),
         backend_type="claude",
     )
     if not sa_id:
@@ -554,9 +550,7 @@ def project_chat(project_id: str, data: dict) -> dict[str, Any]:
         if active:
             session_id = active[0]["id"]
         else:
-            raise HTTPException(
-                status_code=500, detail=error or "Failed to create session"
-            )
+            raise HTTPException(status_code=500, detail=error or "Failed to create session")
 
     ChatStateService.init_session(session_id)
     project_context = build_project_context(project_id, milestone_id)
@@ -579,17 +573,13 @@ def project_chat(project_id: str, data: dict) -> dict[str, Any]:
             system_prompt = SuperAgentSessionService.assemble_system_prompt(_sa_id, _session_id)
             system_prompt = (system_prompt or "") + "\n\n" + _project_context
             state = SuperAgentSessionService.get_session_state(_session_id)
-            llm_messages: list[dict[str, Any]] = [
-                {"role": "system", "content": system_prompt}
-            ]
+            llm_messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
             if state and state.get("conversation_log"):
                 from app.services.conversation_filters import (
                     drop_empty_content_messages,
                 )
 
-                llm_messages.extend(
-                    drop_empty_content_messages(state["conversation_log"])
-                )
+                llm_messages.extend(drop_empty_content_messages(state["conversation_log"]))
             accumulated: list[str] = []
             if should_route_via_cli_agent("claude", use_cli_agent):
                 stream_iter = stream_via_cli_agent(
@@ -722,12 +712,7 @@ def create_session(project_id: str, data: dict) -> dict[str, Any]:
     # claude cmd if it isn't already there. (Ralph / team-spawn handlers
     # build their own commands; if they want yolo, they consult
     # ``yolo_mode`` in their start logic.)
-    if (
-        yolo_mode
-        and cmd
-        and cmd[0] == "claude"
-        and "--dangerously-skip-permissions" not in cmd
-    ):
+    if yolo_mode and cmd and cmd[0] == "claude" and "--dangerously-skip-permissions" not in cmd:
         cmd = [*cmd, "--dangerously-skip-permissions"]
 
     # v0.7.70 — compile the project's Forge context bundle and apply
@@ -761,11 +746,7 @@ def create_session(project_id: str, data: dict) -> dict[str, Any]:
             # materialization. Skip if the bundle has nothing
             # overlay-relevant to add (keeps the session_config
             # payload tight in the common empty case).
-            if (
-                bundle.overlay_files
-                or bundle.overlay_symlinks
-                or bundle.mcp_servers
-            ):
+            if bundle.overlay_files or bundle.overlay_symlinks or bundle.mcp_servers:
                 forge_bundle_dict = bundle.to_dict()
     except Exception:
         logger.warning(
@@ -848,9 +829,7 @@ def list_sessions(project_id: str, limit: int = 50, offset: int = 0) -> dict[str
 
 
 @get("/{project_id:str}/sessions/{session_id:str}/output", sync_to_thread=False)
-def session_output(
-    project_id: str, session_id: str, last_n: int = 100
-) -> dict[str, Any]:
+def session_output(project_id: str, session_id: str, last_n: int = 100) -> dict[str, Any]:
     del project_id
     last_n = max(1, min(last_n, 10000))
     lines = ProjectSessionManager.get_output(session_id, last_n=last_n)
@@ -890,9 +869,7 @@ def add_allowed_account_endpoint(project_id: str, data: dict) -> dict[str, Any]:
     status_code=200,
     sync_to_thread=False,
 )
-def remove_allowed_account_endpoint(
-    project_id: str, account_id: str
-) -> dict[str, Any]:
+def remove_allowed_account_endpoint(project_id: str, account_id: str) -> dict[str, Any]:
     _ensure_project(project_id)
     from app.db.grd import remove_allowed_account
 
@@ -905,9 +882,7 @@ def remove_allowed_account_endpoint(
     "/{project_id:str}/sessions/{session_id:str}/answer-question",
     sync_to_thread=False,
 )
-def session_answer_question(
-    project_id: str, session_id: str, data: dict
-) -> dict[str, Any]:
+def session_answer_question(project_id: str, session_id: str, data: dict) -> dict[str, Any]:
     """v0.7.63 — receive a user's selection for an ``AskUserQuestion``
     tool_use, wrap as a ``tool_result`` envelope, write to claude's
     stdin. Claude continues the conversation with the answer.
@@ -943,9 +918,7 @@ def session_answer_question(
             shown = a if isinstance(a, str) else ", ".join(a or [])
             summary_lines.append(f"**{q}** → {shown}")
         if summary_lines:
-            append_session_message(
-                session_id, "user", "\n".join(summary_lines)
-            )
+            append_session_message(session_id, "user", "\n".join(summary_lines))
     except Exception:
         logger.warning(
             "answer-question: failed to persist user answer for %s",
@@ -954,9 +927,7 @@ def session_answer_question(
         )
 
     if not ProjectSessionManager.is_stream_json(session_id):
-        raise ClientException(
-            detail="Session is not in stream-json mode; cannot answer."
-        )
+        raise ClientException(detail="Session is not in stream-json mode; cannot answer.")
 
     import json as _json
 
@@ -1001,9 +972,7 @@ def session_answer_question(
     "/{project_id:str}/sessions/{session_id:str}/answer-plan",
     sync_to_thread=False,
 )
-def session_answer_plan(
-    project_id: str, session_id: str, data: dict
-) -> dict[str, Any]:
+def session_answer_plan(project_id: str, session_id: str, data: dict) -> dict[str, Any]:
     """v0.7.65 — accept or decline claude's ``ExitPlanMode`` proposal.
 
     Body shape::
@@ -1020,9 +989,7 @@ def session_answer_plan(
     tool_use_id = body.get("tool_use_id")
     approved = body.get("approved")
     if not tool_use_id or approved is None:
-        raise ClientException(
-            detail="tool_use_id and approved are required"
-        )
+        raise ClientException(detail="tool_use_id and approved are required")
 
     decision_text = (
         "User approved the plan. Proceed with execution."
@@ -1048,9 +1015,7 @@ def session_answer_plan(
         )
 
     if not ProjectSessionManager.is_stream_json(session_id):
-        raise ClientException(
-            detail="Session is not in stream-json mode; cannot answer."
-        )
+        raise ClientException(detail="Session is not in stream-json mode; cannot answer.")
 
     import json as _json
 
@@ -1079,9 +1044,7 @@ def session_answer_plan(
     "/{project_id:str}/sessions/{session_id:str}/permission-request",
     sync_to_thread=True,
 )
-def session_permission_request(
-    project_id: str, session_id: str, data: dict
-) -> dict[str, Any]:
+def session_permission_request(project_id: str, session_id: str, data: dict) -> dict[str, Any]:
     """v0.7.69 — Agented permission hook → backend → web panel.
 
     The hook script POSTs here when claude is about to use a tool.
@@ -1148,9 +1111,7 @@ def session_permission_request(
     "/{project_id:str}/sessions/{session_id:str}/permission-decision",
     sync_to_thread=False,
 )
-def session_permission_decision(
-    project_id: str, session_id: str, data: dict
-) -> dict[str, Any]:
+def session_permission_decision(project_id: str, session_id: str, data: dict) -> dict[str, Any]:
     """v0.7.69 — frontend POSTs the user's Approve / Deny click here.
 
     Body: ``{"request_id": "perm-…", "decision": "allow"|"deny"}``
@@ -1160,9 +1121,7 @@ def session_permission_decision(
     rid = body.get("request_id")
     decision = body.get("decision")
     if not rid or decision not in ("allow", "deny"):
-        raise ClientException(
-            detail="request_id and decision (allow|deny) are required"
-        )
+        raise ClientException(detail="request_id and decision (allow|deny) are required")
 
     from app.services.permission_prompt_service import PermissionPromptRegistry
 
@@ -1233,9 +1192,7 @@ def session_input(project_id: str, session_id: str, data: dict) -> dict[str, Any
 
             project_root = None
             try:
-                project_root = ProjectWorkspaceService.resolve_working_directory(
-                    project_id
-                )
+                project_root = ProjectWorkspaceService.resolve_working_directory(project_id)
             except Exception:
                 project_root = None
             bundle = ContextCompilerService.compile(
@@ -1304,9 +1261,7 @@ def session_input(project_id: str, session_id: str, data: dict) -> dict[str, Any
 
     # Default (interactive PTY REPL): strip non-printable bytes so a
     # rogue control char can't reprogram the user's terminal.
-    sanitized = "".join(
-        ch for ch in text if ch in {"\t", "\n", "\r"} or (32 <= ord(ch) < 127)
-    )
+    sanitized = "".join(ch for ch in text if ch in {"\t", "\n", "\r"} or (32 <= ord(ch) < 127))
     if not ProjectSessionManager.send_input(session_id, sanitized):
         raise NotFoundException(detail="Session not found or not active")
     return {"message": "Input sent", "session_id": session_id}
@@ -1372,9 +1327,7 @@ def create_team_session(project_id: str, data: dict) -> dict[str, Any]:
     "/{project_id:str}/sessions/{session_id:str}/goal-iterations",
     sync_to_thread=False,
 )
-def list_session_goal_iterations(
-    project_id: str, session_id: str
-) -> dict[str, Any]:
+def list_session_goal_iterations(project_id: str, session_id: str) -> dict[str, Any]:
     """v0.7.74 — iteration audit trail for a goal_loop session.
 
     Returns every iteration row with its verdict + reason + judging
@@ -1415,9 +1368,7 @@ def monitor_session(project_id: str, session_id: str) -> dict[str, Any]:
         execution_type = row["execution_type"] if row["execution_type"] else "direct"
     handler = get_handler(execution_type)
     if not handler:
-        raise NotFoundException(
-            detail=f"No handler for execution_type: {execution_type}"
-        )
+        raise NotFoundException(detail=f"No handler for execution_type: {execution_type}")
     result = handler.monitor(session_id)
     result["session_id"] = session_id
     result["execution_type"] = execution_type
@@ -1455,9 +1406,7 @@ def grd_verdict_counts(project_id: str) -> dict[str, Any]:
 
 
 @get("/{project_id:str}/grd/dead-ends", sync_to_thread=False)
-def list_grd_dead_ends(
-    project_id: str, limit: int = 200
-) -> dict[str, Any]:
+def list_grd_dead_ends(project_id: str, limit: int = 200) -> dict[str, Any]:
     """v0.7.85 — read DEAD-ENDS.md mirror from the DB. Faster than the
     CLI shell-out and unaffected by missing ``gd.js``.
     """
@@ -1468,9 +1417,7 @@ def list_grd_dead_ends(
 
 
 @get("/{project_id:str}/grd/genome/snapshots", sync_to_thread=False)
-def list_grd_genome_snapshots(
-    project_id: str, limit: int = 50
-) -> dict[str, Any]:
+def list_grd_genome_snapshots(project_id: str, limit: int = 50) -> dict[str, Any]:
     """v0.7.85 — historical GENOME.md snapshots for the project,
     newest first. The latest snapshot's ``content`` is the full
     markdown body so the frontend can render a diff against
@@ -1515,9 +1462,7 @@ def start_grd_evolve(project_id: str, data: dict | None) -> dict[str, Any]:
     if not handler:
         from litestar.exceptions import HTTPException
 
-        raise HTTPException(
-            status_code=500, detail="grd_evolve handler is not registered"
-        )
+        raise HTTPException(status_code=500, detail="grd_evolve handler is not registered")
     cwd = _project_cwd(project_id)
     body = data or {}
     session_config = {
@@ -1595,6 +1540,24 @@ def stop_grd_evolve_run(project_id: str, run_id: str) -> dict[str, Any]:
     return {"status": "stopped"}
 
 
+@post("/{project_id:str}/sessions/{session_id:str}/resume-loop", sync_to_thread=True)
+def resume_goal_loop_route(project_id: str, session_id: str) -> dict[str, Any]:
+    """Phase 4, Unit C — resume a failed goal-loop session by spawning a fresh
+    session seeded with persisted iteration knowledge.
+
+    404 when session not found; 409 when not eligible / already resumed.
+    """
+    del project_id
+    from app.services.goal_loop_runner import resume_goal_loop
+
+    result = resume_goal_loop(session_id)
+    if result.get("error") == "not_found":
+        raise NotFoundException(detail=f"Session {session_id} not found")
+    if "error" in result:
+        raise HTTPException(status_code=409, detail=result["error"])
+    return result
+
+
 grd_router = Router(
     path="/api/projects",
     route_handlers=[
@@ -1649,5 +1612,6 @@ grd_router = Router(
         create_team_session,
         monitor_session,
         list_session_goal_iterations,
+        resume_goal_loop_route,
     ],
 )
