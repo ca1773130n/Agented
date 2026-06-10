@@ -14,6 +14,7 @@ import type {
   AuditStats,
   ProjectInfo,
   Execution,
+  ExecutionStateSnapshot,
   PRStatus,
   ReviewStatusType,
   PrReview,
@@ -334,6 +335,10 @@ export const executionApi = {
   streamLogs: (executionId: string, options?: AuthenticatedEventSourceOptions): AuthenticatedEventSource => {
     return createAuthenticatedEventSource(`${API_BASE}/admin/executions/${executionId}/stream`, options);
   },
+
+  // Get composed harness-state snapshot (Phase 1-3: run/checkpoints/verifications/budget)
+  getState: (executionId: string) =>
+    apiFetch<ExecutionStateSnapshot>(`/admin/executions/${executionId}/state`),
 };
 
 // PR Review API

@@ -5581,7 +5581,6 @@
     "loading": "제품을 불러오는 중...",
     "loadFailed": "제품을 불러오지 못했습니다",
     "loadError": "제품을 불러오지 못했습니다",
-    "loadError": "제품을 불러오지 못했습니다",
     "emptyTitle": "아직 제품이 없습니다",
     "emptyDescription": "프로젝트를 정리하기 위한 첫 제품을 생성하세요",
     "createFirst": "첫 제품 생성",
@@ -8964,5 +8963,21 @@
       "retryStarted": "실행 재시도가 시작되었습니다",
       "cancelled": "실행이 취소되었습니다"
     }
+  },
+  "harnessState": {
+    "title": "하네스 상태",
+    "runStatus": "실행 상태",
+    "stepCursor": "단계 커서",
+    "budget": "실시간 예산",
+    "budgetOf": "/ ${limit}",
+    "lastCheckpoint": "마지막 체크포인트",
+    "step": "{step}단계",
+    "verifications": "검증",
+    "status_pending": "대기 중",
+    "status_passed": "통과",
+    "status_failed": "실패",
+    "noState": "이 실행에 대한 하네스 상태가 기록되지 않았습니다.",
+    "loading": "로딩 중…",
+    "error": "하네스 상태를 불러올 수 없습니다."
   }
 }

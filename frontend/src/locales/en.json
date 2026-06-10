@@ -5581,7 +5581,6 @@
     "loading": "Loading products...",
     "loadFailed": "Failed to load products",
     "loadError": "Failed to load products",
-    "loadError": "Failed to load products",
     "emptyTitle": "No products yet",
     "emptyDescription": "Create your first product to organize your projects",
     "createFirst": "Create Your First Product",
@@ -8964,5 +8963,21 @@
       "retryStarted": "Execution retry started",
       "cancelled": "Execution cancelled"
     }
+  },
+  "harnessState": {
+    "title": "Harness state",
+    "runStatus": "Run status",
+    "stepCursor": "Step cursor",
+    "budget": "Live budget",
+    "budgetOf": "of ${limit}",
+    "lastCheckpoint": "Last checkpoint",
+    "step": "step {step}",
+    "verifications": "Verifications",
+    "status_pending": "pending",
+    "status_passed": "passed",
+    "status_failed": "failed",
+    "noState": "No harness state recorded for this execution.",
+    "loading": "Loading…",
+    "error": "Could not load harness state."
   }
 }

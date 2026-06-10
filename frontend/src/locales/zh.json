@@ -5581,7 +5581,6 @@
     "loading": "正在加载产品...",
     "loadFailed": "加载产品失败",
     "loadError": "加载产品失败",
-    "loadError": "加载产品失败",
     "emptyTitle": "暂无产品",
     "emptyDescription": "创建您的第一个产品以组织项目",
     "createFirst": "创建您的第一个产品",
@@ -8964,5 +8963,21 @@
       "retryStarted": "执行重试已开始",
       "cancelled": "执行已取消"
     }
+  },
+  "harnessState": {
+    "title": "执行器状态",
+    "runStatus": "运行状态",
+    "stepCursor": "步骤游标",
+    "budget": "实时预算",
+    "budgetOf": "/ ${limit}",
+    "lastCheckpoint": "最近检查点",
+    "step": "第 {step} 步",
+    "verifications": "验证",
+    "status_pending": "待处理",
+    "status_passed": "通过",
+    "status_failed": "失败",
+    "noState": "此次执行未记录执行器状态。",
+    "loading": "加载中…",
+    "error": "无法加载执行器状态。"
   }
 }
