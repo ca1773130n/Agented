@@ -37,10 +37,13 @@ Each tick, additionally:
    live in-memory buffer mid-run (verified Phase-1 behavior).
 2. `usage = BudgetService.extract_token_usage(partial_log, backend_type)` — the
    existing parser works on partial logs.
-3. Convert tokens → USD using `BudgetService`'s existing pricing path (the same
-   computation `record_usage` uses; the plan pins the exact function). This is a
-   **live estimate** — the authoritative `record_usage` at `finish_execution`
-   is untouched and remains the source of truth.
+3. Convert tokens → USD via a **new** estimator
+   `BudgetService.cost_from_usage(usage, backend_type)`: native
+   `total_cost_usd` when the extractor reports one (claude), else a
+   `MODEL_PRICING`-based estimate (codex reports tokens but cost 0.0 —
+   `record_usage` only persists extractor-provided cost, it computes nothing).
+   This is a **live estimate** — the authoritative `record_usage` at
+   `finish_execution` is untouched and remains the source of truth.
 4. `harness_state.update_budget_used(execution_id, cost)` — new small repo fn
    (direct UPDATE of `harness_runs.budget_used`; creates the run row if absent,
    mirroring `record_checkpoint`'s upsert semantics).
@@ -117,7 +120,7 @@ at `:125`), returning a composed snapshot:
   `execution.status === 'running'`; stops on terminal status / unmount.
 - Mounted in the **execution detail surface in `ExecutionHistory.vue`**
   (the plan pins the exact insertion point).
-- **API client**: extend the executions-domain object in `services/api.ts`
+- **API client**: extend `executionApi` in `services/api/triggers.ts` (the `services/api/` package; types in `services/api/types/`)
   (follow its per-domain pattern) with `getExecutionState(executionId)`.
 - **i18n**: new `harnessState.*` namespace added to **all four** catalogs
   (`en`, `ko`, `ja`, `zh`), key-identical.
@@ -166,5 +169,5 @@ new component test green; all four locale catalogs stay key-identical.
 `app_litestar/routes/executions.py` (`GET /state`).
 **Frontend new:** `src/components/executions/HarnessStatePanel.vue` + test.
 **Frontend modified:** `src/views/ExecutionHistory.vue` (mount point),
-`src/services/api.ts` (client fn), budget-limits form (one field),
+`src/services/api/` (triggers.ts client fn + budgets.ts/types), budget-limits form (one field),
 `src/locales/{en,ko,ja,zh}.json` (`harnessState.*` + the budget-field label).

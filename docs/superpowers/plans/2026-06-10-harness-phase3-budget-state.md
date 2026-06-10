@@ -46,8 +46,17 @@ def test_migration_151_registered():
 
 
 def test_fresh_schema_has_column():
-    with get_connection() as conn:
-        cols = {r["name"] for r in conn.execute("PRAGMA table_info(budget_limits)")}
+    """Call create_fresh_schema DIRECTLY — the isolated_db fixture runs all
+    migrations too, so checking the fixture DB would pass even if only the
+    migration (not the fresh DDL) added the column (false positive)."""
+    import sqlite3
+
+    from app.db.schema import create_fresh_schema
+
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    create_fresh_schema(conn)
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(budget_limits)")}
     assert "per_run_limit_usd" in cols
 
 
@@ -76,8 +85,11 @@ def test_set_and_get_round_trips_per_run_limit():
     assert get_budget_limit("trigger", "t-1")["per_run_limit_usd"] == 3.0
 
 
-def test_set_rejects_negative_per_run_limit():
+def test_set_rejects_nonpositive_per_run_limit():
+    """<= 0 is rejected: NULL is the only 'off' state, so the tick's
+    `if not limit` check is unambiguous (0.0 can never be stored)."""
     assert set_budget_limit("trigger", "t-2", per_run_limit_usd=-1.0) is False
+    assert set_budget_limit("trigger", "t-2", per_run_limit_usd=0.0) is False
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -120,10 +132,11 @@ In `backend/app/db/budgets.py` — four changes, mirroring how `max_monthly_runs
 
 1. Signature: add `per_run_limit_usd: Optional[float] = None,` after `max_monthly_runs`.
 2. The "at least one limit provided" guard (~:389): add `or per_run_limit_usd is not None`.
-3. Validation (next to the existing `hard < soft` check): 
+3. Validation (next to the existing `hard < soft` check) — reject `<= 0` so
+   NULL is the only "off" state and the monitor's `if not limit` is unambiguous:
 ```python
-    if per_run_limit_usd is not None and per_run_limit_usd < 0:
-        logger.warning("per_run_limit_usd must be non-negative")
+    if per_run_limit_usd is not None and per_run_limit_usd <= 0:
+        logger.warning("per_run_limit_usd must be positive")
         return False
 ```
 4. The INSERT: add `per_run_limit_usd` to the column list, a `?` to VALUES, `per_run_limit_usd = excluded.per_run_limit_usd,` to the UPSERT SET, and `per_run_limit_usd,` to the params tuple (keep tuple order matching the column order).
@@ -203,6 +216,15 @@ def test_update_budget_used_upserts_run_row():
     assert run["step_cursor"] == 0  # accounting must not advance the checkpoint cursor
 
 
+def test_update_budget_used_is_monotonic():
+    """Live cost only grows; a stale lower write (e.g. racing a checkpoint)
+    must not regress the recorded value."""
+    _make_execution()
+    harness_state.update_budget_used("exec-1", 0.25)
+    harness_state.update_budget_used("exec-1", 0.10)  # stale — ignored by MAX
+    assert harness_state.get_run("exec-1")["budget_used"] == pytest.approx(0.25)
+
+
 def test_count_checkpoints():
     _make_execution()
     assert harness_state.count_checkpoints("exec-1") == 0
@@ -247,14 +269,16 @@ In `backend/app/db/harness_state.py`:
 ```python
 def update_budget_used(execution_id: str, budget_used: float) -> None:
     """Live-accounting write (Harness-1 P6): upsert the run row's budget_used
-    WITHOUT advancing the checkpoint cursor."""
+    WITHOUT advancing the checkpoint cursor. MAX keeps the value monotonic —
+    a stale lower write (racing a concurrent checkpoint upsert) can't regress
+    the live total."""
     with get_connection() as conn:
         conn.execute(
             """
             INSERT INTO harness_runs (execution_id, status, step_cursor, budget_used, updated_at)
                 VALUES (?, 'running', 0, ?, datetime('now'))
             ON CONFLICT(execution_id) DO UPDATE SET
-                budget_used = excluded.budget_used,
+                budget_used = MAX(COALESCE(harness_runs.budget_used, 0), excluded.budget_used),
                 updated_at  = datetime('now')
             """,
             (execution_id, budget_used),
@@ -274,7 +298,7 @@ def count_checkpoints(execution_id: str) -> int:
 - [ ] **Step 5: Run test to verify it passes**
 
 Run: `cd backend && uv run pytest tests/test_cost_from_usage.py -q`
-Expected: PASS (5 passed). Also run `uv run pytest tests/test_harness_state_repo.py -q` (regression, 8 passed).
+Expected: PASS (6 passed). Also run `uv run pytest tests/test_harness_state_repo.py -q` (regression, 8 passed).
 
 - [ ] **Step 6: Commit**
 
@@ -410,7 +434,9 @@ def test_budget_monitor_invokes_tick():
     """Wiring: the polling loop calls the tick with the threaded backend_type."""
     _make_execution()
     process = MagicMock()
-    process.poll.side_effect = [None, 0, 0]  # one loop iteration, then exit
+    # Loop order is poll -> sleep -> poll-again -> tick, so one live tick
+    # needs TWO None polls before the terminal 0.
+    process.poll.side_effect = [None, None, 0]
     with (
         patch("app.services.execution_runner._per_run_budget_tick") as tick,
         patch.object(BudgetService, "check_budget", return_value={"allowed": True}),
@@ -448,7 +474,11 @@ def _per_run_budget_tick(
 
     claude/gemini emit usage only in their terminal JSON, so extraction
     returns None mid-run and this whole tick no-ops for them (documented
-    limitation); codex JSONL accumulates and works incrementally."""
+    limitation); codex JSONL accumulates and works incrementally.
+
+    Each tick re-parses the full buffered log (every 30s). Accepted for now:
+    cumulative cost on very long logs — revisit with a parsed-line offset in
+    tick_state if it shows up in profiles."""
     if not backend_type:
         return
     try:
@@ -467,7 +497,7 @@ def _per_run_budget_tick(
 
         limit_row = get_budget_limit(entity_type, entity_id) or {}
         limit = limit_row.get("per_run_limit_usd")
-        if not limit:
+        if not limit:  # NULL = off; set_budget_limit rejects <= 0, so 0.0 can't be stored
             return
 
         if cost >= limit:
@@ -628,7 +658,8 @@ def test_state_full_snapshot():
     set_budget_limit("trigger", "bot-pr-review", per_run_limit_usd=2.0)
 
     with _client() as client:
-        resp = client.get("/executions/exec-1/state")
+        # executions_router mounts at path="/admin" (executions.py ~:562)
+        resp = client.get("/admin/executions/exec-1/state")
     assert resp.status_code == 200
     body = resp.json()
     assert body["execution"]["status"] == "running"
@@ -645,7 +676,7 @@ def test_state_nulls_for_bare_execution():
     """Pre-Phase-1 rows (no run/checkpoints/verifications) must not 500."""
     _make_execution("exec-bare")
     with _client() as client:
-        resp = client.get("/executions/exec-bare/state")
+        resp = client.get("/admin/executions/exec-bare/state")
     assert resp.status_code == 200
     body = resp.json()
     assert body["run"] is None
@@ -657,7 +688,7 @@ def test_state_nulls_for_bare_execution():
 
 def test_state_404_for_unknown_execution():
     with _client() as client:
-        resp = client.get("/executions/nope/state")
+        resp = client.get("/admin/executions/nope/state")
     assert resp.status_code == 404
 ```
 
@@ -731,21 +762,28 @@ git commit -m "feat(harness): GET /executions/{id}/state snapshot endpoint (Phas
 ## Task 5: Vue `HarnessStatePanel` + api client + i18n + mount
 
 **Files:**
-- Modify: `frontend/src/services/api.ts` (add `getState` to `executionApi` + the snapshot type)
+- Modify: `frontend/src/services/api/types/triggers.ts` (add `ExecutionStateSnapshot`)
+- Modify: `frontend/src/services/api/triggers.ts` (add `getState` to `executionApi`, ~:237, using `apiFetch`)
+- Modify: `frontend/src/services/api/index.ts` (export the new type, following its existing re-export style)
 - Create: `frontend/src/components/executions/HarnessStatePanel.vue`
 - Create: `frontend/src/components/executions/__tests__/HarnessStatePanel.test.ts`
 - Modify: `frontend/src/views/ExecutionHistory.vue` (mount in the Log Viewer Modal, ~:420)
 - Modify: `frontend/src/locales/{en,ko,ja,zh}.json` (new `harnessState.*` namespace, key-identical)
 
+NOTE: `frontend/src/services/api` is a **directory** (barrel `index.ts` + per-domain
+modules + `types/`), NOT a single `api.ts` file — the root CLAUDE.md description is
+stale. `executionApi` lives in `services/api/triggers.ts` and its methods use the
+`apiFetch` helper from `services/api/client.ts`.
+
 - [ ] **Step 1: Study the conventions (read, don't guess)**
 
-1. Open `frontend/src/services/api.ts`, find `executionApi` (`grep -n "executionApi" frontend/src/services/api.ts`) and note the fetch helper its methods use — mirror it exactly for `getState`.
+1. Open `frontend/src/services/api/triggers.ts` ~:237, find `executionApi`, and note exactly how its existing methods call `apiFetch` and build their `/admin/executions/...` paths — mirror that for `getState`.
 2. Open `frontend/src/components/monitoring/__tests__/BudgetLimitForm.test.ts` and note the mount/i18n/mock setup — mirror it for the panel test.
 3. Open `frontend/src/views/ExecutionHistory.vue` ~:420-440 (the Log Viewer Modal) to choose the exact mount point (directly under the modal header block).
 
 - [ ] **Step 2: Add the api client method + type**
 
-In `frontend/src/services/api.ts`, next to the `Execution` type:
+In `frontend/src/services/api/types/triggers.ts`, next to the `Execution` type:
 
 ```typescript
 export interface ExecutionStateSnapshot {
@@ -777,15 +815,17 @@ export interface ExecutionStateSnapshot {
 }
 ```
 
-And inside `executionApi`, a method mirroring the sibling fetch style:
+And inside `executionApi` in `frontend/src/services/api/triggers.ts`, a method
+mirroring the sibling methods' `apiFetch` style (the backend route mounts under
+`/admin` — match the exact prefix the adjacent execution methods use):
 
 ```typescript
   getState: (executionId: string) =>
-    /* use the same fetch helper as the adjacent executionApi methods */
-    request<ExecutionStateSnapshot>(`/api/executions/${executionId}/state`),
+    apiFetch<ExecutionStateSnapshot>(`/admin/executions/${executionId}/state`),
 ```
 
-(`request<T>` here stands for whatever helper the adjacent methods actually use — mirror it verbatim, including the `/api` prefix convention you observe.)
+Then export `ExecutionStateSnapshot` from `frontend/src/services/api/index.ts`
+following its existing type re-export style.
 
 - [ ] **Step 3: Write the failing component test**
 
@@ -817,20 +857,28 @@ const SNAPSHOT = {
 };
 
 describe('HarnessStatePanel', () => {
+  let wrappers: Array<{ unmount: () => void }> = [];
+
   beforeEach(() => {
     vi.useFakeTimers();
     vi.mocked(executionApi.getState).mockResolvedValue(SNAPSHOT as never);
   });
   afterEach(() => {
+    // Unmount every wrapper so no poll interval leaks across tests
+    // (no global auto-unmount in this project's Vitest setup).
+    wrappers.forEach((w) => w.unmount());
+    wrappers = [];
     vi.useRealTimers();
     vi.clearAllMocks();
   });
 
   function mountPanel(status = 'running') {
-    return mount(HarnessStatePanel, {
+    const wrapper = mount(HarnessStatePanel, {
       props: { executionId: 'exec-1', executionStatus: status },
       // global: { plugins: [i18n] }  — per the BudgetLimitForm.test.ts convention
     });
+    wrappers.push(wrapper);
+    return wrapper;
   }
 
   it('renders run state, budget, and verifications', async () => {
@@ -1061,7 +1109,7 @@ Expected: full frontend suite PASS (no locale-parity or existing-test regression
 - [ ] **Step 8: Commit**
 
 ```bash
-git add frontend/src/components/executions/ frontend/src/services/api.ts frontend/src/views/ExecutionHistory.vue frontend/src/locales/
+git add frontend/src/components/executions/ frontend/src/services/api/ frontend/src/views/ExecutionHistory.vue frontend/src/locales/
 git commit -m "feat(harness): HarnessStatePanel + /state api client + i18n (Phase 3 P7)"
 ```
 
@@ -1072,8 +1120,9 @@ git commit -m "feat(harness): HarnessStatePanel + /state api client + i18n (Phas
 **Files:**
 - Modify: `frontend/src/components/monitoring/BudgetLimitForm.vue`
 - Modify: `frontend/src/components/monitoring/__tests__/BudgetLimitForm.test.ts`
-- Modify: `frontend/src/services/api.ts` (budget API payload type, if typed)
-- Modify: `backend/app_litestar/routes/budgets.py` (accept + pass the field)
+- Modify: `frontend/src/services/api/budgets.ts` (`budgetApi.setLimit` at ~:28 — accept the new field)
+- Modify: `frontend/src/services/api/types/budgets.ts` (`BudgetLimit` at ~:5 — add `per_run_limit_usd: number | null`)
+- Modify: `backend/app_litestar/routes/budgets.py` (`set_limit` handler at ~:67 — parse/validate/pass)
 - Modify: `frontend/src/locales/{en,ko,ja,zh}.json` (field label, in the form's existing namespace)
 - Test (backend): extend `backend/tests/test_migration_151_per_run_limit.py`
 
@@ -1081,8 +1130,8 @@ git commit -m "feat(harness): HarnessStatePanel + /state api client + i18n (Phas
 
 Trace how `soft_limit_usd` flows end-to-end and mirror it for `per_run_limit_usd`:
 1. `frontend/src/components/monitoring/BudgetLimitForm.vue` — form field + payload.
-2. The api method it calls in `frontend/src/services/api.ts`.
-3. The handler in `backend/app_litestar/routes/budgets.py` that reads the body and calls `set_budget_limit` (which already accepts `per_run_limit_usd` from Task 1).
+2. `budgetApi.setLimit()` in `frontend/src/services/api/budgets.ts` (~:28) and the `BudgetLimit` type in `frontend/src/services/api/types/budgets.ts` (~:5).
+3. The **`PUT /admin/budgets/limits`** handler (`set_limit`, `backend/app_litestar/routes/budgets.py` ~:67) — it reads the body and calls `set_budget_limit` (which already accepts `per_run_limit_usd` from Task 1).
 
 - [ ] **Step 2: Backend route — failing test first**
 
@@ -1094,27 +1143,33 @@ def test_budget_route_accepts_per_run_limit():
 
     from app.db.budgets import get_budget_limit
     from app_litestar.auth import provide_caller
-    from app_litestar.routes.budgets import budgets_router  # confirm exact router name via grep
+    from app_litestar.routes.budgets import budgets_router  # confirm exact symbol via grep
 
     with create_test_client(
         route_handlers=[budgets_router], dependencies={"caller": provide_caller}
     ) as client:
-        # Mirror the existing set-budget request shape found in Step 1
-        # (path + method + body of the handler that calls set_budget_limit),
-        # adding "per_run_limit_usd": 1.5 to the body.
-        resp = client.post(
-            "/admin/budgets/trigger/bot-pr-review",  # adjust to the real path
-            json={"per_run_limit_usd": 1.5},
+        resp = client.put(
+            "/admin/budgets/limits",
+            json={
+                "entity_type": "trigger",
+                "entity_id": "bot-pr-review",
+                "per_run_limit_usd": 1.5,
+            },
         )
     assert resp.status_code in (200, 201)
     assert get_budget_limit("trigger", "bot-pr-review")["per_run_limit_usd"] == 1.5
 ```
 
-(The router symbol, path, and body shape MUST be adjusted to what Step 1 found — the assertion on `get_budget_limit` is the invariant.) Run it, watch it fail (field ignored → limit is None), then extend the route handler's body model/param passing to include `per_run_limit_usd` and pass it to `set_budget_limit`. Re-run → PASS.
+Run it, watch it fail (the handler ignores the field → stored limit is None), then
+extend the `set_limit` handler (~:67): add `per_run_limit_usd` to its body
+model/param parsing, include it in the handler's "at least one limit provided"
+guard if it has one, and pass it through to `set_budget_limit`. Re-run → PASS.
 
-- [ ] **Step 3: Frontend form field**
+- [ ] **Step 3: Frontend api + form field**
 
-In `BudgetLimitForm.vue`, add a number input mirroring the `soft_limit_usd` field's exact markup/binding/validation pattern, bound to `per_run_limit_usd`, labeled with a new i18n key in the form's existing namespace (add to all four catalogs), and included in the submit payload exactly like `soft_limit_usd`.
+1. `frontend/src/services/api/types/budgets.ts` (~:5): add `per_run_limit_usd: number | null;` to `BudgetLimit`.
+2. `frontend/src/services/api/budgets.ts` (~:28): add `per_run_limit_usd?: number;` to `setLimit()`'s input shape and include it in the request body exactly like `soft_limit_usd`.
+3. In `BudgetLimitForm.vue`, add a number input mirroring the `soft_limit_usd` field's exact markup/binding/validation pattern, bound to `per_run_limit_usd`, labeled with a new i18n key in the form's existing namespace (add to all four catalogs), and included in the submit payload exactly like `soft_limit_usd`.
 
 - [ ] **Step 4: Extend the form's component test**
 
@@ -1126,7 +1181,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/components/monitoring/ backend/app_litestar/routes/budgets.py backend/tests/test_migration_151_per_run_limit.py frontend/src/locales/ frontend/src/services/api.ts
+git add frontend/src/components/monitoring/ backend/app_litestar/routes/budgets.py backend/tests/test_migration_151_per_run_limit.py frontend/src/locales/ frontend/src/services/api/
 git commit -m "feat(harness): per-run limit settable from budget form (Phase 3 P6)"
 ```
 
