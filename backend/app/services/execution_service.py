@@ -66,9 +66,7 @@ def _verification_pr_gate(execution_id: str) -> bool:
     since this must never block a healthy run on a gate-infra hiccup."""
     try:
         if verification_records.has_failed(execution_id):
-            logger.warning(
-                "Skipping auto-PR for %s: a verification claim failed", execution_id
-            )
+            logger.warning("Skipping auto-PR for %s: a verification claim failed", execution_id)
             return False
     except Exception as e:  # pragma: no cover - defensive
         logger.debug("verification gate check failed for %s: %s", execution_id, e)
