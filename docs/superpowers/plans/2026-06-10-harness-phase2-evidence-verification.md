@@ -983,10 +983,13 @@ Add the gated wrapper as a classmethod on `ExecutionService` (place it near the 
     def _maybe_auto_resolve_and_pr(cls, execution_id, trigger, github_repo_map, scan_output):
         """Run the auto-resolve+PR side-effect unless a verification claim
         failed (Harness-1 Phase 2, P5). The gate is advisory: with no records
-        it always proceeds."""
+        it always proceeds. Delegates to the existing ``_auto_resolve_and_pr``
+        wrapper (DRY) rather than re-calling the module function."""
         if _verification_pr_gate(execution_id):
-            auto_resolve_and_pr(trigger, github_repo_map, scan_output)
+            cls._auto_resolve_and_pr(trigger, github_repo_map, scan_output)
 ```
+
+(The call-site tests still pass: they patch `app.services.execution_service.auto_resolve_and_pr`, which `_auto_resolve_and_pr` calls internally, so `assert_called_once` / `assert_not_called` still observe the gated behavior.)
 
 At the call site (≈ line 672), replace the bare call with the gated classmethod:
 
