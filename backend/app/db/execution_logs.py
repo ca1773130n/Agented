@@ -354,6 +354,7 @@ def delete_old_execution_logs(days: int = 30) -> int:
             "DELETE FROM execution_logs WHERE started_at < datetime('now', ?)", (f"-{days} days",)
         )
         conn.commit()
+        return cursor.rowcount
 
 
 def set_redispatched_from(execution_id: str, origin_execution_id: str) -> bool:
@@ -386,4 +387,3 @@ def set_execution_session_id(execution_id: str, session_id: str) -> bool:
         )
         conn.commit()
         return cur.rowcount > 0
-        return cursor.rowcount
