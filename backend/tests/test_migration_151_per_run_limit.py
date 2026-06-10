@@ -79,3 +79,25 @@ def test_budget_route_accepts_per_run_limit():
         )
     assert resp.status_code in (200, 201)
     assert get_budget_limit("trigger", "bot-pr-review")["per_run_limit_usd"] == 1.5
+
+
+def test_budget_route_rejects_nonpositive_per_run_limit():
+    """Invalid per-run input is a CLIENT error (400), not a 500 mapped from
+    set_budget_limit's False return."""
+    from litestar.testing import create_test_client
+
+    from app_litestar.auth import provide_caller
+    from app_litestar.routes.budgets import budgets_router
+
+    with create_test_client(
+        route_handlers=[budgets_router], dependencies={"caller": provide_caller}
+    ) as client:
+        resp = client.put(
+            "/admin/budgets/limits",
+            json={
+                "entity_type": "trigger",
+                "entity_id": "bot-pr-review",
+                "per_run_limit_usd": 0,
+            },
+        )
+    assert resp.status_code == 400

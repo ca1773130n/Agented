@@ -33,7 +33,7 @@ def _usage(cost: float) -> dict:
     return {"input_tokens": 10, "output_tokens": 5, "total_cost_usd": cost}
 
 
-def _tick(execution_id: str, state: dict, cost: float) -> None:
+def _tick(execution_id: str, state: dict, cost: float, team_id: str | None = None) -> None:
     with patch.object(BudgetService, "extract_token_usage", return_value=_usage(cost)):
         _per_run_budget_tick(
             execution_id,
@@ -43,6 +43,7 @@ def _tick(execution_id: str, state: dict, cost: float) -> None:
             "codex",
             _fake_process(),
             state,
+            team_id=team_id,
         )
 
 
@@ -141,3 +142,64 @@ def test_budget_monitor_invokes_tick():
         )
     assert tick.call_count == 1
     assert tick.call_args[0][4] == "codex"  # backend_type positional
+
+
+def test_tick_records_usage_on_kill():
+    """The spend that triggers the kill must reach token_usage — run_trigger
+    only records on exit_code == 0, which a SIGKILLed run never hits."""
+    _make_execution()
+    set_budget_limit("trigger", "bot-pr-review", per_run_limit_usd=1.0)
+    state = {}
+    with (
+        patch("os.killpg") as killpg,
+        patch("os.getpgid", return_value=4242),
+        patch.object(BudgetService, "record_usage") as record,
+    ):
+        _tick("exec-1", state, 1.2)
+    killpg.assert_called_once()
+    record.assert_called_once()
+    assert record.call_args.kwargs["execution_id"] == "exec-1"
+    assert record.call_args.kwargs["usage_data"]["total_cost_usd"] == pytest.approx(1.2)
+
+
+def test_team_limit_alone_triggers_kill():
+    """A ('team', id) per-run limit must be enforced for team-dispatched runs
+    even when the agent/trigger entity row has no limit of its own."""
+    _make_execution()
+    set_budget_limit("team", "team-1", per_run_limit_usd=1.0)
+    state = {}
+    with (
+        patch("os.killpg") as killpg,
+        patch("os.getpgid", return_value=4242),
+        patch.object(BudgetService, "record_usage"),
+    ):
+        _tick("exec-1", state, 1.2, team_id="team-1")
+    killpg.assert_called_once()
+    assert state.get("killed") is True
+
+
+def test_team_limit_min_semantics():
+    """When both entity and team limits exist, the MIN is enforced."""
+    _make_execution()
+    set_budget_limit("trigger", "bot-pr-review", per_run_limit_usd=5.0)
+    set_budget_limit("team", "team-1", per_run_limit_usd=1.0)
+    state = {}
+    with (
+        patch("os.killpg") as killpg,
+        patch("os.getpgid", return_value=4242),
+        patch.object(BudgetService, "record_usage"),
+    ):
+        _tick("exec-1", state, 1.2, team_id="team-1")  # under 5.0, over 1.0
+    killpg.assert_called_once()
+    assert state.get("killed") is True
+
+
+def test_no_team_id_means_entity_limit_only():
+    """Without a team_id, a team row in the table is irrelevant."""
+    _make_execution()
+    set_budget_limit("team", "team-1", per_run_limit_usd=1.0)  # exists but not ours
+    state = {}
+    with patch("os.killpg") as killpg:
+        _tick("exec-1", state, 1.2)  # no entity limit, no team_id
+    killpg.assert_not_called()
+    assert not state.get("killed")
