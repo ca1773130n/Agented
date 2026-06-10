@@ -546,7 +546,7 @@ class TestRunTriggerSuccess:
             result = ExecutionService.run_trigger(trigger, "scan this")
 
         assert result == "exec-ok"
-        mock_budget.extract_token_usage.assert_called_once()
+        mock_budget.extract_token_usage.assert_called()  # called twice: _capture_session_id + record_usage
         mock_budget.record_usage.assert_called_once()
         call_kwargs = mock_budget.record_usage.call_args[1]
         assert call_kwargs["execution_id"] == "exec-ok"

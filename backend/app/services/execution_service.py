@@ -59,6 +59,21 @@ from .trigger_dispatcher import (
 logger = logging.getLogger(__name__)
 
 
+def _capture_session_id(execution_id: str, usage_data) -> None:
+    """Persist the harness-reported session id as a resume handle (Phase 4,
+    Unit B). Claude's terminal result JSON carries it; crashed/SIGKILLed runs
+    never print that JSON, so they have no handle — documented limitation.
+    Best-effort: never raises."""
+    try:
+        session_id = (usage_data or {}).get("session_id")
+        if session_id:
+            from ..db.execution_logs import set_execution_session_id
+
+            set_execution_session_id(execution_id, session_id)
+    except Exception as e:  # pragma: no cover - defensive
+        logger.debug("session_id capture failed for %s: %s", execution_id, e)
+
+
 def _verification_pr_gate(execution_id: str) -> bool:
     """Advisory post-hoc gate (Harness-1 Phase 2, P5): allow the downstream
     PR side-effect unless a verification claim is marked 'failed'. Returns
@@ -284,6 +299,7 @@ class ExecutionService:
         model: str = None,
         codex_settings: dict = None,
         allowed_tools: str = None,
+        resume_session_id: str = None,
     ) -> list:
         """Build the CLI command for the specified backend.
 
@@ -291,7 +307,7 @@ class ExecutionService:
         call sites (including test mocks) continue to resolve.
         """
         return CommandBuilder.build(
-            backend, prompt, allowed_paths, model, codex_settings, allowed_tools
+            backend, prompt, allowed_paths, model, codex_settings, allowed_tools, resume_session_id
         )
 
     @classmethod
@@ -668,6 +684,15 @@ class ExecutionService:
             tlog.info("%s exit code: %d", backend, exit_code)
             ExecutionLogService.append_log(
                 execution_id, "stderr", f"[EXIT] {backend} exit code: {exit_code}"
+            )
+
+            # Capture the harness session id for ANY terminal outcome (Phase 4):
+            # failed-but-cleanly-exited claude runs are the main resume audience.
+            _capture_session_id(
+                execution_id,
+                BudgetService.extract_token_usage(
+                    ExecutionLogService.get_stdout_log(execution_id), backend
+                ),
             )
 
             # Check if this execution was cancelled via the cancel endpoint
