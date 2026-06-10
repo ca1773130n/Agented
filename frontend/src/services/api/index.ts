@@ -169,6 +169,7 @@ export type {
 
   // Execution types
   Execution,
+  ExecutionStateSnapshot,
   LogLine,
   SSELogEvent,
   SSEStatusEvent,

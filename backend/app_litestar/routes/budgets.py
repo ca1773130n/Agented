@@ -35,9 +35,7 @@ def window_usage() -> dict[str, Any]:
 
 
 @get("/limits", sync_to_thread=False)
-def list_limits(
-    limit: Optional[int] = None, offset: Optional[int] = None
-) -> dict[str, Any]:
+def list_limits(limit: Optional[int] = None, offset: Optional[int] = None) -> dict[str, Any]:
     from app.db.budgets import count_all_budget_limits
 
     rows = get_all_budget_limits(limit=limit, offset=offset or 0)
@@ -73,35 +71,33 @@ def set_limit(data: dict) -> dict[str, Any]:
     if not entity_type or not entity_id:
         raise ClientException(detail="entity_type and entity_id are required")
     if entity_type not in ("agent", "team", "trigger"):
-        raise ClientException(
-            detail="entity_type must be 'agent', 'team', or 'trigger'"
-        )
+        raise ClientException(detail="entity_type must be 'agent', 'team', or 'trigger'")
     period = data.get("period", "monthly")
     if period not in ("daily", "weekly", "monthly"):
-        raise ClientException(
-            detail="period must be 'daily', 'weekly', or 'monthly'"
-        )
+        raise ClientException(detail="period must be 'daily', 'weekly', or 'monthly'")
     soft = data.get("soft_limit_usd")
     hard = data.get("hard_limit_usd")
-    if soft is None and hard is None:
+    per_run = data.get("per_run_limit_usd")
+    if soft is None and hard is None and per_run is None:
         raise ClientException(
-            detail="At least one of soft_limit_usd or hard_limit_usd must be set"
+            detail="At least one of soft_limit_usd, hard_limit_usd, or per_run_limit_usd must be set"
         )
     if soft is not None and hard is not None and hard < soft:
         raise ClientException(detail="hard_limit_usd must be >= soft_limit_usd")
+    if per_run is not None and per_run <= 0:
+        raise ClientException(detail="per_run_limit_usd must be positive")
     if not set_budget_limit(
         entity_type=entity_type,
         entity_id=entity_id,
         period=period,
         soft_limit_usd=soft,
         hard_limit_usd=hard,
+        per_run_limit_usd=per_run,
     ):
         raise HTTPException(status_code=500, detail="Failed to set budget limit")
     limit = get_budget_limit(entity_type, entity_id)
     result = dict(limit)
-    result["current_spend_usd"] = get_current_period_spend(
-        entity_type, entity_id, period
-    )
+    result["current_spend_usd"] = get_current_period_spend(entity_type, entity_id, period)
     return result
 
 
@@ -230,9 +226,7 @@ def collect_session_usage() -> dict[str, Any]:
     try:
         return {"collected": SessionUsageCollector.collect_all()}
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(
-            status_code=500, detail=f"Collection failed: {exc}"
-        ) from None
+        raise HTTPException(status_code=500, detail=f"Collection failed: {exc}") from None
 
 
 @get("/session-stats", sync_to_thread=False)
@@ -249,9 +243,7 @@ def history_stats(period: str = "weekly", months_back: int = 6) -> dict[str, Any
         raise ClientException(detail="period must be 'weekly' or 'monthly'")
     group_by = "week" if period == "weekly" else "month"
     end_date = datetime.now().strftime("%Y-%m-%d")
-    start_date = (datetime.now() - timedelta(days=months_back * 30)).strftime(
-        "%Y-%m-%d"
-    )
+    start_date = (datetime.now() - timedelta(days=months_back * 30)).strftime("%Y-%m-%d")
     usage = get_usage_aggregated_summary(
         group_by=group_by, start_date=start_date, end_date=end_date
     )

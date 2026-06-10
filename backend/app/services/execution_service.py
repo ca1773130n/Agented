@@ -303,10 +303,19 @@ class ExecutionService:
         entity_id: str,
         process: "subprocess.Popen",
         interval_seconds: int = 30,
+        backend_type: Optional[str] = None,
+        team_id: Optional[str] = None,
     ) -> None:
         """Periodically check budget during execution and kill process if hard limit exceeded."""
         return budget_monitor(
-            execution_id, trigger_id, entity_type, entity_id, process, interval_seconds
+            execution_id,
+            trigger_id,
+            entity_type,
+            entity_id,
+            process,
+            interval_seconds,
+            backend_type=backend_type,
+            team_id=team_id,
         )
 
     @classmethod
@@ -581,6 +590,7 @@ class ExecutionService:
             budget_monitor_thread = threading.Thread(
                 target=cls._budget_monitor,
                 args=(execution_id, trigger_id, entity_type, entity_id, process),
+                kwargs={"backend_type": backend, "team_id": trigger.get("_team_id")},
                 daemon=True,
             )
             budget_monitor_thread.start()

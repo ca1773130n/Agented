@@ -93,6 +93,34 @@ def list_checkpoints(execution_id: str) -> list[dict]:
     return [_checkpoint_to_dict(r) for r in rows]
 
 
+def update_budget_used(execution_id: str, budget_used: float) -> None:
+    """Live-accounting write (Harness-1 P6): upsert the run row's budget_used
+    WITHOUT advancing the checkpoint cursor. MAX keeps the value monotonic —
+    a stale lower write (racing a concurrent checkpoint upsert) can't regress
+    the live total."""
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO harness_runs (execution_id, status, step_cursor, budget_used, updated_at)
+                VALUES (?, 'running', 0, ?, datetime('now'))
+            ON CONFLICT(execution_id) DO UPDATE SET
+                budget_used = MAX(COALESCE(harness_runs.budget_used, 0), excluded.budget_used),
+                updated_at  = datetime('now')
+            """,
+            (execution_id, budget_used),
+        )
+        conn.commit()
+
+
+def count_checkpoints(execution_id: str) -> int:
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM harness_checkpoints WHERE execution_id = ?",
+            (execution_id,),
+        ).fetchone()
+    return int(row[0])
+
+
 def _checkpoint_to_dict(row) -> dict:
     d = dict(row)
     try:

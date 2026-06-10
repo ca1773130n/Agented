@@ -25,7 +25,7 @@ export const budgetApi = {
   getLimit: async (entityType: string, entityId: string): Promise<BudgetLimit> => {
     return apiFetch<BudgetLimit>(`/admin/budgets/limits/${entityType}/${entityId}`);
   },
-  setLimit: async (data: { entity_type: string; entity_id: string; period: string; soft_limit_usd?: number; hard_limit_usd?: number }): Promise<void> => {
+  setLimit: async (data: { entity_type: string; entity_id: string; period: string; soft_limit_usd?: number; hard_limit_usd?: number; per_run_limit_usd?: number }): Promise<void> => {
     await apiFetch<void>('/admin/budgets/limits', {
       method: 'PUT',
       body: JSON.stringify(data),

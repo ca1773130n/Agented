@@ -155,6 +155,34 @@ export interface Execution {
   stderr_log?: string;
 }
 
+export interface ExecutionStateSnapshot {
+  execution: {
+    execution_id: string;
+    status: string;
+    exit_code: number | null;
+    started_at: string | null;
+    finished_at: string | null;
+    duration_ms: number | null;
+    backend_type: string | null;
+  };
+  run: {
+    status: string;
+    step_cursor: number;
+    budget_used: number;
+    updated_at: string;
+  } | null;
+  latest_checkpoint: { step: number; created_at: string } | null;
+  checkpoint_count: number;
+  verifications: Array<{
+    id: number;
+    claim: string;
+    status: string;
+    evidence_ref: string | null;
+    checked_at: string | null;
+  }>;
+  per_run_limit_usd: number | null;
+}
+
 export interface LogLine {
   timestamp: string;
   stream: 'stdout' | 'stderr';

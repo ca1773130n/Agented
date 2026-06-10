@@ -9,6 +9,7 @@ export interface BudgetLimit {
   period: string;
   soft_limit_usd: number | null;
   hard_limit_usd: number | null;
+  per_run_limit_usd: number | null;
   current_spend_usd: number;
   created_at: string;
   updated_at: string;

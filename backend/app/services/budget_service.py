@@ -303,6 +303,39 @@ class BudgetService:
             "confidence": confidence,
         }
 
+    # Backend-family default model for live cost estimation when the
+    # extractor reports tokens but no cost (codex/opencode report cost 0.0).
+    _ESTIMATE_MODEL_FOR_BACKEND = {
+        "codex": "gpt-5.3-codex",
+        "opencode": "gpt-5.3-codex",
+    }
+
+    @classmethod
+    def cost_from_usage(cls, usage: Optional[dict], backend_type: str) -> float:
+        """USD cost of a usage dict (Harness-1 Phase 3 live accounting).
+
+        Uses the extractor's native ``total_cost_usd`` when present (claude
+        reports it); otherwise estimates via session_cost_service's canonical
+        pricing/_compute_cost, selecting the model family by backend (codex
+        reports tokens but cost 0.0 — it must NOT be priced at claude rates).
+        An ESTIMATE for live discipline — the authoritative record stays
+        ``record_usage`` at finish."""
+        if not usage:
+            return 0.0
+        native = usage.get("total_cost_usd") or 0.0
+        if native > 0:
+            return float(native)
+        from .session_cost_service import _compute_cost
+
+        model = cls._ESTIMATE_MODEL_FOR_BACKEND.get(backend_type, "claude-sonnet-4")
+        return _compute_cost(
+            usage.get("input_tokens", 0),
+            usage.get("output_tokens", 0),
+            usage.get("cache_read_tokens", 0),
+            usage.get("cache_creation_tokens", 0),
+            model,
+        )
+
     @classmethod
     def check_budget(cls, entity_type: str, entity_id: str) -> dict:
         """Pre-execution budget check.

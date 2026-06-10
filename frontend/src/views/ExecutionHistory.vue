@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import type { Execution, MergedChunkResults } from '../services/api';
 import { executionApi, triggerApi, ApiError, chunkApi } from '../services/api';
 import ExecutionLogViewer from '../components/triggers/ExecutionLogViewer.vue';
+import HarnessStatePanel from '../components/executions/HarnessStatePanel.vue';
 import ReplayComparison from '../components/triggers/ReplayComparison.vue';
 import PresenceIndicator from '../components/triggers/PresenceIndicator.vue';
 import ChunkResults from '../components/triggers/ChunkResults.vue';
@@ -432,6 +433,7 @@ onMounted(loadData);
             </svg>
           </button>
         </div>
+        <HarnessStatePanel :execution-id="selectedExecution.execution_id" />
         <ExecutionLogViewer
           :execution-id="selectedExecution.execution_id"
           :is-live="selectedExecution.status === 'running'"

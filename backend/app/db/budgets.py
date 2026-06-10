@@ -381,22 +381,28 @@ def set_budget_limit(
     hard_limit_usd: Optional[float] = None,
     max_execution_time_seconds: Optional[int] = None,
     max_monthly_runs: Optional[int] = None,
+    per_run_limit_usd: Optional[float] = None,
 ) -> bool:
     """Set or update a budget limit (upsert). Returns True on success.
 
     Validates: at least one limit must be set. If both USD set, hard >= soft.
+    per_run_limit_usd must be positive (NULL is the only 'off' state).
     """
     has_any = (
         soft_limit_usd is not None
         or hard_limit_usd is not None
         or max_execution_time_seconds is not None
         or max_monthly_runs is not None
+        or per_run_limit_usd is not None
     )
     if not has_any:
         return False
     if soft_limit_usd is not None and hard_limit_usd is not None:
         if hard_limit_usd < soft_limit_usd:
             return False
+    if per_run_limit_usd is not None and per_run_limit_usd <= 0:
+        logger.warning("per_run_limit_usd must be positive")
+        return False
 
     with get_connection() as conn:
         try:
@@ -404,14 +410,15 @@ def set_budget_limit(
                 """
                 INSERT INTO budget_limits
                     (entity_type, entity_id, period, soft_limit_usd, hard_limit_usd,
-                     max_execution_time_seconds, max_monthly_runs)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                     max_execution_time_seconds, max_monthly_runs, per_run_limit_usd)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(entity_type, entity_id) DO UPDATE SET
                     period = excluded.period,
                     soft_limit_usd = excluded.soft_limit_usd,
                     hard_limit_usd = excluded.hard_limit_usd,
                     max_execution_time_seconds = excluded.max_execution_time_seconds,
                     max_monthly_runs = excluded.max_monthly_runs,
+                    per_run_limit_usd = excluded.per_run_limit_usd,
                     updated_at = CURRENT_TIMESTAMP
             """,
                 (
@@ -422,6 +429,7 @@ def set_budget_limit(
                     hard_limit_usd,
                     max_execution_time_seconds,
                     max_monthly_runs,
+                    per_run_limit_usd,
                 ),
             )
             conn.commit()

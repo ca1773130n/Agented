@@ -65,6 +65,7 @@ def create_misc_tables(conn):
             hard_limit_usd REAL,
             max_execution_time_seconds INTEGER,
             max_monthly_runs INTEGER,
+            per_run_limit_usd REAL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(entity_type, entity_id)
