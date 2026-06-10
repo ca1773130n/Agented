@@ -354,4 +354,36 @@ def delete_old_execution_logs(days: int = 30) -> int:
             "DELETE FROM execution_logs WHERE started_at < datetime('now', ?)", (f"-{days} days",)
         )
         conn.commit()
+
+
+def set_redispatched_from(execution_id: str, origin_execution_id: str) -> bool:
+    """Provenance link: this execution is a re-dispatch of origin (Phase 4)."""
+    with get_connection() as conn:
+        cur = conn.execute(
+            "UPDATE execution_logs SET redispatched_from = ? WHERE execution_id = ?",
+            (origin_execution_id, execution_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
+
+def get_redispatch_child(origin_execution_id: str) -> Optional[dict]:
+    """The execution that re-dispatched origin, if any (no-fan-out guard)."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM execution_logs WHERE redispatched_from = ? LIMIT 1",
+            (origin_execution_id,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def set_execution_session_id(execution_id: str, session_id: str) -> bool:
+    """Persist the harness-reported session id (claude resume handle, Phase 4)."""
+    with get_connection() as conn:
+        cur = conn.execute(
+            "UPDATE execution_logs SET session_id = ? WHERE execution_id = ?",
+            (session_id, execution_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
         return cursor.rowcount

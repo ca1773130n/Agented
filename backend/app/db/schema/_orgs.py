@@ -276,6 +276,7 @@ def create_org_tables(conn):
             idle_timeout_seconds INTEGER DEFAULT 3600,
             max_lifetime_seconds INTEGER DEFAULT 14400,
             last_activity_at TIMESTAMP,
+            resumed_from TEXT,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
             FOREIGN KEY (phase_id) REFERENCES project_phases(id) ON DELETE SET NULL,
             FOREIGN KEY (plan_id) REFERENCES project_plans(id) ON DELETE SET NULL,
