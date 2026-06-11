@@ -220,7 +220,7 @@ Commit: `feat(arag): chat progress + backend citations + answer-groundedness car
 
 ## Task 6: Verification sweep
 
-1. Backend: `uv run pytest` on ALL new test files + regressions: `tests/test_execution_service.py tests/test_litestar_streams.py tests/test_harness_state_repo.py tests/test_goal_loop_reentry.py tests/test_redispatch_service.py` (full-suite substitution disclosed in PR — known serial hang).
+1. Backend — honor the repo's full-suite gate with a watchdog: FIRST attempt the full `cd backend && uv run pytest -q` in a background shell with a 12-minute watchdog loop; if it completes, that IS the gate. If it hangs (the documented ~40-46% serial hang — project memory; all four Harness-1 phases hit it), kill it and run the comprehensive targeted substitute: ALL new test files + regressions `tests/test_execution_service.py tests/test_litestar_streams.py tests/test_harness_state_repo.py tests/test_goal_loop_reentry.py tests/test_redispatch_service.py tests/test_execution_log_checkpoint.py tests/test_budget_monitor_per_run.py`. DISCLOSE in the PR which path ran and why — never present targeted runs as the full suite.
 2. `ruff format` + `ruff check` on every touched backend file — no new errors vs origin/main.
 3. Frontend: `npm run test:run` (baseline) + `just build`.
 4. Stage explicit files only (per-task Files lists), never `git add -A`.
