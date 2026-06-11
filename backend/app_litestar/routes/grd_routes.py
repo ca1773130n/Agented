@@ -1595,6 +1595,24 @@ def stop_grd_evolve_run(project_id: str, run_id: str) -> dict[str, Any]:
     return {"status": "stopped"}
 
 
+@post("/{project_id:str}/sessions/{session_id:str}/resume-loop", sync_to_thread=True)
+def resume_goal_loop_route(project_id: str, session_id: str) -> dict[str, Any]:
+    """Phase 4, Unit C — resume a failed goal-loop session by spawning a fresh
+    session seeded with persisted iteration knowledge.
+
+    404 when session not found; 409 when not eligible / already resumed.
+    """
+    del project_id
+    from app.services.goal_loop_runner import resume_goal_loop
+
+    result = resume_goal_loop(session_id)
+    if result.get("error") == "not_found":
+        raise NotFoundException(detail=f"Session {session_id} not found")
+    if "error" in result:
+        raise HTTPException(status_code=409, detail=result["error"])
+    return result
+
+
 grd_router = Router(
     path="/api/projects",
     route_handlers=[
@@ -1636,6 +1654,7 @@ grd_router = Router(
         session_messages,
         session_answer_question,
         session_answer_plan,
+        resume_goal_loop_route,
         session_permission_request,
         session_permission_decision,
         list_allowed_accounts_endpoint,

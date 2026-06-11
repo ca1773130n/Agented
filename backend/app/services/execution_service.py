@@ -59,6 +59,21 @@ from .trigger_dispatcher import (
 logger = logging.getLogger(__name__)
 
 
+def _capture_session_id(execution_id: str, usage_data) -> None:
+    """Persist the harness-reported session id as a resume handle (Phase 4,
+    Unit B). Claude's terminal result JSON carries it; crashed/SIGKILLed runs
+    never print that JSON, so they have no handle — documented limitation.
+    Best-effort: never raises."""
+    try:
+        session_id = (usage_data or {}).get("session_id")
+        if session_id:
+            from ..db.execution_logs import set_execution_session_id
+
+            set_execution_session_id(execution_id, session_id)
+    except Exception as e:  # pragma: no cover - defensive
+        logger.debug("session_id capture failed for %s: %s", execution_id, e)
+
+
 def _verification_pr_gate(execution_id: str) -> bool:
     """Advisory post-hoc gate (Harness-1 Phase 2, P5): allow the downstream
     PR side-effect unless a verification claim is marked 'failed'. Returns
@@ -124,6 +139,32 @@ class ExecutionState:
     PAUSE_TIMEOUT = "pause_timeout"
 
 
+def _build_account_env_overrides(account_id: int) -> Optional[dict]:
+    """Return env-var overrides for the given account id.
+
+    Looks up the account row from backend_accounts then delegates to
+    OrchestrationService._build_account_env (the canonical helper at ~:379).
+    Returns None if the account is not found.
+    """
+    from ..database import get_connection
+    from .orchestration_service import OrchestrationService
+
+    with get_connection() as conn:
+        # JOIN the backend row: _build_account_env branches on
+        # account['backend_type'] (CLAUDE_CONFIG_DIR vs GEMINI_CLI_HOME),
+        # which lives on ai_backends.type, not backend_accounts.
+        row = conn.execute(
+            "SELECT ba.*, ab.type AS backend_type "
+            "FROM backend_accounts ba "
+            "LEFT JOIN ai_backends ab ON ab.id = ba.backend_id "
+            "WHERE ba.id = ?",
+            (account_id,),
+        ).fetchone()
+    if not row:
+        return None
+    return OrchestrationService._build_account_env(dict(row))
+
+
 class ExecutionService:
     """Service for trigger execution and status tracking via database.
 
@@ -141,6 +182,11 @@ class ExecutionService:
     _pending_retries = ExecutionRetryManager._pending_retries
     _retry_timers = ExecutionRetryManager._retry_timers
     _retry_counts = ExecutionRetryManager._retry_counts
+
+    # Phase 4: in-flight redispatch origins (closes the async no-fan-out race;
+    # workers=1). The DB redispatched_from check covers restarts.
+    _redispatch_lock = threading.Lock()
+    _redispatch_in_flight: set = set()
 
     @classmethod
     def was_rate_limited(cls, execution_id: str) -> Optional[int]:
@@ -175,6 +221,140 @@ class ExecutionService:
     def restore_pending_retries(cls) -> int:
         """Re-schedule any pending retries persisted in the DB. Returns the count restored."""
         return ExecutionRetryManager.restore_pending_retries()
+
+    @classmethod
+    def redispatch_execution(cls, execution_id: str) -> dict:
+        """Re-run an interrupted/failed execution as a NEW execution using the
+        stored prompt (deterministic — no re-render). Claude runs that carry a
+        session_id resume with --resume + a continuation prompt; everything
+        else re-runs fresh (Phase 4, Unit A).
+
+        Returns {"execution_id": new_id} on success, or {"error": reason} on failure.
+        Errors: not_found, not_eligible, trigger_missing, already_redispatched.
+        """
+        from ..db.execution_logs import get_execution_log, get_redispatch_child
+        from ..db.triggers import get_trigger
+
+        original = get_execution_log(execution_id)
+        if not original:
+            return {"error": "not_found"}
+        if original.get("status") not in ("interrupted", "failed"):
+            return {"error": "not_eligible"}
+
+        # Deterministic replay: prefer the trigger as it was AT RUN TIME (the
+        # stored trigger_config_snapshot); fall back to the current DB trigger
+        # for legacy rows without a snapshot. Paths/cwd still resolve at
+        # re-dispatch time — documented semantics (spec Unit A).
+        trigger = None
+        snapshot = original.get("trigger_config_snapshot")
+        if snapshot:
+            try:
+                import json as _json
+
+                parsed = _json.loads(snapshot)
+                if isinstance(parsed, dict) and parsed.get("id"):
+                    trigger = parsed
+            except (TypeError, ValueError):
+                pass
+        if trigger is None and original.get("trigger_id"):
+            trigger = get_trigger(original["trigger_id"])
+        if not trigger:
+            return {"error": "trigger_missing"}
+
+        stored_prompt = original.get("prompt") or ""
+        resume_session_id = None
+        prompt_override = stored_prompt
+        if original.get("backend_type") == "claude" and original.get("session_id"):
+            resume_session_id = original["session_id"]
+            prompt_override = (
+                "You were interrupted while working on the task below. "
+                "Continue from where you left off.\n\n" + stored_prompt
+            )
+
+        # Identity: replay the original account so claude --resume runs against
+        # the SAME CLAUDE_CONFIG_DIR (a session id is unusable under another
+        # account's config dir) and usage attribution stays correct.
+        account_id = original.get("account_id")
+        env_overrides = None
+        if account_id:
+            env_overrides = _build_account_env_overrides(account_id)
+
+        # No-fan-out guard — claimed LAST, after every early-return above, so
+        # no path can leak the in-flight marker. The DB child row only appears
+        # once the background thread reaches start_execution, so the DB check
+        # alone is racy for rapid double-calls; the in-process set closes the
+        # window (workers=1 deployment model; the DB check covers restarts).
+        # NOTHING between this claim and thread.start() may return early.
+        with cls._redispatch_lock:
+            if execution_id in cls._redispatch_in_flight or get_redispatch_child(execution_id):
+                return {"error": "already_redispatched"}
+            cls._redispatch_in_flight.add(execution_id)
+
+        AuditLogService.log(
+            action="execution.redispatched",
+            entity_type="trigger",
+            entity_id=original.get("trigger_id") or "",
+            outcome="dispatched",
+            details={"origin_execution_id": execution_id, "resumed": bool(resume_session_id)},
+        )
+
+        # run_trigger BLOCKS until the subprocess exits, so dispatch in a
+        # background thread with a PREALLOCATED execution id and return
+        # immediately — mirror the manual-run pattern in trigger_service.py:~521.
+        from ..database import generate_execution_id
+
+        new_id = generate_execution_id(trigger.get("id") or "redispatch")
+
+        def _dispatch():
+            try:
+                cls.run_trigger(
+                    trigger,
+                    "",
+                    trigger_type=original.get("trigger_type") or "manual",
+                    account_id=account_id,
+                    env_overrides=env_overrides,
+                    execution_id=new_id,
+                    prompt_override=prompt_override,
+                    resume_session_id=resume_session_id,
+                    redispatched_from=execution_id,
+                )
+            finally:
+                # By now the child row exists (or the dispatch failed) — the
+                # DB-side guard takes over; release the in-flight marker.
+                with cls._redispatch_lock:
+                    cls._redispatch_in_flight.discard(execution_id)
+
+        threading.Thread(target=_dispatch, daemon=True).start()
+        return {"execution_id": new_id}
+
+    @classmethod
+    def auto_redispatch_interrupted(cls) -> int:
+        """Startup recovery (Phase 4): one re-dispatch attempt for interrupted
+        executions whose trigger opted in via auto_redispatch=1. Returns count."""
+        from ..db.connection import get_connection
+
+        with get_connection() as conn:
+            rows = conn.execute(
+                """SELECT e.execution_id FROM execution_logs e
+                   JOIN triggers t ON t.id = e.trigger_id
+                   WHERE e.status = 'interrupted'
+                     AND t.auto_redispatch = 1
+                     AND NOT EXISTS (
+                         SELECT 1 FROM execution_logs c
+                         WHERE c.redispatched_from = e.execution_id
+                     )"""
+            ).fetchall()
+        count = 0
+        for row in rows:
+            try:
+                result = cls.redispatch_execution(row["execution_id"])
+                if "execution_id" in result:
+                    count += 1
+            except Exception as e:  # pragma: no cover - defensive
+                logger.warning("auto-redispatch failed for %s: %s", row["execution_id"], e)
+        if count:
+            logger.info("Auto-redispatched %d interrupted execution(s)", count)
+        return count
 
     # ── Status / event persistence ────────────────────────────────────────────
 
@@ -284,6 +464,7 @@ class ExecutionService:
         model: str = None,
         codex_settings: dict = None,
         allowed_tools: str = None,
+        resume_session_id: str = None,
     ) -> list:
         """Build the CLI command for the specified backend.
 
@@ -291,7 +472,7 @@ class ExecutionService:
         call sites (including test mocks) continue to resolve.
         """
         return CommandBuilder.build(
-            backend, prompt, allowed_paths, model, codex_settings, allowed_tools
+            backend, prompt, allowed_paths, model, codex_settings, allowed_tools, resume_session_id
         )
 
     @classmethod
@@ -354,11 +535,17 @@ class ExecutionService:
         account_id: int = None,
         working_directory: str = None,
         execution_id: str = None,
+        prompt_override: str = None,
+        resume_session_id: str = None,
+        redispatched_from: str = None,
     ) -> Optional[str]:
         """Execute a trigger's prompt with real-time log streaming. Returns execution_id.
 
         ``execution_id`` may be pre-allocated by the caller (06 L1) so a
-        background runner is trackable before start_execution runs."""
+        background runner is trackable before start_execution runs.
+        ``prompt_override`` skips PromptRenderer and all post-render augmentations.
+        ``resume_session_id`` is forwarded to build_command for claude --resume.
+        ``redispatched_from`` is persisted as provenance after start_execution."""
         trigger_id = trigger["id"]
         preallocated_execution_id = execution_id
         execution_id = None
@@ -373,43 +560,52 @@ class ExecutionService:
 
             paths_str = ", ".join(effective_paths) if effective_paths else "no paths configured"
 
-            # Render prompt from template (delegated to PromptRenderer)
-            prompt = PromptRenderer.render(trigger, trigger_id, message_text, paths_str, event)
-            PromptRenderer.warn_unresolved(prompt, trigger.get("name", trigger_id), logger)
+            # Render prompt — override path uses the stored prompt verbatim and
+            # skips all post-render augmentations (diff injection, skill paths).
+            if prompt_override is not None:
+                prompt = prompt_override
+            else:
+                prompt = PromptRenderer.render(trigger, trigger_id, message_text, paths_str, event)
+                PromptRenderer.warn_unresolved(prompt, trigger.get("name", trigger_id), logger)
 
-            # EXE-02: Inject diff-aware context for github_pr trigger events
-            # Extracts focused diff context from PR to reduce token costs by 40-80%
-            if trigger_type in ("github_webhook", "github_pr") and event:
-                try:
-                    pr_diff_text = cls._fetch_pr_diff(event)
-                    if pr_diff_text:
-                        diff_context = DiffContextService.extract_pr_diff_context(pr_diff_text)
-                        if diff_context:
-                            prompt = f"{prompt}\n\n--- PR Diff Context ---\n{diff_context}"
-                            logger.info(
-                                "Injected diff-aware context (%d chars) into prompt for trigger '%s'",
-                                len(diff_context),
-                                trigger.get("name", trigger_id),
-                            )
-                except Exception as e:
-                    logger.warning(
-                        "Failed to inject diff context for trigger '%s': %s",
-                        trigger.get("name", trigger_id),
-                        e,
+                # EXE-02: Inject diff-aware context for github_pr trigger events
+                # Extracts focused diff context from PR to reduce token costs by 40-80%
+                if trigger_type in ("github_webhook", "github_pr") and event:
+                    try:
+                        pr_diff_text = cls._fetch_pr_diff(event)
+                        if pr_diff_text:
+                            diff_context = DiffContextService.extract_pr_diff_context(pr_diff_text)
+                            if diff_context:
+                                prompt = f"{prompt}\n\n--- PR Diff Context ---\n{diff_context}"
+                                logger.info(
+                                    "Injected diff-aware context (%d chars) into prompt for trigger '%s'",
+                                    len(diff_context),
+                                    trigger.get("name", trigger_id),
+                                )
+                    except Exception as e:
+                        logger.warning(
+                            "Failed to inject diff context for trigger '%s': %s",
+                            trigger.get("name", trigger_id),
+                            e,
+                        )
+
+                # For security audit skill, save message as threat report and prepend path
+                if "/weekly-security-audit" in prompt:
+                    threat_report_path = cls.save_threat_report(trigger_id, message_text)
+                    prompt = prompt.replace(
+                        "/weekly-security-audit", f"/weekly-security-audit {threat_report_path}"
                     )
-
-            # For security audit skill, save message as threat report and prepend path
-            if "/weekly-security-audit" in prompt:
-                threat_report_path = cls.save_threat_report(trigger_id, message_text)
-                prompt = prompt.replace(
-                    "/weekly-security-audit", f"/weekly-security-audit {threat_report_path}"
-                )
 
             backend = trigger["backend_type"]
             model = trigger.get("model")
             allowed_tools = trigger.get("allowed_tools")
             cmd = cls.build_command(
-                backend, prompt, effective_paths, model, allowed_tools=allowed_tools
+                backend,
+                prompt,
+                effective_paths,
+                model,
+                allowed_tools=allowed_tools,
+                resume_session_id=resume_session_id,
             )
 
             # Wrap with stdbuf to force line-buffered output for real-time streaming
@@ -437,6 +633,10 @@ class ExecutionService:
                 account_id=account_id,
                 execution_id=preallocated_execution_id,
             )
+            if redispatched_from:
+                from ..db.execution_logs import set_redispatched_from
+
+                set_redispatched_from(execution_id, redispatched_from)
             # Trace logger — prefixes all subsequent log lines with the execution ID
             # so that trigger receipt -> subprocess output -> completion can be correlated.
             tlog = _trace_logger(execution_id)
@@ -668,6 +868,15 @@ class ExecutionService:
             tlog.info("%s exit code: %d", backend, exit_code)
             ExecutionLogService.append_log(
                 execution_id, "stderr", f"[EXIT] {backend} exit code: {exit_code}"
+            )
+
+            # Capture the harness session id for ANY terminal outcome (Phase 4):
+            # failed-but-cleanly-exited claude runs are the main resume audience.
+            _capture_session_id(
+                execution_id,
+                BudgetService.extract_token_usage(
+                    ExecutionLogService.get_stdout_log(execution_id), backend
+                ),
             )
 
             # Check if this execution was cancelled via the cancel endpoint

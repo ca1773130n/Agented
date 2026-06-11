@@ -198,7 +198,13 @@ def _continue_prompt(
     return f"{base}{_OUROBOROS_HYPOTHESIS_BLOCK}{result_block}"
 
 
-def _initial_prompt(goal: str, *, ouroboros: bool = True, result_block: str = "") -> str:
+def _initial_prompt(
+    goal: str,
+    *,
+    ouroboros: bool = True,
+    result_block: str = "",
+    resume_context: Optional[str] = None,
+) -> str:
     """First user message that kicks off the goal-loop session.
 
     v0.7.87 — ``ouroboros`` defaults to ``True``. When enabled,
@@ -206,12 +212,19 @@ def _initial_prompt(goal: str, *, ouroboros: bool = True, result_block: str = ""
 
     v0.7.88 — ``result_block`` appends the ``__RESULT__`` reporting
     instruction when the kernel is active (non-empty string).
+
+    Phase 4 — ``resume_context`` prepends accumulated history when
+    resuming a previously failed session.
     """
     if not ouroboros:
-        return (
+        prompt = (
             f"Goal: {goal}\n\nStart working toward the goal. Make progress this turn.{result_block}"
         )
-    return f"Goal: {goal}\n\nStart working toward the goal. {_OUROBOROS_HYPOTHESIS_BLOCK}{result_block}"
+    else:
+        prompt = f"Goal: {goal}\n\nStart working toward the goal. {_OUROBOROS_HYPOTHESIS_BLOCK}{result_block}"
+    if resume_context:
+        prompt = f"{resume_context}\n\n{prompt}"
+    return prompt
 
 
 @dataclass
@@ -344,7 +357,13 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
         # respond to until something hits its stdin. The reply
         # will trigger the first ``turn_done`` and the normal
         # judge-then-continue loop takes over from there.
-        _send_initial(session_id, goal, ouroboros=ouroboros, result_block=result_block)
+        _send_initial(
+            session_id,
+            goal,
+            ouroboros=ouroboros,
+            result_block=result_block,
+            resume_context=(state.config or {}).get("resume_context"),
+        )
         while not state.stop_event.is_set():
             if time.time() - state.started_at > max_wall_seconds:
                 _broadcast_end(
@@ -587,16 +606,27 @@ def _send_continue(
 
 
 def _send_initial(
-    session_id: str, goal: str, *, ouroboros: bool = True, result_block: str = ""
+    session_id: str,
+    goal: str,
+    *,
+    ouroboros: bool = True,
+    result_block: str = "",
+    resume_context: Optional[str] = None,
 ) -> None:
     """Write the initial kickoff prompt to claude's stdin.
 
     Called once per goal-loop session before the polling loop
     begins so claude has something to respond to and the first
     ``turn_done`` actually arrives.
+
+    Phase 4 — ``resume_context`` is forwarded to ``_initial_prompt``
+    so re-entry sessions are seeded with prior iteration knowledge.
     """
     _send_user_text(
-        session_id, _initial_prompt(goal, ouroboros=ouroboros, result_block=result_block)
+        session_id,
+        _initial_prompt(
+            goal, ouroboros=ouroboros, result_block=result_block, resume_context=resume_context
+        ),
     )
 
 
@@ -689,3 +719,165 @@ def _broadcast_end(session_id: str, *, reason: str, detail: str) -> None:
 def _cleanup(session_id: str) -> None:
     with _runners_lock:
         _runners.pop(session_id, None)
+
+
+# ---------------------------------------------------------------------------
+# Phase 4, Unit C — goal-loop re-entry from persisted iteration knowledge
+# ---------------------------------------------------------------------------
+
+# In-flight resume origins: closes the concurrent no-fan-out race (workers=1).
+# The DB resumed_from check covers restarts.
+_resume_lock = threading.Lock()
+_resume_in_flight: set = set()
+
+
+def _build_resume_context(session_id: str) -> str:
+    """Re-entry context block from durable history: iteration count, verdicts,
+    known dead ends. The fresh loop continues from accumulated knowledge —
+    a dead PTY cannot be reattached or replayed (Phase 4, Unit C)."""
+    from ..db.connection import get_connection
+
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT iteration, verdict, judge_reason FROM goal_loop_iterations "
+            "WHERE session_id = ? ORDER BY iteration ASC",
+            (session_id,),
+        ).fetchall()
+    last_iter = rows[-1]["iteration"] if rows else 0
+    verdict_lines = [
+        f"- iteration {r['iteration']}: {r['verdict'] or 'unknown'}"
+        f"{(' — ' + r['judge_reason']) if r['judge_reason'] else ''}"
+        for r in rows
+    ]
+    dead_ends = _dead_ends_context(session_id)
+    parts = [
+        f"RESUMING after interruption at iteration {last_iter}.",
+        "Prior iteration verdicts:" if verdict_lines else "",
+        *verdict_lines,
+        dead_ends or "",
+    ]
+    return "\n".join(p for p in parts if p)
+
+
+def _spawn_resumed_session(origin_session_id: str, goal_config: dict, origin_session: dict) -> str:
+    """Create and start a fresh goal-loop session seeded with the origin's config.
+
+    Mirrors GoalLoopSessionHandler.start()'s spawn recipe. Module-level so tests
+    can patch it. cwd: use origin row's worktree_path when set, else resolve via
+    ProjectWorkspaceService (Phase 4, Unit C).
+    """
+    from ..db.connection import get_connection
+    from ..db.goal_loop import set_goal_loop_config
+    from .project_workspace_service import ProjectWorkspaceService
+
+    # cwd derivation: prefer the worktree the origin ran in, fall back to project workspace
+    cwd: Optional[str] = origin_session.get("worktree_path") or None
+    if not cwd:
+        try:
+            cwd = ProjectWorkspaceService.resolve_working_directory(origin_session["project_id"])
+        except Exception:
+            cwd = None
+
+    # Build a minimal cmd for the fresh session — use the same pattern as
+    # GoalLoopSessionHandler (claude with stream-json, no PTY).
+    cmd = [
+        "claude",
+        "--output-format",
+        "stream-json",
+        "--input-format",
+        "stream-json",
+        "-p",
+        "--verbose",
+    ]
+
+    new_session_id = ProjectSessionManager.create_session(
+        project_id=origin_session["project_id"],
+        cmd=cmd,
+        cwd=cwd or ".",
+        phase_id=origin_session.get("phase_id"),
+        plan_id=origin_session.get("plan_id"),
+        agent_id=origin_session.get("agent_id"),
+        worktree_path=origin_session.get("worktree_path"),
+        execution_type="goal_loop",
+        execution_mode=origin_session.get("execution_mode") or "autonomous",
+        stream_json=True,
+        use_pty=False,
+        # Preserve the origin's yolo mode: a non-yolo respawn would activate
+        # the permission-hook overlay and block the unattended loop. The
+        # original handler expresses yolo solely via this flag — mirror it.
+        yolo_mode=bool(origin_session.get("yolo_mode")),
+    )
+
+    # Persist resumed_from provenance (direct UPDATE — not in update_project_session allowlist)
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE project_sessions SET resumed_from = ? WHERE id = ?",
+            (origin_session_id, new_session_id),
+        )
+        conn.commit()
+
+    set_goal_loop_config(new_session_id, goal_config)
+    start_runner(new_session_id, goal_config, cwd=cwd)
+
+    # Audit
+    try:
+        from .audit_log_service import AuditLogService
+
+        AuditLogService.log(
+            action="session.loop_resumed",
+            entity_type="project_session",
+            entity_id=new_session_id,
+            outcome="spawned",
+            details={"origin_session_id": origin_session_id},
+        )
+    except Exception:
+        logger.debug("goal_loop resume audit failed for %s", new_session_id, exc_info=True)
+
+    return new_session_id
+
+
+def resume_goal_loop(session_id: str) -> dict:
+    """Resume a dead goal-loop session by spawning a FRESH session seeded with
+    the persisted goal config + accumulated knowledge. Eligible: execution_type
+    goal_loop ONLY (ralph_loop persists no resumable state), status 'failed',
+    no prior resume child."""
+    from ..db.connection import get_connection
+    from ..db.goal_loop import get_goal_loop_config
+
+    with get_connection() as conn:
+        row = conn.execute("SELECT * FROM project_sessions WHERE id = ?", (session_id,)).fetchone()
+        if not row:
+            return {"error": "not_found"}
+        session = dict(row)
+        child = conn.execute(
+            "SELECT id FROM project_sessions WHERE resumed_from = ? LIMIT 1", (session_id,)
+        ).fetchone()
+
+    # goal_loop ONLY: ralph_loop persists no goal-loop config/iterations to
+    # re-enter from (its ralph_config is start-only) — excluded this phase.
+    if session.get("execution_type") != "goal_loop":
+        return {"error": "not_eligible"}
+    if session.get("status") != "failed":
+        return {"error": "not_eligible"}
+    if child:
+        return {"error": "already_resumed"}
+
+    config = get_goal_loop_config(session_id)
+    if not config or not config.get("goal"):
+        return {"error": "config_missing"}
+    config["resume_context"] = _build_resume_context(session_id)
+
+    # No-fan-out guard, claimed LAST (after every early return): create_session
+    # starts the subprocess before resumed_from persists, so the DB child check
+    # alone is racy for concurrent calls. Spawn is synchronous here — release
+    # in finally, after which the DB provenance covers restarts. workers=1.
+    with _resume_lock:
+        if session_id in _resume_in_flight:
+            return {"error": "already_resumed"}
+        _resume_in_flight.add(session_id)
+    try:
+        new_session_id = _spawn_resumed_session(session_id, config, session)
+    finally:
+        with _resume_lock:
+            _resume_in_flight.discard(session_id)
+    return {"session_id": new_session_id, "resumed_from": session_id}

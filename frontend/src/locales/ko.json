@@ -2659,6 +2659,8 @@
       "promptHint": "프로젝트 경로에는 {'{'}paths{'}'}, 원본 메시지에는 {'{'}message{'}'} 를 사용하세요",
       "autoResolve": "자동 해결 및 PR",
       "autoResolveDesc": "보안 이슈를 자동으로 해결하고 GitHub 저장소에 풀 리퀘스트를 생성합니다",
+      "autoRedispatch": "중단된 실행 자동 재디스패치",
+      "autoRedispatchDesc": "시작 시 중단된 실행을 자동으로 재디스패치합니다",
       "executionMode": "실행 모드",
       "executionModeDirect": "직접 (오케스트레이션)",
       "executionModeTeam": "팀 위임",
@@ -2711,6 +2713,9 @@
       "autoResolveEnabled": "자동 해결이 활성화되었습니다",
       "autoResolveDisabled": "자동 해결이 비활성화되었습니다",
       "autoResolveFailed": "자동 해결을 업데이트하지 못했습니다",
+      "autoRedispatchEnabled": "자동 재디스패치가 활성화되었습니다",
+      "autoRedispatchDisabled": "자동 재디스패치가 비활성화되었습니다",
+      "autoRedispatchFailed": "자동 재디스패치를 업데이트하지 못했습니다",
       "pathAdded": "경로가 추가되었습니다",
       "pathAddFailed": "경로를 추가하지 못했습니다",
       "githubRepoAdded": "GitHub 저장소가 추가되었습니다",
@@ -8956,6 +8961,7 @@
       "viewLogs": "로그 보기",
       "cancel": "실행 취소",
       "retry": "실행 재시도",
+      "redispatch": "재디스패치",
       "replay": "재실행 및 비교",
       "chunkResults": "청크 결과",
       "branches": "브랜치"
@@ -8963,11 +8969,13 @@
     "errors": {
       "load": "실행 기록을 불러오지 못했습니다",
       "retry": "실행을 재시도하지 못했습니다",
-      "cancel": "실행을 취소하지 못했습니다"
+      "cancel": "실행을 취소하지 못했습니다",
+      "redispatch": "재디스패치에 실패했습니다"
     },
     "toast": {
       "retryStarted": "실행 재시도가 시작되었습니다",
-      "cancelled": "실행이 취소되었습니다"
+      "cancelled": "실행이 취소되었습니다",
+      "redispatched": "실행이 재디스패치되었습니다"
     }
   },
   "harnessState": {

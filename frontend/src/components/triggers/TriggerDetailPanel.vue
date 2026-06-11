@@ -174,6 +174,23 @@ async function toggleAutoResolve() {
   }
 }
 
+async function toggleAutoRedispatch() {
+  const newValue = (props.selectedTrigger.auto_redispatch ?? 0) !== 1 ? 1 : 0;
+  try {
+    await triggerApi.update(props.selectedTrigger.id, { auto_redispatch: newValue });
+    showToast(
+      newValue === 1
+        ? t('triggerDetailPanel.toast.autoRedispatchEnabled')
+        : t('triggerDetailPanel.toast.autoRedispatchDisabled'),
+      'success',
+    );
+    emit('saved');
+  } catch (err) {
+    const message = err instanceof ApiError ? err.message : t('triggerDetailPanel.toast.autoRedispatchFailed');
+    showToast(message, 'error');
+  }
+}
+
 async function addPath() {
   const path = newPathInput.value.trim();
   if (!path) return;
@@ -390,6 +407,14 @@ async function deleteTriggerBudget() {
         <label class="auto-resolve-toggle">
           <input type="checkbox" :checked="selectedTrigger.auto_resolve === 1" @change="toggleAutoResolve" />
           <span class="toggle-desc">{{ t('triggerDetailPanel.fields.autoResolveDesc') }}</span>
+        </label>
+      </div>
+
+      <div class="form-group auto-resolve-group">
+        <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> {{ t('triggerDetailPanel.fields.autoRedispatch') }}</label>
+        <label class="auto-resolve-toggle">
+          <input type="checkbox" :checked="(selectedTrigger.auto_redispatch ?? 0) === 1" @change="toggleAutoRedispatch" />
+          <span class="toggle-desc">{{ t('triggerDetailPanel.fields.autoRedispatchDesc') }}</span>
         </label>
       </div>
 

@@ -371,6 +371,20 @@ def cancel_execution_graceful(execution_id: str) -> dict[str, Any]:
     return {"message": "Cancellation signal sent"}
 
 
+@post("/executions/{execution_id:str}/redispatch", sync_to_thread=True)
+def redispatch_execution(execution_id: str) -> dict[str, Any]:
+    """Re-run an interrupted/failed execution (Phase 4). 404 unknown, 409 not
+    eligible / already re-dispatched."""
+    from app.services.execution_service import ExecutionService
+
+    result = ExecutionService.redispatch_execution(execution_id)
+    if result.get("error") == "not_found":
+        raise NotFoundException(detail=f"Execution {execution_id} not found")
+    if "error" in result:
+        raise HTTPException(status_code=409, detail=result["error"])
+    return result
+
+
 @get("/triggers/{trigger_id:str}/executions/running", sync_to_thread=False)
 def get_running_for_trigger(trigger_id: str) -> dict[str, Any]:
     if not get_trigger(trigger_id):
@@ -613,6 +627,7 @@ executions_router = Router(
         get_execution_diff,
         cancel_execution,
         cancel_execution_graceful,
+        redispatch_execution,
         get_running_for_trigger,
         pause_execution,
         resume_execution,

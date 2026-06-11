@@ -18,6 +18,7 @@ def create_core_tables(conn):
             is_predefined INTEGER DEFAULT 0,
             enabled INTEGER DEFAULT 1,
             auto_resolve INTEGER DEFAULT 0,
+            auto_redispatch INTEGER DEFAULT 0,
             schedule_type TEXT,
             schedule_time TEXT,
             schedule_day INTEGER,
@@ -80,6 +81,7 @@ def create_core_tables(conn):
             total_cost_usd REAL,
             source_type TEXT DEFAULT 'bot',
             session_id TEXT,
+            redispatched_from TEXT,
             FOREIGN KEY (trigger_id) REFERENCES triggers(id) ON DELETE CASCADE
         )
     """)

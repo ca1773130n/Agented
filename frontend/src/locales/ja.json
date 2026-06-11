@@ -2659,6 +2659,8 @@
       "promptHint": "プロジェクトパスには {'{'}paths{'}'}、元のメッセージには {'{'}message{'}'} を使用してください",
       "autoResolve": "自動解決と PR",
       "autoResolveDesc": "セキュリティの問題を自動的に解決し、GitHub リポジトリにプルリクエストを作成します",
+      "autoRedispatch": "中断された実行の自動再ディスパッチ",
+      "autoRedispatchDesc": "起動時に中断された実行を自動的に再ディスパッチします",
       "executionMode": "実行モード",
       "executionModeDirect": "直接 (オーケストレーション)",
       "executionModeTeam": "チーム委任",
@@ -2711,6 +2713,9 @@
       "autoResolveEnabled": "自動解決を有効にしました",
       "autoResolveDisabled": "自動解決を無効にしました",
       "autoResolveFailed": "自動解決の更新に失敗しました",
+      "autoRedispatchEnabled": "自動再ディスパッチを有効にしました",
+      "autoRedispatchDisabled": "自動再ディスパッチを無効にしました",
+      "autoRedispatchFailed": "自動再ディスパッチの更新に失敗しました",
       "pathAdded": "パスを追加しました",
       "pathAddFailed": "パスの追加に失敗しました",
       "githubRepoAdded": "GitHub リポジトリを追加しました",
@@ -8956,6 +8961,7 @@
       "viewLogs": "ログを表示",
       "cancel": "実行をキャンセル",
       "retry": "実行を再試行",
+      "redispatch": "再ディスパッチ",
       "replay": "再実行して比較",
       "chunkResults": "チャンク結果",
       "branches": "ブランチ"
@@ -8963,11 +8969,13 @@
     "errors": {
       "load": "実行履歴の読み込みに失敗しました",
       "retry": "実行の再試行に失敗しました",
-      "cancel": "実行のキャンセルに失敗しました"
+      "cancel": "実行のキャンセルに失敗しました",
+      "redispatch": "再ディスパッチに失敗しました"
     },
     "toast": {
       "retryStarted": "実行の再試行を開始しました",
-      "cancelled": "実行をキャンセルしました"
+      "cancelled": "実行をキャンセルしました",
+      "redispatched": "実行を再ディスパッチしました"
     }
   },
   "harnessState": {

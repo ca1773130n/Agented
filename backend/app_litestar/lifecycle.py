@@ -363,6 +363,14 @@ def _register_cleanup_handlers() -> None:
         logger.error("Pending retry restore failed on startup: %s", exc, exc_info=True)
         _startup_warnings.append(f"pending_retry_restore: {exc}")
 
+    try:
+        from app.services.execution_service import ExecutionService
+
+        ExecutionService.auto_redispatch_interrupted()
+    except Exception as exc:
+        logger.error("Auto-redispatch on startup failed: %s", exc, exc_info=True)
+        _startup_warnings.append(f"auto_redispatch: {exc}")
+
     from app.services.agent_message_bus_service import AgentMessageBusService
     from app.services.execution_queue_service import ExecutionQueueService
 

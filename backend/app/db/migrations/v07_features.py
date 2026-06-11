@@ -1063,6 +1063,20 @@ def _migrate_151_per_run_budget_limit(conn):
         conn.execute("ALTER TABLE budget_limits ADD COLUMN per_run_limit_usd REAL")
 
 
+def _migrate_152_resume_recovery(conn):
+    """Harness-1 Phase 4: redispatch/resume provenance + per-trigger
+    auto-recovery flag. PRAGMA-guarded ALTERs — idempotent."""
+    el = {r["name"] for r in conn.execute("PRAGMA table_info(execution_logs)")}
+    if "redispatched_from" not in el:
+        conn.execute("ALTER TABLE execution_logs ADD COLUMN redispatched_from TEXT")
+    tr = {r["name"] for r in conn.execute("PRAGMA table_info(triggers)")}
+    if "auto_redispatch" not in tr:
+        conn.execute("ALTER TABLE triggers ADD COLUMN auto_redispatch INTEGER DEFAULT 0")
+    ps = {r["name"] for r in conn.execute("PRAGMA table_info(project_sessions)")}
+    if "resumed_from" not in ps:
+        conn.execute("ALTER TABLE project_sessions ADD COLUMN resumed_from TEXT")
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -1164,4 +1178,6 @@ V07_MIGRATIONS: list = [
     (150, "verification_records", _migrate_150_verification_records),
     # Harness-1 Phase 3: per-run budget ceiling (soft warn 80% / hard kill 100%).
     (151, "per_run_budget_limit", _migrate_151_per_run_budget_limit),
+    # Harness-1 Phase 4: restart recovery + resume provenance.
+    (152, "resume_recovery", _migrate_152_resume_recovery),
 ]

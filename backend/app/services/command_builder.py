@@ -8,6 +8,7 @@ Reference: Fowler "Refactoring" (2018) Extract Class pattern.
 """
 
 import logging
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ class CommandBuilder:
         model: str = None,
         codex_settings: dict = None,
         allowed_tools: str = None,
+        resume_session_id: Optional[str] = None,
     ) -> list:
         """Build the CLI command for the specified backend.
 
@@ -78,4 +80,6 @@ class CommandBuilder:
             if allowed_paths:
                 for path in allowed_paths:
                     cmd.extend(["--add-dir", path])
+            if resume_session_id:
+                cmd.extend(["--resume", resume_session_id])
             return cmd
