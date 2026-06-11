@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS answer_eval_runs (
     baseline_groundedness REAL, baseline_sufficiency REAL, baseline_quality REAL,
     pipeline_groundedness REAL, pipeline_sufficiency REAL, pipeline_quality REAL,
     delta_groundedness REAL, delta_sufficiency REAL, delta_quality REAL,
-    status TEXT NOT NULL DEFAULT 'running',
+    status TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running','complete','failed')),
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     finished_at TEXT
 );
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS answer_eval_results (
 ```
 
 Accessors:
-- `extracted_facts.py`: `insert_facts(session_id, *, super_agent_id, project_id, facts: list[dict]) -> int` (each fact `{claim, evidence: list, confidence}`; `dedup_hash = sha256(f"{project_id or ''}|{claim}")`; `INSERT OR IGNORE`; returns inserted count), `list_for_session(session_id)`, `list_for_project(project_id, limit=50)`, `count_for_project(project_id)` — `evidence_json` deserialized to `evidence` (mirror `_row_to_dict` in `harness_takeaways.py:154`).
+- `extracted_facts.py`: `insert_facts(session_id, *, super_agent_id, project_id, facts: list[dict]) -> int` (each fact `{claim, evidence: list, confidence}`; `dedup_hash = sha256(f"{project_id or ''}|{session_id}|{claim}")` — session-scoped so a later session re-asserting the same claim still records it and `list_for_session` stays correct (cross-session dedup intentionally NOT attempted); `INSERT OR IGNORE`; returns inserted count), `list_for_session(session_id)`, `list_for_project(project_id, limit=50)`, `count_for_project(project_id)` — `evidence_json` deserialized to `evidence` (mirror `_row_to_dict` in `harness_takeaways.py:154`).
 - `answer_eval.py`: `create_run(project_id, judge_backend) -> int`, `record_result(run_id, question, arm, answer_text, scores: dict, judge_reason, tokens, cost_usd) -> int`, `finalize_run(run_id, aggregates: dict) -> bool` (sets per-arm means + deltas + status='complete' + finished_at), `get_run(run_id)`, `list_runs(project_id=None, limit=20)`, `list_results(run_id)`.
 
 Registration: `_migrate_153_extracted_facts` + `_migrate_154_answer_eval` (import+call schema fns) appended to `V07_MIGRATIONS` after `(152, ...)`; both schema fns called in `create_fresh_schema` (any position after core).
@@ -73,7 +73,7 @@ Registration: `_migrate_153_extracted_facts` + `_migrate_154_answer_eval` (impor
 Tests (TDD; fixtures use the autouse `isolated_db`):
 - migrations 153+154 registered (versions + names in `VERSIONED_MIGRATIONS`).
 - fresh DDL has all three tables — direct `create_fresh_schema(conn)` on in-memory sqlite (Phase-3 lesson).
-- `insert_facts` dedups (same project+claim twice → 1 row; returns 1 then 0); evidence round-trips.
+- `insert_facts` dedups within a session (same session+project+claim twice → 1 row; returns 1 then 0) and does NOT dedup across sessions (same claim, different session_id → 2 rows); evidence round-trips.
 - `list_for_project` ordered desc; `count_for_project`.
 - eval: `create_run` → `record_result` ×2 arms → `finalize_run` sets deltas; `list_results`; CHECK rejects bad arm (`pytest.raises(sqlite3.IntegrityError)`); FK cascade on run delete.
 
@@ -104,9 +104,9 @@ LLMCall = Callable[[list[dict]], str]  # messages -> collected text (injection s
 - `_parse_plan(text) -> list[dict]` and `_parse_sufficiency(text) -> dict` — forgiving: regex first `{...}`/`[...]` blob (mirror `goal_judge_service._parse_judge_json:478`); on failure, plan falls back to `[{"query": <raw turn>, "sources": ["all"]}]` and sufficiency to `{"sufficient": True, ...}` (fail-open).
 - `gather_context(project_id, turn, *, llm_call, max_iterations=2, tesserae_budget=1, deadline_seconds=20) -> dict` returning `{chunks: list[RetrievedChunk], context_message: dict|None, iterations: int, sufficient: bool, gap: str|None}`:
   1. plan via `llm_call` (prompt asks for ≤4 sub-queries JSON, each with `sources` subset).
-  2. fanout via `ThreadPoolExecutor`: per-source retriever fns `_search_kg_signals`, `_search_execution_logs`, `_search_takeaways`, `_search_findings`, `_search_verifications`, `_ask_tesserae_budgeted` — each thin over the verified helpers, returning ≤K chunks with provenance keys; every retriever wrapped try/except → empty list (fail-open per source). Tesserae: only if a kg-signal cache pass produced nothing relevant AND budget remains AND the project has a tesserae root (the helper returns None gracefully otherwise).
+  2. fanout via `ThreadPoolExecutor` with REAL deadline mechanics: submit all retriever futures, `concurrent.futures.wait(futures, timeout=remaining_budget)`, then `executor.shutdown(wait=False, cancel_futures=True)` — unfinished sources contribute nothing. Retriever fns `_search_kg_signals`, `_search_execution_logs`, `_search_takeaways`, `_search_findings`, `_search_verifications`, `_ask_tesserae_budgeted` — each returning ≤K chunks with provenance keys; every retriever wrapped try/except → empty list (fail-open per source). **Project scoping is mandatory — the raw helpers are global (cross-project leak):** a memoized `_project_execution_ids(project_id) -> set[str]` derives allowed ids via `SELECT e.execution_id FROM execution_logs e JOIN project_paths p ON p.trigger_id = e.trigger_id WHERE p.project_id = ?` (`project_paths.project_id` verified at `schema/_core.py:51`); `_search_execution_logs` post-filters `ExecutionSearchService.search` hits by that set; `_search_findings` filters `list_findings` by it; `_search_verifications` queries `list_verifications(execution_id)` per allowed id (capped to the most recent ~10). `_search_takeaways`/`_search_kg_signals` are already project-keyed. Tesserae: submitted ONLY when `remaining_budget > 25s` AND the kg-signal cache pass produced nothing relevant AND budget remains AND the project has a tesserae root (60s subprocess — the latency hazard).
   3. sufficiency via `llm_call` (prompt: question + numbered chunks → JSON `{sufficient, gap, feedback}`); if insufficient and iterations remain → re-plan with `feedback` appended; else proceed.
-  4. dedupe chunks by provenance_key; build `context_message = {"role": "system", "content": ...}` with numbered `[F1] (source, key) text` lines + cite-marker instructions + an explicit "context may be partial: <gap>" line when `not sufficient`.
+  4. dedupe chunks by provenance_key; build `context_message = {"role": "system", "content": ...}` — INSERTED before the final user message (`llm_messages.insert(-1, ctx)`; proxy/chat APIs behave better with system context ahead of the final user prompt) — with numbered `[F1] (source, key) text` lines + cite-marker instructions + an explicit "context may be partial: <gap>" line when `not sufficient`.
 - `extract_facts_from_answer(answer_text, chunks, *, llm_call) -> list[dict]` — prompt yields JSON list of `{claim, fact_ids: [F1...], confidence}`; map fact_ids back to chunk provenance into `evidence` lists; forgiving parse → `[]` on failure.
 
 Tests — pure-core (`test_answer_pipeline_core.py`, no DB):
@@ -156,10 +156,11 @@ Commit: `feat(arag): AnswerPipelineService — planner, fanout, sufficiency loop
 ```
 
    (Derive `content_of_last_user_turn` from the last user entry in `llm_messages`/conversation log — inspect the local shape at :146-150 and use the real variable. Lazy-import the service inside the function, matching the module's deferred-import style.)
-3. Post-finish (where `_finalize` runs, :151-170 region): if `_rag_chunks`, best-effort `extract_facts_from_answer` + `extracted_facts.insert_facts` + `push_delta("citations", {"facts": [...]})`, all inside try/except. Citations payload: `[{claim, evidence:[{source, provenance_key}], confidence}]`.
-4. `leaf_crud_i.py` (:555-595): `_resolve_chat_session`'s resolved dict exposes the session row (leader-ness at :514: `session.get("session_type") == "leader"`). Compute `rag_enabled = session_type == "leader" and bool(project_id)`; pass `rag_enabled=rag_enabled, rag_project_id=project_id` to the `run_streaming_response(` call at :582. Confirm the locals' names in the route — `resolved` carries what's needed; adapt minimally.
+3. Post-finish (where `_finalize` runs, :151-170 region): if `_rag_chunks`, best-effort `extract_facts_from_answer` + `extracted_facts.insert_facts` + `push_delta("citations", ...)`, all inside try/except. The delta arrives AFTER `finish` by design (extraction is an LLM call; the visible turn must not wait) — the FRONTEND attaches late citations to the LAST assistant message (Task 5), since `finish` clears `activeAssistant` (`ProjectTeamLeaderChat.vue:220`). Payload pre-mapped to the chip shape `{kind, value}` the chips expect (:468): `{"message_scope": "last_assistant", "citations": [{"kind": <source>, "value": <provenance_key>}...], "facts": [{claim, evidence, confidence}...]}`.
+4. **Retry-queue preservation:** `run_streaming_response` parks rate-limited turns in `chat_retry_queue` (:347) and `chat_retry_service._dispatch` re-calls it (:137) with only the legacy fields — so a retried leader turn would silently lose RAG. Fix inside `chat_retry_service._dispatch`: recompute `rag_enabled`/`rag_project_id` from `get_super_agent_session(session_id)` (`session_type == "leader"` + project_id) and pass them through. One test: a parked leader-session retry re-dispatches with `rag_enabled=True` (mock the session row + run_streaming_response).
+5. `leaf_crud_i.py` (:555-595): `_resolve_chat_session`'s resolved dict exposes the session row (leader-ness at :514: `session.get("session_type") == "leader"`). Compute `rag_enabled = session_type == "leader" and bool(project_id)`; pass `rag_enabled=rag_enabled, rag_project_id=project_id` to the `run_streaming_response(` call at :582. Confirm the locals' names in the route — `resolved` carries what's needed; adapt minimally.
 
-Tests (mock `AnswerPipelineService.gather_context` + the LLM stream; mirror the existing streaming-helper test conventions — find them via `grep -rln "run_streaming_response" backend/tests/`):
+Tests (mock `AnswerPipelineService.gather_context` + the LLM stream; mirror `tests/test_streaming_helper_rotation.py:51`'s sync-thread/Event patterns; **force the CLIProxy path** with `use_cli_agent=False` or monkeypatched `should_route_via_cli_agent` — YOLO defaults can route to the CLI-agent path (`cli_agent_runner_service.py:426`) and the captured `stream_llm_response` would never fire):
 - rag_enabled+project → gather called; context message appended (assert via captured llm_messages on the mocked `stream_llm_response`); `planning` + `retrieval` deltas pushed.
 - gather raises → turn proceeds, no context appended, no exception escapes (fail-open).
 - rag_enabled=False (default) → gather NOT called (every existing caller unaffected).
@@ -178,11 +179,11 @@ Commit: `feat(arag): leader-chat hook — sufficiency loop before the answer, ci
 
 `AnswerEvalService`:
 - `build_question_set(project_id, n=8) -> list[str]`: sample from `harness_kg_signals.list_signals` questions + recent `execution_logs` prompts (`get_execution_logs_filtered(limit=...)`, first line, deduped) + `session_takeaways.list_for_project` content-derived questions; deterministic order (sorted + sliced), pad with generic project questions if short.
-- `run_eval(project_id, *, n=8, judge_backend="claude", llm_call=None, pipeline_llm_call=None) -> int`: `create_run` → per question: arm A baseline = `llm_call([system, user])`; arm B pipeline = `gather_context(...)` then same call with the context message; judge each answer **blind** (prompt contains question + answer + the sources list for groundedness checking; never names the arm) → forgiving-parse `{groundedness, sufficiency, quality, reason}` each 0..1 → `record_result`; `finalize_run` with per-arm means + deltas. Every LLM call injected (`llm_call` seam) so tests are pure; the default wraps `stream_llm_response` exactly like Task 2's `_default_llm_call`.
+- `run_eval(project_id, *, n=8, judge_backend="claude", llm_call=None, pipeline_llm_call=None, run_id: int | None = None) -> int`: uses the provided `run_id` when given (the async route preallocates), else `create_run` — ONE owner per run, no orphans → per question: arm A baseline = `llm_call([system, user])`; arm B pipeline = `gather_context(...)` then same call with the context message; judge each answer **blind** (prompt contains question + answer + the sources list for groundedness checking; never names the arm) → forgiving-parse `{groundedness, sufficiency, quality, reason}` each 0..1 → `record_result`; `finalize_run` with per-arm means + deltas. Every LLM call injected (`llm_call` seam) so tests are pure; the default wraps `stream_llm_response` exactly like Task 2's `_default_llm_call`.
 - Fail-closed per question (exception → record zeros + reason='error'), run always finalizes.
 
 Routes (mirror `quality_ratings.py` style, `Router(path="/")`, absolute paths):
-- `POST /admin/answer-eval/run` body `{project_id, n?}` → spawns a daemon thread running `run_eval`, returns `{run_id}` immediately (preallocate via `create_run`, thread takes it — mirror the Phase-4 async-dispatch idiom: nothing blocking the request).
+- `POST /admin/answer-eval/run` body `{project_id, n?}` → `run_id = create_run(...)`, daemon thread runs `run_eval(..., run_id=run_id)`, returns `{run_id}` immediately (Phase-4 async idiom; the thread NEVER creates a second run).
 - `GET /admin/answer-eval/runs?project_id=` → `list_runs`; `GET /admin/answer-eval/runs/{run_id:int}` → run + results.
 
 Script `scripts/run_answer_eval.py` (model on `run_harness_evolution.py`): argparse `--project-id --n --judge-backend`, calls `run_eval` synchronously, prints the aggregate table.
@@ -197,15 +198,15 @@ Commit: `feat(arag): answer eval — question set, blind LLM-as-judge, baseline-
 
 **Files:**
 - Modify: `frontend/src/components/projects/ProjectTeamLeaderChat.vue`
-- Create: `frontend/src/components/dashboards/cards/AnswerGroundednessCard.vue` (place beside existing cards — confirm dir via `ls frontend/src/views/dashboards/cards frontend/src/components/dashboards 2>/dev/null`)
-- Modify: the Quality dashboard view that hosts cards (locate via `grep -rln "QualityPage\|qualityApi" frontend/src/views`)
+- Create: `frontend/src/views/dashboards/cards/AnswerGroundednessCard.vue` (the REAL cards directory — verified)
+- Modify: `frontend/src/views/dashboards/QualityPage.vue` (:37 region) — NOTE: the page has NO project context; the card is therefore GLOBAL: it shows the latest finished run across all projects with the project name displayed (no selector in v1)
 - Modify: `frontend/src/services/api/` (new `answerEvalApi` in the idiomatic module + types + barrel export)
 - Modify: `frontend/src/locales/{en,ko,ja,zh}.json`
 - Test: extend/create colocated tests mirroring `HarnessStatePanel.test.ts` conventions
 
-1. `ProjectTeamLeaderChat.vue` delta dispatch (~:138-228): add `planning` branch (progress line beside the thinking fold ~:145), `retrieval` branch (chunk/iteration count line), `citations` branch — store payload; at finish, when backend citations exist use them for the Cited row (:469-478) and skip the regex (`extractCitations` ~:276-300 stays as fallback when absent).
+1. `ProjectTeamLeaderChat.vue` delta dispatch (~:138-228): add `planning` branch (progress line beside the thinking fold ~:145), `retrieval` branch (chunk/iteration count line), and a `citations` branch that — because it arrives AFTER `finish` has cleared `activeAssistant` (:220) — attaches the payload's pre-mapped `{kind, value}` citations to the LAST assistant message in the list, replacing that message's regex-derived citations (`extractCitations` ~:276-300 stays as the fallback for non-RAG turns).
 2. `answerEvalApi`: `listRuns(projectId?)`, `getRun(id)`, `startRun(projectId, n?)` via `apiFetch` (mirror `executionApi` style in `services/api/triggers.ts`; new module `services/api/answer-eval.ts` + types + barrel export).
-3. Card: latest finished run for the page's project — three delta stats (groundedness/sufficiency/quality, pipeline−baseline) with up/down styling; empty-state when no runs. Mount on the quality dashboard.
+3. Card: latest finished run across ALL projects (QualityPage has no project context — verified) — project name + three delta stats (groundedness/sufficiency/quality, pipeline−baseline) with up/down styling; empty-state when no runs. Mount on QualityPage.
 4. i18n: `answerEval.*` + chat progress strings, four catalogs, key-identical.
 
 Tests (TDD): chat — `citations` delta replaces regex citations (mount with mocked api, feed deltas, assert chips); `planning`/`retrieval` render progress and unknown-type safety holds; card — renders deltas from mocked api, empty state. Run the full frontend suite (baseline 7 known failures, no new) + `npx vue-tsc --noEmit`.
