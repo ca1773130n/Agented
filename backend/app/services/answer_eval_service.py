@@ -215,8 +215,7 @@ class AnswerEvalService:
         -------
         run_id (int)
         """
-        from app.db.answer_eval import create_run, finalize_run, record_result
-        from app.services.answer_pipeline_service import gather_context
+        from app.db.answer_eval import create_run
 
         # --- Build LLM call defaults ---
         if llm_call is None:
@@ -227,6 +226,39 @@ class AnswerEvalService:
         # --- ONE owner per run ---
         if run_id is None:
             run_id = create_run(project_id, judge_backend=judge_backend)
+
+        try:
+            return AnswerEvalService._run_eval_body(
+                project_id,
+                run_id=run_id,
+                n=n,
+                llm_call=llm_call,
+                pipeline_llm_call=pipeline_llm_call,
+                judge_backend=judge_backend,
+            )
+        except Exception:
+            # A fatal error before finalize must not leave the run 'running'
+            # forever (codex PR review P2) — mark terminal and re-raise.
+            try:
+                from app.db.answer_eval import fail_run
+
+                fail_run(run_id)
+            except Exception:
+                logger.warning("could not mark run %d failed", run_id, exc_info=True)
+            raise
+
+    @staticmethod
+    def _run_eval_body(
+        project_id: str,
+        *,
+        run_id: int,
+        n: int,
+        llm_call,
+        pipeline_llm_call,
+        judge_backend: str,
+    ) -> int:
+        from app.db.answer_eval import finalize_run, record_result
+        from app.services.answer_pipeline_service import gather_context
 
         questions = AnswerEvalService.build_question_set(project_id, n=n)
 

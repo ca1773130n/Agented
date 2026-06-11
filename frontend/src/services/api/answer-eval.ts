@@ -41,7 +41,9 @@ export interface AnswerEvalResult {
   created_at: string;
 }
 
-export interface AnswerEvalRunDetail extends AnswerEvalRun {
+/** Matches the backend's nested response: `{ run, results }`. */
+export interface AnswerEvalRunDetail {
+  run: AnswerEvalRun;
   results: AnswerEvalResult[];
 }
 

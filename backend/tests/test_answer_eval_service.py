@@ -448,3 +448,28 @@ def test_run_eval_per_question_failure_records_zeros_and_run_completes(isolated_
         assert r["groundedness"] == pytest.approx(0.0)
         assert r["sufficiency"] == pytest.approx(0.0)
         assert r["quality"] == pytest.approx(0.0)
+
+
+def test_fatal_error_marks_run_failed(isolated_db):
+    """A fatal pre-loop error must leave the run terminally 'failed', never
+    'running' forever (codex PR review)."""
+    from unittest.mock import patch
+
+    import pytest
+
+    from app.db.answer_eval import create_run, get_run
+    from app.services.answer_eval_service import AnswerEvalService
+
+    run_id = create_run("proj-x", judge_backend="claude")
+    with patch.object(AnswerEvalService, "build_question_set", side_effect=RuntimeError("boom")):
+        with pytest.raises(RuntimeError):
+            AnswerEvalService.run_eval(
+                "proj-x",
+                n=2,
+                llm_call=lambda m: "a",
+                pipeline_llm_call=lambda m: "a",
+                run_id=run_id,
+            )
+    run = get_run(run_id)
+    assert run["status"] == "failed"
+    assert run["finished_at"] is not None

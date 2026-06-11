@@ -543,7 +543,18 @@ def _fanout(
     futures_map: dict[concurrent.futures.Future, str] = {}
     results: list[RetrievedChunk] = []
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+    # NO context manager: `with ThreadPoolExecutor` would call
+    # shutdown(wait=True) on exit AFTER our explicit shutdown(wait=False),
+    # blocking on any still-running 60s tesserae subprocess and defeating the
+    # deadline entirely (codex PR review P2). Daemon-threaded executor +
+    # explicit non-waiting shutdown; abandoned workers finish in the
+    # background and their results are simply discarded.
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
+    # Tesserae budget is RESERVED AT SUBMIT TIME: with check-inside-worker
+    # semantics, N sub-queries would launch N tesserae subprocesses before any
+    # of them incremented the counter (codex PR review P2).
+    tesserae_submitted = 0
+    try:
         for q in queries:
             query_text = q.get("query", "")
             sources = q.get("sources", ["all"])
@@ -572,7 +583,14 @@ def _fanout(
                 futures_map[f] = "verification"
 
             # Tesserae: only when budget allows, time allows, and kg cache empty
-            if (use_all or "tesserae" in sources) and not kg_has_results:
+            if (
+                (use_all or "tesserae" in sources)
+                and not kg_has_results
+                and tesserae_submitted < tesserae_budget
+                and remaining_seconds > _TESSERAE_MIN_REMAINING
+                and tesserae_root
+            ):
+                tesserae_submitted += 1
                 f = executor.submit(
                     _ask_tesserae_budgeted,
                     project_id=project_id,
@@ -588,8 +606,6 @@ def _fanout(
         done, not_done = concurrent.futures.wait(
             list(futures_map.keys()), timeout=max(remaining_seconds - 0.5, 0.1)
         )
-        # Cancel unfinished futures
-        executor.shutdown(wait=False, cancel_futures=True)
 
         for future in done:
             try:
@@ -598,6 +614,9 @@ def _fanout(
                     results.extend(chunks)
             except Exception:
                 logger.debug("fanout future failed", exc_info=True)
+    finally:
+        # Cancel queued futures; do NOT wait for running ones.
+        executor.shutdown(wait=False, cancel_futures=True)
 
     return results
 

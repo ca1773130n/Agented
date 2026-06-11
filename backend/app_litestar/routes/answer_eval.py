@@ -47,6 +47,14 @@ def start_eval_run(data: RunRequestBody) -> dict[str, Any]:
             import logging
 
             logging.getLogger(__name__).warning("answer-eval run %d failed", run_id, exc_info=True)
+            try:
+                from app.db.answer_eval import fail_run
+
+                fail_run(run_id)
+            except Exception:
+                logging.getLogger(__name__).warning(
+                    "could not mark answer-eval run %d failed", run_id, exc_info=True
+                )
 
     t = threading.Thread(target=_worker, daemon=True)
     t.start()

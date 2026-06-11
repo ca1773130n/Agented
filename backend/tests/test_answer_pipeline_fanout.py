@@ -388,3 +388,53 @@ def test_ask_tesserae_budgeted_returns_none(monkeypatch):
         remaining_seconds=90.0,
     )
     assert chunks == []
+
+
+def test_fanout_does_not_block_on_slow_retriever(monkeypatch):
+    """The executor must NOT wait for an over-deadline retriever (the `with`
+    context manager regression: shutdown(wait=True) on exit defeated the
+    deadline — codex PR review)."""
+    import time
+
+    from app.services import answer_pipeline_service as aps
+
+    def slow_search(project_id, query):
+        time.sleep(5)
+        return []
+
+    monkeypatch.setattr(aps, "_search_kg_signals", slow_search)
+    start = time.time()
+    aps._fanout(
+        project_id="proj-x",
+        queries=[{"query": "q", "sources": ["kg_signal"]}],
+        remaining_seconds=0.5,
+        tesserae_root=None,
+        budget_state={"used": 0},
+        tesserae_budget=1,
+        kg_has_results=False,
+    )
+    assert time.time() - start < 3.0  # returned without waiting the full 5s
+
+
+def test_fanout_reserves_tesserae_budget_at_submit(monkeypatch):
+    """Multiple sub-queries must not each launch a tesserae subprocess: the
+    budget is claimed at SUBMIT time, not inside the worker (codex PR review)."""
+    from app.services import answer_pipeline_service as aps
+
+    calls = []
+
+    def fake_tesserae(**kwargs):
+        calls.append(1)
+        return []
+
+    monkeypatch.setattr(aps, "_ask_tesserae_budgeted", fake_tesserae)
+    aps._fanout(
+        project_id="proj-x",
+        queries=[{"query": f"q{i}", "sources": ["tesserae"]} for i in range(4)],
+        remaining_seconds=60.0,
+        tesserae_root="/tmp/root",
+        budget_state={"used": 0},
+        tesserae_budget=1,
+        kg_has_results=False,
+    )
+    assert sum(calls) <= 1  # at most ONE submission despite four sub-queries

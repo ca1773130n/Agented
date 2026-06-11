@@ -124,3 +124,16 @@ def list_results(run_id: int) -> list[dict]:
             (run_id,),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def fail_run(run_id: int) -> bool:
+    """Terminal failure marker: a run that raised before finalizing must not
+    sit as 'running' forever (pollers need a terminal state)."""
+    with get_connection() as conn:
+        cur = conn.execute(
+            "UPDATE answer_eval_runs SET status = 'failed', finished_at = datetime('now') "
+            "WHERE id = ? AND status = 'running'",
+            (run_id,),
+        )
+        conn.commit()
+        return cur.rowcount > 0
