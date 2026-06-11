@@ -670,6 +670,17 @@ def _build_context_message(
     if not sufficient and gap:
         lines.append(f"\nNote: context may be partial — {gap}")
 
+    # Groundedness guard (added after eval run 1 measured a -0.12 groundedness
+    # delta on thin corpora): retrieved context must never become license to
+    # assert beyond it. Claims outside the sources must be labeled as such.
+    lines.append(
+        "\nGROUNDING RULES: Only state as fact what the sources above (or the "
+        "conversation itself) support, citing [F<n>]. If the sources do not "
+        "cover part of the question, say so explicitly rather than guessing — "
+        "an honest 'the project context does not cover X' is the required "
+        "answer for uncovered parts. Clearly label any general knowledge or "
+        "inference as such."
+    )
     lines.append(
         "\nWhen referencing information from the above, use inline [F<n>] citation markers."
     )
