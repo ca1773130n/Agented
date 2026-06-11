@@ -554,6 +554,12 @@ def send_chat_message(super_agent_id: str, session_id: str, data: dict) -> dict[
     cwd = resolved["cwd"]
     chat_mode = resolved["chat_mode"]
     instance = resolved["instance"]
+    _session_row = resolved["session"]
+
+    # Determine RAG enablement: only leader sessions with a project get RAG.
+    _session_project_id = _session_row.get("project_id")
+    rag_enabled = _session_row.get("session_type") == "leader" and bool(_session_project_id)
+    rag_project_id = _session_project_id if rag_enabled else None
 
     # Per-call CLI runner override from the AiChatPanel toggle. Non-bool
     # values fall back to None so the global ``agent_yolo_mode`` setting
@@ -589,6 +595,8 @@ def send_chat_message(super_agent_id: str, session_id: str, data: dict) -> dict[
         chat_mode=chat_mode,
         instance_id=instance["id"] if instance else None,
         use_cli_agent=use_cli_agent,
+        rag_enabled=rag_enabled,
+        rag_project_id=rag_project_id,
     )
     return {"status": "ok", "message_id": message_id}
 

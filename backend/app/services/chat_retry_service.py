@@ -119,7 +119,12 @@ class ChatRetryService:
         """Re-run the parked turn. ``run_streaming_response`` rebuilds the
         prompt from the session's conversation log (the user message is
         already persisted), so we only need the original routing args.
-        ``next_attempts`` carries the rate-limit retry count forward."""
+        ``next_attempts`` carries the rate-limit retry count forward.
+
+        RAG enablement is recomputed here (not stored in the queue row) so a
+        leader-session retry always gets RAG even if the queue was written
+        before the feature shipped.
+        """
         from .chat_state_service import ChatStateService
         from .streaming_helper import run_streaming_response
 
@@ -133,6 +138,23 @@ class ChatRetryService:
         except Exception:
             logger.debug("retry_dispatch delta push failed", exc_info=True)
 
+        # Recompute RAG flags from the live session row so a leader-session
+        # retry is always RAG-enabled, regardless of how the queue row was
+        # originally written.
+        rag_enabled = False
+        rag_project_id: Optional[str] = None
+        try:
+            from ..db.super_agents import get_super_agent_session
+
+            live_session = get_super_agent_session(session_id)
+            if live_session and live_session.get("session_type") == "leader":
+                _pid = live_session.get("project_id")
+                if _pid:
+                    rag_enabled = True
+                    rag_project_id = _pid
+        except Exception:
+            logger.debug("rag recompute failed for session %s", session_id, exc_info=True)
+
         logger.info("Re-dispatching queued chat turn for session %s", session_id)
         run_streaming_response(
             session_id=session_id,
@@ -145,6 +167,8 @@ class ChatRetryService:
             instance_id=row.get("instance_id"),
             use_cli_agent=row.get("use_cli_agent"),
             retry_attempts=next_attempts,
+            rag_enabled=rag_enabled,
+            rag_project_id=rag_project_id,
         )
 
     @classmethod
