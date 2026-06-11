@@ -1812,7 +1812,9 @@
     "citedLabel": "引用:",
     "citationKind": "引用类型: {kind}",
     "inputPlaceholder": "向团队负责人提问…",
-    "askButton": "提问"
+    "askButton": "提问",
+    "planningProgress": "正在规划检索…",
+    "retrievalProgress": "已检索 {chunks} 个块（{iterations} 次迭代）"
   },
   "projectTeamsSection": {
     "heading": "已分配团队",
@@ -8993,5 +8995,19 @@
     "noState": "此次执行未记录执行器状态。",
     "loading": "加载中…",
     "error": "无法加载执行器状态。"
+  },
+  "answerEval": {
+    "cardTitle": "答案依据评估",
+    "cardSubtitle": "流水线 vs 基准 — 最新评估运行",
+    "groundedness": "依据性",
+    "sufficiency": "充分性",
+    "quality": "质量",
+    "noRuns": "暂无评估运行",
+    "noRunsHint": "运行评估以查看质量指标",
+    "projectLabel": "项目",
+    "loadError": "加载失败",
+    "statusRunning": "运行中",
+    "statusComplete": "完成",
+    "statusFailed": "失败"
   }
 }

@@ -71,6 +71,8 @@ def run_streaming_response(
     instance_id: Optional[str] = None,
     use_cli_agent: Optional[bool] = None,
     retry_attempts: int = 0,
+    rag_enabled: bool = False,
+    rag_project_id: Optional[str] = None,
 ) -> None:
     """Launch a background thread that streams an LLM response.
 
@@ -149,6 +151,49 @@ def run_streaming_response(
             if state and state.get("conversation_log"):
                 llm_messages.extend(drop_empty_content_messages(state["conversation_log"]))
 
+            # Derive the last user turn text from the assembled messages list.
+            _last_user_content = ""
+            for _msg in reversed(llm_messages):
+                if _msg.get("role") == "user":
+                    _last_user_content = _msg.get("content") or ""
+                    break
+
+            # --- Agentic-RAG hook (Task 3) -----------------------------------
+            # Runs AFTER llm_messages is built, BEFORE the routing branch.
+            # Fail-open: any exception → log + plain turn.
+            _rag_chunks: list = []
+            if rag_enabled and rag_project_id:
+                try:
+                    from .answer_pipeline_service import gather_context as _gather_context
+
+                    ChatStateService.push_delta(_session_id, "planning", {"status": "started"})
+                    rag = _gather_context(
+                        rag_project_id,
+                        _last_user_content,
+                        backend=backend,
+                        account_email=account_id,
+                    )
+                    ChatStateService.push_delta(
+                        _session_id,
+                        "retrieval",
+                        {
+                            "chunks": len(rag["chunks"]),
+                            "iterations": rag["iterations"],
+                            "sufficient": rag["sufficient"],
+                        },
+                    )
+                    if rag.get("context_message"):
+                        # Insert BEFORE the final user message (which is
+                        # already the last entry in llm_messages).
+                        llm_messages.insert(-1, rag["context_message"])
+                    _rag_chunks = rag["chunks"]
+                except Exception:
+                    logger.warning(
+                        "answer pipeline failed — falling back to baseline", exc_info=True
+                    )
+                    _rag_chunks = []
+            # -----------------------------------------------------------------
+
             def _finalize(accumulated: list, used_backend: str) -> None:
                 full_response = "".join(accumulated)
                 if full_response:
@@ -168,6 +213,49 @@ def run_streaming_response(
                 ChatStateService.push_status(_session_id, "idle")
                 if on_complete:
                     on_complete()
+
+                # --- Post-finish: extract facts + push citations delta --------
+                # Best-effort; arrives AFTER finish by design (extraction is an
+                # LLM call — the visible turn must not wait). The frontend
+                # attaches late citations to the LAST assistant message (Task 5).
+                if _rag_chunks and full_response:
+                    try:
+                        from ..db import extracted_facts as _ef
+                        from .answer_pipeline_service import _default_llm_call
+                        from .answer_pipeline_service import (
+                            extract_facts_from_answer as _extract_facts,
+                        )
+
+                        _llm_call = _default_llm_call(
+                            backend=used_backend, account_email=account_id
+                        )
+                        facts = _extract_facts(full_response, _rag_chunks, llm_call=_llm_call)
+                        if facts:
+                            _ef.insert_facts(
+                                _session_id,
+                                super_agent_id=_super_agent_id,
+                                project_id=rag_project_id,
+                                facts=facts,
+                            )
+                        citations = [
+                            {"kind": c.source, "value": c.provenance_key} for c in _rag_chunks
+                        ]
+                        ChatStateService.push_delta(
+                            _session_id,
+                            "citations",
+                            {
+                                "message_scope": "last_assistant",
+                                "citations": citations,
+                                "facts": facts,
+                            },
+                        )
+                    except Exception:
+                        logger.warning(
+                            "post-finish fact extraction failed for session %s",
+                            _session_id,
+                            exc_info=True,
+                        )
+                # ---------------------------------------------------------------
 
             # Routing decision lives in `should_route_via_cli_agent` so the
             # three streaming sites (this one, design conversations, project

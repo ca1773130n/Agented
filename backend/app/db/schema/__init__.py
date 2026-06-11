@@ -9,21 +9,22 @@ point. Modules MUST NOT import each other.
 import logging
 
 from ._agents import create_agent_tables
+from ._answer_eval import create_answer_eval_tables
 from ._core import create_core_tables
 from ._embeddings import create_embedding_tables
+from ._extracted_facts import create_extracted_facts_tables
+from ._forge_promotion import create_forge_promotion_tables
 from ._harness_annotations import create_harness_annotation_tables
+from ._harness_evidence import create_harness_evidence_tables
 from ._harness_evolution import create_harness_evolution_tables
 from ._harness_kg_signals import create_harness_kg_signals_tables
 from ._harness_snapshots import create_harness_snapshot_tables
-from ._harness_evidence import create_harness_evidence_tables
 from ._harness_state import create_harness_state_tables
-from ._verification_records import create_verification_records_tables
 from ._harness_takeaways import create_harness_takeaway_tables
 from ._misc import create_misc_tables
 from ._monitoring import create_monitoring_tables
 from ._orgs import create_org_tables
 from ._plugins import create_plugin_tables
-from ._forge_promotion import create_forge_promotion_tables
 from ._project_autonomy import create_project_autonomy_tables
 from ._security import create_security_tables
 from ._setup import create_setup_tables
@@ -31,6 +32,7 @@ from ._skills import create_skill_tables
 from ._super_agents import create_super_agent_tables
 from ._team_executions import create_team_execution_tables
 from ._triggers_infra import create_triggers_infra_tables
+from ._verification_records import create_verification_records_tables
 from ._workflows import create_workflow_tables
 
 logger = logging.getLogger(__name__)
@@ -76,4 +78,6 @@ def create_fresh_schema(conn):
     create_project_autonomy_tables(conn)
     create_forge_promotion_tables(conn)
     create_harness_kg_signals_tables(conn)
+    create_extracted_facts_tables(conn)
+    create_answer_eval_tables(conn)
     conn.commit()

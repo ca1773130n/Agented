@@ -1063,6 +1063,20 @@ def _migrate_151_per_run_budget_limit(conn):
         conn.execute("ALTER TABLE budget_limits ADD COLUMN per_run_limit_usd REAL")
 
 
+def _migrate_153_extracted_facts(conn):
+    """Agentic-RAG answers T1: session-scoped claim extraction store."""
+    from app.db.schema._extracted_facts import create_extracted_facts_tables
+
+    create_extracted_facts_tables(conn)
+
+
+def _migrate_154_answer_eval(conn):
+    """Agentic-RAG answers T1: baseline-vs-pipeline answer eval tables."""
+    from app.db.schema._answer_eval import create_answer_eval_tables
+
+    create_answer_eval_tables(conn)
+
+
 def _migrate_152_resume_recovery(conn):
     """Harness-1 Phase 4: redispatch/resume provenance + per-trigger
     auto-recovery flag. PRAGMA-guarded ALTERs — idempotent."""
@@ -1180,4 +1194,8 @@ V07_MIGRATIONS: list = [
     (151, "per_run_budget_limit", _migrate_151_per_run_budget_limit),
     # Harness-1 Phase 4: restart recovery + resume provenance.
     (152, "resume_recovery", _migrate_152_resume_recovery),
+    # Agentic-RAG T1: session-scoped claim extraction + provenance store.
+    (153, "extracted_facts", _migrate_153_extracted_facts),
+    # Agentic-RAG T1: baseline-vs-pipeline answer eval runs + results.
+    (154, "answer_eval", _migrate_154_answer_eval),
 ]

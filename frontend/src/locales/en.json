@@ -1812,7 +1812,9 @@
     "citedLabel": "Cited:",
     "citationKind": "Citation kind: {kind}",
     "inputPlaceholder": "Ask the team leader…",
-    "askButton": "Ask"
+    "askButton": "Ask",
+    "planningProgress": "Planning retrieval…",
+    "retrievalProgress": "Retrieved {chunks} chunks ({iterations} iter)"
   },
   "projectTeamsSection": {
     "heading": "Assigned Teams",
@@ -8993,5 +8995,19 @@
     "noState": "No harness state recorded for this execution.",
     "loading": "Loading…",
     "error": "Could not load harness state."
+  },
+  "answerEval": {
+    "cardTitle": "Answer Groundedness",
+    "cardSubtitle": "Pipeline vs baseline — latest eval run",
+    "groundedness": "Groundedness",
+    "sufficiency": "Sufficiency",
+    "quality": "Quality",
+    "noRuns": "No eval runs yet",
+    "noRunsHint": "Run an eval to see quality metrics",
+    "projectLabel": "Project",
+    "loadError": "Failed to load",
+    "statusRunning": "Running",
+    "statusComplete": "Complete",
+    "statusFailed": "Failed"
   }
 }
