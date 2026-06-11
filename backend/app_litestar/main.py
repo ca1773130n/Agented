@@ -34,6 +34,7 @@ from .routes.admin_tooling import (
     version_pins_router,
 )
 from .routes.agents_and_tracing import agents_router, tracing_router
+from .routes.answer_eval import answer_eval_router
 from .routes.auth import auth_router
 from .routes.auth_management import auth_management_router
 from .routes.bot_health import bot_health_router
@@ -50,8 +51,6 @@ from .routes.executions import executions_router
 from .routes.grd_routes import grd_router
 from .routes.harness_evolution import harness_evolution_router
 from .routes.harness_takeaways import harness_takeaways_router
-from .routes.memory_system import memory_system_router
-from .routes.team_leader_chat import team_leader_chat_router
 from .routes.health import health_router
 from .routes.integrations import integrations_github_router
 from .routes.leaf_crud_a import (
@@ -112,6 +111,7 @@ from .routes.leaf_crud_i import (
     team_generation_router,
 )
 from .routes.mcp_servers import mcp_servers_router, project_mcp_router
+from .routes.memory_system import memory_system_router
 from .routes.metrics import metrics_router
 from .routes.misc import misc_router
 from .routes.model_cache import model_cache_router
@@ -120,9 +120,7 @@ from .routes.plugin_discovery import plugin_discovery_router
 from .routes.product_owner import product_owner_router
 from .routes.project_forge_bindings import forge_bindings_router
 from .routes.projects import projects_router
-from .routes.answer_eval import answer_eval_router
 from .routes.quality_ratings import quality_ratings_router
-from .routes.verification import verification_router
 from .routes.rbac import rbac_router
 from .routes.retention import retention_router
 from .routes.rules_plugins_hooks_commands import (
@@ -156,10 +154,12 @@ from .routes.super_agents_cluster import (
     super_agent_exports_router,
     super_agents_router,
 )
+from .routes.team_leader_chat import team_leader_chat_router
 from .routes.teams import teams_router
 from .routes.trigger_events import trigger_events_router
 from .routes.triggers import triggers_router
 from .routes.utility import utility_router
+from .routes.verification import verification_router
 from .routes.webhooks import (
     github_webhook_router,
     oauth_callback_router,

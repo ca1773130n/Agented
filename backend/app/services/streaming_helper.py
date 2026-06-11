@@ -220,11 +220,11 @@ def run_streaming_response(
                 # attaches late citations to the LAST assistant message (Task 5).
                 if _rag_chunks and full_response:
                     try:
+                        from ..db import extracted_facts as _ef
+                        from .answer_pipeline_service import _default_llm_call
                         from .answer_pipeline_service import (
                             extract_facts_from_answer as _extract_facts,
                         )
-                        from .answer_pipeline_service import _default_llm_call
-                        from ..db import extracted_facts as _ef
 
                         _llm_call = _default_llm_call(
                             backend=used_backend, account_email=account_id

@@ -11,9 +11,6 @@ Verifies that run_streaming_response with rag_enabled=True:
 
 from __future__ import annotations
 
-import pytest
-
-
 # ---------------------------------------------------------------------------
 # Helpers — mirror test_streaming_helper_rotation._install_common_stubs
 # ---------------------------------------------------------------------------
