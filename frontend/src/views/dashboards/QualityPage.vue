@@ -11,6 +11,7 @@ import PageHeader from '../../components/base/PageHeader.vue';
 import SecurityCard from './cards/SecurityCard.vue';
 import PrReviewCard from './cards/PrReviewCard.vue';
 import AnomalyDetectionCard from './cards/AnomalyDetectionCard.vue';
+import AnswerGroundednessCard from './cards/AnswerGroundednessCard.vue';
 
 const { t } = useI18n();
 const route = useRoute();
@@ -41,6 +42,7 @@ onMounted(maybeScroll);
       <SecurityCard @loaded="onCardLoaded" />
       <PrReviewCard @loaded="onCardLoaded" />
       <AnomalyDetectionCard @loaded="onCardLoaded" />
+      <AnswerGroundednessCard @loaded="onCardLoaded" />
     </div>
   </div>
 </template>

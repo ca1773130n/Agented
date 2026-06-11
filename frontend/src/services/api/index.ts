@@ -96,6 +96,8 @@ export { scopeFiltersApi } from './scope-filters';
 export type { ScopeFilter, ScopeFilterPattern, ListScopeFiltersResponse, UpsertScopeFilterRequest, UpdateScopeFilterRequest, AddPatternRequest } from './scope-filters';
 export { retentionApi } from './retention';
 export type { RetentionPolicy, CreateRetentionPolicyRequest } from './retention';
+export { answerEvalApi } from './answer-eval';
+export type { AnswerEvalRun, AnswerEvalResult, AnswerEvalRunDetail, ListRunsResponse, StartRunResponse } from './answer-eval';
 export { versionPinsApi } from './version-pins';
 export type { VersionPin, ComponentVersionHistory, PinStatus, ComponentType, VersionPinsListResponse, VersionHistoryResponse, UpgradeAllResponse } from './version-pins';
 export { findingsApi } from './findings';

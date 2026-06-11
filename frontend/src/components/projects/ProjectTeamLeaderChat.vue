@@ -55,7 +55,10 @@ interface ChatMessage {
   /** Extended-thinking / reasoning text, shown folded above the answer. */
   thinking?: string;
   // System notices: account rotation / queued-for-retry / terminal errors.
-  variant?: 'rotation' | 'queued' | 'error';
+  variant?: 'rotation' | 'queued' | 'error' | 'rag_progress';
+  /** RAG progress hint (planning/retrieval). Only for variant === 'rag_progress'. */
+  ragProgressKind?: 'planning' | 'retrieval';
+  ragProgressData?: { chunks?: number; iterations?: number; sufficient?: boolean };
 }
 
 const messages = ref<ChatMessage[]>([]);
@@ -225,6 +228,45 @@ function connectStream(session: TeamLeaderChatSession) {
       isStreaming.value = false;
     } else if (deltaType === 'status_change') {
       isStreaming.value = data.status === 'streaming';
+    } else if (deltaType === 'planning') {
+      // RAG pipeline: planner sub-step started — show inline progress line
+      // beside the thinking fold so the user sees retrieval is in progress.
+      messages.value.push({
+        role: 'system',
+        variant: 'rag_progress',
+        content: t('projectTeamLeaderChat.planningProgress'),
+        ragProgressKind: 'planning',
+      });
+      scrollToBottom();
+    } else if (deltaType === 'retrieval') {
+      // RAG pipeline: fanout finished — report chunk / iteration counts.
+      messages.value.push({
+        role: 'system',
+        variant: 'rag_progress',
+        content: t('projectTeamLeaderChat.retrievalProgress', {
+          chunks: data.chunks ?? 0,
+          iterations: data.iterations ?? 1,
+        }),
+        ragProgressKind: 'retrieval',
+        ragProgressData: {
+          chunks: data.chunks,
+          iterations: data.iterations,
+          sufficient: data.sufficient,
+        },
+      });
+      scrollToBottom();
+    } else if (deltaType === 'citations') {
+      // RAG pipeline: backend-extracted citations arrive AFTER finish has
+      // already cleared activeAssistant. Attach them to the LAST assistant
+      // message, replacing the regex-derived fallback citations.
+      // data.citations is already mapped to {kind, value} by the backend
+      // (Task 3), so we consume it directly without re-running extractCitations.
+      if (data.message_scope === 'last_assistant') {
+        const lastAssistant = [...messages.value].reverse().find((m) => m.role === 'assistant');
+        if (lastAssistant && Array.isArray(data.citations)) {
+          lastAssistant.citations = data.citations as Citation[];
+        }
+      }
     }
   };
 
@@ -412,7 +454,12 @@ onUnmounted(closeStream);
           :data-variant="m.variant"
           data-testid="chat-system-notice"
         >
-          <span class="msg-notice__icon" aria-hidden="true">{{ m.variant === 'error' ? '⚠' : m.variant === 'queued' ? '⏳' : '↻' }}</span>
+          <span class="msg-notice__icon" aria-hidden="true">{{
+            m.variant === 'error' ? '⚠'
+            : m.variant === 'queued' ? '⏳'
+            : m.variant === 'rag_progress' ? (m.ragProgressKind === 'retrieval' ? '⬇' : '⟳')
+            : '↻'
+          }}</span>
           <span class="msg-notice__text">{{ m.content }}</span>
         </div>
         <article
