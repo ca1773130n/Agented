@@ -120,6 +120,7 @@ from .routes.plugin_discovery import plugin_discovery_router
 from .routes.product_owner import product_owner_router
 from .routes.project_forge_bindings import forge_bindings_router
 from .routes.projects import projects_router
+from .routes.answer_eval import answer_eval_router
 from .routes.quality_ratings import quality_ratings_router
 from .routes.verification import verification_router
 from .routes.rbac import rbac_router
@@ -250,6 +251,7 @@ def create_app() -> Litestar:
             integrations_github_router,
             budgets_router,
             quality_ratings_router,
+            answer_eval_router,
             verification_router,
             scheduler_router,
             triggers_router,
