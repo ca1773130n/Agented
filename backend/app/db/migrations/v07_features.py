@@ -1128,6 +1128,28 @@ def _migrate_156_forge_bundles(conn):
     )
 
 
+def _migrate_157_forge_origin(conn):
+    """Phase 17-06: provenance for session-auto-imported forge primitives.
+    Records, per (asset_id, kind), the sha256 content-hash of the source
+    ``.claude/`` file at import time plus the session that produced it — so the
+    import handler can detect unchanged files (skip) and changed files
+    (re-import), and so an operator can audit where an auto-bound primitive came
+    from. Idempotent CREATE IF NOT EXISTS."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS forge_origin (
+            asset_id TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            origin_hash TEXT NOT NULL,
+            source_session_id TEXT,
+            imported_at TEXT NOT NULL,
+            PRIMARY KEY (asset_id, kind)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_forge_origin_session ON forge_origin(source_session_id)"
+    )
+
+
 def _migrate_152_resume_recovery(conn):
     """Harness-1 Phase 4: redispatch/resume provenance + per-trigger
     auto-recovery flag. PRAGMA-guarded ALTERs — idempotent."""
@@ -1252,4 +1274,5 @@ V07_MIGRATIONS: list = [
     # v0.8.0 (17-03): cross-kind forge bundles (155 reserved for 17-02 subagents).
     (155, "subagents", _migrate_155_subagents),
     (156, "forge_bundles", _migrate_156_forge_bundles),
+    (157, "forge_origin", _migrate_157_forge_origin),
 ]

@@ -573,6 +573,13 @@ from .forge_bundles import (  # noqa: F401
     list_forge_bundles,
 )
 
+# Forge primitive provenance (v0.8.0 17-06 — session-auto-import origin hashes).
+from .forge_origin import (  # noqa: F401
+    get_origin,
+    get_origin_by_hash,
+    record_origin,
+)
+
 # Goal-loop execution type (v0.7.74 — per-session config + iteration audit;
 # v0.7.86 — Ouroboros dead-ends + convergence helpers)
 from .goal_loop import (  # noqa: F401
