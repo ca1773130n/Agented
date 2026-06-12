@@ -16,11 +16,13 @@ requirements mapped. Approved design spec:
 (+ ``.ko.md``). PR-per-phase + codex-review-until-green cadence.
 
 Phase: 17 of 22 (Forge creation surface) — **in progress**
-Plan: 2 complete (17-01, 17-03)
-Status: Plan 17-03 executed (cross-kind forge_bundles, migration 156, green)
-Last activity: 2026-06-13 — Completed 17-03-PLAN.md; added cross-kind
-forge_bundles/forge_bundle_items (migration 156) + conn-accepting _add_binding
-for atomic bundle-bind; skill_sets pinned byte-for-byte. 155 reserved for 17-02.
+Plan: 3 complete (17-01, 17-02, 17-03)
+Status: Plan 17-02 executed (subagent forge primitive, migration 155, green)
+Last activity: 2026-06-13 — Completed 17-02-PLAN.md; registered `subagent` as a
+forge primitive — distinct `subagents` table (migration 155, subag- prefix) +
+CRUD + /admin/subagents routes + VALID_KINDS membership + _get_asset READ
+branch. Legacy agents table untouched; materialization WRITE branch left for
+17-04. 5/5 DB tests green.
 
 Progress: [----------] 0% (0 of 6 phases complete)
 
