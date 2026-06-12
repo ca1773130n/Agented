@@ -363,6 +363,108 @@ def _normalize_trigger_execution(row: dict) -> dict[str, Any]:
     }
 
 
+def _normalize_project_session(row: dict) -> dict[str, Any]:
+    """Map a ``project_sessions`` row to HarnessSession shape. ``log_json``
+    may be a JSON array of role/content entries (same shape as
+    super_agent_sessions.conversation_log)."""
+    log_raw = row.get("log_json") or "[]"
+    try:
+        parsed = json.loads(log_raw)
+    except (TypeError, ValueError):
+        parsed = []
+    if not isinstance(parsed, list):
+        parsed = []
+
+    message_count = len(parsed)
+    preview_chunks: list[str] = []
+    for entry in parsed[:3]:
+        if isinstance(entry, dict):
+            content = entry.get("content")
+            if isinstance(content, str):
+                preview_chunks.append(content[:300])
+    preview = "\n---\n".join(preview_chunks)[:1200]
+
+    summary = row.get("summary") or (preview[:240] if preview else "")
+    return {
+        "harness": "claude",
+        "agent_label": row.get("agent_id") or "project_session",
+        "started_at": row.get("started_at") or "",
+        "ended_at": row.get("ended_at") or "",
+        "message_count": message_count,
+        "tool_call_count": 0,
+        "tools_used": [],
+        "files_touched": [],
+        "commands_run": [],
+        "decisions": [],
+        "errors": [],
+        "redacted_preview": preview,
+        "title": row.get("id") or "",
+        "summary": summary,
+    }
+
+
+def _normalize_workflow(row: dict) -> dict[str, Any]:
+    """Map a ``workflow_executions`` row (joined with its node executions)
+    to HarnessSession shape. The trajectory text is the concatenation of
+    node ``output_json``/``error`` values, mirroring
+    ``harness_failure_annotator._fetch_workflow``."""
+    text_parts: list[str] = []
+    for node in row.get("_nodes") or []:
+        if node.get("output_json"):
+            text_parts.append(str(node["output_json"]))
+        if node.get("error"):
+            text_parts.append(str(node["error"]))
+    preview = "\n".join(text_parts)[:1200]
+
+    return {
+        "harness": "claude",
+        "agent_label": row.get("workflow_id") or "workflow",
+        "started_at": row.get("started_at") or "",
+        "ended_at": row.get("ended_at") or "",
+        "message_count": len(row.get("_nodes") or []),
+        "tool_call_count": 0,
+        "tools_used": [],
+        "files_touched": [],
+        "commands_run": [],
+        "decisions": [],
+        "errors": [],
+        "redacted_preview": preview,
+        "title": row.get("id") or "",
+        "summary": (preview[:240] if preview else ""),
+    }
+
+
+def _normalize_team_session(row: dict) -> dict[str, Any]:
+    """Map a ``team_executions`` row (with its component execution_logs
+    pre-aggregated under ``_components``) to HarnessSession shape. Mirrors
+    ``harness_failure_annotator._fetch_team_session``."""
+    parts: list[str] = []
+    backend = "claude"
+    for comp in row.get("_components") or []:
+        if comp.get("backend_type"):
+            backend = comp["backend_type"]
+        if comp.get("stdout_log"):
+            parts.append(str(comp["stdout_log"]))
+    preview = "\n".join(parts)[:1200]
+
+    return {
+        "harness": backend,
+        "agent_label": row.get("team_id") or "team_session",
+        "started_at": row.get("started_at") or "",
+        "ended_at": row.get("completed_at") or "",
+        "message_count": len(row.get("_components") or []),
+        "tool_call_count": 0,
+        "tools_used": [],
+        "files_touched": [],
+        "commands_run": [],
+        "decisions": [],
+        "errors": [],
+        "redacted_preview": preview,
+        "title": row.get("id") or "",
+        "summary": (row.get("message") or "")[:240],
+    }
+
+
 def _slug(text: str) -> str:
     """Tesserae-style slug. Mirrors ``tesserae.harness_sessions.safe_slug``."""
     out = "".join(ch.lower() if ch.isalnum() else "-" for ch in str(text))
@@ -414,9 +516,59 @@ def _build_harness_session(
             if not row:
                 return None
             base.update(_normalize_trigger_execution(dict(row)))
+        elif session_kind == "project_session":
+            row = conn.execute(
+                "SELECT * FROM project_sessions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
+            if not row:
+                return None
+            base.update(_normalize_project_session(dict(row)))
+        elif session_kind == "workflow":
+            wf_row = conn.execute(
+                "SELECT * FROM workflow_executions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
+            nodes = conn.execute(
+                "SELECT output_json, error FROM workflow_node_executions "
+                "WHERE execution_id = ? ORDER BY id ASC",
+                (session_id,),
+            ).fetchall()
+            if not wf_row and not nodes:
+                return None
+            wf = dict(wf_row) if wf_row else {"id": session_id}
+            wf["_nodes"] = [dict(n) for n in nodes]
+            base.update(_normalize_workflow(wf))
+        elif session_kind == "team_session":
+            team_row = conn.execute(
+                "SELECT * FROM team_executions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
+            if not team_row:
+                return None
+            team = dict(team_row)
+            try:
+                execution_ids = json.loads(team.get("execution_ids") or "[]")
+            except (TypeError, ValueError):
+                execution_ids = []
+            if not isinstance(execution_ids, list):
+                execution_ids = []
+            components: list[dict] = []
+            if execution_ids:
+                placeholders = ",".join("?" * len(execution_ids))
+                components = [
+                    dict(r)
+                    for r in conn.execute(
+                        "SELECT execution_id, stdout_log, backend_type "
+                        f"FROM execution_logs WHERE execution_id IN ({placeholders}) "
+                        "ORDER BY id ASC",
+                        execution_ids,
+                    ).fetchall()
+                ]
+            team["_components"] = components
+            base.update(_normalize_team_session(team))
         else:
-            # Other kinds (project_session, workflow, team_session) —
-            # not normalized yet. Skip rather than emit a half-baked
+            # Genuinely unknown kind — skip rather than emit a half-baked
             # record that would pollute Tesserae's graph.
             return None
 
