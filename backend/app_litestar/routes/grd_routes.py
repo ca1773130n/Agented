@@ -518,7 +518,7 @@ def project_chat(project_id: str, data: dict) -> dict[str, Any]:
     from app.services.cli_agent_runner_service import (
         is_yolo_mode_enabled,
         resolve_account_config_dir,
-        should_route_via_cli_agent,
+        resolve_execution_driver,
         stream_via_cli_agent,
     )
     from app.services.conversation_streaming import stream_llm_response
@@ -602,9 +602,77 @@ def project_chat(project_id: str, data: dict) -> dict[str, Any]:
 
                 llm_messages.extend(drop_empty_content_messages(state["conversation_log"]))
             accumulated: list[str] = []
-            if should_route_via_cli_agent(_backend, use_cli_agent):
-                # Only reachable for a concrete CLI-runnable backend (None is
-                # filtered out by should_route_via_cli_agent).
+            # Single source of routing (REQ-10): resolve the driver instead
+            # of the legacy 2-way boolean. Returns "cliproxy" | "cli_agent" |
+            # "grd"; the resolver degrades grd→cli_agent when GRD/workspace
+            # is unavailable, so this never crashes the turn.
+            driver = resolve_execution_driver(
+                backend=_backend,
+                use_cli_agent=use_cli_agent,
+                super_agent_id=_sa_id,
+                project_id=_project_id,
+            )
+
+            # GRD task turns dispatch the grd_chat handler and bridge its PSM
+            # output onto chat SSE — consistent with the streaming_helper
+            # funnel. Conversational grd turns fall through to cliproxy below.
+            if driver == "grd":
+                try:
+                    from app.services.execution_type_handler import get_handler
+                    from app.services.grd_chat_bridge import bridge_psm_to_chat
+                    from app.services.project_session_manager import ProjectSessionManager
+                    from app.services.turn_classifier_service import classify_turn
+
+                    classification = classify_turn(_content, backend_kind=_backend)
+                    if classification.get("shape") == "task":
+                        handler = get_handler("grd_chat")
+                        result = (
+                            handler.start(
+                                {
+                                    "project_id": _project_id,
+                                    "task": _content,
+                                    "intent": classification.get("intent"),
+                                    "grd_command": classification.get("grd_command"),
+                                    "super_agent_id": _sa_id,
+                                    "cwd": _workspace_cwd,
+                                }
+                            )
+                            if handler
+                            else None
+                        )
+                        grd_session_id = (result or {}).get("session_id")
+                        if grd_session_id:
+                            raw_q = ProjectSessionManager.subscribe_raw(grd_session_id)
+
+                            def _psm_events():
+                                while True:
+                                    event_type, payload = raw_q.get()
+                                    if event_type == "__end__":
+                                        return
+                                    ev = dict(payload or {})
+                                    ev.setdefault("type", event_type)
+                                    yield ev
+
+                            try:
+                                bridge_psm_to_chat(
+                                    _session_id, _psm_events(), ChatStateService
+                                )
+                            finally:
+                                ProjectSessionManager.unsubscribe_raw(grd_session_id, raw_q)
+                            return
+                        logger.warning(
+                            "project_chat grd dispatch returned no session; "
+                            "falling through to cliproxy"
+                        )
+                except Exception:
+                    logger.warning(
+                        "project_chat grd dispatch failed; falling through", exc_info=True
+                    )
+                # Conversational grd (or degrade) → cliproxy below.
+                driver = "cliproxy"
+
+            if driver == "cli_agent":
+                # Only reachable for a concrete CLI-runnable backend.
                 cli_backend = _backend or ""
                 stream_iter = stream_via_cli_agent(
                     llm_messages,
