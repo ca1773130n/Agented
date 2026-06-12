@@ -91,10 +91,15 @@ Plans:
   4. `execute_delegate`, `_scan_mentions_and_notify`, and `grd_routes.project_chat` resolve the project workspace instead of `cwd=None`, and `project_chat` no longer hardcodes `backend='claude'` (delegation cwd tests).
   5. A driver selector (default GRD) appears on superagent and project settings, and the chat transcript shows GRD session linkage (component test).
   6. House gates pass.
-**Plans**: TBD
+**Plans**: 6 plans
 
 Plans:
-- [ ] 19-NN: TBD (set by /grd:plan-phase 19)
+- [ ] 19-01-PLAN.md — Driver resolver + migration 158 (projects.default_driver, project_sa_instances.driver) + degrade injection (Wave 1)
+- [ ] 19-02-PLAN.md — Turn classifier classify_turn + /grd: command mapping (Wave 1)
+- [ ] 19-03-PLAN.md — cwd/backend bug fixes (execute_delegate, _scan_mentions_and_notify, project_chat) (Wave 1)
+- [ ] 19-04-PLAN.md — GrdChatSessionHandler + HANDLER_REGISTRY entry + PSM→chat-SSE bridge (Wave 2)
+- [ ] 19-05-PLAN.md — Funnel integration: 3-way branch in run_streaming_response + 2 call-site migrations + cliproxy regression (Wave 3)
+- [ ] 19-06-PLAN.md — Frontend driver selectors (default GRD) + transcript GRD-session linkage + 4-locale i18n (Wave 3)
 
 ### Phase 20: GRD frontend wiring
 **Goal**: GRD's full feature set is reachable from the frontend — autoresearch (`gd research`) has backend routes and a Research page, the life-harness completion surfaces (autonomy editor, round revert, shared-forge adopt, the 16 previously-unwired GRD routes) have UI, the PlanningCommandBar exposes the full supported `/grd:` command set from a manifest, and every new surface is fully localized.
