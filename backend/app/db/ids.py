@@ -73,6 +73,10 @@ EVOLVE_RUN_ID_LENGTH = 8
 ROTATION_EVENT_ID_PREFIX = "rot-"
 ROTATION_EVENT_ID_LENGTH = 8
 
+# v0.8.0 — Phase 17 forge subagent primitive (distinct from legacy agents table)
+SUBAGENT_ID_PREFIX = "subag-"
+SUBAGENT_ID_LENGTH = 6
+
 PRODUCT_DECISION_ID_PREFIX = "pdec-"
 PRODUCT_DECISION_ID_LENGTH = 6
 
@@ -202,6 +206,11 @@ def generate_conversation_id() -> str:
 def generate_team_id() -> str:
     """Generate a unique team ID like 'team-abc123'."""
     return generate_id(TEAM_ID_PREFIX, TEAM_ID_LENGTH)
+
+
+def generate_subagent_id() -> str:
+    """Generate a unique subagent ID like 'subag-abc123' (forge primitive)."""
+    return generate_id(SUBAGENT_ID_PREFIX, SUBAGENT_ID_LENGTH)
 
 
 def generate_product_id() -> str:

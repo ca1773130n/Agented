@@ -758,6 +758,16 @@ from .skills import (  # noqa: F401
     update_user_skill,
 )
 
+# Subagent forge primitive (Phase 17-02) — DISTINCT from the legacy agents table
+from .subagents import (  # noqa: F401
+    create_subagent,
+    delete_subagent,
+    get_subagent,
+    get_subagent_by_name,
+    list_subagents,
+    update_subagent,
+)
+
 # Project SA instances (project-scoped super agent instances)
 from .project_sa_instances import (  # noqa: F401
     create_project_sa_instance,

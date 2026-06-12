@@ -1077,6 +1077,27 @@ def _migrate_154_answer_eval(conn):
     create_answer_eval_tables(conn)
 
 
+def _migrate_155_subagents(conn):
+    """Phase 17-02: register ``subagent`` as a forge primitive. A brand-new,
+    SEPARATE table from the legacy ``agents`` table (used by
+    HarnessLoaderService._import_agents) — do NOT conflate the two. ``content``
+    holds the full ``.claude/agents/<name>.md`` body including frontmatter.
+    Idempotent CREATE IF NOT EXISTS."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS subagents (
+            id TEXT PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL,
+            description TEXT,
+            content TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            project_id TEXT,
+            source_path TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
+
+
 def _migrate_156_forge_bundles(conn):
     """Phase 17-03: cross-kind forge bundles. A ``forge_bundles`` row is a
     named, scope-tagged group; ``forge_bundle_items`` holds primitives of ANY
@@ -1229,5 +1250,6 @@ V07_MIGRATIONS: list = [
     # Agentic-RAG T1: baseline-vs-pipeline answer eval runs + results.
     (154, "answer_eval", _migrate_154_answer_eval),
     # v0.8.0 (17-03): cross-kind forge bundles (155 reserved for 17-02 subagents).
+    (155, "subagents", _migrate_155_subagents),
     (156, "forge_bundles", _migrate_156_forge_bundles),
 ]
