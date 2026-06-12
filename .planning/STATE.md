@@ -15,11 +15,11 @@ requirements mapped. Approved design spec:
 ``docs/superpowers/specs/2026-06-13-team-harness-self-improvement-design.md``
 (+ ``.ko.md``). PR-per-phase + codex-review-until-green cadence.
 
-Phase: 17 of 22 (Forge creation surface) — **next**
-Plan: 0 of TBD
-Status: Ready to plan (roadmap approved, no phase planned yet)
-Last activity: 2026-06-13 — Roadmap written (.planning/ROADMAP.md); phases
-17→22 = spec Phase 1→6; execution order 17,18,19,20,21,22.
+Phase: 17 of 22 (Forge creation surface) — **in progress**
+Plan: 1 complete (17-01)
+Status: Plan 17-01 executed (replace_for_project provenance fix, TDD, green)
+Last activity: 2026-06-13 — Completed 17-01-PLAN.md; fixed the
+provenance-dropping bug in replace_for_project + regression test.
 
 Progress: [----------] 0% (0 of 6 phases complete)
 
@@ -164,6 +164,7 @@ Progress: [##########] 100%
 - 09-02: create_project route set to /products with Phase 7 graceful fallback
 - 10-04: tourMachine.ts function/line thresholds relaxed (XState guard stubs are runtime-overridden)
 - 10-04: App.test.ts provide/inject tests fixed with route name + flushPromises
+- 17-01: replace_for_project now mirrors add_binding's full 10-column INSERT + coalescing so the two write paths cannot drift; calls _ensure_propagation_columns first
 
 ### Pending Todos
 
@@ -176,6 +177,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-23
-Stopped at: Completed 10-04-PLAN.md (Milestone complete — all 10 phases done)
+Last session: 2026-06-13
+Stopped at: Completed 17-01-PLAN.md (provenance fix, 2 tests green)
 Resume file: None
