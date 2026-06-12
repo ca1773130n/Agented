@@ -16,10 +16,11 @@ requirements mapped. Approved design spec:
 (+ ``.ko.md``). PR-per-phase + codex-review-until-green cadence.
 
 Phase: 17 of 22 (Forge creation surface) — **in progress**
-Plan: 1 complete (17-01)
-Status: Plan 17-01 executed (replace_for_project provenance fix, TDD, green)
-Last activity: 2026-06-13 — Completed 17-01-PLAN.md; fixed the
-provenance-dropping bug in replace_for_project + regression test.
+Plan: 2 complete (17-01, 17-03)
+Status: Plan 17-03 executed (cross-kind forge_bundles, migration 156, green)
+Last activity: 2026-06-13 — Completed 17-03-PLAN.md; added cross-kind
+forge_bundles/forge_bundle_items (migration 156) + conn-accepting _add_binding
+for atomic bundle-bind; skill_sets pinned byte-for-byte. 155 reserved for 17-02.
 
 Progress: [----------] 0% (0 of 6 phases complete)
 
@@ -165,6 +166,8 @@ Progress: [##########] 100%
 - 10-04: tourMachine.ts function/line thresholds relaxed (XState guard stubs are runtime-overridden)
 - 10-04: App.test.ts provide/inject tests fixed with route name + flushPromises
 - 17-01: replace_for_project now mirrors add_binding's full 10-column INSERT + coalescing so the two write paths cannot drift; calls _ensure_propagation_columns first
+- 17-03: cross-kind forge_bundles + forge_bundle_items (migration 156, FK ON DELETE CASCADE); conn-accepting _add_binding(conn,...) for atomic bundle-bind in one transaction (17-05 route foundation); skill_sets DDL pinned byte-for-byte; migration 155 reserved for 17-02 (subagents, not yet run)
+- [Phase 17]: 17-03: cross-kind forge_bundles + forge_bundle_items (migration 156); conn-accepting _add_binding for atomic bundle-bind (17-05 foundation); skill_sets DDL pinned byte-for-byte
 
 ### Pending Todos
 
@@ -178,5 +181,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-06-13
-Stopped at: Completed 17-01-PLAN.md (provenance fix, 2 tests green)
+Stopped at: Completed 17-03-PLAN.md (cross-kind forge_bundles, migration 156, 5 tests green)
 Resume file: None
