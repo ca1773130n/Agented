@@ -505,6 +505,20 @@ def on_startup(app: Any) -> None:
         register_session_handler(on_session_complete_import)
     except Exception:
         logger.warning("forge_session_import registration failed", exc_info=True)
+    # Phase 22-03: repeated-request detector. A NEW handler that extracts the
+    # user request from every completed session, embeds + cosine-matches it
+    # (>=0.83) against existing signals, and UPSERTs into the 22-01 store —
+    # accumulating recurrence evidence for the auto-skill gate. The module also
+    # self-registers on import (idempotent); this explicit block keeps it
+    # consistent with the other handlers and ensures startup import. Own
+    # try/except so a detector failure can't take down the other handlers.
+    try:
+        from app.services.execution_events import register_session_handler
+        from app.services.repeated_request_detector import on_session_complete_detect
+
+        register_session_handler(on_session_complete_detect)
+    except Exception:
+        logger.warning("repeated_request_detector registration failed", exc_info=True)
     # Life-Harness: sweep stale /tmp/agented-claude-overlay-* dirs left
     # behind by crashes / SIGKILLs where the per-session finally block
     # didn't run. Best-effort; never blocks startup.
