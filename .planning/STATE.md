@@ -10,11 +10,25 @@ See: .planning/PROJECT.md (updated 2026-05-21)
 ## Current Position
 
 **Active milestone:** v0.8.0 — Team Harness & Self-Improvement (started
-2026-06-13). Status: **Not started (defining requirements)**. Approved design
-spec: ``docs/superpowers/specs/2026-06-13-team-harness-self-improvement-design.md``
-(+ ``.ko.md``). First GRD-planned milestone since v0.5.0 — formal
-roadmap/plan/verify flow resumes, keeping the PR-per-phase +
-codex-review-until-green cadence.
+2026-06-13). **Roadmap created 2026-06-13** — 6 phases (17–22), 26/26
+requirements mapped. Approved design spec:
+``docs/superpowers/specs/2026-06-13-team-harness-self-improvement-design.md``
+(+ ``.ko.md``). PR-per-phase + codex-review-until-green cadence.
+
+Phase: 17 of 22 (Forge creation surface) — **next**
+Plan: 0 of TBD
+Status: Ready to plan (roadmap approved, no phase planned yet)
+Last activity: 2026-06-13 — Roadmap written (.planning/ROADMAP.md); phases
+17→22 = spec Phase 1→6; execution order 17,18,19,20,21,22.
+
+Progress: [----------] 0% (0 of 6 phases complete)
+
+**Phase queue:** 17 Forge creation surface (REQ-01..05) → 18 Sketch→primitive
+routing (REQ-06..09) → 19 GRD default driver (REQ-10..13) → 20 GRD frontend
+wiring (REQ-14..18) → 21 One-click team harness setup (REQ-19..21, integration)
+→ 22 Repeated-request auto-skill (REQ-22..26).
+
+**Next command:** `/grd:plan-phase 17`
 
 **Workflow mode (history):** PR-driven from v0.5.1 through v0.7.98. Each
 commit-message version tag corresponds to one merged PR. Per-version STATE.md
