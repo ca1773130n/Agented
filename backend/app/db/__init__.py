@@ -562,6 +562,17 @@ from .project_forge_bindings import (  # noqa: F401
     replace_for_project as replace_project_forge_bindings,
 )
 
+# Cross-kind Forge bundles (v0.8.0 17-03 — named group spanning any kind).
+from .forge_bundles import (  # noqa: F401
+    add_bundle_item,
+    create_forge_bundle,
+    delete_forge_bundle,
+    get_forge_bundle,
+    get_forge_bundle_by_name,
+    list_forge_bundle_items,
+    list_forge_bundles,
+)
+
 # Goal-loop execution type (v0.7.74 — per-session config + iteration audit;
 # v0.7.86 — Ouroboros dead-ends + convergence helpers)
 from .goal_loop import (  # noqa: F401
