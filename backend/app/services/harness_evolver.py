@@ -324,10 +324,14 @@ paper's four layers to concrete Forge tables.
                     procedural skill should be invocable explicitly.
 - **mcp_servers** — Tool registry. Add a new MCP server when the agent
                     keeps failing because it lacks a tool it needs.
+- **skills**      — Reusable procedural playbooks materialized to
+                    ``.claude/skills/<name>/SKILL.md``. Create or update a
+                    skill when a recurring multi-step procedure should be
+                    packaged so the agent can invoke it on demand.
 
-Skills (``.claude/skills/<name>/SKILL.md``) need filesystem materialization
-and are *not* auto-evolved by this loop — propose them in NOTES.md but
-don't add files for them.
+Skills ARE writable by this loop: you may create and update them just like
+the other primitives (write the payload to ``forge/skills/<name>.json``);
+they are materialized to ``.claude/skills/<name>/SKILL.md`` automatically.
 
 ## Workspace layout
 
@@ -336,14 +340,14 @@ don't add files for them.
       hooks/<name>.json
       commands/<name>.json
       mcp_servers/<name>.json
-      skills/<name>.json      (read-only — do not edit)
+      skills/<name>.json      (writable — create / update like the rest)
     trajectories/<exec_id>.json   (negative signal — what failed)
     takeaways/<takeaway_id>.json  (positive signal — what worked / was learned)
     tesserae_context.md           (OPTIONAL — Tesserae graph answers
                                   for the top-5 takeaways: code, docs,
                                   past-session references; present
                                   only when project enabled Tesserae)
-    DESIGN_GUIDE.md            (this file — read-only)
+    DESIGN_GUIDE.md            (this file — do not edit)
     PROMPT.md                  (your task)
     NOTES.md                   (write your rationale here)
 
@@ -388,8 +392,9 @@ failed trajectories and editing the Forge primitives under ``forge/``.
 - ``forge/rules/*.json``, ``forge/hooks/*.json``, ``forge/commands/*.json``,
   ``forge/mcp_servers/*.json``: the current Forge primitives bound to this
   project. Each file is one primitive; the filename is its name.
-- ``forge/skills/*.json``: read-only view of bound skills. Skill changes
-  are not auto-applied — propose them in NOTES.md only.
+- ``forge/skills/*.json``: the skills bound to this project. Skills are
+  writable — create or update one when a recurring procedure deserves a
+  reusable ``.claude/skills/<name>/SKILL.md`` playbook.
 - ``trajectories/*.json``: per-execution outcome + ``primary_layer`` +
   incidents + ``active_bindings``. NEGATIVE signal — what failed.
 - ``takeaways/*.json``: per-session positive learnings (preferences,
@@ -411,18 +416,17 @@ failed trajectories and editing the Forge primitives under ``forge/``.
 1. Group failed trajectories by ``primary_layer``.
 2. For each cluster, decide which Forge primitive type addresses it (h2/h4
    → hooks; h3 → rules; tool gaps → mcp_servers; recurring procedures →
-   commands).
+   commands or skills).
 3. Cross-reference ``takeaways/`` for positive signal: when a takeaway
    describes a procedure or constraint not yet captured in
-   ``forge/rules/`` or ``forge/commands/``, add it.
-4. Edit ``forge/<kind>/<name>.json`` files following the rules in
-   ``DESIGN_GUIDE.md``.
-5. Write your rationale to ``NOTES.md`` (what changed, why, and any skill
-   suggestions for the operator to apply manually). Cite takeaway ids
-   and trajectory ids when they motivated a change.
+   ``forge/rules/``, ``forge/commands/``, or ``forge/skills/``, add it.
+4. Edit ``forge/<kind>/<name>.json`` files (including ``forge/skills/``)
+   following the rules in ``DESIGN_GUIDE.md``.
+5. Write your rationale to ``NOTES.md`` (what changed and why). Cite
+   takeaway ids and trajectory ids when they motivated a change.
 
 Do NOT edit ``DESIGN_GUIDE.md``, ``PROMPT.md``, or anything in
-``trajectories/`` / ``takeaways/`` / ``forge/skills/``.
+``trajectories/`` / ``takeaways/``.
 """
 
 
