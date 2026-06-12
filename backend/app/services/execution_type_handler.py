@@ -484,6 +484,7 @@ class GoalLoopSessionHandler(ExecutionTypeHandler):
 
         # Persist config + spawn the driver thread.
         from app.db import set_goal_loop_config
+
         from .goal_loop_runner import start_runner
 
         try:
@@ -554,9 +555,10 @@ class GrdEvolveSessionHandler(ExecutionTypeHandler):
     """
 
     def start(self, session_config: dict) -> dict:
+        from app.db import create_evolve_run
+
         from .grd_cli_service import GrdCliService
         from .grd_evolve_runner import start_evolve_state_sync
-        from app.db import create_evolve_run
 
         gd_path = GrdCliService.gd_path()
         if not gd_path:
