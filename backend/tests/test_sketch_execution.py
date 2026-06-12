@@ -196,8 +196,8 @@ def test_project_chat_derives_backend_and_cwd(monkeypatch):
     )
 
     # Session + chat-state stubs (imported lazily inside the handler).
-    from app.services.super_agent_session_service import SuperAgentSessionService
     from app.services.chat_state_service import ChatStateService
+    from app.services.super_agent_session_service import SuperAgentSessionService
 
     monkeypatch.setattr(
         SuperAgentSessionService, "create_session", staticmethod(lambda *a, **k: ("sess-9", None))
