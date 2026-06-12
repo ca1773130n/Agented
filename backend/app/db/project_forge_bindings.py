@@ -21,7 +21,7 @@ from typing import List, Optional
 
 from .connection import get_connection
 
-VALID_KINDS = {"rule", "skill", "hook", "command", "mcp_server", "plugin"}
+VALID_KINDS = {"rule", "skill", "hook", "command", "mcp_server", "plugin", "subagent"}
 
 
 def _ensure_propagation_columns(conn) -> None:
@@ -85,6 +85,59 @@ def get_binding(binding_id: int) -> Optional[dict]:
         return _row_to_dict(row) if row else None
 
 
+def upsert_binding(
+    conn,
+    project_id: str,
+    kind: str,
+    asset_id: str,
+    *,
+    role: Optional[str] = None,
+    enabled: int = 1,
+    position: int = 0,
+    source_scope: str = "project",
+    source_shared_binding_id: Optional[int] = None,
+    fingerprint: Optional[str] = None,
+    conflict_policy: str = "local_wins",
+) -> None:
+    """Single upsert shared by every write path (``add_binding``,
+    ``replace_for_project``, bundle bind).
+
+    Takes an EXISTING ``conn`` and does NOT open or commit a connection of
+    its own — the caller owns the transaction boundary, so multi-item writes
+    stay atomic.
+    """
+    if kind not in VALID_KINDS:
+        raise ValueError(f"Unknown forge kind: {kind!r}")
+    conn.execute(
+        """
+        INSERT INTO project_forge_bindings
+            (project_id, kind, asset_id, role, enabled, position,
+             source_scope, source_shared_binding_id, fingerprint, conflict_policy)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(project_id, kind, asset_id) DO UPDATE SET
+            role                     = excluded.role,
+            enabled                  = excluded.enabled,
+            position                 = excluded.position,
+            source_scope             = excluded.source_scope,
+            source_shared_binding_id = excluded.source_shared_binding_id,
+            fingerprint              = excluded.fingerprint,
+            conflict_policy          = excluded.conflict_policy
+        """,
+        (
+            project_id,
+            kind,
+            asset_id,
+            role,
+            1 if enabled else 0,
+            position,
+            source_scope,
+            source_shared_binding_id,
+            fingerprint,
+            conflict_policy,
+        ),
+    )
+
+
 def add_binding(
     project_id: str,
     kind: str,
@@ -98,8 +151,6 @@ def add_binding(
     fingerprint: Optional[str] = None,
 ) -> dict:
     """Insert a binding. Idempotent: re-adding bumps position + re-enables."""
-    if kind not in VALID_KINDS:
-        raise ValueError(f"Unknown forge kind: {kind!r}")
     with get_connection() as conn:
         _ensure_propagation_columns(conn)
         if position is None:
@@ -109,31 +160,17 @@ def add_binding(
                 (project_id, kind),
             )
             position = cursor.fetchone()[0]
-        conn.execute(
-            """
-            INSERT INTO project_forge_bindings
-                (project_id, kind, asset_id, role, enabled, position,
-                 source_scope, source_shared_binding_id, fingerprint)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(project_id, kind, asset_id) DO UPDATE SET
-                role                    = excluded.role,
-                enabled                 = excluded.enabled,
-                position                = excluded.position,
-                source_scope            = excluded.source_scope,
-                source_shared_binding_id = excluded.source_shared_binding_id,
-                fingerprint             = excluded.fingerprint
-            """,
-            (
-                project_id,
-                kind,
-                asset_id,
-                role,
-                1 if enabled else 0,
-                position,
-                source_scope,
-                source_shared_binding_id,
-                fingerprint,
-            ),
+        upsert_binding(
+            conn,
+            project_id,
+            kind,
+            asset_id,
+            role=role,
+            enabled=1 if enabled else 0,
+            position=position,
+            source_scope=source_scope,
+            source_shared_binding_id=source_shared_binding_id,
+            fingerprint=fingerprint,
         )
         conn.commit()
         cursor = conn.execute(
@@ -162,6 +199,7 @@ def replace_for_project(project_id: str, bindings: List[dict]) -> List[dict]:
     the persisted ``position`` (per kind).
     """
     with get_connection() as conn:
+        _ensure_propagation_columns(conn)
         conn.execute(
             "DELETE FROM project_forge_bindings WHERE project_id = ?",
             (project_id,),
@@ -174,20 +212,18 @@ def replace_for_project(project_id: str, bindings: List[dict]) -> List[dict]:
                 continue
             pos = per_kind_pos.get(kind, 0)
             per_kind_pos[kind] = pos + 1
-            conn.execute(
-                """
-                INSERT INTO project_forge_bindings
-                    (project_id, kind, asset_id, role, enabled, position)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    project_id,
-                    kind,
-                    str(asset_id),
-                    b.get("role"),
-                    1 if b.get("enabled", True) else 0,
-                    pos,
-                ),
+            upsert_binding(
+                conn,
+                project_id,
+                kind,
+                str(asset_id),
+                role=b.get("role"),
+                enabled=1 if b.get("enabled", True) else 0,
+                position=pos,
+                source_scope=b.get("source_scope", "project"),
+                source_shared_binding_id=b.get("source_shared_binding_id"),
+                fingerprint=b.get("fingerprint"),
+                conflict_policy=b.get("conflict_policy", "local_wins"),
             )
         conn.commit()
     return list_bindings(project_id)

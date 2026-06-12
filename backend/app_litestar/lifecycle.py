@@ -73,6 +73,14 @@ def _init_database() -> None:
     seed_bundled_teams_and_agents()
     _seed_bundled_marketplace()
     _seed_system_agent()
+    # Phase 17-06: idempotent forge-creator default bundle (5 global-scope
+    # creator skills). Own try/except so a seed issue can't take down startup.
+    try:
+        from app.services.forge_creator_seed import seed_forge_creator_bundle
+
+        seed_forge_creator_bundle()
+    except Exception:
+        logger.warning("forge-creator seed failed", exc_info=True)
     migrate_existing_paths()
     auto_register_project_root()
     InstanceService.ensure_worktrees()
@@ -483,6 +491,20 @@ def on_startup(app: Any) -> None:
         register_session_handler(on_tesserae_export)
     except Exception:
         logger.warning("tesserae_integration registration failed", exc_info=True)
+    # Phase 17-06: session-completion auto-import of session-scaffolded forge
+    # primitives. Diffs .claude/ vs the forge manifest and imports only
+    # Agented-driven-session artifacts (session_kind gate fails CLOSED on
+    # foreign/unknown kinds — the Phase 17 prompt-injection mitigation),
+    # recording origin content-hash + source session id. Own try/except so an
+    # import error can't take down the other three handlers or session
+    # completion.
+    try:
+        from app.services.execution_events import register_session_handler
+        from app.services.forge_session_import import on_session_complete_import
+
+        register_session_handler(on_session_complete_import)
+    except Exception:
+        logger.warning("forge_session_import registration failed", exc_info=True)
     # Life-Harness: sweep stale /tmp/agented-claude-overlay-* dirs left
     # behind by crashes / SIGKILLs where the per-session finally block
     # didn't run. Best-effort; never blocks startup.

@@ -562,6 +562,24 @@ from .project_forge_bindings import (  # noqa: F401
     replace_for_project as replace_project_forge_bindings,
 )
 
+# Cross-kind Forge bundles (v0.8.0 17-03 — named group spanning any kind).
+from .forge_bundles import (  # noqa: F401
+    add_bundle_item,
+    bind_bundle_to_project as bind_forge_bundle_to_project,
+    create_forge_bundle,
+    delete_forge_bundle,
+    get_forge_bundle,
+    get_forge_bundle_by_name,
+    list_forge_bundle_items,
+    list_forge_bundles,
+)
+
+# Forge primitive provenance (v0.8.0 17-06 — session-auto-import origin hashes).
+from .forge_origin import (  # noqa: F401
+    get_origin,
+    record_origin,
+)
+
 # Goal-loop execution type (v0.7.74 — per-session config + iteration audit;
 # v0.7.86 — Ouroboros dead-ends + convergence helpers)
 from .goal_loop import (  # noqa: F401
@@ -745,6 +763,16 @@ from .skills import (  # noqa: F401
     get_user_skill_by_name,
     toggle_skill_harness,
     update_user_skill,
+)
+
+# Subagent forge primitive (Phase 17-02) — DISTINCT from the legacy agents table
+from .subagents import (  # noqa: F401
+    create_subagent,
+    delete_subagent,
+    get_subagent,
+    get_subagent_by_name,
+    list_subagents,
+    update_subagent,
 )
 
 # Project SA instances (project-scoped super agent instances)

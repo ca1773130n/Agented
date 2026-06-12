@@ -25,6 +25,9 @@ logger = logging.getLogger(__name__)
 _MANIFEST_REL = ".claude/agented-forge/manifest.json"
 # Operator-shared, marker-managed files — NEVER manifest-deleted.
 _NEVER_DELETE = {_MANIFEST_REL, ".claude/settings.json", ".claude/mcp.json"}
+# Where native claude sub-agents live — shared with the session-import differ,
+# which must agree with the materializer for manifest-skip logic to hold.
+AGENTS_SUBDIR = ".claude/agents"
 
 
 @dataclass
@@ -59,6 +62,14 @@ def _get_asset(kind: str, asset_id: str) -> Optional[dict]:
             from app.db.skills import get_user_skill
 
             return get_user_skill(int(asset_id))
+        if kind == "subagent":
+            # Subagent ids are STR (subag-…), like mcp_server. The WRITE branch
+            # (rendering each bound subagent to .claude/agents/<name>.md) lives in
+            # materialize_primitives; renderer projection is in
+            # app/services/context_renderers/* (17-04).
+            from app.db.subagents import get_subagent
+
+            return get_subagent(str(asset_id))
     except (ValueError, TypeError):
         logger.warning("forge materialize: bad asset_id %r for kind %s; skipping", asset_id, kind)
         return None
@@ -119,6 +130,16 @@ def _load_manifest(workspace: Path) -> dict[str, list[str]]:
         return {}
     by_kind = data.get("paths_by_kind")
     return by_kind if isinstance(by_kind, dict) else {}
+
+
+def manifest_managed_paths(workspace: Path) -> set[str]:
+    """Repo-relative paths the forge manifest tracks — i.e. files materialized
+    BY Agented, as opposed to scaffolded fresh by a session."""
+    managed: set[str] = set()
+    for rels in _load_manifest(workspace).values():
+        if isinstance(rels, list):
+            managed.update(rels)
+    return managed
 
 
 def _finalize_manifest(
@@ -318,6 +339,28 @@ def materialize_primitives(
                 json.dumps(doc, indent=2, ensure_ascii=False) + "\n",
             )
             result.written.append(WrittenFile(".claude/mcp.json", "mcp_server", "mcp"))
+
+    if "subagent" in kinds:
+        # Native claude sub-agent: .claude/agents/<safe>.md = frontmatter + body.
+        # Agented markers mirror the command/rule branches so the file is both a
+        # valid claude sub-agent (name/description frontmatter) and round-trippable
+        # by the loader. Per-asset file → reconciled by _finalize_manifest like
+        # commands/rules (NOT in _NEVER_DELETE).
+        for asset in _bound_assets(project_id, "subagent"):
+            safe = _safe(asset.get("name") or str(asset.get("id")))
+            base_rel = f"{AGENTS_SUBDIR}/{safe}.md"
+            rel = _unique_rel(used_rels, base_rel, asset.get("id"))
+            fm = _frontmatter(
+                {
+                    "name": asset.get("name"),
+                    "description": asset.get("description"),
+                    "agented-kind": "subagent",
+                    "agented-asset-id": asset.get("id"),
+                    "agented-source": "forge",
+                }
+            )
+            _write(workspace_path, rel, f"{fm}\n\n{asset.get('content') or ''}\n")
+            result.written.append(WrittenFile(rel, "subagent", str(asset.get("id"))))
 
     if "skill" in kinds:
         for asset in _bound_assets(project_id, "skill"):

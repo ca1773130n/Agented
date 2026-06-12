@@ -39,6 +39,7 @@ from app.db import (
     get_hook,
     get_plugin,
     get_rule,
+    get_subagent,
     list_project_forge_bindings,
 )
 from app.db.mcp_servers import get_mcp_server
@@ -66,6 +67,12 @@ class ContextBundle:
     overlay_symlinks: dict[str, str] = field(default_factory=dict)
     mcp_servers: dict[str, dict] = field(default_factory=dict)
     prompt_prepend: str = ""
+    # Bound sub-agents as [{"name": str, "body": str}]. claude discovers these
+    # natively via the overlay's agents/ dir (written into overlay_files), so its
+    # renderer does NOT inline the body. codex/gemini/opencode have no native
+    # sub-agent concept and degrade to a named prompt-prefix block built from
+    # this list (see context_renderers.base.subagent_prompt_block).
+    subagents: list[dict] = field(default_factory=list)
     # Diagnostic — surfaced via /forge-context/preview so the
     # operator can see what got resolved / skipped.
     resolved_bindings: list[dict] = field(default_factory=list)
@@ -79,6 +86,7 @@ class ContextBundle:
                 self.overlay_symlinks,
                 self.mcp_servers,
                 self.prompt_prepend,
+                self.subagents,
             )
         )
 
@@ -89,6 +97,7 @@ class ContextBundle:
             "overlay_files": sorted(self.overlay_files.keys()),
             "overlay_symlinks": sorted(self.overlay_symlinks.keys()),
             "mcp_servers": sorted(self.mcp_servers.keys()),
+            "subagents": sorted(s.get("name", "") for s in self.subagents),
             "resolved_bindings": self.resolved_bindings,
             "skipped_bindings": self.skipped_bindings,
         }
@@ -107,6 +116,7 @@ class ContextBundle:
             "overlay_symlinks": dict(self.overlay_symlinks),
             "mcp_servers": dict(self.mcp_servers),
             "prompt_prepend": self.prompt_prepend,
+            "subagents": list(self.subagents),
             "resolved_bindings": list(self.resolved_bindings),
             "skipped_bindings": list(self.skipped_bindings),
         }
@@ -121,6 +131,7 @@ class ContextBundle:
             overlay_symlinks=dict(data.get("overlay_symlinks") or {}),
             mcp_servers=dict(data.get("mcp_servers") or {}),
             prompt_prepend=data.get("prompt_prepend", "") or "",
+            subagents=list(data.get("subagents") or []),
             resolved_bindings=list(data.get("resolved_bindings") or []),
             skipped_bindings=list(data.get("skipped_bindings") or []),
         )
@@ -210,12 +221,15 @@ def _render_hook(hook: dict) -> dict:
     }
 
 
+def _safe_name(name: str) -> str:
+    return "".join(c if c.isalnum() or c in "-_" else "-" for c in name)
+
+
 def _render_command(command: dict) -> tuple[str, str]:
     """Return (relative_path, content) for a claude slash command."""
     name = command.get("name") or f"command-{command.get('id')}"
-    safe = "".join(c if c.isalnum() or c in "-_" else "-" for c in name)
     body = command.get("content") or command.get("body") or ""
-    return f"commands/{safe}.md", body
+    return f"commands/{_safe_name(name)}.md", body
 
 
 def _render_mcp_server(server: dict) -> dict:
@@ -227,9 +241,7 @@ def _render_mcp_server(server: dict) -> dict:
     return out
 
 
-def _resolve_attachment_file(
-    path: str, project_root: Optional[str]
-) -> Optional[tuple[str, str]]:
+def _resolve_attachment_file(path: str, project_root: Optional[str]) -> Optional[tuple[str, str]]:
     """Read a repo-relative file, capped at ``ATTACHMENT_BYTE_CAP``.
 
     Returns ``(label, content)`` or ``None`` if the path is outside
@@ -349,9 +361,7 @@ class ContextCompilerService:
                 if kind == "rule":
                     rule = get_rule(int(asset_id))
                     if not rule:
-                        bundle.skipped_bindings.append(
-                            {**resolved_entry, "reason": "not found"}
-                        )
+                        bundle.skipped_bindings.append({**resolved_entry, "reason": "not found"})
                         continue
                     chunk = _render_rule(rule)
                     if chunk:
@@ -359,37 +369,40 @@ class ContextCompilerService:
                 elif kind == "hook":
                     hook = get_hook(int(asset_id))
                     if not hook:
-                        bundle.skipped_bindings.append(
-                            {**resolved_entry, "reason": "not found"}
-                        )
+                        bundle.skipped_bindings.append({**resolved_entry, "reason": "not found"})
                         continue
                     hook_entries.append(_render_hook(hook))
                 elif kind == "command":
                     cmd = get_command(int(asset_id))
                     if not cmd:
-                        bundle.skipped_bindings.append(
-                            {**resolved_entry, "reason": "not found"}
-                        )
+                        bundle.skipped_bindings.append({**resolved_entry, "reason": "not found"})
                         continue
                     rel, body = _render_command(cmd)
                     bundle.overlay_files[rel] = body
+                elif kind == "subagent":
+                    subagent = get_subagent(str(asset_id))
+                    if not subagent:
+                        bundle.skipped_bindings.append({**resolved_entry, "reason": "not found"})
+                        continue
+                    name = subagent.get("name") or str(asset_id)
+                    body = subagent.get("content") or ""
+                    bundle.subagents.append({"name": name, "body": body})
+                    # claude discovers this natively from the overlay's agents/
+                    # dir; codex/gemini/opencode read bundle.subagents instead.
+                    bundle.overlay_files[f"agents/{_safe_name(name)}.md"] = body
                 elif kind == "skill":
                     system_prompt_chunks.append(_render_skill_pointer(asset_id))
                 elif kind == "mcp_server":
                     server = get_mcp_server(asset_id)
                     if not server:
-                        bundle.skipped_bindings.append(
-                            {**resolved_entry, "reason": "not found"}
-                        )
+                        bundle.skipped_bindings.append({**resolved_entry, "reason": "not found"})
                         continue
                     name = server.get("name") or asset_id
                     bundle.mcp_servers[name] = _render_mcp_server(server)
                 elif kind == "plugin":
                     plugin = get_plugin(asset_id)
                     if not plugin:
-                        bundle.skipped_bindings.append(
-                            {**resolved_entry, "reason": "not found"}
-                        )
+                        bundle.skipped_bindings.append({**resolved_entry, "reason": "not found"})
                         continue
                     # Plugins live on disk under the user's claude
                     # config dir; the renderer chooses whether to
@@ -409,9 +422,7 @@ class ContextCompilerService:
                     exc,
                     exc_info=True,
                 )
-                bundle.skipped_bindings.append(
-                    {**resolved_entry, "reason": f"error: {exc}"}
-                )
+                bundle.skipped_bindings.append({**resolved_entry, "reason": f"error: {exc}"})
 
         if system_prompt_chunks:
             bundle.system_prompt_text = "\n\n".join(system_prompt_chunks)

@@ -33,6 +33,12 @@ def utcnow() -> _dt.datetime:
     return _dt.datetime.now(_dt.UTC).replace(tzinfo=None)
 
 
+def utc_now_iso() -> str:
+    """Aware UTC timestamp as an ISO-8601 string — the convention for
+    ``created_at``/``updated_at`` columns in the db layer."""
+    return _dt.datetime.now(_dt.UTC).isoformat()
+
+
 def get_local_timezone() -> str:
     """Detect the system's IANA timezone (e.g. 'Asia/Seoul').
 

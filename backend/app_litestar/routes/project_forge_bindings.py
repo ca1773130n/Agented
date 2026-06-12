@@ -22,12 +22,14 @@ from litestar.exceptions import ClientException, NotFoundException
 from app.db import (
     VALID_FORGE_BINDING_KINDS,
     add_project_forge_binding,
+    bind_forge_bundle_to_project,
     get_project,
     list_project_forge_bindings,
     remove_project_forge_binding,
     replace_project_forge_bindings,
 )
 from app.services.context_compiler_service import ContextCompilerService
+from app.services.forge_create_service import create_and_bind_and_materialize
 from app.services.project_workspace_service import ProjectWorkspaceService
 
 from ..auth import Caller
@@ -50,9 +52,7 @@ def list_bindings_endpoint(project_id: str, caller: Caller) -> dict[str, Any]:
 
 
 @put("/{project_id:str}/forge-bindings", sync_to_thread=False)
-def replace_bindings_endpoint(
-    project_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def replace_bindings_endpoint(project_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     _ensure_project(project_id)
     bindings = (data or {}).get("bindings") or []
@@ -62,9 +62,7 @@ def replace_bindings_endpoint(
 
 
 @post("/{project_id:str}/forge-bindings", status_code=201, sync_to_thread=False)
-def add_binding_endpoint(
-    project_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def add_binding_endpoint(project_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     _ensure_project(project_id)
     body = data or {}
@@ -73,9 +71,7 @@ def add_binding_endpoint(
     if not kind or not asset_id:
         raise ClientException(detail="kind and asset_id are required")
     if kind not in VALID_FORGE_BINDING_KINDS:
-        raise ClientException(
-            detail=f"kind must be one of {sorted(VALID_FORGE_BINDING_KINDS)}"
-        )
+        raise ClientException(detail=f"kind must be one of {sorted(VALID_FORGE_BINDING_KINDS)}")
     binding = add_project_forge_binding(
         project_id,
         kind,
@@ -91,9 +87,7 @@ def add_binding_endpoint(
     status_code=204,
     sync_to_thread=False,
 )
-def remove_binding_endpoint(
-    project_id: str, binding_id: int, caller: Caller
-) -> None:
+def remove_binding_endpoint(project_id: str, binding_id: int, caller: Caller) -> None:
     del caller
     _ensure_project(project_id)
     if not remove_project_forge_binding(binding_id):
@@ -101,9 +95,7 @@ def remove_binding_endpoint(
 
 
 @post("/{project_id:str}/forge-context/preview", sync_to_thread=False)
-def preview_bundle_endpoint(
-    project_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def preview_bundle_endpoint(project_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     _ensure_project(project_id)
     body = data or {}
@@ -123,6 +115,59 @@ def preview_bundle_endpoint(
     return {"bundle": bundle.to_preview_dict()}
 
 
+@post("/{project_id:str}/forge/create", status_code=201, sync_to_thread=False)
+def forge_create_endpoint(project_id: str, data: dict, caller: Caller) -> dict[str, Any]:
+    """Atomic create+bind+materialize: create a Forge asset, bind it, and
+    materialize it to the repo in ONE flow with LIFO compensation on failure.
+
+    Body: ``{kind, payload, bind?, materialize?}``. A bad kind → 400; a
+    mid-flow failure surfaces as 5xx via the existing exception handlers after
+    compensation has undone every completed step (no orphan).
+    """
+    del caller
+    _ensure_project(project_id)
+    body = data or {}
+    kind = body.get("kind")
+    payload = body.get("payload") or {}
+    if not kind:
+        raise ClientException(detail="kind is required")
+    if not isinstance(payload, dict):
+        raise ClientException(detail="payload must be an object")
+    try:
+        result = create_and_bind_and_materialize(
+            project_id,
+            kind,
+            payload,
+            bind=bool(body.get("bind", True)),
+            materialize=bool(body.get("materialize", True)),
+        )
+    except ValueError as exc:
+        # Bad kind / unsupported kind / project-not-found surface as 400.
+        raise ClientException(detail=str(exc)) from exc
+    except TypeError as exc:
+        # Unknown payload field for the kind's create fn (**payload splat) —
+        # caller error, not a server fault.
+        raise ClientException(detail=f"invalid payload for kind {kind!r}: {exc}") from exc
+    return result
+
+
+@post(
+    "/{project_id:str}/forge/bundles/{bundle_id:str}/bind",
+    status_code=200,
+    sync_to_thread=False,
+)
+def bundle_bind_endpoint(project_id: str, bundle_id: str, caller: Caller) -> dict[str, Any]:
+    """Bind every item of a cross-kind bundle to the project in ONE
+    transaction. If any item raises, nothing commits (the whole bind rolls
+    back) and the error surfaces — no partial bind."""
+    del caller
+    _ensure_project(project_id)
+    bound = bind_forge_bundle_to_project(project_id, bundle_id)
+    if not bound:
+        raise NotFoundException(detail="Bundle has no items (or does not exist)")
+    return {"bundle_id": bundle_id, "bound": bound}
+
+
 forge_bindings_router = Router(
     path="/admin/projects",
     route_handlers=[
@@ -131,5 +176,7 @@ forge_bindings_router = Router(
         add_binding_endpoint,
         remove_binding_endpoint,
         preview_bundle_endpoint,
+        forge_create_endpoint,
+        bundle_bind_endpoint,
     ],
 )

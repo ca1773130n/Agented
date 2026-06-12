@@ -91,6 +91,42 @@ def test_skill_binding_adds_pointer_to_prompt(project):
     assert "Skill available" in bundle.system_prompt_text
 
 
+def test_subagent_binding_included_in_bundle(project):
+    """A bound sub-agent surfaces in the compiled ContextBundle (name + body)
+    via the get_subagent resolution path, and is mirrored into the overlay's
+    agents/ dir for claude's native discovery."""
+    from app.db.subagents import create_subagent
+
+    sa = create_subagent(
+        name="code-reviewer",
+        description="Reviews code",
+        content="You review code for bugs.",
+        project_id=project,
+    )
+    add_project_forge_binding(project, "subagent", sa["id"])
+
+    bundle = ContextCompilerService.compile(project)
+    assert len(bundle.subagents) == 1
+    assert bundle.subagents[0]["name"] == "code-reviewer"
+    assert bundle.subagents[0]["body"] == "You review code for bugs."
+    # claude native-discovery overlay file
+    assert "agents/code-reviewer.md" in bundle.overlay_files
+    assert bundle.overlay_files["agents/code-reviewer.md"] == "You review code for bugs."
+    assert any(
+        rb["kind"] == "subagent" and rb["asset_id"] == sa["id"]
+        for rb in bundle.resolved_bindings
+    )
+    assert not bundle.is_empty()
+
+
+def test_stale_subagent_binding_skipped(project):
+    add_project_forge_binding(project, "subagent", "subag-doesnotexist")
+    bundle = ContextCompilerService.compile(project)
+    assert bundle.subagents == []
+    assert len(bundle.skipped_bindings) == 1
+    assert bundle.skipped_bindings[0]["reason"] == "not found"
+
+
 def test_stale_binding_skipped_not_raised(project):
     # Bind to a rule id that doesn't exist — compile must succeed
     # and surface the skip in diagnostics so the operator can fix

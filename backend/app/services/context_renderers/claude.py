@@ -52,6 +52,12 @@ class ClaudeRenderer(Renderer):
             return cmd, env
         new_env = dict(env)
         new_cmd = _append_system_prompt(cmd, bundle.system_prompt_text)
+        # Sub-agents: claude discovers these NATIVELY from the overlay's
+        # ``agents/<name>.md`` files (placed in bundle.overlay_files by the
+        # compiler and written by apply_forge_bundle below). We deliberately do
+        # NOT inline the sub-agent body into --append-system-prompt — that's the
+        # codex/gemini/opencode degrade path, not claude's. This asymmetry is
+        # the all-four-backends house rule documented in 17-RESEARCH.md.
 
         # If the env already points at an overlay dir, apply the
         # bundle right now. Otherwise PSM will create the overlay
@@ -62,7 +68,5 @@ class ClaudeRenderer(Renderer):
             try:
                 apply_forge_bundle(overlay, bundle.to_dict())
             except Exception:
-                logger.warning(
-                    "claude_renderer: overlay apply failed", exc_info=True
-                )
+                logger.warning("claude_renderer: overlay apply failed", exc_info=True)
         return new_cmd, new_env

@@ -9,19 +9,61 @@ See: .planning/PROJECT.md (updated 2026-05-21)
 
 ## Current Position
 
-**Workflow mode:** PR-driven (since v0.5.1). Each commit-message version tag
-corresponds to one merged PR. Per-version STATE.md stubs live at
-``.planning/milestones/v0.7.N/STATE.md`` (backfilled via PR #148 — 94 files
-covering v0.7.0 through v0.7.98).
+**Active milestone:** v0.8.0 — Team Harness & Self-Improvement (started
+2026-06-13). **Roadmap created 2026-06-13** — 6 phases (17–22), 26/26
+requirements mapped. Approved design spec:
+``docs/superpowers/specs/2026-06-13-team-harness-self-improvement-design.md``
+(+ ``.ko.md``). PR-per-phase + codex-review-until-green cadence.
 
-**Last GRD-planned milestone:** v0.5.0 — Production-Level Onboarding Experience
-(10 phases / 19 plans, complete 2026-03-23). The detail below is preserved as
-the v0.5.0 historical record; for newer work see the per-milestone STATE.md
-files under ``.planning/milestones/v0.5.1/`` and later.
+Phase: 17 of 22 (Forge creation surface) — **all plans complete (ready for verify)**
+Plan: 6 complete (17-01, 17-02, 17-03, 17-04, 17-05, 17-06)
+Status: Plan 17-06 executed (forge-creator bundle + gated session auto-import,
+6/6 proxy + 174 backend green; phase house gates run)
+Last activity: 2026-06-13 — Completed 17-06-PLAN.md (FINAL plan of phase 17).
+Shipped the forge-creator default bundle (5 global-scope agentskills.io creator
+skills — skill/rule/hook/command/subagent-creator — seeded idempotently at startup,
+predefined-bot pattern) and the session-completion auto-import pipeline: a 4th
+handler on the `execution_events` bus diffs `.claude/` vs the forge manifest and
+auto-imports session-scaffolded subagents via the 17-05 atomic API, recording
+sha256 + source-session-id provenance in `forge_origin` (migration 157). SECURITY:
+the session_kind gate fails CLOSED — only {project_session, super_agent,
+team_session, goal_loop} auto-bind; foreign/unknown kinds (incl. external
+clone-import) import nothing. House gates: backend 174 passed (targeted-set
+substitution disclosed, full-suite hang avoided); frontend 1480 passed / 7
+known-baseline / 0 NEW; `just build` fails only on a PRE-EXISTING unrelated TS
+error in AnswerGroundednessCard.vue (PR #212, phase 17 touched zero frontend files).
+See prior 17-05 below.
 
-**Active phase work:** None. GRD's roadmap model still resolves the
-``anonymous`` milestone (= v0.5.0's phase tree) as "complete"; the active
-shipping cadence happens in commits, not phases.
+Prior activity: 2026-06-13 — Completed 17-05-PLAN.md; `POST /admin/projects/{id}/forge/create`
+creates+binds+materializes atomically via explicit LIFO compensation (no DB+FS saga
+exists) — injected failure at the bind stage AND the materialize stage each leaves
+zero orphaned row/binding/repo file; cross-kind bundle-bind binds every item in one
+transaction via 17-03's conn-accepting `_add_binding`. See prior 17-04 below.
+
+Prior activity: 2026-06-13 — Completed 17-04-PLAN.md; subagents now materialize to
+byte-stable `.claude/agents/<name>.md` (manifest-tracked, resolved 17-02 WRITE
+TODO) and project across all four renderers — claude via native `agents/`
+discovery (no inline body), codex/gemini/opencode via a named prompt-prefix
+degrade block. Added `ContextBundle.subagents` + compiler resolution. 58/58
+proxy tests green (forge_materialization + prompt_renderer + context_compiler).
+
+Progress: [----------] 0% (0 of 6 phases complete)
+
+**Phase queue:** 17 Forge creation surface (REQ-01..05) → 18 Sketch→primitive
+routing (REQ-06..09) → 19 GRD default driver (REQ-10..13) → 20 GRD frontend
+wiring (REQ-14..18) → 21 One-click team harness setup (REQ-19..21, integration)
+→ 22 Repeated-request auto-skill (REQ-22..26).
+
+**Next command:** `/grd:plan-phase 17`
+
+**Workflow mode (history):** PR-driven from v0.5.1 through v0.7.98. Each
+commit-message version tag corresponds to one merged PR. Per-version STATE.md
+stubs live at ``.planning/milestones/v0.7.N/STATE.md`` (backfilled via PR #148
+— 94 files covering v0.7.0 through v0.7.98).
+
+**Last completed GRD-planned milestone:** v0.5.0 — Production-Level Onboarding
+Experience (10 phases / 19 plans, complete 2026-03-23). The detail below is
+preserved as the v0.5.0 historical record.
 
 ---
 
@@ -79,6 +121,7 @@ Progress: [##########] 100%
 | 08-accessibility | 1/1 | 5min | 5min |
 | 09-post-tour-experience | 2/2 | 24min | 12min |
 | 10-integration-testing | 4/4 | 64min | 16min |
+| Phase 17 P06 | 13min | 4 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -148,6 +191,11 @@ Progress: [##########] 100%
 - 09-02: create_project route set to /products with Phase 7 graceful fallback
 - 10-04: tourMachine.ts function/line thresholds relaxed (XState guard stubs are runtime-overridden)
 - 10-04: App.test.ts provide/inject tests fixed with route name + flushPromises
+- 17-01: replace_for_project now mirrors add_binding's full 10-column INSERT + coalescing so the two write paths cannot drift; calls _ensure_propagation_columns first
+- 17-03: cross-kind forge_bundles + forge_bundle_items (migration 156, FK ON DELETE CASCADE); conn-accepting _add_binding(conn,...) for atomic bundle-bind in one transaction (17-05 route foundation); skill_sets DDL pinned byte-for-byte; migration 155 reserved for 17-02 (subagents, not yet run)
+- 17-05: atomic forge/create implemented as explicit LIFO compensation in create_and_bind_and_materialize (no DB+FS saga abstraction exists); forward steps (create row -> bind -> materialize) undone in reverse on any exception, each cleanup isolated so it cannot mask the original error; bundle-bind binds all cross-kind items in one get_connection() block (commit-once or rollback); skill excluded from create dispatch (no db create fn)
+- [Phase 17]: 17-03: cross-kind forge_bundles + forge_bundle_items (migration 156); conn-accepting _add_binding for atomic bundle-bind (17-05 foundation); skill_sets DDL pinned byte-for-byte
+- [Phase 17]: 17-06: forge-creator bundle (5 global-scope creator skills, idempotent startup seed); session-completion auto-import handler (4th on execution_events bus) gated on session_kind={project_session,super_agent,team_session,goal_loop}, fails closed on foreign/unknown; forge_origin (mig 157) records sha256+source-session-id; global scope via forge_bundles.scope='global' (user_skills inherently global)
 
 ### Pending Todos
 
@@ -160,6 +208,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-23
-Stopped at: Completed 10-04-PLAN.md (Milestone complete — all 10 phases done)
+Last session: 2026-06-13
+Stopped at: Completed 17-03-PLAN.md (cross-kind forge_bundles, migration 156, 5 tests green)
 Resume file: None

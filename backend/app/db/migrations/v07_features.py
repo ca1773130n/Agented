@@ -1077,6 +1077,79 @@ def _migrate_154_answer_eval(conn):
     create_answer_eval_tables(conn)
 
 
+def _migrate_155_subagents(conn):
+    """Phase 17-02: register ``subagent`` as a forge primitive. A brand-new,
+    SEPARATE table from the legacy ``agents`` table (used by
+    HarnessLoaderService._import_agents) — do NOT conflate the two. ``content``
+    holds the full ``.claude/agents/<name>.md`` body including frontmatter.
+    Idempotent CREATE IF NOT EXISTS."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS subagents (
+            id TEXT PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL,
+            description TEXT,
+            content TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            project_id TEXT,
+            source_path TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
+
+
+def _migrate_156_forge_bundles(conn):
+    """Phase 17-03: cross-kind forge bundles. A ``forge_bundles`` row is a
+    named, scope-tagged group; ``forge_bundle_items`` holds primitives of ANY
+    kind in one bundle (unlike skills-only legacy ``skill_sets``). Idempotent
+    CREATE IF NOT EXISTS. Does NOT touch skill_sets / skill_set_items."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS forge_bundles (
+            id TEXT PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL,
+            description TEXT,
+            scope TEXT NOT NULL DEFAULT 'project',
+            created_at TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS forge_bundle_items (
+            bundle_id TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            asset_id TEXT NOT NULL,
+            position INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (bundle_id, kind, asset_id),
+            FOREIGN KEY (bundle_id) REFERENCES forge_bundles(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_forge_bundle_items_pos "
+        "ON forge_bundle_items(bundle_id, position)"
+    )
+
+
+def _migrate_157_forge_origin(conn):
+    """Phase 17-06: provenance for session-auto-imported forge primitives.
+    Records, per (asset_id, kind), the sha256 content-hash of the source
+    ``.claude/`` file at import time plus the session that produced it — so the
+    import handler can detect unchanged files (skip) and changed files
+    (re-import), and so an operator can audit where an auto-bound primitive came
+    from. Idempotent CREATE IF NOT EXISTS."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS forge_origin (
+            asset_id TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            origin_hash TEXT NOT NULL,
+            source_session_id TEXT,
+            imported_at TEXT NOT NULL,
+            PRIMARY KEY (asset_id, kind)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_forge_origin_session ON forge_origin(source_session_id)"
+    )
+
+
 def _migrate_152_resume_recovery(conn):
     """Harness-1 Phase 4: redispatch/resume provenance + per-trigger
     auto-recovery flag. PRAGMA-guarded ALTERs — idempotent."""
@@ -1198,4 +1271,8 @@ V07_MIGRATIONS: list = [
     (153, "extracted_facts", _migrate_153_extracted_facts),
     # Agentic-RAG T1: baseline-vs-pipeline answer eval runs + results.
     (154, "answer_eval", _migrate_154_answer_eval),
+    # v0.8.0 (17-03): cross-kind forge bundles (155 reserved for 17-02 subagents).
+    (155, "subagents", _migrate_155_subagents),
+    (156, "forge_bundles", _migrate_156_forge_bundles),
+    (157, "forge_origin", _migrate_157_forge_origin),
 ]

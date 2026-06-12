@@ -129,6 +129,7 @@ from .routes.rules_plugins_hooks_commands import (
     plugins_router,
     rules_router,
 )
+from .routes.project_subagents import subagents_router
 from .routes.scheduler import scheduler_router
 from .routes.skills import (
     skill_composer_router,
@@ -273,6 +274,7 @@ def create_app() -> Litestar:
             plugins_router,
             hooks_router,
             commands_router,
+            subagents_router,
             workflows_router,
             super_agents_router,
             super_agent_activity_router,

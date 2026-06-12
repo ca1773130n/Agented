@@ -78,13 +78,28 @@ Enable engineering teams to orchestrate AI-powered automation (bots, agents, wor
 
 ### Active
 
-No formal "Active" list at the moment. Since v0.5.1 the project ships
-PR-driven (one merged PR per commit-message version tag), so feature
-selection happens at PR-open time rather than from a milestone backlog.
-The v0.2.0 line items above were partially absorbed into the v0.6.x and
-v0.7.x waves (workflow builder, analytics dashboards, RBAC, specialized
-bots, retention/secrets, frontend polish); see ``.planning/MILESTONES.md``
-for which arc covers which.
+v0.8.0 — Team Harness & Self-Improvement (see
+``docs/superpowers/specs/2026-06-13-team-harness-self-improvement-design.md``):
+
+- A **Forge creation surface** — `subagent` primitive kind, atomic
+  create+bind+materialize API, cross-kind `forge_bundles`, shipped
+  `forge-creator` skill bundle + session-completion auto-import
+- A **Sketch → primitive routing** — classification `action` dimension,
+  `primitive_generator` routing target, PrimitiveForgeService
+  (create + ACE-style improve), outcome card with undo
+- A **GRD default driver** — `resolve_execution_driver()` 3-way
+  (cliproxy | cli_agent | grd, default grd), GrdChatSessionHandler
+  bridging PSM → chat SSE, cwd fixes for delegations/project_chat
+- A **GRD frontend wiring** — autoresearch (gd research) page,
+  life-harness completion UI (autonomy/revert/shared-forge/16 unwired
+  routes), full /grd: command surface, 4-locale i18n
+- A **One-click team harness setup** — ProjectDashboard button +
+  idempotent TeamHarnessSetupService (GRD init, team topology,
+  bundles, tesserae, policies, 4-harness materialization)
+- A **Repeated-request auto-skill** — `repeated_request_signals`
+  store, embedding-similarity detection over all 5 session kinds,
+  hybrid confidence gates (auto ≥3 occurrences + verified; else
+  propose), patch-over-create, provenance hashes, security scan
 
 ### Out of Scope
 
@@ -124,12 +139,22 @@ The codebase has grown organically and has accumulated technical debt documented
 
 ## Current Milestone
 
-**v0.7.98** (last shipped 2026-05-21 via PR #146 `refactor(v0.7.98): simplify v0.7.95-.97 wave`)
+**v0.8.0 — Team Harness & Self-Improvement** (started 2026-06-13; first
+GRD-planned milestone since v0.5.0; last shipped version v0.7.98 via PR #146)
 
-Shipping cadence has been PR-driven since v0.5.1 — no formal GRD roadmap; each
-commit-message version tag corresponds to one merged PR. Per-version STATE.md
-stubs at ``.planning/milestones/v0.7.N/STATE.md`` (94 files, backfilled via
-PR #148). See ``.planning/MILESTONES.md`` for the chronological summary.
+**Goal:** Every project can one-click bootstrap a team harness where agents
+and the sketch panel create/improve forge primitives (skill, rule, hook,
+command, subagent), GRD drives all superagent conversations by default with
+its full feature set (autoresearch, life-harness, tesserae) wired to the
+frontend, and repeated similar user requests are detected via life-harness
+memory + tesserae and auto-converted into skills behind confidence gates.
+
+**Target features:** forge creation surface; sketch→primitive routing; GRD
+default driver; GRD frontend wiring; one-click team harness setup;
+repeated-request auto-skill. Approved design spec:
+``docs/superpowers/specs/2026-06-13-team-harness-self-improvement-design.md``
+(+ ``.ko.md`` sibling). PRs remain phase-scoped with
+codex-review-until-green.
 
 ---
-*Last updated: 2026-05-21 — version bump to v0.7.98 + GRD docs refreshed for the post-v0.5.0 PR-driven era*
+*Last updated: 2026-06-13 — started milestone v0.8.0 Team Harness & Self-Improvement*

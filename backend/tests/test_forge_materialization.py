@@ -324,6 +324,78 @@ def test_cleanup_never_deletes_shared_files(isolated_db, tmp_path):
     assert (tmp_path / ".claude" / "settings.json").exists()
 
 
+def test_materialize_writes_subagent(isolated_db, tmp_path):
+    """A bound subagent materializes to .claude/agents/<safe>.md with Agented
+    frontmatter markers, and is tracked in the manifest's subagent bucket."""
+    from app.db import subagents as subagents_repo
+    from app.db import project_forge_bindings as bindings_repo
+    from app.database import get_connection
+
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('proj-sa', 'P', 'active')")
+        conn.commit()
+    sa = subagents_repo.create_subagent(
+        name="code-reviewer",
+        description="Reviews code for bugs",
+        content="You are a meticulous code reviewer. Find bugs.",
+        project_id="proj-sa",
+    )
+    bindings_repo.add_binding("proj-sa", "subagent", sa["id"])
+
+    result = materialize_primitives({"id": "proj-sa"}, ["subagent"], tmp_path)
+
+    agent_file = tmp_path / ".claude" / "agents" / "code-reviewer.md"
+    assert agent_file.exists()
+    text = agent_file.read_text()
+    assert 'agented-kind: "subagent"' in text
+    assert f'agented-asset-id: "{sa["id"]}"' in text
+    assert 'agented-source: "forge"' in text
+    assert 'name: "code-reviewer"' in text
+    assert 'description: "Reviews code for bugs"' in text
+    assert "meticulous code reviewer" in text
+
+    rels = {w.rel_path for w in result.written}
+    assert ".claude/agents/code-reviewer.md" in rels
+
+    import json as _json
+
+    manifest = _json.loads(
+        (tmp_path / ".claude" / "agented-forge" / "manifest.json").read_text()
+    )
+    assert ".claude/agents/code-reviewer.md" in manifest["paths_by_kind"]["subagent"]
+
+
+def test_materialize_subagent_is_deterministic(isolated_db, tmp_path):
+    """A second identical run yields byte-identical output + no manifest churn."""
+    from app.db import subagents as subagents_repo
+    from app.db import project_forge_bindings as bindings_repo
+    from app.database import get_connection
+
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name, status) VALUES ('proj-sad', 'P', 'active')")
+        conn.commit()
+    sa = subagents_repo.create_subagent(
+        name="planner",
+        description="Plans work",
+        content="Plan carefully.",
+        project_id="proj-sad",
+    )
+    bindings_repo.add_binding("proj-sad", "subagent", sa["id"])
+
+    r1 = materialize_primitives({"id": "proj-sad"}, ["subagent"], tmp_path)
+    f = tmp_path / ".claude" / "agents" / "planner.md"
+    text1 = f.read_text()
+    manifest1 = (tmp_path / ".claude" / "agented-forge" / "manifest.json").read_text()
+    r2 = materialize_primitives({"id": "proj-sad"}, ["subagent"], tmp_path)
+    text2 = f.read_text()
+    manifest2 = (tmp_path / ".claude" / "agented-forge" / "manifest.json").read_text()
+
+    assert text1 == text2
+    assert manifest1 == manifest2
+    assert {w.rel_path for w in r1.written} == {w.rel_path for w in r2.written}
+    assert r2.deleted == []
+
+
 def test_mcp_json_idempotent_marker_length_and_bad_file_recovery(isolated_db, tmp_path):
     import json as _json
     from app.db import mcp_servers as mcp_repo
