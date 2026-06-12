@@ -60,11 +60,10 @@ def _get_asset(kind: str, asset_id: str) -> Optional[dict]:
 
             return get_user_skill(int(asset_id))
         if kind == "subagent":
-            # Subagent ids are STR (subag-…), like mcp_server. This is the
-            # READ/dispatch half only — the WRITE branch (rendering each bound
-            # subagent to .claude/agents/<name>.md across the 4 backends) is
-            # 17-04. TODO(17-02→17-04): add a subagent materialization block
-            # alongside the mcp_server/rule/hook/command/skill write branches.
+            # Subagent ids are STR (subag-…), like mcp_server. The WRITE branch
+            # (rendering each bound subagent to .claude/agents/<name>.md) lives in
+            # materialize_primitives; renderer projection is in
+            # app/services/context_renderers/* (17-04).
             from app.db.subagents import get_subagent
 
             return get_subagent(str(asset_id))
@@ -327,6 +326,28 @@ def materialize_primitives(
                 json.dumps(doc, indent=2, ensure_ascii=False) + "\n",
             )
             result.written.append(WrittenFile(".claude/mcp.json", "mcp_server", "mcp"))
+
+    if "subagent" in kinds:
+        # Native claude sub-agent: .claude/agents/<safe>.md = frontmatter + body.
+        # Agented markers mirror the command/rule branches so the file is both a
+        # valid claude sub-agent (name/description frontmatter) and round-trippable
+        # by the loader. Per-asset file → reconciled by _finalize_manifest like
+        # commands/rules (NOT in _NEVER_DELETE).
+        for asset in _bound_assets(project_id, "subagent"):
+            safe = _safe(asset.get("name") or str(asset.get("id")))
+            base_rel = f".claude/agents/{safe}.md"
+            rel = _unique_rel(used_rels, base_rel, asset.get("id"))
+            fm = _frontmatter(
+                {
+                    "name": asset.get("name"),
+                    "description": asset.get("description"),
+                    "agented-kind": "subagent",
+                    "agented-asset-id": asset.get("id"),
+                    "agented-source": "forge",
+                }
+            )
+            _write(workspace_path, rel, f"{fm}\n\n{asset.get('content') or ''}\n")
+            result.written.append(WrittenFile(rel, "subagent", str(asset.get("id"))))
 
     if "skill" in kinds:
         for asset in _bound_assets(project_id, "skill"):
