@@ -197,6 +197,18 @@ Progress: [##########] 100%
 - [Phase 17]: 17-03: cross-kind forge_bundles + forge_bundle_items (migration 156); conn-accepting _add_binding for atomic bundle-bind (17-05 foundation); skill_sets DDL pinned byte-for-byte
 - [Phase 17]: 17-06: forge-creator bundle (5 global-scope creator skills, idempotent startup seed); session-completion auto-import handler (4th on execution_events bus) gated on session_kind={project_session,super_agent,team_session,goal_loop}, fails closed on foreign/unknown; forge_origin (mig 157) records sha256+source-session-id; global scope via forge_bundles.scope='global' (user_skills inherently global)
 
+- [Phase 19]: 19-01: driver spine foundation. resolve_execution_driver() is an
+  ADDITIVE precedence resolver beside should_route_via_cli_agent (callers migrate
+  in 19-04): turn -> SuperAgent config_json.driver -> instance.driver ->
+  project.default_driver -> global "grd", normalized to {cliproxy,cli_agent,grd}.
+  Non-CLI backend -> cliproxy. Migration 158 adds nullable projects.default_driver
+  + project_sa_instances.driver (NULL = inherit, PRAGMA-guarded idempotent).
+  Degrade grd->cli_agent via injectable _grd_available/_resolve_workspace
+  (GrdCliService.available classmethod + ProjectWorkspaceService.resolve_working_directory
+  staticmethod) — both must be OK or it degrades. Every DB read wrapped; outer
+  guard returns legacy choice on any exception (never crashes the turn). 50/50
+  test_cli_agent_runner.py green.
+
 ### Pending Todos
 
 None yet.
@@ -209,5 +221,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-06-13
-Stopped at: Completed 17-03-PLAN.md (cross-kind forge_bundles, migration 156, 5 tests green)
+Stopped at: Completed 19-01-PLAN.md (driver spine: resolve_execution_driver + migration 158, 50/50 green)
 Resume file: None
