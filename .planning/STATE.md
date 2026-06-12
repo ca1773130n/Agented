@@ -16,13 +16,14 @@ requirements mapped. Approved design spec:
 (+ ``.ko.md``). PR-per-phase + codex-review-until-green cadence.
 
 Phase: 17 of 22 (Forge creation surface) — **in progress**
-Plan: 3 complete (17-01, 17-02, 17-03)
-Status: Plan 17-02 executed (subagent forge primitive, migration 155, green)
-Last activity: 2026-06-13 — Completed 17-02-PLAN.md; registered `subagent` as a
-forge primitive — distinct `subagents` table (migration 155, subag- prefix) +
-CRUD + /admin/subagents routes + VALID_KINDS membership + _get_asset READ
-branch. Legacy agents table untouched; materialization WRITE branch left for
-17-04. 5/5 DB tests green.
+Plan: 4 complete (17-01, 17-02, 17-03, 17-04)
+Status: Plan 17-04 executed (subagent materialization + 4-backend rendering, green)
+Last activity: 2026-06-13 — Completed 17-04-PLAN.md; subagents now materialize to
+byte-stable `.claude/agents/<name>.md` (manifest-tracked, resolved 17-02 WRITE
+TODO) and project across all four renderers — claude via native `agents/`
+discovery (no inline body), codex/gemini/opencode via a named prompt-prefix
+degrade block. Added `ContextBundle.subagents` + compiler resolution. 58/58
+proxy tests green (forge_materialization + prompt_renderer + context_compiler).
 
 Progress: [----------] 0% (0 of 6 phases complete)
 
