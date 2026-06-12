@@ -16,9 +16,15 @@ requirements mapped. Approved design spec:
 (+ ``.ko.md``). PR-per-phase + codex-review-until-green cadence.
 
 Phase: 17 of 22 (Forge creation surface) — **in progress**
-Plan: 4 complete (17-01, 17-02, 17-03, 17-04)
-Status: Plan 17-04 executed (subagent materialization + 4-backend rendering, green)
-Last activity: 2026-06-13 — Completed 17-04-PLAN.md; subagents now materialize to
+Plan: 5 complete (17-01, 17-02, 17-03, 17-04, 17-05)
+Status: Plan 17-05 executed (atomic forge/create + bundle-bind, 12/12 green)
+Last activity: 2026-06-13 — Completed 17-05-PLAN.md; `POST /admin/projects/{id}/forge/create`
+creates+binds+materializes atomically via explicit LIFO compensation (no DB+FS saga
+exists) — injected failure at the bind stage AND the materialize stage each leaves
+zero orphaned row/binding/repo file; cross-kind bundle-bind binds every item in one
+transaction via 17-03's conn-accepting `_add_binding`. See prior 17-04 below.
+
+Prior activity: 2026-06-13 — Completed 17-04-PLAN.md; subagents now materialize to
 byte-stable `.claude/agents/<name>.md` (manifest-tracked, resolved 17-02 WRITE
 TODO) and project across all four renderers — claude via native `agents/`
 discovery (no inline body), codex/gemini/opencode via a named prompt-prefix
@@ -170,6 +176,7 @@ Progress: [##########] 100%
 - 10-04: App.test.ts provide/inject tests fixed with route name + flushPromises
 - 17-01: replace_for_project now mirrors add_binding's full 10-column INSERT + coalescing so the two write paths cannot drift; calls _ensure_propagation_columns first
 - 17-03: cross-kind forge_bundles + forge_bundle_items (migration 156, FK ON DELETE CASCADE); conn-accepting _add_binding(conn,...) for atomic bundle-bind in one transaction (17-05 route foundation); skill_sets DDL pinned byte-for-byte; migration 155 reserved for 17-02 (subagents, not yet run)
+- 17-05: atomic forge/create implemented as explicit LIFO compensation in create_and_bind_and_materialize (no DB+FS saga abstraction exists); forward steps (create row -> bind -> materialize) undone in reverse on any exception, each cleanup isolated so it cannot mask the original error; bundle-bind binds all cross-kind items in one get_connection() block (commit-once or rollback); skill excluded from create dispatch (no db create fn)
 - [Phase 17]: 17-03: cross-kind forge_bundles + forge_bundle_items (migration 156); conn-accepting _add_binding for atomic bundle-bind (17-05 foundation); skill_sets DDL pinned byte-for-byte
 
 ### Pending Todos
