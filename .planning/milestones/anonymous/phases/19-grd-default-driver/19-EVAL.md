@@ -121,9 +121,11 @@ No external benchmarks, datasets, or score thresholds exist. Evaluation is entir
   cd /Users/neo/Developer/Projects/Agented/frontend && node -e "
   const fs = require('fs');
   const locales = ['en', 'ko', 'ja', 'zh'].map(l => [l, JSON.parse(fs.readFileSync('src/locales/' + l + '.json', 'utf8'))]);
-  const enKeys = Object.keys(locales[0][1]).filter(k => k.startsWith('driver'));
+  const driverKeys = obj => Object.keys(obj.driver || {}).map(k => 'driver.' + k);
+  const enKeys = driverKeys(locales[0][1]);
+  if (!enKeys.length) { console.error('en has no driver.* namespace'); process.exit(1); }
   for (const [l, obj] of locales.slice(1)) {
-    const keys = Object.keys(obj).filter(k => k.startsWith('driver'));
+    const keys = driverKeys(obj);
     const missing = enKeys.filter(k => !keys.includes(k));
     const extra = keys.filter(k => !enKeys.includes(k));
     if (missing.length || extra.length) { console.error(l, 'missing:', missing, 'extra:', extra); process.exit(1); }
@@ -200,9 +202,9 @@ No external benchmarks, datasets, or score thresholds exist. Evaluation is entir
   ```
   Additionally, verify no literal `'claude'` hardcode at the patched sites:
   ```bash
-  cd /Users/neo/Developer/Projects/Agented/backend && grep -n "backend='claude'" app_litestar/routes/grd_routes.py app/services/sketch_execution_service.py
+  cd /Users/neo/Developer/Projects/Agented/backend && grep -nE "backend=['\"]claude['\"]" app_litestar/routes/grd_routes.py app/services/sketch_execution_service.py
   ```
-- **Pass condition:** All `test_sketch_execution.py` tests pass; `grep` returns no output (no `backend='claude'` literals remaining at the three patched call sites).
+- **Pass condition:** All `test_sketch_execution.py` tests pass; `grep` returns no output (no `backend='claude'` or `backend="claude"` literals remaining at the three patched call sites).
 - **Blind spots:** Tests use a monkeypatched `ProjectWorkspaceService` — real workspace resolution against a cloned repo is deferred.
 
 ### P6: Backend targeted test suite with watchdog-substitution procedure

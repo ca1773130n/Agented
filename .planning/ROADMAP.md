@@ -177,7 +177,7 @@ Plans:
 
 | Phase | Name | Requirements | Depends on | Verification | Status |
 |-------|------|--------------|------------|--------------|--------|
-| 17 | Forge creation surface | Complete    | 2026-06-12 | proxy | Complete (6/6 ✓ 2026-06-13) |
+| 17 | Forge creation surface | REQ-01..05 | — | proxy | Complete (6/6 ✓ 2026-06-13) |
 | 18 | Sketch → primitive routing | REQ-06..09 | 17 | proxy | Not started |
 | 19 | GRD default driver | REQ-10..13 | 17 | proxy | Not started |
 | 20 | GRD frontend wiring | REQ-14..18 | 19 | proxy | Not started |
