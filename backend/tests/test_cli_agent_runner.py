@@ -61,9 +61,15 @@ def captured(monkeypatch):
 def test_claude_yolo_passes_skip_permissions(captured):
     captured["proc"] = _FakeProc(
         [
-            (json.dumps({"type": "assistant", "message": {
-                "content": [{"type": "text", "text": "hello"}]
-            }}) + "\n").encode(),
+            (
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {"content": [{"type": "text", "text": "hello"}]},
+                    }
+                )
+                + "\n"
+            ).encode(),
         ]
     )
     chunks = list(
@@ -90,13 +96,23 @@ def test_claude_result_event_does_not_double_yield_text(captured):
     reply = "Hey. What do you need?"
     captured["proc"] = _FakeProc(
         [
-            (json.dumps({"type": "assistant", "message": {
-                "content": [{"type": "text", "text": reply}]
-            }}) + "\n").encode(),
-            (json.dumps({
-                "type": "result", "subtype": "success", "is_error": False,
-                "result": reply,
-            }) + "\n").encode(),
+            (
+                json.dumps(
+                    {"type": "assistant", "message": {"content": [{"type": "text", "text": reply}]}}
+                )
+                + "\n"
+            ).encode(),
+            (
+                json.dumps(
+                    {
+                        "type": "result",
+                        "subtype": "success",
+                        "is_error": False,
+                        "result": reply,
+                    }
+                )
+                + "\n"
+            ).encode(),
         ]
     )
     chunks = list(
@@ -118,25 +134,38 @@ def test_claude_streams_token_deltas_and_skips_duplicate_assistant(captured):
     lines = []
     for tok in tokens:
         lines.append(
-            (json.dumps({
-                "type": "stream_event",
-                "event": {
-                    "type": "content_block_delta",
-                    "delta": {"type": "text_delta", "text": tok},
-                },
-            }) + "\n").encode()
+            (
+                json.dumps(
+                    {
+                        "type": "stream_event",
+                        "event": {
+                            "type": "content_block_delta",
+                            "delta": {"type": "text_delta", "text": tok},
+                        },
+                    }
+                )
+                + "\n"
+            ).encode()
         )
     # Final full assistant message (the duplicate) + result (also duplicate).
     full = "".join(tokens)
-    lines.append((json.dumps({"type": "assistant", "message": {
-        "content": [{"type": "text", "text": full}]
-    }}) + "\n").encode())
+    lines.append(
+        (
+            json.dumps(
+                {"type": "assistant", "message": {"content": [{"type": "text", "text": full}]}}
+            )
+            + "\n"
+        ).encode()
+    )
     lines.append((json.dumps({"type": "result", "result": full}) + "\n").encode())
 
     captured["proc"] = _FakeProc(lines)
     chunks = list(
         runner.stream_via_cli_agent(
-            [{"role": "user", "content": "hi"}], backend="claude", cwd="/tmp", yolo=True,
+            [{"role": "user", "content": "hi"}],
+            backend="claude",
+            cwd="/tmp",
+            yolo=True,
         )
     )
     # Streamed token-by-token (3 chunks), and the full text appears once.
@@ -152,18 +181,35 @@ def test_claude_assistant_event_emits_thinking_and_tool_use(captured):
 
     captured["proc"] = _FakeProc(
         [
-            (json.dumps({"type": "assistant", "message": {"content": [
-                {"type": "thinking", "thinking": "Let me plan the epics."},
-                {"type": "tool_use", "name": "tesserae_ask", "id": "tu1",
-                 "input": {"question": "prior art?"}},
-                {"type": "text", "text": "Here's the plan."},
-            ]}}) + "\n").encode(),
+            (
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "content": [
+                                {"type": "thinking", "thinking": "Let me plan the epics."},
+                                {
+                                    "type": "tool_use",
+                                    "name": "tesserae_ask",
+                                    "id": "tu1",
+                                    "input": {"question": "prior art?"},
+                                },
+                                {"type": "text", "text": "Here's the plan."},
+                            ]
+                        },
+                    }
+                )
+                + "\n"
+            ).encode(),
             (json.dumps({"type": "result", "result": "Here's the plan."}) + "\n").encode(),
         ]
     )
     out = list(
         runner.stream_via_cli_agent(
-            [{"role": "user", "content": "plan it"}], backend="claude", cwd="/tmp", yolo=True,
+            [{"role": "user", "content": "plan it"}],
+            backend="claude",
+            cwd="/tmp",
+            yolo=True,
         )
     )
     thinking = [x for x in out if isinstance(x, ThinkingEvent)]
@@ -311,8 +357,15 @@ def test_yolo_mode_persists_disabled(isolated_db):
 @pytest.mark.parametrize(
     "raw,expected",
     [
-        ("true", True), ("True", True), ("1", True), ("yes", True),
-        ("false", False), ("False", False), ("0", False), ("no", False), ("off", False),
+        ("true", True),
+        ("True", True),
+        ("1", True),
+        ("yes", True),
+        ("false", False),
+        ("False", False),
+        ("0", False),
+        ("no", False),
+        ("off", False),
     ],
 )
 def test_yolo_mode_truthy_parsing(monkeypatch, raw, expected):
@@ -365,9 +418,7 @@ def test_routing_explicit_false_wins_even_without_cliproxy(monkeypatch):
     deferred. They get whatever error CLIProxy yields.
     """
     monkeypatch.setattr(runner, "is_yolo_mode_enabled", lambda: True)
-    monkeypatch.setattr(
-        "app.services.conversation_streaming._find_cliproxy", lambda: None
-    )
+    monkeypatch.setattr("app.services.conversation_streaming._find_cliproxy", lambda: None)
     assert runner.should_route_via_cli_agent("claude", False) is False
 
 
@@ -397,9 +448,7 @@ def test_routing_defer_falls_over_to_cli_when_proxy_missing(monkeypatch):
     the request, so the only way to actually answer is the CLI runner.
     """
     monkeypatch.setattr(runner, "is_yolo_mode_enabled", lambda: False)
-    monkeypatch.setattr(
-        "app.services.conversation_streaming._find_cliproxy", lambda: None
-    )
+    monkeypatch.setattr("app.services.conversation_streaming._find_cliproxy", lambda: None)
     assert runner.should_route_via_cli_agent("claude", None) is True
     assert runner.should_route_via_cli_agent("codex", None) is True
     assert runner.should_route_via_cli_agent("gemini", None) is True
@@ -562,7 +611,178 @@ def test_routing_proxy_probe_failure_does_not_crash(monkeypatch):
     def _boom():
         raise RuntimeError("probe failed")
 
-    monkeypatch.setattr(
-        "app.services.conversation_streaming._find_cliproxy", _boom
-    )
+    monkeypatch.setattr("app.services.conversation_streaming._find_cliproxy", _boom)
     assert runner.should_route_via_cli_agent("claude", None) is False
+
+
+# ---------------------------------------------------------------------------
+# resolve_execution_driver() — precedence matrix + degrade/read-failure safety
+# (Phase 19-01, REQ-10). Always inject the degrade callables so a "grd"
+# outcome needs no real binary/workspace.
+# ---------------------------------------------------------------------------
+
+# GRD reports available + workspace resolves cleanly → "grd" survives.
+_GRD_OK = {"grd_tools_available": True, "gd_available": True}
+_grd_available_ok = lambda: _GRD_OK  # noqa: E731
+_resolve_ws_ok = lambda project_id: "/tmp/clone"  # noqa: E731
+
+
+def _conn():
+    """Open the live (isolated_db) SQLite connection for seeding driver columns."""
+    from app.db.connection import get_connection
+
+    return get_connection()
+
+
+def _resolve(**kw):
+    """Call resolve_execution_driver with the available/workspace callables
+    defaulted to the happy path unless a test overrides them."""
+    kw.setdefault("_grd_available", _grd_available_ok)
+    kw.setdefault("_resolve_workspace", _resolve_ws_ok)
+    return runner.resolve_execution_driver(**kw)
+
+
+def test_resolve_global_default_is_grd():
+    """No source set + GRD available → global default 'grd'."""
+    assert _resolve(backend="claude") == "grd"
+
+
+def test_resolve_non_cli_backend_is_cliproxy():
+    """A backend outside {claude,codex,gemini} can never run grd/cli_agent."""
+    assert _resolve(backend="openai") == "cliproxy"
+    # Even an explicit turn override cannot promote a non-CLI backend.
+    assert _resolve(backend="openai", turn_driver="grd") == "cliproxy"
+
+
+def test_resolve_turn_driver_overrides_everything(isolated_db):
+    """An explicit turn_driver wins over every lower precedence source."""
+    from app.db.projects import create_project, update_project
+
+    pid = create_project(name="p-turn")
+    update_project(pid, status="active")
+    # Seed a project default that would otherwise win.
+    with _conn() as conn:
+        conn.execute("UPDATE projects SET default_driver='cli_agent' WHERE id=?", (pid,))
+        conn.commit()
+    assert _resolve(backend="claude", turn_driver="cliproxy", project_id=pid) == "cliproxy"
+
+
+def test_resolve_use_cli_agent_legacy_mapping():
+    """Legacy boolean maps when turn_driver is None."""
+    assert _resolve(backend="claude", use_cli_agent=True) == "cli_agent"
+    assert _resolve(backend="claude", use_cli_agent=False) == "cliproxy"
+
+
+def test_resolve_super_agent_wins_over_instance_and_project(isolated_db):
+    """SuperAgent config_json.driver beats instance + project defaults."""
+    from app.db.projects import create_project
+    from app.db.project_sa_instances import create_project_sa_instance
+    from app.db.super_agents import create_super_agent
+
+    pid = create_project(name="p-sa")
+    with _conn() as conn:
+        conn.execute("UPDATE projects SET default_driver='grd' WHERE id=?", (pid,))
+        conn.commit()
+    sa_id = create_super_agent(name="sa", config_json=json.dumps({"driver": "cliproxy"}))
+    iid = create_project_sa_instance(pid, sa_id, driver="cli_agent")
+    assert (
+        _resolve(
+            backend="claude",
+            super_agent_id=sa_id,
+            instance_id=iid,
+            project_id=pid,
+        )
+        == "cliproxy"
+    )
+
+
+def test_resolve_instance_wins_over_project(isolated_db):
+    """Instance driver beats the project default."""
+    from app.db.projects import create_project
+    from app.db.project_sa_instances import create_project_sa_instance
+    from app.db.super_agents import create_super_agent
+
+    pid = create_project(name="p-inst")
+    with _conn() as conn:
+        conn.execute("UPDATE projects SET default_driver='grd' WHERE id=?", (pid,))
+        conn.commit()
+    sa_id = create_super_agent(name="sa2")
+    iid = create_project_sa_instance(pid, sa_id, driver="cli_agent")
+    assert _resolve(backend="claude", instance_id=iid, project_id=pid) == "cli_agent"
+
+
+def test_resolve_project_default_wins_over_global(isolated_db):
+    """projects.default_driver beats the global 'grd' default."""
+    from app.db.projects import create_project
+
+    pid = create_project(name="p-proj")
+    with _conn() as conn:
+        conn.execute("UPDATE projects SET default_driver='cli_agent' WHERE id=?", (pid,))
+        conn.commit()
+    assert _resolve(backend="claude", project_id=pid) == "cli_agent"
+
+
+def test_resolve_no_source_is_grd(isolated_db):
+    """Project with NULL default_driver + no other source → 'grd'."""
+    from app.db.projects import create_project
+
+    pid = create_project(name="p-null")
+    assert _resolve(backend="claude", project_id=pid) == "grd"
+
+
+def test_resolve_degrade_when_grd_unavailable():
+    """grd → cli_agent when the GRD binary reports unavailable."""
+    assert (
+        runner.resolve_execution_driver(
+            backend="claude",
+            _grd_available=lambda: {"grd_tools_available": False, "gd_available": False},
+            _resolve_workspace=_resolve_ws_ok,
+        )
+        == "cli_agent"
+    )
+
+
+def test_resolve_degrade_when_workspace_unresolvable():
+    """grd → cli_agent when the workspace resolver raises ValueError."""
+
+    def _no_clone(project_id):
+        raise ValueError("no clone path")
+
+    assert (
+        runner.resolve_execution_driver(
+            backend="claude",
+            project_id="proj-x",
+            _grd_available=_grd_available_ok,
+            _resolve_workspace=_no_clone,
+        )
+        == "cli_agent"
+    )
+
+
+def test_resolve_read_failure_degrades_does_not_raise(monkeypatch):
+    """A DB read failure during precedence resolution degrades to the legacy
+    choice (cli_agent for a CLI backend) instead of raising."""
+
+    def _boom(project_id):
+        raise RuntimeError("db exploded")
+
+    monkeypatch.setattr("app.db.projects.get_project_default_driver", _boom)
+    # project read raises → falls through to global 'grd', which is available,
+    # so the resolver returns 'grd' (the read failure is swallowed, not raised).
+    out = _resolve(backend="claude", project_id="proj-x")
+    assert out in {"grd", "cli_agent"}  # never raised
+
+
+def test_resolve_total_failure_returns_legacy_choice(monkeypatch):
+    """If even the degrade check explodes, the outer guard returns the legacy
+    choice rather than propagating."""
+
+    def _boom():
+        raise RuntimeError("boom")
+
+    out = runner.resolve_execution_driver(
+        backend="claude",
+        _grd_available=_boom,
+        _resolve_workspace=_resolve_ws_ok,
+    )
+    assert out == "cli_agent"
