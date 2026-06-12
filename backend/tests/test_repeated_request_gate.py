@@ -90,3 +90,173 @@ def test_dedup_hit_sets_patch_flag_on_auto():
 def test_three_occurrences_within_window_is_boundary_auto():
     d = _eval(occurrence_count=3, verified_success_count=1)
     assert d.route == "auto"
+
+
+# --- convert_signal: effects (P2 — create called once / zero) ----------------
+
+from app.db import harness_takeaways  # noqa: E402
+from app.db import repeated_request_signals as rrs  # noqa: E402
+from app.db.connection import get_connection  # noqa: E402
+from app.services import harness_evolver as ev  # noqa: E402
+
+
+def _make_signal(*, occurrence_count, verified_success_count, project_id=None):
+    """Persist a signal via the 22-01 store, then bump the counters to the
+    requested values, and return the read model (with a recent first_seen)."""
+    rrs.upsert_signal(
+        request_hash="rh-test",
+        project_id=project_id,
+        session_kind="project",
+        representative_text="add a changelog entry",
+        embedding=None,
+        session_id="sess-1",
+    )
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE repeated_request_signals SET occurrence_count = ?, "
+            "verified_success_count = ? WHERE request_hash = 'rh-test'",
+            (occurrence_count, verified_success_count),
+        )
+        conn.commit()
+    return rrs.get_signal("rh-test")
+
+
+def _convert(signal, *, monkeypatch, **overrides):
+    """Run convert_signal with the create/update dispatch mocked so we can count
+    calls. Returns (result, create_mock, update_mock)."""
+    create_calls: list[dict] = []
+    update_calls: list[dict] = []
+
+    def fake_create(*, name, payload, project_id):
+        create_calls.append({"name": name, "payload": payload, "project_id": project_id})
+        return "42"
+
+    def fake_update(*, asset_id, payload):
+        update_calls.append({"asset_id": asset_id, "payload": payload})
+
+    monkeypatch.setitem(ev._create_dispatch, "skill", fake_create)
+    monkeypatch.setitem(ev._update_dispatch, "skill", fake_update)
+
+    kwargs = dict(
+        skill_name="add-changelog",
+        skill_description="Add a changelog entry on each feature merge",
+        skill_content="Run the changelog updater and commit it.",
+        scan_safe=True,
+        dedup_existing=None,
+        provenance_ok=True,
+        now=_NOW,
+    )
+    kwargs.update(overrides)
+    result = gate.convert_signal(signal, **kwargs)
+    return result, create_calls, update_calls
+
+
+def _enable_project(project_id, enabled, policy_json="{}"):
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO project_autonomy_config (project_id, enabled, policy_json) "
+            "VALUES (?, ?, ?)",
+            (project_id, 1 if enabled else 0, policy_json),
+        )
+        conn.commit()
+
+
+def test_convert_auto_creates_skill_exactly_once(monkeypatch):
+    _enable_project("proj-auto", True)
+    signal = _make_signal(occurrence_count=4, verified_success_count=2, project_id="proj-auto")
+
+    result, create_calls, update_calls = _convert(signal, monkeypatch=monkeypatch)
+
+    assert result["route"] == "auto"
+    assert result["confidence"] == 0.9
+    assert len(create_calls) == 1
+    assert len(update_calls) == 0
+    # discovered_procedure takeaway at 0.9
+    tk = harness_takeaways.get(result["takeaway_id"])
+    assert tk is not None
+    assert tk["kind"] == "discovered_procedure"
+    assert tk["confidence"] == 0.9
+    # origin recorded + skill_created marked
+    from app.db.forge_origin import get_origin
+
+    assert get_origin("42", "skill") is not None
+    assert rrs.get_signal("rh-test").skill_created is True
+
+
+def test_convert_dedup_hit_patches_instead_of_creating(monkeypatch):
+    _enable_project("proj-auto", True)
+    signal = _make_signal(occurrence_count=4, verified_success_count=2, project_id="proj-auto")
+
+    result, create_calls, update_calls = _convert(
+        signal, monkeypatch=monkeypatch, dedup_existing={"id": 7, "skill_name": "x"}
+    )
+
+    assert result["route"] == "auto"
+    assert result["patch"] is True
+    assert len(create_calls) == 0
+    assert len(update_calls) == 1
+    assert update_calls[0]["asset_id"] == 7
+
+
+def test_convert_propose_when_unverified_never_creates(monkeypatch):
+    _enable_project("proj-auto", True)
+    signal = _make_signal(occurrence_count=5, verified_success_count=0, project_id="proj-auto")
+
+    result, create_calls, update_calls = _convert(signal, monkeypatch=monkeypatch)
+
+    assert result["route"] == "propose"
+    assert result["confidence"] == 0.65
+    assert len(create_calls) == 0
+    assert len(update_calls) == 0
+    assert result["takeaway_id"] is None
+
+
+def test_convert_scan_fail_never_creates(monkeypatch):
+    _enable_project("proj-auto", True)
+    signal = _make_signal(occurrence_count=5, verified_success_count=2, project_id="proj-auto")
+
+    result, create_calls, _ = _convert(signal, monkeypatch=monkeypatch, scan_safe=False)
+
+    assert result["route"] == "propose"
+    assert len(create_calls) == 0
+
+
+def test_convert_provenance_diverged_never_creates(monkeypatch):
+    _enable_project("proj-auto", True)
+    signal = _make_signal(occurrence_count=5, verified_success_count=2, project_id="proj-auto")
+
+    result, create_calls, _ = _convert(signal, monkeypatch=monkeypatch, provenance_ok=False)
+
+    assert result["route"] == "propose"
+    assert len(create_calls) == 0
+
+
+def test_policy_disabled_row_forces_propose(monkeypatch):
+    _enable_project("proj-off", False)
+    signal = _make_signal(occurrence_count=4, verified_success_count=2, project_id="proj-off")
+
+    result, create_calls, _ = _convert(signal, monkeypatch=monkeypatch)
+
+    assert result["route"] == "propose"
+    assert len(create_calls) == 0
+
+
+def test_no_policy_row_env_flag_allows_auto(monkeypatch):
+    # No project_autonomy_config row → fall back to AGENTED_TAKEAWAY_AUTOAPPLY.
+    monkeypatch.setenv("AGENTED_TAKEAWAY_AUTOAPPLY", "1")
+    signal = _make_signal(occurrence_count=4, verified_success_count=2, project_id="proj-norow")
+
+    result, create_calls, _ = _convert(signal, monkeypatch=monkeypatch)
+
+    assert result["route"] == "auto"
+    assert len(create_calls) == 1
+
+
+def test_no_policy_row_env_flag_off_proposes(monkeypatch):
+    monkeypatch.setenv("AGENTED_TAKEAWAY_AUTOAPPLY", "0")
+    signal = _make_signal(occurrence_count=4, verified_success_count=2, project_id="proj-norow")
+
+    result, create_calls, _ = _convert(signal, monkeypatch=monkeypatch)
+
+    assert result["route"] == "propose"
+    assert len(create_calls) == 0
