@@ -209,6 +209,7 @@ Progress: [##########] 100%
   guard returns legacy choice on any exception (never crashes the turn). 50/50
   test_cli_agent_runner.py green.
 - [Phase 19]: 19-02: turn classifier classify_turn() keyword->LLM->deterministic (mirrors SketchRoutingService); per-kind DEFAULT_MODELS, model_override precedence, never claude-only; conversational openers match on word boundary not substring (Rule1 fix). 14/14 green.
+- [Phase 19-grd-default-driver]: 19-03: cwd resolved inline at execute_delegate/_scan_mentions_and_notify/project_chat via ProjectWorkspaceService.resolve_working_directory (ValueError->warn+None fallback, never crashes turn); project_chat backend derived from SA backend_type, no claude literal remains (REQ-12 anti-regression); finish delta backend also de-hardcoded. 4/4 proxy + 55 regression green.
 
 ### Pending Todos
 
@@ -222,5 +223,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-06-13
-Stopped at: Completed 19-02-PLAN.md (turn classifier: classify_turn + GRD_COMMAND_MAP, per-kind LLM fallback, 14/14 green)
+Stopped at: Completed 19-03-PLAN.md (cwd/backend fixes: execute_delegate/_scan_mentions_and_notify/project_chat resolve workspace cwd inline, ValueError->None fallback; project_chat backend derived from SA backend_type, no claude literal; 4/4 proxy + 55 regression green)
 Resume file: None
