@@ -9,19 +9,21 @@ See: .planning/PROJECT.md (updated 2026-05-21)
 
 ## Current Position
 
-**Workflow mode:** PR-driven (since v0.5.1). Each commit-message version tag
-corresponds to one merged PR. Per-version STATE.md stubs live at
-``.planning/milestones/v0.7.N/STATE.md`` (backfilled via PR #148 — 94 files
-covering v0.7.0 through v0.7.98).
+**Active milestone:** v0.8.0 — Team Harness & Self-Improvement (started
+2026-06-13). Status: **Not started (defining requirements)**. Approved design
+spec: ``docs/superpowers/specs/2026-06-13-team-harness-self-improvement-design.md``
+(+ ``.ko.md``). First GRD-planned milestone since v0.5.0 — formal
+roadmap/plan/verify flow resumes, keeping the PR-per-phase +
+codex-review-until-green cadence.
 
-**Last GRD-planned milestone:** v0.5.0 — Production-Level Onboarding Experience
-(10 phases / 19 plans, complete 2026-03-23). The detail below is preserved as
-the v0.5.0 historical record; for newer work see the per-milestone STATE.md
-files under ``.planning/milestones/v0.5.1/`` and later.
+**Workflow mode (history):** PR-driven from v0.5.1 through v0.7.98. Each
+commit-message version tag corresponds to one merged PR. Per-version STATE.md
+stubs live at ``.planning/milestones/v0.7.N/STATE.md`` (backfilled via PR #148
+— 94 files covering v0.7.0 through v0.7.98).
 
-**Active phase work:** None. GRD's roadmap model still resolves the
-``anonymous`` milestone (= v0.5.0's phase tree) as "complete"; the active
-shipping cadence happens in commits, not phases.
+**Last completed GRD-planned milestone:** v0.5.0 — Production-Level Onboarding
+Experience (10 phases / 19 plans, complete 2026-03-23). The detail below is
+preserved as the v0.5.0 historical record.
 
 ---
 

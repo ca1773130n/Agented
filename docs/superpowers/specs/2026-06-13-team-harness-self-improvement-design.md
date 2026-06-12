@@ -1,6 +1,6 @@
 > 🌐 **Language:** English | [한국어](2026-06-13-team-harness-self-improvement-design.ko.md)
 
-# v0.6.0 — Team Harness & Self-Improvement: Design Spec
+# v0.8.0 — Team Harness & Self-Improvement: Design Spec
 
 **Date:** 2026-06-13
 **Status:** Approved (design); pending milestone formalization via `/grd:new-milestone`
@@ -18,7 +18,7 @@ Make every Agented project able to bootstrap, in one click, a team harness where
 
 | Decision | Choice |
 |---|---|
-| Delivery | GRD milestone v0.6.0 (`.planning/milestones/v0.6.0/`), phase-by-phase PRs |
+| Delivery | GRD milestone v0.8.0 (`.planning/milestones/v0.8.0/`), phase-by-phase PRs |
 | GRD driver default | Default-on toggle: `driver: grd \| cli_agent \| cliproxy`, default `grd` |
 | Auto-skill autonomy | Hybrid: high-confidence auto-create (≥3 near-identical + verified episode), lower confidence queued for approval |
 | Harness targets | All four (claude/codex/gemini/opencode) via existing context-renderer/propagation layers |

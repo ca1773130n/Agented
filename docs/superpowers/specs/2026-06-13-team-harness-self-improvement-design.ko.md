@@ -1,6 +1,6 @@
 > 🌐 **Language:** [English](2026-06-13-team-harness-self-improvement-design.md) | 한국어
 
-# v0.6.0 — 팀 하니스 & 자가 개선: 설계 명세
+# v0.8.0 — 팀 하니스 & 자가 개선: 설계 명세
 
 **날짜:** 2026-06-13
 **상태:** 승인됨 (설계); `/grd:new-milestone`을 통한 마일스톤 공식화 대기 중
@@ -18,7 +18,7 @@
 
 | 결정 | 선택 |
 |---|---|
-| 전달 방식 | GRD 마일스톤 v0.6.0 (`.planning/milestones/v0.6.0/`), 페이즈별 PR |
+| 전달 방식 | GRD 마일스톤 v0.8.0 (`.planning/milestones/v0.8.0/`), 페이즈별 PR |
 | GRD 드라이버 기본값 | 기본 켜짐 토글: `driver: grd \| cli_agent \| cliproxy`, 기본값 `grd` |
 | 자동 스킬 자율성 | 하이브리드: 고신뢰(≥3회 거의 동일 + 검증된 에피소드)는 자동 생성, 저신뢰는 승인 큐로 |
 | 하니스 대상 | 기존 context-renderer/propagation 레이어를 통한 4종 전부 (claude/codex/gemini/opencode) |
