@@ -220,6 +220,22 @@ Progress: [##########] 100%
   (NOT enum 'tool_call'); ordering preserved, error propagates +
   push_status('error'), synthetic finish on drain. Injectable event source.
   12/12 proxy green. 19-05 wires this into the funnel.
+- [Phase 19-grd-default-driver]: 19-05: GRD is the DEFAULT driver at the single
+  streaming funnel. run_streaming_response resolves a 3-way driver via
+  resolve_execution_driver (cliproxy|cli_agent|grd); the cliproxy block is
+  lifted VERBATIM into a _run_cliproxy() closure so the grd-conversational
+  fallthrough shares it byte-identically (criterion 3 proven by regression test:
+  conversational driver=grd deltas == cliproxy baseline). grd-task turns
+  classify_turn() -> get_handler('grd_chat').start + bridge_psm_to_chat over a
+  subscribe_raw generator (subscribe BEFORE start so no early events lost); any
+  grd dispatch failure logs + falls through to cli_agent (turn never dropped).
+  All three legacy should_route_via_cli_agent sites migrated: funnel,
+  base_conversation_service (grd==cli_agent — no PSM/chat-SSE surface), and
+  grd_routes.project_chat (grd-task -> handler+bridge). Tests 3/3 driver
+  (regression+dispatch+degrade); [Rule 1] migrated 2 pre-existing test files off
+  the removed routing seam. Gates: 305 targeted backend green (full suite hung
+  at documented point); frontend 1480/7-baseline/0-NEW; build fails only on
+  pre-existing AnswerGroundednessCard.vue TS error (zero FE files touched).
 
 ### Pending Todos
 
@@ -233,5 +249,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-06-13
-Stopped at: Completed 19-04-PLAN.md (GrdChatSessionHandler registered as grd_chat — one-shot claude -p stream-json /grd:<cmd> "<task>" session in resolved project cwd, forge_bundle+super_agent_id forwarded, stop stops PSM; bridge_psm_to_chat maps stream-json -> chat state_delta wire strings content_delta/tool_use/finish/error with ordering + error propagation + synthetic finish; 12/12 proxy green)
+Stopped at: Completed 19-05-PLAN.md (GRD default driver at the streaming funnel — 3-way resolve_execution_driver branch in run_streaming_response; cliproxy block byte-identical via shared _run_cliproxy() closure; grd-task -> grd_chat handler + bridge_psm_to_chat over subscribe_raw; all three legacy routing sites migrated; regression+dispatch+degrade tests 3/3; 305 targeted backend green, FE 1480/7-baseline/0-NEW)
 Resume file: None
