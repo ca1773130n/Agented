@@ -195,6 +195,7 @@ Progress: [##########] 100%
 - 17-03: cross-kind forge_bundles + forge_bundle_items (migration 156, FK ON DELETE CASCADE); conn-accepting _add_binding(conn,...) for atomic bundle-bind in one transaction (17-05 route foundation); skill_sets DDL pinned byte-for-byte; migration 155 reserved for 17-02 (subagents, not yet run)
 - 17-05: atomic forge/create implemented as explicit LIFO compensation in create_and_bind_and_materialize (no DB+FS saga abstraction exists); forward steps (create row -> bind -> materialize) undone in reverse on any exception, each cleanup isolated so it cannot mask the original error; bundle-bind binds all cross-kind items in one get_connection() block (commit-once or rollback); skill excluded from create dispatch (no db create fn)
 - [Phase 17]: 17-03: cross-kind forge_bundles + forge_bundle_items (migration 156); conn-accepting _add_binding for atomic bundle-bind (17-05 foundation); skill_sets DDL pinned byte-for-byte
+- [Phase 22]: 22-01: repeated_request_signals store — hash-keyed UPSERT accumulates salience (occurrence_count grows, first_seen_at set once in INSERT clause, never in DO UPDATE); example_session_ids FIFO-capped at 5 in Python read-then-merge; embedding stored as serialize_embedding BLOB; registered in create_fresh_schema after harness-takeaways
 - [Phase 17]: 17-06: forge-creator bundle (5 global-scope creator skills, idempotent startup seed); session-completion auto-import handler (4th on execution_events bus) gated on session_kind={project_session,super_agent,team_session,goal_loop}, fails closed on foreign/unknown; forge_origin (mig 157) records sha256+source-session-id; global scope via forge_bundles.scope='global' (user_skills inherently global)
 
 ### Pending Todos
@@ -209,5 +210,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-06-13
-Stopped at: Completed 17-03-PLAN.md (cross-kind forge_bundles, migration 156, 5 tests green)
+Stopped at: Completed 22-01-PLAN.md (repeated_request_signals store — DDL + repo + model, 11 UPSERT-invariant tests green)
 Resume file: None
