@@ -54,8 +54,15 @@ cd backend && uv run ruff format .                           # Format (line-leng
 ## Verification — all three must pass before any task is complete
 
 1. `just build` (vue-tsc type checking + vite build)
-2. `cd backend && uv run pytest`
-3. `cd frontend && npm run test:run`
+2. `cd backend && uv run pytest` — **known issue:** the full serial suite
+   hangs at ~40-48% (no failures before the hang). Procedure: attempt the
+   full suite under a ~12-minute watchdog; on hang, kill it and run a
+   comprehensive targeted set (all suites touched by the change + execution/
+   streaming/harness regressions), and disclose the substitution in the PR.
+   Never present targeted runs as the full suite.
+3. `cd frontend && npm run test:run` — baseline carries 7 known pre-existing
+   failures (RateLimitGauge, MarkdownContent, WorkingMemoryView,
+   useTourMachine areas); the gate is **no NEW failures**.
 
 ## Architecture
 
@@ -88,9 +95,13 @@ credentials/login flows.
 
 **Frontend** (`frontend/`) — Vue 3 + TypeScript, Vue Router 4.
 
-- `src/services/api.ts` — API client with per-domain objects (`botApi`,
-  `agentApi`, etc.). No state library — `ref`/`reactive`, props/emits,
-  `provide`/`inject`. SSE streaming via Litestar `Stream`.
+- `src/services/api/` — API client **package** (NOT a single `api.ts`):
+  per-domain modules (`triggers.ts` with `executionApi`/`triggerApi`,
+  `budgets.ts`, `answer-eval.ts`, …), shared `apiFetch` in `client.ts`,
+  types under `types/`, all re-exported through the `index.ts` barrel
+  (`import { executionApi } from '../services/api'`). No state library —
+  `ref`/`reactive`, props/emits, `provide`/`inject`. SSE streaming via
+  Litestar `Stream`.
 - Vitest + happy-dom + @vue/test-utils.
 - Vite proxies `/api/v1/*` → `:20001` (sidecar) and `/api/*`, `/admin/*`,
   `/health/*`, `/schema/*` → `:20000` (Litestar).
