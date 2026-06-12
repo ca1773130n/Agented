@@ -150,10 +150,15 @@ Plans:
   4. Quality/safety: patch-over-create dedup against the bound-skills index turns near-duplicates into update proposals; origin-hash provenance never overwrites operator-modified skills; prompt-injection/exfiltration + invisible-Unicode scan rejects unsafe content (security-scan tests).
   5. Consistency fixes land: evolver `_DESIGN_GUIDE`/`_PROMPT_TEMPLATE` reflect writable skills; `tesserae_integration._build_harness_session` normalizes `project_session`/`workflow`/`team_session`.
   6. Live dogfood: replay ≥3 real session transcripts through the detector before sign-off. House gates pass.
-**Plans**: TBD
+**Plans**: 6 plans (4 waves)
 
 Plans:
-- [ ] 22-NN: TBD (set by /grd:plan-phase 22)
+- [ ] 22-01-PLAN.md — repeated_request_signals store (DDL + repo + model + UPSERT invariants)
+- [ ] 22-02-PLAN.md — consistency fixes: _build_harness_session 5-kind normalizers + evolver writable-skill prompts
+- [ ] 22-03-PLAN.md — detection handler (register_session_handler, _FETCHERS, cosine ≥ 0.83, embed-disabled fallback, non-blocking)
+- [ ] 22-04-PLAN.md — safety scanner (injection/exfiltration/invisible-Unicode) + dedup + origin-hash provenance
+- [ ] 22-05-PLAN.md — hybrid gate (auto/propose/reject matrix + per-project policy + evolver skill-create dispatch)
+- [ ] 22-06-PLAN.md — live dogfood: replay ≥3 real transcripts, operator review, house gates
 
 ## Dependencies
 
