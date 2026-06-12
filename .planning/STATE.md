@@ -15,10 +15,26 @@ requirements mapped. Approved design spec:
 ``docs/superpowers/specs/2026-06-13-team-harness-self-improvement-design.md``
 (+ ``.ko.md``). PR-per-phase + codex-review-until-green cadence.
 
-Phase: 17 of 22 (Forge creation surface) — **in progress**
-Plan: 5 complete (17-01, 17-02, 17-03, 17-04, 17-05)
-Status: Plan 17-05 executed (atomic forge/create + bundle-bind, 12/12 green)
-Last activity: 2026-06-13 — Completed 17-05-PLAN.md; `POST /admin/projects/{id}/forge/create`
+Phase: 17 of 22 (Forge creation surface) — **all plans complete (ready for verify)**
+Plan: 6 complete (17-01, 17-02, 17-03, 17-04, 17-05, 17-06)
+Status: Plan 17-06 executed (forge-creator bundle + gated session auto-import,
+6/6 proxy + 174 backend green; phase house gates run)
+Last activity: 2026-06-13 — Completed 17-06-PLAN.md (FINAL plan of phase 17).
+Shipped the forge-creator default bundle (5 global-scope agentskills.io creator
+skills — skill/rule/hook/command/subagent-creator — seeded idempotently at startup,
+predefined-bot pattern) and the session-completion auto-import pipeline: a 4th
+handler on the `execution_events` bus diffs `.claude/` vs the forge manifest and
+auto-imports session-scaffolded subagents via the 17-05 atomic API, recording
+sha256 + source-session-id provenance in `forge_origin` (migration 157). SECURITY:
+the session_kind gate fails CLOSED — only {project_session, super_agent,
+team_session, goal_loop} auto-bind; foreign/unknown kinds (incl. external
+clone-import) import nothing. House gates: backend 174 passed (targeted-set
+substitution disclosed, full-suite hang avoided); frontend 1480 passed / 7
+known-baseline / 0 NEW; `just build` fails only on a PRE-EXISTING unrelated TS
+error in AnswerGroundednessCard.vue (PR #212, phase 17 touched zero frontend files).
+See prior 17-05 below.
+
+Prior activity: 2026-06-13 — Completed 17-05-PLAN.md; `POST /admin/projects/{id}/forge/create`
 creates+binds+materializes atomically via explicit LIFO compensation (no DB+FS saga
 exists) — injected failure at the bind stage AND the materialize stage each leaves
 zero orphaned row/binding/repo file; cross-kind bundle-bind binds every item in one
@@ -105,6 +121,7 @@ Progress: [##########] 100%
 | 08-accessibility | 1/1 | 5min | 5min |
 | 09-post-tour-experience | 2/2 | 24min | 12min |
 | 10-integration-testing | 4/4 | 64min | 16min |
+| Phase 17 P06 | 13min | 4 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -178,6 +195,7 @@ Progress: [##########] 100%
 - 17-03: cross-kind forge_bundles + forge_bundle_items (migration 156, FK ON DELETE CASCADE); conn-accepting _add_binding(conn,...) for atomic bundle-bind in one transaction (17-05 route foundation); skill_sets DDL pinned byte-for-byte; migration 155 reserved for 17-02 (subagents, not yet run)
 - 17-05: atomic forge/create implemented as explicit LIFO compensation in create_and_bind_and_materialize (no DB+FS saga abstraction exists); forward steps (create row -> bind -> materialize) undone in reverse on any exception, each cleanup isolated so it cannot mask the original error; bundle-bind binds all cross-kind items in one get_connection() block (commit-once or rollback); skill excluded from create dispatch (no db create fn)
 - [Phase 17]: 17-03: cross-kind forge_bundles + forge_bundle_items (migration 156); conn-accepting _add_binding for atomic bundle-bind (17-05 foundation); skill_sets DDL pinned byte-for-byte
+- [Phase 17]: 17-06: forge-creator bundle (5 global-scope creator skills, idempotent startup seed); session-completion auto-import handler (4th on execution_events bus) gated on session_kind={project_session,super_agent,team_session,goal_loop}, fails closed on foreign/unknown; forge_origin (mig 157) records sha256+source-session-id; global scope via forge_bundles.scope='global' (user_skills inherently global)
 
 ### Pending Todos
 
