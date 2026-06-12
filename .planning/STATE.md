@@ -208,6 +208,7 @@ Progress: [##########] 100%
   staticmethod) — both must be OK or it degrades. Every DB read wrapped; outer
   guard returns legacy choice on any exception (never crashes the turn). 50/50
   test_cli_agent_runner.py green.
+- [Phase 19]: 19-02: turn classifier classify_turn() keyword->LLM->deterministic (mirrors SketchRoutingService); per-kind DEFAULT_MODELS, model_override precedence, never claude-only; conversational openers match on word boundary not substring (Rule1 fix). 14/14 green.
 
 ### Pending Todos
 
@@ -221,5 +222,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-06-13
-Stopped at: Completed 19-01-PLAN.md (driver spine: resolve_execution_driver + migration 158, 50/50 green)
+Stopped at: Completed 19-02-PLAN.md (turn classifier: classify_turn + GRD_COMMAND_MAP, per-kind LLM fallback, 14/14 green)
 Resume file: None
