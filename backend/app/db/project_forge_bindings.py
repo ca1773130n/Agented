@@ -162,6 +162,7 @@ def replace_for_project(project_id: str, bindings: List[dict]) -> List[dict]:
     the persisted ``position`` (per kind).
     """
     with get_connection() as conn:
+        _ensure_propagation_columns(conn)
         conn.execute(
             "DELETE FROM project_forge_bindings WHERE project_id = ?",
             (project_id,),
@@ -174,11 +175,15 @@ def replace_for_project(project_id: str, bindings: List[dict]) -> List[dict]:
                 continue
             pos = per_kind_pos.get(kind, 0)
             per_kind_pos[kind] = pos + 1
+            # Carry the SAME provenance columns add_binding writes, with the
+            # same default coalescing, so the two write paths can never drift.
             conn.execute(
                 """
                 INSERT INTO project_forge_bindings
-                    (project_id, kind, asset_id, role, enabled, position)
-                VALUES (?, ?, ?, ?, ?, ?)
+                    (project_id, kind, asset_id, role, enabled, position,
+                     source_scope, source_shared_binding_id, fingerprint,
+                     conflict_policy)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     project_id,
@@ -187,6 +192,10 @@ def replace_for_project(project_id: str, bindings: List[dict]) -> List[dict]:
                     b.get("role"),
                     1 if b.get("enabled", True) else 0,
                     pos,
+                    b.get("source_scope", "project"),
+                    b.get("source_shared_binding_id"),
+                    b.get("fingerprint"),
+                    b.get("conflict_policy", "local_wins"),
                 ),
             )
         conn.commit()
