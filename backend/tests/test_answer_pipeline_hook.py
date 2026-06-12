@@ -64,8 +64,9 @@ def _install_common_stubs(monkeypatch, deltas, *, captured_llm_messages=None):
         lambda sid, content, backend=None: None,
     )
 
-    # Force CLIProxy path — not the CLI agent runner.
-    monkeypatch.setattr(runner, "should_route_via_cli_agent", lambda *a, **k: False)
+    # Force CLIProxy path — not the CLI agent runner. The funnel resolves the
+    # driver via resolve_execution_driver (19-05), so pin that to "cliproxy".
+    monkeypatch.setattr(runner, "resolve_execution_driver", lambda *a, **k: "cliproxy")
 
     # Stub stream_llm_response to yield a simple answer and record messages.
     def _fake_stream(messages, **kwargs):

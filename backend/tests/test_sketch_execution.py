@@ -227,10 +227,12 @@ def test_project_chat_derives_backend_and_cwd(monkeypatch):
     monkeypatch.setattr(pcs, "build_project_context", lambda *a, **k: "CTX")
     monkeypatch.setattr(pcs, "execute_plan_actions", lambda *a, **k: [])
 
-    # Routing: force the non-CLI (token) branch so we inspect stream_llm_response.
+    # Routing: force the cliproxy (token) branch so we inspect
+    # stream_llm_response. project_chat resolves via resolve_execution_driver
+    # (19-05), so pin that to "cliproxy".
     import app.services.cli_agent_runner_service as cli
 
-    monkeypatch.setattr(cli, "should_route_via_cli_agent", lambda *a, **k: False)
+    monkeypatch.setattr(cli, "resolve_execution_driver", lambda *a, **k: "cliproxy")
 
     import app.services.conversation_streaming as cs
 
