@@ -211,5 +211,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-06-13
-Stopped at: Completed 22-02-PLAN.md (REQ-26 consistency: _build_harness_session normalizes all 5 session kinds; evolver _DESIGN_GUIDE/_PROMPT_TEMPLATE declare skills writable — 6/6 S5 tests green)
+Stopped at: Completed 22-04-PLAN.md (REQ-25 safety guard: scan_skill_content fail-closed on injection/exfil/invisible-Unicode; find_duplicate_binding name-cosine patch-over-create; provenance_allows_overwrite refuses on diverged origin_hash — 26/26 S6+P3 tests green)
 Resume file: None
