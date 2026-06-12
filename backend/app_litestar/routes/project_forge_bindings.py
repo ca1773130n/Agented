@@ -23,11 +23,15 @@ from app.db import (
     VALID_FORGE_BINDING_KINDS,
     add_project_forge_binding,
     get_project,
+    list_forge_bundle_items,
     list_project_forge_bindings,
     remove_project_forge_binding,
     replace_project_forge_bindings,
 )
+from app.db.connection import get_connection
+from app.db.forge_bundles import _add_binding
 from app.services.context_compiler_service import ContextCompilerService
+from app.services.forge_create_service import create_and_bind_and_materialize
 from app.services.project_workspace_service import ProjectWorkspaceService
 
 from ..auth import Caller
@@ -123,6 +127,66 @@ def preview_bundle_endpoint(
     return {"bundle": bundle.to_preview_dict()}
 
 
+@post("/{project_id:str}/forge/create", status_code=201, sync_to_thread=False)
+def forge_create_endpoint(
+    project_id: str, data: dict, caller: Caller
+) -> dict[str, Any]:
+    """Atomic create+bind+materialize: create a Forge asset, bind it, and
+    materialize it to the repo in ONE flow with LIFO compensation on failure.
+
+    Body: ``{kind, payload, bind?, materialize?}``. A bad kind → 400; a
+    mid-flow failure surfaces as 5xx via the existing exception handlers after
+    compensation has undone every completed step (no orphan).
+    """
+    del caller
+    _ensure_project(project_id)
+    body = data or {}
+    kind = body.get("kind")
+    payload = body.get("payload") or {}
+    if not kind:
+        raise ClientException(detail="kind is required")
+    if not isinstance(payload, dict):
+        raise ClientException(detail="payload must be an object")
+    try:
+        result = create_and_bind_and_materialize(
+            project_id,
+            kind,
+            payload,
+            bind=bool(body.get("bind", True)),
+            materialize=bool(body.get("materialize", True)),
+        )
+    except ValueError as exc:
+        # Bad kind / unsupported kind / project-not-found surface as 400.
+        raise ClientException(detail=str(exc)) from exc
+    return result
+
+
+@post("/{project_id:str}/forge/bundles/{bundle_id:str}/bind", sync_to_thread=False)
+def bundle_bind_endpoint(
+    project_id: str, bundle_id: str, caller: Caller
+) -> dict[str, Any]:
+    """Bind every item of a cross-kind bundle to the project in ONE
+    transaction using the conn-accepting ``_add_binding`` from 17-03. If any
+    item raises, the connection block does not commit (the whole bind rolls
+    back) and the error surfaces — no partial bind."""
+    del caller
+    _ensure_project(project_id)
+    items = list_forge_bundle_items(bundle_id)
+    if not items:
+        raise NotFoundException(detail="Bundle has no items (or does not exist)")
+    with get_connection() as conn:
+        for item in items:
+            _add_binding(
+                conn,
+                project_id,
+                item["kind"],
+                str(item["asset_id"]),
+                position=item.get("position", 0),
+            )
+        conn.commit()
+    return {"bundle_id": bundle_id, "bound": len(items)}
+
+
 forge_bindings_router = Router(
     path="/admin/projects",
     route_handlers=[
@@ -131,5 +195,7 @@ forge_bindings_router = Router(
         add_binding_endpoint,
         remove_binding_endpoint,
         preview_bundle_endpoint,
+        forge_create_endpoint,
+        bundle_bind_endpoint,
     ],
 )
