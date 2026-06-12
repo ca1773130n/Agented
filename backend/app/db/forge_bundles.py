@@ -7,28 +7,20 @@ skills-only. The Forge needs a grouping primitive that spans every kind
 stage a coherent set. ``forge_bundles`` + ``forge_bundle_items`` (migration
 156) are that primitive.
 
-This module also provides ``_add_binding(conn, ...)`` — a conn-accepting
-internal variant of ``project_forge_bindings.add_binding`` so a future
-bundle-bind endpoint (17-05) can bind every item of any kind in ONE
-``get_connection()`` block: true single-call atomicity. The upsert SQL is the
-same as ``add_binding``; the two MUST stay in sync (RESEARCH.md Open
-Question 3). ``add_binding`` opens/commits its own connection; this helper
-takes an existing ``conn`` and neither opens nor commits — the caller owns the
-transaction boundary.
+This module also provides ``bind_bundle_to_project`` — binds every item of
+any kind to a project in ONE ``get_connection()`` block (true single-call
+atomicity) via the shared ``project_forge_bindings.upsert_binding``.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import List, Optional
+
+from app.utils.timezone import utc_now_iso
 
 from .connection import get_connection
 from .ids import generate_id
-from .project_forge_bindings import VALID_KINDS
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+from .project_forge_bindings import VALID_KINDS, upsert_binding
 
 
 def _bundle_to_dict(row) -> dict:
@@ -61,7 +53,7 @@ def create_forge_bundle(
     """Create a bundle. ``name`` is UNIQUE; raises sqlite3.IntegrityError on
     collision. ``id`` uses the ``bundle-`` prefix."""
     bundle_id = generate_id("bundle-")
-    created_at = _now()
+    created_at = utc_now_iso()
     with get_connection() as conn:
         conn.execute(
             "INSERT INTO forge_bundles (id, name, description, scope, created_at) "
@@ -69,25 +61,19 @@ def create_forge_bundle(
             (bundle_id, name, description, scope, created_at),
         )
         conn.commit()
-        row = conn.execute(
-            "SELECT * FROM forge_bundles WHERE id = ?", (bundle_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM forge_bundles WHERE id = ?", (bundle_id,)).fetchone()
         return _bundle_to_dict(row)
 
 
 def get_forge_bundle(bundle_id: str) -> Optional[dict]:
     with get_connection() as conn:
-        row = conn.execute(
-            "SELECT * FROM forge_bundles WHERE id = ?", (bundle_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM forge_bundles WHERE id = ?", (bundle_id,)).fetchone()
         return _bundle_to_dict(row) if row else None
 
 
 def get_forge_bundle_by_name(name: str) -> Optional[dict]:
     with get_connection() as conn:
-        row = conn.execute(
-            "SELECT * FROM forge_bundles WHERE name = ?", (name,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM forge_bundles WHERE name = ?", (name,)).fetchone()
         return _bundle_to_dict(row) if row else None
 
 
@@ -104,15 +90,9 @@ def list_forge_bundles(scope: Optional[str] = None) -> List[dict]:
 
 def delete_forge_bundle(bundle_id: str) -> bool:
     """Delete a bundle. ``forge_bundle_items`` rows cascade via ON DELETE
-    CASCADE (foreign_keys PRAGMA is enabled in get_connection). The explicit
-    item DELETE is belt-and-suspenders in case that PRAGMA is ever disabled."""
+    CASCADE (foreign_keys PRAGMA is enabled in get_connection)."""
     with get_connection() as conn:
-        conn.execute(
-            "DELETE FROM forge_bundle_items WHERE bundle_id = ?", (bundle_id,)
-        )
-        cursor = conn.execute(
-            "DELETE FROM forge_bundles WHERE id = ?", (bundle_id,)
-        )
+        cursor = conn.execute("DELETE FROM forge_bundles WHERE id = ?", (bundle_id,))
         conn.commit()
         return cursor.rowcount > 0
 
@@ -149,8 +129,7 @@ def add_bundle_item(
         )
         conn.commit()
         row = conn.execute(
-            "SELECT * FROM forge_bundle_items "
-            "WHERE bundle_id = ? AND kind = ? AND asset_id = ?",
+            "SELECT * FROM forge_bundle_items WHERE bundle_id = ? AND kind = ? AND asset_id = ?",
             (bundle_id, kind, asset_id),
         ).fetchone()
         return _item_to_dict(row)
@@ -167,59 +146,30 @@ def list_forge_bundle_items(bundle_id: str) -> List[dict]:
         return [_item_to_dict(r) for r in cursor.fetchall()]
 
 
-# --- conn-accepting atomic binding helper --------------------------------
+# --- atomic bundle bind ----------------------------------------------------
 
 
-def _add_binding(
-    conn,
-    project_id: str,
-    kind: str,
-    asset_id: str,
-    *,
-    role: Optional[str] = None,
-    enabled: int = 1,
-    position: int = 0,
-    source_scope: str = "project",
-    source_shared_binding_id: Optional[int] = None,
-    fingerprint: Optional[str] = None,
-    conflict_policy: str = "local_wins",
-) -> None:
-    """Conn-accepting variant of ``project_forge_bindings.add_binding``.
+def bind_bundle_to_project(project_id: str, bundle_id: str) -> int:
+    """Bind every item of a bundle to ``project_id`` in ONE transaction.
 
-    Takes an EXISTING ``conn`` and does NOT open or commit a connection of
-    its own, so a bundle-bind loop can bind every item of any kind inside a
-    single ``get_connection()`` transaction — true single-call atomicity for
-    the 17-05 bundle-bind route. The upsert SQL mirrors ``add_binding``; the
-    two must stay in sync (RESEARCH.md Open Question 3). All four provenance
-    columns are carried through (consistency with 17-01's replace_for_project).
+    If any item raises, nothing commits — no partial bind. Returns the
+    number of items bound (0 when the bundle is empty or unknown).
     """
-    if kind not in VALID_KINDS:
-        raise ValueError(f"Unknown forge kind: {kind!r}")
-    conn.execute(
-        """
-        INSERT INTO project_forge_bindings
-            (project_id, kind, asset_id, role, enabled, position,
-             source_scope, source_shared_binding_id, fingerprint, conflict_policy)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(project_id, kind, asset_id) DO UPDATE SET
-            role                     = excluded.role,
-            enabled                  = excluded.enabled,
-            position                 = excluded.position,
-            source_scope             = excluded.source_scope,
-            source_shared_binding_id = excluded.source_shared_binding_id,
-            fingerprint              = excluded.fingerprint,
-            conflict_policy          = excluded.conflict_policy
-        """,
-        (
-            project_id,
-            kind,
-            asset_id,
-            role,
-            1 if enabled else 0,
-            position,
-            source_scope,
-            source_shared_binding_id,
-            fingerprint,
-            conflict_policy,
-        ),
-    )
+    with get_connection() as conn:
+        items = conn.execute(
+            "SELECT * FROM forge_bundle_items WHERE bundle_id = ? "
+            "ORDER BY position ASC, kind ASC, asset_id ASC",
+            (bundle_id,),
+        ).fetchall()
+        if not items:
+            return 0
+        for item in items:
+            upsert_binding(
+                conn,
+                project_id,
+                item["kind"],
+                str(item["asset_id"]),
+                position=item["position"],
+            )
+        conn.commit()
+        return len(items)

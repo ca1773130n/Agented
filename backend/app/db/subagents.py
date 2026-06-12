@@ -9,18 +9,12 @@ CRITICAL: this ``subagents`` table is entirely DISTINCT from the legacy
 ``create_agent``). Do not conflate, reuse, or cross-wire the two.
 """
 
-import logging
-from datetime import datetime, timezone
 from typing import List, Optional
+
+from app.utils.timezone import utc_now_iso
 
 from .connection import get_connection
 from .ids import generate_subagent_id
-
-logger = logging.getLogger(__name__)
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def create_subagent(
@@ -34,7 +28,7 @@ def create_subagent(
     """Create a subagent. Returns the created row. Raises sqlite3.IntegrityError
     on duplicate name (UNIQUE constraint)."""
     subagent_id = generate_subagent_id()
-    ts = _now()
+    ts = utc_now_iso()
     with get_connection() as conn:
         conn.execute(
             """
@@ -100,12 +94,10 @@ def update_subagent(subagent_id: str, **fields) -> bool:
     if not updates:
         return False
     updates.append("updated_at = ?")
-    values.append(_now())
+    values.append(utc_now_iso())
     values.append(subagent_id)
     with get_connection() as conn:
-        cursor = conn.execute(
-            f"UPDATE subagents SET {', '.join(updates)} WHERE id = ?", values
-        )
+        cursor = conn.execute(f"UPDATE subagents SET {', '.join(updates)} WHERE id = ?", values)
         conn.commit()
         return cursor.rowcount > 0
 

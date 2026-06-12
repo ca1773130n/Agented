@@ -19,8 +19,9 @@ from .base import Renderer, subagent_prompt_block, universal_prompt_prepend
 logger = logging.getLogger(__name__)
 
 
-def _prefix_p_arg(cmd: list[str], system_text: str) -> list[str]:
-    if not system_text or not cmd:
+def _prefix_p_arg(cmd: list[str], text: str) -> list[str]:
+    """Splice ``text`` above the ``-p`` prompt arg (gemini)."""
+    if not text or not cmd:
         return cmd
     try:
         idx = cmd.index("-p")
@@ -30,23 +31,7 @@ def _prefix_p_arg(cmd: list[str], system_text: str) -> list[str]:
     if prompt_idx >= len(cmd):
         return cmd
     new_cmd = list(cmd)
-    new_cmd[prompt_idx] = f"=== System ===\n{system_text}\n\n{cmd[prompt_idx]}"
-    return new_cmd
-
-
-def _prefix_p_block(cmd: list[str], block: str) -> list[str]:
-    """Splice a free-form block above the ``-p`` prompt arg (gemini)."""
-    if not block or not cmd:
-        return cmd
-    try:
-        idx = cmd.index("-p")
-    except ValueError:
-        return cmd
-    prompt_idx = idx + 1
-    if prompt_idx >= len(cmd):
-        return cmd
-    new_cmd = list(cmd)
-    new_cmd[prompt_idx] = f"{block}\n\n{cmd[prompt_idx]}"
+    new_cmd[prompt_idx] = f"{text}\n\n{cmd[prompt_idx]}"
     return new_cmd
 
 
@@ -72,10 +57,12 @@ class GeminiRenderer(Renderer):
         if bundle.is_empty():
             return cmd, env
         new_env = dict(env)
-        new_cmd = _prefix_p_arg(cmd, bundle.system_prompt_text)
+        new_cmd = cmd
+        if bundle.system_prompt_text:
+            new_cmd = _prefix_p_arg(new_cmd, f"=== System ===\n{bundle.system_prompt_text}")
         # gemini has no native sub-agent concept → degrade to a named
         # prompt-prefix block (claude discovers sub-agents natively instead).
-        new_cmd = _prefix_p_block(new_cmd, subagent_prompt_block(bundle))
+        new_cmd = _prefix_p_arg(new_cmd, subagent_prompt_block(bundle))
         new_cmd = universal_prompt_prepend(new_cmd, bundle)
 
         if bundle.overlay_files or bundle.mcp_servers:
@@ -84,7 +71,5 @@ class GeminiRenderer(Renderer):
                 try:
                     apply_forge_bundle(overlay, bundle.to_dict())
                 except Exception:
-                    logger.warning(
-                        "gemini_renderer: overlay apply failed", exc_info=True
-                    )
+                    logger.warning("gemini_renderer: overlay apply failed", exc_info=True)
         return new_cmd, new_env

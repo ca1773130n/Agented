@@ -10,20 +10,18 @@ that:
 - a changed file can be re-imported (hash differs);
 - an operator can audit where an auto-bound primitive came from.
 
-Keyed on (asset_id, kind) — the same (id, kind) identity the rest of the forge
-layer uses.
+Keyed on (asset_id, kind). ``asset_id`` is the import handler's stable key for
+the asset — for session-imported sub-agents that is the sub-agent NAME (the
+identity carried by the source file), not the generated ``subag-`` row id.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Optional
 
+from app.utils.timezone import utc_now_iso
+
 from .connection import get_connection
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def record_origin(
@@ -45,7 +43,7 @@ def record_origin(
                 source_session_id = excluded.source_session_id,
                 imported_at = excluded.imported_at
             """,
-            (str(asset_id), kind, origin_hash, source_session_id, _now()),
+            (asset_id, kind, origin_hash, source_session_id, utc_now_iso()),
         )
         conn.commit()
 
@@ -55,18 +53,6 @@ def get_origin(asset_id: str, kind: str) -> Optional[dict]:
     with get_connection() as conn:
         row = conn.execute(
             "SELECT * FROM forge_origin WHERE asset_id = ? AND kind = ?",
-            (str(asset_id), kind),
-        ).fetchone()
-        return dict(row) if row else None
-
-
-def get_origin_by_hash(origin_hash: str) -> Optional[dict]:
-    """Return any provenance row matching this content-hash, or None. Lets the
-    import handler skip a file whose bytes were already imported (even under a
-    different asset id)."""
-    with get_connection() as conn:
-        row = conn.execute(
-            "SELECT * FROM forge_origin WHERE origin_hash = ? LIMIT 1",
-            (origin_hash,),
+            (asset_id, kind),
         ).fetchone()
         return dict(row) if row else None

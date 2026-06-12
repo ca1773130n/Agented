@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from app.db import (
     get_all_user_skills,
     get_forge_bundle_by_name,
@@ -18,13 +16,7 @@ from app.services.forge_creator_seed import (
 _EXPECTED_NAMES = {name for name, _rel, _desc in _CREATOR_SKILLS}
 
 
-@pytest.fixture
-def db(isolated_db):
-    del isolated_db
-    yield
-
-
-def test_seed_produces_five_skills_one_bundle(db):
+def test_seed_produces_five_skills_one_bundle(isolated_db):
     summary = seed_forge_creator_bundle()
 
     skills = get_all_user_skills()
@@ -43,7 +35,7 @@ def test_seed_produces_five_skills_one_bundle(db):
     assert summary["created"] is True
 
 
-def test_seed_idempotent(db):
+def test_seed_idempotent(isolated_db):
     first = seed_forge_creator_bundle()
     skills_after_first = {s["skill_name"] for s in get_all_user_skills()}
     items_after_first = list_forge_bundle_items(first["bundle_id"])

@@ -22,14 +22,12 @@ from litestar.exceptions import ClientException, NotFoundException
 from app.db import (
     VALID_FORGE_BINDING_KINDS,
     add_project_forge_binding,
+    bind_forge_bundle_to_project,
     get_project,
-    list_forge_bundle_items,
     list_project_forge_bindings,
     remove_project_forge_binding,
     replace_project_forge_bindings,
 )
-from app.db.connection import get_connection
-from app.db.forge_bundles import _add_binding
 from app.services.context_compiler_service import ContextCompilerService
 from app.services.forge_create_service import create_and_bind_and_materialize
 from app.services.project_workspace_service import ProjectWorkspaceService
@@ -54,9 +52,7 @@ def list_bindings_endpoint(project_id: str, caller: Caller) -> dict[str, Any]:
 
 
 @put("/{project_id:str}/forge-bindings", sync_to_thread=False)
-def replace_bindings_endpoint(
-    project_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def replace_bindings_endpoint(project_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     _ensure_project(project_id)
     bindings = (data or {}).get("bindings") or []
@@ -66,9 +62,7 @@ def replace_bindings_endpoint(
 
 
 @post("/{project_id:str}/forge-bindings", status_code=201, sync_to_thread=False)
-def add_binding_endpoint(
-    project_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def add_binding_endpoint(project_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     _ensure_project(project_id)
     body = data or {}
@@ -77,9 +71,7 @@ def add_binding_endpoint(
     if not kind or not asset_id:
         raise ClientException(detail="kind and asset_id are required")
     if kind not in VALID_FORGE_BINDING_KINDS:
-        raise ClientException(
-            detail=f"kind must be one of {sorted(VALID_FORGE_BINDING_KINDS)}"
-        )
+        raise ClientException(detail=f"kind must be one of {sorted(VALID_FORGE_BINDING_KINDS)}")
     binding = add_project_forge_binding(
         project_id,
         kind,
@@ -95,9 +87,7 @@ def add_binding_endpoint(
     status_code=204,
     sync_to_thread=False,
 )
-def remove_binding_endpoint(
-    project_id: str, binding_id: int, caller: Caller
-) -> None:
+def remove_binding_endpoint(project_id: str, binding_id: int, caller: Caller) -> None:
     del caller
     _ensure_project(project_id)
     if not remove_project_forge_binding(binding_id):
@@ -105,9 +95,7 @@ def remove_binding_endpoint(
 
 
 @post("/{project_id:str}/forge-context/preview", sync_to_thread=False)
-def preview_bundle_endpoint(
-    project_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def preview_bundle_endpoint(project_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     _ensure_project(project_id)
     body = data or {}
@@ -128,9 +116,7 @@ def preview_bundle_endpoint(
 
 
 @post("/{project_id:str}/forge/create", status_code=201, sync_to_thread=False)
-def forge_create_endpoint(
-    project_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def forge_create_endpoint(project_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     """Atomic create+bind+materialize: create a Forge asset, bind it, and
     materialize it to the repo in ONE flow with LIFO compensation on failure.
 
@@ -161,30 +147,21 @@ def forge_create_endpoint(
     return result
 
 
-@post("/{project_id:str}/forge/bundles/{bundle_id:str}/bind", sync_to_thread=False)
-def bundle_bind_endpoint(
-    project_id: str, bundle_id: str, caller: Caller
-) -> dict[str, Any]:
+@post(
+    "/{project_id:str}/forge/bundles/{bundle_id:str}/bind",
+    status_code=200,
+    sync_to_thread=False,
+)
+def bundle_bind_endpoint(project_id: str, bundle_id: str, caller: Caller) -> dict[str, Any]:
     """Bind every item of a cross-kind bundle to the project in ONE
-    transaction using the conn-accepting ``_add_binding`` from 17-03. If any
-    item raises, the connection block does not commit (the whole bind rolls
+    transaction. If any item raises, nothing commits (the whole bind rolls
     back) and the error surfaces — no partial bind."""
     del caller
     _ensure_project(project_id)
-    items = list_forge_bundle_items(bundle_id)
-    if not items:
+    bound = bind_forge_bundle_to_project(project_id, bundle_id)
+    if not bound:
         raise NotFoundException(detail="Bundle has no items (or does not exist)")
-    with get_connection() as conn:
-        for item in items:
-            _add_binding(
-                conn,
-                project_id,
-                item["kind"],
-                str(item["asset_id"]),
-                position=item.get("position", 0),
-            )
-        conn.commit()
-    return {"bundle_id": bundle_id, "bound": len(items)}
+    return {"bundle_id": bundle_id, "bound": bound}
 
 
 forge_bindings_router = Router(

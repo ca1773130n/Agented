@@ -565,6 +565,7 @@ from .project_forge_bindings import (  # noqa: F401
 # Cross-kind Forge bundles (v0.8.0 17-03 — named group spanning any kind).
 from .forge_bundles import (  # noqa: F401
     add_bundle_item,
+    bind_bundle_to_project as bind_forge_bundle_to_project,
     create_forge_bundle,
     delete_forge_bundle,
     get_forge_bundle,
@@ -576,7 +577,6 @@ from .forge_bundles import (  # noqa: F401
 # Forge primitive provenance (v0.8.0 17-06 — session-auto-import origin hashes).
 from .forge_origin import (  # noqa: F401
     get_origin,
-    get_origin_by_hash,
     record_origin,
 )
 

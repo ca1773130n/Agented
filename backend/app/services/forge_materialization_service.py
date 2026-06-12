@@ -25,6 +25,9 @@ logger = logging.getLogger(__name__)
 _MANIFEST_REL = ".claude/agented-forge/manifest.json"
 # Operator-shared, marker-managed files — NEVER manifest-deleted.
 _NEVER_DELETE = {_MANIFEST_REL, ".claude/settings.json", ".claude/mcp.json"}
+# Where native claude sub-agents live — shared with the session-import differ,
+# which must agree with the materializer for manifest-skip logic to hold.
+AGENTS_SUBDIR = ".claude/agents"
 
 
 @dataclass
@@ -127,6 +130,16 @@ def _load_manifest(workspace: Path) -> dict[str, list[str]]:
         return {}
     by_kind = data.get("paths_by_kind")
     return by_kind if isinstance(by_kind, dict) else {}
+
+
+def manifest_managed_paths(workspace: Path) -> set[str]:
+    """Repo-relative paths the forge manifest tracks — i.e. files materialized
+    BY Agented, as opposed to scaffolded fresh by a session."""
+    managed: set[str] = set()
+    for rels in _load_manifest(workspace).values():
+        if isinstance(rels, list):
+            managed.update(rels)
+    return managed
 
 
 def _finalize_manifest(
@@ -335,7 +348,7 @@ def materialize_primitives(
         # commands/rules (NOT in _NEVER_DELETE).
         for asset in _bound_assets(project_id, "subagent"):
             safe = _safe(asset.get("name") or str(asset.get("id")))
-            base_rel = f".claude/agents/{safe}.md"
+            base_rel = f"{AGENTS_SUBDIR}/{safe}.md"
             rel = _unique_rel(used_rels, base_rel, asset.get("id"))
             fm = _frontmatter(
                 {

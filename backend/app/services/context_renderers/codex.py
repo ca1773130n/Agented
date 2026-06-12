@@ -19,7 +19,7 @@ from ..codex_config_overlay import apply_forge_bundle, prepare_session_overlay
 from ..context_compiler_service import ContextBundle
 from .base import (
     Renderer,
-    prefix_system_text,
+    prepend_to_trailing_prompt,
     subagent_prompt_block,
     universal_prompt_prepend,
 )
@@ -28,12 +28,9 @@ logger = logging.getLogger(__name__)
 
 
 def _prefix_prompt(cmd: list[str], system_text: str) -> list[str]:
-    if not system_text or not cmd:
+    if not system_text:
         return cmd
-    last = cmd[-1]
-    if not isinstance(last, str) or last.startswith("-"):
-        return cmd
-    return [*cmd[:-1], f"=== System ===\n{system_text}\n\n{last}"]
+    return prepend_to_trailing_prompt(cmd, f"=== System ===\n{system_text}")
 
 
 def _ensure_overlay(env: dict, session_id: str) -> str | None:
@@ -61,7 +58,7 @@ class CodexRenderer(Renderer):
         new_cmd = _prefix_prompt(cmd, bundle.system_prompt_text)
         # codex has no native sub-agent concept → degrade to a named
         # prompt-prefix block (claude discovers sub-agents natively instead).
-        new_cmd = prefix_system_text(new_cmd, bundle.system_prompt_text, subagent_prompt_block(bundle))
+        new_cmd = prepend_to_trailing_prompt(new_cmd, subagent_prompt_block(bundle))
         new_cmd = universal_prompt_prepend(new_cmd, bundle)
 
         if bundle.overlay_files or bundle.mcp_servers:
@@ -70,7 +67,5 @@ class CodexRenderer(Renderer):
                 try:
                     apply_forge_bundle(overlay, bundle.to_dict())
                 except Exception:
-                    logger.warning(
-                        "codex_renderer: overlay apply failed", exc_info=True
-                    )
+                    logger.warning("codex_renderer: overlay apply failed", exc_info=True)
         return new_cmd, new_env

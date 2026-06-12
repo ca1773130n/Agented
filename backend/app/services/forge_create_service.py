@@ -37,6 +37,7 @@ from app.db import (
     remove_project_forge_binding,
 )
 from app.services.forge_materialization_service import (
+    MaterializationResult,
     _finalize_manifest,
     materialize_primitives,
 )
@@ -135,9 +136,7 @@ def create_and_bind_and_materialize(
             project = get_project(project_id)
             if not project:
                 raise ValueError(f"Project not found: {project_id}")
-            workspace_path = Path(
-                ProjectWorkspaceService.resolve_working_directory(project_id)
-            )
+            workspace_path = Path(ProjectWorkspaceService.resolve_working_directory(project_id))
             result = materialize_primitives(project, [kind], workspace_path)
             written_rels = result.rel_paths()
 
@@ -189,10 +188,6 @@ def _compensate(
                 # Re-run materialization for the kind now that the row will be
                 # gone — but the row still exists here, so instead reconcile the
                 # manifest directly against an empty written set for the kind.
-                from app.services.forge_materialization_service import (
-                    MaterializationResult,
-                )
-
                 empty = MaterializationResult()
                 _finalize_manifest(workspace_path, empty, [kind])
             except Exception:  # pragma: no cover - best effort cleanup

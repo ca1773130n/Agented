@@ -68,7 +68,5 @@ class ClaudeRenderer(Renderer):
             try:
                 apply_forge_bundle(overlay, bundle.to_dict())
             except Exception:
-                logger.warning(
-                    "claude_renderer: overlay apply failed", exc_info=True
-                )
+                logger.warning("claude_renderer: overlay apply failed", exc_info=True)
         return new_cmd, new_env
