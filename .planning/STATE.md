@@ -212,5 +212,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-06-13
-Stopped at: Completed 22-03-PLAN.md (repeated-request detector: NEW bus handler over all 5 kinds, cosine-match >=0.83 with exact-hash A1 fallback, non-blocking proven at the bus — 3/3 P1/A1/P4 tests green)
+Stopped at: Completed 22-05-PLAN.md (hybrid auto-skill confidence gate: evaluate_signal routes AUTO/PROPOSE/REJECT as a pure function; convert_signal drives AUTO via evolver _create_dispatch['skill'] — discovered_procedure takeaway conf 0.9, origin recorded, skill_created marked; scan-fail/provenance/policy-off downgrade to PROPOSE; per-project project_autonomy_config gates AUTO with AGENTED_TAKEAWAY_AUTOAPPLY env fallback — 17/17 P2/A2 tests green, create called once in AUTO / zero in PROPOSE/REJECT)
 Resume file: None
