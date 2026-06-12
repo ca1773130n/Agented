@@ -117,7 +117,7 @@ Plans:
 ### Phase 21: One-click team harness setup
 **Goal**: A single ProjectDashboard button bootstraps a complete team harness — an idempotent `TeamHarnessSetupService` runs GRD init, team topology + GRD-driven superagents, project-tailored bundle binding, tesserae enablement, default policies, and 4-harness materialization with a per-backend compile smoke check; re-running reconciles rather than duplicates, and each step is independently retryable with step-level SSE progress.
 **Type**: integrate
-**Depends on**: Phases 17 and 19 (assembles the forge surface + GRD-driven SAs; this is the milestone's integration point for those two)
+**Depends on**: Phase 17, Phase 19 (assembles the forge surface + GRD-driven SAs; this is the milestone's integration point for those two)
 **Requirements**: REQ-19, REQ-20, REQ-21
 **Verification Level**: full
 **Success Criteria** (what must be TRUE):
