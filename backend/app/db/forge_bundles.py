@@ -20,7 +20,7 @@ from app.utils.timezone import utc_now_iso
 
 from .connection import get_connection
 from .ids import generate_id
-from .project_forge_bindings import VALID_KINDS, upsert_binding
+from .project_forge_bindings import VALID_KINDS, _ensure_propagation_columns, upsert_binding
 
 
 def _bundle_to_dict(row) -> dict:
@@ -163,6 +163,10 @@ def bind_bundle_to_project(project_id: str, bundle_id: str) -> int:
         ).fetchall()
         if not items:
             return 0
+        # Legacy DBs gain the provenance columns lazily — every other
+        # write/read path runs this guard before touching them; so must the
+        # bundle bind (upsert_binding writes source_scope/conflict_policy/…).
+        _ensure_propagation_columns(conn)
         for item in items:
             upsert_binding(
                 conn,

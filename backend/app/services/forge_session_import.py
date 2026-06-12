@@ -22,7 +22,11 @@ FIRST thing the handler checks, before touching the filesystem.
 
 Provenance/idempotence: the source file bytes are sha256'd. If ``forge_origin``
 already holds that exact hash, the file is skipped (no duplicate import). A
-changed file (new hash) is re-imported and its origin row refreshed.
+changed file (new hash) whose subagent name already exists in THIS project is
+updated in place (same row id, content + origin refreshed) — a fresh create
+would trip the global UNIQUE name constraint. A name owned by a DIFFERENT
+project (or a global subagent) is never touched from here: cross-project
+hijack fails closed with a warning.
 
 Scope (Phase 17): only ``.claude/agents/<name>.md`` (subagents) are imported —
 that is the kind the atomic create API supports end-to-end (create + bind +
@@ -37,8 +41,9 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from app.db import get_project
+from app.db import add_project_forge_binding, get_project
 from app.db.forge_origin import get_origin, record_origin
+from app.db.subagents import get_subagent_by_name, update_subagent
 from app.services.forge_create_service import create_and_bind_and_materialize
 from app.services.forge_materialization_service import (
     AGENTS_SUBDIR,
@@ -83,6 +88,12 @@ def on_session_complete_import(
         )
         return
 
+    # Only successful sessions auto-bind (same gate as the tesserae exporter) —
+    # a failed/cancelled session may leave half-written scaffolds behind.
+    if status not in ("completed", "success"):
+        logger.debug("forge import: session status %r not successful; skipping", status)
+        return
+
     if not project_id:
         return
 
@@ -120,23 +131,50 @@ def on_session_complete_import(
         if prior and prior.get("origin_hash") == origin_hash:
             continue
 
-        try:
-            # materialize=False: one batch materialization after the loop
-            # covers every import — per-file materialization would rewrite
-            # ALL bound subagents once per imported file.
-            create_and_bind_and_materialize(
-                project_id=project_id,
-                kind="subagent",
-                payload={
-                    "name": name,
-                    "content": text,
-                    "description": f"Imported from session {session_id}",
-                    "project_id": project_id,
-                    "source_path": rel,
-                },
-                bind=True,
-                materialize=False,
+        # Subagent names are globally UNIQUE. A name owned by a different
+        # project (or a project-less/global subagent) must never be updated
+        # from a session in THIS project — that would be a cross-project
+        # hijack vector. Fail closed.
+        existing = get_subagent_by_name(name)
+        if existing is not None and existing.get("project_id") != project_id:
+            logger.warning(
+                "forge import: subagent name %r belongs to project %r, not %r; skipping %s",
+                name,
+                existing.get("project_id"),
+                project_id,
+                rel,
             )
+            continue
+
+        try:
+            if existing is None:
+                # materialize=False: one batch materialization after the loop
+                # covers every import — per-file materialization would rewrite
+                # ALL bound subagents once per imported file.
+                create_and_bind_and_materialize(
+                    project_id=project_id,
+                    kind="subagent",
+                    payload={
+                        "name": name,
+                        "content": text,
+                        "description": f"Imported from session {session_id}",
+                        "project_id": project_id,
+                        "source_path": rel,
+                    },
+                    bind=True,
+                    materialize=False,
+                )
+            else:
+                # Changed file for an already-imported name: refresh the row in
+                # place (a fresh create would trip the UNIQUE name constraint)
+                # and re-assert the binding (idempotent upsert).
+                update_subagent(
+                    existing["id"],
+                    content=text,
+                    description=f"Imported from session {session_id}",
+                    source_path=rel,
+                )
+                add_project_forge_binding(project_id, "subagent", existing["id"])
         except Exception:
             logger.warning("forge import: create+bind failed for %s; skipping", rel, exc_info=True)
             continue

@@ -144,6 +144,10 @@ def forge_create_endpoint(project_id: str, data: dict, caller: Caller) -> dict[s
     except ValueError as exc:
         # Bad kind / unsupported kind / project-not-found surface as 400.
         raise ClientException(detail=str(exc)) from exc
+    except TypeError as exc:
+        # Unknown payload field for the kind's create fn (**payload splat) —
+        # caller error, not a server fault.
+        raise ClientException(detail=f"invalid payload for kind {kind!r}: {exc}") from exc
     return result
 
 

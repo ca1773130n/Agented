@@ -3,12 +3,12 @@
 The codebase has NO transaction/saga abstraction spanning the DB and the
 filesystem: ``get_connection()`` commits per call and
 ``materialize_primitives`` writes files outside any DB transaction. So
-"atomic create" here is implemented as an EXPLICIT LIFO compensation in
+"atomic create" here is implemented as an EXPLICIT compensation in
 ``create_and_bind_and_materialize``: the function performs up to three forward
 steps (create row → bind → materialize), tracking exactly which completed, and
-on ANY mid-flow exception it undoes the completed steps in REVERSE order
-(written files → binding → row), leaving NO orphaned row, binding, or repo
-file.
+on ANY mid-flow exception it undoes the completed steps (binding → row, then a
+file reconcile against the rolled-back DB), leaving NO orphaned row, binding,
+or repo file.
 
 Each compensation action is wrapped in its own try/except so a cleanup failure
 cannot mask the original exception; the original error is always re-raised.
@@ -36,11 +36,7 @@ from app.db import (
     get_project,
     remove_project_forge_binding,
 )
-from app.services.forge_materialization_service import (
-    MaterializationResult,
-    _finalize_manifest,
-    materialize_primitives,
-)
+from app.services.forge_materialization_service import materialize_primitives
 from app.services.project_workspace_service import ProjectWorkspaceService
 
 logger = logging.getLogger(__name__)
@@ -84,9 +80,9 @@ def create_and_bind_and_materialize(
     """Create a Forge asset, optionally bind it to the project, and optionally
     materialize it to the project's repo — atomically via LIFO compensation.
 
-    On any mid-flow failure, completed steps are undone in reverse order
-    (written files → binding → asset row) so no orphan remains, and the
-    original exception is re-raised.
+    On any mid-flow failure, completed steps are undone (binding → asset row,
+    then a file reconcile against the rolled-back DB) so no orphan remains,
+    and the original exception is re-raised.
 
     Returns ``{"kind", "asset", "binding", "written"}`` on success.
     """
@@ -96,6 +92,10 @@ def create_and_bind_and_materialize(
         raise ValueError(f"forge/create does not support kind {kind!r}")
 
     payload = dict(payload or {})
+    # ``role`` belongs to the BINDING, not the asset row — pop it before the
+    # **payload splat so the per-kind create fn (none of which take a ``role``
+    # param) doesn't blow up with a TypeError.
+    bind_role = payload.pop("role", None)
 
     # Compensation bookkeeping — only set once the corresponding step succeeds.
     asset_id: Any = None
@@ -126,7 +126,7 @@ def create_and_bind_and_materialize(
                 project_id,
                 kind,
                 str(asset_id),
-                role=payload.get("role"),
+                role=bind_role,
                 enabled=bool(payload.get("enabled", True)),
             )
             binding_id = binding.get("id") if binding else None
@@ -148,13 +148,13 @@ def create_and_bind_and_materialize(
         }
 
     except Exception:
-        # LIFO compensation — undo in reverse of the forward order. Each action
-        # is isolated so a cleanup error cannot mask the original exception.
+        # Compensation — undo the DB steps in reverse, then reconcile files
+        # against the rolled-back DB. Each action is isolated so a cleanup
+        # error cannot mask the original exception.
         _compensate(
             kind=kind,
             asset_id=asset_id,
             binding_id=binding_id,
-            written_rels=written_rels,
             project=project,
             workspace_path=workspace_path,
         )
@@ -166,32 +166,19 @@ def _compensate(
     kind: str,
     asset_id: Any,
     binding_id: Optional[int],
-    written_rels: list[str],
     project: Optional[dict],
     workspace_path: Optional[Path],
 ) -> None:
-    """Undo completed steps in REVERSE (LIFO) order. Every action is wrapped so
-    no cleanup failure can mask or replace the original error being unwound."""
+    """Undo completed DB steps in reverse (binding → row), then reconcile repo
+    files by re-materializing the kind against the rolled-back DB. Every action
+    is wrapped so no cleanup failure can mask the original error being unwound.
 
-    # 3 (last forward step) → undo first: remove written repo files, then
-    # reconcile the manifest so the kind's bucket no longer references them.
-    if written_rels and workspace_path is not None:
-        for rel in written_rels:
-            try:
-                target = workspace_path / rel
-                if target.exists():
-                    target.unlink()
-            except Exception:  # pragma: no cover - best effort cleanup
-                logger.warning("forge compensation: could not unlink %s", rel)
-        if project is not None:
-            try:
-                # Re-run materialization for the kind now that the row will be
-                # gone — but the row still exists here, so instead reconcile the
-                # manifest directly against an empty written set for the kind.
-                empty = MaterializationResult()
-                _finalize_manifest(workspace_path, empty, [kind])
-            except Exception:  # pragma: no cover - best effort cleanup
-                logger.warning("forge compensation: manifest reconcile failed")
+    File reconcile MUST come after the DB undo and MUST NOT just unlink this
+    run's written paths: ``materialize_primitives`` rewrites EVERY bound asset
+    of the kind, so the written set includes pre-existing assets' files —
+    unlinking them all would wipe the kind. Re-materializing instead deletes
+    only the new asset's file (its row/binding are gone) and leaves the other
+    assets' files and the manifest consistent."""
 
     # 2 → undo the binding.
     if binding_id is not None:
@@ -206,3 +193,10 @@ def _compensate(
             _DELETE_FNS[kind](asset_id)
         except Exception:  # pragma: no cover - best effort cleanup
             logger.warning("forge compensation: could not delete %s %s", kind, asset_id)
+
+    # 3 → reconcile files/manifest against the now-rolled-back DB.
+    if project is not None and workspace_path is not None:
+        try:
+            materialize_primitives(project, [kind], workspace_path)
+        except Exception:  # pragma: no cover - best effort cleanup
+            logger.warning("forge compensation: file reconcile failed", exc_info=True)
