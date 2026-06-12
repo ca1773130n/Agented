@@ -105,11 +105,20 @@ def _keyword_classify(text: str) -> dict:
     """
     lowered = text.lower()
     tokens = lowered.split()
+    # Word set with surrounding punctuation stripped, so openers like "what"
+    # match the token "what?" but NOT a substring of "somewhat".
+    word_set = {tok.strip("?.!,;:") for tok in tokens}
 
     research_score = sum(1 for kw in TASK_RESEARCH if kw in lowered)
     plan_score = sum(1 for kw in TASK_PLAN if kw in lowered)
     generic_score = sum(1 for kw in TASK_GENERIC if kw in lowered)
-    conversational_score = sum(1 for kw in CONVERSATIONAL if kw in lowered)
+    # Conversational openers match on word boundary (token membership); "?" is
+    # punctuation so it stays a substring check.
+    conversational_score = sum(
+        1
+        for kw in CONVERSATIONAL
+        if (kw == "?" and "?" in lowered) or (kw != "?" and kw in word_set)
+    )
 
     task_scores = {
         "research": research_score,
