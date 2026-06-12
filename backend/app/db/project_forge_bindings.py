@@ -21,7 +21,7 @@ from typing import List, Optional
 
 from .connection import get_connection
 
-VALID_KINDS = {"rule", "skill", "hook", "command", "mcp_server", "plugin"}
+VALID_KINDS = {"rule", "skill", "hook", "command", "mcp_server", "plugin", "subagent"}
 
 
 def _ensure_propagation_columns(conn) -> None:

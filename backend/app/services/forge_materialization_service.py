@@ -59,6 +59,15 @@ def _get_asset(kind: str, asset_id: str) -> Optional[dict]:
             from app.db.skills import get_user_skill
 
             return get_user_skill(int(asset_id))
+        if kind == "subagent":
+            # Subagent ids are STR (subag-…), like mcp_server. This is the
+            # READ/dispatch half only — the WRITE branch (rendering each bound
+            # subagent to .claude/agents/<name>.md across the 4 backends) is
+            # 17-04. TODO(17-02→17-04): add a subagent materialization block
+            # alongside the mcp_server/rule/hook/command/skill write branches.
+            from app.db.subagents import get_subagent
+
+            return get_subagent(str(asset_id))
     except (ValueError, TypeError):
         logger.warning("forge materialize: bad asset_id %r for kind %s; skipping", asset_id, kind)
         return None
