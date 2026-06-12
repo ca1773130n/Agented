@@ -1077,6 +1077,36 @@ def _migrate_154_answer_eval(conn):
     create_answer_eval_tables(conn)
 
 
+def _migrate_156_forge_bundles(conn):
+    """Phase 17-03: cross-kind forge bundles. A ``forge_bundles`` row is a
+    named, scope-tagged group; ``forge_bundle_items`` holds primitives of ANY
+    kind in one bundle (unlike skills-only legacy ``skill_sets``). Idempotent
+    CREATE IF NOT EXISTS. Does NOT touch skill_sets / skill_set_items."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS forge_bundles (
+            id TEXT PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL,
+            description TEXT,
+            scope TEXT NOT NULL DEFAULT 'project',
+            created_at TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS forge_bundle_items (
+            bundle_id TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            asset_id TEXT NOT NULL,
+            position INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (bundle_id, kind, asset_id),
+            FOREIGN KEY (bundle_id) REFERENCES forge_bundles(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_forge_bundle_items_pos "
+        "ON forge_bundle_items(bundle_id, position)"
+    )
+
+
 def _migrate_152_resume_recovery(conn):
     """Harness-1 Phase 4: redispatch/resume provenance + per-trigger
     auto-recovery flag. PRAGMA-guarded ALTERs — idempotent."""
@@ -1198,4 +1228,6 @@ V07_MIGRATIONS: list = [
     (153, "extracted_facts", _migrate_153_extracted_facts),
     # Agentic-RAG T1: baseline-vs-pipeline answer eval runs + results.
     (154, "answer_eval", _migrate_154_answer_eval),
+    # v0.8.0 (17-03): cross-kind forge bundles (155 reserved for 17-02 subagents).
+    (156, "forge_bundles", _migrate_156_forge_bundles),
 ]
