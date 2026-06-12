@@ -21,6 +21,7 @@ def create_project_sa_instance(
     worktree_path: str = None,
     default_chat_mode: str = "management",
     config_overrides: str = None,
+    driver: str = None,
 ) -> Optional[str]:
     """Add a new project SA instance. Returns instance ID on success, None on failure."""
     with get_connection() as conn:
@@ -30,8 +31,8 @@ def create_project_sa_instance(
                 """
                 INSERT INTO project_sa_instances
                 (id, project_id, template_sa_id, worktree_path,
-                 default_chat_mode, config_overrides)
-                VALUES (?, ?, ?, ?, ?, ?)
+                 default_chat_mode, config_overrides, driver)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     psa_id,
@@ -40,6 +41,7 @@ def create_project_sa_instance(
                     worktree_path,
                     default_chat_mode,
                     config_overrides,
+                    driver,
                 ),
             )
             conn.commit()
@@ -54,6 +56,21 @@ def get_project_sa_instance(instance_id: str) -> Optional[dict]:
         cursor = conn.execute("SELECT * FROM project_sa_instances WHERE id = ?", (instance_id,))
         row = cursor.fetchone()
         return dict(row) if row else None
+
+
+def get_instance_driver(instance_id: str) -> Optional[str]:
+    """Return ``project_sa_instances.driver`` for ``instance_id`` (Phase 19).
+
+    NULL/missing row → ``None`` (caller inherits the project/global default).
+    """
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT driver FROM project_sa_instances WHERE id = ?", (instance_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return row["driver"] if hasattr(row, "keys") else row[0]
 
 
 def get_project_sa_instance_by_project_and_sa(
@@ -84,6 +101,7 @@ def update_project_sa_instance(
     worktree_path: str = None,
     default_chat_mode: str = None,
     config_overrides: str = None,
+    driver: str = None,
 ) -> bool:
     """Update project SA instance fields. Returns True on success."""
     updates = []
@@ -98,6 +116,9 @@ def update_project_sa_instance(
     if config_overrides is not None:
         updates.append("config_overrides = ?")
         values.append(config_overrides)
+    if driver is not None:
+        updates.append("driver = ?")
+        values.append(driver)
 
     if not updates:
         return False

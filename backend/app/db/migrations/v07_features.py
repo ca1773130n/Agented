@@ -1164,6 +1164,28 @@ def _migrate_152_resume_recovery(conn):
         conn.execute("ALTER TABLE project_sessions ADD COLUMN resumed_from TEXT")
 
 
+def _migrate_158_driver_columns(conn):
+    """Phase 19 (19-01): per-scope execution-driver columns for the
+    precedence-driven, default-GRD ``resolve_execution_driver()`` resolver.
+
+    Adds two nullable TEXT columns (NULL = inherit the next precedence
+    level, ultimately the global default ``"grd"``):
+
+      - ``projects.default_driver`` — a project's fallback driver when no
+        more-specific (turn / SuperAgent / instance) source is set.
+      - ``project_sa_instances.driver`` — a per-instance override that wins
+        over the project default but loses to the SuperAgent config / turn.
+
+    PRAGMA-guarded ALTERs — idempotent under re-run.
+    """
+    pcols = {row[1] for row in conn.execute("PRAGMA table_info(projects)")}
+    if "default_driver" not in pcols:
+        conn.execute("ALTER TABLE projects ADD COLUMN default_driver TEXT")
+    icols = {row[1] for row in conn.execute("PRAGMA table_info(project_sa_instances)")}
+    if "driver" not in icols:
+        conn.execute("ALTER TABLE project_sa_instances ADD COLUMN driver TEXT")
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -1275,4 +1297,7 @@ V07_MIGRATIONS: list = [
     (155, "subagents", _migrate_155_subagents),
     (156, "forge_bundles", _migrate_156_forge_bundles),
     (157, "forge_origin", _migrate_157_forge_origin),
+    # v0.8.0 (19-01): per-scope execution-driver columns for the
+    # precedence-driven, default-GRD resolve_execution_driver() resolver.
+    (158, "driver_columns", _migrate_158_driver_columns),
 ]
