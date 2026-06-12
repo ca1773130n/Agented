@@ -33,7 +33,7 @@ gates (`just build`, backend pytest watchdog, frontend no-new-failures).
 
 **Phase Types:** survey | implement | evaluate | integrate
 
-- [ ] **Phase 17: Forge creation surface** - `subagent` kind, atomic create+bind+materialize, cross-kind bundles, `forge-creator` bundle, session-completion auto-import `implement`
+- [x] **Phase 17: Forge creation surface** - `subagent` kind, atomic create+bind+materialize, cross-kind bundles, `forge-creator` bundle, session-completion auto-import `implement` ✓ 2026-06-13
 - [ ] **Phase 18: Sketch → primitive routing** - classification `action` dimension, `primitive_generator` target, PrimitiveForgeService create + ACE-style improve, outcome card with undo `implement`
 - [ ] **Phase 19: GRD default driver** - `resolve_execution_driver()` 3-way (default grd), GrdChatSessionHandler PSM→chat-SSE bridge, cwd/backend fixes, driver selector UI `implement`
 - [ ] **Phase 20: GRD frontend wiring** - autoresearch page, life-harness completion UI (16 unwired routes), full `/grd:` command bar, 4-locale i18n `implement`
@@ -172,7 +172,7 @@ Plans:
 
 | Phase | Name | Requirements | Depends on | Verification | Status |
 |-------|------|--------------|------------|--------------|--------|
-| 17 | Forge creation surface | REQ-01..05 | — | proxy | Not started |
+| 17 | Forge creation surface | REQ-01..05 | — | proxy | Complete (6/6 ✓ 2026-06-13) |
 | 18 | Sketch → primitive routing | REQ-06..09 | 17 | proxy | Not started |
 | 19 | GRD default driver | REQ-10..13 | 17 | proxy | Not started |
 | 20 | GRD frontend wiring | REQ-14..18 | 19 | proxy | Not started |
