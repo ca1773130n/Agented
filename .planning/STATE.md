@@ -210,6 +210,16 @@ Progress: [##########] 100%
   test_cli_agent_runner.py green.
 - [Phase 19]: 19-02: turn classifier classify_turn() keyword->LLM->deterministic (mirrors SketchRoutingService); per-kind DEFAULT_MODELS, model_override precedence, never claude-only; conversational openers match on word boundary not substring (Rule1 fix). 14/14 green.
 - [Phase 19-grd-default-driver]: 19-03: cwd resolved inline at execute_delegate/_scan_mentions_and_notify/project_chat via ProjectWorkspaceService.resolve_working_directory (ValueError->warn+None fallback, never crashes turn); project_chat backend derived from SA backend_type, no claude literal remains (REQ-12 anti-regression); finish delta backend also de-hardcoded. 4/4 proxy + 55 regression green.
+- [Phase 19-grd-default-driver]: 19-04: GrdChatSessionHandler registered as
+  'grd_chat' (mirrors GoalLoopSessionHandler) — spawns one-shot claude -p
+  stream-json session running /grd:<cmd> "<task>" (default /grd:quick, mapped
+  from intent via GRD_COMMAND_MAP) in cwd from resolve_working_directory,
+  forwards forge_bundle+super_agent_id to create_session, stop stops PSM
+  (no orphan on chat abort). grd_chat_bridge.bridge_psm_to_chat maps PSM
+  stream-json -> push_delta WIRE strings content_delta/tool_use/finish/error
+  (NOT enum 'tool_call'); ordering preserved, error propagates +
+  push_status('error'), synthetic finish on drain. Injectable event source.
+  12/12 proxy green. 19-05 wires this into the funnel.
 
 ### Pending Todos
 
@@ -223,5 +233,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-06-13
-Stopped at: Completed 19-03-PLAN.md (cwd/backend fixes: execute_delegate/_scan_mentions_and_notify/project_chat resolve workspace cwd inline, ValueError->None fallback; project_chat backend derived from SA backend_type, no claude literal; 4/4 proxy + 55 regression green)
+Stopped at: Completed 19-04-PLAN.md (GrdChatSessionHandler registered as grd_chat — one-shot claude -p stream-json /grd:<cmd> "<task>" session in resolved project cwd, forge_bundle+super_agent_id forwarded, stop stops PSM; bridge_psm_to_chat maps stream-json -> chat state_delta wire strings content_delta/tool_use/finish/error with ordering + error propagation + synthetic finish; 12/12 proxy green)
 Resume file: None
