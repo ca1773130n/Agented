@@ -96,6 +96,81 @@ class TestRender:
         assert result == "Input: json: {key: value}"
 
 
+class TestSubagentRendererProjection:
+    """4-backend golden parity for a bound sub-agent (success criterion #1,
+    renderer half). claude discovers sub-agents natively (no inline body);
+    codex/gemini/opencode emit a named prompt-prefix block. Deterministic."""
+
+    def _bundle(self):
+        from app.services.context_compiler_service import ContextBundle
+
+        return ContextBundle(
+            subagents=[{"name": "code-reviewer", "body": "Review code for bugs."}],
+            overlay_files={"agents/code-reviewer.md": "Review code for bugs."},
+        )
+
+    def test_claude_does_not_inline_subagent_body(self):
+        from app.services.context_renderers.claude import ClaudeRenderer
+
+        cmd = ["claude", "-p", "do the task"]
+        new_cmd, _ = ClaudeRenderer().apply(cmd, {}, self._bundle(), "sess-1")
+        joined = "\n".join(new_cmd)
+        # Native discovery: body must NOT be inlined into the system prompt.
+        assert "Review code for bugs." not in joined
+        # The native agents/ file rides in the overlay (overlay_files), not the cmd.
+        assert "agents/code-reviewer.md" in self._bundle().overlay_files
+
+    def test_codex_emits_named_block(self):
+        from app.services.context_renderers.codex import CodexRenderer
+
+        cmd = ["codex", "exec", "do the task"]
+        new_cmd, _ = CodexRenderer().apply(cmd, {}, self._bundle(), "sess-1")
+        last = new_cmd[-1]
+        assert "=== Sub-agents ===" in last
+        assert "Sub-agent: code-reviewer" in last
+        assert "Review code for bugs." in last
+        assert last.endswith("do the task")
+
+    def test_opencode_emits_named_block(self):
+        from app.services.context_renderers.opencode import OpencodeRenderer
+
+        cmd = ["opencode", "run", "--format", "json", "do the task"]
+        new_cmd, _ = OpencodeRenderer().apply(cmd, {}, self._bundle(), "sess-1")
+        last = new_cmd[-1]
+        assert "Sub-agent: code-reviewer" in last
+        assert "Review code for bugs." in last
+
+    def test_gemini_emits_named_block(self):
+        from app.services.context_renderers.gemini import GeminiRenderer
+
+        cmd = ["gemini", "-p", "do the task"]
+        new_cmd, _ = GeminiRenderer().apply(cmd, {}, self._bundle(), "sess-1")
+        idx = new_cmd.index("-p") + 1
+        prompt = new_cmd[idx]
+        assert "Sub-agent: code-reviewer" in prompt
+        assert "Review code for bugs." in prompt
+
+    @pytest.mark.parametrize(
+        "renderer_path,cmd",
+        [
+            ("codex", ["codex", "exec", "task"]),
+            ("opencode", ["opencode", "run", "task"]),
+            ("gemini", ["gemini", "-p", "task"]),
+            ("claude", ["claude", "-p", "task"]),
+        ],
+    )
+    def test_subagent_projection_is_deterministic(self, renderer_path, cmd):
+        import importlib
+
+        mod = importlib.import_module(
+            f"app.services.context_renderers.{renderer_path}"
+        )
+        cls = getattr(mod, f"{renderer_path.capitalize()}Renderer")
+        out1, _ = cls().apply(list(cmd), {}, self._bundle(), "sess-1")
+        out2, _ = cls().apply(list(cmd), {}, self._bundle(), "sess-1")
+        assert out1 == out2
+
+
 class TestWarnUnresolved:
     def test_no_warnings_when_fully_resolved(self):
         mock_logger = logging.getLogger("test.no_warn")

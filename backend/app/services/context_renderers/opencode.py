@@ -13,7 +13,12 @@ import os
 
 from ..context_compiler_service import ContextBundle
 from ..opencode_config_overlay import apply_forge_bundle, prepare_session_overlay
-from .base import Renderer, universal_prompt_prepend
+from .base import (
+    Renderer,
+    prefix_system_text,
+    subagent_prompt_block,
+    universal_prompt_prepend,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +55,9 @@ class OpencodeRenderer(Renderer):
             return cmd, env
         new_env = dict(env)
         new_cmd = _prefix_prompt(cmd, bundle.system_prompt_text)
+        # opencode has no native sub-agent concept → degrade to a named
+        # prompt-prefix block (claude discovers sub-agents natively instead).
+        new_cmd = prefix_system_text(new_cmd, bundle.system_prompt_text, subagent_prompt_block(bundle))
         new_cmd = universal_prompt_prepend(new_cmd, bundle)
 
         if bundle.overlay_files or bundle.mcp_servers:

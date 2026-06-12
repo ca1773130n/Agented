@@ -66,6 +66,12 @@ class ContextBundle:
     overlay_symlinks: dict[str, str] = field(default_factory=dict)
     mcp_servers: dict[str, dict] = field(default_factory=dict)
     prompt_prepend: str = ""
+    # Bound sub-agents as [{"name": str, "body": str}]. claude discovers these
+    # natively via the overlay's agents/ dir (written into overlay_files), so its
+    # renderer does NOT inline the body. codex/gemini/opencode have no native
+    # sub-agent concept and degrade to a named prompt-prefix block built from
+    # this list (see context_renderers.base.subagent_prompt_block).
+    subagents: list[dict] = field(default_factory=list)
     # Diagnostic — surfaced via /forge-context/preview so the
     # operator can see what got resolved / skipped.
     resolved_bindings: list[dict] = field(default_factory=list)
@@ -79,6 +85,7 @@ class ContextBundle:
                 self.overlay_symlinks,
                 self.mcp_servers,
                 self.prompt_prepend,
+                self.subagents,
             )
         )
 
@@ -89,6 +96,7 @@ class ContextBundle:
             "overlay_files": sorted(self.overlay_files.keys()),
             "overlay_symlinks": sorted(self.overlay_symlinks.keys()),
             "mcp_servers": sorted(self.mcp_servers.keys()),
+            "subagents": sorted(s.get("name", "") for s in self.subagents),
             "resolved_bindings": self.resolved_bindings,
             "skipped_bindings": self.skipped_bindings,
         }
@@ -107,6 +115,7 @@ class ContextBundle:
             "overlay_symlinks": dict(self.overlay_symlinks),
             "mcp_servers": dict(self.mcp_servers),
             "prompt_prepend": self.prompt_prepend,
+            "subagents": list(self.subagents),
             "resolved_bindings": list(self.resolved_bindings),
             "skipped_bindings": list(self.skipped_bindings),
         }
@@ -121,6 +130,7 @@ class ContextBundle:
             overlay_symlinks=dict(data.get("overlay_symlinks") or {}),
             mcp_servers=dict(data.get("mcp_servers") or {}),
             prompt_prepend=data.get("prompt_prepend", "") or "",
+            subagents=list(data.get("subagents") or []),
             resolved_bindings=list(data.get("resolved_bindings") or []),
             skipped_bindings=list(data.get("skipped_bindings") or []),
         )
@@ -373,6 +383,24 @@ class ContextCompilerService:
                         continue
                     rel, body = _render_command(cmd)
                     bundle.overlay_files[rel] = body
+                elif kind == "subagent":
+                    from app.db.subagents import get_subagent
+
+                    subagent = get_subagent(str(asset_id))
+                    if not subagent:
+                        bundle.skipped_bindings.append(
+                            {**resolved_entry, "reason": "not found"}
+                        )
+                        continue
+                    name = subagent.get("name") or str(asset_id)
+                    body = subagent.get("content") or ""
+                    bundle.subagents.append({"name": name, "body": body})
+                    # claude discovers this natively from the overlay's agents/
+                    # dir; codex/gemini/opencode read bundle.subagents instead.
+                    safe = "".join(
+                        c if c.isalnum() or c in "-_" else "-" for c in name
+                    )
+                    bundle.overlay_files[f"agents/{safe}.md"] = body
                 elif kind == "skill":
                     system_prompt_chunks.append(_render_skill_pointer(asset_id))
                 elif kind == "mcp_server":

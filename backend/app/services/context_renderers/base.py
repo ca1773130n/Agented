@@ -24,6 +24,41 @@ class Renderer(Protocol):
     ) -> tuple[list[str], dict]: ...
 
 
+def subagent_prompt_block(bundle: ContextBundle) -> str:
+    """Build the degrade-path sub-agent block for backends with no native
+    sub-agent concept (codex/gemini/opencode).
+
+    claude does NOT use this — it discovers sub-agents natively from the
+    overlay's ``agents/`` dir, so inlining the body in its system prompt would
+    duplicate it. The block is deterministic: sub-agents are emitted in the
+    order they were resolved, each as a named ``=== Sub-agent: <name> ===``
+    section. Returns ``""`` when no sub-agents are bound.
+    """
+    if not bundle.subagents:
+        return ""
+    parts: list[str] = ["=== Sub-agents ==="]
+    for sa in bundle.subagents:
+        name = sa.get("name") or "unnamed"
+        body = (sa.get("body") or "").strip()
+        parts.append(f"--- Sub-agent: {name} ---\n{body}")
+    return "\n\n".join(parts)
+
+
+def prefix_system_text(cmd: list[str], system_text: str, block: str) -> list[str]:
+    """Splice ``block`` into the trailing positional prompt arg, beneath the
+    existing system text. Shared by codex/opencode (trailing-arg backends).
+
+    Returns cmd unchanged when there is nothing to add or the tail isn't a
+    free-form prompt arg.
+    """
+    if not block or not cmd:
+        return cmd
+    last = cmd[-1]
+    if not isinstance(last, str) or last.startswith("-"):
+        return cmd
+    return [*cmd[:-1], f"{block}\n\n{last}"]
+
+
 def universal_prompt_prepend(cmd: list[str], bundle: ContextBundle) -> list[str]:
     """Splice ``bundle.prompt_prepend`` into the last argument of cmd
     when that argument looks like a free-form prompt.
