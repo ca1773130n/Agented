@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
-import type { SuperAgent, SuperAgentActivityStatus } from '../services/api';
+import type { SuperAgent, SuperAgentActivityStatus, ExecutionDriver } from '../services/api';
 import { superAgentApi, ApiError } from '../services/api';
+import SuperAgentDriverSelector from '../components/super-agents/SuperAgentDriverSelector.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import EmptyState from '../components/base/EmptyState.vue';
@@ -177,6 +178,43 @@ function getStatusClass(sa: SuperAgent) {
   return sa.enabled ? 'status-active' : 'status-inactive';
 }
 
+// Phase 19 (REQ-13) — the SA's execution driver lives in
+// ``config_json.driver``. Read it back for the selector (default 'grd').
+function saDriver(sa: SuperAgent): ExecutionDriver {
+  if (sa.driver) return sa.driver;
+  if (sa.config_json) {
+    try {
+      const cfg = JSON.parse(sa.config_json);
+      if (cfg && typeof cfg.driver === 'string') return cfg.driver as ExecutionDriver;
+    } catch {
+      // Malformed config_json — fall through to the default.
+    }
+  }
+  return 'grd';
+}
+
+// Persist a new driver into ``config_json.driver`` without clobbering
+// the rest of the config blob.
+async function setSaDriver(sa: SuperAgent, driver: ExecutionDriver) {
+  let cfg: Record<string, unknown> = {};
+  if (sa.config_json) {
+    try {
+      const parsed = JSON.parse(sa.config_json);
+      if (parsed && typeof parsed === 'object') cfg = parsed as Record<string, unknown>;
+    } catch {
+      // Replace an unparseable blob rather than failing the save.
+    }
+  }
+  cfg.driver = driver;
+  try {
+    await superAgentApi.update(sa.id, { config_json: JSON.stringify(cfg) });
+    showToast(t('driver.saved'), 'success');
+    await loadSuperAgents();
+  } catch (e) {
+    showToast(e instanceof ApiError ? e.message : t('superAgents.toast.updateFailed'), 'error');
+  }
+}
+
 // Per-SA activity snapshot. Keyed by ``super_agent_id``; SAs with no
 // active sessions are absent from the map (treat as "idle"). Polled on
 // a 7-second cadence so the badge is fresh enough to surface a working
@@ -318,6 +356,16 @@ onUnmounted(() => {
           <div class="meta-item">
             <span class="meta-label">{{ t('superAgents.maxSessionsLabel') }}</span>
             <span class="meta-value">{{ sa.max_concurrent_sessions }}</span>
+          </div>
+          <!-- Phase 19 (REQ-13) — per-SA execution driver, persisted to
+               config_json.driver. Stop click/change from triggering the
+               card's router-link navigation. -->
+          <div class="meta-item meta-item--driver" @click.stop.prevent>
+            <span class="meta-label">{{ t('driver.saLabel') }}</span>
+            <SuperAgentDriverSelector
+              :model-value="saDriver(sa)"
+              @update:model-value="(d) => setSaDriver(sa, d)"
+            />
           </div>
         </div>
 

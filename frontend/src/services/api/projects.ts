@@ -11,6 +11,7 @@ import type {
   HarnessLoadResult,
   HarnessDeployResult,
   ProjectTeamEdge,
+  ExecutionDriver,
 } from './types';
 
 // v0.7.70 — Forge context bindings + per-prompt attachments. The
@@ -93,6 +94,10 @@ export const projectApi = {
     github_repo: string;
     owner_team_id: string;
     local_path: string;
+    manager_super_agent_id: string;
+    // Phase 19 (REQ-13) — project-level default execution driver,
+    // persisted to ``projects.default_driver``.
+    default_driver: ExecutionDriver;
   }>) => apiFetch<Project>(`/admin/projects/${projectId}`, {
     method: 'PUT',
     body: JSON.stringify(data),
