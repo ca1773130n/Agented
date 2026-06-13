@@ -28,6 +28,7 @@ so tests run with zero subprocesses, exactly like ``AnswerEvalService``.
 
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 import logging
@@ -260,6 +261,101 @@ def propose_candidate(
     if not candidate or candidate.strip() == (current_body or "").strip():
         return None
     return candidate
+
+
+# ---------------------------------------------------------------------------
+# Edit-budget ranker (SkillOpt's "textual learning rate"), Phase 3
+# ---------------------------------------------------------------------------
+
+# SkillOpt's default edit budget per step (learning_rate=4).
+_DEFAULT_EDIT_BUDGET = 4
+# The per-edit ranking does N× scoring passes — route it to a cheap model
+# (the final gate keeps the default strong model). Operator-overridable.
+_DEFAULT_RANKER_MODEL = "claude-haiku-4-5"
+
+
+def _diff_opcodes(current_body: str, candidate_body: str):
+    """Line-level diff between current and candidate bodies.
+
+    Returns (cur_lines, cand_lines, opcodes, edit_indices) where ``opcodes`` is
+    difflib's get_opcodes() and ``edit_indices`` are the positions of the
+    non-'equal' opcodes — each is one discrete candidate edit (a contiguous
+    replace/insert/delete region)."""
+    cur = current_body.splitlines()
+    cand = candidate_body.splitlines()
+    ops = difflib.SequenceMatcher(None, cur, cand, autojunk=False).get_opcodes()
+    edits = [i for i, op in enumerate(ops) if op[0] != "equal"]
+    return cur, cand, ops, edits
+
+
+def _apply_edits(cur_lines, cand_lines, ops, selected: set) -> str:
+    """Reconstruct a body applying ONLY the selected non-'equal' edits.
+
+    'equal' regions are always kept; a selected edit emits the candidate's
+    version of that region, an unselected edit keeps the current version. So
+    selected=={all edits} reproduces the candidate and selected==set() the
+    current body."""
+    out: list[str] = []
+    for i, (tag, i1, i2, j1, j2) in enumerate(ops):
+        if tag == "equal" or i not in selected:
+            out.extend(cur_lines[i1:i2])
+        else:
+            out.extend(cand_lines[j1:j2])
+    return "\n".join(out)
+
+
+def rank_edits(
+    project_id: str,
+    current_body: str,
+    candidate_body: str,
+    *,
+    budget: int,
+    seed: int,
+    n: int,
+    answer_call: LLMCall,
+    judge_call: LLMCall,
+) -> str:
+    """Trim a candidate to its top-``budget`` edits by marginal contribution.
+
+    SkillOpt's textual learning rate: decompose candidate-vs-current into
+    discrete edits, score each edit's MARGINAL improvement (apply just that one
+    edit → score on the eval split vs the current-body baseline), keep the top
+    ``budget`` edits, and reconstruct a trimmed candidate. The trimmed body
+    still faces the full gate afterward — so the ranker is best-effort:
+    fail-open (return the full candidate) on any scoring error or when there is
+    nothing to rank. The N× scoring is meant to run on a CHEAP model (the
+    caller supplies cheap-model seams); the gate keeps the strong model.
+    """
+    cur, cand, ops, edit_idxs = _diff_opcodes(current_body, candidate_body)
+    if budget <= 0 or len(edit_idxs) <= budget:
+        return candidate_body  # nothing to trim
+
+    from app.services.answer_eval_service import AnswerEvalService
+
+    questions = AnswerEvalService.build_question_set(project_id, n=n, partition="eval", seed=seed)
+    if not questions:
+        return candidate_body  # can't rank without a held-out set → gate decides
+
+    try:
+
+        def _mean(body: str) -> float:
+            return sum(_score_body(q, body, answer_call, judge_call) for q in questions) / len(
+                questions
+            )
+
+        baseline = _mean(current_body)
+        marginal = [
+            (_mean(_apply_edits(cur, cand, ops, {idx})) - baseline, idx) for idx in edit_idxs
+        ]
+    except Exception:
+        logger.warning(
+            "rank_edits: scoring failed for %s — keeping full candidate", project_id, exc_info=True
+        )
+        return candidate_body
+
+    marginal.sort(key=lambda t: t[0], reverse=True)
+    keep = {idx for _, idx in marginal[:budget]}
+    return _apply_edits(cur, cand, ops, keep)
 
 
 class SkillSleepGate:
@@ -573,15 +669,22 @@ class SkillSleepGate:
         seed: int = 0,
         judge_backend: str = "claude",
         measure: bool = True,
+        edit_budget: Optional[int] = None,
+        ranker_model: str = _DEFAULT_RANKER_MODEL,
     ) -> dict:
-        """One autonomous Skill-Sleep round: Reflect → gate (+ outcome) → stage.
+        """One autonomous Skill-Sleep round: Reflect → [rank] → gate (+ outcome) → stage.
 
         SkillOpt's full loop for one skill: propose an improved body from the
-        project's recurring needs, then gate it (and measure on the disjoint
-        split). The result is STAGED for operator adoption — never
-        auto-applied (review-then-adopt). When reflect proposes nothing new the
-        round is a no-op. Raises ``SkillNotInProjectError`` if the skill is not
-        bound to the project.
+        project's recurring needs, optionally TRIM it to its top-``edit_budget``
+        edits (SkillOpt's textual learning rate — scored on a CHEAP model via
+        ``ranker_model``), then gate it (and measure on the disjoint split).
+        The result is STAGED for operator adoption — never auto-applied. When
+        reflect proposes nothing new the round is a no-op. Raises
+        ``SkillNotInProjectError`` if the skill is not bound to the project.
+
+        ``edit_budget`` is opt-in (None = no ranking; the reflect candidate is
+        gated whole). When set, the ranker uses cheap-model seams while the gate
+        keeps the default strong model.
         """
         from app.services.answer_eval_service import _build_default_llm_call
 
@@ -595,6 +698,21 @@ class SkillSleepGate:
                 "accepted": False,
                 "reason": "reflect proposed no material change",
             }
+        if edit_budget is not None:
+            # Rank on a CHEAP model (default seams pinned to ranker_model); the
+            # gate below keeps the strong model. Injected seams win if provided.
+            rank_answer = answer_call or _build_default_llm_call(judge_backend, model=ranker_model)
+            rank_judge = judge_call or _build_default_llm_call(judge_backend, model=ranker_model)
+            candidate = rank_edits(
+                project_id,
+                current_body,
+                candidate,
+                budget=edit_budget,
+                seed=seed,
+                n=n,
+                answer_call=rank_answer,
+                judge_call=rank_judge,
+            )
         fn = (
             SkillSleepGate.evaluate_skill_with_outcome if measure else SkillSleepGate.evaluate_skill
         )

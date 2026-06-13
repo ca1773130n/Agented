@@ -411,6 +411,7 @@ def skill_sleep_round(
     body = data or {}
     from app.services.skill_sleep_service import SkillNotInProjectError, SkillSleepGate
 
+    edit_budget = body.get("edit_budget")
     try:
         return SkillSleepGate.run_skill_sleep_round(
             project_id,
@@ -418,6 +419,7 @@ def skill_sleep_round(
             n=int(body.get("n", 6)),
             seed=int(body.get("seed", 0)),
             measure=bool(body.get("measure", True)),
+            edit_budget=int(edit_budget) if edit_budget is not None else None,
         )
     except SkillNotInProjectError as e:
         raise NotFoundException(detail=str(e)) from e

@@ -462,14 +462,19 @@ def _judge_and_record(run_id, question, arm, answer, sources, llm_call) -> dict:
         return zero_scores
 
 
-def _build_default_llm_call(backend: str = "claude") -> LLMCall:
-    """Build the default LLM call wrapping stream_llm_response."""
+def _build_default_llm_call(backend: str = "claude", model: Optional[str] = None) -> LLMCall:
+    """Build the default LLM call wrapping stream_llm_response.
+
+    ``model`` lets a caller pin a specific (e.g. cheaper) model — Skill-Sleep's
+    edit-budget ranker routes its N× per-edit scoring to a cheap tier while the
+    final gate keeps the default strong model.
+    """
 
     def _call(messages: list[dict]) -> str:
         from app.services.conversation_streaming import stream_llm_response
 
         chunks = []
-        for token in stream_llm_response(messages, model=None, backend=backend):
+        for token in stream_llm_response(messages, model=model, backend=backend):
             if isinstance(token, str):
                 chunks.append(token)
         return "".join(chunks)
