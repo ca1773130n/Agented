@@ -82,6 +82,36 @@ def finalize_run(
     return cur.rowcount > 0
 
 
+def record_outcome(
+    run_id: int,
+    *,
+    before_score: Optional[float],
+    after_score: Optional[float],
+    question_count: int = 0,
+) -> bool:
+    """Record the disjoint-split outcome measurement on a run (Phase 6).
+
+    ``outcome_delta`` = after - before when both present. This is measured on a
+    partition DISJOINT from the gate's, so it is the honest "did optimizing
+    actually help" signal. Returns True if a row was updated.
+    """
+    delta = None
+    if before_score is not None and after_score is not None:
+        delta = after_score - before_score
+    with get_connection() as conn:
+        cur = conn.execute(
+            """UPDATE skill_sleep_runs SET
+                   outcome_before_score   = ?,
+                   outcome_after_score    = ?,
+                   outcome_delta          = ?,
+                   outcome_question_count = ?
+               WHERE id = ?""",
+            (before_score, after_score, delta, int(question_count), run_id),
+        )
+        conn.commit()
+    return cur.rowcount > 0
+
+
 def mark_adopted(run_id: int) -> bool:
     """Stamp adopted_at on an accepted run (the candidate body was written to
     disk). Idempotent: only sets it when currently NULL. Returns True if newly

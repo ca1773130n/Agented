@@ -156,6 +156,28 @@ def _read_current_body(skill_path: Optional[str]) -> str:
         return ""
 
 
+def _score_body(question: str, body: str, answer_fn: LLMCall, judge_fn: LLMCall) -> float:
+    """Composite score for answering ``question`` with ``body`` in context.
+
+    The single scoring primitive shared by the gate and the outcome measure:
+    generate an answer with the skill body as context, then blind-judge it
+    (arm never named; answer fenced as untrusted; strict parse → raises on any
+    malformed/non-finite judgment so callers fail closed)."""
+    from app.services.answer_eval_service import _build_judge_prompt
+
+    answer = answer_fn([_skill_context_message(body), {"role": "user", "content": question}])
+    return _strict_judge_score(
+        judge_fn(
+            [
+                {
+                    "role": "user",
+                    "content": _build_judge_prompt(question, _wrap_untrusted(answer), []),
+                }
+            ]
+        )
+    )
+
+
 class SkillSleepGate:
     """Validation gate that decides whether a candidate skill body is adopted."""
 
@@ -185,7 +207,6 @@ class SkillSleepGate:
         from app.services.answer_eval_service import (
             AnswerEvalService,
             _build_default_llm_call,
-            _build_judge_prompt,
         )
         from app.services.answer_pipeline_service import corpus_health
 
@@ -251,46 +272,12 @@ class SkillSleepGate:
 
             # --- Score each arm; fail CLOSED on any error (strict judge parse). ---
             try:
-                cur_scores: list[float] = []
-                cand_scores: list[float] = []
-                for q in questions:
-                    cur_ans = answer_fn(
-                        [_skill_context_message(current_body), {"role": "user", "content": q}]
-                    )
-                    cand_ans = answer_fn(
-                        [_skill_context_message(candidate_body), {"role": "user", "content": q}]
-                    )
-                    # Blind (prompt-level): the judge prompt names neither arm;
-                    # the answer is fenced as untrusted (LOW). Strict parse →
-                    # any malformed/non-finite judgment raises → fail CLOSED.
-                    cur_scores.append(
-                        _strict_judge_score(
-                            judge_fn(
-                                [
-                                    {
-                                        "role": "user",
-                                        "content": _build_judge_prompt(
-                                            q, _wrap_untrusted(cur_ans), []
-                                        ),
-                                    }
-                                ]
-                            )
-                        )
-                    )
-                    cand_scores.append(
-                        _strict_judge_score(
-                            judge_fn(
-                                [
-                                    {
-                                        "role": "user",
-                                        "content": _build_judge_prompt(
-                                            q, _wrap_untrusted(cand_ans), []
-                                        ),
-                                    }
-                                ]
-                            )
-                        )
-                    )
+                # Blind (prompt-level), untrusted-fenced, strict parse →
+                # any malformed/non-finite judgment raises → fail CLOSED.
+                cur_scores = [_score_body(q, current_body, answer_fn, judge_fn) for q in questions]
+                cand_scores = [
+                    _score_body(q, candidate_body, answer_fn, judge_fn) for q in questions
+                ]
             except Exception:
                 logger.warning(
                     "skill-sleep: scoring failed for %s/%s", project_id, skill_name, exc_info=True
@@ -323,6 +310,81 @@ class SkillSleepGate:
         except Exception:
             logger.exception("skill-sleep: unexpected error for %s/%s", project_id, skill_name)
             return _verdict("failed", reason="unexpected error (fail-closed)")
+
+    @staticmethod
+    def measure_outcome(
+        project_id: str,
+        *,
+        before_body: str,
+        after_body: str,
+        seed: int = 0,
+        n: int = 6,
+        answer_call: Optional[LLMCall] = None,
+        judge_call: Optional[LLMCall] = None,
+        judge_backend: str = "claude",
+    ) -> dict:
+        """Phase 6 — disjoint-split outcome measurement.
+
+        The gate optimizes against the ``eval`` partition at ``seed``; this
+        measures before-vs-after on the ``train`` partition at the SAME seed,
+        which is disjoint by construction — so these questions never entered
+        the accept decision. It is the honest "did optimizing actually help"
+        signal and the only real defense against the gate gaming itself
+        (docs/research/skillopt-integration.md §7). NOTE: still a
+        distribution-sharing proxy — train and eval are drawn from the same
+        project telemetry; this is not a truly external labeled set.
+
+        Returns {before_score, after_score, delta, question_count, improved,
+        measured, reason}. On thin corpus / no questions / judge error it
+        returns measured=False (the caller should treat "unmeasured" as "not
+        proven helpful").
+        """
+        from app.services.answer_eval_service import (
+            AnswerEvalService,
+            _build_default_llm_call,
+        )
+        from app.services.answer_pipeline_service import corpus_health
+
+        def _unmeasured(reason: str) -> dict:
+            return {
+                "before_score": None,
+                "after_score": None,
+                "delta": None,
+                "question_count": 0,
+                "improved": False,
+                "measured": False,
+                "reason": reason,
+            }
+
+        try:
+            if not corpus_health(project_id).get("healthy"):
+                return _unmeasured("thin corpus")
+            questions = AnswerEvalService.build_question_set(
+                project_id, n=n, partition="train", seed=seed
+            )
+            if not questions:
+                return _unmeasured("no held-out (train) questions")
+            answer_fn = answer_call or _build_default_llm_call(judge_backend)
+            judge_fn = judge_call or _build_default_llm_call(judge_backend)
+            before = [_score_body(q, before_body, answer_fn, judge_fn) for q in questions]
+            after = [_score_body(q, after_body, answer_fn, judge_fn) for q in questions]
+        except Exception:
+            logger.warning(
+                "skill-sleep: outcome measurement failed for %s", project_id, exc_info=True
+            )
+            return _unmeasured("measurement error")
+
+        before_mean = sum(before) / len(before)
+        after_mean = sum(after) / len(after)
+        return {
+            "before_score": before_mean,
+            "after_score": after_mean,
+            "delta": after_mean - before_mean,
+            "question_count": len(questions),
+            "improved": after_mean > before_mean,
+            "measured": True,
+            "reason": None,
+        }
 
     @staticmethod
     def evaluate_skill(
@@ -364,6 +426,66 @@ class SkillSleepGate:
             seed=seed,
             judge_backend=judge_backend,
         )
+
+    @staticmethod
+    def evaluate_skill_with_outcome(
+        project_id: str,
+        skill_name: str,
+        *,
+        candidate_body: str,
+        n: int = 6,
+        seed: int = 0,
+        judge_backend: str = "claude",
+        answer_call: Optional[LLMCall] = None,
+        judge_call: Optional[LLMCall] = None,
+    ) -> dict:
+        """Gate the candidate (on the ``eval`` split) AND, when accepted,
+        measure the outcome on the disjoint ``train`` split — persisting the
+        measurement on the run. The returned verdict carries an ``outcome``
+        block. A run accepted by the gate whose ``outcome.improved`` is False
+        is the gate gaming itself; the operator/auto-adopt path should treat an
+        unimproved/unmeasured outcome as "not proven helpful".
+        """
+        from app.db import skill_sleep
+
+        row = _resolve_project_skill(project_id, skill_name)
+        if row is None:
+            raise SkillNotInProjectError(
+                f"skill {skill_name!r} is not bound to project {project_id}"
+            )
+        current_body = _read_current_body(row.get("skill_path"))
+        verdict = SkillSleepGate.evaluate_candidate(
+            project_id,
+            skill_name=skill_name,
+            current_body=current_body,
+            candidate_body=candidate_body,
+            skill_id=row.get("id"),
+            answer_call=answer_call,
+            judge_call=judge_call,
+            n=n,
+            seed=seed,
+            judge_backend=judge_backend,
+        )
+        if verdict.get("status") == "accepted":
+            outcome = SkillSleepGate.measure_outcome(
+                project_id,
+                before_body=current_body,
+                after_body=candidate_body,
+                seed=seed,
+                n=n,
+                answer_call=answer_call,
+                judge_call=judge_call,
+                judge_backend=judge_backend,
+            )
+            if outcome.get("measured") and verdict.get("run_id") is not None:
+                skill_sleep.record_outcome(
+                    verdict["run_id"],
+                    before_score=outcome["before_score"],
+                    after_score=outcome["after_score"],
+                    question_count=outcome["question_count"],
+                )
+            verdict["outcome"] = outcome
+        return verdict
 
     @staticmethod
     def adopt_run(run_id: int) -> dict:

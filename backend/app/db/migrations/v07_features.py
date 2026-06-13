@@ -1254,6 +1254,25 @@ def _migrate_162_skill_sleep_body_hash(conn):
         conn.execute("ALTER TABLE skill_sleep_runs ADD COLUMN current_body_hash TEXT")
 
 
+def _migrate_163_skill_sleep_outcome(conn):
+    """SkillOpt integration Phase 6: disjoint-split outcome measurement.
+
+    Adds outcome columns so a run can record whether the candidate also
+    improved a measured outcome on a held-out partition DISJOINT from the one
+    the gate scored — the honest check that the gate did not game itself.
+    PRAGMA-guarded ALTERs; fresh DBs get the columns from create_fresh_schema.
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(skill_sleep_runs)")}
+    for col, decl in (
+        ("outcome_before_score", "REAL"),
+        ("outcome_after_score", "REAL"),
+        ("outcome_delta", "REAL"),
+        ("outcome_question_count", "INTEGER"),
+    ):
+        if col not in cols:
+            conn.execute(f"ALTER TABLE skill_sleep_runs ADD COLUMN {col} {decl}")
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -1377,4 +1396,6 @@ V07_MIGRATIONS: list = [
     (161, "skill_sleep_adopted", _migrate_161_skill_sleep_adopted),
     # SkillOpt integration Phase 4: stale-adoption guard (current body hash).
     (162, "skill_sleep_body_hash", _migrate_162_skill_sleep_body_hash),
+    # SkillOpt integration Phase 6: disjoint-split outcome measurement.
+    (163, "skill_sleep_outcome", _migrate_163_skill_sleep_outcome),
 ]
