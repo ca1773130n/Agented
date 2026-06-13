@@ -16,15 +16,16 @@ requirements mapped. Approved design spec:
 (+ ``.ko.md``). PR-per-phase + codex-review-until-green cadence.
 
 Phase: 21 of 22 (One-click team harness setup) — **in progress**
-Plan: 21-03 complete (steps a+b real bodies) — wave 2 begun
-Status: Plan 21-03 executed — _step_grd_init (reconcile: skip when .planning/
-exists via mtime fingerprint, never re-init — SC4; else fire-and-forget
-auto_init_project) and _step_team_topology (existence-check before
-create_team_instances — P1; post-update driver='grd' per SA instance on both
-create+skip paths — S4) replace placeholders. S4 + P1 green; 11/11 file tests
-pass; instance_service 37/37 regression clean. Commits 97236aa5d7/92018ca08a.
-Next: 21-04..06 implement bundle_binding/tesserae_enable/default_policies/
-materialize_compile bodies. Last activity: 2026-06-13 — Completed 21-02-PLAN.md. Built
+Plan: 21-05 complete (step e default_policies real body) — wave 2 continuing
+Status: Plan 21-05 executed — _step_default_policies upserts the single
+dual-consumer project_autonomy_config row AutonomyPolicy(enabled=True,
+allowed_kinds=['discovered_procedure'], block_deletes=True,
+max_ops_per_round=1) via idempotent upsert_policy; reconcile skip-vs-run by
+get_policy equality; no deletes (SC4). P7 green: _auto_apply_policy True
+(scoped), evolution conservative (rule/hook excluded, block_deletes on),
+single row on re-run. 18/18 file tests pass. Commits 38a78fd5bb/f20b3081a2.
+Steps a-d (21-03/04) already bound. Next: 21-06 materialize_compile body
+(step f). Last activity: 2026-06-13 — Completed 21-05-PLAN.md. Built
 backend/app/services/team_harness_setup_service.py: HARNESS_SETUP_STEP_KEYS
 (grd_init, team_topology, bundle_binding, tesserae_enable, default_policies,
 materialize_compile — 6 ordered), StepResult dataclass, setup() that sets
