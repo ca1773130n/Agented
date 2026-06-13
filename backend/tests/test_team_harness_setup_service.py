@@ -412,3 +412,56 @@ def test_tesserae_enable_idempotent_never_unsets(isolated_db, monkeypatch, tmp_p
     res2 = svc._step_tesserae_enable(pid, None)  # re-run reconciles to skipped
     assert res2.status == "skipped"
     assert tess.get_tesserae_root(pid) == local.resolve()
+
+
+# ---------------------------------------------------------------------------
+# 21-05: default autonomy policy (P7 — dual-consumer, scoped auto-apply ON)
+# ---------------------------------------------------------------------------
+
+
+def test_default_policies_dual_consumer_autonomy_policy(isolated_db):
+    """autonomy_policy (P7 / Seam 5): step e writes a SINGLE
+    project_autonomy_config row that satisfies BOTH gate readers.
+
+    - get_policy returns enabled=True, block_deletes=True,
+      allowed_kinds==['discovered_procedure'], max_ops_per_round==1.
+    - repeated_request_gate._auto_apply_policy is True (takeaway auto-apply ON,
+      scoped to discovered_procedure).
+    - Evolution stays conservative: allowed_kinds excludes rule/hook,
+      block_deletes True (structural assertion per EVAL P7 blind-spot note).
+    - Idempotent: re-run leaves exactly one row, status skipped.
+    """
+    from app.database import get_connection
+    from app.db.project_autonomy_config import get_policy
+    from app.services.repeated_request_gate import _auto_apply_policy
+
+    pid = create_project(name="harness-autonomy")
+
+    res1 = svc._step_default_policies(pid, None)
+    assert res1.status == "ok"
+
+    policy = get_policy(pid)
+    assert policy is not None
+    assert policy.enabled is True
+    assert policy.block_deletes is True
+    assert policy.allowed_kinds == ["discovered_procedure"]
+    assert policy.max_ops_per_round == 1
+
+    # Consumer 1: takeaway auto-apply ON, scoped to discovered_procedure.
+    assert _auto_apply_policy(pid) is True
+
+    # Consumer 2: evolution autonomy stays conservative — rule/hook patches
+    # are gate-blocked by allowed_kinds, and deletes are blocked.
+    assert "rule" not in policy.allowed_kinds
+    assert "hook" not in policy.allowed_kinds
+    assert policy.block_deletes is True
+
+    # Idempotency: re-run reconciles to skipped, exactly one row remains.
+    res2 = svc._step_default_policies(pid, None)
+    assert res2.status == "skipped"
+    with get_connection() as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) AS c FROM project_autonomy_config WHERE project_id = ?",
+            (pid,),
+        ).fetchone()["c"]
+    assert count == 1
