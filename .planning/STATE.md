@@ -16,8 +16,19 @@ requirements mapped. Approved design spec:
 (+ ``.ko.md``). PR-per-phase + codex-review-until-green cadence.
 
 Phase: 21 of 22 (One-click team harness setup) — **in progress**
-Plan: 21-06 complete (step f materialize_compile real body) — all 6 steps bound
-Status: Plan 21-06 executed — _step_materialize_compile resolves the project
+Plan: 21-07 complete (operator surface) — route trio + ProjectDashboard + 4-locale i18n wired; all 6 steps reachable from one click
+Status: Plan 21-07 executed — backend route trio in grd_routes.py: POST
+/api/projects/{id}/harness-setup (202, flips status running, spawns
+TeamHarnessSetupService.setup off-thread), GET .../status ({harness_setup_status,
+steps}), GET .../stream (text/event-stream, event:step + event:done; mirrors
+trace SSE). grdApi.{triggerHarnessSetup,getHarnessSetupStatus,streamHarnessSetup}
++ GrdHarnessSetupStep type. ProjectDashboard: Setup-Team-Harness button (none/
+failed), status chip (running/ready/failed), EventSource-fed step panel — mirrors
+grdInit wiring. harnessSetup.* i18n key-identical (20 keys) across en/ko/ja/zh.
+P5 4/4 + P8 4/4 green; full frontend suite at known 7-failure baseline (no NEW);
+i18n parity confirmed. Commits 6aca3ee5c9/13fd52eb7f/e69e736637. Deviation: routes
+mount under /api/projects (grd_init prior art), not /admin/projects from task prose.
+PRIOR (21-06): Plan executed — _step_materialize_compile resolves the project
 DICT, calls materialize_primitives(project, [rule,hook,command,mcp_server,
 skill,subagent], workspace) writing the .claude projection, then runs a
 per-backend compile smoke: renderer_for(b).apply(...) for claude/codex/
@@ -27,8 +38,8 @@ _NEVER_DELETE guard; SC4/P2). EVAL P4 green: 4 renderers accept projection,
 idempotent re-run preserves _NEVER_DELETE, failed backend named. 20/20 file
 tests pass. Commits 7ab1c09873/15c7402930. Deviation: renderer method is
 apply (not the plan's prose .render — render is not on the Protocol).
-Next: 21-07 route plan calls TeamHarnessSetupService.setup. Last activity:
-2026-06-13 — Completed 21-06-PLAN.md. Built
+Next: 21-08 (D3 just build full validation + phase verify). Last activity:
+2026-06-13 — Completed 21-07-PLAN.md. PRIOR 21-06 built
 backend/app/services/team_harness_setup_service.py: HARNESS_SETUP_STEP_KEYS
 (grd_init, team_topology, bundle_binding, tesserae_enable, default_policies,
 materialize_compile — 6 ordered), StepResult dataclass, setup() that sets
@@ -307,6 +318,6 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-06-13
-Stopped at: Completed 21-02-PLAN.md (orchestrator skeleton; wave 1 done) — next is wave-2 step-group plans 21-03..06.
+Stopped at: Completed 21-07-PLAN.md (operator surface — route trio + ProjectDashboard + 4-locale i18n). Next is 21-08 (just build + phase verify).
 Prior stopped-at: Merged phase 19 (GRD default driver) into main — plans 01-06 ALL complete, verification PASSED 8/8, code review warnings_only (0 blockers), eval tiers 1+2 PASS (83/83). Delivered: 3-way resolve_execution_driver() at the streaming funnel, GrdChatSessionHandler + PSM→chat-SSE bridge, turn classifier, cwd/backend bug fixes, operator driver selectors (default GRD) with 4-locale i18n. (Prior main state: phase 22 repeated-request auto-skill also complete/merged.)
 Resume file: None
