@@ -224,6 +224,31 @@ def test_convert_idempotent_when_already_created(monkeypatch):
     assert "already-created" in second["reasons"]
 
 
+def test_convert_create_failure_leaves_signal_unconverted(monkeypatch):
+    """A failed skill create (_create_skill -> None, e.g. project without
+    local_path) must NOT mark the signal skill_created — otherwise the
+    idempotency guard permanently blocks retries for a transient failure."""
+    _enable_project("proj-auto", True)
+    signal = _make_signal(occurrence_count=4, verified_success_count=2, project_id="proj-auto")
+
+    monkeypatch.setitem(ev._create_dispatch, "skill", lambda *, name, payload, project_id: None)
+    result = gate.convert_signal(
+        signal,
+        skill_name="add-changelog",
+        skill_description="Add a changelog entry on each feature merge",
+        skill_content="Run the changelog updater and commit it.",
+        scan_safe=True,
+        dedup_existing=None,
+        provenance_ok=True,
+        now=_NOW,
+    )
+
+    assert result["route"] == "auto"
+    assert result["asset_id"] is None
+    assert "skill-create-failed" in result["reasons"]
+    assert rrs.get_signal("rh-test").skill_created is False
+
+
 def test_convert_dedup_hit_patches_instead_of_creating(monkeypatch):
     _enable_project("proj-auto", True)
     signal = _make_signal(occurrence_count=4, verified_success_count=2, project_id="proj-auto")

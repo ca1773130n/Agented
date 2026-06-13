@@ -89,11 +89,12 @@ def _match_existing(
 ) -> Optional[str]:
     """Return the request_hash of the best signal whose embedding cosine-matches
     ``emb`` at or above the threshold, or None if there is no such signal."""
-    candidates = [
-        s
-        for s in list_signals(project_id=project_id, limit=_MATCH_CANDIDATE_LIMIT)
-        if s.embedding is not None
-    ]
+    signals = list_signals(project_id=project_id, limit=_MATCH_CANDIDATE_LIMIT)
+    if project_id is None:
+        # list_signals(project_id=None) is unfiltered; a project-less session
+        # must not coalesce onto (and mutate) another project's signal.
+        signals = [s for s in signals if s.project_id is None]
+    candidates = [s for s in signals if s.embedding is not None]
     if not candidates:
         return None
     scores = cosine_similarity_batch(emb, [s.embedding for s in candidates])  # type: ignore[arg-type]

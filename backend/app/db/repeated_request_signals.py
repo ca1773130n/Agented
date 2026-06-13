@@ -66,7 +66,10 @@ def upsert_signal(
     On conflict (same ``request_hash``): increment ``occurrence_count``,
     advance ``last_seen_at``, FIFO-merge ``session_id`` into
     ``example_session_ids`` (capped at 5). ``first_seen_at`` is set ONLY by the
-    INSERT clause and is never touched by the DO UPDATE branch.
+    INSERT clause and is never touched by the DO UPDATE branch. A NULL
+    ``embedding`` (embedder unavailable for this sighting) never erases a
+    previously stored vector — such a conflict can only come from an
+    exact-hash match, so the stored embedding still describes the text.
     """
     ts = now or utc_now_iso()
     blob = serialize_embedding(embedding) if embedding is not None else None
@@ -93,7 +96,7 @@ def upsert_signal(
                 last_seen_at = excluded.last_seen_at,
                 example_session_ids = excluded.example_session_ids,
                 representative_text = excluded.representative_text,
-                embedding = excluded.embedding
+                embedding = COALESCE(excluded.embedding, embedding)
             """,
             (
                 request_hash,

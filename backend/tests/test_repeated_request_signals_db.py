@@ -94,6 +94,18 @@ def test_embedding_none_stays_none():
     assert sig.embedding is None
 
 
+def test_embedding_preserved_when_later_upsert_has_none():
+    """An embedder outage on a later sighting must not erase the stored vector."""
+    emb = [0.6, 0.8]
+    _upsert("sess-1", embedding=emb, now="2026-01-01T00:00:00Z")
+    _upsert("sess-2", embedding=None, now="2026-01-02T00:00:00Z")
+    sig = repo.get_signal(repo.normalize_request_hash("deploy the app"))
+    assert sig.occurrence_count == 2
+    assert sig.embedding is not None
+    for got, want in zip(sig.embedding, emb):
+        assert abs(got - want) < 1e-6
+
+
 def test_mark_skill_created_flips_flag():
     h = repo.normalize_request_hash("deploy the app")
     _upsert("sess-1", now="2026-01-01T00:00:00Z")

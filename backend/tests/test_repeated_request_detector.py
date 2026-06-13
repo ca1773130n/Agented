@@ -93,6 +93,43 @@ def test_embed_disabled_falls_back_to_exact_hash(monkeypatch):
     assert verbatim_signals[0].occurrence_count == 2
 
 
+def test_projectless_session_does_not_mutate_project_signal(monkeypatch):
+    """A session with no project must not cosine-coalesce onto (and mutate)
+    another project's signal — null-project matching is scoped to null-project
+    signals only."""
+    from app.db.repeated_request_signals import upsert_signal
+
+    upsert_signal(
+        request_hash="rh-proj-a",
+        project_id="proj-A",
+        session_kind="project_session",
+        representative_text="add a dark mode toggle to the settings page",
+        embedding=[1.0, 0.0],
+        session_id="sess-a",
+    )
+    # Identical embedding -> cosine 1.0, far above the threshold.
+    monkeypatch.setattr(detector, "embed_text", lambda _text: [1.0, 0.0])
+
+    def _fetch(session_id: str):
+        return SessionPayload(
+            text=build_payload_text("add a dark mode toggle to the settings page"),
+            backend_type="claude",
+            project_id=None,
+            outcome="success",
+        )
+
+    monkeypatch.setitem(detector._FETCHERS, "project_session", _fetch)
+    detector.detect_for_session("project_session", "sess-none", None)
+
+    # proj-A's signal is untouched; the project-less request got its own row.
+    proj_a = list_signals(project_id="proj-A")
+    assert len(proj_a) == 1
+    assert proj_a[0].occurrence_count == 1
+    projectless = [s for s in list_signals() if s.project_id is None]
+    assert len(projectless) == 1
+    assert projectless[0].occurrence_count == 1
+
+
 def test_detector_exception_does_not_escape_bus(monkeypatch):
     clear_session_handlers()
     try:

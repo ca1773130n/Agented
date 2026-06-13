@@ -260,6 +260,11 @@ def convert_signal(
             origin_hash=content_hash(ev._render_skill_md(written_name, payload)),
             source_session_id=source_session_id,
         )
-    mark_skill_created(signal.request_hash)
+        mark_skill_created(signal.request_hash)
+    else:
+        # _create_skill returns None when the project has no local_path or the
+        # skill name sanitizes to nothing. Leave the signal unconverted so a
+        # later re-drive can retry once the project is fixed.
+        result["reasons"].append("skill-create-failed")
 
     return result
