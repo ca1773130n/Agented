@@ -9023,5 +9023,48 @@
     "statusRunning": "実行中",
     "statusComplete": "完了",
     "statusFailed": "失敗"
+  },
+  "surface": {
+    "research": {
+      "title": "リサーチ",
+      "loadError": "リサーチデータの読み込みに失敗しました",
+      "loadThreadError": "リサーチスレッドの読み込みに失敗しました",
+      "intake": {
+        "prompt": "リサーチの質問",
+        "placeholder": "何を調査しますか？",
+        "submit": "リサーチを開始",
+        "maxIterations": "最大反復回数",
+        "noGates": "ゲートをスキップ"
+      },
+      "threads": {
+        "title": "スレッド",
+        "empty": "まだリサーチスレッドがありません。",
+        "question": "質問",
+        "status": "ステータス",
+        "iteration": "反復"
+      },
+      "status": {
+        "running": "実行中",
+        "complete": "完了",
+        "completed": "完了済み",
+        "error": "エラー",
+        "idle": "待機"
+      },
+      "ledger": {
+        "title": "仮説台帳",
+        "empty": "まだ記録された仮説はありません。"
+      },
+      "report": {
+        "title": "レポート",
+        "empty": "まだ利用可能なレポートがありません。"
+      },
+      "portfolio": {
+        "title": "ポートフォリオ",
+        "total": "合計",
+        "running": "実行中",
+        "completed": "完了",
+        "iterations": "反復"
+      }
+    }
   }
 }

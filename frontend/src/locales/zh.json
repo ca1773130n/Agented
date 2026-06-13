@@ -9023,5 +9023,48 @@
     "statusRunning": "运行中",
     "statusComplete": "完成",
     "statusFailed": "失败"
+  },
+  "surface": {
+    "research": {
+      "title": "研究",
+      "loadError": "加载研究数据失败",
+      "loadThreadError": "加载研究线程失败",
+      "intake": {
+        "prompt": "研究问题",
+        "placeholder": "您想调查什么？",
+        "submit": "开始研究",
+        "maxIterations": "最大迭代次数",
+        "noGates": "跳过关卡"
+      },
+      "threads": {
+        "title": "线程",
+        "empty": "暂无研究线程。",
+        "question": "问题",
+        "status": "状态",
+        "iteration": "迭代"
+      },
+      "status": {
+        "running": "运行中",
+        "complete": "完成",
+        "completed": "已完成",
+        "error": "错误",
+        "idle": "空闲"
+      },
+      "ledger": {
+        "title": "假设账本",
+        "empty": "尚未记录假设。"
+      },
+      "report": {
+        "title": "报告",
+        "empty": "暂无可用报告。"
+      },
+      "portfolio": {
+        "title": "组合",
+        "total": "总计",
+        "running": "运行中",
+        "completed": "已完成",
+        "iterations": "迭代"
+      }
+    }
   }
 }

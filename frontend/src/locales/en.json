@@ -9023,5 +9023,48 @@
     "statusRunning": "Running",
     "statusComplete": "Complete",
     "statusFailed": "Failed"
+  },
+  "surface": {
+    "research": {
+      "title": "Research",
+      "loadError": "Failed to load research data",
+      "loadThreadError": "Failed to load research thread",
+      "intake": {
+        "prompt": "Research question",
+        "placeholder": "What do you want to investigate?",
+        "submit": "Start research",
+        "maxIterations": "Max iterations",
+        "noGates": "Skip gates"
+      },
+      "threads": {
+        "title": "Threads",
+        "empty": "No research threads yet.",
+        "question": "Question",
+        "status": "Status",
+        "iteration": "Iteration"
+      },
+      "status": {
+        "running": "Running",
+        "complete": "Complete",
+        "completed": "Completed",
+        "error": "Error",
+        "idle": "Idle"
+      },
+      "ledger": {
+        "title": "Hypothesis ledger",
+        "empty": "No hypotheses recorded yet."
+      },
+      "report": {
+        "title": "Report",
+        "empty": "No report available yet."
+      },
+      "portfolio": {
+        "title": "Portfolio",
+        "total": "Total",
+        "running": "Running",
+        "completed": "Completed",
+        "iterations": "Iterations"
+      }
+    }
   }
 }

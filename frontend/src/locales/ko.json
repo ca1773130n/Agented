@@ -9023,5 +9023,48 @@
     "statusRunning": "실행 중",
     "statusComplete": "완료",
     "statusFailed": "실패"
+  },
+  "surface": {
+    "research": {
+      "title": "리서치",
+      "loadError": "리서치 데이터를 불러오지 못했습니다",
+      "loadThreadError": "리서치 스레드를 불러오지 못했습니다",
+      "intake": {
+        "prompt": "리서치 질문",
+        "placeholder": "무엇을 조사하시겠습니까?",
+        "submit": "리서치 시작",
+        "maxIterations": "최대 반복 횟수",
+        "noGates": "게이트 건너뛰기"
+      },
+      "threads": {
+        "title": "스레드",
+        "empty": "아직 리서치 스레드가 없습니다.",
+        "question": "질문",
+        "status": "상태",
+        "iteration": "반복"
+      },
+      "status": {
+        "running": "실행 중",
+        "complete": "완료",
+        "completed": "완료됨",
+        "error": "오류",
+        "idle": "대기"
+      },
+      "ledger": {
+        "title": "가설 원장",
+        "empty": "아직 기록된 가설이 없습니다."
+      },
+      "report": {
+        "title": "보고서",
+        "empty": "아직 사용할 수 있는 보고서가 없습니다."
+      },
+      "portfolio": {
+        "title": "포트폴리오",
+        "total": "전체",
+        "running": "실행 중",
+        "completed": "완료",
+        "iterations": "반복"
+      }
+    }
   }
 }
