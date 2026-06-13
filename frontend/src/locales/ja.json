@@ -9264,6 +9264,8 @@
     "optQuestions": "質問数",
     "optSeed": "シード",
     "optMeasure": "成果を測定",
-    "optEditBudget": "編集予算"
+    "optEditBudget": "編集予算",
+    "roundTitle": "スキルを最適化",
+    "selectSkill": "スキルを選択…"
   }
 }

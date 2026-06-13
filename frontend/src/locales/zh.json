@@ -9264,6 +9264,8 @@
     "optQuestions": "问题数",
     "optSeed": "种子",
     "optMeasure": "测量成效",
-    "optEditBudget": "编辑预算"
+    "optEditBudget": "编辑预算",
+    "roundTitle": "优化技能",
+    "selectSkill": "选择技能…"
   }
 }

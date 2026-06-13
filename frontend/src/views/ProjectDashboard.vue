@@ -12,6 +12,7 @@ import ProjectTeamCanvas from '../components/projects/ProjectTeamCanvas.vue';
 import ProjectLibraryTabs from '../components/projects/ProjectLibraryTabs.vue';
 import SkillSleepCard from './dashboards/cards/SkillSleepCard.vue';
 import SkillSleepReviewDrawer from '../components/projects/SkillSleepReviewDrawer.vue';
+import SkillSleepRoundControl from '../components/projects/SkillSleepRoundControl.vue';
 import ProjectForgeBindingsPanel from '../components/project/ProjectForgeBindingsPanel.vue';
 import HarnessStatusSection from '../components/projects/HarnessStatusSection.vue';
 import { useToast } from '../composables/useToast';
@@ -841,6 +842,12 @@ function onSetupCompleted() {
       <!-- SkillOpt Skill-Sleep: optimization runs + review-then-adopt. -->
       <div class="card">
         <div class="card-body-padded">
+          <SkillSleepRoundControl
+            v-if="projectSkills.length"
+            :project-id="projectId"
+            :skills="projectSkills"
+            @completed="sleepCard?.reload()"
+          />
           <SkillSleepCard ref="sleepCard" :project-id="projectId" @open-run="openSleepRun" />
         </div>
       </div>

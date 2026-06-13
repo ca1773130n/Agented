@@ -9264,6 +9264,8 @@
     "optQuestions": "Questions",
     "optSeed": "Seed",
     "optMeasure": "Measure outcome",
-    "optEditBudget": "Edit budget"
+    "optEditBudget": "Edit budget",
+    "roundTitle": "Optimize a skill",
+    "selectSkill": "Select a skill…"
   }
 }
