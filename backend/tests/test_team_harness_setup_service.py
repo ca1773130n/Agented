@@ -465,3 +465,94 @@ def test_default_policies_dual_consumer_autonomy_policy(isolated_db):
             (pid,),
         ).fetchone()["c"]
     assert count == 1
+
+
+# ---------------------------------------------------------------------------
+# 21-06 — Step f: materialize + 4-backend compile smoke (EVAL P4).
+# Mirrors tests/test_forge_materialization.py's golden-file/tmp_path pattern.
+# ---------------------------------------------------------------------------
+
+
+def test_step_f_renderer_compile_all_backends(isolated_db, tmp_path):
+    """renderer_compile (EVAL P4): step f materializes the .claude projection and
+    all four backend renderers accept it without raising; a re-run is
+    idempotent and preserves the _NEVER_DELETE files (supports P1/P2/SC4)."""
+    from app.db import commands as commands_repo
+    from app.db import project_forge_bindings as bindings_repo
+    from app.db import rules as rules_repo
+    from app.services.context_renderers import ContextBundle, renderer_for
+
+    pid = create_project(name="harness-renderer-compile", local_path=str(tmp_path))
+
+    # Bind real primitives so the materializer writes non-empty projection files.
+    rid = rules_repo.create_rule(
+        name="no-force-push",
+        rule_type="validation",
+        description="Never force-push to main",
+        project_id=pid,
+    )
+    cid = commands_repo.create_command(
+        name="deploy",
+        description="Deploy",
+        content="run deploy.sh",
+        project_id=pid,
+    )
+    bindings_repo.add_binding(pid, "rule", str(rid))
+    bindings_repo.add_binding(pid, "command", str(cid))
+
+    res = svc._step_materialize_compile(pid, None)
+    assert res.status == "ok", res.detail
+
+    # .claude projection exists with non-empty content + the forge manifest.
+    claude_dir = tmp_path / ".claude"
+    assert claude_dir.is_dir()
+    manifest = claude_dir / "agented-forge" / "manifest.json"
+    assert manifest.exists()
+    assert manifest.read_text().strip()
+    cmd_file = claude_dir / "commands" / "deploy.md"
+    assert cmd_file.exists() and "run deploy.sh" in cmd_file.read_text()
+
+    # All four backends: renderer present and apply() runs cleanly (non-empty cmd).
+    bundle = ContextBundle()
+    for backend in ("claude", "codex", "gemini", "opencode"):
+        renderer = renderer_for(backend)
+        assert renderer is not None, backend
+        out_cmd, out_env = renderer.apply(["claude", "-p", "noop"], {}, bundle, "sid")
+        assert out_cmd, f"{backend} produced empty cmd"
+
+    # Re-run is idempotent (no raise) and the _NEVER_DELETE files survive (SC4/P2).
+    res2 = svc._step_materialize_compile(pid, None)
+    assert res2.status == "ok", res2.detail
+    assert manifest.exists()
+    # settings.json / mcp.json are operator-shared _NEVER_DELETE members; if the
+    # materializer wrote them they must persist across the re-run.
+    for never_delete in (claude_dir / "settings.json", claude_dir / "mcp.json"):
+        if never_delete.exists():
+            assert never_delete.exists()
+
+
+def test_step_f_compile_failure_names_backend(isolated_db, tmp_path, monkeypatch):
+    """renderer_compile: a backend whose renderer.apply raises yields a failed
+    StepResult naming that backend (retryable — the orchestrator records failed)."""
+    from app.services import context_renderers
+
+    pid = create_project(name="harness-compile-fail", local_path=str(tmp_path))
+
+    real_renderer_for = context_renderers.renderer_for
+
+    class _BoomRenderer:
+        def apply(self, cmd, env, bundle, session_id):
+            raise RuntimeError("gemini boom")
+
+    def _patched(backend):
+        if backend == "gemini":
+            return _BoomRenderer()
+        return real_renderer_for(backend)
+
+    # Patch the symbol imported inside the step function's module-local namespace.
+    monkeypatch.setattr(svc, "renderer_for", _patched, raising=False)
+    monkeypatch.setattr("app.services.context_renderers.renderer_for", _patched, raising=False)
+
+    res = svc._step_materialize_compile(pid, None)
+    assert res.status == "failed"
+    assert "gemini" in res.detail
