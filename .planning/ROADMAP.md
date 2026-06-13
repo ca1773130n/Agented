@@ -36,7 +36,7 @@ gates (`just build`, backend pytest watchdog, frontend no-new-failures).
 - [x] **Phase 17: Forge creation surface** - `subagent` kind, atomic create+bind+materialize, cross-kind bundles, `forge-creator` bundle, session-completion auto-import `implement` ✓ 2026-06-13
 - [x] **Phase 18: Sketch → primitive routing** - classification `action` dimension, `primitive_generator` target, PrimitiveForgeService create + ACE-style improve, outcome card with undo `implement` (completed 2026-06-13)
 - [x] **Phase 19: GRD default driver** - `resolve_execution_driver()` 3-way (default grd), GrdChatSessionHandler PSM→chat-SSE bridge, cwd/backend fixes, driver selector UI `implement` ✓ 2026-06-13
-- [ ] **Phase 20: GRD frontend wiring** - autoresearch page, life-harness completion UI (16 unwired routes), full `/grd:` command bar, 4-locale i18n `implement`
+- [x] **Phase 20: GRD frontend wiring** - autoresearch page, life-harness completion UI (16 unwired routes), full `/grd:` command bar, 4-locale i18n `implement` ✓ 2026-06-13
 - [ ] **Phase 21: One-click team harness setup** - ProjectDashboard button + idempotent TeamHarnessSetupService (GRD init, topology, bundles, tesserae, policies, 4-harness materialization) `integrate`
 - [x] **Phase 22: Repeated-request auto-skill** - `repeated_request_signals` store, embedding detection over 5 session kinds, hybrid gates, patch-over-create, provenance, security scan `implement`
 
@@ -193,7 +193,7 @@ Plans:
 | 17 | Forge creation surface | REQ-01..05 | — | proxy | Complete (6/6 ✓ 2026-06-13) |
 | 18 | Sketch → primitive routing | REQ-06..09 | 17 | proxy | Complete (2026-06-13) |
 | 19 | GRD default driver | REQ-10..13 | 17 | proxy | Complete (2026-06-13) |
-| 20 | GRD frontend wiring | REQ-14..18 | 19 | proxy | Not started |
+| 20 | GRD frontend wiring | REQ-14..18 | 19 | proxy | Complete (5/5 ✓ 2026-06-13) |
 | 21 | One-click team harness setup | REQ-19..21 | 17, 19 | full | Not started |
 | 22 | Repeated-request auto-skill | REQ-22..26 | 17 | proxy | Complete (2026-06-13) |
 
