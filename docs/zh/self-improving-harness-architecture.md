@@ -1,6 +1,6 @@
 # 自我改进 harness：架构
 
-**语言:** [English](/self-improving-harness-architecture) · [한국어](/ko/self-improving-harness-architecture) · [日本語](/ja/self-improving-harness-architecture) · 中文 (当前)
+**语言:** [English](../self-improving-harness-architecture.md) · [한국어](../ko/self-improving-harness-architecture.md) · [日本語](../ja/self-improving-harness-architecture.md) · 中文 (当前)
 
 *[BLOG-self-improving-harness.md](https://github.com/ca1773130n/Agented/blob/main/BLOG-self-improving-harness.md) 的配套文档。
 该博客主张，智能体记忆领域正在优化错误的维度（召回准确率），却忽视了在

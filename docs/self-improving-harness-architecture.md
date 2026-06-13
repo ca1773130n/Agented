@@ -1,6 +1,6 @@
 # The Self-Improving Harness: Architecture
 
-**Languages:** English (canonical) · [한국어](/ko/self-improving-harness-architecture) · [日本語](/ja/self-improving-harness-architecture) · [中文](/zh/self-improving-harness-architecture)
+**Languages:** English (canonical) · [한국어](ko/self-improving-harness-architecture.md) · [日本語](ja/self-improving-harness-architecture.md) · [中文](zh/self-improving-harness-architecture.md)
 
 *A companion to [BLOG-self-improving-harness.md](https://github.com/ca1773130n/Agented/blob/main/BLOG-self-improving-harness.md).
 The blog argues that the agent-memory field is optimizing the wrong axis

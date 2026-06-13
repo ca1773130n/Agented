@@ -1,6 +1,6 @@
 # Tutorial: Watch the Harness Improve Itself (with Wiki-Style Memory)
 
-**Languages:** English (canonical) · [한국어](/ko/self-improving-harness-tutorial)
+**Languages:** English (canonical) · [한국어](ko/self-improving-harness-tutorial.md)
 
 *A hands-on walkthrough. In about 30 minutes you will run a few agent
 sessions, watch Agented turn them into typed memory, compile that memory
@@ -11,7 +11,7 @@ motivated it.*
 
 > This is the *show-me* companion to two reference docs. Read them when you
 > want the "why" and the "what":
-> - **[The Self-Improving Harness: Architecture](/self-improving-harness-architecture)** — the closed loop, stage by stage, mapped to real symbols.
+> - **[The Self-Improving Harness: Architecture](self-improving-harness-architecture.md)** — the closed loop, stage by stage, mapped to real symbols.
 > - **[Blog: Your Agent Doesn't Have a Memory Problem. It Has a Provenance Problem.](https://github.com/ca1773130n/Agented/blob/main/BLOG-self-improving-harness.md)** — the argument this system falls out of.
 
 ---
@@ -324,13 +324,13 @@ loop.
 | Autonomy never fires | Walk the nine gates (§9); confirm `AGENTED_AUTONOMY` ≠ `0` and `score ≥ 0.85` |
 
 Full symbol map: the **Source map** table in
-[the architecture doc](/self-improving-harness-architecture#source-map-every-claim-above-is-a-symbol-in-the-tree).
+[the architecture doc](self-improving-harness-architecture.md#source-map-every-claim-above-is-a-symbol-in-the-tree).
 
 ---
 
 ## Next steps
 
-- Read the **[architecture](/self-improving-harness-architecture)** for the
+- Read the **[architecture](self-improving-harness-architecture.md)** for the
   honest comparison with Letta/MemGPT, Hermes Agent, Mastra, Zep/Graphiti,
   Mem0, Cognee.
 - Wire the Tesserae MCP tools into your agents so they *query* the wiki

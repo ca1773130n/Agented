@@ -1,6 +1,6 @@
 # 自己改善ハーネス: アーキテクチャ
 
-**言語:** [English](/self-improving-harness-architecture) · [한국어](/ko/self-improving-harness-architecture) · 日本語 (現在) · [中文](/zh/self-improving-harness-architecture)
+**言語:** [English](../self-improving-harness-architecture.md) · [한국어](../ko/self-improving-harness-architecture.md) · 日本語 (現在) · [中文](../zh/self-improving-harness-architecture.md)
 
 *[BLOG-self-improving-harness.md](https://github.com/ca1773130n/Agented/blob/main/BLOG-self-improving-harness.md) の補足ドキュメント。
 ブログは、エージェントメモリ分野が誤った軸（想起精度）を最適化しており、

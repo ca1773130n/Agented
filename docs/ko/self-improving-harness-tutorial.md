@@ -1,6 +1,6 @@
 # 튜토리얼: 하네스가 스스로 개선되는 과정 보기 (위키형 메모리와 함께)
 
-**언어:** [English](/self-improving-harness-tutorial) · 한국어 (현재)
+**언어:** [English](../self-improving-harness-tutorial.md) · 한국어 (현재)
 
 *직접 해보는 워크스루입니다. 약 30분 동안 에이전트 세션을 몇 개 실행하고,
 Agented가 그것을 타입이 있는 메모리로 바꾸는 과정을 지켜보고, 그 메모리를
@@ -10,7 +10,7 @@ Agented가 그것을 타입이 있는 메모리로 바꾸는 과정을 지켜보
 
 > 이 문서는 두 개의 레퍼런스 문서에 대한 *직접 보여주는* 동반 문서입니다.
 > "왜"와 "무엇"이 궁금하면 그쪽을 읽으세요:
-> - **[자기개선 하네스: 아키텍처](/ko/self-improving-harness-architecture)** — 닫힌 루프를 단계별로, 실제 심볼에 매핑.
+> - **[자기개선 하네스: 아키텍처](self-improving-harness-architecture.md)** — 닫힌 루프를 단계별로, 실제 심볼에 매핑.
 > - **[블로그: 당신의 에이전트는 메모리 문제가 아니다. 출처 문제다.](https://github.com/ca1773130n/Agented/blob/main/BLOG-self-improving-harness.ko.md)** — 이 시스템이 따라 나오는 논증.
 
 ---
@@ -323,7 +323,7 @@ export AGENTED_AUTONOMY=0      # 모든 자율 적용을 하드 정지
 | 라운드가 되돌려지지 않음 | 저널을 가진 `applied` 라운드만 되돌려짐; 충돌하는 이후 라운드 확인 |
 | 자율이 절대 작동 안 함 | 아홉 게이트(§9) 점검; `AGENTED_AUTONOMY` ≠ `0` 및 `score ≥ 0.85` 확인 |
 
-전체 심볼 맵: [아키텍처 문서](/ko/self-improving-harness-architecture)의
+전체 심볼 맵: [아키텍처 문서](self-improving-harness-architecture.md)의
 **Source map** 표.
 
 ---
@@ -331,7 +331,7 @@ export AGENTED_AUTONOMY=0      # 모든 자율 적용을 하드 정지
 ## 다음 단계
 
 - Letta/MemGPT, Hermes Agent, Mastra, Zep/Graphiti, Mem0, Cognee와의 정직한
-  비교는 **[아키텍처](/ko/self-improving-harness-architecture)**를 읽으세요.
+  비교는 **[아키텍처](self-improving-harness-architecture.md)**를 읽으세요.
 - Tesserae MCP 도구를 에이전트에 배선해 재유도 대신 작업 도중 위키를 *질의*하게
   하세요 — `tesserae_ask`, `find_session_findings`, `graph_ppr`, `wiki_page`.
 - 위험이 낮은 프로젝트 하나에 자율을 켜고 일주일치 `git log`가 스스로 쓰이는
