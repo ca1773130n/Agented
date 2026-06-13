@@ -15,11 +15,53 @@ requirements mapped. Approved design spec:
 ``docs/superpowers/specs/2026-06-13-team-harness-self-improvement-design.md``
 (+ ``.ko.md``). PR-per-phase + codex-review-until-green cadence.
 
-Phase: 17 of 22 (Forge creation surface) — **all plans complete (ready for verify)**
-Plan: 6 complete (17-01, 17-02, 17-03, 17-04, 17-05, 17-06)
-Status: Plan 17-06 executed (forge-creator bundle + gated session auto-import,
-6/6 proxy + 174 backend green; phase house gates run)
-Last activity: 2026-06-13 — Completed 17-06-PLAN.md (FINAL plan of phase 17).
+Phase: 21 of 22 (One-click team harness setup) — **in progress**
+Plan: 21-07 complete (operator surface) — route trio + ProjectDashboard + 4-locale i18n wired; all 6 steps reachable from one click
+Status: Plan 21-07 executed — backend route trio in grd_routes.py: POST
+/api/projects/{id}/harness-setup (202, flips status running, spawns
+TeamHarnessSetupService.setup off-thread), GET .../status ({harness_setup_status,
+steps}), GET .../stream (text/event-stream, event:step + event:done; mirrors
+trace SSE). grdApi.{triggerHarnessSetup,getHarnessSetupStatus,streamHarnessSetup}
++ GrdHarnessSetupStep type. ProjectDashboard: Setup-Team-Harness button (none/
+failed), status chip (running/ready/failed), EventSource-fed step panel — mirrors
+grdInit wiring. harnessSetup.* i18n key-identical (20 keys) across en/ko/ja/zh.
+P5 4/4 + P8 4/4 green; full frontend suite at known 7-failure baseline (no NEW);
+i18n parity confirmed. Commits 6aca3ee5c9/13fd52eb7f/e69e736637. Deviation: routes
+mount under /api/projects (grd_init prior art), not /admin/projects from task prose.
+PRIOR (21-06): Plan executed — _step_materialize_compile resolves the project
+DICT, calls materialize_primitives(project, [rule,hook,command,mcp_server,
+skill,subagent], workspace) writing the .claude projection, then runs a
+per-backend compile smoke: renderer_for(b).apply(...) for claude/codex/
+gemini/opencode. All clean → StepResult ok; any raise/missing/empty-cmd →
+failed naming the backend. No manual deletes (relies on materializer's
+_NEVER_DELETE guard; SC4/P2). EVAL P4 green: 4 renderers accept projection,
+idempotent re-run preserves _NEVER_DELETE, failed backend named. 20/20 file
+tests pass. Commits 7ab1c09873/15c7402930. Deviation: renderer method is
+apply (not the plan's prose .render — render is not on the Protocol).
+Next: 21-08 (D3 just build full validation + phase verify). Last activity:
+2026-06-13 — Completed 21-07-PLAN.md. PRIOR 21-06 built
+backend/app/services/team_harness_setup_service.py: HARNESS_SETUP_STEP_KEYS
+(grd_init, team_topology, bundle_binding, tesserae_enable, default_policies,
+materialize_compile — 6 ordered), StepResult dataclass, setup() that sets
+"running", iterates steps (skipping rows already status='ok'), per-step
+try/except → StepResult, persists rows via 21-01's upsert, breaks on first
+failure leaving later steps unrecorded (retryable), finalises "ready"/"failed",
+never raises. Side-effect-free placeholder _step_* bodies in _STEP_FUNCS for
+21-03..06 to replace. Skeleton tests cover S3/state-machine/failed_step/
+idempotent/retry. Commits 169dbdab6d/b2288670f0 on branch grd/v0.8.0/21-21.
+WAVE-2 CONTRACT for 21-03..06: each step is
+_step_<name>(project_id, existing_row|None) -> StepResult(step_key, status
+ok|skipped|failed, detail, fingerprint); step does NOT persist its own row;
+rebind via TeamHarnessSetupService._STEP_FUNCS[<key>]; no destructive deletes.
+Prior: 21-01 (migration 159 + helpers, dd4faf9863/680aa084d3/c0132249a7).
+See prior phase 17 record below.
+
+Prior phase 20 (now on main, rebased under phase 21): GRD frontend wiring —
+plans 20-01..06 COMPLETE (REQ-14..18 / SC-6). Autoresearch page, life-harness
+completion UI (16 unwired routes), full `/grd:` command bar manifest, 4-locale
+i18n parity + house-gate certification. See ROADMAP.md Progress table.
+
+Prior activity: 2026-06-13 — Completed 17-06-PLAN.md (FINAL plan of phase 17).
 Shipped the forge-creator default bundle (5 global-scope agentskills.io creator
 skills — skill/rule/hook/command/subagent-creator — seeded idempotently at startup,
 predefined-bot pattern) and the session-completion auto-import pipeline: a 4th
@@ -202,6 +244,19 @@ Progress: [##########] 100%
 - [Phase 17]: 17-06: forge-creator bundle (5 global-scope creator skills, idempotent startup seed); session-completion auto-import handler (4th on execution_events bus) gated on session_kind={project_session,super_agent,team_session,goal_loop}, fails closed on foreign/unknown; forge_origin (mig 157) records sha256+source-session-id; global scope via forge_bundles.scope='global' (user_skills inherently global)
 - [Phase 22]: 22-06: live dogfood (EVAL D1/D2) — end-to-end harness (test_repeated_request_dogfood.py) drives detect_for_session -> upsert -> evaluate/convert_signal (AUTO) -> scan + forge_origin on the REAL MiniLM cosine path (embedding backend operational). agented.db was empty so transcripts are recorded-real (real wording, byte-identical payload shape) with live-session_id source DEFERRED + exact rerun cmd in 22-DOGFOOD.md. 4 real phrasings coalesce to 1 signal occ=4 -> AUTO @0.9 -> clean+provenanced skill; D2 operator judged skill useful+correctly-scoped. Real-text finding: a 5th genuine phrasing at cosine 0.60-0.65 correctly stayed separate (0.83 cut is precision-first). 67 targeted pytest pass, ruff clean; just build FAIL pre-existing (AnswerGroundednessCard TS2345, PR #212, frontend/out-of-scope)
 
+- [Phase 21]: 21-01: harness-setup persistence floor. Migration 159
+  (_migrate_159_harness_setup) copies the v05:38 grd_init_status PRAGMA-guard
+  (NOT v07:1181): adds projects.harness_setup_status TEXT DEFAULT 'none' +
+  harness_setup_steps (PK project_id,step_key; status/detail/fingerprint/
+  updated_at) via CREATE TABLE IF NOT EXISTS — double-apply is a pure no-op.
+  Helpers in projects.py: update_project gains harness_setup_status kwarg;
+  get_harness_setup_status coerces NULL→'none' (mirrors get_init_status);
+  set_harness_setup_status direct UPDATE; upsert_harness_setup_step is
+  ON CONFLICT(project_id,step_key) latest-write-wins (one row, ISO-8601 UTC
+  updated_at in Python); get_harness_setup_steps reads ordered rows. Parity
+  classmethod GrdPlanningService.get_harness_setup_status added. S1/S2 4/4
+  green, ruff clean.
+
 - [Phase 19]: 19-01: driver spine foundation. resolve_execution_driver() is an
   ADDITIVE precedence resolver beside should_route_via_cli_agent (callers migrate
   in 19-04): turn -> SuperAgent config_json.driver -> instance.driver ->
@@ -268,5 +323,6 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-06-13
-Stopped at: Merged phase 19 (GRD default driver) into main — plans 01-06 ALL complete, verification PASSED 8/8, code review warnings_only (0 blockers), eval tiers 1+2 PASS (83/83). Delivered: 3-way resolve_execution_driver() at the streaming funnel, GrdChatSessionHandler + PSM→chat-SSE bridge, turn classifier, cwd/backend bug fixes, operator driver selectors (default GRD) with 4-locale i18n. (Prior main state: phase 22 repeated-request auto-skill also complete/merged.)
+Stopped at: Completed 21-07-PLAN.md (operator surface — route trio + ProjectDashboard + 4-locale i18n). Next is 21-08 (just build + phase verify).
+Prior stopped-at: Merged phase 19 (GRD default driver) into main — plans 01-06 ALL complete, verification PASSED 8/8, code review warnings_only (0 blockers), eval tiers 1+2 PASS (83/83). Delivered: 3-way resolve_execution_driver() at the streaming funnel, GrdChatSessionHandler + PSM→chat-SSE bridge, turn classifier, cwd/backend bug fixes, operator driver selectors (default GRD) with 4-locale i18n. (Prior main state: phase 22 repeated-request auto-skill also complete/merged.)
 Resume file: None

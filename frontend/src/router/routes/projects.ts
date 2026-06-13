@@ -35,4 +35,18 @@ export const projectRoutes: RouteRecordRaw[] = [
     props: true,
     meta: { title: 'Project Planning', requiresEntity: 'projectId' },
   },
+  {
+    path: '/projects/:projectId/research',
+    name: 'project-research',
+    component: () => import('../../views/ProjectResearchPage.vue'),
+    props: true,
+    meta: { title: 'Project Research', requiresEntity: 'projectId' },
+  },
+  {
+    path: '/projects/:projectId/harness',
+    name: 'project-harness',
+    component: () => import('../../views/ProjectHarnessPage.vue'),
+    props: true,
+    meta: { title: 'Life-Harness', requiresEntity: 'projectId' },
+  },
 ];

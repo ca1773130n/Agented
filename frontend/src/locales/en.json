@@ -1038,80 +1038,103 @@
   },
   "planningCommandBar": {
     "title": "Planning Commands",
+    "deprecated": "Deprecated",
     "groups": {
-      "projectSetup": "Project Setup",
-      "phaseManagement": "Phase Management",
-      "researchAnalysis": "Research & Analysis",
-      "requirements": "Requirements"
+      "plan": "Plan",
+      "execute": "Execute",
+      "verify": "Verify",
+      "research": "Research",
+      "harness": "Harness",
+      "misc": "Misc"
     },
     "cmd": {
-      "mapCodebase": {
-        "label": "Map Codebase",
-        "desc": "Analyze project structure"
+      "planPhase": {
+        "label": "Plan Phase",
+        "desc": "Generate execution plans for a phase"
       },
-      "newMilestone": {
-        "label": "New Milestone",
-        "desc": "Create a new milestone"
+      "planGaps": {
+        "label": "Plan Gaps",
+        "desc": "Identify and plan milestone gaps"
       },
-      "longTermRoadmap": {
-        "label": "Long-term Roadmap",
-        "desc": "Generate strategic roadmap"
-      },
-      "addPhase": {
-        "label": "Add Phase",
-        "desc": "Add a phase to milestone"
-      },
-      "removePhase": {
-        "label": "Remove Phase",
-        "desc": "Remove a phase"
-      },
-      "insertPhase": {
-        "label": "Insert Phase",
-        "desc": "Insert phase at position"
+      "autoplan": {
+        "label": "Autoplan",
+        "desc": "Plan all remaining phases automatically"
       },
       "discussPhase": {
         "label": "Discuss Phase",
         "desc": "AI-assisted phase discussion"
       },
-      "planPhase": {
-        "label": "Plan Phase",
-        "desc": "Generate execution plans"
+      "executePhase": {
+        "label": "Execute Phase",
+        "desc": "Run a phase to completion"
+      },
+      "autopilot": {
+        "label": "Autopilot",
+        "desc": "Plan and execute autonomously"
+      },
+      "quick": {
+        "label": "Quick",
+        "desc": "Run a quick one-shot task"
+      },
+      "verifyPhase": {
+        "label": "Verify Phase",
+        "desc": "Verify a completed phase"
+      },
+      "verifyWork": {
+        "label": "Verify Work",
+        "desc": "Verify recent work against the plan"
+      },
+      "assessBaseline": {
+        "label": "Assess Baseline",
+        "desc": "Establish a performance baseline"
+      },
+      "research": {
+        "label": "Research",
+        "desc": "Start a research thread"
       },
       "survey": {
         "label": "Survey",
-        "desc": "Survey research landscape"
+        "desc": "Survey the research landscape"
       },
       "deepDive": {
         "label": "Deep Dive",
-        "desc": "Deep dive into topic"
+        "desc": "Deep dive into a topic"
+      },
+      "compareMethods": {
+        "label": "Compare Methods",
+        "desc": "Compare candidate approaches"
       },
       "feasibility": {
         "label": "Feasibility",
         "desc": "Assess feasibility"
       },
-      "assessBaseline": {
-        "label": "Assess Baseline",
-        "desc": "Establish performance baseline"
+      "harness": {
+        "label": "Harness",
+        "desc": "Open the life-harness panels"
       },
-      "compareMethods": {
-        "label": "Compare Methods",
-        "desc": "Compare approaches"
+      "evolve": {
+        "label": "Evolve",
+        "desc": "Run harness self-improvement (deprecated)"
       },
-      "listAssumptions": {
-        "label": "List Assumptions",
-        "desc": "Surface phase assumptions"
+      "settings": {
+        "label": "Settings",
+        "desc": "Configure GRD settings"
       },
-      "requirement": {
-        "label": "Requirement",
-        "desc": "Define a requirement"
+      "sync": {
+        "label": "Sync",
+        "desc": "Sync planning state from disk"
       },
-      "planGaps": {
-        "label": "Plan Gaps",
-        "desc": "Identify milestone gaps"
+      "mapCodebase": {
+        "label": "Map Codebase",
+        "desc": "Analyze project structure"
       },
-      "completeMilestone": {
-        "label": "Complete Milestone",
-        "desc": "Mark milestone complete"
+      "progress": {
+        "label": "Progress",
+        "desc": "Show planning progress"
+      },
+      "help": {
+        "label": "Help",
+        "desc": "Show available GRD commands"
       }
     }
   },
@@ -9023,5 +9046,179 @@
     "statusRunning": "Running",
     "statusComplete": "Complete",
     "statusFailed": "Failed"
+  },
+  "surface": {
+    "research": {
+      "title": "Research",
+      "loadError": "Failed to load research data",
+      "loadThreadError": "Failed to load research thread",
+      "intake": {
+        "prompt": "Research question",
+        "placeholder": "What do you want to investigate?",
+        "submit": "Start research",
+        "maxIterations": "Max iterations",
+        "noGates": "Skip gates"
+      },
+      "threads": {
+        "title": "Threads",
+        "empty": "No research threads yet.",
+        "question": "Question",
+        "status": "Status",
+        "iteration": "Iteration"
+      },
+      "status": {
+        "running": "Running",
+        "complete": "Complete",
+        "completed": "Completed",
+        "error": "Error",
+        "idle": "Idle"
+      },
+      "ledger": {
+        "title": "Hypothesis ledger",
+        "empty": "No hypotheses recorded yet."
+      },
+      "report": {
+        "title": "Report",
+        "empty": "No report available yet."
+      },
+      "portfolio": {
+        "title": "Portfolio",
+        "total": "Total",
+        "running": "Running",
+        "completed": "Completed",
+        "iterations": "Iterations"
+      }
+    },
+    "harness": {
+      "title": "Life-Harness",
+      "subtitle": "Autonomy, evolution rounds, shared forge, and GRD panels",
+      "autonomy": {
+        "title": "Autonomy policy",
+        "unconfigured": "not configured",
+        "loading": "Loading policy…",
+        "autoPlan": "Auto-plan phases",
+        "autoExecute": "Auto-execute plans",
+        "autoVerify": "Auto-verify phases",
+        "maxRounds": "Max evolution rounds",
+        "save": "Save policy",
+        "saving": "Saving…",
+        "saved": "Autonomy policy saved",
+        "saveFailed": "Failed to save autonomy policy"
+      },
+      "rounds": {
+        "title": "Evolution rounds",
+        "detailTitle": "Round detail",
+        "loading": "Loading rounds…",
+        "empty": "No evolution rounds yet",
+        "unknownStatus": "unknown",
+        "selectPrompt": "Select a round to view its detail and impact",
+        "idLabel": "Round",
+        "statusLabel": "Status",
+        "approve": "Approve",
+        "abort": "Abort",
+        "revert": "Revert",
+        "revertWarning": "Reverting is destructive: it undoes this round’s applied changes (git-reversible). Confirm to proceed.",
+        "revertConfirm": "Confirm revert",
+        "revertCancel": "Cancel",
+        "approved": "Round approved",
+        "aborted": "Round aborted",
+        "reverted": "Round reverted",
+        "actionFailed": "Round action failed"
+      },
+      "forge": {
+        "title": "Shared forge",
+        "loading": "Loading shared bindings…",
+        "empty": "No shared-forge bindings available",
+        "adopt": "Adopt",
+        "adopting": "Adopting…",
+        "adopted": "Shared binding adopted",
+        "adoptFailed": "Failed to adopt shared binding"
+      },
+      "panels": {
+        "health": {
+          "tab": "Health",
+          "title": "Project health",
+          "refresh": "Refresh",
+          "empty": "No health data"
+        },
+        "think": {
+          "tab": "Think",
+          "title": "Think briefing",
+          "run": "Generate briefing",
+          "empty": "No briefing yet"
+        },
+        "deadEnds": {
+          "tab": "Dead-ends",
+          "title": "Dead-ends",
+          "empty": "No dead-ends recorded",
+          "approach": "Approach",
+          "reason": "Reason",
+          "phase": "Phase",
+          "add": "Add dead-end",
+          "promote": "Promote phase dead-ends",
+          "promotePlaceholder": "Phase id"
+        },
+        "genome": {
+          "tab": "Genome",
+          "title": "Project genome",
+          "snapshot": "Take snapshot",
+          "latest": "Latest snapshot",
+          "history": "Snapshot history",
+          "empty": "No genome data"
+        },
+        "verify": {
+          "tab": "Verify",
+          "title": "Mechanical verification",
+          "run": "Run mechanical verify",
+          "phasePlaceholder": "Phase id",
+          "empty": "No verification run yet"
+        },
+        "reflections": {
+          "tab": "Reflections",
+          "title": "Reflections & verdicts",
+          "phasePlaceholder": "Phase id",
+          "load": "Load reflections",
+          "verdicts": "Verdict counts",
+          "empty": "No reflections loaded"
+        },
+        "evolve": {
+          "tab": "Evolve",
+          "title": "Evolve runs",
+          "start": "Start evolve run",
+          "stop": "Stop",
+          "refresh": "Refresh runs",
+          "empty": "No evolve runs",
+          "detail": "Run detail"
+        }
+      },
+      "tablistLabel": "Harness panels",
+      "loadError": "Failed to load harness data"
+    }
+  },
+  "harnessSetup": {
+    "setupButton": "Setup Team Harness",
+    "retry": "Retry Harness Setup",
+    "chipRunning": "Setting up...",
+    "chipReady": "Harness Ready",
+    "chipFailed": "Setup Failed",
+    "panelTitle": "Setup Progress",
+    "toastReady": "Team harness setup complete.",
+    "toastFailed": "Team harness setup failed.",
+    "step": {
+      "grd_init": "Initialize GRD",
+      "team_topology": "Team Topology",
+      "bundle_binding": "Bundle Binding",
+      "tesserae_enable": "Enable Tesserae",
+      "default_policies": "Default Policies",
+      "materialize_compile": "Materialize & Compile",
+      "__done__": "Done"
+    },
+    "stepStatus": {
+      "pending": "Pending",
+      "ok": "Done",
+      "skipped": "Skipped",
+      "failed": "Failed",
+      "running": "Running"
+    }
   }
 }

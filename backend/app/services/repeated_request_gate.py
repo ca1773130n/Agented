@@ -126,9 +126,9 @@ def _auto_apply_policy(project_id: str | None) -> bool:
     """Per-project auto-apply policy with env fallback.
 
     Read ``project_autonomy_config`` for ``project_id``. If a row exists, honor
-    its ``enabled`` flag (and, if ``policy_json`` scopes a ``kinds`` allow-list,
-    require ``discovered_procedure`` to be in it). If NO row exists, fall back to
-    the ``AGENTED_TAKEAWAY_AUTOAPPLY`` env flag.
+    its ``enabled`` flag (and, if ``policy_json`` scopes an allow-list, require
+    ``discovered_procedure`` to be in it). If NO row exists, fall back to the
+    ``AGENTED_TAKEAWAY_AUTOAPPLY`` env flag.
     """
     from app.db.connection import get_connection
 
@@ -146,12 +146,15 @@ def _auto_apply_policy(project_id: str | None) -> bool:
     if not bool(row["enabled"]):
         return False
 
-    # Optional kind-scoping via policy_json {"kinds": [...]}.
+    # Optional kind-scoping. AutonomyPolicy serializes the allow-list as
+    # ``allowed_kinds``; accept legacy ``kinds`` too for forward-compat.
     try:
         policy = json.loads(row["policy_json"] or "{}")
     except (json.JSONDecodeError, TypeError):
         policy = {}
-    kinds = policy.get("kinds")
+    kinds = policy.get("allowed_kinds")
+    if not (isinstance(kinds, list) and kinds):
+        kinds = policy.get("kinds")
     if isinstance(kinds, list) and kinds:
         return "discovered_procedure" in kinds
     return True

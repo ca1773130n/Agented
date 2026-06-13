@@ -1038,80 +1038,103 @@
   },
   "planningCommandBar": {
     "title": "기획 명령",
+    "deprecated": "지원 중단",
     "groups": {
-      "projectSetup": "프로젝트 설정",
-      "phaseManagement": "페이즈 관리",
-      "researchAnalysis": "리서치 및 분석",
-      "requirements": "요구사항"
+      "plan": "기획",
+      "execute": "실행",
+      "verify": "검증",
+      "research": "리서치",
+      "harness": "하네스",
+      "misc": "기타"
     },
     "cmd": {
-      "mapCodebase": {
-        "label": "코드베이스 매핑",
-        "desc": "프로젝트 구조 분석"
+      "planPhase": {
+        "label": "페이즈 기획",
+        "desc": "페이즈 실행 계획 생성"
       },
-      "newMilestone": {
-        "label": "새 마일스톤",
-        "desc": "새 마일스톤 생성"
+      "planGaps": {
+        "label": "갭 기획",
+        "desc": "마일스톤 갭 식별 및 기획"
       },
-      "longTermRoadmap": {
-        "label": "장기 로드맵",
-        "desc": "전략 로드맵 생성"
-      },
-      "addPhase": {
-        "label": "페이즈 추가",
-        "desc": "마일스톤에 페이즈 추가"
-      },
-      "removePhase": {
-        "label": "페이즈 제거",
-        "desc": "페이즈 제거"
-      },
-      "insertPhase": {
-        "label": "페이즈 삽입",
-        "desc": "특정 위치에 페이즈 삽입"
+      "autoplan": {
+        "label": "자동 기획",
+        "desc": "남은 모든 페이즈 자동 기획"
       },
       "discussPhase": {
         "label": "페이즈 논의",
-        "desc": "AI 지원 페이즈 논의"
+        "desc": "AI 보조 페이즈 논의"
       },
-      "planPhase": {
-        "label": "페이즈 계획",
-        "desc": "실행 계획 생성"
+      "executePhase": {
+        "label": "페이즈 실행",
+        "desc": "페이즈를 완료까지 실행"
+      },
+      "autopilot": {
+        "label": "오토파일럿",
+        "desc": "자율적으로 기획 및 실행"
+      },
+      "quick": {
+        "label": "퀵",
+        "desc": "빠른 단발 작업 실행"
+      },
+      "verifyPhase": {
+        "label": "페이즈 검증",
+        "desc": "완료된 페이즈 검증"
+      },
+      "verifyWork": {
+        "label": "작업 검증",
+        "desc": "최근 작업을 계획과 대조 검증"
+      },
+      "assessBaseline": {
+        "label": "베이스라인 평가",
+        "desc": "성능 베이스라인 수립"
+      },
+      "research": {
+        "label": "리서치",
+        "desc": "리서치 스레드 시작"
       },
       "survey": {
         "label": "서베이",
-        "desc": "연구 동향 조사"
+        "desc": "리서치 지형 조사"
       },
       "deepDive": {
         "label": "딥 다이브",
         "desc": "주제 심층 분석"
       },
+      "compareMethods": {
+        "label": "방법 비교",
+        "desc": "후보 접근법 비교"
+      },
       "feasibility": {
         "label": "타당성",
         "desc": "타당성 평가"
       },
-      "assessBaseline": {
-        "label": "기준선 평가",
-        "desc": "성능 기준선 설정"
+      "harness": {
+        "label": "하네스",
+        "desc": "라이프 하네스 패널 열기"
       },
-      "compareMethods": {
-        "label": "방법 비교",
-        "desc": "접근 방식 비교"
+      "evolve": {
+        "label": "진화",
+        "desc": "하네스 자가 개선 실행 (지원 중단)"
       },
-      "listAssumptions": {
-        "label": "가정 나열",
-        "desc": "페이즈 가정 도출"
+      "settings": {
+        "label": "설정",
+        "desc": "GRD 설정 구성"
       },
-      "requirement": {
-        "label": "요구사항",
-        "desc": "요구사항 정의"
+      "sync": {
+        "label": "동기화",
+        "desc": "디스크에서 기획 상태 동기화"
       },
-      "planGaps": {
-        "label": "갭 계획",
-        "desc": "마일스톤 갭 식별"
+      "mapCodebase": {
+        "label": "코드베이스 매핑",
+        "desc": "프로젝트 구조 분석"
       },
-      "completeMilestone": {
-        "label": "마일스톤 완료",
-        "desc": "마일스톤 완료 처리"
+      "progress": {
+        "label": "진행 상황",
+        "desc": "기획 진행 상황 표시"
+      },
+      "help": {
+        "label": "도움말",
+        "desc": "사용 가능한 GRD 명령 표시"
       }
     }
   },
@@ -9023,5 +9046,179 @@
     "statusRunning": "실행 중",
     "statusComplete": "완료",
     "statusFailed": "실패"
+  },
+  "surface": {
+    "research": {
+      "title": "리서치",
+      "loadError": "리서치 데이터를 불러오지 못했습니다",
+      "loadThreadError": "리서치 스레드를 불러오지 못했습니다",
+      "intake": {
+        "prompt": "리서치 질문",
+        "placeholder": "무엇을 조사하시겠습니까?",
+        "submit": "리서치 시작",
+        "maxIterations": "최대 반복 횟수",
+        "noGates": "게이트 건너뛰기"
+      },
+      "threads": {
+        "title": "스레드",
+        "empty": "아직 리서치 스레드가 없습니다.",
+        "question": "질문",
+        "status": "상태",
+        "iteration": "반복"
+      },
+      "status": {
+        "running": "실행 중",
+        "complete": "완료",
+        "completed": "완료됨",
+        "error": "오류",
+        "idle": "대기"
+      },
+      "ledger": {
+        "title": "가설 원장",
+        "empty": "아직 기록된 가설이 없습니다."
+      },
+      "report": {
+        "title": "보고서",
+        "empty": "아직 사용할 수 있는 보고서가 없습니다."
+      },
+      "portfolio": {
+        "title": "포트폴리오",
+        "total": "전체",
+        "running": "실행 중",
+        "completed": "완료",
+        "iterations": "반복"
+      }
+    },
+    "harness": {
+      "title": "라이프 하니스",
+      "subtitle": "자율성, 진화 라운드, 공유 포지 및 GRD 패널",
+      "autonomy": {
+        "title": "자율성 정책",
+        "unconfigured": "미구성",
+        "loading": "정책 로딩 중…",
+        "autoPlan": "단계 자동 계획",
+        "autoExecute": "계획 자동 실행",
+        "autoVerify": "단계 자동 검증",
+        "maxRounds": "최대 진화 라운드",
+        "save": "정책 저장",
+        "saving": "저장 중…",
+        "saved": "자율성 정책이 저장되었습니다",
+        "saveFailed": "자율성 정책 저장 실패"
+      },
+      "rounds": {
+        "title": "진화 라운드",
+        "detailTitle": "라운드 상세",
+        "loading": "라운드 로딩 중…",
+        "empty": "아직 진화 라운드가 없습니다",
+        "unknownStatus": "알 수 없음",
+        "selectPrompt": "상세 및 영향을 보려면 라운드를 선택하세요",
+        "idLabel": "라운드",
+        "statusLabel": "상태",
+        "approve": "승인",
+        "abort": "중단",
+        "revert": "되돌리기",
+        "revertWarning": "되돌리기는 파괴적입니다: 이 라운드의 적용된 변경을 취소합니다(git으로 복구 가능). 계속하려면 확인하세요.",
+        "revertConfirm": "되돌리기 확인",
+        "revertCancel": "취소",
+        "approved": "라운드가 승인되었습니다",
+        "aborted": "라운드가 중단되었습니다",
+        "reverted": "라운드가 되돌려졌습니다",
+        "actionFailed": "라운드 작업 실패"
+      },
+      "forge": {
+        "title": "공유 포지",
+        "loading": "공유 바인딩 로딩 중…",
+        "empty": "사용 가능한 공유 포지 바인딩이 없습니다",
+        "adopt": "채택",
+        "adopting": "채택 중…",
+        "adopted": "공유 바인딩이 채택되었습니다",
+        "adoptFailed": "공유 바인딩 채택 실패"
+      },
+      "panels": {
+        "health": {
+          "tab": "상태",
+          "title": "프로젝트 상태",
+          "refresh": "새로고침",
+          "empty": "상태 데이터 없음"
+        },
+        "think": {
+          "tab": "사고",
+          "title": "사고 브리핑",
+          "run": "브리핑 생성",
+          "empty": "아직 브리핑이 없습니다"
+        },
+        "deadEnds": {
+          "tab": "막다른 길",
+          "title": "막다른 길",
+          "empty": "기록된 막다른 길이 없습니다",
+          "approach": "접근법",
+          "reason": "이유",
+          "phase": "단계",
+          "add": "막다른 길 추가",
+          "promote": "단계 막다른 길 승격",
+          "promotePlaceholder": "단계 ID"
+        },
+        "genome": {
+          "tab": "게놈",
+          "title": "프로젝트 게놈",
+          "snapshot": "스냅샷 생성",
+          "latest": "최신 스냅샷",
+          "history": "스냅샷 기록",
+          "empty": "게놈 데이터 없음"
+        },
+        "verify": {
+          "tab": "검증",
+          "title": "기계적 검증",
+          "run": "기계적 검증 실행",
+          "phasePlaceholder": "단계 ID",
+          "empty": "아직 검증 실행이 없습니다"
+        },
+        "reflections": {
+          "tab": "회고",
+          "title": "회고 및 판정",
+          "phasePlaceholder": "단계 ID",
+          "load": "회고 로드",
+          "verdicts": "판정 집계",
+          "empty": "로드된 회고가 없습니다"
+        },
+        "evolve": {
+          "tab": "진화",
+          "title": "진화 실행",
+          "start": "진화 실행 시작",
+          "stop": "중지",
+          "refresh": "실행 새로고침",
+          "empty": "진화 실행 없음",
+          "detail": "실행 상세"
+        }
+      },
+      "tablistLabel": "하니스 패널",
+      "loadError": "하니스 데이터 로드 실패"
+    }
+  },
+  "harnessSetup": {
+    "setupButton": "팀 하네스 설정",
+    "retry": "하네스 설정 재시도",
+    "chipRunning": "설정 중...",
+    "chipReady": "하네스 준비됨",
+    "chipFailed": "설정 실패",
+    "panelTitle": "설정 진행 상황",
+    "toastReady": "팀 하네스 설정이 완료되었습니다.",
+    "toastFailed": "팀 하네스 설정에 실패했습니다.",
+    "step": {
+      "grd_init": "GRD 초기화",
+      "team_topology": "팀 토폴로지",
+      "bundle_binding": "번들 바인딩",
+      "tesserae_enable": "Tesserae 활성화",
+      "default_policies": "기본 정책",
+      "materialize_compile": "구체화 및 컴파일",
+      "__done__": "완료"
+    },
+    "stepStatus": {
+      "pending": "대기 중",
+      "ok": "완료",
+      "skipped": "건너뜀",
+      "failed": "실패",
+      "running": "진행 중"
+    }
   }
 }

@@ -32,11 +32,11 @@ to exactly one phase).
 
 ## GRD frontend wiring (GWR)
 
-- [ ] **REQ-14** — Autoresearch backend: routes wrapping `gd research` (start/status/resume/report/portfolio + thread browser) + `grd_research` execution-type handler (PSM + SSE). (Phase: 20)
-- [ ] **REQ-15** — Research page: question intake, thread list, hypothesis ledger, report viewer, portfolio runs. (Phase: 20)
-- [ ] **REQ-16** — Life-harness completion UI: autonomy policy editor, round revert, shared-forge browse/adopt, panels for the 16 unwired GRD routes (health/think/dead-ends/genome/verify-mechanical/reflections/verdict-counts/evolve). (Phase: 20)
-- [ ] **REQ-17** — PlanningCommandBar exposes the full supported `/grd:` command set, grouped, from a declarative manifest. (Phase: 20)
-- [ ] **REQ-18** — All new UI surfaces ship en/ko/ja/zh key-identical catalogs. (Phase: 20)
+- [x] **REQ-14** — Autoresearch backend: routes wrapping `gd research` (start/status/resume/report/portfolio + thread browser) + `grd_research` execution-type handler (PSM + SSE). (Phase: 20)
+- [x] **REQ-15** — Research page: question intake, thread list, hypothesis ledger, report viewer, portfolio runs. (Phase: 20)
+- [x] **REQ-16** — Life-harness completion UI: autonomy policy editor, round revert, shared-forge browse/adopt, panels for the 16 unwired GRD routes (health/think/dead-ends/genome/verify-mechanical/reflections/verdict-counts/evolve). (Phase: 20)
+- [x] **REQ-17** — PlanningCommandBar exposes the full supported `/grd:` command set, grouped, from a declarative manifest. (Phase: 20)
+- [x] **REQ-18** — All new UI surfaces ship en/ko/ja/zh key-identical catalogs. (Phase: 20)
 
 ## One-click team harness setup (OCS)
 

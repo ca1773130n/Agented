@@ -1186,6 +1186,36 @@ def _migrate_158_driver_columns(conn):
         conn.execute("ALTER TABLE project_sa_instances ADD COLUMN driver TEXT")
 
 
+def _migrate_159_harness_setup(conn):
+    """Phase 21 (21-01): persistence floor for one-click team harness setup.
+
+    Adds ``projects.harness_setup_status`` (TEXT DEFAULT 'none', the
+    none/running/ready/failed state machine), mirroring the PRAGMA-guard
+    pattern of ``_migrate_v54_project_grd_init_status`` (v05_features.py:38),
+    plus a ``harness_setup_steps`` table giving per-step idempotent upsert +
+    retry granularity with PK ``(project_id, step_key)``.
+
+    PRAGMA-guarded ALTER + CREATE TABLE IF NOT EXISTS — double-apply is a
+    pure no-op.
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(projects)")}
+    if "harness_setup_status" not in cols:
+        conn.execute("ALTER TABLE projects ADD COLUMN harness_setup_status TEXT DEFAULT 'none'")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS harness_setup_steps (
+            project_id TEXT NOT NULL,
+            step_key TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            detail TEXT,
+            fingerprint TEXT,
+            updated_at TEXT,
+            PRIMARY KEY (project_id, step_key)
+        )
+        """
+    )
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -1300,4 +1330,7 @@ V07_MIGRATIONS: list = [
     # v0.8.0 (19-01): per-scope execution-driver columns for the
     # precedence-driven, default-GRD resolve_execution_driver() resolver.
     (158, "driver_columns", _migrate_158_driver_columns),
+    # v0.8.0 (21-01): persistence floor for one-click team harness setup —
+    # projects.harness_setup_status column + harness_setup_steps table.
+    (159, "harness_setup", _migrate_159_harness_setup),
 ]

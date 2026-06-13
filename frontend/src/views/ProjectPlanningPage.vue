@@ -12,6 +12,7 @@ import EntityLayout from '../layouts/EntityLayout.vue';
 import MilestoneOverview from '../components/grd/MilestoneOverview.vue';
 import PlanningCommandBar from '../components/grd/PlanningCommandBar.vue';
 import PlanningSessionPanel from '../components/grd/PlanningSessionPanel.vue';
+import { GRD_COMMAND_GROUP_BY_NAME, GRD_GROUP } from '../components/grd/planningCommands';
 
 const props = defineProps<{
   projectId?: string;
@@ -96,9 +97,35 @@ async function loadPhasesAndPlans() {
   }
 }
 
-// Command dispatch
+// Command dispatch — group-aware routing.
+// Research-group commands open the research surface (20-03); harness-group
+// commands deep-link to the /harness panels (20-04); everything else spawns a
+// planning/grd_chat session in the inline session panel.
 function handleInvokeCommand(command: string, args?: Record<string, string>) {
-  planning.invokeCommand(command, args);
+  const group = args?.group ?? GRD_COMMAND_GROUP_BY_NAME[command];
+
+  if (group === GRD_GROUP.RESEARCH) {
+    router.push({
+      name: 'project-research',
+      params: { projectId: projectId.value },
+      query: { command },
+    });
+    return;
+  }
+
+  if (group === GRD_GROUP.HARNESS) {
+    router.push({
+      name: 'project-harness',
+      params: { projectId: projectId.value },
+      query: { command },
+    });
+    return;
+  }
+
+  // Strip the routing-only `group` arg before handing off to the session.
+  const sessionArgs = args ? { ...args } : undefined;
+  if (sessionArgs) delete sessionArgs.group;
+  planning.invokeCommand(command, sessionArgs);
   showSessionPanel.value = true;
 }
 

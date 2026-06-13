@@ -34,10 +34,10 @@ gates (`just build`, backend pytest watchdog, frontend no-new-failures).
 **Phase Types:** survey | implement | evaluate | integrate
 
 - [x] **Phase 17: Forge creation surface** - `subagent` kind, atomic create+bind+materialize, cross-kind bundles, `forge-creator` bundle, session-completion auto-import `implement` ✓ 2026-06-13
-- [ ] **Phase 18: Sketch → primitive routing** - classification `action` dimension, `primitive_generator` target, PrimitiveForgeService create + ACE-style improve, outcome card with undo `implement`
+- [x] **Phase 18: Sketch → primitive routing** - classification `action` dimension, `primitive_generator` target, PrimitiveForgeService create + ACE-style improve, outcome card with undo `implement` (completed 2026-06-13)
 - [x] **Phase 19: GRD default driver** - `resolve_execution_driver()` 3-way (default grd), GrdChatSessionHandler PSM→chat-SSE bridge, cwd/backend fixes, driver selector UI `implement` ✓ 2026-06-13
-- [ ] **Phase 20: GRD frontend wiring** - autoresearch page, life-harness completion UI (16 unwired routes), full `/grd:` command bar, 4-locale i18n `implement`
-- [ ] **Phase 21: One-click team harness setup** - ProjectDashboard button + idempotent TeamHarnessSetupService (GRD init, topology, bundles, tesserae, policies, 4-harness materialization) `integrate`
+- [x] **Phase 20: GRD frontend wiring** - autoresearch page, life-harness completion UI (16 unwired routes), full `/grd:` command bar, 4-locale i18n `implement` ✓ 2026-06-13
+- [x] **Phase 21: One-click team harness setup** - ProjectDashboard button + idempotent TeamHarnessSetupService (GRD init, topology, bundles, tesserae, policies, 4-harness materialization) `integrate` ✓ 2026-06-13
 - [x] **Phase 22: Repeated-request auto-skill** - `repeated_request_signals` store, embedding detection over 5 session kinds, hybrid gates, patch-over-create, provenance, security scan `implement`
 
 ## Phase Details
@@ -73,10 +73,13 @@ Plans:
   4. Improve path fuzzy-resolves the referenced primitive over bound primitives, applies an ACE-style old→new delta patch, and re-materializes; an ambiguous reference yields sketch status `collaborating` with a clarification question (improve + ambiguity tests; `SketchStatus` enum includes `collaborating`).
   5. The sketch panel renders a "primitive created/updated" outcome card (kind, name, diff, bound-project list, one-click undo = unbind+delete or revert-update) (component test).
   6. Dogfood: ≥3 real sketches routed through the live pipeline before sign-off. House gates pass.
-**Plans**: TBD
+**Plans**: 4 (planned 2026-06-13)
 
 Plans:
-- [ ] 18-NN: TBD (set by /grd:plan-phase 18)
+- [ ] 18-01 (wave 1): Backend foundation — `SketchStatus.COLLABORATING` + `action` classification dimension (keyword `ACTION_KEYWORDS` + LLM prompt/schema, 4-backend litellm model-string map)
+- [ ] 18-02 (wave 2): `route()` `primitive_generator` precedence branch (conf ≥ 0.6, target_id=kind, ahead of SA/team)
+- [ ] 18-03 (wave 3): `PrimitiveForgeService` (create via atomic API + skill→add_user_skill; improve via difflib fuzzy-resolve + old→new delta; ambiguity→collaborating) + `route_sketch` dispatch + undo endpoint
+- [ ] 18-04 (wave 4): Sketch panel primitive outcome card + undo + `SketchPrimitiveOutcome` type + `sketchPrimitiveOutcome.*` i18n (4 locales) + dogfood checkpoint
 
 ### Phase 19: GRD default driver
 **Goal**: GRD is the default execution driver for superagent chat — a 3-way `resolve_execution_driver()` (cliproxy | cli_agent | grd, default grd) is honored at the single streaming funnel, task-shaped turns spawn GRD PSM sessions bridged into the chat SSE protocol while conversational turns stay on cliproxy, delegation/project_chat cwd-and-backend bugs are fixed, and the driver is operator-selectable.
@@ -114,10 +117,15 @@ Plans:
   4. PlanningCommandBar exposes the full supported `/grd:` command set, grouped (Plan/Execute/Verify/Research/Harness/Misc), driven from a declarative manifest.
   5. Every new UI surface ships en/ko/ja/zh key-identical catalogs.
   6. House gates pass (frontend no-new-failures explicitly).
-**Plans**: TBD
+**Plans**: 6 plans
 
 Plans:
-- [ ] 20-NN: TBD (set by /grd:plan-phase 20)
+- [ ] 20-01-PLAN.md — Autoresearch backend: grd_research handler + research CLI helpers + 5 routes (REQ-14)
+- [ ] 20-02-PLAN.md — Frontend api modules: research.ts + grdHarness.ts + barrel (REQ-14/15/16 plumbing)
+- [ ] 20-03-PLAN.md — Research page: intake/threads/ledger/report/portfolio + SSE + i18n (REQ-15)
+- [ ] 20-04-PLAN.md — Life-harness UI: autonomy editor, round revert, shared-forge, 7 GRD-route panels + i18n (REQ-16)
+- [ ] 20-05-PLAN.md — PlanningCommandBar manifest: planningCommands.ts, 6 groups, group-aware invoke + i18n (REQ-17)
+- [ ] 20-06-PLAN.md — i18n parity sweep + house-gate green certification (REQ-18)
 
 ### Phase 21: One-click team harness setup
 **Goal**: A single ProjectDashboard button bootstraps a complete team harness — an idempotent `TeamHarnessSetupService` runs GRD init, team topology + GRD-driven superagents, project-tailored bundle binding, tesserae enablement, default policies, and 4-harness materialization with a per-backend compile smoke check; re-running reconciles rather than duplicates, and each step is independently retryable with step-level SSE progress.
@@ -132,10 +140,17 @@ Plans:
   4. Re-running reconciles via manifest/fingerprint comparison without duplicating; a failed run leaves a step log + `failed` status and every step is independently retryable; setup performs no destructive deletes.
   5. One live dogfood run completes against a real project end-to-end, with all four backends compiling the materialized projection.
   6. House gates pass.
-**Plans**: TBD
+**Plans**: 8 plans (3 waves)
 
 Plans:
-- [ ] 21-NN: TBD (set by /grd:plan-phase 21)
+- [ ] 21-01-PLAN.md — migration 159 (harness_setup_status + harness_setup_steps) + status/step helpers
+- [ ] 21-02-PLAN.md — TeamHarnessSetupService skeleton: 6 step keys, StepResult, state machine, retry-skips-ok
+- [ ] 21-03-PLAN.md — steps a+b: GRD-init reconcile + team topology + SA instances driver=grd (dedup + post-update)
+- [ ] 21-04-PLAN.md — steps c+d: STACK.md-tailored bundle binding (forge-creator floor) + idempotent tesserae enable
+- [ ] 21-05-PLAN.md — step e: dual-consumer autonomy policy (auto-apply ON scoped to discovered_procedure; evolution conservative)
+- [ ] 21-06-PLAN.md — step f: 4-renderer materialize + per-backend compile smoke
+- [ ] 21-07-PLAN.md — route trio (POST/status/SSE-stream) + ProjectDashboard button/chip/step-panel + 4-locale i18n
+- [ ] 21-08-PLAN.md — deferred: live 4-backend dogfood + session auto-import idempotency + house gates
 
 ### Phase 22: Repeated-request auto-skill
 **Goal**: The harness self-improves — a `repeated_request_signals` store and a session-completion detection handler (over all five session kinds) embed and match recurring user requests, and hybrid confidence gates convert them into skills automatically (≥3 occurrences + verified + scan-pass) or queue them for approval, with patch-over-create dedup, origin-hash provenance protecting operator-modified skills, and prompt-injection/exfiltration/invisible-Unicode scanning.
@@ -183,10 +198,10 @@ Plans:
 | Phase | Name | Requirements | Depends on | Verification | Status |
 |-------|------|--------------|------------|--------------|--------|
 | 17 | Forge creation surface | REQ-01..05 | — | proxy | Complete (6/6 ✓ 2026-06-13) |
-| 18 | Sketch → primitive routing | REQ-06..09 | 17 | proxy | Not started |
-| 19 | GRD default driver | REQ-10..13 | 17 | proxy | Complete ✓ 2026-06-13 |
-| 20 | GRD frontend wiring | REQ-14..18 | 19 | proxy | Not started |
-| 21 | One-click team harness setup | REQ-19..21 | 17, 19 | full | Not started |
+| 18 | Sketch → primitive routing | REQ-06..09 | 17 | proxy | Complete (2026-06-13) |
+| 19 | GRD default driver | REQ-10..13 | 17 | proxy | Complete (2026-06-13) |
+| 20 | GRD frontend wiring | REQ-14..18 | 19 | proxy | Complete (5/5 ✓ 2026-06-13) |
+| 21 | One-click team harness setup | REQ-19..21 | 17, 19 | full | Complete (2026-06-13) — L1 5/5, L2 8/8; D1/D2 live dogfood deferred |
 | 22 | Repeated-request auto-skill | REQ-22..26 | 17 | proxy | Complete (2026-06-13) |
 
 **Coverage:** 26/26 requirements mapped (REQ-01 … REQ-26), each to exactly one phase. No orphans, no duplicates.

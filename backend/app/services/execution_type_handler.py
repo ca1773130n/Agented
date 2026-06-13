@@ -459,11 +459,7 @@ class GoalLoopSessionHandler(ExecutionTypeHandler):
         # supplied an explicit ``cmd`` so we don't double-stack a
         # prompt the caller already encoded.
         system_prompt = session_config.get("system_prompt_override")
-        if (
-            system_prompt
-            and not session_config.get("cmd")
-            and "--append-system-prompt" not in cmd
-        ):
+        if system_prompt and not session_config.get("cmd") and "--append-system-prompt" not in cmd:
             cmd = [*cmd, "--append-system-prompt", system_prompt]
         session_id = ProjectSessionManager.create_session(
             project_id=session_config["project_id"],
@@ -490,9 +486,7 @@ class GoalLoopSessionHandler(ExecutionTypeHandler):
         try:
             set_goal_loop_config(session_id, goal_config)
         except Exception:
-            logger.warning(
-                "goal_loop: failed to persist config for %s", session_id, exc_info=True
-            )
+            logger.warning("goal_loop: failed to persist config for %s", session_id, exc_info=True)
         start_runner(session_id, goal_config, cwd=session_config.get("cwd"))
 
         info = ProjectSessionManager.get_session_info(session_id)
@@ -626,9 +620,7 @@ class GrdEvolveSessionHandler(ExecutionTypeHandler):
                 pick_pct=pick_pct,
             )
         except Exception:
-            logger.warning(
-                "grd_evolve: failed to insert run row for %s", session_id, exc_info=True
-            )
+            logger.warning("grd_evolve: failed to insert run row for %s", session_id, exc_info=True)
             run_id = None
 
         planning_dir = str(Path(cwd).expanduser().resolve() / ".planning")
@@ -732,7 +724,7 @@ class GrdChatSessionHandler(ExecutionTypeHandler):
         # "/quick", "grd:quick", or "/grd:quick" all converge.
         cmd = cmd.lstrip("/")
         if cmd.startswith("grd:"):
-            cmd = cmd[len("grd:"):]
+            cmd = cmd[len("grd:") :]
         return f"/grd:{cmd}"
 
     def start(self, session_config: dict) -> dict:
@@ -816,6 +808,131 @@ class GrdChatSessionHandler(ExecutionTypeHandler):
         return ProjectSessionManager.get_output(session_id, last_n=last_n)
 
 
+class GrdResearchSessionHandler(ExecutionTypeHandler):
+    """Handler for the GRD autoresearch loop (v0.8.0, REQ-14).
+
+    Mirrors ``GrdChatSessionHandler`` verbatim but spawns a one-shot
+    ``claude -p`` stream-json session whose single prompt is a
+    ``/grd:research <json.dumps(question)>`` invocation. Where the chat
+    handler maps an intent to a ``/grd:<cmd>`` token, this handler is
+    pinned to ``/grd:research`` (optionally ``/grd:research resume
+    <thread_id>`` when ``thread_id`` is supplied). The project cwd is
+    resolved through ``ProjectWorkspaceService.resolve_working_directory``
+    so the loop runs against the real checkout (raising ``ValueError``
+    when no clone exists — that behavior is preserved), and the phase-17
+    forge wiring (``forge_bundle`` / ``super_agent_id``) is forwarded onto
+    ``create_session`` unchanged.
+
+    The generic ``/sessions/{session_id}/output`` SSE route is what
+    streams this session back to the operator — this handler owns only
+    start + stop + monitor. ``stop`` stops the PSM session so an abort
+    does not orphan the GRD subprocess.
+
+    Required ``session_config``:
+      * ``project_id`` (standard).
+      * ``question`` — the research question the loop investigates
+        (or, when ``thread_id`` is set for a resume, optional).
+      * ``thread_id`` (optional) — resume an existing research thread
+        instead of starting a fresh one.
+      * ``max_iterations`` (optional, int) — appends ``--max-iterations N``.
+      * ``no_gates`` (optional, bool) — appends ``--no-gates``.
+      * ``cwd`` (optional) — overrides the resolved project cwd.
+    """
+
+    def start(self, session_config: dict) -> dict:
+        thread_id = (session_config.get("thread_id") or "").strip()
+        question = (session_config.get("question") or "").strip()
+        # A fresh run needs a question; a resume run rides on the thread_id.
+        if not thread_id and not question:
+            return {"error": "grd_research: session_config.question is required"}
+
+        project_id = session_config["project_id"]
+
+        # Resolve the project cwd so the GRD command runs against the real
+        # checkout. An explicit cwd wins (test seams / worktrees). This
+        # raises ValueError when no clone exists — preserved on purpose.
+        cwd = session_config.get("cwd")
+        if not cwd:
+            from .project_workspace_service import ProjectWorkspaceService
+
+            cwd = ProjectWorkspaceService.resolve_working_directory(project_id)
+
+        # Build the /grd:research prompt. The question can arrive from
+        # non-operator sources, so JSON-encode it (escapes embedded
+        # quotes/newlines/backslashes) rather than naive `"{question}"`
+        # interpolation — this is the 19-04 prompt-injection hardening.
+        if thread_id:
+            prompt = f"/grd:research resume {json.dumps(thread_id)}"
+        else:
+            prompt = f"/grd:research {json.dumps(question)}"
+
+        # Optional loop knobs are appended to the prompt tail, only when
+        # provided. ``--max-iterations N`` caps the loop; ``--no-gates``
+        # runs without human-verify checkpoints.
+        max_iterations = session_config.get("max_iterations")
+        if max_iterations is not None:
+            prompt = f"{prompt} --max-iterations {int(max_iterations)}"
+        if session_config.get("no_gates"):
+            prompt = f"{prompt} --no-gates"
+
+        cmd = [
+            "claude",
+            "-p",
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            prompt,
+        ]
+
+        session_id = ProjectSessionManager.create_session(
+            project_id=project_id,
+            cmd=cmd,
+            cwd=cwd,
+            phase_id=session_config.get("phase_id"),
+            plan_id=session_config.get("plan_id"),
+            agent_id=session_config.get("agent_id"),
+            worktree_path=session_config.get("worktree_path"),
+            execution_type="grd_research",
+            execution_mode=session_config.get("execution_mode", "autonomous"),
+            stream_json=True,
+            use_pty=False,
+            yolo_mode=session_config.get("yolo_mode", False),
+            forge_bundle=session_config.get("forge_bundle"),
+            super_agent_id=session_config.get("super_agent_id"),
+        )
+
+        info = ProjectSessionManager.get_session_info(session_id)
+        return {
+            "session_id": session_id,
+            "pid": info["pid"] if info else None,
+            "status": "active",
+        }
+
+    def monitor(self, session_id: str) -> dict:
+        info = ProjectSessionManager.get_session_info(session_id)
+        if not info:
+            return {
+                "alive": False,
+                "status": "unknown",
+                "output_lines": 0,
+                "last_activity_at": None,
+            }
+        return {
+            "alive": info["status"] == "active",
+            "status": info["status"],
+            "output_lines": info.get("output_lines", 0),
+            "last_activity_at": info.get("last_activity_at"),
+        }
+
+    def stop(self, session_id: str) -> bool:
+        # Stop the PSM session so an abort does not orphan the GRD
+        # subprocess.
+        return ProjectSessionManager.stop_session(session_id)
+
+    def get_output(self, session_id: str, last_n: int = 100) -> list[str]:
+        return ProjectSessionManager.get_output(session_id, last_n=last_n)
+
+
 # =============================================================================
 # Handler Registry
 # =============================================================================
@@ -828,6 +945,7 @@ HANDLER_REGISTRY: dict[str, ExecutionTypeHandler] = {
     "goal_loop": GoalLoopSessionHandler(),
     "grd_evolve": GrdEvolveSessionHandler(),
     "grd_chat": GrdChatSessionHandler(),
+    "grd_research": GrdResearchSessionHandler(),
 }
 
 

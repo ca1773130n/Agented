@@ -9,9 +9,10 @@ streams stay on Flask until the streaming wave:
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import threading
-from datetime import datetime
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any, Optional
@@ -22,8 +23,7 @@ from litestar.exceptions import (
     HTTPException,
     NotFoundException,
 )
-
-from app.utils.timezone import utcnow as _utcnow
+from litestar.response import Stream
 
 from app.database import (
     add_project_phase,
@@ -42,12 +42,19 @@ from app.database import (
     update_project,
     update_project_plan,
 )
+from app.db.projects import (
+    get_harness_setup_status,
+    get_harness_setup_steps,
+    set_harness_setup_status,
+)
 from app.services.execution_type_handler import get_handler
 from app.services.grd_cli_service import GrdCliService
 from app.services.grd_planning_service import GrdPlanningService
 from app.services.grd_sync_service import GrdSyncService
 from app.services.project_session_manager import ProjectSessionManager
 from app.services.project_workspace_service import ProjectWorkspaceService
+from app.services.team_harness_setup_service import TeamHarnessSetupService
+from app.utils.timezone import utcnow as _utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -654,9 +661,7 @@ def project_chat(project_id: str, data: dict) -> dict[str, Any]:
                                     yield ev
 
                             try:
-                                bridge_psm_to_chat(
-                                    _session_id, _psm_events(), ChatStateService
-                                )
+                                bridge_psm_to_chat(_session_id, _psm_events(), ChatStateService)
                             finally:
                                 ProjectSessionManager.unsubscribe_raw(grd_session_id, raw_q)
                             return
@@ -736,6 +741,91 @@ def planning_status(project_id: str) -> dict[str, Any]:
         "grd_init_status": GrdPlanningService.get_init_status(project_id),
         "active_session_id": GrdPlanningService.get_active_planning_session(project_id),
     }
+
+
+# ---------------------------------------------------------------------------
+# Team harness setup (one-click) — REQ-19 / SC1
+# ---------------------------------------------------------------------------
+
+
+@post("/{project_id:str}/harness-setup", status_code=202, sync_to_thread=False)
+def trigger_harness_setup(project_id: str) -> dict[str, Any]:
+    """Flip status to 'running' and run the six-step setup off-thread.
+
+    Mirrors the grd-chat thread-spawn shape (grd_routes.py:709). The status
+    flip here makes a follow-up GET .../status report 'running' immediately,
+    even before the background thread sets it itself.
+
+    Idempotent under concurrent triggers: if a setup is already 'running' we
+    return without spawning a second thread. ``_step_team_topology`` does an
+    existence-check-then-create on the non-deduped SA-instance table, so two
+    overlapping runs could TOCTOU-create duplicate instances — the guard
+    prevents that.
+    """
+    _ensure_project(project_id)
+    if get_harness_setup_status(project_id) == "running":
+        return {"harness_setup_status": "running"}
+    set_harness_setup_status(project_id, "running")
+    threading.Thread(
+        target=TeamHarnessSetupService.setup,
+        args=(project_id,),
+        daemon=True,
+    ).start()
+    return {"harness_setup_status": "running"}
+
+
+@get("/{project_id:str}/harness-setup/status", sync_to_thread=False)
+def harness_setup_status(project_id: str) -> dict[str, Any]:
+    _ensure_project(project_id)
+    return {
+        "harness_setup_status": get_harness_setup_status(project_id),
+        "steps": get_harness_setup_steps(project_id),
+    }
+
+
+@get(
+    "/{project_id:str}/harness-setup/stream",
+    media_type="text/event-stream",
+    sync_to_thread=False,
+)
+async def harness_setup_stream(project_id: str) -> Stream:
+    """SSE stream of harness-setup step progress.
+
+    Polls the DB every 1s, emits an ``event: step`` frame per changed step row
+    (keyed by step_key, diffed on status+detail), and a terminal
+    ``event: done`` frame once the overall status reaches ready/failed.
+    Mirrors the trace SSE Stream pattern (agents_and_tracing.py:228).
+    """
+    _ensure_project(project_id)
+
+    async def event_generator():
+        seen: dict[str, str] = {}
+        deadline = asyncio.get_event_loop().time() + 600.0  # 10 min
+        while True:
+            steps = get_harness_setup_steps(project_id)
+            for s in steps:
+                key = s["step_key"]
+                sig = f"{s.get('status')}|{s.get('detail')}"
+                if seen.get(key) != sig:
+                    seen[key] = sig
+                    payload = {
+                        "step": key,
+                        "status": s.get("status"),
+                        "detail": s.get("detail"),
+                    }
+                    yield f"event: step\ndata: {json.dumps(payload, default=str)}\n\n"
+            status = get_harness_setup_status(project_id)
+            if status in ("ready", "failed"):
+                yield (
+                    f"event: done\ndata: {json.dumps({'step': '__done__', 'status': status})}\n\n"
+                )
+                return
+            if asyncio.get_event_loop().time() > deadline:
+                yield f"event: timeout\ndata: {json.dumps({'reason': 'max_duration'})}\n\n"
+                return
+            await asyncio.sleep(1.0)
+
+    return Stream(event_generator(), media_type="text/event-stream")
 
 
 # ---------------------------------------------------------------------------
@@ -1655,6 +1745,99 @@ def resume_goal_loop_route(project_id: str, session_id: str) -> dict[str, Any]:
     return result
 
 
+# ---------------------------------------------------------------------------
+# Research (v0.8.0 — REQ-14, autoresearch loop)
+#
+# The long ``gd research`` loop runs as a streamed ``grd_research`` PSM
+# session via ``GrdResearchSessionHandler``; the operator watches it through
+# the generic ``/sessions/{session_id}/output`` SSE route (no research-
+# specific bridge). The thread browser/status endpoints read the loop's
+# on-disk ``THREAD.md`` / ``HYPOTHESES.md`` / ``FINDING.md`` outputs.
+# ---------------------------------------------------------------------------
+
+
+@post("/{project_id:str}/research/start", status_code=201, sync_to_thread=False)
+def research_start(project_id: str, data: dict) -> dict[str, Any]:
+    """Start a fresh ``gd research`` loop as a streamed ``grd_research``
+    session. Returns ``{"session_id": ...}``; stream it via the generic
+    ``/sessions/{session_id}/output`` SSE route.
+    """
+    _ensure_project(project_id)
+    body = data or {}
+    question = (body.get("question") or "").strip()
+    if not question:
+        raise ClientException(detail="question is required")
+
+    handler = get_handler("grd_research")
+    config: dict[str, Any] = {"project_id": project_id, "question": question}
+    if body.get("max_iterations") is not None:
+        config["max_iterations"] = body["max_iterations"]
+    if body.get("no_gates"):
+        config["no_gates"] = True
+
+    result = handler.start(config)
+    if "error" in result:
+        raise ClientException(detail=result["error"])
+    return {"session_id": result["session_id"]}
+
+
+@post(
+    "/{project_id:str}/research/{thread_id:str}/resume",
+    status_code=201,
+    sync_to_thread=False,
+)
+def research_resume(project_id: str, thread_id: str, data: dict) -> dict[str, Any]:
+    """Resume an existing research thread by spawning a fresh
+    ``grd_research`` session pinned to ``/grd:research resume <thread_id>``.
+    Returns ``{"session_id": ...}``.
+    """
+    _ensure_project(project_id)
+    body = data or {}
+
+    handler = get_handler("grd_research")
+    config: dict[str, Any] = {"project_id": project_id, "thread_id": thread_id}
+    if body.get("max_iterations") is not None:
+        config["max_iterations"] = body["max_iterations"]
+    if body.get("no_gates"):
+        config["no_gates"] = True
+
+    result = handler.start(config)
+    if "error" in result:
+        raise ClientException(detail=result["error"])
+    return {"session_id": result["session_id"]}
+
+
+@get("/{project_id:str}/research/threads", sync_to_thread=False)
+def research_list_threads(project_id: str) -> dict[str, Any]:
+    """Portfolio/browser — the project's research threads parsed from
+    on-disk ``THREAD.md`` frontmatter. Returns ``{"threads": []}`` when no
+    research has run yet (the threads dir does not exist until then).
+    """
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    return {"threads": GrdCliService.list_threads(cwd)}
+
+
+@get("/{project_id:str}/research/threads/{thread_id:str}", sync_to_thread=False)
+def research_read_thread(project_id: str, thread_id: str) -> dict[str, Any]:
+    """None-safe bundle of one thread's ``THREAD.md`` + ``HYPOTHESES.md`` +
+    ``FINDING.md`` (each ``None`` when its file is absent).
+    """
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    return GrdCliService.read_thread(cwd, thread_id)
+
+
+@get("/{project_id:str}/research/status", sync_to_thread=False)
+def research_status_route(project_id: str, thread_id: Optional[str] = None) -> dict[str, Any]:
+    """Passthrough to ``gd research status [thread_id]`` (JSON snapshot of
+    the active/most-recent loop).
+    """
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    return GrdCliService.research_status(cwd, thread_id)
+
+
 grd_router = Router(
     path="/api/projects",
     route_handlers=[
@@ -1690,6 +1873,10 @@ grd_router = Router(
         project_chat,
         invoke_planning,
         planning_status,
+        # v0.8.0 — one-click team harness setup (REQ-19 / SC1)
+        trigger_harness_setup,
+        harness_setup_status,
+        harness_setup_stream,
         create_session,
         list_sessions,
         session_output,
@@ -1710,5 +1897,11 @@ grd_router = Router(
         create_team_session,
         monitor_session,
         list_session_goal_iterations,
+        # v0.8.0 — REQ-14 autoresearch loop
+        research_start,
+        research_resume,
+        research_list_threads,
+        research_read_thread,
+        research_status_route,
     ],
 )

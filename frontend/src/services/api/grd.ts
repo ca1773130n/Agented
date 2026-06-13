@@ -240,6 +240,14 @@ export interface SessionMonitorData {
   tasks?: Array<{ id: string; subject: string; status: string; owner?: string }>;
 }
 
+// v0.8.0 — one-click team harness setup step row (REQ-19 / SC1).
+export interface GrdHarnessSetupStep {
+  step_key: string;
+  status: string; // 'pending' | 'ok' | 'skipped' | 'failed'
+  detail?: string | null;
+  fingerprint?: string | null;
+}
+
 export const grdApi = {
   getSyncStatus: (projectId: string) =>
     apiFetch<GrdSyncStatus>(`/api/projects/${projectId}/sync`),
@@ -524,4 +532,22 @@ export const grdApi = {
     apiFetch<{ grd_init_status: string; active_session_id: string | null }>(
       `/api/projects/${projectId}/planning/status`,
     ),
+
+  // v0.8.0 — one-click team harness setup (REQ-19 / SC1).
+  // Trigger flips status → 'running' and runs the six-step setup off-thread.
+  triggerHarnessSetup: (projectId: string) =>
+    apiFetch<{ harness_setup_status: string }>(
+      `/api/projects/${projectId}/harness-setup`,
+      { method: 'POST' },
+    ),
+
+  getHarnessSetupStatus: (projectId: string) =>
+    apiFetch<{ harness_setup_status: string; steps: GrdHarnessSetupStep[] }>(
+      `/api/projects/${projectId}/harness-setup/status`,
+    ),
+
+  // SSE stream of step progress. Returns an EventSource directly (NOT a
+  // Promise); caller manages lifecycle and listens for 'step'/'done' events.
+  streamHarnessSetup: (projectId: string): AuthenticatedEventSource =>
+    createAuthenticatedEventSource(`/api/projects/${projectId}/harness-setup/stream`),
 };

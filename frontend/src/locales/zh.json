@@ -1038,80 +1038,103 @@
   },
   "planningCommandBar": {
     "title": "规划命令",
+    "deprecated": "已弃用",
     "groups": {
-      "projectSetup": "项目设置",
-      "phaseManagement": "阶段管理",
-      "researchAnalysis": "研究与分析",
-      "requirements": "需求"
+      "plan": "规划",
+      "execute": "执行",
+      "verify": "验证",
+      "research": "研究",
+      "harness": "框架",
+      "misc": "其他"
     },
     "cmd": {
-      "mapCodebase": {
-        "label": "梳理代码库",
-        "desc": "分析项目结构"
+      "planPhase": {
+        "label": "规划阶段",
+        "desc": "为阶段生成执行计划"
       },
-      "newMilestone": {
-        "label": "新建里程碑",
-        "desc": "创建新里程碑"
+      "planGaps": {
+        "label": "规划缺口",
+        "desc": "识别并规划里程碑缺口"
       },
-      "longTermRoadmap": {
-        "label": "长期路线图",
-        "desc": "生成战略路线图"
-      },
-      "addPhase": {
-        "label": "添加阶段",
-        "desc": "向里程碑添加阶段"
-      },
-      "removePhase": {
-        "label": "移除阶段",
-        "desc": "移除一个阶段"
-      },
-      "insertPhase": {
-        "label": "插入阶段",
-        "desc": "在指定位置插入阶段"
+      "autoplan": {
+        "label": "自动规划",
+        "desc": "自动规划所有剩余阶段"
       },
       "discussPhase": {
         "label": "讨论阶段",
-        "desc": "AI 辅助的阶段讨论"
+        "desc": "AI 辅助阶段讨论"
       },
-      "planPhase": {
-        "label": "规划阶段",
-        "desc": "生成执行计划"
+      "executePhase": {
+        "label": "执行阶段",
+        "desc": "将阶段执行至完成"
       },
-      "survey": {
-        "label": "调研",
-        "desc": "调研研究领域"
+      "autopilot": {
+        "label": "自动驾驶",
+        "desc": "自主规划与执行"
       },
-      "deepDive": {
-        "label": "深入分析",
-        "desc": "深入研究主题"
+      "quick": {
+        "label": "快速",
+        "desc": "运行快速单次任务"
       },
-      "feasibility": {
-        "label": "可行性",
-        "desc": "评估可行性"
+      "verifyPhase": {
+        "label": "验证阶段",
+        "desc": "验证已完成的阶段"
+      },
+      "verifyWork": {
+        "label": "验证工作",
+        "desc": "对照计划验证近期工作"
       },
       "assessBaseline": {
         "label": "评估基线",
         "desc": "建立性能基线"
       },
+      "research": {
+        "label": "研究",
+        "desc": "启动研究线程"
+      },
+      "survey": {
+        "label": "综述",
+        "desc": "调研研究全景"
+      },
+      "deepDive": {
+        "label": "深入研究",
+        "desc": "深入剖析主题"
+      },
       "compareMethods": {
         "label": "比较方法",
-        "desc": "比较各种方法"
+        "desc": "比较候选方案"
       },
-      "listAssumptions": {
-        "label": "列出假设",
-        "desc": "梳理阶段假设"
+      "feasibility": {
+        "label": "可行性",
+        "desc": "评估可行性"
       },
-      "requirement": {
-        "label": "需求",
-        "desc": "定义需求"
+      "harness": {
+        "label": "框架",
+        "desc": "打开生命框架面板"
       },
-      "planGaps": {
-        "label": "规划差距",
-        "desc": "识别里程碑差距"
+      "evolve": {
+        "label": "演进",
+        "desc": "运行框架自我改进 (已弃用)"
       },
-      "completeMilestone": {
-        "label": "完成里程碑",
-        "desc": "将里程碑标记为完成"
+      "settings": {
+        "label": "设置",
+        "desc": "配置 GRD 设置"
+      },
+      "sync": {
+        "label": "同步",
+        "desc": "从磁盘同步规划状态"
+      },
+      "mapCodebase": {
+        "label": "映射代码库",
+        "desc": "分析项目结构"
+      },
+      "progress": {
+        "label": "进度",
+        "desc": "显示规划进度"
+      },
+      "help": {
+        "label": "帮助",
+        "desc": "显示可用的 GRD 命令"
       }
     }
   },
@@ -9023,5 +9046,179 @@
     "statusRunning": "运行中",
     "statusComplete": "完成",
     "statusFailed": "失败"
+  },
+  "surface": {
+    "research": {
+      "title": "研究",
+      "loadError": "加载研究数据失败",
+      "loadThreadError": "加载研究线程失败",
+      "intake": {
+        "prompt": "研究问题",
+        "placeholder": "您想调查什么？",
+        "submit": "开始研究",
+        "maxIterations": "最大迭代次数",
+        "noGates": "跳过关卡"
+      },
+      "threads": {
+        "title": "线程",
+        "empty": "暂无研究线程。",
+        "question": "问题",
+        "status": "状态",
+        "iteration": "迭代"
+      },
+      "status": {
+        "running": "运行中",
+        "complete": "完成",
+        "completed": "已完成",
+        "error": "错误",
+        "idle": "空闲"
+      },
+      "ledger": {
+        "title": "假设账本",
+        "empty": "尚未记录假设。"
+      },
+      "report": {
+        "title": "报告",
+        "empty": "暂无可用报告。"
+      },
+      "portfolio": {
+        "title": "组合",
+        "total": "总计",
+        "running": "运行中",
+        "completed": "已完成",
+        "iterations": "迭代"
+      }
+    },
+    "harness": {
+      "title": "生命线束",
+      "subtitle": "自治、演化轮次、共享熔炉和 GRD 面板",
+      "autonomy": {
+        "title": "自治策略",
+        "unconfigured": "未配置",
+        "loading": "正在加载策略…",
+        "autoPlan": "自动规划阶段",
+        "autoExecute": "自动执行计划",
+        "autoVerify": "自动验证阶段",
+        "maxRounds": "最大演化轮次",
+        "save": "保存策略",
+        "saving": "正在保存…",
+        "saved": "已保存自治策略",
+        "saveFailed": "保存自治策略失败"
+      },
+      "rounds": {
+        "title": "演化轮次",
+        "detailTitle": "轮次详情",
+        "loading": "正在加载轮次…",
+        "empty": "尚无演化轮次",
+        "unknownStatus": "未知",
+        "selectPrompt": "选择一个轮次以查看其详情和影响",
+        "idLabel": "轮次",
+        "statusLabel": "状态",
+        "approve": "批准",
+        "abort": "中止",
+        "revert": "回退",
+        "revertWarning": "回退是破坏性的：它会撤销此轮次已应用的更改（可通过 git 恢复）。请确认以继续。",
+        "revertConfirm": "确认回退",
+        "revertCancel": "取消",
+        "approved": "已批准轮次",
+        "aborted": "已中止轮次",
+        "reverted": "已回退轮次",
+        "actionFailed": "轮次操作失败"
+      },
+      "forge": {
+        "title": "共享熔炉",
+        "loading": "正在加载共享绑定…",
+        "empty": "没有可用的共享熔炉绑定",
+        "adopt": "采用",
+        "adopting": "正在采用…",
+        "adopted": "已采用共享绑定",
+        "adoptFailed": "采用共享绑定失败"
+      },
+      "panels": {
+        "health": {
+          "tab": "健康",
+          "title": "项目健康",
+          "refresh": "刷新",
+          "empty": "无健康数据"
+        },
+        "think": {
+          "tab": "思考",
+          "title": "思考简报",
+          "run": "生成简报",
+          "empty": "尚无简报"
+        },
+        "deadEnds": {
+          "tab": "死胡同",
+          "title": "死胡同",
+          "empty": "未记录死胡同",
+          "approach": "方法",
+          "reason": "原因",
+          "phase": "阶段",
+          "add": "添加死胡同",
+          "promote": "提升阶段死胡同",
+          "promotePlaceholder": "阶段 ID"
+        },
+        "genome": {
+          "tab": "基因组",
+          "title": "项目基因组",
+          "snapshot": "创建快照",
+          "latest": "最新快照",
+          "history": "快照历史",
+          "empty": "无基因组数据"
+        },
+        "verify": {
+          "tab": "验证",
+          "title": "机械验证",
+          "run": "运行机械验证",
+          "phasePlaceholder": "阶段 ID",
+          "empty": "尚无验证运行"
+        },
+        "reflections": {
+          "tab": "反思",
+          "title": "反思与裁定",
+          "phasePlaceholder": "阶段 ID",
+          "load": "加载反思",
+          "verdicts": "裁定计数",
+          "empty": "未加载反思"
+        },
+        "evolve": {
+          "tab": "演化",
+          "title": "演化运行",
+          "start": "启动演化运行",
+          "stop": "停止",
+          "refresh": "刷新运行",
+          "empty": "无演化运行",
+          "detail": "运行详情"
+        }
+      },
+      "tablistLabel": "线束面板",
+      "loadError": "加载线束数据失败"
+    }
+  },
+  "harnessSetup": {
+    "setupButton": "设置团队工具链",
+    "retry": "重试工具链设置",
+    "chipRunning": "设置中...",
+    "chipReady": "工具链就绪",
+    "chipFailed": "设置失败",
+    "panelTitle": "设置进度",
+    "toastReady": "团队工具链设置完成。",
+    "toastFailed": "团队工具链设置失败。",
+    "step": {
+      "grd_init": "初始化 GRD",
+      "team_topology": "团队拓扑",
+      "bundle_binding": "捆绑绑定",
+      "tesserae_enable": "启用 Tesserae",
+      "default_policies": "默认策略",
+      "materialize_compile": "物化与编译",
+      "__done__": "完成"
+    },
+    "stepStatus": {
+      "pending": "待处理",
+      "ok": "完成",
+      "skipped": "已跳过",
+      "failed": "失败",
+      "running": "运行中"
+    }
   }
 }

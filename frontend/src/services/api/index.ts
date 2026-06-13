@@ -64,6 +64,24 @@ export type { SuperAgentActivityStatus } from './super-agents';
 export { workflowApi, workflowExecutionApi } from './workflows';
 export { sketchApi } from './sketches';
 export { grdApi } from './grd';
+export { researchApi } from './research';
+export type {
+  ResearchThread,
+  ResearchThreadBundle,
+  StartResearchResponse,
+  ResearchThreadsResponse,
+  StartResearchOptions,
+} from './research';
+export { grdHarnessApi } from './grdHarness';
+export type {
+  GrdHealthResult,
+  DeadEndEntry,
+  GenomeSnapshot,
+  EvolveRun,
+  AutonomyConfigResponse,
+  HarnessRound,
+  SharedForgeBinding,
+} from './grdHarness';
 export { mcpServerApi } from './mcp-servers';
 export { replayApi } from './replay';
 export { collaborativeApi } from './collaborative';
@@ -442,6 +460,7 @@ export type {
   GrdPlan,
   GrdSyncResult,
   GrdSyncStatus,
+  GrdHarnessSetupStep,
 } from './grd';
 
 // Onboarding automation API

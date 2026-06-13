@@ -1038,80 +1038,103 @@
   },
   "planningCommandBar": {
     "title": "プランニングコマンド",
+    "deprecated": "非推奨",
     "groups": {
-      "projectSetup": "プロジェクト設定",
-      "phaseManagement": "フェーズ管理",
-      "researchAnalysis": "リサーチと分析",
-      "requirements": "要件"
+      "plan": "プラン",
+      "execute": "実行",
+      "verify": "検証",
+      "research": "リサーチ",
+      "harness": "ハーネス",
+      "misc": "その他"
     },
     "cmd": {
-      "mapCodebase": {
-        "label": "コードベースマップ",
-        "desc": "プロジェクト構造を分析"
+      "planPhase": {
+        "label": "フェーズ計画",
+        "desc": "フェーズの実行計画を生成"
       },
-      "newMilestone": {
-        "label": "新規マイルストーン",
-        "desc": "新しいマイルストーンを作成"
+      "planGaps": {
+        "label": "ギャップ計画",
+        "desc": "マイルストーンのギャップを特定し計画"
       },
-      "longTermRoadmap": {
-        "label": "長期ロードマップ",
-        "desc": "戦略ロードマップを生成"
-      },
-      "addPhase": {
-        "label": "フェーズを追加",
-        "desc": "マイルストーンにフェーズを追加"
-      },
-      "removePhase": {
-        "label": "フェーズを削除",
-        "desc": "フェーズを削除"
-      },
-      "insertPhase": {
-        "label": "フェーズを挿入",
-        "desc": "指定位置にフェーズを挿入"
+      "autoplan": {
+        "label": "自動計画",
+        "desc": "残りのフェーズを自動計画"
       },
       "discussPhase": {
-        "label": "フェーズを議論",
-        "desc": "AI支援によるフェーズ議論"
+        "label": "フェーズ討議",
+        "desc": "AI支援フェーズ討議"
       },
-      "planPhase": {
-        "label": "フェーズを計画",
-        "desc": "実行プランを生成"
+      "executePhase": {
+        "label": "フェーズ実行",
+        "desc": "フェーズを完了まで実行"
+      },
+      "autopilot": {
+        "label": "オートパイロット",
+        "desc": "自律的に計画・実行"
+      },
+      "quick": {
+        "label": "クイック",
+        "desc": "素早い単発タスクを実行"
+      },
+      "verifyPhase": {
+        "label": "フェーズ検証",
+        "desc": "完了したフェーズを検証"
+      },
+      "verifyWork": {
+        "label": "作業検証",
+        "desc": "最近の作業を計画と照合検証"
+      },
+      "assessBaseline": {
+        "label": "ベースライン評価",
+        "desc": "性能ベースラインを確立"
+      },
+      "research": {
+        "label": "リサーチ",
+        "desc": "リサーチスレッドを開始"
       },
       "survey": {
         "label": "サーベイ",
-        "desc": "研究動向を調査"
+        "desc": "リサーチ領域を調査"
       },
       "deepDive": {
         "label": "ディープダイブ",
         "desc": "トピックを深掘り"
       },
+      "compareMethods": {
+        "label": "手法比較",
+        "desc": "候補アプローチを比較"
+      },
       "feasibility": {
         "label": "実現可能性",
         "desc": "実現可能性を評価"
       },
-      "assessBaseline": {
-        "label": "ベースライン評価",
-        "desc": "パフォーマンスのベースラインを確立"
+      "harness": {
+        "label": "ハーネス",
+        "desc": "ライフハーネスパネルを開く"
       },
-      "compareMethods": {
-        "label": "手法を比較",
-        "desc": "アプローチを比較"
+      "evolve": {
+        "label": "進化",
+        "desc": "ハーネス自己改善を実行 (非推奨)"
       },
-      "listAssumptions": {
-        "label": "前提を一覧",
-        "desc": "フェーズの前提を洗い出す"
+      "settings": {
+        "label": "設定",
+        "desc": "GRD設定を構成"
       },
-      "requirement": {
-        "label": "要件",
-        "desc": "要件を定義"
+      "sync": {
+        "label": "同期",
+        "desc": "ディスクからプランニング状態を同期"
       },
-      "planGaps": {
-        "label": "ギャップを計画",
-        "desc": "マイルストーンのギャップを特定"
+      "mapCodebase": {
+        "label": "コードベースマップ",
+        "desc": "プロジェクト構造を分析"
       },
-      "completeMilestone": {
-        "label": "マイルストーン完了",
-        "desc": "マイルストーンを完了としてマーク"
+      "progress": {
+        "label": "進捗",
+        "desc": "プランニング進捗を表示"
+      },
+      "help": {
+        "label": "ヘルプ",
+        "desc": "利用可能なGRDコマンドを表示"
       }
     }
   },
@@ -9023,5 +9046,179 @@
     "statusRunning": "実行中",
     "statusComplete": "完了",
     "statusFailed": "失敗"
+  },
+  "surface": {
+    "research": {
+      "title": "リサーチ",
+      "loadError": "リサーチデータの読み込みに失敗しました",
+      "loadThreadError": "リサーチスレッドの読み込みに失敗しました",
+      "intake": {
+        "prompt": "リサーチの質問",
+        "placeholder": "何を調査しますか？",
+        "submit": "リサーチを開始",
+        "maxIterations": "最大反復回数",
+        "noGates": "ゲートをスキップ"
+      },
+      "threads": {
+        "title": "スレッド",
+        "empty": "まだリサーチスレッドがありません。",
+        "question": "質問",
+        "status": "ステータス",
+        "iteration": "反復"
+      },
+      "status": {
+        "running": "実行中",
+        "complete": "完了",
+        "completed": "完了済み",
+        "error": "エラー",
+        "idle": "待機"
+      },
+      "ledger": {
+        "title": "仮説台帳",
+        "empty": "まだ記録された仮説はありません。"
+      },
+      "report": {
+        "title": "レポート",
+        "empty": "まだ利用可能なレポートがありません。"
+      },
+      "portfolio": {
+        "title": "ポートフォリオ",
+        "total": "合計",
+        "running": "実行中",
+        "completed": "完了",
+        "iterations": "反復"
+      }
+    },
+    "harness": {
+      "title": "ライフハーネス",
+      "subtitle": "自律性、進化ラウンド、共有フォージ、GRD パネル",
+      "autonomy": {
+        "title": "自律性ポリシー",
+        "unconfigured": "未設定",
+        "loading": "ポリシーを読み込み中…",
+        "autoPlan": "フェーズを自動計画",
+        "autoExecute": "計画を自動実行",
+        "autoVerify": "フェーズを自動検証",
+        "maxRounds": "最大進化ラウンド",
+        "save": "ポリシーを保存",
+        "saving": "保存中…",
+        "saved": "自律性ポリシーを保存しました",
+        "saveFailed": "自律性ポリシーの保存に失敗しました"
+      },
+      "rounds": {
+        "title": "進化ラウンド",
+        "detailTitle": "ラウンド詳細",
+        "loading": "ラウンドを読み込み中…",
+        "empty": "進化ラウンドはまだありません",
+        "unknownStatus": "不明",
+        "selectPrompt": "詳細と影響を表示するラウンドを選択してください",
+        "idLabel": "ラウンド",
+        "statusLabel": "ステータス",
+        "approve": "承認",
+        "abort": "中止",
+        "revert": "取り消し",
+        "revertWarning": "取り消しは破壊的です。このラウンドの適用済み変更を元に戻します（git で復元可能）。続行するには確認してください。",
+        "revertConfirm": "取り消しを確認",
+        "revertCancel": "キャンセル",
+        "approved": "ラウンドを承認しました",
+        "aborted": "ラウンドを中止しました",
+        "reverted": "ラウンドを取り消しました",
+        "actionFailed": "ラウンド操作に失敗しました"
+      },
+      "forge": {
+        "title": "共有フォージ",
+        "loading": "共有バインディングを読み込み中…",
+        "empty": "利用可能な共有フォージバインディングがありません",
+        "adopt": "採用",
+        "adopting": "採用中…",
+        "adopted": "共有バインディングを採用しました",
+        "adoptFailed": "共有バインディングの採用に失敗しました"
+      },
+      "panels": {
+        "health": {
+          "tab": "ヘルス",
+          "title": "プロジェクトのヘルス",
+          "refresh": "更新",
+          "empty": "ヘルスデータなし"
+        },
+        "think": {
+          "tab": "思考",
+          "title": "思考ブリーフィング",
+          "run": "ブリーフィングを生成",
+          "empty": "まだブリーフィングがありません"
+        },
+        "deadEnds": {
+          "tab": "行き止まり",
+          "title": "行き止まり",
+          "empty": "記録された行き止まりはありません",
+          "approach": "アプローチ",
+          "reason": "理由",
+          "phase": "フェーズ",
+          "add": "行き止まりを追加",
+          "promote": "フェーズの行き止まりを昇格",
+          "promotePlaceholder": "フェーズ ID"
+        },
+        "genome": {
+          "tab": "ゲノム",
+          "title": "プロジェクトゲノム",
+          "snapshot": "スナップショットを取得",
+          "latest": "最新スナップショット",
+          "history": "スナップショット履歴",
+          "empty": "ゲノムデータなし"
+        },
+        "verify": {
+          "tab": "検証",
+          "title": "機械的検証",
+          "run": "機械的検証を実行",
+          "phasePlaceholder": "フェーズ ID",
+          "empty": "まだ検証実行がありません"
+        },
+        "reflections": {
+          "tab": "振り返り",
+          "title": "振り返りと判定",
+          "phasePlaceholder": "フェーズ ID",
+          "load": "振り返りを読み込む",
+          "verdicts": "判定数",
+          "empty": "読み込まれた振り返りがありません"
+        },
+        "evolve": {
+          "tab": "進化",
+          "title": "進化実行",
+          "start": "進化実行を開始",
+          "stop": "停止",
+          "refresh": "実行を更新",
+          "empty": "進化実行なし",
+          "detail": "実行詳細"
+        }
+      },
+      "tablistLabel": "ハーネスパネル",
+      "loadError": "ハーネスデータの読み込みに失敗しました"
+    }
+  },
+  "harnessSetup": {
+    "setupButton": "チームハーネスをセットアップ",
+    "retry": "ハーネスセットアップを再試行",
+    "chipRunning": "セットアップ中...",
+    "chipReady": "ハーネス準備完了",
+    "chipFailed": "セットアップ失敗",
+    "panelTitle": "セットアップの進行状況",
+    "toastReady": "チームハーネスのセットアップが完了しました。",
+    "toastFailed": "チームハーネスのセットアップに失敗しました。",
+    "step": {
+      "grd_init": "GRD を初期化",
+      "team_topology": "チームトポロジー",
+      "bundle_binding": "バンドルバインディング",
+      "tesserae_enable": "Tesserae を有効化",
+      "default_policies": "デフォルトポリシー",
+      "materialize_compile": "マテリアライズとコンパイル",
+      "__done__": "完了"
+    },
+    "stepStatus": {
+      "pending": "保留中",
+      "ok": "完了",
+      "skipped": "スキップ",
+      "failed": "失敗",
+      "running": "実行中"
+    }
   }
 }
