@@ -9,6 +9,8 @@ streams stay on Flask until the streaming wave:
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import threading
 from datetime import datetime
@@ -22,6 +24,7 @@ from litestar.exceptions import (
     HTTPException,
     NotFoundException,
 )
+from litestar.response import Stream
 
 from app.utils.timezone import utcnow as _utcnow
 
@@ -42,8 +45,14 @@ from app.database import (
     update_project,
     update_project_plan,
 )
+from app.db.projects import (
+    get_harness_setup_status,
+    get_harness_setup_steps,
+    set_harness_setup_status,
+)
 from app.services.execution_type_handler import get_handler
 from app.services.grd_cli_service import GrdCliService
+from app.services.team_harness_setup_service import TeamHarnessSetupService
 from app.services.grd_planning_service import GrdPlanningService
 from app.services.grd_sync_service import GrdSyncService
 from app.services.project_session_manager import ProjectSessionManager
@@ -734,6 +743,83 @@ def planning_status(project_id: str) -> dict[str, Any]:
         "grd_init_status": GrdPlanningService.get_init_status(project_id),
         "active_session_id": GrdPlanningService.get_active_planning_session(project_id),
     }
+
+
+# ---------------------------------------------------------------------------
+# Team harness setup (one-click) — REQ-19 / SC1
+# ---------------------------------------------------------------------------
+
+
+@post("/{project_id:str}/harness-setup", status_code=202, sync_to_thread=False)
+def trigger_harness_setup(project_id: str) -> dict[str, Any]:
+    """Flip status to 'running' and run the six-step setup off-thread.
+
+    Mirrors the grd-chat thread-spawn shape (grd_routes.py:709). The status
+    flip here makes a follow-up GET .../status report 'running' immediately,
+    even before the background thread sets it itself.
+    """
+    _ensure_project(project_id)
+    set_harness_setup_status(project_id, "running")
+    threading.Thread(
+        target=TeamHarnessSetupService.setup,
+        args=(project_id,),
+        daemon=True,
+    ).start()
+    return {"harness_setup_status": "running"}
+
+
+@get("/{project_id:str}/harness-setup/status", sync_to_thread=False)
+def harness_setup_status(project_id: str) -> dict[str, Any]:
+    _ensure_project(project_id)
+    return {
+        "harness_setup_status": get_harness_setup_status(project_id),
+        "steps": get_harness_setup_steps(project_id),
+    }
+
+
+@get(
+    "/{project_id:str}/harness-setup/stream",
+    media_type="text/event-stream",
+    sync_to_thread=False,
+)
+async def harness_setup_stream(project_id: str) -> Stream:
+    """SSE stream of harness-setup step progress.
+
+    Polls the DB every 1s, emits an ``event: step`` frame per changed step row
+    (keyed by step_key, diffed on status+detail), and a terminal
+    ``event: done`` frame once the overall status reaches ready/failed.
+    Mirrors the trace SSE Stream pattern (agents_and_tracing.py:228).
+    """
+    _ensure_project(project_id)
+
+    async def event_generator():
+        seen: dict[str, str] = {}
+        deadline = asyncio.get_event_loop().time() + 600.0  # 10 min
+        while True:
+            steps = get_harness_setup_steps(project_id)
+            for s in steps:
+                key = s["step_key"]
+                sig = f"{s.get('status')}|{s.get('detail')}"
+                if seen.get(key) != sig:
+                    seen[key] = sig
+                    payload = {
+                        "step": key,
+                        "status": s.get("status"),
+                        "detail": s.get("detail"),
+                    }
+                    yield f"event: step\ndata: {json.dumps(payload, default=str)}\n\n"
+            status = get_harness_setup_status(project_id)
+            if status in ("ready", "failed"):
+                yield (
+                    f"event: done\ndata: {json.dumps({'step': '__done__', 'status': status})}\n\n"
+                )
+                return
+            if asyncio.get_event_loop().time() > deadline:
+                yield f"event: timeout\ndata: {json.dumps({'reason': 'max_duration'})}\n\n"
+                return
+            await asyncio.sleep(1.0)
+
+    return Stream(event_generator(), media_type="text/event-stream")
 
 
 # ---------------------------------------------------------------------------
@@ -1781,6 +1867,10 @@ grd_router = Router(
         project_chat,
         invoke_planning,
         planning_status,
+        # v0.8.0 — one-click team harness setup (REQ-19 / SC1)
+        trigger_harness_setup,
+        harness_setup_status,
+        harness_setup_stream,
         create_session,
         list_sessions,
         session_output,
