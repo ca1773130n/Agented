@@ -56,6 +56,11 @@ rebind via TeamHarnessSetupService._STEP_FUNCS[<key>]; no destructive deletes.
 Prior: 21-01 (migration 159 + helpers, dd4faf9863/680aa084d3/c0132249a7).
 See prior phase 17 record below.
 
+Prior phase 20 (now on main, rebased under phase 21): GRD frontend wiring —
+plans 20-01..06 COMPLETE (REQ-14..18 / SC-6). Autoresearch page, life-harness
+completion UI (16 unwired routes), full `/grd:` command bar manifest, 4-locale
+i18n parity + house-gate certification. See ROADMAP.md Progress table.
+
 Prior activity: 2026-06-13 — Completed 17-06-PLAN.md (FINAL plan of phase 17).
 Shipped the forge-creator default bundle (5 global-scope agentskills.io creator
 skills — skill/rule/hook/command/subagent-creator — seeded idempotently at startup,
