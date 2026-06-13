@@ -34,7 +34,7 @@ gates (`just build`, backend pytest watchdog, frontend no-new-failures).
 **Phase Types:** survey | implement | evaluate | integrate
 
 - [x] **Phase 17: Forge creation surface** - `subagent` kind, atomic create+bind+materialize, cross-kind bundles, `forge-creator` bundle, session-completion auto-import `implement` ✓ 2026-06-13
-- [ ] **Phase 18: Sketch → primitive routing** - classification `action` dimension, `primitive_generator` target, PrimitiveForgeService create + ACE-style improve, outcome card with undo `implement`
+- [x] **Phase 18: Sketch → primitive routing** - classification `action` dimension, `primitive_generator` target, PrimitiveForgeService create + ACE-style improve, outcome card with undo `implement` (completed 2026-06-13)
 - [x] **Phase 19: GRD default driver** - `resolve_execution_driver()` 3-way (default grd), GrdChatSessionHandler PSM→chat-SSE bridge, cwd/backend fixes, driver selector UI `implement` ✓ 2026-06-13
 - [ ] **Phase 20: GRD frontend wiring** - autoresearch page, life-harness completion UI (16 unwired routes), full `/grd:` command bar, 4-locale i18n `implement`
 - [ ] **Phase 21: One-click team harness setup** - ProjectDashboard button + idempotent TeamHarnessSetupService (GRD init, topology, bundles, tesserae, policies, 4-harness materialization) `integrate`
@@ -73,10 +73,13 @@ Plans:
   4. Improve path fuzzy-resolves the referenced primitive over bound primitives, applies an ACE-style old→new delta patch, and re-materializes; an ambiguous reference yields sketch status `collaborating` with a clarification question (improve + ambiguity tests; `SketchStatus` enum includes `collaborating`).
   5. The sketch panel renders a "primitive created/updated" outcome card (kind, name, diff, bound-project list, one-click undo = unbind+delete or revert-update) (component test).
   6. Dogfood: ≥3 real sketches routed through the live pipeline before sign-off. House gates pass.
-**Plans**: TBD
+**Plans**: 4 (planned 2026-06-13)
 
 Plans:
-- [ ] 18-NN: TBD (set by /grd:plan-phase 18)
+- [ ] 18-01 (wave 1): Backend foundation — `SketchStatus.COLLABORATING` + `action` classification dimension (keyword `ACTION_KEYWORDS` + LLM prompt/schema, 4-backend litellm model-string map)
+- [ ] 18-02 (wave 2): `route()` `primitive_generator` precedence branch (conf ≥ 0.6, target_id=kind, ahead of SA/team)
+- [ ] 18-03 (wave 3): `PrimitiveForgeService` (create via atomic API + skill→add_user_skill; improve via difflib fuzzy-resolve + old→new delta; ambiguity→collaborating) + `route_sketch` dispatch + undo endpoint
+- [ ] 18-04 (wave 4): Sketch panel primitive outcome card + undo + `SketchPrimitiveOutcome` type + `sketchPrimitiveOutcome.*` i18n (4 locales) + dogfood checkpoint
 
 ### Phase 19: GRD default driver
 **Goal**: GRD is the default execution driver for superagent chat — a 3-way `resolve_execution_driver()` (cliproxy | cli_agent | grd, default grd) is honored at the single streaming funnel, task-shaped turns spawn GRD PSM sessions bridged into the chat SSE protocol while conversational turns stay on cliproxy, delegation/project_chat cwd-and-backend bugs are fixed, and the driver is operator-selectable.
@@ -183,8 +186,8 @@ Plans:
 | Phase | Name | Requirements | Depends on | Verification | Status |
 |-------|------|--------------|------------|--------------|--------|
 | 17 | Forge creation surface | REQ-01..05 | — | proxy | Complete (6/6 ✓ 2026-06-13) |
-| 18 | Sketch → primitive routing | REQ-06..09 | 17 | proxy | Not started |
-| 19 | GRD default driver | REQ-10..13 | 17 | proxy | Complete ✓ 2026-06-13 |
+| 18 | Sketch → primitive routing | REQ-06..09 | 17 | proxy | Complete (2026-06-13) |
+| 19 | GRD default driver | REQ-10..13 | 17 | proxy | Complete (2026-06-13) |
 | 20 | GRD frontend wiring | REQ-14..18 | 19 | proxy | Not started |
 | 21 | One-click team harness setup | REQ-19..21 | 17, 19 | full | Not started |
 | 22 | Repeated-request auto-skill | REQ-22..26 | 17 | proxy | Complete (2026-06-13) |
