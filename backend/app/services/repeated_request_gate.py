@@ -35,7 +35,9 @@ import json
 import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal, Optional
+from typing import Literal, Optional
+
+from app.models.repeated_request_signal import RepeatedRequestSignal
 
 Route = Literal["auto", "propose", "reject"]
 
@@ -156,7 +158,7 @@ def _auto_apply_policy(project_id: str | None) -> bool:
 
 
 def convert_signal(
-    signal: Any,
+    signal: RepeatedRequestSignal,
     *,
     skill_name: str,
     skill_description: str,
@@ -180,15 +182,14 @@ def convert_signal(
     from app.services import harness_evolver as ev
     from app.utils.plugin_format import content_hash
 
-    project_id = getattr(signal, "project_id", None)
     decision = evaluate_signal(
-        occurrence_count=getattr(signal, "occurrence_count", 0),
-        verified_success_count=getattr(signal, "verified_success_count", 0),
+        occurrence_count=signal.occurrence_count,
+        verified_success_count=signal.verified_success_count,
         scan_safe=scan_safe,
         dedup_existing=dedup_existing,
         provenance_ok=provenance_ok,
-        policy_enabled=_auto_apply_policy(project_id),
-        first_seen_at=getattr(signal, "first_seen_at"),
+        policy_enabled=_auto_apply_policy(signal.project_id),
+        first_seen_at=signal.first_seen_at,
         now=now,
     )
 
@@ -207,26 +208,26 @@ def convert_signal(
 
     # Idempotency: a signal already converted must not create a second skill or
     # duplicate the discovered_procedure takeaway when the gate is re-driven.
-    if getattr(signal, "skill_created", 0):
+    if signal.skill_created:
         result["reasons"].append("already-created")
         return result
 
-    example_sessions = getattr(signal, "example_session_ids", []) or []
+    example_sessions = signal.example_session_ids
     source_session_id = example_sessions[-1] if example_sessions else None
 
     takeaway_ids = harness_takeaways.insert_many(
         [
             {
-                "session_kind": getattr(signal, "session_kind", "project"),
+                "session_kind": signal.session_kind,
                 "session_id": source_session_id or "repeated-request-gate",
-                "project_id": project_id,
+                "project_id": signal.project_id,
                 "kind": "discovered_procedure",
                 "content": skill_description,
                 "confidence": _CONF_AUTO,
                 "evidence": {
-                    "request_hash": getattr(signal, "request_hash", None),
-                    "occurrence_count": getattr(signal, "occurrence_count", 0),
-                    "verified_success_count": getattr(signal, "verified_success_count", 0),
+                    "request_hash": signal.request_hash,
+                    "occurrence_count": signal.occurrence_count,
+                    "verified_success_count": signal.verified_success_count,
                 },
                 "suggested_target": "skill",
                 "suggested_payload": {"name": skill_name},
@@ -244,7 +245,7 @@ def convert_signal(
         written_name = dedup_existing.get("skill_name") or skill_name
     else:
         asset_id = ev._create_dispatch["skill"](
-            name=skill_name, payload=payload, project_id=project_id
+            name=skill_name, payload=payload, project_id=signal.project_id
         )
         written_name = skill_name
     result["asset_id"] = asset_id
@@ -259,6 +260,6 @@ def convert_signal(
             origin_hash=content_hash(ev._render_skill_md(written_name, payload)),
             source_session_id=source_session_id,
         )
-    mark_skill_created(getattr(signal, "request_hash"))
+    mark_skill_created(signal.request_hash)
 
     return result

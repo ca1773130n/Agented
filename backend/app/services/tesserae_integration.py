@@ -40,18 +40,18 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
 
 _TESSERAE_CMD = shutil.which("tesserae") or "tesserae"
 _TESSERAE_BATCH_MAX_SESSIONS = 500
-_TESSERAE_IMPORT_TIMEOUT = 60      # sessions import — fast
-_TESSERAE_INIT_TIMEOUT = 30        # init — instant
-_TESSERAE_INGEST_TIMEOUT = 180     # ingest — walks markdown files
-_TESSERAE_COMPILE_TIMEOUT = 600    # compile — extractor over all sources (5-10 min)
-_TESSERAE_BUILD_SITE_TIMEOUT = 300 # build-site — static gen
+_TESSERAE_IMPORT_TIMEOUT = 60  # sessions import — fast
+_TESSERAE_INIT_TIMEOUT = 30  # init — instant
+_TESSERAE_INGEST_TIMEOUT = 180  # ingest — walks markdown files
+_TESSERAE_COMPILE_TIMEOUT = 600  # compile — extractor over all sources (5-10 min)
+_TESSERAE_BUILD_SITE_TIMEOUT = 300  # build-site — static gen
 _TESSERAE_DEFAULT_INGEST_PATHS = (
     "README.md",
     "CLAUDE.md",
@@ -71,6 +71,7 @@ _TESSERAE_AUTO_COMPILE_MIN_INTERVAL_SECONDS_DEFAULT = 60 * 60  # 1 hour
 # ---------------------------------------------------------------------------
 # Project linkage
 # ---------------------------------------------------------------------------
+
 
 def get_tesserae_root(project_id: str) -> Optional[Path]:
     """Return the absolute Tesserae workspace path for a project, or
@@ -93,7 +94,8 @@ def get_tesserae_root(project_id: str) -> Optional[Path]:
     except Exception:
         logger.warning(
             "tesserae: project lookup failed for %s",
-            project_id, exc_info=True,
+            project_id,
+            exc_info=True,
         )
         return None
 
@@ -121,7 +123,8 @@ def set_tesserae_root(project_id: str, root: Path) -> None:
     except Exception:
         logger.warning(
             "tesserae: MCP auto-bind failed for %s",
-            project_id, exc_info=True,
+            project_id,
+            exc_info=True,
         )
 
 
@@ -130,25 +133,29 @@ def unset_tesserae_root_bindings(project_id: str) -> None:
     Tesserae. The mcp_server row itself stays for history; we just
     flip the binding's enabled flag."""
     try:
-        from app.db.project_forge_bindings import list_bindings
         from app.db.connection import get_connection
+        from app.db.project_forge_bindings import list_bindings
 
-        bindings = [b for b in list_bindings(project_id, enabled_only=False)
-                    if b.get("kind") == "mcp_server"]
+        bindings = [
+            b
+            for b in list_bindings(project_id, enabled_only=False)
+            if b.get("kind") == "mcp_server"
+        ]
         for b in bindings:
             if str(b.get("asset_id", "")).startswith(
                 _TESSERAE_MCP_SERVER_NAME_PREFIX
             ) or _is_tesserae_binding(b):
                 with get_connection() as conn:
                     conn.execute(
-                        "UPDATE project_forge_bindings SET enabled = 0 "
-                        "WHERE id = ?", (b["id"],),
+                        "UPDATE project_forge_bindings SET enabled = 0 WHERE id = ?",
+                        (b["id"],),
                     )
                     conn.commit()
     except Exception:
         logger.warning(
             "tesserae: unset MCP bindings failed for %s",
-            project_id, exc_info=True,
+            project_id,
+            exc_info=True,
         )
 
 
@@ -202,18 +209,16 @@ def _ensure_tesserae_mcp_binding(project_id: str, root: Path) -> Optional[str]:
     # Find or create the mcp_server row.
     with get_connection() as conn:
         existing = conn.execute(
-            "SELECT id FROM mcp_servers WHERE name = ?", (name,),
+            "SELECT id FROM mcp_servers WHERE name = ?",
+            (name,),
         ).fetchone()
     if existing:
         server_id = existing["id"]
         # Re-write the args in case the path changed (e.g. project moved).
         with get_connection() as conn:
             conn.execute(
-                "UPDATE mcp_servers SET command = ?, args = ?, "
-                "server_type = 'stdio' WHERE id = ?",
-                (_TESSERAE_MCP_COMMAND,
-                 json.dumps(["--graph", graph_path]),
-                 server_id),
+                "UPDATE mcp_servers SET command = ?, args = ?, server_type = 'stdio' WHERE id = ?",
+                (_TESSERAE_MCP_COMMAND, json.dumps(["--graph", graph_path]), server_id),
             )
             conn.commit()
     else:
@@ -234,7 +239,8 @@ def _ensure_tesserae_mcp_binding(project_id: str, root: Path) -> Optional[str]:
         )
         if not server_id:
             logger.warning(
-                "tesserae: create_mcp_server returned None for %s", name,
+                "tesserae: create_mcp_server returned None for %s",
+                name,
             )
             return None
         # Verify
@@ -242,8 +248,9 @@ def _ensure_tesserae_mcp_binding(project_id: str, root: Path) -> Optional[str]:
             return None
 
     # Add the binding (idempotent — bumps position + re-enables).
-    bindings = [b for b in list_bindings(project_id, enabled_only=False)
-                if b.get("kind") == "mcp_server"]
+    bindings = [
+        b for b in list_bindings(project_id, enabled_only=False) if b.get("kind") == "mcp_server"
+    ]
     already = next(
         (b for b in bindings if str(b.get("asset_id")) == str(server_id)),
         None,
@@ -261,7 +268,8 @@ def _ensure_tesserae_mcp_binding(project_id: str, root: Path) -> Optional[str]:
     add_binding(project_id, "mcp_server", str(server_id))
     logger.info(
         "tesserae: auto-bound MCP server %s to project %s",
-        name, project_id,
+        name,
+        project_id,
     )
     return server_id
 
@@ -270,44 +278,62 @@ def _ensure_tesserae_mcp_binding(project_id: str, root: Path) -> Optional[str]:
 # Session normalization — Agented row → Tesserae HarnessSession dict
 # ---------------------------------------------------------------------------
 
-def _normalize_super_agent_session(row: dict) -> dict[str, Any]:
-    """Map a ``super_agent_sessions`` row to Tesserae's HarnessSession
-    shape. ``conversation_log`` may be a JSON array of role/content
-    entries; we extract a redacted preview + counts but don't include
-    the full transcript in the import (size + redaction concerns)."""
-    log_raw = row.get("conversation_log") or "[]"
-    try:
-        parsed = json.loads(log_raw)
-    except (TypeError, ValueError):
-        parsed = []
-    if not isinstance(parsed, list):
-        parsed = []
 
-    message_count = len(parsed)
-    preview_chunks: list[str] = []
-    for entry in parsed[:3]:
-        if isinstance(entry, dict):
-            content = entry.get("content")
-            if isinstance(content, str):
-                preview_chunks.append(content[:300])
-    preview = "\n---\n".join(preview_chunks)[:1200]
-
-    return {
+def _session_record(**fields: Any) -> dict[str, Any]:
+    """HarnessSession dict with empty defaults; ``fields`` override them."""
+    record: dict[str, Any] = {
         "harness": "claude",
-        "agent_label": row.get("super_agent_id") or "super_agent",
-        "started_at": row.get("started_at") or "",
-        "ended_at": row.get("ended_at") or "",
-        "message_count": message_count,
+        "agent_label": "",
+        "started_at": "",
+        "ended_at": "",
+        "message_count": 0,
         "tool_call_count": 0,
         "tools_used": [],
         "files_touched": [],
         "commands_run": [],
         "decisions": [],
         "errors": [],
-        "redacted_preview": preview,
-        "title": row.get("name") or "",
-        "summary": (preview[:240] if preview else ""),
+        "redacted_preview": "",
+        "title": "",
+        "summary": "",
     }
+    record.update(fields)
+    return record
+
+
+def _conversation_preview(log_raw: Any) -> tuple[int, str]:
+    """Parse a JSON role/content conversation log into
+    ``(message_count, redacted_preview)``. The preview covers the first 3
+    entries only — the full transcript stays out of the import (size +
+    redaction concerns)."""
+    try:
+        parsed = json.loads(log_raw or "[]")
+    except (TypeError, ValueError):
+        parsed = []
+    if not isinstance(parsed, list):
+        parsed = []
+    chunks = [
+        entry["content"][:300]
+        for entry in parsed[:3]
+        if isinstance(entry, dict) and isinstance(entry.get("content"), str)
+    ]
+    return len(parsed), "\n---\n".join(chunks)[:1200]
+
+
+def _normalize_super_agent_session(row: dict) -> dict[str, Any]:
+    """Map a ``super_agent_sessions`` row to Tesserae's HarnessSession
+    shape. ``conversation_log`` may be a JSON array of role/content
+    entries."""
+    message_count, preview = _conversation_preview(row.get("conversation_log"))
+    return _session_record(
+        agent_label=row.get("super_agent_id") or "super_agent",
+        started_at=row.get("started_at") or "",
+        ended_at=row.get("ended_at") or "",
+        message_count=message_count,
+        redacted_preview=preview,
+        title=row.get("name") or "",
+        summary=preview[:240],
+    )
 
 
 def _normalize_trigger_execution(row: dict) -> dict[str, Any]:
@@ -319,6 +345,7 @@ def _normalize_trigger_execution(row: dict) -> dict[str, Any]:
     if log_raw:
         try:
             from app.services.harness_failure_annotator import _to_claude_jsonl
+
             bridged = _to_claude_jsonl(log_raw)
         except Exception:
             bridged = log_raw
@@ -345,62 +372,33 @@ def _normalize_trigger_execution(row: dict) -> dict[str, Any]:
                         if isinstance(fp, str):
                             files_touched.add(fp)
 
-    return {
-        "harness": row.get("backend_type") or "claude",
-        "agent_label": row.get("trigger_id") or row.get("trigger_type") or "trigger",
-        "started_at": row.get("started_at") or "",
-        "ended_at": row.get("completed_at") or "",
-        "message_count": 0,
-        "tool_call_count": len(tools_used),
-        "tools_used": sorted(tools_used),
-        "files_touched": sorted(files_touched),
-        "commands_run": [],
-        "decisions": [],
-        "errors": [],
-        "redacted_preview": (log_raw[:1200] if log_raw else ""),
-        "title": row.get("execution_id") or "",
-        "summary": "",
-    }
+    return _session_record(
+        harness=row.get("backend_type") or "claude",
+        agent_label=row.get("trigger_id") or row.get("trigger_type") or "trigger",
+        started_at=row.get("started_at") or "",
+        ended_at=row.get("completed_at") or "",
+        tool_call_count=len(tools_used),
+        tools_used=sorted(tools_used),
+        files_touched=sorted(files_touched),
+        redacted_preview=log_raw[:1200] if log_raw else "",
+        title=row.get("execution_id") or "",
+    )
 
 
 def _normalize_project_session(row: dict) -> dict[str, Any]:
     """Map a ``project_sessions`` row to HarnessSession shape. ``log_json``
     may be a JSON array of role/content entries (same shape as
     super_agent_sessions.conversation_log)."""
-    log_raw = row.get("log_json") or "[]"
-    try:
-        parsed = json.loads(log_raw)
-    except (TypeError, ValueError):
-        parsed = []
-    if not isinstance(parsed, list):
-        parsed = []
-
-    message_count = len(parsed)
-    preview_chunks: list[str] = []
-    for entry in parsed[:3]:
-        if isinstance(entry, dict):
-            content = entry.get("content")
-            if isinstance(content, str):
-                preview_chunks.append(content[:300])
-    preview = "\n---\n".join(preview_chunks)[:1200]
-
-    summary = row.get("summary") or (preview[:240] if preview else "")
-    return {
-        "harness": "claude",
-        "agent_label": row.get("agent_id") or "project_session",
-        "started_at": row.get("started_at") or "",
-        "ended_at": row.get("ended_at") or "",
-        "message_count": message_count,
-        "tool_call_count": 0,
-        "tools_used": [],
-        "files_touched": [],
-        "commands_run": [],
-        "decisions": [],
-        "errors": [],
-        "redacted_preview": preview,
-        "title": row.get("id") or "",
-        "summary": summary,
-    }
+    message_count, preview = _conversation_preview(row.get("log_json"))
+    return _session_record(
+        agent_label=row.get("agent_id") or "project_session",
+        started_at=row.get("started_at") or "",
+        ended_at=row.get("ended_at") or "",
+        message_count=message_count,
+        redacted_preview=preview,
+        title=row.get("id") or "",
+        summary=row.get("summary") or preview[:240],
+    )
 
 
 def _normalize_workflow(row: dict) -> dict[str, Any]:
@@ -416,22 +414,15 @@ def _normalize_workflow(row: dict) -> dict[str, Any]:
             text_parts.append(str(node["error"]))
     preview = "\n".join(text_parts)[:1200]
 
-    return {
-        "harness": "claude",
-        "agent_label": row.get("workflow_id") or "workflow",
-        "started_at": row.get("started_at") or "",
-        "ended_at": row.get("ended_at") or "",
-        "message_count": len(row.get("_nodes") or []),
-        "tool_call_count": 0,
-        "tools_used": [],
-        "files_touched": [],
-        "commands_run": [],
-        "decisions": [],
-        "errors": [],
-        "redacted_preview": preview,
-        "title": row.get("id") or "",
-        "summary": (preview[:240] if preview else ""),
-    }
+    return _session_record(
+        agent_label=row.get("workflow_id") or "workflow",
+        started_at=row.get("started_at") or "",
+        ended_at=row.get("ended_at") or "",
+        message_count=len(row.get("_nodes") or []),
+        redacted_preview=preview,
+        title=row.get("id") or "",
+        summary=preview[:240],
+    )
 
 
 def _normalize_team_session(row: dict) -> dict[str, Any]:
@@ -447,22 +438,26 @@ def _normalize_team_session(row: dict) -> dict[str, Any]:
             parts.append(str(comp["stdout_log"]))
     preview = "\n".join(parts)[:1200]
 
-    return {
-        "harness": backend,
-        "agent_label": row.get("team_id") or "team_session",
-        "started_at": row.get("started_at") or "",
-        "ended_at": row.get("completed_at") or "",
-        "message_count": len(row.get("_components") or []),
-        "tool_call_count": 0,
-        "tools_used": [],
-        "files_touched": [],
-        "commands_run": [],
-        "decisions": [],
-        "errors": [],
-        "redacted_preview": preview,
-        "title": row.get("id") or "",
-        "summary": (row.get("message") or "")[:240],
-    }
+    return _session_record(
+        harness=backend,
+        agent_label=row.get("team_id") or "team_session",
+        started_at=row.get("started_at") or "",
+        ended_at=row.get("completed_at") or "",
+        message_count=len(row.get("_components") or []),
+        redacted_preview=preview,
+        title=row.get("id") or "",
+        summary=(row.get("message") or "")[:240],
+    )
+
+
+# session_kind -> (table, id column, normalizer) for kinds that need only a
+# single-row fetch. workflow / team_session join in child rows and are handled
+# explicitly in _build_harness_session.
+_SIMPLE_SESSION_SOURCES = {
+    "super_agent": ("super_agent_sessions", "id", _normalize_super_agent_session),
+    "trigger_execution": ("execution_logs", "execution_id", _normalize_trigger_execution),
+    "project_session": ("project_sessions", "id", _normalize_project_session),
+}
 
 
 def _slug(text: str) -> str:
@@ -500,30 +495,15 @@ def _build_harness_session(
     }
 
     with get_connection() as conn:
-        if session_kind == "super_agent":
+        if session_kind in _SIMPLE_SESSION_SOURCES:
+            table, id_col, normalize = _SIMPLE_SESSION_SOURCES[session_kind]
             row = conn.execute(
-                "SELECT * FROM super_agent_sessions WHERE id = ?",
+                f"SELECT * FROM {table} WHERE {id_col} = ?",
                 (session_id,),
             ).fetchone()
             if not row:
                 return None
-            base.update(_normalize_super_agent_session(dict(row)))
-        elif session_kind == "trigger_execution":
-            row = conn.execute(
-                "SELECT * FROM execution_logs WHERE execution_id = ?",
-                (session_id,),
-            ).fetchone()
-            if not row:
-                return None
-            base.update(_normalize_trigger_execution(dict(row)))
-        elif session_kind == "project_session":
-            row = conn.execute(
-                "SELECT * FROM project_sessions WHERE id = ?",
-                (session_id,),
-            ).fetchone()
-            if not row:
-                return None
-            base.update(_normalize_project_session(dict(row)))
+            base.update(normalize(dict(row)))
         elif session_kind == "workflow":
             wf_row = conn.execute(
                 "SELECT * FROM workflow_executions WHERE id = ?",
@@ -598,6 +578,7 @@ def _gather_project_decisions(project_id: str) -> dict[str, list[str]]:
 # Batch export — every session for the project, normalized
 # ---------------------------------------------------------------------------
 
+
 def _gather_project_sessions(
     project_id: str,
     *,
@@ -633,7 +614,8 @@ def _project_name(project_id: str) -> str:
 
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT name FROM projects WHERE id = ?", (project_id,),
+            "SELECT name FROM projects WHERE id = ?",
+            (project_id,),
         ).fetchone()
     return (row and row["name"]) or project_id
 
@@ -661,7 +643,11 @@ def export_sessions_to_tesserae(project_id: str) -> dict[str, Any]:
     payload: list[dict[str, Any]] = []
     for kind, sid in sessions:
         rec = _build_harness_session(
-            kind, sid, project_id, name, root,
+            kind,
+            sid,
+            project_id,
+            name,
+            root,
             decisions=decisions_by_session.get(sid, []),
         )
         if rec is not None:
@@ -671,25 +657,36 @@ def export_sessions_to_tesserae(project_id: str) -> dict[str, Any]:
         return {"imported": 0, "skipped_reason": "no_sessions"}
 
     with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", encoding="utf-8",
-        prefix=f"agented-tesserae-{project_id}-", delete=False,
+        mode="w",
+        suffix=".json",
+        encoding="utf-8",
+        prefix=f"agented-tesserae-{project_id}-",
+        delete=False,
     ) as fh:
         json.dump(payload, fh, ensure_ascii=False)
         tmp_path = fh.name
 
     try:
         cmd = [
-            _TESSERAE_CMD, "project", "sessions", "import",
-            tmp_path, "--project", str(root),
+            _TESSERAE_CMD,
+            "project",
+            "sessions",
+            "import",
+            tmp_path,
+            "--project",
+            str(root),
         ]
         result = subprocess.run(
-            cmd, capture_output=True, text=True,
+            cmd,
+            capture_output=True,
+            text=True,
             timeout=_TESSERAE_IMPORT_TIMEOUT,
         )
         if result.returncode != 0:
             logger.warning(
                 "tesserae: import exit=%s stderr=%s",
-                result.returncode, (result.stderr or "").strip()[:300],
+                result.returncode,
+                (result.stderr or "").strip()[:300],
             )
             return {
                 "imported": 0,
@@ -698,12 +695,12 @@ def export_sessions_to_tesserae(project_id: str) -> dict[str, Any]:
         return {"imported": len(payload), "stdout": result.stdout.strip()}
     except FileNotFoundError:
         logger.warning(
-            "tesserae: CLI not found at %r — skip integration", _TESSERAE_CMD,
+            "tesserae: CLI not found at %r — skip integration",
+            _TESSERAE_CMD,
         )
         return {"imported": 0, "skipped_reason": "cli_missing"}
     except subprocess.TimeoutExpired:
-        logger.warning("tesserae: import timed out after %ds",
-                       _TESSERAE_IMPORT_TIMEOUT)
+        logger.warning("tesserae: import timed out after %ds", _TESSERAE_IMPORT_TIMEOUT)
         return {"imported": 0, "skipped_reason": "timeout"}
     finally:
         try:
@@ -725,7 +722,7 @@ def export_sessions_to_tesserae(project_id: str) -> dict[str, Any]:
 
 import threading
 import time as _time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 
@@ -742,11 +739,13 @@ class TesseraeOpResult:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "op": self.op, "ok": self.ok,
+            "op": self.op,
+            "ok": self.ok,
             "stdout": self.stdout[:4000],
             "stderr": self.stderr[:2000],
             "reason": self.reason,
-            "started_at": self.started_at, "finished_at": self.finished_at,
+            "started_at": self.started_at,
+            "finished_at": self.finished_at,
             "elapsed_seconds": round(self.elapsed_seconds, 2),
         }
 
@@ -763,7 +762,11 @@ def _now_iso() -> str:
 
 
 def _run_tesserae_subcommand(
-    op: str, args: list[str], *, cwd: Path, timeout: int,
+    op: str,
+    args: list[str],
+    *,
+    cwd: Path,
+    timeout: int,
 ) -> TesseraeOpResult:
     """Run ``tesserae project <subcommand>`` with the given args.
 
@@ -776,33 +779,50 @@ def _run_tesserae_subcommand(
     started_iso = _now_iso()
     try:
         proc = subprocess.run(
-            cmd, cwd=str(cwd), capture_output=True, text=True,
+            cmd,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
             timeout=timeout,
         )
     except FileNotFoundError:
         return TesseraeOpResult(
-            op=op, ok=False, reason="cli_missing",
-            started_at=started_iso, finished_at=_now_iso(),
+            op=op,
+            ok=False,
+            reason="cli_missing",
+            started_at=started_iso,
+            finished_at=_now_iso(),
             elapsed_seconds=_time.monotonic() - started,
         )
     except subprocess.TimeoutExpired:
         return TesseraeOpResult(
-            op=op, ok=False, reason=f"timeout_after_{timeout}s",
-            started_at=started_iso, finished_at=_now_iso(),
+            op=op,
+            ok=False,
+            reason=f"timeout_after_{timeout}s",
+            started_at=started_iso,
+            finished_at=_now_iso(),
             elapsed_seconds=_time.monotonic() - started,
         )
     finished_iso = _now_iso()
     elapsed = _time.monotonic() - started
     if proc.returncode != 0:
         return TesseraeOpResult(
-            op=op, ok=False, stdout=proc.stdout or "",
-            stderr=proc.stderr or "", reason=f"exit_{proc.returncode}",
-            started_at=started_iso, finished_at=finished_iso,
+            op=op,
+            ok=False,
+            stdout=proc.stdout or "",
+            stderr=proc.stderr or "",
+            reason=f"exit_{proc.returncode}",
+            started_at=started_iso,
+            finished_at=finished_iso,
             elapsed_seconds=elapsed,
         )
     return TesseraeOpResult(
-        op=op, ok=True, stdout=proc.stdout or "", stderr=proc.stderr or "",
-        started_at=started_iso, finished_at=finished_iso,
+        op=op,
+        ok=True,
+        stdout=proc.stdout or "",
+        stderr=proc.stderr or "",
+        started_at=started_iso,
+        finished_at=finished_iso,
         elapsed_seconds=elapsed,
     )
 
@@ -815,15 +835,24 @@ def init_workspace(project_id: str) -> TesseraeOpResult:
     """
     root = get_tesserae_root(project_id)
     if root is None:
-        return TesseraeOpResult(op="init", ok=False, reason="tesserae_disabled",
-                                started_at=_now_iso(), finished_at=_now_iso())
+        return TesseraeOpResult(
+            op="init",
+            ok=False,
+            reason="tesserae_disabled",
+            started_at=_now_iso(),
+            finished_at=_now_iso(),
+        )
     return _run_tesserae_subcommand(
-        "init", ["init"], cwd=root, timeout=_TESSERAE_INIT_TIMEOUT,
+        "init",
+        ["init"],
+        cwd=root,
+        timeout=_TESSERAE_INIT_TIMEOUT,
     )
 
 
 def ingest_paths(
-    project_id: str, paths: Optional[list[str]] = None,
+    project_id: str,
+    paths: Optional[list[str]] = None,
 ) -> TesseraeOpResult:
     """Ingest markdown sources into the project's extraction queue.
 
@@ -834,8 +863,13 @@ def ingest_paths(
     """
     root = get_tesserae_root(project_id)
     if root is None:
-        return TesseraeOpResult(op="ingest", ok=False, reason="tesserae_disabled",
-                                started_at=_now_iso(), finished_at=_now_iso())
+        return TesseraeOpResult(
+            op="ingest",
+            ok=False,
+            reason="tesserae_disabled",
+            started_at=_now_iso(),
+            finished_at=_now_iso(),
+        )
     targets = paths or list(_TESSERAE_DEFAULT_INGEST_PATHS)
     resolved: list[str] = []
     for p in targets:
@@ -844,11 +878,16 @@ def ingest_paths(
             resolved.append(str(candidate))
     if not resolved:
         return TesseraeOpResult(
-            op="ingest", ok=False, reason="no_paths_to_ingest",
-            started_at=_now_iso(), finished_at=_now_iso(),
+            op="ingest",
+            ok=False,
+            reason="no_paths_to_ingest",
+            started_at=_now_iso(),
+            finished_at=_now_iso(),
         )
     return _run_tesserae_subcommand(
-        "ingest", ["ingest", *resolved], cwd=root,
+        "ingest",
+        ["ingest", *resolved],
+        cwd=root,
         timeout=_TESSERAE_INGEST_TIMEOUT,
     )
 
@@ -862,10 +901,17 @@ def compile_workspace(project_id: str) -> TesseraeOpResult:
     """
     root = get_tesserae_root(project_id)
     if root is None:
-        return TesseraeOpResult(op="compile", ok=False, reason="tesserae_disabled",
-                                started_at=_now_iso(), finished_at=_now_iso())
+        return TesseraeOpResult(
+            op="compile",
+            ok=False,
+            reason="tesserae_disabled",
+            started_at=_now_iso(),
+            finished_at=_now_iso(),
+        )
     return _run_tesserae_subcommand(
-        "compile", ["compile"], cwd=root,
+        "compile",
+        ["compile"],
+        cwd=root,
         timeout=_TESSERAE_COMPILE_TIMEOUT,
     )
 
@@ -874,10 +920,17 @@ def build_site(project_id: str) -> TesseraeOpResult:
     """Build the static frontend site from the compiled graph."""
     root = get_tesserae_root(project_id)
     if root is None:
-        return TesseraeOpResult(op="build-site", ok=False, reason="tesserae_disabled",
-                                started_at=_now_iso(), finished_at=_now_iso())
+        return TesseraeOpResult(
+            op="build-site",
+            ok=False,
+            reason="tesserae_disabled",
+            started_at=_now_iso(),
+            finished_at=_now_iso(),
+        )
     return _run_tesserae_subcommand(
-        "build-site", ["build-site"], cwd=root,
+        "build-site",
+        ["build-site"],
+        cwd=root,
         timeout=_TESSERAE_BUILD_SITE_TIMEOUT,
     )
 
@@ -891,7 +944,8 @@ _OP_DISPATCH = {
         op="sessions-import",
         ok=(export_sessions_to_tesserae(pid).get("imported", 0) > 0),
         reason=export_sessions_to_tesserae(pid).get("skipped_reason", ""),
-        started_at=_now_iso(), finished_at=_now_iso(),
+        started_at=_now_iso(),
+        finished_at=_now_iso(),
     ),
 }
 
@@ -907,8 +961,11 @@ def run_op_async(project_id: str, op: str) -> str:
     job_id = f"tess-{op}-{secrets.token_hex(6)}"
     with _op_jobs_lock:
         _op_jobs[job_id] = {
-            "job_id": job_id, "project_id": project_id, "op": op,
-            "status": "running", "started_at": _now_iso(),
+            "job_id": job_id,
+            "project_id": project_id,
+            "op": op,
+            "status": "running",
+            "started_at": _now_iso(),
             "result": None,
         }
 
@@ -924,8 +981,7 @@ def run_op_async(project_id: str, op: str) -> str:
             with _op_jobs_lock:
                 _op_jobs[job_id]["status"] = "failed"
                 _op_jobs[job_id]["finished_at"] = _now_iso()
-                _op_jobs[job_id]["result"] = {"op": op, "ok": False,
-                                              "reason": str(exc)[:200]}
+                _op_jobs[job_id]["result"] = {"op": op, "ok": False, "reason": str(exc)[:200]}
 
     threading.Thread(target=_runner, daemon=True).start()
     return job_id
@@ -963,7 +1019,8 @@ def workspace_status(project_id: str) -> dict[str, Any]:
         out["graph_compiled"] = st.st_size > 100
         out["graph_size_bytes"] = st.st_size
         out["graph_compiled_at"] = datetime.fromtimestamp(
-            st.st_mtime, tz=timezone.utc,
+            st.st_mtime,
+            tz=timezone.utc,
         ).isoformat()
     manifest = tess / "harness_sessions" / "manifest.json"
     if manifest.is_file():
@@ -971,7 +1028,8 @@ def workspace_status(project_id: str) -> dict[str, Any]:
             data = json.loads(manifest.read_text())
             out["session_count"] = len(data.get("sessions") or [])
             out["last_session_imported_at"] = datetime.fromtimestamp(
-                manifest.stat().st_mtime, tz=timezone.utc,
+                manifest.stat().st_mtime,
+                tz=timezone.utc,
             ).isoformat()
         except (OSError, ValueError):
             pass
@@ -1032,18 +1090,19 @@ def _maybe_schedule_auto_compile(project_id: str) -> None:
         _session_count_since_compile[project_id] = 0
     logger.info(
         "tesserae: auto-compile scheduled for %s (after %d sessions)",
-        project_id, n,
+        project_id,
+        n,
     )
     try:
         run_op_async(project_id, "compile")
     except Exception:
-        logger.warning("tesserae: auto-compile dispatch failed for %s",
-                       project_id, exc_info=True)
+        logger.warning("tesserae: auto-compile dispatch failed for %s", project_id, exc_info=True)
 
 
 # ---------------------------------------------------------------------------
 # Session-completion handler — fires on every completed session
 # ---------------------------------------------------------------------------
+
 
 def on_session_complete(
     session_kind: str,
@@ -1074,12 +1133,18 @@ def on_session_complete(
         result = export_sessions_to_tesserae(project_id)
         logger.debug(
             "tesserae: imported %s sessions for %s after %s/%s",
-            result.get("imported"), project_id, session_kind, session_id,
+            result.get("imported"),
+            project_id,
+            session_kind,
+            session_id,
         )
     except Exception:
         logger.warning(
             "tesserae: export failed for %s after %s/%s",
-            project_id, session_kind, session_id, exc_info=True,
+            project_id,
+            session_kind,
+            session_id,
+            exc_info=True,
         )
         return
     # Auto-compile policy: after enough fresh sessions, kick off a
@@ -1089,7 +1154,8 @@ def on_session_complete(
     except Exception:
         logger.warning(
             "tesserae: auto-compile decision failed for %s",
-            project_id, exc_info=True,
+            project_id,
+            exc_info=True,
         )
 
 
@@ -1097,8 +1163,12 @@ def on_session_complete(
 # Query — used by the evolver workspace builder
 # ---------------------------------------------------------------------------
 
+
 def ask_tesserae(
-    project_id: str, question: str, *, top_k: int = 5,
+    project_id: str,
+    question: str,
+    *,
+    top_k: int = 5,
 ) -> Optional[str]:
     """Run ``tesserae ask`` for the project's compiled graph. Returns
     Codex-friendly markdown / text or ``None`` on any failure (so the
@@ -1107,13 +1177,20 @@ def ask_tesserae(
     if root is None:
         return None
     cmd = [
-        _TESSERAE_CMD, "ask", question,
-        "--project", str(root),
-        "--top-k", str(top_k),
+        _TESSERAE_CMD,
+        "ask",
+        question,
+        "--project",
+        str(root),
+        "--top-k",
+        str(top_k),
     ]
     try:
         result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=60,
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
         logger.warning("tesserae: ask failed: %s", exc)
@@ -1121,7 +1198,8 @@ def ask_tesserae(
     if result.returncode != 0:
         logger.warning(
             "tesserae: ask exit=%s stderr=%s",
-            result.returncode, (result.stderr or "").strip()[:200],
+            result.returncode,
+            (result.stderr or "").strip()[:200],
         )
         return None
     return result.stdout or None
