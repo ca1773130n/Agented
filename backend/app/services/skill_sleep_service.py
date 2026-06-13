@@ -178,6 +178,73 @@ def _score_body(question: str, body: str, answer_fn: LLMCall, judge_fn: LLMCall)
     )
 
 
+_FENCE_RE = re.compile(r"^```[\w-]*\n([\s\S]*?)\n```\s*$")
+
+
+def _extract_body_from_reflect(text: str) -> str:
+    """Pull the proposed skill body out of a reflect response — unwrap a single
+    fenced code block if the optimizer wrapped its answer, else use it raw."""
+    s = (text or "").strip()
+    m = _FENCE_RE.match(s)
+    return m.group(1).strip() if m else s
+
+
+def _build_reflect_prompt(skill_name: str, current_body: str, needs: str) -> str:
+    return (
+        "You are improving a reusable project skill document (a SKILL.md body). "
+        "Below is the CURRENT body and a list of recurring questions/needs this "
+        "skill should help an agent answer in this project. Propose an improved "
+        "body that better addresses those recurring needs while staying concise "
+        "and faithful — do not invent project-specific facts you cannot support.\n\n"
+        f"Skill: {skill_name}\n\n"
+        f"CURRENT body:\n{current_body or '(empty)'}\n\n"
+        f"Recurring project needs:\n{needs or '(none recorded)'}\n\n"
+        "Return ONLY the improved skill body text (no preamble, no code fence)."
+    )
+
+
+def propose_candidate(
+    project_id: str,
+    skill_name: str,
+    current_body: str,
+    *,
+    reflect_call: LLMCall,
+    max_signals: int = 10,
+) -> Optional[str]:
+    """SkillOpt's Reflect stage: read the project's recurring needs + the
+    current skill body, ask the optimizer (``reflect_call`` seam) for an
+    improved body. Returns the candidate, or None when reflect errors or
+    proposes nothing materially different (fail-open: no candidate → the round
+    is a no-op, never a bad write). Whole-body proposal; bounded structured
+    edits are the P3 refinement.
+    """
+    needs = ""
+    try:
+        from app.db.harness_kg_signals import list_signals
+
+        signals = list_signals(project_id, limit=max_signals)
+        needs = "\n".join(
+            f"- {s.get('question', '').strip()}" for s in signals if s.get("question")
+        )
+    except Exception:
+        logger.debug("propose_candidate: needs gather failed for %s", project_id, exc_info=True)
+
+    try:
+        resp = reflect_call(
+            [{"role": "user", "content": _build_reflect_prompt(skill_name, current_body, needs)}]
+        )
+    except Exception:
+        logger.warning(
+            "propose_candidate: reflect failed for %s/%s", project_id, skill_name, exc_info=True
+        )
+        return None
+
+    candidate = _extract_body_from_reflect(resp if isinstance(resp, str) else "")
+    if not candidate or candidate.strip() == (current_body or "").strip():
+        return None
+    return candidate
+
+
 class SkillSleepGate:
     """Validation gate that decides whether a candidate skill body is adopted."""
 
@@ -486,6 +553,59 @@ class SkillSleepGate:
                 )
             verdict["outcome"] = outcome
         return verdict
+
+    @staticmethod
+    def run_skill_sleep_round(
+        project_id: str,
+        skill_name: str,
+        *,
+        reflect_call: Optional[LLMCall] = None,
+        answer_call: Optional[LLMCall] = None,
+        judge_call: Optional[LLMCall] = None,
+        n: int = 6,
+        seed: int = 0,
+        judge_backend: str = "claude",
+        measure: bool = True,
+    ) -> dict:
+        """One autonomous Skill-Sleep round: Reflect → gate (+ outcome) → stage.
+
+        SkillOpt's full loop for one skill: propose an improved body from the
+        project's recurring needs, then gate it (and measure on the disjoint
+        split). The result is STAGED for operator adoption — never
+        auto-applied (review-then-adopt). When reflect proposes nothing new the
+        round is a no-op. Raises ``SkillNotInProjectError`` if the skill is not
+        bound to the project.
+        """
+        from app.services.answer_eval_service import _build_default_llm_call
+
+        row = _resolve_project_skill(project_id, skill_name)
+        if row is None:
+            raise SkillNotInProjectError(
+                f"skill {skill_name!r} is not bound to project {project_id}"
+            )
+        current_body = _read_current_body(row.get("skill_path"))
+        reflect = reflect_call or _build_default_llm_call(judge_backend)
+        candidate = propose_candidate(project_id, skill_name, current_body, reflect_call=reflect)
+        if candidate is None:
+            return {
+                "run_id": None,
+                "status": "no_candidate",
+                "accepted": False,
+                "reason": "reflect proposed no material change",
+            }
+        fn = (
+            SkillSleepGate.evaluate_skill_with_outcome if measure else SkillSleepGate.evaluate_skill
+        )
+        return fn(
+            project_id,
+            skill_name,
+            candidate_body=candidate,
+            n=n,
+            seed=seed,
+            judge_backend=judge_backend,
+            answer_call=answer_call,
+            judge_call=judge_call,
+        )
 
     @staticmethod
     def adopt_run(run_id: int) -> dict:

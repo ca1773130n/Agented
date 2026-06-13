@@ -77,6 +77,32 @@ def test_evaluate_returns_verdict(isolated_db, monkeypatch):
     assert body["accepted"] is True
 
 
+def test_round_endpoint_runs(isolated_db, monkeypatch):
+    from app.services import skill_sleep_service as svc
+
+    monkeypatch.setattr(
+        svc.SkillSleepGate,
+        "run_skill_sleep_round",
+        staticmethod(
+            lambda project_id, skill_name, **kw: {
+                "run_id": 5,
+                "status": "no_candidate",
+                "accepted": False,
+                "reason": "reflect proposed no material change",
+            }
+        ),
+    )
+    with _client() as c:
+        pid = _make_project(c, "ss-key-round")
+        resp = c.post(
+            f"/admin/projects/{pid}/skills/deploy/sleep/round",
+            headers={"X-API-Key": "ss-key-round"},
+            json={"n": 4, "seed": 1},
+        )
+    assert resp.status_code == 201
+    assert resp.json()["status"] == "no_candidate"
+
+
 def test_adopt_404_for_foreign_run(isolated_db):
     from app.db import skill_sleep
 
