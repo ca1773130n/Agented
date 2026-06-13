@@ -15,20 +15,24 @@ requirements mapped. Approved design spec:
 ``docs/superpowers/specs/2026-06-13-team-harness-self-improvement-design.md``
 (+ ``.ko.md``). PR-per-phase + codex-review-until-green cadence.
 
-Phase: 20 of 22 (GRD frontend wiring) — plans 20-01 + 20-02 + 20-03 complete
-Plan: 20-03 complete (3 of 6)
-Status: 20-03 executed — the Research page (REQ-15). ProjectResearchPage
-(route project-research at /projects/:projectId/research) mirrors
-ProjectPlanningPage, composing QuestionIntake + PortfolioRuns + ThreadList +
-HypothesisLedger + ReportViewer over a new useResearchSession SSE composable
-and the 20-02 researchApi. Markdown bodies render via renderMarkdown()
-(useMarkdown.ts, DOMPurify GREEN renderer) — NOT the baseline-broken
-MarkdownContent. New top-level surface.research.* i18n namespace added
-key-identical to en/ko/ja/zh (parity verified). 17/17 tests green (6
-composable + 9 component + 2 page), no Vue warn; vue-tsc S1 clean (only
-pre-existing AnswerGroundednessCard err). Unblocks 20-05 (planning command
-bar deep-link to the research surface).
-Last activity: 2026-06-13 — Completed 20-03-PLAN.md.
+Phase: 20 of 22 (GRD frontend wiring) — plans 20-01 + 20-02 + 20-03 + 20-04 complete
+Plan: 20-04 complete (4 of 6)
+Status: 20-04 executed — the life-harness completion UI (REQ-16 / SC-4). New
+route project-harness at /projects/:projectId/harness composes AutonomyEditor
+(get/set autonomy), RoundList + RoundDetail (a TWO-STEP confirm-guarded revert:
+requestRevert only arms a confirmation; only confirmRevert calls
+grdHarnessApi.revertRound — asserted by test), SharedForgeBrowser (list/adopt),
+and HarnessPanelHost — which REUSES the repo's TabbedViewHost (markRaw render
+closures bind projectId) to mount seven panels (Health/Think/Dead-Ends/Genome/
+Verify/Reflections+Verdicts/Evolve) collectively covering all 16 Group-A GRD
+routes (a dedicated test drives every panel and fails if any of the 16
+grdHarnessApi mocks is uncalled). New surface.harness.* i18n namespace added
+key-identical to en/ko/ja/zh (81 keys × 4, parity verified). 13/13 new tests
+green (4 autonomy/rounds/forge + 9 panels), no Vue warn; vue-tsc clean; sibling
+grd/research suite 9/9 (no new failures). Mounted under the project surface —
+no top-level sidebar slot. Unblocks 20-05 (planning command bar deep-link to
+harness commands).
+Last activity: 2026-06-13 — Completed 20-04-PLAN.md.
 
 Prior phase-17 activity: 2026-06-13 — Completed 17-06-PLAN.md (FINAL plan of phase 17).
 Shipped the forge-creator default bundle (5 global-scope agentskills.io creator
