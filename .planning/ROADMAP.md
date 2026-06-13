@@ -38,7 +38,7 @@ gates (`just build`, backend pytest watchdog, frontend no-new-failures).
 - [ ] **Phase 19: GRD default driver** - `resolve_execution_driver()` 3-way (default grd), GrdChatSessionHandler PSM→chat-SSE bridge, cwd/backend fixes, driver selector UI `implement`
 - [ ] **Phase 20: GRD frontend wiring** - autoresearch page, life-harness completion UI (16 unwired routes), full `/grd:` command bar, 4-locale i18n `implement`
 - [ ] **Phase 21: One-click team harness setup** - ProjectDashboard button + idempotent TeamHarnessSetupService (GRD init, topology, bundles, tesserae, policies, 4-harness materialization) `integrate`
-- [ ] **Phase 22: Repeated-request auto-skill** - `repeated_request_signals` store, embedding detection over 5 session kinds, hybrid gates, patch-over-create, provenance, security scan `implement`
+- [x] **Phase 22: Repeated-request auto-skill** - `repeated_request_signals` store, embedding detection over 5 session kinds, hybrid gates, patch-over-create, provenance, security scan `implement`
 
 ## Phase Details
 
@@ -153,12 +153,12 @@ Plans:
 **Plans**: 6 plans (4 waves)
 
 Plans:
-- [ ] 22-01-PLAN.md — repeated_request_signals store (DDL + repo + model + UPSERT invariants)
-- [ ] 22-02-PLAN.md — consistency fixes: _build_harness_session 5-kind normalizers + evolver writable-skill prompts
-- [ ] 22-03-PLAN.md — detection handler (register_session_handler, _FETCHERS, cosine ≥ 0.83, embed-disabled fallback, non-blocking)
-- [ ] 22-04-PLAN.md — safety scanner (injection/exfiltration/invisible-Unicode) + dedup + origin-hash provenance
-- [ ] 22-05-PLAN.md — hybrid gate (auto/propose/reject matrix + per-project policy + evolver skill-create dispatch)
-- [ ] 22-06-PLAN.md — live dogfood: replay ≥3 real transcripts, operator review, house gates
+- [x] 22-01-PLAN.md — repeated_request_signals store (DDL + repo + model + UPSERT invariants)
+- [x] 22-02-PLAN.md — consistency fixes: _build_harness_session 5-kind normalizers + evolver writable-skill prompts
+- [x] 22-03-PLAN.md — detection handler (register_session_handler, _FETCHERS, cosine ≥ 0.83, embed-disabled fallback, non-blocking)
+- [x] 22-04-PLAN.md — safety scanner (injection/exfiltration/invisible-Unicode) + dedup + origin-hash provenance
+- [x] 22-05-PLAN.md — hybrid gate (auto/propose/reject matrix + per-project policy + evolver skill-create dispatch)
+- [x] 22-06-PLAN.md — live dogfood: replay ≥3 real transcripts, operator review, house gates
 
 ## Dependencies
 
@@ -187,7 +187,7 @@ Plans:
 | 19 | GRD default driver | REQ-10..13 | 17 | proxy | Not started |
 | 20 | GRD frontend wiring | REQ-14..18 | 19 | proxy | Not started |
 | 21 | One-click team harness setup | REQ-19..21 | 17, 19 | full | Not started |
-| 22 | Repeated-request auto-skill | REQ-22..26 | 17 | proxy | Not started |
+| 22 | Repeated-request auto-skill | REQ-22..26 | 17 | proxy | Complete (2026-06-13) |
 
 **Coverage:** 26/26 requirements mapped (REQ-01 … REQ-26), each to exactly one phase. No orphans, no duplicates.
 
