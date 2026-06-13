@@ -215,6 +215,20 @@ def autonomous_apply_job() -> None:
         logger.warning("autonomous_apply_job failed", exc_info=True)
 
 
+def skill_sleep_nightly_job() -> None:
+    """Periodic (SkillOpt P5b): run a staged Skill-Sleep round for each skill
+    bound to an autonomy-enabled project that is past its cooldown. Staged
+    only — an operator still adopts; never auto-writes a skill."""
+    try:
+        from app.services.skill_sleep_service import SkillSleepScheduler
+
+        result = SkillSleepScheduler.run_due()
+        if result.get("ran"):
+            logger.info("skill-sleep nightly: ran %d round(s)", len(result["ran"]))
+    except Exception:
+        logger.warning("skill_sleep_nightly_job failed", exc_info=True)
+
+
 def _setup_scheduler(app: Any) -> None:
     from app.services.scheduler_service import SchedulerService
 
@@ -276,6 +290,8 @@ def _setup_scheduler(app: Any) -> None:
             ),
             # Phase D: periodic autonomy poller — auto-apply eligible rounds.
             (autonomous_apply_job, {"minutes": 5}, "harness_autonomous_apply"),
+            # SkillOpt P5b: nightly staged Skill-Sleep rounds for bound skills.
+            (skill_sleep_nightly_job, {"hours": 24}, "skill_sleep_nightly"),
             # Chat rate-limit rotation Phase 2: re-dispatch parked chat turns
             # once a rate-limited account frees up.
             (ChatRetryService.process_pending, {"seconds": 20}, "chat_retry_queue"),

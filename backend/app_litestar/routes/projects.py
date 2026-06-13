@@ -403,14 +403,18 @@ def skill_sleep_round(
     project_id: str, skill_name: str, data: dict, caller: Caller
 ) -> dict[str, Any]:
     """Run one autonomous Skill-Sleep round: Reflect (propose an improved body
-    from the project's recurring needs) → gate + outcome → stage for adoption.
+    from the project's recurring needs) → [rank] → gate + outcome → stage for
+    adoption.
 
-    Body (all optional): {"n": int, "seed": int, "measure": bool}.
+    Body (all optional): {"n": int, "seed": int, "measure": bool,
+    "edit_budget": int}. ``edit_budget`` (omit/None = off) caps the candidate
+    to its top-N edits, scored on a cheap model before the gate.
     """
     _assert_project_access(project_id, caller)
     body = data or {}
     from app.services.skill_sleep_service import SkillNotInProjectError, SkillSleepGate
 
+    edit_budget = body.get("edit_budget")
     try:
         return SkillSleepGate.run_skill_sleep_round(
             project_id,
@@ -418,6 +422,7 @@ def skill_sleep_round(
             n=int(body.get("n", 6)),
             seed=int(body.get("seed", 0)),
             measure=bool(body.get("measure", True)),
+            edit_budget=int(edit_budget) if edit_budget is not None else None,
         )
     except SkillNotInProjectError as e:
         raise NotFoundException(detail=str(e)) from e
