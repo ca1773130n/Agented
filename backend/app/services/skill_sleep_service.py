@@ -329,11 +329,17 @@ def _run_codex_reflect(prompt: str, *, config_dir: Optional[str], timeout: int =
                 env=env,
                 check=False,
             )
-        except (FileNotFoundError, subprocess.TimeoutExpired):
+        except (OSError, subprocess.TimeoutExpired):
+            # OSError (superset of FileNotFoundError) also covers a present-but-
+            # non-executable codex binary etc. — honor the "any failure → ''"
+            # fail-open contract (codex review LOW).
             logger.warning("skill-sleep: codex reflect subprocess failed", exc_info=True)
             return ""
         out = scratch / "CANDIDATE.md"
-        return out.read_text(encoding="utf-8") if out.exists() else ""
+        try:
+            return out.read_text(encoding="utf-8", errors="replace") if out.exists() else ""
+        except OSError:
+            return ""
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
 
