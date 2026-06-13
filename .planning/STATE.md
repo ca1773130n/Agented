@@ -15,16 +15,20 @@ requirements mapped. Approved design spec:
 ``docs/superpowers/specs/2026-06-13-team-harness-self-improvement-design.md``
 (+ ``.ko.md``). PR-per-phase + codex-review-until-green cadence.
 
-Phase: 20 of 22 (GRD frontend wiring) — plans 20-01 + 20-02 complete
-Plan: 20-02 complete (2 of N)
-Status: 20-02 executed — two frontend api modules (research.ts: 5 methods;
-grdHarness.ts: 16 GRD + 11 /admin harness routes) + barrel re-exports + 36
-unit tests green (7 research + 29 harness); bot-health regression green;
-vue-tsc S1 clean (only pre-existing AnswerGroundednessCard err remains).
-Group B /admin routes authed purely by base path (apiFetch already sends
-X-API-Key+bearer/cookie+CSRF). Unblocks UI plans 20-03 (Research page) +
-20-04 (life-harness panels).
-Last activity: 2026-06-13 — Completed 20-02-PLAN.md.
+Phase: 20 of 22 (GRD frontend wiring) — plans 20-01 + 20-02 + 20-03 complete
+Plan: 20-03 complete (3 of 6)
+Status: 20-03 executed — the Research page (REQ-15). ProjectResearchPage
+(route project-research at /projects/:projectId/research) mirrors
+ProjectPlanningPage, composing QuestionIntake + PortfolioRuns + ThreadList +
+HypothesisLedger + ReportViewer over a new useResearchSession SSE composable
+and the 20-02 researchApi. Markdown bodies render via renderMarkdown()
+(useMarkdown.ts, DOMPurify GREEN renderer) — NOT the baseline-broken
+MarkdownContent. New top-level surface.research.* i18n namespace added
+key-identical to en/ko/ja/zh (parity verified). 17/17 tests green (6
+composable + 9 component + 2 page), no Vue warn; vue-tsc S1 clean (only
+pre-existing AnswerGroundednessCard err). Unblocks 20-05 (planning command
+bar deep-link to the research surface).
+Last activity: 2026-06-13 — Completed 20-03-PLAN.md.
 
 Prior phase-17 activity: 2026-06-13 — Completed 17-06-PLAN.md (FINAL plan of phase 17).
 Shipped the forge-creator default bundle (5 global-scope agentskills.io creator
