@@ -265,6 +265,114 @@ def propose_candidate(
 
 
 # ---------------------------------------------------------------------------
+# Codex-subprocess Reflect — an alternative optimizer, gated on the
+# multi-vendor scheduler reporting an available Codex account.
+# ---------------------------------------------------------------------------
+
+
+def _codex_available() -> Optional[str]:
+    """If the multi-vendor scheduler has an available (non-rate-limited) Codex
+    account, return its CODEX_HOME (config_dir, possibly None for the default
+    vault); else return None. Distinguishes "no codex account" (→ None) from
+    "codex available with default vault" via the returned-vs-sentinel below."""
+    try:
+        from app.services.account_rotation_service import rotation_candidates
+
+        for cand in rotation_candidates("codex", allow_cross_backend=False):
+            if cand.backend == "codex":
+                return cand.config_dir or ""  # "" = available, default vault
+    except Exception:
+        logger.debug("skill-sleep: codex availability check failed", exc_info=True)
+    return None
+
+
+def _run_codex_reflect(prompt: str, *, config_dir: Optional[str], timeout: int = 600) -> str:
+    """Run ``codex exec`` over a scratch workspace to propose an improved skill
+    body, returning the contents of the CANDIDATE.md it writes (or "" on any
+    failure — fail-open, the caller treats empty as "no candidate"). The Codex
+    account's CODEX_HOME (``config_dir``) selects the vendor credentials chosen
+    by the multi-vendor scheduler."""
+    import os
+    import shutil
+    import subprocess
+    import tempfile
+    from pathlib import Path
+
+    from app.services.harness_evolver import _PROMPT_TOKEN, _default_codex_cmd  # noqa: PLC0415
+
+    scratch = Path(tempfile.mkdtemp(prefix="agented-skill-reflect-"))
+    try:
+        instruction = (
+            prompt + "\n\nWrite ONLY the improved skill body — no preamble, no code fence — "
+            "to a file named CANDIDATE.md in the current working directory, and write "
+            "nothing else."
+        )
+        (scratch / "PROMPT.md").write_text(instruction, encoding="utf-8")
+        template = _default_codex_cmd()
+        if _PROMPT_TOKEN in template:
+            cmd = [instruction if p == _PROMPT_TOKEN else p for p in template]
+            stdin_input: Optional[bytes] = None
+        else:
+            cmd = list(template)
+            stdin_input = instruction.encode("utf-8")
+        env = dict(os.environ)
+        if config_dir:  # "" → leave ambient CODEX_HOME (default vault)
+            env["CODEX_HOME"] = config_dir
+        try:
+            subprocess.run(
+                cmd,
+                cwd=str(scratch),
+                input=stdin_input,
+                timeout=timeout,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                env=env,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            # OSError (superset of FileNotFoundError) also covers a present-but-
+            # non-executable codex binary etc. — honor the "any failure → ''"
+            # fail-open contract (codex review LOW).
+            logger.warning("skill-sleep: codex reflect subprocess failed", exc_info=True)
+            return ""
+        out = scratch / "CANDIDATE.md"
+        try:
+            return out.read_text(encoding="utf-8", errors="replace") if out.exists() else ""
+        except OSError:
+            return ""
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def _build_codex_reflect_call(config_dir: Optional[str]) -> LLMCall:
+    """Wrap codex-subprocess reflect as an ``LLMCall`` seam (messages → body),
+    so ``propose_candidate`` uses it identically to the in-process call."""
+
+    def _call(messages: list[dict]) -> str:
+        prompt = "\n\n".join(m.get("content", "") for m in messages)
+        return _run_codex_reflect(prompt, config_dir=config_dir)
+
+    return _call
+
+
+def _select_reflect_call(reflect_backend: str, judge_backend: str) -> LLMCall:
+    """Pick the Reflect optimizer. ``"auto"`` (default) prefers codex-subprocess
+    reflect WHEN the multi-vendor scheduler reports an available codex account,
+    else falls back to the in-process LLM seam. ``"codex"`` forces codex but
+    still falls back (with a log) when unavailable; anything else uses the
+    in-process seam."""
+    from app.services.answer_eval_service import _build_default_llm_call
+
+    if reflect_backend in ("auto", "codex"):
+        config_dir = _codex_available()
+        if config_dir is not None:
+            return _build_codex_reflect_call(config_dir)
+        if reflect_backend == "codex":
+            logger.info("skill-sleep: codex requested but unavailable; using in-process reflect")
+    return _build_default_llm_call(judge_backend)
+
+
+# ---------------------------------------------------------------------------
 # Edit-budget ranker (SkillOpt's "textual learning rate"), Phase 3
 # ---------------------------------------------------------------------------
 
@@ -672,6 +780,7 @@ class SkillSleepGate:
         measure: bool = True,
         edit_budget: Optional[int] = None,
         ranker_model: str = _DEFAULT_RANKER_MODEL,
+        reflect_backend: str = "auto",
     ) -> dict:
         """One autonomous Skill-Sleep round: Reflect → [rank] → gate (+ outcome) → stage.
 
@@ -683,6 +792,12 @@ class SkillSleepGate:
         reflect proposes nothing new the round is a no-op. Raises
         ``SkillNotInProjectError`` if the skill is not bound to the project.
 
+        ``reflect_backend`` selects the optimizer (when ``reflect_call`` is not
+        injected): ``"auto"`` (default) uses codex-subprocess reflect WHEN the
+        multi-vendor scheduler has an available codex account, else the
+        in-process LLM seam; ``"codex"`` forces codex (fall back on
+        unavailable); any other value uses the in-process seam.
+
         ``edit_budget`` is opt-in (None = no ranking; the reflect candidate is
         gated whole). When set, the ranker uses cheap-model seams while the gate
         keeps the default strong model.
@@ -690,7 +805,7 @@ class SkillSleepGate:
         from app.services.answer_eval_service import _build_default_llm_call
 
         row, current_body = _resolve_and_read(project_id, skill_name)
-        reflect = reflect_call or _build_default_llm_call(judge_backend)
+        reflect = reflect_call or _select_reflect_call(reflect_backend, judge_backend)
         candidate = propose_candidate(project_id, skill_name, current_body, reflect_call=reflect)
         if candidate is None:
             return {
