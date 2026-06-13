@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { Project, HarnessStatusResult, ProjectSkill, Hook, Command, Rule, Agent, TeamMember, ProjectInstallation, SuperAgent, SuperAgentSession, ProjectSAInstance, SuperAgentActivityStatus, GrdHarnessSetupStep } from '../services/api';
-import { projectApi, grdApi, hookApi, commandApi, ruleApi, agentApi, teamApi, superAgentApi, superAgentSessionApi, projectInstanceApi, ApiError } from '../services/api';
+import type { Project, HarnessStatusResult, ProjectSkill, Hook, Command, Rule, Agent, TeamMember, ProjectInstallation, SuperAgent, SuperAgentSession, ProjectSAInstance, SuperAgentActivityStatus, GrdHarnessSetupStep, SkillSleepRun } from '../services/api';
+import { projectApi, grdApi, hookApi, commandApi, ruleApi, agentApi, teamApi, superAgentApi, superAgentSessionApi, projectInstanceApi, skillSleepApi, ApiError } from '../services/api';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import InteractiveSetup from '../components/projects/InteractiveSetup.vue';
 import ProjectStatusCard from '../components/projects/ProjectStatusCard.vue';
@@ -10,6 +10,8 @@ import ProjectTeamLeaderChat from '../components/projects/ProjectTeamLeaderChat.
 import ProjectTeamsSection from '../components/projects/ProjectTeamsSection.vue';
 import ProjectTeamCanvas from '../components/projects/ProjectTeamCanvas.vue';
 import ProjectLibraryTabs from '../components/projects/ProjectLibraryTabs.vue';
+import SkillSleepCard from './dashboards/cards/SkillSleepCard.vue';
+import SkillSleepReviewDrawer from '../components/projects/SkillSleepReviewDrawer.vue';
 import ProjectForgeBindingsPanel from '../components/project/ProjectForgeBindingsPanel.vue';
 import HarnessStatusSection from '../components/projects/HarnessStatusSection.vue';
 import { useToast } from '../composables/useToast';
@@ -41,6 +43,41 @@ const newSkillPath = ref('');
 const addSkillModalRef = ref<HTMLElement | null>(null);
 useFocusTrap(addSkillModalRef, showAddSkillModal);
 const isAddingSkill = ref(false);
+
+// Skill-Sleep review-then-adopt state. The card owns the runs list; the
+// dashboard owns the selected run + drawer + adopt flow. Adopt is the only
+// action that writes to disk; the server re-checks accepted/stale/foreign.
+const sleepCard = ref<{ reload: () => Promise<void> } | null>(null);
+const selectedSleepRun = ref<SkillSleepRun | null>(null);
+const sleepDrawerOpen = ref(false);
+const isAdoptingSleep = ref(false);
+const sleepAdoptError = ref<string | null>(null);
+
+function openSleepRun(run: SkillSleepRun) {
+  selectedSleepRun.value = run;
+  sleepAdoptError.value = null;
+  sleepDrawerOpen.value = true;
+}
+
+async function onAdoptSleepRun(runId: number) {
+  isAdoptingSleep.value = true;
+  sleepAdoptError.value = null;
+  try {
+    const res = await skillSleepApi.adopt(projectId.value, runId);
+    if (res.adopted) {
+      sleepDrawerOpen.value = false;
+      await sleepCard.value?.reload();
+      showToast(t('skillSleep.adoptSuccess'), 'success');
+    } else {
+      // Server refused (non-accepted / stale / foreign) — surface its reason.
+      sleepAdoptError.value = res.reason ?? t('skillSleep.adoptFailed');
+    }
+  } catch (err) {
+    sleepAdoptError.value = err instanceof ApiError ? err.message : t('skillSleep.adoptFailed');
+  } finally {
+    isAdoptingSleep.value = false;
+  }
+}
 
 // Team run state
 const teamRunMessages = ref<Record<string, string>>({});
@@ -801,6 +838,13 @@ function onSetupCompleted() {
         @toggleRule="toggleRuleForProject"
       />
 
+      <!-- SkillOpt Skill-Sleep: optimization runs + review-then-adopt. -->
+      <div class="card">
+        <div class="card-body-padded">
+          <SkillSleepCard ref="sleepCard" :project-id="projectId" @open-run="openSleepRun" />
+        </div>
+      </div>
+
       <!-- v0.7.70 — Forge context bindings surfaced on the dashboard
            too (not just settings) so the operator can see what's
            inherited into sessions without leaving the project's
@@ -814,6 +858,16 @@ function onSetupCompleted() {
         </div>
       </div>
     </template>
+
+    <!-- Skill-Sleep review-then-adopt drawer (own Teleport). -->
+    <SkillSleepReviewDrawer
+      :open="sleepDrawerOpen"
+      :run="selectedSleepRun"
+      :is-adopting="isAdoptingSleep"
+      :adopt-error="sleepAdoptError"
+      @adopt="onAdoptSleepRun"
+      @close="sleepDrawerOpen = false"
+    />
 
     <!-- Add Skill Modal -->
     <Teleport to="body">
