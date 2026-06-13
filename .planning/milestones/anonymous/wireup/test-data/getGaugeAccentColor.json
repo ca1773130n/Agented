@@ -1,0 +1,9 @@
+{
+  "feature": "getGaugeAccentColor",
+  "parameters": {
+    "backendType": "test-value",
+    "windowType": "test-value",
+    "index": 42
+  },
+  "generated_at": "2026-06-13T05:04:55.234Z"
+}

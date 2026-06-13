@@ -1,7 +1,7 @@
 {
-  "feature": "useOrgCanvas",
+  "feature": "useMonitoringCountdowns",
   "parameters": {
-    "projectId": null
+    "monitoringStatus": null
   },
   "generated_at": "2026-06-13T05:04:55.236Z"
 }
