@@ -15,57 +15,19 @@ requirements mapped. Approved design spec:
 ``docs/superpowers/specs/2026-06-13-team-harness-self-improvement-design.md``
 (+ ``.ko.md``). PR-per-phase + codex-review-until-green cadence.
 
-Phase: 20 of 22 (GRD frontend wiring) — plans 20-01..20-06 complete (PHASE COMPLETE)
-Plan: 20-06 complete (6 of 6)
-Status: 20-06 executed — i18n parity + house-gate certification (REQ-18 / SC-6).
-Committed a deterministic key-diff script (frontend/scripts/i18n-parity.mjs:
-flatten + set-diff of all four catalogs, exits non-zero on diff); parity already
-at Total diff count: 0 across en/ko/ja/zh (surface.research.*, surface.harness.*,
-planningCommandBar.* all key-identical — no locale edits needed). House gate
-certified: [Rule 1] FIXED 15 phase-20-introduced TS2345 errors in
-harness-panels.test.ts (opts() returned global.plugins as unknown[],
-incompatible with ComponentMountingOptions on mount() spread — typed Plugin[];
-the 20-05 STATE note had mis-classified these as pre-existing baseline). After
-fix, all phase-20 files type-clean (non-bailing vue-tsc --noEmit, 0 errors);
-just build still blocked ONLY by pre-existing AnswerGroundednessCard.vue TS2345
-(PR #212, zero phase-20 files — disclosed, out of scope per phase-17/19
-precedent). Frontend 1485 passed / 7 known-baseline / 0 NEW. Backend targeted
-substitution (full-suite hang avoided): 115 passed (27 research handler/routes +
-grd_chat regression, 88 bridge/cli-agent-runner/litestar-grd). Phase 20 plans
-01-06 ALL complete.
+Phase: 21 of 22 (One-click team harness setup) — **in progress**
+Plan: 21-01 complete (persistence floor)
+Status: Plan 21-01 executed — migration 159 + harness_setup_status helpers +
+harness_setup_steps idempotent upsert; S1/S2 sanity 4/4 green, ruff clean.
+Last activity: 2026-06-13 — Completed 21-01-PLAN.md. PRAGMA-guarded migration
+159 adds projects.harness_setup_status (default 'none') + harness_setup_steps
+(PK project_id,step_key); get/set_harness_setup_status (NULL→'none') +
+upsert_harness_setup_step (ON CONFLICT idempotent) + get_harness_setup_steps in
+projects.py; GrdPlanningService.get_harness_setup_status parity classmethod.
+Double-apply no-op verified. Commits dd4faf9863/680aa084d3/c0132249a7 on
+branch grd/v0.8.0/21-21. See prior phase 17 record below.
 
-Prior 20-05 status — PlanningCommandBar manifest (REQ-17 / SC-5). Extracted
-the bar's inline commandGroups into a typed, unit-testable
-frontend/src/components/grd/planningCommands.ts manifest (GRD_COMMAND_MANIFEST:
-six groups Plan/Execute/Verify/Research/Harness/Misc covering the full supported
-/grd: set — 21 commands + evolve marked deprecated). The bar now imports the
-manifest (no inline array) and emits invoke(name,{group}); ProjectPlanningPage
-routes group-aware: research->project-research, harness->project-harness,
-everything else->grd_chat planning session (group arg stripped before handoff).
-planningCommandBar.* i18n expanded key-identical across en/ko/ja/zh (52 keys
-each). TDD: RED manifest test committed first, then GREEN. 15/15 grd tests green
-(9 manifest + 6 bar); vue-tsc clean for all touched files (pre-existing 16
-harness-panels/AnswerGroundednessCard errors confirmed baseline via stash).
-Unblocks 20-06 (key-diff parity + final phase wrap).
-
-Prior 20-04 status — the life-harness completion UI (REQ-16 / SC-4). New
-route project-harness at /projects/:projectId/harness composes AutonomyEditor
-(get/set autonomy), RoundList + RoundDetail (a TWO-STEP confirm-guarded revert:
-requestRevert only arms a confirmation; only confirmRevert calls
-grdHarnessApi.revertRound — asserted by test), SharedForgeBrowser (list/adopt),
-and HarnessPanelHost — which REUSES the repo's TabbedViewHost (markRaw render
-closures bind projectId) to mount seven panels (Health/Think/Dead-Ends/Genome/
-Verify/Reflections+Verdicts/Evolve) collectively covering all 16 Group-A GRD
-routes (a dedicated test drives every panel and fails if any of the 16
-grdHarnessApi mocks is uncalled). New surface.harness.* i18n namespace added
-key-identical to en/ko/ja/zh (81 keys × 4, parity verified). 13/13 new tests
-green (4 autonomy/rounds/forge + 9 panels), no Vue warn; vue-tsc clean; sibling
-grd/research suite 9/9 (no new failures). Mounted under the project surface —
-no top-level sidebar slot. Unblocks 20-05 (planning command bar deep-link to
-harness commands).
-Last activity: 2026-06-13 — Completed 20-05-PLAN.md.
-
-Prior phase-17 activity: 2026-06-13 — Completed 17-06-PLAN.md (FINAL plan of phase 17).
+Prior activity: 2026-06-13 — Completed 17-06-PLAN.md (FINAL plan of phase 17).
 Shipped the forge-creator default bundle (5 global-scope agentskills.io creator
 skills — skill/rule/hook/command/subagent-creator — seeded idempotently at startup,
 predefined-bot pattern) and the session-completion auto-import pipeline: a 4th
@@ -248,6 +210,19 @@ Progress: [##########] 100%
 - [Phase 17]: 17-06: forge-creator bundle (5 global-scope creator skills, idempotent startup seed); session-completion auto-import handler (4th on execution_events bus) gated on session_kind={project_session,super_agent,team_session,goal_loop}, fails closed on foreign/unknown; forge_origin (mig 157) records sha256+source-session-id; global scope via forge_bundles.scope='global' (user_skills inherently global)
 - [Phase 22]: 22-06: live dogfood (EVAL D1/D2) — end-to-end harness (test_repeated_request_dogfood.py) drives detect_for_session -> upsert -> evaluate/convert_signal (AUTO) -> scan + forge_origin on the REAL MiniLM cosine path (embedding backend operational). agented.db was empty so transcripts are recorded-real (real wording, byte-identical payload shape) with live-session_id source DEFERRED + exact rerun cmd in 22-DOGFOOD.md. 4 real phrasings coalesce to 1 signal occ=4 -> AUTO @0.9 -> clean+provenanced skill; D2 operator judged skill useful+correctly-scoped. Real-text finding: a 5th genuine phrasing at cosine 0.60-0.65 correctly stayed separate (0.83 cut is precision-first). 67 targeted pytest pass, ruff clean; just build FAIL pre-existing (AnswerGroundednessCard TS2345, PR #212, frontend/out-of-scope)
 
+- [Phase 21]: 21-01: harness-setup persistence floor. Migration 159
+  (_migrate_159_harness_setup) copies the v05:38 grd_init_status PRAGMA-guard
+  (NOT v07:1181): adds projects.harness_setup_status TEXT DEFAULT 'none' +
+  harness_setup_steps (PK project_id,step_key; status/detail/fingerprint/
+  updated_at) via CREATE TABLE IF NOT EXISTS — double-apply is a pure no-op.
+  Helpers in projects.py: update_project gains harness_setup_status kwarg;
+  get_harness_setup_status coerces NULL→'none' (mirrors get_init_status);
+  set_harness_setup_status direct UPDATE; upsert_harness_setup_step is
+  ON CONFLICT(project_id,step_key) latest-write-wins (one row, ISO-8601 UTC
+  updated_at in Python); get_harness_setup_steps reads ordered rows. Parity
+  classmethod GrdPlanningService.get_harness_setup_status added. S1/S2 4/4
+  green, ruff clean.
+
 - [Phase 19]: 19-01: driver spine foundation. resolve_execution_driver() is an
   ADDITIVE precedence resolver beside should_route_via_cli_agent (callers migrate
   in 19-04): turn -> SuperAgent config_json.driver -> instance.driver ->
@@ -301,38 +276,6 @@ Progress: [##########] 100%
   en/ko/ja/zh. Tests 5/5; full FE suite 1485 passed / 7 known-baseline /
   0 NEW; build fails only on pre-existing AnswerGroundednessCard.vue TS error
   (zero FE files of that touched). Phase 19 plans 01-06 ALL complete.
-
-- [Phase 20]: 20-01: GrdResearchSessionHandler registered as 'grd_research'
-  — mirrors GrdChatSessionHandler verbatim, spawns one-shot claude -p
-  stream-json `/grd:research <json.dumps(question)>` (or `resume <thread_id>`)
-  in cwd from resolve_working_directory (ValueError preserved when no clone),
-  forwards forge_bundle+super_agent_id; optional --max-iterations/--no-gates
-  appended only when provided; stop stops PSM (no orphan). GrdCliService gains
-  research_status (gd round-trip) + list_threads/read_thread (ON-DISK reads of
-  THREAD/HYPOTHESES/FINDING — list_threads returns [] for missing dir, tiny
-  frontmatter line-parser coerces iteration ints); NO gd research report/portfolio
-  invented (report=FINDING.md, portfolio=thread list). Five /api/projects/{id}/
-  research/* routes reuse the generic /sessions/{id}/output SSE (no research bridge).
-  27 tests green (19 new + 8 grd_chat regression); ruff clean; grd_chat untouched.
-  Unblocks Wave B (Research page, REQ-15). Live SSE through PSM deferred (DEFER-20-01).
-- [Phase 20]: 20-02: two frontend api modules. research.ts (researchApi) wraps
-  the five /api/projects/{id}/research/* routes — startResearch/resumeThread/
-  listThreads/getThread + streamResearch (returns EventSource over the generic
-  /sessions/{id}/stream, NOT a research-specific endpoint). grdHarness.ts
-  (grdHarnessApi) wraps Group A (16 GRD routes, /api/projects/{id}/grd/*,
-  X-API-Key) + Group B (11 harness-evolution routes, /admin/* base): autonomy
-  get/set, rounds list/detail/impact/apply/abort/revert, shared-forge list/adopt.
-  KEY: client.ts has NO special admin header — apiFetch already sends
-  X-API-Key+bearer/cookie+CSRF on every call, and the /admin Litestar router is
-  gated by that same global middleware, so Group B is authed purely by routing
-  to the /admin base path. [Rule 1] renamed research ListThreadsResponse ->
-  ResearchThreadsResponse to clear a barrel duplicate-identifier (TS2300).
-  36 tests green (7+29); bot-health regression green; vue-tsc S1 clean except
-  pre-existing AnswerGroundednessCard err (PR #212, untouched). Unblocks
-  20-03 (Research page) + 20-04 (life-harness panels). DEFER-20-02 = live network.
-- [Phase 20]: 20-02: /admin routes carry no special header — apiFetch already sends X-API-Key+bearer/cookie+CSRF; Group B authed purely by /admin base path
-- [Phase 20]: 20-05: PlanningCommandBar fed by GRD_COMMAND_MANIFEST (six groups Plan/Execute/Verify/Research/Harness/Misc, full /grd: set, evolve deprecated); invoke emits (name,{group}) and the page routes research->project-research, harness->project-harness, else->grd_chat; planningCommandBar.* i18n key-identical across en/ko/ja/zh (52 keys each)
-- [Phase 20]: 20-06: committed frontend/scripts/i18n-parity.mjs (flatten + set-diff of en/ko/ja/zh, exits non-zero on diff); parity == 0 already (no locale edits). [Rule 1] fixed 15 phase-20-introduced TS2345 in harness-panels.test.ts (global.plugins unknown[] -> Plugin[]) — these were NOT pre-existing baseline as 20-05 claimed. just build blocked only by pre-existing AnswerGroundednessCard.vue (PR #212, out of scope). FE 1485/7-baseline/0-NEW; backend targeted 115 passed (full-suite hang avoided). Phase 20 COMPLETE.
 
 ### Pending Todos
 
