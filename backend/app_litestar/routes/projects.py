@@ -398,6 +398,31 @@ def skill_sleep_evaluate(
         raise NotFoundException(detail=str(e)) from e
 
 
+@post("/{project_id:str}/skills/{skill_name:str}/sleep/round", sync_to_thread=True)
+def skill_sleep_round(
+    project_id: str, skill_name: str, data: dict, caller: Caller
+) -> dict[str, Any]:
+    """Run one autonomous Skill-Sleep round: Reflect (propose an improved body
+    from the project's recurring needs) → gate + outcome → stage for adoption.
+
+    Body (all optional): {"n": int, "seed": int, "measure": bool}.
+    """
+    _assert_project_access(project_id, caller)
+    body = data or {}
+    from app.services.skill_sleep_service import SkillNotInProjectError, SkillSleepGate
+
+    try:
+        return SkillSleepGate.run_skill_sleep_round(
+            project_id,
+            skill_name,
+            n=int(body.get("n", 6)),
+            seed=int(body.get("seed", 0)),
+            measure=bool(body.get("measure", True)),
+        )
+    except SkillNotInProjectError as e:
+        raise NotFoundException(detail=str(e)) from e
+
+
 @get("/{project_id:str}/skill-sleep", sync_to_thread=False)
 def skill_sleep_list(project_id: str, caller: Caller) -> dict[str, Any]:
     """List this project's Skill-Sleep runs (most recent first)."""
@@ -643,6 +668,7 @@ projects_router = Router(
         add_skill_to_project,
         remove_skill_from_project,
         skill_sleep_evaluate,
+        skill_sleep_round,
         skill_sleep_list,
         skill_sleep_adopt,
         list_installations,
