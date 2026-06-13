@@ -278,7 +278,8 @@ class AnswerEvalService:
                 logger.debug("baseline llm_call failed for question %r", question, exc_info=True)
                 baseline_answer = None
 
-            # ---- Arm B: pipeline (RAG context injected) ----
+            # ---- Arm B: pipeline (RAG context injected, unless the gate suppresses) ----
+            pipeline_injected = False
             try:
                 rag = gather_context(
                     project_id,
@@ -286,64 +287,62 @@ class AnswerEvalService:
                     llm_call=pipeline_llm_call,
                     deadline_seconds=90,
                 )
-                pipeline_messages: list[dict] = [
-                    {"role": "system", "content": "You are a helpful assistant."},
-                ]
-                if rag.get("context_message"):
-                    pipeline_messages.append(rag["context_message"])
-                pipeline_messages.append({"role": "user", "content": question})
-                pipeline_answer = pipeline_llm_call(pipeline_messages)
-                pipeline_sources = [f"{c.source}:{c.provenance_key}" for c in rag.get("chunks", [])]
+                pipeline_injected = bool(rag.get("injected"))
+                if pipeline_injected:
+                    pipeline_messages: list[dict] = [
+                        {"role": "system", "content": "You are a helpful assistant."},
+                        rag["context_message"],
+                        {"role": "user", "content": question},
+                    ]
+                    pipeline_answer = pipeline_llm_call(pipeline_messages)
+                    pipeline_sources = [
+                        f"{c.source}:{c.provenance_key}" for c in rag.get("chunks", [])
+                    ]
+                else:
+                    # The injection gate suppressed retrieval, so the pipeline's
+                    # actual production behavior on this question IS a plain
+                    # baseline turn. Model that faithfully — reuse the baseline
+                    # answer so a suppressed question contributes a true 0 delta
+                    # rather than arm-sampling noise (two independent samples of
+                    # the same prompt would otherwise diverge under a noisy
+                    # judge and masquerade as a pipeline effect).
+                    pipeline_answer = baseline_answer
+                    pipeline_sources = []
             except Exception:
                 logger.debug("pipeline arm failed for question %r", question, exc_info=True)
                 pipeline_answer = None
                 pipeline_sources = []
 
-            # ---- Judge: blind evaluation ----
-            # The judge prompt NEVER names the arm — it only sees question + answer + sources
-            for arm, answer, sources in [
-                ("baseline", baseline_answer, []),
-                ("pipeline", pipeline_answer, pipeline_sources),
-            ]:
-                try:
-                    if answer is None:
-                        raise ValueError("no answer generated")
-                    judge_prompt = _build_judge_prompt(question, answer, sources)
-                    judge_text = llm_call([{"role": "user", "content": judge_prompt}])
-                    scores = _parse_judge_response(judge_text)
-                    record_result(
-                        run_id,
-                        question=question,
-                        arm=arm,
-                        answer_text=answer,
-                        scores=scores,
-                        judge_reason=scores.get("reason"),
-                        tokens=None,
-                        cost_usd=None,
+            # ---- Judge: blind evaluation (prompt NEVER names the arm) ----
+            baseline_eval = _judge_and_record(
+                run_id, question, "baseline", baseline_answer, [], llm_call
+            )
+            baseline_scores.append(baseline_eval)
+
+            if (
+                not pipeline_injected
+                and pipeline_answer is not None
+                and pipeline_answer == baseline_answer
+            ):
+                # Suppressed → identical to baseline by construction; reuse the
+                # baseline judgment (exact 0 delta, one fewer judge call).
+                record_result(
+                    run_id,
+                    question=question,
+                    arm="pipeline",
+                    answer_text=pipeline_answer,
+                    scores=baseline_eval,
+                    judge_reason=baseline_eval.get("reason"),
+                    tokens=None,
+                    cost_usd=None,
+                )
+                pipeline_scores.append(baseline_eval)
+            else:
+                pipeline_scores.append(
+                    _judge_and_record(
+                        run_id, question, "pipeline", pipeline_answer, pipeline_sources, llm_call
                     )
-                    if arm == "baseline":
-                        baseline_scores.append(scores)
-                    else:
-                        pipeline_scores.append(scores)
-                except Exception:
-                    logger.debug(
-                        "judge failed for arm=%s question=%r", arm, question, exc_info=True
-                    )
-                    zero_scores = {"groundedness": 0.0, "sufficiency": 0.0, "quality": 0.0}
-                    record_result(
-                        run_id,
-                        question=question,
-                        arm=arm,
-                        answer_text=answer,
-                        scores=zero_scores,
-                        judge_reason="error",
-                        tokens=None,
-                        cost_usd=None,
-                    )
-                    if arm == "baseline":
-                        baseline_scores.append(zero_scores)
-                    else:
-                        pipeline_scores.append(zero_scores)
+                )
 
         # ---- Finalize: compute per-arm means + deltas ----
         def _mean(scores: list[dict], key: str) -> Optional[float]:
@@ -373,7 +372,7 @@ class AnswerEvalService:
             "delta_sufficiency": _delta(p_s, b_s),
             "delta_quality": _delta(p_q, b_q),
         }
-        finalize_run(run_id, aggregates=aggregates)
+        finalize_run(run_id, aggregates=aggregates, question_count=len(questions))
 
         return run_id
 
@@ -381,6 +380,44 @@ class AnswerEvalService:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _judge_and_record(run_id, question, arm, answer, sources, llm_call) -> dict:
+    """Blind-judge one arm's answer and persist the result row. Returns the
+    scores dict (zeros + reason='error' on any failure, still recorded)."""
+    from app.db.answer_eval import record_result
+
+    try:
+        if answer is None:
+            raise ValueError("no answer generated")
+        judge_prompt = _build_judge_prompt(question, answer, sources)
+        judge_text = llm_call([{"role": "user", "content": judge_prompt}])
+        scores = _parse_judge_response(judge_text)
+        record_result(
+            run_id,
+            question=question,
+            arm=arm,
+            answer_text=answer,
+            scores=scores,
+            judge_reason=scores.get("reason"),
+            tokens=None,
+            cost_usd=None,
+        )
+        return scores
+    except Exception:
+        logger.debug("judge failed for arm=%s question=%r", arm, question, exc_info=True)
+        zero_scores = {"groundedness": 0.0, "sufficiency": 0.0, "quality": 0.0}
+        record_result(
+            run_id,
+            question=question,
+            arm=arm,
+            answer_text=answer,
+            scores=zero_scores,
+            judge_reason="error",
+            tokens=None,
+            cost_usd=None,
+        )
+        return zero_scores
 
 
 def _build_default_llm_call(backend: str = "claude") -> LLMCall:

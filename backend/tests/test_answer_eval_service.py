@@ -346,6 +346,69 @@ def test_run_eval_aggregates_and_deltas_correct(isolated_db):
     run = ae.get_run(run_id)
     assert run["status"] == "complete"
     assert run["finished_at"] is not None
+    # question_count is recorded from the actual question set (n=1 here).
+    assert run["question_count"] == 1
+
+
+def test_run_eval_suppressed_gate_pipeline_reuses_baseline(isolated_db, monkeypatch):
+    """When the injection gate suppresses, the pipeline arm must mirror the
+    baseline answer/score (true 0 delta) and NOT generate a separate sample."""
+    import json
+
+    from app.db import answer_eval as ae
+    from app.db import harness_kg_signals
+    from app.services import answer_eval_service as svc
+
+    # Force suppression on every question. _run_eval_body does a call-time
+    # `from app.services.answer_pipeline_service import gather_context`, so the
+    # patch must land on the SOURCE module, not answer_eval_service.
+    monkeypatch.setattr(
+        "app.services.answer_pipeline_service.gather_context",
+        lambda *a, **k: {
+            "context_message": None,
+            "injected": False,
+            "chunks": [],
+            "strength": 0.0,
+            "sufficient": False,
+            "gap": None,
+            "iterations": 1,
+        },
+    )
+
+    pipeline_calls = {"n": 0}
+
+    def pipeline_stub(messages):
+        pipeline_calls["n"] += 1
+        return "SEPARATE PIPELINE ANSWER"
+
+    def baseline_and_judge(messages):
+        # Baseline generation returns this; judge calls parse it as valid JSON.
+        return json.dumps({"groundedness": 0.6, "sufficiency": 0.5, "quality": 0.7, "reason": "ok"})
+
+    harness_kg_signals.record_signal(
+        signal_id="sig-sup",
+        project_id="proj-sup",
+        question="What is the build system?",
+        content="cmake.",
+        round_id="r1",
+        already_forged=False,
+        weight=1.0,
+        now="2026-01-01T00:00:00",
+    )
+
+    run_id = svc.AnswerEvalService.run_eval(
+        "proj-sup", n=1, llm_call=baseline_and_judge, pipeline_llm_call=pipeline_stub
+    )
+
+    rows = {r["arm"]: r for r in ae.list_results(run_id)}
+    # Pipeline mirrors baseline answer + score exactly (true 0 delta).
+    assert rows["pipeline"]["answer_text"] == rows["baseline"]["answer_text"]
+    assert rows["pipeline"]["groundedness"] == rows["baseline"]["groundedness"]
+    # Suppressed → the pipeline LLM was never invoked for a separate answer.
+    assert pipeline_calls["n"] == 0
+    # Delta is exactly zero, not sampling noise.
+    run = ae.get_run(run_id)
+    assert run["delta_groundedness"] == 0.0
 
 
 def test_run_eval_blind_judge_prompt_contains_no_arm_names(isolated_db):

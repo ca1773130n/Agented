@@ -110,9 +110,11 @@ def test_parse_sufficiency_garbage_fails_open():
 def test_gather_context_sufficient_round1(monkeypatch):
     from app.services import answer_pipeline_service as svc
 
+    # Chunk text shares meaningful terms ("project", "status") with the
+    # question so it clears the injection-strength gate.
     chunks_returned = [
         svc.RetrievedChunk(
-            text="signal content",
+            text="project status: all phases green",
             source="kg_signal",
             provenance_key="signal:sig-1",
             score=0.9,
@@ -293,6 +295,292 @@ def test_gather_context_deadline_stops_early(monkeypatch):
     # Should complete without raising
     assert "chunks" in result
     assert "iterations" in result
+
+
+# ---------------------------------------------------------------------------
+# _retrieval_strength — clean relevance measure (answer-eval run-3 calibration)
+# ---------------------------------------------------------------------------
+
+
+def test_retrieval_strength_counts_corroborating_relevant_chunks():
+    from app.services.answer_pipeline_service import RetrievedChunk, _retrieval_strength
+
+    # Shares only stopwords with the query → no demonstrated relevance.
+    # The inflated stored ``score`` (substring overlap) is deliberately ignored.
+    irrelevant = [
+        RetrievedChunk(
+            text="the harness externalizes checkpoint state",
+            source="kg_signal",
+            provenance_key="signal:s1",
+            score=5.0,
+        )
+    ]
+    assert _retrieval_strength("what is the deployment process", irrelevant) == 0.0
+
+    # A single shared term is coincidental — NOT counted as relevant.
+    one_term = [
+        RetrievedChunk(
+            text="deployment of the harness", source="kg_signal", provenance_key="signal:s2"
+        )
+    ]
+    assert _retrieval_strength("what is the deployment process", one_term) == 0.0
+
+    # Two meaningful shared terms ("deployment", "process") → one relevant chunk.
+    relevant = [
+        RetrievedChunk(
+            text="deployment process via gunicorn",
+            source="kg_signal",
+            provenance_key="signal:s3",
+            score=0.0,
+        )
+    ]
+    assert _retrieval_strength("what is the deployment process", relevant) == 1.0
+
+
+def test_retrieval_strength_is_whole_word_not_substring():
+    from app.services.answer_pipeline_service import RetrievedChunk, _retrieval_strength
+
+    # "is" must NOT match "this"/"axis"/"basis" — the bug that inflates the
+    # retrievers' stored scores. Clean whole-word matching yields 0.
+    chunks = [
+        RetrievedChunk(
+            text="this axis is the basis",
+            source="takeaway",
+            provenance_key="takeaway:t1",
+            score=9.0,
+        )
+    ]
+    assert _retrieval_strength("is", chunks) == 0.0
+
+
+def test_retrieval_strength_execution_log_intrinsic_tesserae_excluded():
+    from app.services.answer_pipeline_service import RetrievedChunk, _retrieval_strength
+
+    # execution_log is FTS-matched → intrinsically relevant even with zero
+    # literal overlap. Tesserae is generative → never self-justifies, so a lone
+    # tesserae chunk does NOT count (only execution_log does → strength 1.0).
+    chunks = [
+        RetrievedChunk(
+            text="added JWT middleware",
+            source="execution_log",
+            provenance_key="execution:e1",
+            score=0.0,
+        ),
+        RetrievedChunk(
+            text="graph answer", source="tesserae", provenance_key="tesserae:t", score=0.0
+        ),
+    ]
+    assert _retrieval_strength("how is auth implemented", chunks) == 1.0
+
+
+def test_retrieval_strength_empty_chunks_is_zero():
+    from app.services.answer_pipeline_service import _retrieval_strength
+
+    assert _retrieval_strength("anything at all", []) == 0.0
+
+
+# ---------------------------------------------------------------------------
+# gather_context — injection gate suppresses thin/irrelevant context
+# ---------------------------------------------------------------------------
+
+
+def _stub_all_retrievers(monkeypatch, svc, kg=None):
+    monkeypatch.setattr(svc, "_search_kg_signals", lambda *a, **kw: kg or [])
+    monkeypatch.setattr(svc, "_search_execution_logs", lambda *a, **kw: [])
+    monkeypatch.setattr(svc, "_search_takeaways", lambda *a, **kw: [])
+    monkeypatch.setattr(svc, "_search_findings", lambda *a, **kw: [])
+    monkeypatch.setattr(svc, "_search_verifications", lambda *a, **kw: [])
+    monkeypatch.setattr(svc, "_ask_tesserae_budgeted", lambda *a, **kw: [])
+
+
+def test_gather_context_suppresses_thin_irrelevant_context(monkeypatch):
+    """A retrieved chunk with no meaningful term overlap is surfaced but NOT
+    injected — the pipeline falls back to a clean baseline turn (run-3 fix)."""
+    from app.services import answer_pipeline_service as svc
+
+    irrelevant = [
+        svc.RetrievedChunk(
+            text="phase 3 added live per-run budget discipline",
+            source="kg_signal",
+            provenance_key="signal:sig-x",
+            score=4.0,  # inflated substring score; clean overlap is 0
+        )
+    ]
+    _stub_all_retrievers(monkeypatch, svc, kg=irrelevant)
+
+    llm_call = _make_llm_call(
+        [
+            '[{"query": "deployment", "sources": ["kg_signal"]}]',
+            '{"sufficient": false, "gap": "no deployment info", "feedback": ""}',
+            '[{"query": "deployment", "sources": ["kg_signal"]}]',
+            '{"sufficient": false, "gap": "no deployment info", "feedback": ""}',
+        ]
+    )
+
+    result = svc.gather_context(
+        "proj-aaa",
+        "what is the deployment process for authentication",
+        llm_call=llm_call,
+        deadline_seconds=20,
+    )
+
+    # Chunk still returned (caller may log provenance) but injection suppressed.
+    assert len(result["chunks"]) == 1
+    assert result["strength"] == 0.0
+    assert result["injected"] is False
+    assert result["context_message"] is None
+
+
+def test_gather_context_injects_when_meaningful_overlap(monkeypatch):
+    from app.services import answer_pipeline_service as svc
+
+    relevant = [
+        svc.RetrievedChunk(
+            text="the deployment process uses gunicorn workers",
+            source="kg_signal",
+            provenance_key="signal:sig-y",
+            score=0.0,
+        )
+    ]
+    _stub_all_retrievers(monkeypatch, svc, kg=relevant)
+
+    llm_call = _make_llm_call(
+        [
+            '[{"query": "deployment", "sources": ["kg_signal"]}]',
+            '{"sufficient": true, "gap": null, "feedback": ""}',
+        ]
+    )
+    result = svc.gather_context(
+        "proj-aaa",
+        "what is the deployment process",
+        llm_call=llm_call,
+        deadline_seconds=20,
+    )
+
+    assert result["strength"] >= 1.0
+    assert result["injected"] is True
+    assert result["context_message"] is not None
+    assert "signal:sig-y" in result["context_message"]["content"]
+
+
+def test_gather_context_intrinsic_source_injected_without_overlap(monkeypatch):
+    """An execution_log chunk with zero literal overlap is still injected —
+    FTS retrieval already established relevance."""
+    from app.services import answer_pipeline_service as svc
+
+    monkeypatch.setattr(svc, "_search_kg_signals", lambda *a, **kw: [])
+    monkeypatch.setattr(
+        svc,
+        "_search_execution_logs",
+        lambda *a, **kw: [
+            svc.RetrievedChunk(
+                text="added JWT middleware to login route",
+                source="execution_log",
+                provenance_key="execution:exec-9",
+                score=0.5,
+            )
+        ],
+    )
+    monkeypatch.setattr(svc, "_search_takeaways", lambda *a, **kw: [])
+    monkeypatch.setattr(svc, "_search_findings", lambda *a, **kw: [])
+    monkeypatch.setattr(svc, "_search_verifications", lambda *a, **kw: [])
+    monkeypatch.setattr(svc, "_ask_tesserae_budgeted", lambda *a, **kw: [])
+
+    llm_call = _make_llm_call(
+        [
+            '[{"query": "auth", "sources": ["execution_log"]}]',
+            '{"sufficient": true, "gap": null, "feedback": ""}',
+        ]
+    )
+    result = svc.gather_context(
+        "proj-aaa",
+        "how is authentication implemented",
+        llm_call=llm_call,
+        deadline_seconds=20,
+    )
+
+    assert result["strength"] >= 1.0
+    assert result["injected"] is True
+    assert result["context_message"] is not None
+
+
+def test_gather_context_tesserae_alone_does_not_open_gate(monkeypatch):
+    """A lone generative Tesserae answer must NOT trigger injection by itself —
+    the run-4 failure mode (tesserae-only questions tanked groundedness)."""
+    from app.services import answer_pipeline_service as svc
+
+    monkeypatch.setattr(svc, "_search_kg_signals", lambda *a, **kw: [])
+    monkeypatch.setattr(svc, "_search_execution_logs", lambda *a, **kw: [])
+    monkeypatch.setattr(svc, "_search_takeaways", lambda *a, **kw: [])
+    monkeypatch.setattr(svc, "_search_findings", lambda *a, **kw: [])
+    monkeypatch.setattr(svc, "_search_verifications", lambda *a, **kw: [])
+    monkeypatch.setattr(svc, "_get_project_tesserae_root", lambda pid: "/fake/root")
+    monkeypatch.setattr(
+        svc,
+        "_ask_tesserae_budgeted",
+        lambda **kw: [
+            svc.RetrievedChunk(
+                text="a generative answer that echoes monitoring and observability",
+                source="tesserae",
+                provenance_key="tesserae:x",
+                score=0.8,
+            )
+        ],
+    )
+
+    llm_call = _make_llm_call(
+        [
+            '[{"query": "monitoring", "sources": ["tesserae"]}]',
+            '{"sufficient": false, "gap": "no monitoring info", "feedback": ""}',
+            '[{"query": "monitoring", "sources": ["tesserae"]}]',
+            '{"sufficient": false, "gap": "no monitoring info", "feedback": ""}',
+        ]
+    )
+    result = svc.gather_context(
+        "proj-aaa",
+        "what monitoring and observability is in place",
+        llm_call=llm_call,
+        deadline_seconds=90,  # > 25s so Tesserae is allowed to fire
+    )
+
+    # Tesserae chunk was retrieved but cannot open the gate by itself.
+    assert any(c.source == "tesserae" for c in result["chunks"])
+    assert result["strength"] == 0.0
+    assert result["injected"] is False
+    assert result["context_message"] is None
+
+
+def test_gather_context_min_injection_strength_zero_restores_old_behavior(monkeypatch):
+    """min_injection_strength=0 disables the gate (inject any non-empty chunks)."""
+    from app.services import answer_pipeline_service as svc
+
+    irrelevant = [
+        svc.RetrievedChunk(
+            text="totally unrelated content",
+            source="kg_signal",
+            provenance_key="signal:sig-z",
+            score=0.0,
+        )
+    ]
+    _stub_all_retrievers(monkeypatch, svc, kg=irrelevant)
+
+    llm_call = _make_llm_call(
+        [
+            '[{"query": "q", "sources": ["kg_signal"]}]',
+            '{"sufficient": true, "gap": null, "feedback": ""}',
+        ]
+    )
+    result = svc.gather_context(
+        "proj-aaa",
+        "alpha beta gamma",
+        llm_call=llm_call,
+        deadline_seconds=20,
+        min_injection_strength=0.0,
+    )
+
+    assert result["strength"] == 0.0
+    assert result["injected"] is True
+    assert result["context_message"] is not None
 
 
 # ---------------------------------------------------------------------------
