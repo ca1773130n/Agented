@@ -33,3 +33,4 @@ export * from './chunks';
 export * from './bot-templates';
 export * from './prompt-snippets';
 export * from './specialized-bots';
+export * from './skill-sleep';
