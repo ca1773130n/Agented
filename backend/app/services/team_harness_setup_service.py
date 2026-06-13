@@ -424,8 +424,89 @@ def _step_default_policies(project_id: str, existing_row: Optional[dict]) -> Ste
     )
 
 
+# Kinds the materializer projects into .claude (mirrors forge_create_service's
+# default kind set). The materializer's _NEVER_DELETE guard (forge_materialization
+# _service.py:27) protects manifest/settings/mcp.json across re-runs, so step f
+# never issues a manual delete (SC4 / P2).
+_MATERIALIZE_KINDS: list[str] = ["rule", "hook", "command", "mcp_server", "skill", "subagent"]
+
+# The four backends whose renderers must accept the materialized projection.
+_COMPILE_BACKENDS: tuple[str, ...] = ("claude", "codex", "gemini", "opencode")
+
+
 def _step_materialize_compile(project_id: str, existing_row: Optional[dict]) -> StepResult:
-    return StepResult("materialize_compile", "ok")
+    """Step f — materialize bound primitives, then per-backend compile smoke.
+
+    1. Resolve the project DICT (``materialize_primitives`` takes the dict, not
+       the id — forge_materialization_service.py:183) and its ``local_path`` as
+       the workspace. Call ``materialize_primitives(project, _MATERIALIZE_KINDS,
+       workspace)`` — deterministic, idempotent, and protected by the built-in
+       ``_NEVER_DELETE`` guard (no manual deletes — SC4 / P2).
+    2. Compile smoke (NOT a subprocess compile): build a minimal ``ContextBundle``
+       and, for each of the four backends, fetch the PUBLIC ``renderer_for(b)``
+       (context_renderers/__init__.py:27 — over the private ``_REGISTRY``; there
+       is no ``RENDERERS`` symbol) and run ``renderer.apply(cmd, env, bundle,
+       session_id)``. A clean return is a pass; a raised exception names that
+       backend's compile failure → ``failed`` StepResult (retryable). A missing
+       renderer for a required backend is likewise a failure.
+    """
+    from pathlib import Path
+
+    from app.services.context_renderers import ContextBundle, renderer_for
+    from app.services.forge_materialization_service import materialize_primitives
+
+    project = get_project(project_id)
+    if not project:
+        raise ValueError(f"materialize_compile: project {project_id} not found")
+
+    local_path = project.get("local_path")
+    if not local_path:
+        raise ValueError(f"materialize_compile: project {project_id} has no local_path")
+
+    workspace_path = Path(local_path)
+    result = materialize_primitives(project, _MATERIALIZE_KINDS, workspace_path)
+    written = len(result.written)
+
+    # Compile smoke over the materialized projection. The bundle is intentionally
+    # minimal — the smoke proves every renderer ACCEPTS the projection without
+    # raising, mirroring how the renderer suite exercises apply().
+    bundle = ContextBundle()
+    base_cmd = ["claude", "-p", "noop"]
+    base_env = {"AGENTED_SESSION": project_id}
+    session_id = f"harness-setup-{project_id}"
+
+    failed: list[str] = []
+    passed: list[str] = []
+    for backend in _COMPILE_BACKENDS:
+        renderer = renderer_for(backend)
+        if renderer is None:
+            failed.append(f"{backend} (no renderer)")
+            continue
+        try:
+            out_cmd, out_env = renderer.apply(list(base_cmd), dict(base_env), bundle, session_id)
+        except Exception as exc:  # noqa: BLE001 — per-backend compile isolation
+            failed.append(f"{backend} ({exc})")
+            continue
+        # A clean return with a non-empty cmd is a pass (renderers may legitimately
+        # no-op an empty bundle, so non-empty mutation is not required — a cleared
+        # cmd would be the only abnormal result).
+        if not out_cmd:
+            failed.append(f"{backend} (empty cmd)")
+            continue
+        passed.append(backend)
+
+    if failed:
+        return StepResult(
+            "materialize_compile",
+            "failed",
+            f"materialized {written} files; compile failed for: {', '.join(failed)}",
+        )
+
+    return StepResult(
+        "materialize_compile",
+        "ok",
+        f"materialized {written} files; compiled for: {', '.join(passed)}",
+    )
 
 
 # Dispatch table — the seam wave-2 plans rebind per step.
