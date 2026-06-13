@@ -495,6 +495,27 @@ class GrdCliService:
 
     _RESEARCH_THREADS_REL = os.path.join(".planning", "research", "threads")
 
+    @staticmethod
+    def _is_safe_thread_id(thread_id: Optional[str]) -> bool:
+        """Reject thread ids that could escape the threads directory.
+
+        ``thread_id`` arrives from a URL path/query param and is joined onto
+        a filesystem path (``read_thread``) and passed as a ``gd`` argv
+        (``research_status``), so a value containing a path separator, a
+        ``..`` segment, or a NUL byte is treated as hostile and refused —
+        defense-in-depth against path traversal regardless of how the ASGI
+        server decodes ``%2F``.
+        """
+        if not thread_id:
+            return False
+        if "\x00" in thread_id or "/" in thread_id or "\\" in thread_id:
+            return False
+        # With separators already rejected, the only traversal left is a
+        # bare ``..`` segment.
+        if thread_id == "..":
+            return False
+        return True
+
     @classmethod
     def research_status(cls, project_path: str, thread_id: Optional[str] = None) -> dict:
         """``gd research status [thread_id]`` — JSON snapshot of the
@@ -510,6 +531,8 @@ class GrdCliService:
             }
         args = ["research", "status"]
         if thread_id:
+            if not cls._is_safe_thread_id(thread_id):
+                return {"success": False, "data": None, "error": "invalid thread_id"}
             args.append(thread_id)
         return cls.run_gd_json(project_path, *args)
 
@@ -555,8 +578,12 @@ class GrdCliService:
 
         Each field is ``None`` when its file is absent (a thread mid-loop
         may not have written FINDING.md yet), so callers get a None-safe
-        bundle rather than a partial dict or an exception.
+        bundle rather than a partial dict or an exception. A hostile
+        ``thread_id`` (path separators / ``..``) yields an all-``None``
+        bundle rather than escaping the threads directory.
         """
+        if not cls._is_safe_thread_id(thread_id):
+            return {"id": thread_id, "thread": None, "hypotheses": None, "finding": None}
         thread_path = os.path.join(project_path, cls._RESEARCH_THREADS_REL, thread_id)
         return {
             "id": thread_id,

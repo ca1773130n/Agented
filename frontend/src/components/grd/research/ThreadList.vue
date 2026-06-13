@@ -2,7 +2,7 @@
 import { useI18n } from 'vue-i18n';
 import type { ResearchThread } from '../../../services/api/research';
 
-const props = defineProps<{
+defineProps<{
   threads: ResearchThread[];
   selectedId?: string | null;
 }>();
@@ -21,7 +21,6 @@ function statusLabel(status: string): string {
 }
 
 defineExpose({ statusLabel });
-void props;
 </script>
 
 <template>

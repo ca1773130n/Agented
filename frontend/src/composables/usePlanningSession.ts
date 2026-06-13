@@ -117,15 +117,21 @@ export function usePlanningSession(projectId: Ref<string>) {
       closeEventSource();
     });
 
-    // Error event (named SSE event, not EventSource.onerror)
+    // Error event (named SSE event, not EventSource.onerror).
+    // A native 'error' event from a transient connection drop carries no
+    // parseable ``data``; treating it as fatal here would close the stream
+    // and defeat the reconnect logic in ``onerror`` below. Only a parsed
+    // server-sent error payload is terminal.
     eventSource.addEventListener('error', (event: Event) => {
+      let data: { error_message?: string; message?: string } | null = null;
       try {
-        const data = JSON.parse((event as MessageEvent).data);
-        const msg = data.error_message || data.message || 'Session error';
-        outputLines.value.push(`[error] ${msg}`);
+        data = JSON.parse((event as MessageEvent).data);
       } catch {
-        // Ignore parse errors
+        // Native connection error (no payload) — let onerror handle retry.
+        return;
       }
+      const msg = data?.error_message || data?.message || 'Session error';
+      outputLines.value.push(`[error] ${msg}`);
       status.value = 'error';
       closeEventSource();
     });

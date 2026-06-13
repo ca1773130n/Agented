@@ -151,16 +151,23 @@ export function useResearchSession(projectId: Ref<string>) {
       closeEventSource();
     });
 
-    // Error event (named SSE event, not EventSource.onerror)
+    // Error event (named SSE event, not EventSource.onerror).
+    // The browser also dispatches a native 'error' event on a transient
+    // connection drop — that event carries no parseable ``data``, so we
+    // must NOT treat it as fatal here, otherwise we'd close the stream and
+    // defeat the reconnect logic in ``onerror`` below. Only a successfully
+    // parsed server-sent error payload is terminal.
     eventSource.addEventListener('error', (event: Event) => {
+      let data: { error_message?: string; message?: string } | null = null;
       try {
-        const data = JSON.parse((event as MessageEvent).data);
-        const msg = data.error_message || data.message || 'Session error';
-        error.value = msg;
-        outputLines.value.push(`[error] ${msg}`);
+        data = JSON.parse((event as MessageEvent).data);
       } catch {
-        // Ignore parse errors
+        // Native connection error (no payload) — let onerror handle retry.
+        return;
       }
+      const msg = data?.error_message || data?.message || 'Session error';
+      error.value = msg;
+      outputLines.value.push(`[error] ${msg}`);
       status.value = 'error';
       closeEventSource();
     });

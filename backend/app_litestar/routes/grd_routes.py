@@ -1992,6 +1992,27 @@ def resume_goal_loop_route(project_id: str, session_id: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _apply_research_knobs(config: dict[str, Any], body: dict) -> None:
+    """Copy the optional ``max_iterations`` / ``no_gates`` loop knobs from a
+    request body onto a ``grd_research`` handler config (in place).
+
+    ``max_iterations`` is validated to a positive int here so a malformed
+    value is a clean 400 rather than an ``int()`` ``ValueError`` (HTTP 500)
+    inside the handler.
+    """
+    raw_max = body.get("max_iterations")
+    if raw_max is not None:
+        try:
+            max_iterations = int(raw_max)
+        except (TypeError, ValueError):
+            raise ClientException(detail="max_iterations must be an integer")
+        if max_iterations <= 0:
+            raise ClientException(detail="max_iterations must be a positive integer")
+        config["max_iterations"] = max_iterations
+    if body.get("no_gates"):
+        config["no_gates"] = True
+
+
 @post("/{project_id:str}/research/start", status_code=201, sync_to_thread=False)
 def research_start(project_id: str, data: dict) -> dict[str, Any]:
     """Start a fresh ``gd research`` loop as a streamed ``grd_research``
@@ -2010,10 +2031,7 @@ def research_start(project_id: str, data: dict) -> dict[str, Any]:
 
     handler = get_handler("grd_research")
     config: dict[str, Any] = {"project_id": project_id, "question": question}
-    if body.get("max_iterations") is not None:
-        config["max_iterations"] = body["max_iterations"]
-    if body.get("no_gates"):
-        config["no_gates"] = True
+    _apply_research_knobs(config, body)
     # GRD 0.4.14 deep-research mode (fresh-run only). ``deep`` swaps the
     # prompt to /grd:deep-research; ``ultracode`` escalates to Opus/max.
     if body.get("deep"):
@@ -2053,10 +2071,7 @@ def research_resume(project_id: str, thread_id: str, data: dict) -> dict[str, An
 
     handler = get_handler("grd_research")
     config: dict[str, Any] = {"project_id": project_id, "thread_id": thread_id}
-    if body.get("max_iterations") is not None:
-        config["max_iterations"] = body["max_iterations"]
-    if body.get("no_gates"):
-        config["no_gates"] = True
+    _apply_research_knobs(config, body)
     if isinstance(body.get("answers"), list) and body["answers"]:
         config["answers"] = body["answers"]
 
