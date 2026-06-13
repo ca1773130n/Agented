@@ -1200,9 +1200,7 @@ def _migrate_159_harness_setup(conn):
     """
     cols = {row[1] for row in conn.execute("PRAGMA table_info(projects)")}
     if "harness_setup_status" not in cols:
-        conn.execute(
-            "ALTER TABLE projects ADD COLUMN harness_setup_status TEXT DEFAULT 'none'"
-        )
+        conn.execute("ALTER TABLE projects ADD COLUMN harness_setup_status TEXT DEFAULT 'none'")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS harness_setup_steps (

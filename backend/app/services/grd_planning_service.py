@@ -158,6 +158,18 @@ class GrdPlanningService:
         return project.get("grd_init_status") or "none"
 
     @classmethod
+    def get_harness_setup_status(cls, project_id: str) -> str:
+        """Get the harness_setup_status for a project (Phase 21).
+
+        Coalesces NULL → "none", mirroring ``get_init_status`` so downstream
+        consumers (status route, dashboard) never see a raw NULL.
+        """
+        project = get_project(project_id)
+        if not project:
+            return "none"
+        return project.get("harness_setup_status") or "none"
+
+    @classmethod
     def auto_init_project(cls, project_id: str, local_path: str) -> None:
         """Background GRD initialization after project clone.
 

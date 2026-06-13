@@ -71,6 +71,7 @@ def update_project(
     github_host: str = None,
     manager_super_agent_id: str = None,
     grd_init_status: str = None,
+    harness_setup_status: str = None,
 ) -> bool:
     """Update project fields. Returns True on success."""
     updates = []
@@ -109,6 +110,9 @@ def update_project(
     if grd_init_status is not None:
         updates.append("grd_init_status = ?")
         values.append(grd_init_status)
+    if harness_setup_status is not None:
+        updates.append("harness_setup_status = ?")
+        values.append(harness_setup_status)
 
     if not updates:
         return False
@@ -149,6 +153,78 @@ def get_project_default_driver(project_id: str) -> Optional[str]:
         if not row:
             return None
         return row["default_driver"] if hasattr(row, "keys") else row[0]
+
+
+# =============================================================================
+# Phase 21 (21-01): one-click team harness setup status + step persistence
+# =============================================================================
+
+
+def get_harness_setup_status(project_id: str) -> str:
+    """Return ``projects.harness_setup_status``, coercing NULL → "none".
+
+    Mirrors ``GrdPlanningService.get_init_status`` (grd_planning_service.py:149)
+    so a fresh project reports "none" rather than exposing NULL to the SPA.
+    """
+    project = get_project(project_id)
+    if not project:
+        return "none"
+    return project.get("harness_setup_status") or "none"
+
+
+def set_harness_setup_status(project_id: str, status: str) -> bool:
+    """Persist ``projects.harness_setup_status`` directly. Returns True on success."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "UPDATE projects SET harness_setup_status = ?, updated_at = CURRENT_TIMESTAMP "
+            "WHERE id = ?",
+            (status, project_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def upsert_harness_setup_step(
+    project_id: str,
+    step_key: str,
+    status: str,
+    detail: str = None,
+    fingerprint: str = None,
+) -> None:
+    """Idempotently upsert a per-step row keyed by ``(project_id, step_key)``.
+
+    Latest write wins (status/detail/fingerprint/updated_at reconciled via
+    ON CONFLICT), mirroring the upsert_policy pattern at
+    project_autonomy_config.py:25. Re-running a step never duplicates a row.
+    """
+    from datetime import datetime, timezone
+
+    updated_at = datetime.now(timezone.utc).isoformat()
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO harness_setup_steps
+                (project_id, step_key, status, detail, fingerprint, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(project_id, step_key) DO UPDATE SET
+                status = excluded.status,
+                detail = excluded.detail,
+                fingerprint = excluded.fingerprint,
+                updated_at = excluded.updated_at
+            """,
+            (project_id, step_key, status, detail, fingerprint, updated_at),
+        )
+        conn.commit()
+
+
+def get_harness_setup_steps(project_id: str) -> List[dict]:
+    """Return all harness-setup step rows for a project (ordered by step_key)."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT * FROM harness_setup_steps WHERE project_id = ? ORDER BY step_key",
+            (project_id,),
+        )
+        return [dict(row) for row in cursor.fetchall()]
 
 
 def get_all_projects(limit: Optional[int] = None, offset: int = 0) -> List[dict]:
