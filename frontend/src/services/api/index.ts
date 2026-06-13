@@ -116,6 +116,8 @@ export { retentionApi } from './retention';
 export type { RetentionPolicy, CreateRetentionPolicyRequest } from './retention';
 export { answerEvalApi } from './answer-eval';
 export type { AnswerEvalRun, AnswerEvalResult, AnswerEvalRunDetail, ListRunsResponse, StartRunResponse } from './answer-eval';
+export { skillSleepApi } from './skill-sleep';
+export type { SkillSleepStatus, SkillSleepVerdict, SkillSleepRun, SkillSleepRunsResponse, SkillSleepAdoptResponse } from './types/skill-sleep';
 export { versionPinsApi } from './version-pins';
 export type { VersionPin, ComponentVersionHistory, PinStatus, ComponentType, VersionPinsListResponse, VersionHistoryResponse, UpgradeAllResponse } from './version-pins';
 export { findingsApi } from './findings';
