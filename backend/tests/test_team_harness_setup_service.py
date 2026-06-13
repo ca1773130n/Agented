@@ -289,3 +289,126 @@ def test_team_topology_idempotent_no_duplicate(isolated_db, monkeypatch):
     # Driver still reconciled to grd on the skip path.
     for inst in get_project_sa_instances_for_project(pid):
         assert get_instance_driver(inst["id"]) == "grd"
+
+
+# ---------------------------------------------------------------------------
+# 21-04: bundle_selection (P3 — STACK.md tailoring + forge-creator floor)
+# ---------------------------------------------------------------------------
+
+_PYTHON_STACK = """# Technology Stack
+
+## Languages
+
+**Primary:**
+- Python 3.10+ — Backend API server
+
+## Runtime
+- Python >= 3.10
+"""
+
+_TYPESCRIPT_STACK = """# Technology Stack
+
+## Languages
+
+**Primary:**
+- TypeScript 5.4 — Frontend SPA
+
+## Frameworks
+- vue 3.5
+"""
+
+
+def test_bundle_selection_python_includes_floor_and_python():
+    """bundle_selection: Python STACK.md → forge-creator floor + forge-python."""
+    names = svc._select_bundles_for_stack(_PYTHON_STACK)
+    assert names[0] == "forge-creator"  # floor first (only unconditional pick)
+    assert "forge-python" in names
+    assert "forge-typescript" not in names
+
+
+def test_bundle_selection_typescript_includes_floor_and_typescript():
+    """bundle_selection: TypeScript STACK.md → forge-creator floor + forge-typescript."""
+    names = svc._select_bundles_for_stack(_TYPESCRIPT_STACK)
+    assert names[0] == "forge-creator"
+    assert "forge-typescript" in names
+    assert "forge-python" not in names
+
+
+def test_bundle_selection_missing_stack_floor_only():
+    """bundle_selection: missing STACK.md (None) → forge-creator floor alone (P3)."""
+    assert svc._select_bundles_for_stack(None) == ["forge-creator"]
+    assert svc._select_bundles_for_stack("") == ["forge-creator"]
+
+
+def test_bundle_selection_dedups_preserving_order():
+    """bundle_selection: a section naming a language twice yields no dup, order kept."""
+    text = "## Languages\n- Python\n- python\n"
+    assert svc._select_bundles_for_stack(text) == ["forge-creator", "forge-python"]
+
+
+def test_bundle_selection_step_binds_forge_creator_floor(isolated_db, monkeypatch):
+    """bundle_selection: step c binds the forge-creator bundle id via
+    bind_bundle_to_project; missing language bundle is skipped silently; the
+    DELETE/unbind path is never touched (SC4); re-run adds no duplicate rows."""
+    from app.db import forge_bundles as fb
+    from app.services.forge_creator_seed import seed_forge_creator_bundle
+
+    seed_forge_creator_bundle()
+    creator = fb.get_forge_bundle_by_name("forge-creator")
+    assert creator is not None
+
+    pid = create_project(name="harness-bundle", local_path="/tmp/no-stack-here-21-04")
+
+    bind_calls: list[str] = []
+    real_bind = fb.bind_bundle_to_project
+
+    def spy_bind(project_id, bundle_id):
+        bind_calls.append(bundle_id)
+        return real_bind(project_id, bundle_id)
+
+    # Spy on the bind path used inside the step (imported lazily there).
+    monkeypatch.setattr(fb, "bind_bundle_to_project", spy_bind)
+
+    res1 = svc._step_bundle_binding(pid, None)
+    assert res1.status == "ok"
+    assert creator["id"] in bind_calls  # floor bound
+
+    bindings_after_first = fb_list_count(pid)
+    res2 = svc._step_bundle_binding(pid, None)  # re-run
+    assert res2.status == "ok"
+    assert fb_list_count(pid) == bindings_after_first  # idempotent — no dups
+
+
+def fb_list_count(project_id: str) -> int:
+    from app.db.project_forge_bindings import list_bindings
+
+    return len(list_bindings(project_id, enabled_only=False))
+
+
+# ---------------------------------------------------------------------------
+# 21-04: tesserae (P2 — idempotent set, never unset on re-run)
+# ---------------------------------------------------------------------------
+
+
+def test_tesserae_enable_idempotent_never_unsets(isolated_db, monkeypatch, tmp_path):
+    """tesserae: step d sets the root via set_tesserae_root, is idempotent on
+    re-run (skipped), get_tesserae_root returns the configured root, and the
+    destructive unset_tesserae_root_bindings is NEVER called (P2 / SC4)."""
+    from app.services import tesserae_integration as tess
+
+    def boom_unset(project_id):
+        raise AssertionError("unset_tesserae_root_bindings must never be called (P2)")
+
+    monkeypatch.setattr(tess, "unset_tesserae_root_bindings", boom_unset)
+
+    local = tmp_path / "proj"
+    local.mkdir()
+    pid = create_project(name="harness-tesserae", local_path=str(local))
+
+    res1 = svc._step_tesserae_enable(pid, None)
+    assert res1.status == "ok"
+    assert tess.get_tesserae_root(pid) == local.resolve()
+
+    res2 = svc._step_tesserae_enable(pid, None)  # re-run reconciles to skipped
+    assert res2.status == "skipped"
+    assert tess.get_tesserae_root(pid) == local.resolve()

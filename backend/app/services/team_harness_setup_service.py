@@ -242,12 +242,125 @@ def _step_team_topology(project_id: str, existing_row: Optional[dict]) -> StepRe
     return StepResult("team_topology", status, f"{detail_prefix}: {len(instances)} SA instances")
 
 
+# forge-creator (forge_creator_seed.BUNDLE_NAME) is the guaranteed floor —
+# always bound. Language-specific bundles are bound only when actually seeded.
+_FORGE_CREATOR_BUNDLE = "forge-creator"
+_LANGUAGE_BUNDLE_MAP: dict[str, str] = {
+    "python": "forge-python",
+    "typescript": "forge-typescript",
+}
+
+
+def _select_bundles_for_stack(stack_md_text: Optional[str]) -> list[str]:
+    """Pure STACK.md → ordered bundle-name list (P3 tailoring surface).
+
+    Always emits the ``forge-creator`` floor first. Parses the ``## Languages``
+    section of STACK.md; for each recognized language (case-insensitive
+    substring match against the section lines) appends its language-keyed
+    bundle name from a small static map. Dedups while preserving order.
+    ``None``/missing STACK.md → ``["forge-creator"]`` only.
+    """
+    names: list[str] = [_FORGE_CREATOR_BUNDLE]
+    if not stack_md_text:
+        return names
+
+    # Slice the "## Languages" section: from its heading to the next "## ".
+    lines = stack_md_text.splitlines()
+    in_languages = False
+    section: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            in_languages = stripped[3:].strip().lower() == "languages"
+            continue
+        if in_languages:
+            section.append(line)
+    section_text = "\n".join(section).lower()
+
+    for language, bundle_name in _LANGUAGE_BUNDLE_MAP.items():
+        if language in section_text and bundle_name not in names:
+            names.append(bundle_name)
+    return names
+
+
+def _read_stack_md(local_path: Optional[str]) -> Optional[str]:
+    """Read ``<local_path>/.planning/codebase/STACK.md`` (None when absent)."""
+    if not local_path:
+        return None
+    stack_path = os.path.join(local_path, ".planning", "codebase", "STACK.md")
+    try:
+        with open(stack_path, encoding="utf-8") as fh:
+            return fh.read()
+    except OSError:
+        return None
+
+
 def _step_bundle_binding(project_id: str, existing_row: Optional[dict]) -> StepResult:
-    return StepResult("bundle_binding", "ok")
+    """Step c — project-tailored forge-bundle binding (REQ-21 tailoring).
+
+    Parses STACK.md ``## Languages`` to a bundle-name list via the pure
+    :func:`_select_bundles_for_stack`. Always binds the ``forge-creator``
+    floor; binds a language-specific bundle ONLY when it is actually seeded
+    (``get_forge_bundle_by_name`` returns a row). Binding goes exclusively
+    through ``bind_bundle_to_project`` (delegating to the idempotent
+    ``upsert_binding``) — DELETE/unbind paths are NEVER called (SC4). Re-runs
+    upsert the same rows, so no duplicate bindings.
+    """
+    from app.db.forge_bundles import bind_bundle_to_project, get_forge_bundle_by_name
+
+    project = get_project(project_id)
+    if not project:
+        raise ValueError(f"bundle_binding: project {project_id} not found")
+
+    stack_text = _read_stack_md(project.get("local_path"))
+    names = _select_bundles_for_stack(stack_text)
+
+    bound: list[str] = []
+    for name in names:
+        bundle = get_forge_bundle_by_name(name)
+        if bundle is None:
+            # Language-specific bundle not seeded → skip silently. forge-creator
+            # is guaranteed by the seed, so a missing floor is a hard failure.
+            if name == _FORGE_CREATOR_BUNDLE:
+                raise RuntimeError("bundle_binding: forge-creator bundle is not seeded")
+            continue
+        bind_bundle_to_project(project_id, bundle["id"])  # idempotent upsert
+        bound.append(name)
+
+    return StepResult("bundle_binding", "ok", f"bound: {', '.join(bound)}")
 
 
 def _step_tesserae_enable(project_id: str, existing_row: Optional[dict]) -> StepResult:
-    return StepResult("tesserae_enable", "ok")
+    """Step d — enable per-project Tesserae via the idempotent set path.
+
+    Resolves the Tesserae root to the project's ``local_path`` and calls
+    ``set_tesserae_root`` (tesserae_integration:103) — explicitly idempotent
+    and also best-effort binds the per-project Tesserae MCP server. Reconcile:
+    if ``get_tesserae_root`` already returns the same resolved root, return
+    ``skipped``; otherwise ``ok``. ``unset_tesserae_root_bindings`` is NEVER
+    called (SC4 / P2).
+    """
+    from pathlib import Path
+
+    from app.services.tesserae_integration import get_tesserae_root, set_tesserae_root
+
+    project = get_project(project_id)
+    if not project:
+        raise ValueError(f"tesserae_enable: project {project_id} not found")
+
+    local_path = project.get("local_path")
+    if not local_path:
+        raise ValueError(f"tesserae_enable: project {project_id} has no local_path")
+
+    root = Path(local_path)
+    existing_root = get_tesserae_root(project_id)
+    already_set = existing_root is not None and existing_root == root.resolve()
+
+    set_tesserae_root(project_id, root)  # idempotent
+
+    if already_set:
+        return StepResult("tesserae_enable", "skipped", f"tesserae root already {root.resolve()}")
+    return StepResult("tesserae_enable", "ok", f"tesserae root set to {root.resolve()}")
 
 
 def _step_default_policies(project_id: str, existing_row: Optional[dict]) -> StepResult:
