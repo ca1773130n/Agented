@@ -117,10 +117,15 @@ Plans:
   4. PlanningCommandBar exposes the full supported `/grd:` command set, grouped (Plan/Execute/Verify/Research/Harness/Misc), driven from a declarative manifest.
   5. Every new UI surface ships en/ko/ja/zh key-identical catalogs.
   6. House gates pass (frontend no-new-failures explicitly).
-**Plans**: TBD
+**Plans**: 6 plans
 
 Plans:
-- [ ] 20-NN: TBD (set by /grd:plan-phase 20)
+- [ ] 20-01-PLAN.md — Autoresearch backend: grd_research handler + research CLI helpers + 5 routes (REQ-14)
+- [ ] 20-02-PLAN.md — Frontend api modules: research.ts + grdHarness.ts + barrel (REQ-14/15/16 plumbing)
+- [ ] 20-03-PLAN.md — Research page: intake/threads/ledger/report/portfolio + SSE + i18n (REQ-15)
+- [ ] 20-04-PLAN.md — Life-harness UI: autonomy editor, round revert, shared-forge, 7 GRD-route panels + i18n (REQ-16)
+- [ ] 20-05-PLAN.md — PlanningCommandBar manifest: planningCommands.ts, 6 groups, group-aware invoke + i18n (REQ-17)
+- [ ] 20-06-PLAN.md — i18n parity sweep + house-gate green certification (REQ-18)
 
 ### Phase 21: One-click team harness setup
 **Goal**: A single ProjectDashboard button bootstraps a complete team harness — an idempotent `TeamHarnessSetupService` runs GRD init, team topology + GRD-driven superagents, project-tailored bundle binding, tesserae enablement, default policies, and 4-harness materialization with a per-backend compile smoke check; re-running reconciles rather than duplicates, and each step is independently retryable with step-level SSE progress.
