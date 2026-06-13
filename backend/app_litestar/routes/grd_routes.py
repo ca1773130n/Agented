@@ -654,9 +654,7 @@ def project_chat(project_id: str, data: dict) -> dict[str, Any]:
                                     yield ev
 
                             try:
-                                bridge_psm_to_chat(
-                                    _session_id, _psm_events(), ChatStateService
-                                )
+                                bridge_psm_to_chat(_session_id, _psm_events(), ChatStateService)
                             finally:
                                 ProjectSessionManager.unsubscribe_raw(grd_session_id, raw_q)
                             return
@@ -1655,6 +1653,99 @@ def resume_goal_loop_route(project_id: str, session_id: str) -> dict[str, Any]:
     return result
 
 
+# ---------------------------------------------------------------------------
+# Research (v0.8.0 — REQ-14, autoresearch loop)
+#
+# The long ``gd research`` loop runs as a streamed ``grd_research`` PSM
+# session via ``GrdResearchSessionHandler``; the operator watches it through
+# the generic ``/sessions/{session_id}/output`` SSE route (no research-
+# specific bridge). The thread browser/status endpoints read the loop's
+# on-disk ``THREAD.md`` / ``HYPOTHESES.md`` / ``FINDING.md`` outputs.
+# ---------------------------------------------------------------------------
+
+
+@post("/{project_id:str}/research/start", status_code=201, sync_to_thread=False)
+def research_start(project_id: str, data: dict) -> dict[str, Any]:
+    """Start a fresh ``gd research`` loop as a streamed ``grd_research``
+    session. Returns ``{"session_id": ...}``; stream it via the generic
+    ``/sessions/{session_id}/output`` SSE route.
+    """
+    _ensure_project(project_id)
+    body = data or {}
+    question = (body.get("question") or "").strip()
+    if not question:
+        raise ClientException(detail="question is required")
+
+    handler = get_handler("grd_research")
+    config: dict[str, Any] = {"project_id": project_id, "question": question}
+    if body.get("max_iterations") is not None:
+        config["max_iterations"] = body["max_iterations"]
+    if body.get("no_gates"):
+        config["no_gates"] = True
+
+    result = handler.start(config)
+    if "error" in result:
+        raise ClientException(detail=result["error"])
+    return {"session_id": result["session_id"]}
+
+
+@post(
+    "/{project_id:str}/research/{thread_id:str}/resume",
+    status_code=201,
+    sync_to_thread=False,
+)
+def research_resume(project_id: str, thread_id: str, data: dict) -> dict[str, Any]:
+    """Resume an existing research thread by spawning a fresh
+    ``grd_research`` session pinned to ``/grd:research resume <thread_id>``.
+    Returns ``{"session_id": ...}``.
+    """
+    _ensure_project(project_id)
+    body = data or {}
+
+    handler = get_handler("grd_research")
+    config: dict[str, Any] = {"project_id": project_id, "thread_id": thread_id}
+    if body.get("max_iterations") is not None:
+        config["max_iterations"] = body["max_iterations"]
+    if body.get("no_gates"):
+        config["no_gates"] = True
+
+    result = handler.start(config)
+    if "error" in result:
+        raise ClientException(detail=result["error"])
+    return {"session_id": result["session_id"]}
+
+
+@get("/{project_id:str}/research/threads", sync_to_thread=False)
+def research_list_threads(project_id: str) -> dict[str, Any]:
+    """Portfolio/browser — the project's research threads parsed from
+    on-disk ``THREAD.md`` frontmatter. Returns ``{"threads": []}`` when no
+    research has run yet (the threads dir does not exist until then).
+    """
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    return {"threads": GrdCliService.list_threads(cwd)}
+
+
+@get("/{project_id:str}/research/threads/{thread_id:str}", sync_to_thread=False)
+def research_read_thread(project_id: str, thread_id: str) -> dict[str, Any]:
+    """None-safe bundle of one thread's ``THREAD.md`` + ``HYPOTHESES.md`` +
+    ``FINDING.md`` (each ``None`` when its file is absent).
+    """
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    return GrdCliService.read_thread(cwd, thread_id)
+
+
+@get("/{project_id:str}/research/status", sync_to_thread=False)
+def research_status_route(project_id: str, thread_id: Optional[str] = None) -> dict[str, Any]:
+    """Passthrough to ``gd research status [thread_id]`` (JSON snapshot of
+    the active/most-recent loop).
+    """
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    return GrdCliService.research_status(cwd, thread_id)
+
+
 grd_router = Router(
     path="/api/projects",
     route_handlers=[
@@ -1710,5 +1801,11 @@ grd_router = Router(
         create_team_session,
         monitor_session,
         list_session_goal_iterations,
+        # v0.8.0 — REQ-14 autoresearch loop
+        research_start,
+        research_resume,
+        research_list_threads,
+        research_read_thread,
+        research_status_route,
     ],
 )
