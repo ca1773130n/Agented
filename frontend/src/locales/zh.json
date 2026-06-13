@@ -1791,6 +1791,20 @@
       "uninstalled": "已卸载 {count} 个组件"
     }
   },
+  "driver": {
+    "selectorTitle": "执行驱动",
+    "projectTitle": "执行驱动",
+    "projectDescription": "选择运行此项目聊天和代理回合的驱动。GRD（默认）会生成一个有计划的多步骤会话；CLI Agent 运行单个使用工具的代理；CLIProxy 为纯令牌聊天。",
+    "saLabel": "驱动",
+    "changeHint": "驱动更改将在保存时生效。",
+    "saved": "驱动已更新。",
+    "viewGrdSession": "查看 GRD 会话",
+    "options": {
+      "grd": "GRD（默认）",
+      "cli_agent": "CLI Agent",
+      "cliproxy": "CLIProxy"
+    }
+  },
   "projectTeamLeaderChat": {
     "thinkingLabel": "思考过程",
     "toolsLabel": "{count} 次工具执行",

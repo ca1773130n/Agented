@@ -122,6 +122,7 @@ Progress: [##########] 100%
 | 09-post-tour-experience | 2/2 | 24min | 12min |
 | 10-integration-testing | 4/4 | 64min | 16min |
 | Phase 17 P06 | 13min | 4 tasks | 13 files |
+| Phase 19 P06 | 19min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -201,6 +202,60 @@ Progress: [##########] 100%
 - [Phase 17]: 17-06: forge-creator bundle (5 global-scope creator skills, idempotent startup seed); session-completion auto-import handler (4th on execution_events bus) gated on session_kind={project_session,super_agent,team_session,goal_loop}, fails closed on foreign/unknown; forge_origin (mig 157) records sha256+source-session-id; global scope via forge_bundles.scope='global' (user_skills inherently global)
 - [Phase 22]: 22-06: live dogfood (EVAL D1/D2) — end-to-end harness (test_repeated_request_dogfood.py) drives detect_for_session -> upsert -> evaluate/convert_signal (AUTO) -> scan + forge_origin on the REAL MiniLM cosine path (embedding backend operational). agented.db was empty so transcripts are recorded-real (real wording, byte-identical payload shape) with live-session_id source DEFERRED + exact rerun cmd in 22-DOGFOOD.md. 4 real phrasings coalesce to 1 signal occ=4 -> AUTO @0.9 -> clean+provenanced skill; D2 operator judged skill useful+correctly-scoped. Real-text finding: a 5th genuine phrasing at cosine 0.60-0.65 correctly stayed separate (0.83 cut is precision-first). 67 targeted pytest pass, ruff clean; just build FAIL pre-existing (AnswerGroundednessCard TS2345, PR #212, frontend/out-of-scope)
 
+- [Phase 19]: 19-01: driver spine foundation. resolve_execution_driver() is an
+  ADDITIVE precedence resolver beside should_route_via_cli_agent (callers migrate
+  in 19-04): turn -> SuperAgent config_json.driver -> instance.driver ->
+  project.default_driver -> global "grd", normalized to {cliproxy,cli_agent,grd}.
+  Non-CLI backend -> cliproxy. Migration 158 adds nullable projects.default_driver
+  + project_sa_instances.driver (NULL = inherit, PRAGMA-guarded idempotent).
+  Degrade grd->cli_agent via injectable _grd_available/_resolve_workspace
+  (GrdCliService.available classmethod + ProjectWorkspaceService.resolve_working_directory
+  staticmethod) — both must be OK or it degrades. Every DB read wrapped; outer
+  guard returns legacy choice on any exception (never crashes the turn). 50/50
+  test_cli_agent_runner.py green.
+- [Phase 19]: 19-02: turn classifier classify_turn() keyword->LLM->deterministic (mirrors SketchRoutingService); per-kind DEFAULT_MODELS, model_override precedence, never claude-only; conversational openers match on word boundary not substring (Rule1 fix). 14/14 green.
+- [Phase 19-grd-default-driver]: 19-03: cwd resolved inline at execute_delegate/_scan_mentions_and_notify/project_chat via ProjectWorkspaceService.resolve_working_directory (ValueError->warn+None fallback, never crashes turn); project_chat backend derived from SA backend_type, no claude literal remains (REQ-12 anti-regression); finish delta backend also de-hardcoded. 4/4 proxy + 55 regression green.
+- [Phase 19-grd-default-driver]: 19-04: GrdChatSessionHandler registered as
+  'grd_chat' (mirrors GoalLoopSessionHandler) — spawns one-shot claude -p
+  stream-json session running /grd:<cmd> "<task>" (default /grd:quick, mapped
+  from intent via GRD_COMMAND_MAP) in cwd from resolve_working_directory,
+  forwards forge_bundle+super_agent_id to create_session, stop stops PSM
+  (no orphan on chat abort). grd_chat_bridge.bridge_psm_to_chat maps PSM
+  stream-json -> push_delta WIRE strings content_delta/tool_use/finish/error
+  (NOT enum 'tool_call'); ordering preserved, error propagates +
+  push_status('error'), synthetic finish on drain. Injectable event source.
+  12/12 proxy green. 19-05 wires this into the funnel.
+- [Phase 19-grd-default-driver]: 19-05: GRD is the DEFAULT driver at the single
+  streaming funnel. run_streaming_response resolves a 3-way driver via
+  resolve_execution_driver (cliproxy|cli_agent|grd); the cliproxy block is
+  lifted VERBATIM into a _run_cliproxy() closure so the grd-conversational
+  fallthrough shares it byte-identically (criterion 3 proven by regression test:
+  conversational driver=grd deltas == cliproxy baseline). grd-task turns
+  classify_turn() -> get_handler('grd_chat').start + bridge_psm_to_chat over a
+  subscribe_raw generator (subscribe BEFORE start so no early events lost); any
+  grd dispatch failure logs + falls through to cli_agent (turn never dropped).
+  All three legacy should_route_via_cli_agent sites migrated: funnel,
+  base_conversation_service (grd==cli_agent — no PSM/chat-SSE surface), and
+  grd_routes.project_chat (grd-task -> handler+bridge). Tests 3/3 driver
+  (regression+dispatch+degrade); [Rule 1] migrated 2 pre-existing test files off
+  the removed routing seam. Gates: 305 targeted backend green (full suite hung
+  at documented point); frontend 1480/7-baseline/0-NEW; build fails only on
+  pre-existing AnswerGroundednessCard.vue TS error (zero FE files touched).
+- [Phase 19-grd-default-driver]: 19-06: operator frontend cap (REQ-13,
+  success criterion 5). Reusable SuperAgentDriverSelector.vue (v-model
+  <select> over cliproxy|cli_agent|grd, default grd) mounted on project
+  settings (persists projects.default_driver via projectApi.update) and
+  per-SA card on SuperAgentsPage (merge-on-write into config_json.driver).
+  ExecutionDriver enum in types/projects.ts, imported by super-agents/agents
+  types + barrel. ProjectTeamLeaderChat renders a "View GRD session"
+  RouterLink on grd-driver finish turns, binding defensively to
+  grd_session_id|psm_session_id|session_id (backend bridge not yet emitting
+  it — forward-compatible per 19-RESEARCH risk 2), targeting
+  project-management?session=<psess>. driver.* i18n key-identical in
+  en/ko/ja/zh. Tests 5/5; full FE suite 1485 passed / 7 known-baseline /
+  0 NEW; build fails only on pre-existing AnswerGroundednessCard.vue TS error
+  (zero FE files of that touched). Phase 19 plans 01-06 ALL complete.
+
 ### Pending Todos
 
 None yet.
@@ -213,5 +268,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-06-13
-Stopped at: Completed 22-06-PLAN.md (live dogfood EVAL D1/D2: end-to-end replay of 4 recorded-real recurring transcripts through detect_for_session -> signal store -> gate AUTO -> scan + forge_origin on the live MiniLM cosine path; 1 signal occ=4 -> AUTO skill clean+provenanced; D2 operator PASS useful+correctly-scoped; live-session_id source deferred — agented.db empty — with rerun cmd in 22-DOGFOOD.md; 67 targeted pytest pass, ruff clean; just build FAIL pre-existing AnswerGroundednessCard TS2345 from PR #212 frontend/out-of-scope)
+Stopped at: Merged phase 19 (GRD default driver) into main — plans 01-06 ALL complete, verification PASSED 8/8, code review warnings_only (0 blockers), eval tiers 1+2 PASS (83/83). Delivered: 3-way resolve_execution_driver() at the streaming funnel, GrdChatSessionHandler + PSM→chat-SSE bridge, turn classifier, cwd/backend bug fixes, operator driver selectors (default GRD) with 4-locale i18n. (Prior main state: phase 22 repeated-request auto-skill also complete/merged.)
 Resume file: None

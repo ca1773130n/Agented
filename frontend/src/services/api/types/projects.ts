@@ -2,6 +2,11 @@
  * Project, ProjectSkill, and deployment-related types.
  */
 
+// Phase 19 (REQ-13) — the three execution drivers the backend's
+// ``resolve_execution_driver`` precedence resolves to. Mirrors the
+// backend enum; ``grd`` is the phase-19 default.
+export type ExecutionDriver = 'cliproxy' | 'cli_agent' | 'grd';
+
 export interface Project {
   id: string;
   name: string;
@@ -21,6 +26,9 @@ export interface Project {
   manager_super_agent_id?: string;
   team_count: number;
   team_topology_config?: string;
+  // Phase 19 (REQ-13) — project-level default execution driver. NULL /
+  // undefined means "inherit the global default" (which is ``grd``).
+  default_driver?: ExecutionDriver;
   created_at?: string;
   updated_at?: string;
   teams?: { id: string; name: string; color: string }[];

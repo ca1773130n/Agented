@@ -1791,6 +1791,20 @@
       "uninstalled": "Uninstalled {count} components"
     }
   },
+  "driver": {
+    "selectorTitle": "Execution driver",
+    "projectTitle": "Execution Driver",
+    "projectDescription": "Choose which driver runs this project's chat and agent turns. GRD (the default) spawns a planned multi-step session; CLI Agent runs a single tool-using agent; CLIProxy is plain token chat.",
+    "saLabel": "Driver",
+    "changeHint": "Driver change will apply on save.",
+    "saved": "Driver updated.",
+    "viewGrdSession": "View GRD session",
+    "options": {
+      "grd": "GRD (default)",
+      "cli_agent": "CLI Agent",
+      "cliproxy": "CLIProxy"
+    }
+  },
   "projectTeamLeaderChat": {
     "thinkingLabel": "Thinking",
     "toolsLabel": "{count} tool execution(s)",

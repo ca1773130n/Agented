@@ -39,6 +39,9 @@ export interface Agent {
   autonomous?: number;
   allowed_tools?: string[];
   preferred_model?: string;
+  // Phase 19 (REQ-13) — execution driver: 'cliproxy' | 'cli_agent' | 'grd'.
+  // NULL / undefined inherits the project / global default ('grd').
+  driver?: 'cliproxy' | 'cli_agent' | 'grd';
   effort_level?: EffortLevel;
   layer?: AgentLayer;
   detected_role?: string;

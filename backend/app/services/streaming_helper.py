@@ -124,7 +124,7 @@ def run_streaming_response(
             from .cli_agent_runner_service import (
                 is_yolo_mode_enabled,
                 resolve_account_config_dir,
-                should_route_via_cli_agent,
+                resolve_execution_driver,
                 stream_via_cli_agent,
             )
             from .conversation_streaming import (
@@ -257,10 +257,12 @@ def run_streaming_response(
                         )
                 # ---------------------------------------------------------------
 
-            # Routing decision lives in `should_route_via_cli_agent` so the
-            # three streaming sites (this one, design conversations, project
-            # chat) make the same choice. See its docstring for the matrix.
-            if not should_route_via_cli_agent(backend, use_cli_agent):
+            # The cliproxy conversational path is byte-identical to its
+            # pre-19-05 form; it is extracted into this closure ONLY so the
+            # grd-conversational fallthrough can share the exact same code
+            # path (no duplicate-and-diverge). Do NOT edit its body — the
+            # byte-identity is success-criterion-3 (cliproxy regression).
+            def _run_cliproxy() -> None:
                 # CLIProxy path — single attempt (it marks its own rate
                 # limits in conversation_streaming; cross-account retry for
                 # this path is a follow-up).
@@ -284,7 +286,103 @@ def run_streaming_response(
                             _session_id, "content_delta", {"content": chunk}
                         )
                 _finalize(accumulated, backend)
+
+            # Routing decision lives in `resolve_execution_driver` so the
+            # three streaming sites (this one, design conversations, project
+            # chat) make the same choice. It returns one of
+            # "cliproxy" | "cli_agent" | "grd". Best-effort project_id from
+            # the session row feeds the precedence chain; the resolver
+            # tolerates None and degrades grd→cli_agent when GRD/workspace
+            # is unavailable, so a missing project_id never crashes the turn.
+            _project_id = None
+            try:
+                if state:
+                    _project_id = state.get("project_id")
+            except Exception:
+                _project_id = None
+            driver = resolve_execution_driver(
+                backend=backend,
+                use_cli_agent=use_cli_agent,
+                super_agent_id=_super_agent_id,
+                project_id=_project_id,
+                instance_id=instance_id,
+            )
+
+            if driver == "cliproxy":
+                _run_cliproxy()
                 return
+
+            if driver == "grd":
+                # GRD branch (REQ-11): classify the turn. Conversational
+                # turns fall BACK through the SAME cliproxy block (shared, not
+                # duplicated). Task turns dispatch the grd_chat handler and
+                # bridge its PSM stream-json output onto chat SSE deltas.
+                # Any failure degrades to the cliproxy/cli_agent path rather
+                # than dropping the turn.
+                try:
+                    from .turn_classifier_service import classify_turn
+
+                    classification = classify_turn(
+                        _last_user_content, backend_kind=backend, model_override=model
+                    )
+                    if classification.get("shape") != "task":
+                        _run_cliproxy()
+                        return
+
+                    from .execution_type_handler import get_handler
+                    from .grd_chat_bridge import bridge_psm_to_chat
+                    from .project_session_manager import ProjectSessionManager
+
+                    handler = get_handler("grd_chat")
+                    if handler is None:
+                        logger.warning("grd_chat handler missing; degrading to cli_agent")
+                    else:
+                        # Subscribe to raw PSM events BEFORE starting the
+                        # session — raw subscribers do not replay history, so
+                        # registering first guarantees no early events are lost.
+                        result = handler.start(
+                            {
+                                "project_id": _project_id,
+                                "task": _last_user_content,
+                                "intent": classification.get("intent"),
+                                "grd_command": classification.get("grd_command"),
+                                "super_agent_id": _super_agent_id,
+                            }
+                        )
+                        grd_session_id = (result or {}).get("session_id")
+                        if not grd_session_id:
+                            logger.warning(
+                                "grd_chat start returned no session_id (%s); "
+                                "degrading to cli_agent",
+                                result,
+                            )
+                        else:
+                            raw_q = ProjectSessionManager.subscribe_raw(grd_session_id)
+
+                            def _psm_events():
+                                while True:
+                                    event_type, data = raw_q.get()
+                                    if event_type == "__end__":
+                                        return
+                                    payload = dict(data or {})
+                                    payload.setdefault("type", event_type)
+                                    yield payload
+
+                            try:
+                                bridge_psm_to_chat(_session_id, _psm_events(), ChatStateService)
+                            finally:
+                                ProjectSessionManager.unsubscribe_raw(grd_session_id, raw_q)
+                            if on_complete:
+                                on_complete()
+                            return
+                except Exception:
+                    logger.warning(
+                        "GRD task dispatch failed for session %s; falling through "
+                        "to the legacy path",
+                        _session_id,
+                        exc_info=True,
+                    )
+                # Fall through to the cli_agent block below (degrade).
 
             # ---- CLI-agent path with rate-limit rotation --------------------
             # When an account hits a provider rate limit (429 / weekly cap),

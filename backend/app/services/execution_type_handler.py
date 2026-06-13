@@ -484,6 +484,7 @@ class GoalLoopSessionHandler(ExecutionTypeHandler):
 
         # Persist config + spawn the driver thread.
         from app.db import set_goal_loop_config
+
         from .goal_loop_runner import start_runner
 
         try:
@@ -554,9 +555,10 @@ class GrdEvolveSessionHandler(ExecutionTypeHandler):
     """
 
     def start(self, session_config: dict) -> dict:
+        from app.db import create_evolve_run
+
         from .grd_cli_service import GrdCliService
         from .grd_evolve_runner import start_evolve_state_sync
-        from app.db import create_evolve_run
 
         gd_path = GrdCliService.gd_path()
         if not gd_path:
@@ -678,6 +680,138 @@ class GrdEvolveSessionHandler(ExecutionTypeHandler):
         return ProjectSessionManager.get_output(session_id, last_n=last_n)
 
 
+class GrdChatSessionHandler(ExecutionTypeHandler):
+    """Handler for GRD-driven chat turns (v0.8.0, REQ-11).
+
+    Mirrors ``GoalLoopSessionHandler`` but spawns a one-shot
+    ``claude -p`` stream-json session whose single prompt is a
+    ``/grd:<command> "<task>"`` invocation (default ``/grd:quick``).
+    The command is chosen from the classifier intent via
+    ``GRD_COMMAND_MAP``. The project cwd is resolved through
+    ``ProjectWorkspaceService.resolve_working_directory`` so the GRD
+    command runs against the real checkout, and the phase-17 forge
+    wiring (``forge_bundle`` / ``super_agent_id``) is forwarded onto
+    ``create_session`` unchanged.
+
+    The PSM→chat-SSE bridge (``grd_chat_bridge.bridge_psm_to_chat``)
+    is what maps this session's stream-json output back onto the chat
+    state_delta protocol; this handler only owns start + stop +
+    monitor. ``stop`` stops the PSM session so a chat abort does not
+    orphan the GRD subprocess (risk 5).
+
+    Required ``session_config``:
+      * ``project_id`` (standard).
+      * ``task`` — the user turn text the GRD command operates on.
+      * ``grd_command`` (optional) — a pre-resolved ``/grd:<cmd>``
+        from the classifier; when absent it is derived from
+        ``intent`` via ``GRD_COMMAND_MAP``, defaulting to
+        ``/grd:quick``.
+      * ``intent`` (optional) — classifier intent bucket.
+      * ``cwd`` (optional) — overrides the resolved project cwd.
+    """
+
+    @staticmethod
+    def _resolve_grd_command(session_config: dict) -> str:
+        """Pick the ``/grd:<cmd>`` token for this turn.
+
+        Precedence: an explicit ``grd_command`` from the classifier,
+        else a map lookup on ``intent``, else the ``/grd:quick``
+        default. The leading slash is normalized so the final token
+        is exactly one ``/grd:<cmd>`` string regardless of whether
+        the map value already carries the prefix.
+        """
+        from .turn_classifier_service import GRD_COMMAND_MAP
+
+        raw = session_config.get("grd_command")
+        if not raw:
+            intent = session_config.get("intent")
+            raw = GRD_COMMAND_MAP.get(intent or "", "/grd:quick")
+        cmd = (raw or "/grd:quick").strip()
+        # Normalize: strip any leading slash and the grd: prefix, then
+        # re-apply exactly one "/grd:" so callers passing "quick",
+        # "/quick", "grd:quick", or "/grd:quick" all converge.
+        cmd = cmd.lstrip("/")
+        if cmd.startswith("grd:"):
+            cmd = cmd[len("grd:"):]
+        return f"/grd:{cmd}"
+
+    def start(self, session_config: dict) -> dict:
+        task = (session_config.get("task") or "").strip()
+        if not task:
+            return {"error": "grd_chat: session_config.task is required"}
+
+        project_id = session_config["project_id"]
+
+        # Resolve the project cwd so the GRD command runs against the
+        # real checkout. An explicit cwd wins (test seams / worktrees).
+        cwd = session_config.get("cwd")
+        if not cwd:
+            from .project_workspace_service import ProjectWorkspaceService
+
+            cwd = ProjectWorkspaceService.resolve_working_directory(project_id)
+
+        grd_command = self._resolve_grd_command(session_config)
+
+        # One-shot stream-json invocation — same shape GrdPlanningService
+        # uses for /grd: commands. The task is the single prompt.
+        cmd = [
+            "claude",
+            "-p",
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            f'{grd_command} "{task}"',
+        ]
+
+        session_id = ProjectSessionManager.create_session(
+            project_id=project_id,
+            cmd=cmd,
+            cwd=cwd,
+            phase_id=session_config.get("phase_id"),
+            plan_id=session_config.get("plan_id"),
+            agent_id=session_config.get("agent_id"),
+            worktree_path=session_config.get("worktree_path"),
+            execution_type="grd_chat",
+            execution_mode=session_config.get("execution_mode", "autonomous"),
+            stream_json=True,
+            use_pty=False,
+            yolo_mode=session_config.get("yolo_mode", False),
+            forge_bundle=session_config.get("forge_bundle"),
+            super_agent_id=session_config.get("super_agent_id"),
+        )
+
+        info = ProjectSessionManager.get_session_info(session_id)
+        return {
+            "session_id": session_id,
+            "pid": info["pid"] if info else None,
+            "status": "active",
+        }
+
+    def monitor(self, session_id: str) -> dict:
+        info = ProjectSessionManager.get_session_info(session_id)
+        if not info:
+            return {
+                "alive": False,
+                "status": "unknown",
+                "output_lines": 0,
+                "last_activity_at": None,
+            }
+        return {
+            "alive": info["status"] == "active",
+            "status": info["status"],
+            "output_lines": info.get("output_lines", 0),
+            "last_activity_at": info.get("last_activity_at"),
+        }
+
+    def stop(self, session_id: str) -> bool:
+        # Stop the PSM session so a chat abort does not orphan the GRD
+        # subprocess (risk 5).
+        return ProjectSessionManager.stop_session(session_id)
+
+    def get_output(self, session_id: str, last_n: int = 100) -> list[str]:
+        return ProjectSessionManager.get_output(session_id, last_n=last_n)
+
+
 # =============================================================================
 # Handler Registry
 # =============================================================================
@@ -689,6 +823,7 @@ HANDLER_REGISTRY: dict[str, ExecutionTypeHandler] = {
     "team_spawn": TeamSpawnHandler(),
     "goal_loop": GoalLoopSessionHandler(),
     "grd_evolve": GrdEvolveSessionHandler(),
+    "grd_chat": GrdChatSessionHandler(),
 }
 
 

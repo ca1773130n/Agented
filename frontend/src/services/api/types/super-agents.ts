@@ -2,6 +2,8 @@
  * SuperAgent types.
  */
 
+import type { ExecutionDriver } from './projects';
+
 export type SuperAgentStatus = 'active' | 'idle' | 'terminated';
 export type SessionStatus = 'active' | 'paused' | 'completed' | 'terminated';
 export type DocumentType = 'SOUL' | 'IDENTITY' | 'MEMORY' | 'ROLE';
@@ -20,6 +22,10 @@ export interface SuperAgent {
   max_concurrent_sessions: number;
   enabled: number;
   config_json?: string;
+  // Phase 19 (REQ-13) — per-super-agent execution driver. The
+  // canonical store is ``config_json.driver``; this convenience field
+  // mirrors it for the settings selector. NULL / undefined inherits.
+  driver?: ExecutionDriver;
   created_at?: string;
   updated_at?: string;
 }

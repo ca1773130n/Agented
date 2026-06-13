@@ -52,6 +52,10 @@ interface ChatMessage {
   timestamp?: string;
   citations?: Citation[];
   tool_uses?: ToolUseRecord[];
+  // Phase 19 (REQ-13) — when this turn ran on the ``grd`` driver, the
+  // bridge surfaces the spawned PSM session id on the finish/status
+  // delta. We render a "View GRD session" link to that session.
+  grdSessionId?: string;
   /** Extended-thinking / reasoning text, shown folded above the answer. */
   thinking?: string;
   // System notices: account rotation / queued-for-retry / terminal errors.
@@ -223,6 +227,12 @@ function connectStream(session: TeamLeaderChatSession) {
     } else if (deltaType === 'finish') {
       if (activeAssistant) {
         activeAssistant.citations = extractCitations(activeAssistant.content);
+        // Phase 19 (REQ-13) — a grd-driver turn carries the spawned PSM
+        // session id on the finish delta (any of these field names —
+        // 19-RESEARCH §7/risk 2; bind defensively). When present, render
+        // a link to the GRD session.
+        const gid = extractGrdSessionId(data);
+        if (gid) activeAssistant.grdSessionId = gid;
         activeAssistant = null;
       }
       isStreaming.value = false;
@@ -322,6 +332,18 @@ const CITATION_PATTERNS: { kind: CitationKind; re: RegExp }[] = [
   { kind: 'session', re: /\b(sess-[a-z0-9]{4,}|psa-[a-z0-9]{4,})\b/g },
   { kind: 'takeaway', re: /\b(tk[a-z0-9]{6,})\b/g },
 ];
+
+// Phase 19 (REQ-13) — pull the GRD/PSM session id off a finish/status
+// delta. The bridge may name it any of these; accept all and require a
+// plausible session-id shape so a stray ``finish_reason`` never matches.
+function extractGrdSessionId(data: Record<string, unknown>): string | null {
+  if (!data || typeof data !== 'object') return null;
+  for (const key of ['grd_session_id', 'psm_session_id', 'session_id']) {
+    const val = data[key];
+    if (typeof val === 'string' && val.trim()) return val.trim();
+  }
+  return null;
+}
 
 function extractCitations(text: string): Citation[] {
   const seen = new Set<string>();
@@ -512,6 +534,21 @@ onUnmounted(closeStream);
             :breaks="true"
           />
           <div v-else class="msg__content">{{ m.content }}</div>
+          <!-- Phase 19 (REQ-13) — GRD-session linkage for grd-driver turns. -->
+          <router-link
+            v-if="m.role === 'assistant' && m.grdSessionId"
+            class="grd-session-link"
+            data-testid="grd-session-link"
+            :data-session-id="m.grdSessionId"
+            :to="{
+              name: 'project-management',
+              params: { projectId: props.projectId },
+              query: { session: m.grdSessionId },
+            }"
+          >
+            <span class="grd-session-link__icon" aria-hidden="true">⚡</span>
+            {{ t('driver.viewGrdSession') }}
+          </router-link>
           <div
             v-if="m.role === 'assistant' && m.citations?.length"
             class="msg__cites"
@@ -640,6 +677,17 @@ onUnmounted(closeStream);
   display: flex; flex-wrap: wrap; gap: 4px;
   margin-top: 4px;
 }
+.grd-session-link {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-top: 6px; align-self: flex-start;
+  font-size: 11px; padding: 3px 8px; border-radius: 4px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: var(--accent-green, #10b981);
+  text-decoration: none;
+}
+.grd-session-link:hover { background: rgba(16, 185, 129, 0.18); }
+.grd-session-link__icon { font-size: 11px; }
 .cite-label { font-size: 10px; color: var(--text-tertiary); }
 .cite-chip {
   font-size: 10px; padding: 1px 5px; border-radius: 3px;
