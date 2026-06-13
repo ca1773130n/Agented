@@ -29,7 +29,10 @@ import hashlib
 import logging
 import os
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional
+
+if TYPE_CHECKING:
+    from app.models.autonomy_policy import AutonomyPolicy
 
 from app.db.projects import (
     get_harness_setup_steps,
@@ -363,8 +366,62 @@ def _step_tesserae_enable(project_id: str, existing_row: Optional[dict]) -> Step
     return StepResult("tesserae_enable", "ok", f"tesserae root set to {root.resolve()}")
 
 
+def _default_autonomy_policy() -> "AutonomyPolicy":
+    """The dual-consumer default policy row (RESEARCH Seam 5 / Open Question 1).
+
+    A SINGLE ``project_autonomy_config`` row is read by two consumers:
+
+    1. ``repeated_request_gate._auto_apply_policy`` — needs ``enabled=True`` to
+       turn takeaway auto-apply ON (skill-from-repetition / ``discovered_procedure``).
+    2. ``harness_autonomy.autonomous_apply_eligible`` — must stay conservative.
+
+    Resolved with one row: ``enabled=True`` arms auto-apply, while
+    ``allowed_kinds=["discovered_procedure"]`` (excluding ``rule``/``hook``),
+    ``block_deletes=True`` and ``max_ops_per_round=1`` keep evolution autonomy
+    cautious — rule/hook evolution patches are gate-blocked, deletes are
+    blocked, and blast radius is capped at one op per round.
+    ``confidence_threshold`` and ``rate_limit_per_day`` keep their conservative
+    model defaults (0.85 / 10).
+    """
+    from app.models.autonomy_policy import AutonomyPolicy
+
+    return AutonomyPolicy(
+        enabled=True,
+        allowed_kinds=["discovered_procedure"],
+        block_deletes=True,
+        max_ops_per_round=1,
+    )
+
+
 def _step_default_policies(project_id: str, existing_row: Optional[dict]) -> StepResult:
-    return StepResult("default_policies", "ok")
+    """Step e — write the dual-consumer default autonomy policy (P7 / Seam 5).
+
+    Upserts the single ``project_autonomy_config`` row via the idempotent
+    ``upsert_policy`` (ON CONFLICT(project_id) DO UPDATE — one row on re-run,
+    never a DELETE; SC4). Reconcile: if ``get_policy`` already equals the target
+    return ``skipped``, else ``ok``. The row satisfies BOTH gate readers:
+    ``_auto_apply_policy`` returns True (takeaway auto-apply ON), while
+    ``autonomous_apply_eligible`` stays conservative (allowed_kinds excludes
+    rule/hook, block_deletes on, max_ops_per_round=1).
+    """
+    from app.db.project_autonomy_config import get_policy, upsert_policy
+
+    target = _default_autonomy_policy()
+    current = get_policy(project_id)
+    if current is not None and current == target:
+        return StepResult(
+            "default_policies",
+            "skipped",
+            "autonomy policy already at dual-consumer default",
+        )
+
+    upsert_policy(project_id, target)
+    return StepResult(
+        "default_policies",
+        "ok",
+        "autonomy policy set: enabled, allowed_kinds=['discovered_procedure'], "
+        "block_deletes, max_ops_per_round=1",
+    )
 
 
 def _step_materialize_compile(project_id: str, existing_row: Optional[dict]) -> StepResult:
