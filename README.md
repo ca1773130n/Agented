@@ -1,59 +1,114 @@
+<div align="center">
+
 # Agented
 
-A tool for Harness engineering to organize teams, agents, and automation into a working structure — whether that's a real business team or a virtual one.
+**A harness-engineering meta-layer for AI coding agents.**
 
-Agented gives you a dashboard to define products, projects, and teams, then wire up AI agents, bots, skills, and webhooks to do the work.
+Orchestrate Claude Code, Codex, and Gemini CLI into end-to-end, autonomous
+product development — from one operator console, with provenance and
+auditability built in.
 
-## Getting Started
+[Architecture](docs/self-improving-harness-architecture.md) · [Tutorial](docs/self-improving-harness-tutorial.md) · [Security](docs/SECURITY.md) · [Deploy](docs/deploy/RUNBOOK.md) · [한국어](docs/ko/index.md) · [日本語](docs/ja/index.md) · [中文](docs/zh/index.md)
 
-### Fresh machine (auto-installs prerequisites)
+</div>
+
+---
+
+Agented is the **control plane on top of AI coding harnesses**. It coordinates
+**products → projects → teams → agents**, drives the underlying CLIs as live
+subprocesses, and streams their work back to you in real time. On top of that
+sits a **self-improving harness**: every action an agent takes is checkpointed,
+attributed to its source, budget-governed, and verifiable — provenance and
+auditability as first-class concerns, not afterthoughts.
+
+## Quickstart
 
 ```bash
+# Fresh machine — auto-installs just, uv, and Node.js, then all deps (safe to re-run)
 bash scripts/setup.sh
+
+# Already have the prerequisites?
+just setup        # install all dependencies
+just dev-all      # backend :20000 + sidecar :20001 + frontend :3000
 ```
 
-This installs [just](https://just.systems/), [uv](https://docs.astral.sh/uv/), and [Node.js](https://nodejs.org/) if missing, then installs all project dependencies. Safe to re-run.
+Open the console at **http://localhost:3000**. Interactive API docs (Swagger UI)
+live at **http://localhost:20000/schema**. Run pieces individually with
+`just dev-backend`, `just dev-frontend`, `just dev-ai-accounts`.
 
-### Already have prerequisites
+> **First run:** the **first** account to register becomes admin. Set
+> `AGENTED_DISABLE_SIGNUP=1` once you've registered — always before exposing the
+> instance to an untrusted network.
 
-```bash
-just setup
-```
+## What's inside
 
-### Run
+**🎛 Multi-harness orchestration** — Drive Claude Code, Codex CLI, and Gemini CLI
+as subprocesses and stream their output over SSE. Work is delivered by
+**triggers**: webhooks, GitHub events, schedules, or a manual run.
 
-```bash
-# Run backend and frontend in separate terminals
-just dev-backend    # http://localhost:20000
-just dev-frontend   # http://localhost:3000
-```
+**🗂 Organization model** — Products, projects, teams, agents, and predefined
+bots, wired together through one dashboard. Per-project context, accounts, and
+**Forge primitives** (plugins, skills, hooks, commands, rules) compose into each
+run.
 
-API docs are at http://localhost:20000/docs once the backend is running.
+**🔁 The self-improving harness** — Durable per-run state with incremental
+checkpoints (crash recovery + `--resume`), an append-only **evidence ledger** of
+every tool call, **verification records** that gate side effects, **live per-run
+budget discipline** (soft warn → hard stop), and goal-loop re-entry. Provenance,
+auditability, and rollback are designed in. → [Architecture](docs/self-improving-harness-architecture.md)
 
-## What It Does
+**💬 Dependable answers (agentic RAG)** — Leader-chat answers run through a
+planner → multi-source fanout → sufficient-context loop → grounded answer, with
+provenance-tagged extracted facts and a blind LLM-as-judge usefulness eval.
+Injection is gated on retrieval relevance **and** per-project corpus health, so
+the pipeline only runs where it measurably helps. → [Research report](docs/research/harness-1-integration.md)
 
-**Organization** — Define products, projects, and teams. Assign teams to projects, link projects to products.
+**🔐 Identity sidecar** — `ai-accounts` owns AI-backend accounts, credentials, and
+login flows on `:20001`. → [Integration](docs/ai-accounts/AGENTED-INTEGRATION.md)
 
-**Agents** — Design AI agents with roles, goals, and skills. Run them through conversations or trigger them automatically.
+**🌍 Operator console** — Vue 3 dashboard, dark theme, full i18n
+(English · 한국어 · 日本語 · 中文).
 
-**Bots** — Webhook-driven automation. Bots listen for events (webhooks, GitHub PRs, schedules) and run AI CLI tools with templated prompts.
+## Architecture
 
-**Plugins, Skills, Hooks, Commands, Rules** — Composable building blocks. Create skills for agents, hooks for event-driven logic, commands for reusable actions, and rules for validation.
+| Layer | Stack | Port |
+|---|---|---|
+| **Backend** | Litestar (gunicorn / UvicornWorker), raw SQLite, subprocess + SSE | `:20000` |
+| **Frontend** | Vue 3 + TypeScript operator console | `:3000` |
+| **Sidecar** | `ai-accounts` — AI-backend identity & credentials | `:20001` |
+| **Memory** | Tesserae typed knowledge graph + CodeGraph symbol index | — |
 
 ## Configuration
 
 | Variable | Description | Default |
 |---|---|---|
+| `AGENTED_DISABLE_SIGNUP` | Close open self-registration (set after the first admin) | unset (open) |
 | `AGENTED_DB_PATH` | SQLite database path | `backend/agented.db` |
-| `SECRET_KEY` | Flask secret key | Auto-generated |
-| `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins | `*` |
+| `AI_ACCOUNTS_API_KEY` | Token for the `ai-accounts` sidecar | reuse admin key |
+| `AGENTED_RAG_MIN_CORPUS` | Min durable corpus items before leader-chat RAG runs | `8` |
 
-## Running Tests
+Full environment reference and conventions live in [CLAUDE.md](CLAUDE.md).
+
+## Verify
+
+All three gates should pass before shipping:
 
 ```bash
-# Backend
-cd backend && uv run pytest
-
-# Frontend
-cd frontend && npm run test:run
+just build                       # vue-tsc type-check + vite build
+cd backend && uv run pytest      # backend suite
+cd frontend && npm run test:run  # frontend suite
 ```
+
+## Documentation
+
+| Topic | Link |
+|---|---|
+| Self-improving harness — architecture | [docs/self-improving-harness-architecture.md](docs/self-improving-harness-architecture.md) |
+| Self-improving harness — tutorial | [docs/self-improving-harness-tutorial.md](docs/self-improving-harness-tutorial.md) |
+| Harness-1 integration (research) | [docs/research/harness-1-integration.md](docs/research/harness-1-integration.md) |
+| Security | [docs/SECURITY.md](docs/SECURITY.md) |
+| Deploy — runbook · backup · secrets | [runbook](docs/deploy/RUNBOOK.md) · [backup](docs/deploy/BACKUP.md) · [secrets](docs/deploy/SECRETS.md) |
+| ai-accounts sidecar | [docs/ai-accounts/ARCHITECTURE.md](docs/ai-accounts/ARCHITECTURE.md) |
+| Internationalization | [docs/i18n.md](docs/i18n.md) |
+
+<div align="center"><sub>Built for harness engineering.</sub></div>
