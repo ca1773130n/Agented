@@ -1273,6 +1273,17 @@ def _migrate_163_skill_sleep_outcome(conn):
             conn.execute(f"ALTER TABLE skill_sleep_runs ADD COLUMN {col} {decl}")
 
 
+def _migrate_164_skill_sleep_current_body(conn):
+    """SkillOpt follow-up: store the current SKILL.md body the candidate was
+    gated against (not just its hash), so the operator review drawer can render
+    a true current-vs-candidate diff. PRAGMA-guarded ALTER; fresh DBs get it
+    from create_fresh_schema.
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(skill_sleep_runs)")}
+    if "current_body" not in cols:
+        conn.execute("ALTER TABLE skill_sleep_runs ADD COLUMN current_body TEXT")
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -1398,4 +1409,6 @@ V07_MIGRATIONS: list = [
     (162, "skill_sleep_body_hash", _migrate_162_skill_sleep_body_hash),
     # SkillOpt integration Phase 6: disjoint-split outcome measurement.
     (163, "skill_sleep_outcome", _migrate_163_skill_sleep_outcome),
+    # SkillOpt follow-up: store current body for the review-drawer diff.
+    (164, "skill_sleep_current_body", _migrate_164_skill_sleep_current_body),
 ]

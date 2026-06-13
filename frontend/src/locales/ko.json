@@ -9266,6 +9266,8 @@
     "optMeasure": "성과 측정",
     "optEditBudget": "편집 예산",
     "roundTitle": "스킬 최적화",
-    "selectSkill": "스킬 선택…"
+    "selectSkill": "스킬 선택…",
+    "changesFromCurrent": "현재 본문 대비 변경",
+    "noChanges": "줄 변경 없음"
   }
 }

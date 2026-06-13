@@ -516,6 +516,7 @@ class SkillSleepGate:
                 candidate_score=cand,
                 question_count=qc,
                 candidate_body=candidate_body if status == "accepted" else None,
+                current_body=current_body if status == "accepted" else None,
                 current_body_hash=current_hash,
                 reason=reason,
             )

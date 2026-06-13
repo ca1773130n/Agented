@@ -16,6 +16,7 @@ import { useI18n } from 'vue-i18n';
 import type { SkillSleepRun } from '../../services/api';
 import { useFocusTrap } from '../../composables/useFocusTrap';
 import MarkdownContent from '../base/MarkdownContent.vue';
+import { lineDiff } from '../../utils/lineDiff';
 
 const props = defineProps<{
   open: boolean;
@@ -33,6 +34,17 @@ useFocusTrap(drawerEl, toRef(props, 'open'));
 /** The client-side adopt gate (server re-checks; this is honest affordance). */
 const canAdopt = computed(
   () => !!props.run && props.run.status === 'accepted' && !props.run.adopted_at && !props.isAdopting,
+);
+
+/** When the run carries the current body (migration 164+), show a real
+ *  current-vs-candidate line diff; otherwise fall back to candidate-only. */
+const hasDiff = computed(
+  () => props.run?.current_body !== null && props.run?.current_body !== undefined,
+);
+const diff = computed(() =>
+  hasDiff.value && props.run
+    ? lineDiff(props.run.current_body ?? '', props.run.candidate_body ?? '')
+    : null,
 );
 
 function pct(val: number | null | undefined): string {
@@ -143,8 +155,23 @@ function onEscape(e: KeyboardEvent) {
             <p class="ss-reason">{{ props.run.reason }}</p>
           </section>
 
-          <!-- (d) Candidate body (no diff: current body unavailable — see plan) -->
-          <section class="ss-section">
+          <!-- (d) Current-vs-candidate diff when the run carries the current
+               body (migration 164+); otherwise candidate-only fallback. -->
+          <section v-if="diff" class="ss-section">
+            <h4>{{ t('skillSleep.changesFromCurrent') }}</h4>
+            <div class="ss-diff-summary">
+              <span class="ss-diff-added">+{{ diff.summary.added }}</span>
+              <span class="ss-diff-removed">-{{ diff.summary.removed }}</span>
+            </div>
+            <pre v-if="diff.rows.length" class="ss-diff" data-testid="ss-diff"><code><span
+              v-for="(row, i) in diff.rows"
+              :key="i"
+              :class="`ss-diff-line ss-diff-line--${row.type}`"
+            >{{ row.type === 'added' ? '+ ' : row.type === 'removed' ? '- ' : '  ' }}{{ row.text }}
+</span></code></pre>
+            <p v-else class="ss-muted">{{ t('skillSleep.noChanges') }}</p>
+          </section>
+          <section v-else class="ss-section">
             <h4>{{ t('skillSleep.candidateBody') }}</h4>
             <p class="ss-muted">{{ t('skillSleep.currentBodyUnavailable') }}</p>
             <MarkdownContent
@@ -317,5 +344,45 @@ function onEscape(e: KeyboardEvent) {
 .btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.ss-diff-summary {
+  display: flex;
+  gap: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.ss-diff-added {
+  color: var(--accent-green, #4ade80);
+}
+.ss-diff-removed {
+  color: var(--accent-crimson, #f87171);
+}
+
+.ss-diff {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--bg-card-inner, rgba(255, 255, 255, 0.04));
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  white-space: pre;
+}
+
+.ss-diff-line {
+  display: block;
+}
+.ss-diff-line--added {
+  background: rgba(74, 222, 128, 0.12);
+  color: var(--accent-green, #4ade80);
+}
+.ss-diff-line--removed {
+  background: rgba(248, 113, 113, 0.12);
+  color: var(--accent-crimson, #f87171);
+}
+.ss-diff-line--unchanged {
+  color: var(--text-muted, #999);
 }
 </style>

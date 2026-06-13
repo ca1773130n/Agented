@@ -9266,6 +9266,8 @@
     "optMeasure": "成果を測定",
     "optEditBudget": "編集予算",
     "roundTitle": "スキルを最適化",
-    "selectSkill": "スキルを選択…"
+    "selectSkill": "スキルを選択…",
+    "changesFromCurrent": "現在の本文からの変更",
+    "noChanges": "行の変更なし"
   }
 }

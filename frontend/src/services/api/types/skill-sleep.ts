@@ -42,7 +42,9 @@ export interface SkillSleepRun {
   partition_seed: number | null;
   judge_backend: string | null;
   candidate_body: string | null;
-  /** A hash, NOT the current text — no client-side diff is possible. */
+  /** The current SKILL.md body the candidate was gated against (for the diff);
+   *  null on pre-migration-164 runs → drawer falls back to candidate-only. */
+  current_body: string | null;
   current_body_hash: string | null;
   reason: string | null;
   created_at: string;

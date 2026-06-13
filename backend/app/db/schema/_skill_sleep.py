@@ -27,6 +27,7 @@ def create_skill_sleep_tables(conn) -> None:
             partition_seed   INTEGER NOT NULL DEFAULT 0,
             judge_backend    TEXT,
             candidate_body   TEXT,
+            current_body     TEXT,
             current_body_hash TEXT,
             reason           TEXT,
             created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
