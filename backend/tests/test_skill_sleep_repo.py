@@ -58,6 +58,35 @@ def test_run_lifecycle_accepted():
     assert run["finished_at"] is not None
 
 
+def test_finalize_stores_current_body_for_diff():
+    run_id = skill_sleep.create_run("proj-cb", "deploy", skill_id=3)
+    skill_sleep.finalize_run(
+        run_id,
+        status="accepted",
+        current_score=0.4,
+        candidate_score=0.7,
+        candidate_body="# new\n",
+        current_body="# old\n",
+    )
+    row = skill_sleep.get_run(run_id)
+    assert row["current_body"] == "# old\n"
+    assert row["candidate_body"] == "# new\n"
+
+
+def test_migration_164_current_body_present():
+    import sqlite3
+
+    from app.db.migrations import VERSIONED_MIGRATIONS
+    from app.db.schema import create_fresh_schema
+
+    assert 164 in {v for (v, _n, _f) in VERSIONED_MIGRATIONS}
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    create_fresh_schema(conn)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(skill_sleep_runs)")}
+    assert "current_body" in cols
+
+
 def test_status_check_rejects_bad_value():
     run_id = skill_sleep.create_run("proj-ss2", "s")
     with pytest.raises(sqlite3.IntegrityError):
