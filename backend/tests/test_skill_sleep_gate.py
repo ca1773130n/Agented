@@ -184,6 +184,58 @@ def test_nan_judge_score_fails_closed(isolated_db):
     assert v["status"] == "failed"
 
 
+def test_out_of_range_and_bool_judge_scores_fail_closed(isolated_db):
+    """Malformed FINITE axis values (999, -1, true, "0.5") must fail closed —
+    not be clamped into a usable score (codex re-review HIGH)."""
+    import pytest
+
+    from app.services.skill_sleep_service import _strict_judge_score
+
+    for bad in (
+        '{"groundedness": 999, "sufficiency": 999, "quality": 999, "reason": "x"}',
+        '{"groundedness": -1, "sufficiency": 0.5, "quality": 0.5, "reason": "x"}',
+        '{"groundedness": true, "sufficiency": true, "quality": true, "reason": "x"}',
+        '{"groundedness": "0.9", "sufficiency": "0.9", "quality": "0.9", "reason": "x"}',
+    ):
+        with pytest.raises(ValueError):
+            _strict_judge_score(bad)
+
+    # A well-formed in-range judgment still parses to the composite.
+    assert _strict_judge_score(
+        '{"groundedness": 0.6, "sufficiency": 0.6, "quality": 0.6, "reason": "x"}'
+    ) == pytest.approx(0.6)
+
+
+def test_untrusted_fence_uses_unpredictable_nonce():
+    """A candidate answer cannot forge the closing fence (per-call nonce)."""
+    from app.services.skill_sleep_service import _wrap_untrusted
+
+    a = _wrap_untrusted("hello")
+    b = _wrap_untrusted("hello")
+    # Per-call nonce → the two fences differ, so a static forged delimiter
+    # in the answer can't reliably break out.
+    assert a != b
+    assert "hello" in a
+
+
+def test_out_of_range_judge_drives_failed_status(isolated_db):
+    from app.services.skill_sleep_service import SkillSleepGate
+
+    _seed_corpus("proj-oor")
+    v = SkillSleepGate.evaluate_candidate(
+        "proj-oor",
+        skill_name="s",
+        current_body="CURR",
+        candidate_body="CAND",
+        answer_call=_answer_call,
+        judge_call=lambda m: '{"groundedness": 999, "sufficiency": 999, "quality": 999}',
+        n=4,
+        seed=1,
+    )
+    assert v["accepted"] is False
+    assert v["status"] == "failed"
+
+
 def test_malformed_judge_fails_closed(isolated_db):
     from app.services.skill_sleep_service import SkillSleepGate
 
