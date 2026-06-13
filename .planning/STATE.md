@@ -15,12 +15,16 @@ requirements mapped. Approved design spec:
 ``docs/superpowers/specs/2026-06-13-team-harness-self-improvement-design.md``
 (+ ``.ko.md``). PR-per-phase + codex-review-until-green cadence.
 
-Phase: 20 of 22 (GRD frontend wiring) — plan 20-01 (backend slice) complete
-Plan: 20-01 complete (1 of N)
-Status: 20-01 executed — GrdResearchSessionHandler (grd_research) + 5
-/research/* routes + research CLI helpers; 27 backend tests green (19 new
-+ 8 grd_chat regression), ruff clean. Unblocks Wave B (Research page, REQ-15).
-Last activity: 2026-06-13 — Completed 20-01-PLAN.md.
+Phase: 20 of 22 (GRD frontend wiring) — plans 20-01 + 20-02 complete
+Plan: 20-02 complete (2 of N)
+Status: 20-02 executed — two frontend api modules (research.ts: 5 methods;
+grdHarness.ts: 16 GRD + 11 /admin harness routes) + barrel re-exports + 36
+unit tests green (7 research + 29 harness); bot-health regression green;
+vue-tsc S1 clean (only pre-existing AnswerGroundednessCard err remains).
+Group B /admin routes authed purely by base path (apiFetch already sends
+X-API-Key+bearer/cookie+CSRF). Unblocks UI plans 20-03 (Research page) +
+20-04 (life-harness panels).
+Last activity: 2026-06-13 — Completed 20-02-PLAN.md.
 
 Prior phase-17 activity: 2026-06-13 — Completed 17-06-PLAN.md (FINAL plan of phase 17).
 Shipped the forge-creator default bundle (5 global-scope agentskills.io creator
@@ -272,6 +276,22 @@ Progress: [##########] 100%
   research/* routes reuse the generic /sessions/{id}/output SSE (no research bridge).
   27 tests green (19 new + 8 grd_chat regression); ruff clean; grd_chat untouched.
   Unblocks Wave B (Research page, REQ-15). Live SSE through PSM deferred (DEFER-20-01).
+- [Phase 20]: 20-02: two frontend api modules. research.ts (researchApi) wraps
+  the five /api/projects/{id}/research/* routes — startResearch/resumeThread/
+  listThreads/getThread + streamResearch (returns EventSource over the generic
+  /sessions/{id}/stream, NOT a research-specific endpoint). grdHarness.ts
+  (grdHarnessApi) wraps Group A (16 GRD routes, /api/projects/{id}/grd/*,
+  X-API-Key) + Group B (11 harness-evolution routes, /admin/* base): autonomy
+  get/set, rounds list/detail/impact/apply/abort/revert, shared-forge list/adopt.
+  KEY: client.ts has NO special admin header — apiFetch already sends
+  X-API-Key+bearer/cookie+CSRF on every call, and the /admin Litestar router is
+  gated by that same global middleware, so Group B is authed purely by routing
+  to the /admin base path. [Rule 1] renamed research ListThreadsResponse ->
+  ResearchThreadsResponse to clear a barrel duplicate-identifier (TS2300).
+  36 tests green (7+29); bot-health regression green; vue-tsc S1 clean except
+  pre-existing AnswerGroundednessCard err (PR #212, untouched). Unblocks
+  20-03 (Research page) + 20-04 (life-harness panels). DEFER-20-02 = live network.
+- [Phase 20]: 20-02: /admin routes carry no special header — apiFetch already sends X-API-Key+bearer/cookie+CSRF; Group B authed purely by /admin base path
 
 ### Pending Todos
 
