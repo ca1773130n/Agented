@@ -15,9 +15,26 @@ requirements mapped. Approved design spec:
 ``docs/superpowers/specs/2026-06-13-team-harness-self-improvement-design.md``
 (+ ``.ko.md``). PR-per-phase + codex-review-until-green cadence.
 
-Phase: 20 of 22 (GRD frontend wiring) — plans 20-01..20-05 complete
-Plan: 20-05 complete (5 of 6)
-Status: 20-05 executed — PlanningCommandBar manifest (REQ-17 / SC-5). Extracted
+Phase: 20 of 22 (GRD frontend wiring) — plans 20-01..20-06 complete (PHASE COMPLETE)
+Plan: 20-06 complete (6 of 6)
+Status: 20-06 executed — i18n parity + house-gate certification (REQ-18 / SC-6).
+Committed a deterministic key-diff script (frontend/scripts/i18n-parity.mjs:
+flatten + set-diff of all four catalogs, exits non-zero on diff); parity already
+at Total diff count: 0 across en/ko/ja/zh (surface.research.*, surface.harness.*,
+planningCommandBar.* all key-identical — no locale edits needed). House gate
+certified: [Rule 1] FIXED 15 phase-20-introduced TS2345 errors in
+harness-panels.test.ts (opts() returned global.plugins as unknown[],
+incompatible with ComponentMountingOptions on mount() spread — typed Plugin[];
+the 20-05 STATE note had mis-classified these as pre-existing baseline). After
+fix, all phase-20 files type-clean (non-bailing vue-tsc --noEmit, 0 errors);
+just build still blocked ONLY by pre-existing AnswerGroundednessCard.vue TS2345
+(PR #212, zero phase-20 files — disclosed, out of scope per phase-17/19
+precedent). Frontend 1485 passed / 7 known-baseline / 0 NEW. Backend targeted
+substitution (full-suite hang avoided): 115 passed (27 research handler/routes +
+grd_chat regression, 88 bridge/cli-agent-runner/litestar-grd). Phase 20 plans
+01-06 ALL complete.
+
+Prior 20-05 status — PlanningCommandBar manifest (REQ-17 / SC-5). Extracted
 the bar's inline commandGroups into a typed, unit-testable
 frontend/src/components/grd/planningCommands.ts manifest (GRD_COMMAND_MANIFEST:
 six groups Plan/Execute/Verify/Research/Harness/Misc covering the full supported
@@ -315,6 +332,7 @@ Progress: [##########] 100%
   20-03 (Research page) + 20-04 (life-harness panels). DEFER-20-02 = live network.
 - [Phase 20]: 20-02: /admin routes carry no special header — apiFetch already sends X-API-Key+bearer/cookie+CSRF; Group B authed purely by /admin base path
 - [Phase 20]: 20-05: PlanningCommandBar fed by GRD_COMMAND_MANIFEST (six groups Plan/Execute/Verify/Research/Harness/Misc, full /grd: set, evolve deprecated); invoke emits (name,{group}) and the page routes research->project-research, harness->project-harness, else->grd_chat; planningCommandBar.* i18n key-identical across en/ko/ja/zh (52 keys each)
+- [Phase 20]: 20-06: committed frontend/scripts/i18n-parity.mjs (flatten + set-diff of en/ko/ja/zh, exits non-zero on diff); parity == 0 already (no locale edits). [Rule 1] fixed 15 phase-20-introduced TS2345 in harness-panels.test.ts (global.plugins unknown[] -> Plugin[]) — these were NOT pre-existing baseline as 20-05 claimed. just build blocked only by pre-existing AnswerGroundednessCard.vue (PR #212, out of scope). FE 1485/7-baseline/0-NEW; backend targeted 115 passed (full-suite hang avoided). Phase 20 COMPLETE.
 
 ### Pending Todos
 
