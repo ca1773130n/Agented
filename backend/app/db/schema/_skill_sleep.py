@@ -31,7 +31,11 @@ def create_skill_sleep_tables(conn) -> None:
             reason           TEXT,
             created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
             finished_at      TEXT,
-            adopted_at       TEXT
+            adopted_at       TEXT,
+            outcome_before_score   REAL,
+            outcome_after_score    REAL,
+            outcome_delta          REAL,
+            outcome_question_count INTEGER
         )
         """
     )

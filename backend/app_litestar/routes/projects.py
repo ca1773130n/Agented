@@ -380,8 +380,14 @@ def skill_sleep_evaluate(
         raise ClientException(detail="candidate_body is required")
     from app.services.skill_sleep_service import SkillNotInProjectError, SkillSleepGate
 
+    # measure=true also runs the disjoint-split outcome check (Phase 6).
+    fn = (
+        SkillSleepGate.evaluate_skill_with_outcome
+        if body.get("measure")
+        else SkillSleepGate.evaluate_skill
+    )
     try:
-        return SkillSleepGate.evaluate_skill(
+        return fn(
             project_id,
             skill_name,
             candidate_body=str(candidate),
