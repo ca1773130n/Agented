@@ -46,7 +46,7 @@ export const mockFindings: Finding[] = [
   }
 ]
 
-export const mockAuditRecord: AuditRecord = {
+const mockAuditRecord: AuditRecord = {
   audit_id: 'audit-1',
   project_path: '/path/to/project1',
   project_name: 'project1',
