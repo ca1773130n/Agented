@@ -140,10 +140,17 @@ Plans:
   4. Re-running reconciles via manifest/fingerprint comparison without duplicating; a failed run leaves a step log + `failed` status and every step is independently retryable; setup performs no destructive deletes.
   5. One live dogfood run completes against a real project end-to-end, with all four backends compiling the materialized projection.
   6. House gates pass.
-**Plans**: TBD
+**Plans**: 8 plans (3 waves)
 
 Plans:
-- [ ] 21-NN: TBD (set by /grd:plan-phase 21)
+- [ ] 21-01-PLAN.md — migration 159 (harness_setup_status + harness_setup_steps) + status/step helpers
+- [ ] 21-02-PLAN.md — TeamHarnessSetupService skeleton: 6 step keys, StepResult, state machine, retry-skips-ok
+- [ ] 21-03-PLAN.md — steps a+b: GRD-init reconcile + team topology + SA instances driver=grd (dedup + post-update)
+- [ ] 21-04-PLAN.md — steps c+d: STACK.md-tailored bundle binding (forge-creator floor) + idempotent tesserae enable
+- [ ] 21-05-PLAN.md — step e: dual-consumer autonomy policy (auto-apply ON scoped to discovered_procedure; evolution conservative)
+- [ ] 21-06-PLAN.md — step f: 4-renderer materialize + per-backend compile smoke
+- [ ] 21-07-PLAN.md — route trio (POST/status/SSE-stream) + ProjectDashboard button/chip/step-panel + 4-locale i18n
+- [ ] 21-08-PLAN.md — deferred: live 4-backend dogfood + session auto-import idempotency + house gates
 
 ### Phase 22: Repeated-request auto-skill
 **Goal**: The harness self-improves — a `repeated_request_signals` store and a session-completion detection handler (over all five session kinds) embed and match recurring user requests, and hybrid confidence gates convert them into skills automatically (≥3 occurrences + verified + scan-pass) or queue them for approval, with patch-over-create dedup, origin-hash provenance protecting operator-modified skills, and prompt-injection/exfiltration/invisible-Unicode scanning.
