@@ -9266,6 +9266,8 @@
     "optMeasure": "测量成效",
     "optEditBudget": "编辑预算",
     "roundTitle": "优化技能",
-    "selectSkill": "选择技能…"
+    "selectSkill": "选择技能…",
+    "changesFromCurrent": "相对当前的更改",
+    "noChanges": "无行级更改"
   }
 }

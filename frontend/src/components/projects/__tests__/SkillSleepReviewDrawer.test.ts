@@ -32,6 +32,8 @@ const i18n = createI18n({
         adopt: 'Adopt',
         adopting: 'Adopting…',
         adoptFailed: 'Adopt failed',
+        changesFromCurrent: 'Changes from current',
+        noChanges: 'No line changes',
       },
     },
   },
@@ -51,6 +53,7 @@ function run(over: Partial<SkillSleepRun> = {}): SkillSleepRun {
     partition_seed: 1,
     judge_backend: 'claude',
     candidate_body: '# improved\n',
+    current_body: null,
     current_body_hash: 'hash',
     reason: 'candidate strictly improved held-out score',
     created_at: '2026-06-13 12:00:00',
@@ -111,10 +114,24 @@ describe('SkillSleepReviewDrawer', () => {
     expect(w.text()).toContain('Adopting');
   });
 
-  it('renders the candidate body section with the current-body-unavailable note', () => {
-    const w = mountDrawer({ run: run() });
+  it('falls back to candidate-only + note when current_body is absent (old runs)', () => {
+    const w = mountDrawer({ run: run({ current_body: null }) });
     expect(w.text()).toContain('Current body unavailable');
     expect(w.find('[data-testid="ss-candidate-body"]').exists()).toBe(true);
+    expect(w.find('[data-testid="ss-diff"]').exists()).toBe(false);
+  });
+
+  it('renders a current-vs-candidate diff when current_body is present', () => {
+    const w = mountDrawer({
+      run: run({ current_body: 'line a\nOLD\nline c', candidate_body: 'line a\nNEW\nline c' }),
+    });
+    const diff = w.find('[data-testid="ss-diff"]');
+    expect(diff.exists()).toBe(true);
+    expect(diff.text()).toContain('OLD'); // removed line
+    expect(diff.text()).toContain('NEW'); // added line
+    // The candidate-only fallback is NOT shown when a diff is available.
+    expect(w.find('[data-testid="ss-candidate-body"]').exists()).toBe(false);
+    expect(w.text()).toContain('Changes from current');
   });
 
   it('surfaces an inline adoptError', () => {
