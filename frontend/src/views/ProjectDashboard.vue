@@ -323,35 +323,55 @@ async function loadHarnessSetupStatus() {
   }
 }
 
+// The backend emits NAMED SSE events (`event: step` / `event: done` /
+// `event: timeout`). The custom AuthenticatedEventSource only routes named
+// events through addEventListener — `onmessage` fires for default/`message`
+// frames only — so these must be subscribed by name (matching every other
+// SSE consumer in this app, e.g. InteractiveSetup/LiveExecutionTerminal).
+function onHarnessStepFrame(event: MessageEvent) {
+  try {
+    const payload = JSON.parse(event.data) as { step: string; status: string; detail?: string | null };
+    const idx = harnessSetupSteps.value.findIndex((s) => s.step_key === payload.step);
+    const row: GrdHarnessSetupStep = {
+      step_key: payload.step,
+      status: payload.status,
+      detail: payload.detail ?? null,
+    };
+    if (idx >= 0) harnessSetupSteps.value.splice(idx, 1, row);
+    else harnessSetupSteps.value.push(row);
+  } catch {
+    // Ignore malformed frames.
+  }
+}
+
+function onHarnessDoneFrame(event: MessageEvent) {
+  let status = '';
+  try {
+    status = (JSON.parse(event.data) as { status?: string }).status ?? '';
+  } catch {
+    // Fall through to re-fetch the authoritative status below.
+  }
+  if (status) harnessSetupStatus.value = status;
+  closeHarnessSetupStream();
+  loadHarnessSetupStatus();
+  if (status === 'ready') {
+    showToast(t('harnessSetup.toastReady'), 'success');
+  } else if (status === 'failed') {
+    showToast(t('harnessSetup.toastFailed'), 'error');
+  }
+}
+
 function openHarnessSetupStream() {
   if (!projectId.value || harnessSetupEventSource) return;
   const es = grdApi.streamHarnessSetup(projectId.value);
-  es.onmessage = (event: MessageEvent) => {
-    try {
-      const payload = JSON.parse(event.data) as { step: string; status: string; detail?: string | null };
-      if (payload.step === '__done__') {
-        harnessSetupStatus.value = payload.status;
-        closeHarnessSetupStream();
-        loadHarnessSetupStatus();
-        if (payload.status === 'ready') {
-          showToast(t('harnessSetup.toastReady'), 'success');
-        } else if (payload.status === 'failed') {
-          showToast(t('harnessSetup.toastFailed'), 'error');
-        }
-        return;
-      }
-      const idx = harnessSetupSteps.value.findIndex((s) => s.step_key === payload.step);
-      const row: GrdHarnessSetupStep = {
-        step_key: payload.step,
-        status: payload.status,
-        detail: payload.detail ?? null,
-      };
-      if (idx >= 0) harnessSetupSteps.value.splice(idx, 1, row);
-      else harnessSetupSteps.value.push(row);
-    } catch {
-      // Ignore malformed frames.
-    }
-  };
+  es.addEventListener('step', onHarnessStepFrame);
+  es.addEventListener('done', onHarnessDoneFrame);
+  // A max-duration timeout frame carries no terminal status — just stop the
+  // stream and re-fetch the authoritative status from the DB.
+  es.addEventListener('timeout', () => {
+    closeHarnessSetupStream();
+    loadHarnessSetupStatus();
+  });
   es.onerror = () => {
     closeHarnessSetupStream();
   };

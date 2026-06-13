@@ -755,8 +755,16 @@ def trigger_harness_setup(project_id: str) -> dict[str, Any]:
     Mirrors the grd-chat thread-spawn shape (grd_routes.py:709). The status
     flip here makes a follow-up GET .../status report 'running' immediately,
     even before the background thread sets it itself.
+
+    Idempotent under concurrent triggers: if a setup is already 'running' we
+    return without spawning a second thread. ``_step_team_topology`` does an
+    existence-check-then-create on the non-deduped SA-instance table, so two
+    overlapping runs could TOCTOU-create duplicate instances — the guard
+    prevents that.
     """
     _ensure_project(project_id)
+    if get_harness_setup_status(project_id) == "running":
+        return {"harness_setup_status": "running"}
     set_harness_setup_status(project_id, "running")
     threading.Thread(
         target=TeamHarnessSetupService.setup,

@@ -17,15 +17,22 @@ vi.mock('vue-router', () => ({
 
 // Controllable fake EventSource — the dashboard calls
 // grdApi.streamHarnessSetup() which (mocked below) returns one of these.
+// Models named-event routing (addEventListener) the way the real
+// AuthenticatedEventSource does, since the dashboard subscribes by event name.
 class FakeEventSource {
-  onmessage: ((e: MessageEvent) => void) | null = null;
   onerror: ((e: Event) => void) | null = null;
   closed = false;
+  listeners: Record<string, ((e: MessageEvent) => void)[]> = {};
+  addEventListener(type: string, fn: (e: MessageEvent) => void) {
+    (this.listeners[type] ||= []).push(fn);
+  }
   close() {
     this.closed = true;
   }
-  emit(data: unknown) {
-    this.onmessage?.({ data: JSON.stringify(data) } as MessageEvent);
+  emit(type: string, data: unknown) {
+    (this.listeners[type] || []).forEach((fn) =>
+      fn({ data: JSON.stringify(data) } as MessageEvent),
+    );
   }
 }
 let lastEventSource: FakeEventSource | null = null;
@@ -124,8 +131,8 @@ describe('ProjectDashboard — team harness setup', () => {
     await wrapper.find('[data-testid="harness-setup-btn"]').trigger('click');
     await flushPromises();
 
-    lastEventSource!.emit({ step: 'grd_init', status: 'ok', detail: 'initialized' });
-    lastEventSource!.emit({ step: 'team_topology', status: 'failed', detail: 'boom' });
+    lastEventSource!.emit('step', { step: 'grd_init', status: 'ok', detail: 'initialized' });
+    lastEventSource!.emit('step', { step: 'team_topology', status: 'failed', detail: 'boom' });
     await flushPromises();
 
     const steps = wrapper.findAll('[data-testid="harness-setup-step"]');
@@ -143,7 +150,7 @@ describe('ProjectDashboard — team harness setup', () => {
     await flushPromises();
 
     const es = lastEventSource!;
-    es.emit({ step: '__done__', status: 'ready' });
+    es.emit('done', { step: '__done__', status: 'ready' });
     await flushPromises();
 
     expect(es.closed).toBe(true);
