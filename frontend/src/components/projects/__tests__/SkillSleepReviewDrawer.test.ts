@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createI18n } from 'vue-i18n';
 import SkillSleepReviewDrawer from '../SkillSleepReviewDrawer.vue';
+import type { SkillSleepRun, SkillSleepStatus } from '../../../services/api';
 
 const i18n = createI18n({
   legacy: false,
@@ -36,7 +37,7 @@ const i18n = createI18n({
   },
 });
 
-function run(over: Record<string, unknown> = {}) {
+function run(over: Partial<SkillSleepRun> = {}): SkillSleepRun {
   return {
     id: 7,
     project_id: 'proj-1',
@@ -60,7 +61,7 @@ function run(over: Record<string, unknown> = {}) {
     outcome_delta: 0.2,
     outcome_question_count: 6,
     ...over,
-  };
+  } as SkillSleepRun;
 }
 
 describe('SkillSleepReviewDrawer', () => {
@@ -91,7 +92,7 @@ describe('SkillSleepReviewDrawer', () => {
     expect(w.emitted('adopt')![0]).toEqual([7]);
   });
 
-  it.each(['rejected', 'abstained', 'failed', 'no_candidate'])(
+  it.each<SkillSleepStatus>(['rejected', 'abstained', 'failed', 'no_candidate'])(
     'disables Adopt for status=%s',
     (status) => {
       const w = mountDrawer({ run: run({ status }) });
