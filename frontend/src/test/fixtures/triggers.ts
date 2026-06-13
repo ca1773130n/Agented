@@ -82,22 +82,6 @@ export const mockTriggers: Trigger[] = [
   }
 ]
 
-export const mockTriggerWithGitHub: Trigger = {
-  ...mockTrigger,
-  id: 'bot-github',
-  name: 'GitHub Trigger',
-  trigger_source: 'github',
-  paths: [
-    {
-      id: 3,
-      local_project_path: '/tmp/github-repo',
-      path_type: 'github',
-      github_repo_url: 'https://github.com/owner/repo',
-      created_at: '2024-01-04T00:00:00Z'
-    }
-  ]
-}
-
 export const mockTriggerWithWebhook: Trigger = {
   ...mockTrigger,
   id: 'bot-webhook',
