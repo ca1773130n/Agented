@@ -29,6 +29,7 @@ from ._project_autonomy import create_project_autonomy_tables
 from ._repeated_request_signals import create_repeated_request_signal_tables
 from ._security import create_security_tables
 from ._setup import create_setup_tables
+from ._skill_sleep import create_skill_sleep_tables
 from ._skills import create_skill_tables
 from ._super_agents import create_super_agent_tables
 from ._team_executions import create_team_execution_tables
@@ -82,4 +83,5 @@ def create_fresh_schema(conn):
     create_harness_kg_signals_tables(conn)
     create_extracted_facts_tables(conn)
     create_answer_eval_tables(conn)
+    create_skill_sleep_tables(conn)
     conn.commit()

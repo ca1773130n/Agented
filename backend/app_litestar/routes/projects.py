@@ -360,6 +360,64 @@ def remove_skill_from_project(project_id: str, skill_id: int, caller: Caller) ->
 
 
 # ---------------------------------------------------------------------------
+# Skill-Sleep (SkillOpt integration): gate a candidate SKILL.md, then adopt.
+# ---------------------------------------------------------------------------
+
+
+@post("/{project_id:str}/skills/{skill_name:str}/sleep", sync_to_thread=True)
+def skill_sleep_evaluate(
+    project_id: str, skill_name: str, data: dict, caller: Caller
+) -> dict[str, Any]:
+    """Gate a candidate skill body against the current one (no write).
+
+    Body: {"candidate_body": str, "n"?: int, "seed"?: int}. Returns the verdict;
+    an ``accepted`` candidate is staged on its run for a follow-up adopt.
+    """
+    _assert_project_access(project_id, caller)
+    body = data or {}
+    candidate = body.get("candidate_body")
+    if not candidate or not str(candidate).strip():
+        raise ClientException(detail="candidate_body is required")
+    from app.services.skill_sleep_service import SkillNotInProjectError, SkillSleepGate
+
+    try:
+        return SkillSleepGate.evaluate_skill(
+            project_id,
+            skill_name,
+            candidate_body=str(candidate),
+            n=int(body.get("n", 6)),
+            seed=int(body.get("seed", 0)),
+        )
+    except SkillNotInProjectError as e:
+        raise NotFoundException(detail=str(e)) from e
+
+
+@get("/{project_id:str}/skill-sleep", sync_to_thread=False)
+def skill_sleep_list(project_id: str, caller: Caller) -> dict[str, Any]:
+    """List this project's Skill-Sleep runs (most recent first)."""
+    _assert_project_access(project_id, caller)
+    from app.db import skill_sleep
+
+    return {"runs": skill_sleep.list_runs(project_id)}
+
+
+@post("/{project_id:str}/skill-sleep/{run_id:int}/adopt", sync_to_thread=True)
+def skill_sleep_adopt(project_id: str, run_id: int, caller: Caller) -> dict[str, Any]:
+    """Adopt an accepted run — write its staged candidate body to SKILL.md."""
+    _assert_project_access(project_id, caller)
+    from app.db import skill_sleep
+    from app.services.skill_sleep_service import SkillSleepGate
+
+    run = skill_sleep.get_run(run_id)
+    if run is None or run.get("project_id") != project_id:
+        raise NotFoundException(detail="Skill-Sleep run not found")
+    result = SkillSleepGate.adopt_run(run_id)
+    if not result.get("adopted"):
+        raise ClientException(detail=result.get("reason") or "not adoptable")
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Installations
 # ---------------------------------------------------------------------------
 
@@ -578,6 +636,9 @@ projects_router = Router(
         list_project_skills,
         add_skill_to_project,
         remove_skill_from_project,
+        skill_sleep_evaluate,
+        skill_sleep_list,
+        skill_sleep_adopt,
         list_installations,
         install_component,
         uninstall_component,

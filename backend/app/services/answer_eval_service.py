@@ -11,12 +11,38 @@ exactly like AnswerPipelineService._default_llm_call.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
 from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _stable_bucket(seed: int, question: str) -> int:
+    """Process-stable 2-way bucket for a question (Python's hash() is salted).
+
+    Used to split a question pool into disjoint train/eval halves
+    deterministically across runs and processes.
+    """
+    digest = hashlib.sha256(f"{seed}|{question}".encode()).hexdigest()
+    return int(digest, 16) % 2
+
+
+def _partition_pool(pool: list[str], *, n: int, partition: str, seed: int) -> list[str]:
+    """Return up to n questions from the requested half of a seed-split universe.
+
+    The universe is the real question pool plus any generic fallbacks not
+    already in it (so thin corpora still split). ``train`` is bucket 0,
+    ``eval`` is bucket 1 — complementary, so the two halves are disjoint by
+    construction.
+    """
+    universe = list(pool) + [g for g in _GENERIC_QUESTIONS if g not in pool]
+    want = 0 if partition == "train" else 1
+    half = [q for q in universe if _stable_bucket(seed, q) == want]
+    return half[:n]
+
 
 LLMCall = Callable[[list[dict]], str]  # messages -> collected text
 
@@ -100,7 +126,13 @@ class AnswerEvalService:
     """Baseline-vs-pipeline answer quality evaluator."""
 
     @staticmethod
-    def build_question_set(project_id: str, n: int = 8) -> list[str]:
+    def build_question_set(
+        project_id: str,
+        n: int = 8,
+        *,
+        partition: Optional[str] = None,
+        seed: int = 0,
+    ) -> list[str]:
         """Build a deterministic, project-scoped question set of at most n items.
 
         Sources (in priority order):
@@ -110,6 +142,12 @@ class AnswerEvalService:
         4. Generic fallback questions (padded to reach n)
 
         The final list is sorted + sliced to guarantee determinism.
+
+        ``partition`` (SkillOpt held-out split): when ``"train"`` or ``"eval"``,
+        the deduped pool (plus generics) is split into two disjoint halves by a
+        process-stable hash keyed on ``seed``, and up to n items of the
+        requested half are returned. ``None`` (default) keeps the historical
+        top-n behavior unchanged.
         """
         questions: list[str] = []
 
@@ -174,18 +212,22 @@ class AnswerEvalService:
         except Exception:
             logger.debug("build_question_set: takeaways failed for %s", project_id, exc_info=True)
 
-        # Deterministic: sort + slice
-        questions = sorted(set(questions))[:n]
+        # Deduped, deterministic pool (pre-slice) — shared by both code paths.
+        pool = sorted(set(questions))
 
-        # Pad with generic questions if short
-        if len(questions) < n:
+        if partition in ("train", "eval"):
+            return _partition_pool(pool, n=n, partition=partition, seed=seed)
+
+        # Default (unchanged): top-n, padded with generics if short.
+        result = pool[:n]
+        if len(result) < n:
             for gq in _GENERIC_QUESTIONS:
-                if gq not in questions:
-                    questions.append(gq)
-                if len(questions) >= n:
+                if gq not in result:
+                    result.append(gq)
+                if len(result) >= n:
                     break
 
-        return questions[:n]
+        return result[:n]
 
     @staticmethod
     def run_eval(

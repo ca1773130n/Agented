@@ -1216,6 +1216,44 @@ def _migrate_159_harness_setup(conn):
     )
 
 
+def _migrate_160_skill_sleep(conn):
+    """SkillOpt integration: gated skill-optimization run store.
+
+    One row per Skill-Sleep attempt — the blind judge scored the current
+    SKILL.md (arm A) vs a candidate body (arm B) on a held-out question
+    partition; the candidate is accepted only on strict improvement.
+    """
+    from app.db.schema._skill_sleep import create_skill_sleep_tables
+
+    create_skill_sleep_tables(conn)
+
+
+def _migrate_161_skill_sleep_adopted(conn):
+    """SkillOpt integration Phase 4: operator-adopt timestamp.
+
+    Adds ``skill_sleep_runs.adopted_at`` (TEXT, nullable) so an accepted
+    candidate that has been written to disk is distinguishable from one merely
+    awaiting adoption. PRAGMA-guarded ALTER — double-apply is a no-op, and
+    fresh DBs already get the column from create_fresh_schema.
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(skill_sleep_runs)")}
+    if "adopted_at" not in cols:
+        conn.execute("ALTER TABLE skill_sleep_runs ADD COLUMN adopted_at TEXT")
+
+
+def _migrate_162_skill_sleep_body_hash(conn):
+    """SkillOpt integration Phase 4: stale-adoption guard.
+
+    Adds ``skill_sleep_runs.current_body_hash`` (the hash of the current body
+    the candidate beat) so adoption can refuse to overwrite a skill that has
+    changed since the run was gated. PRAGMA-guarded ALTER; fresh DBs get it
+    from create_fresh_schema.
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(skill_sleep_runs)")}
+    if "current_body_hash" not in cols:
+        conn.execute("ALTER TABLE skill_sleep_runs ADD COLUMN current_body_hash TEXT")
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -1333,4 +1371,10 @@ V07_MIGRATIONS: list = [
     # v0.8.0 (21-01): persistence floor for one-click team harness setup —
     # projects.harness_setup_status column + harness_setup_steps table.
     (159, "harness_setup", _migrate_159_harness_setup),
+    # SkillOpt integration: gated skill-optimization run store.
+    (160, "skill_sleep", _migrate_160_skill_sleep),
+    # SkillOpt integration Phase 4: operator-adopt timestamp.
+    (161, "skill_sleep_adopted", _migrate_161_skill_sleep_adopted),
+    # SkillOpt integration Phase 4: stale-adoption guard (current body hash).
+    (162, "skill_sleep_body_hash", _migrate_162_skill_sleep_body_hash),
 ]

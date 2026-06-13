@@ -6,17 +6,19 @@ gives Codex a workspace mirroring those primitives, parses Codex's edits
 back into Forge CRUD operations, and applies them via the existing Forge
 repos.
 
-Scope of automatic evolution:
+Scope of automatic evolution (``WRITABLE_KINDS``):
     - rules        — H3 Environment Contract suggestions
     - hooks        — H2 Action Realization (PreToolUse) +
                      H4 Trajectory Regulation (PostToolUse / Stop)
     - commands     — H5-shaped operator shortcuts
     - mcp_servers  — tool-registry additions
+    - skills       — ``.claude/skills/<name>/SKILL.md`` documents; create/update
+                     materialize via ``_create_skill`` / ``_update_skill`` with
+                     04.H5 path containment. (Earlier deferred; now writable.)
 
-Skills create/update is deferred — the ``.claude/skills/<name>/SKILL.md``
-filesystem layout needs more than a single repo call. Codex can still
-*propose* skill changes; validate_patch flags them as unsupported and the
-operator handles them manually.
+The SkillOpt integration's Skill-Sleep gate
+(``skill_sleep_service.SkillSleepGate``) drives this skill-write path behind a
+strict-improvement validation gate — see docs/research/skillopt-integration.md.
 
 Reference: arXiv 2605.22166 §5.2 Evolution Dynamics.
 """
@@ -1514,12 +1516,20 @@ def _owning_project_id_for_skill(asset_id) -> Optional[str]:
         return None
 
 
-def _update_skill(*, asset_id, payload):
+def _update_skill(*, asset_id, payload) -> bool:
+    """Update a skill row + rewrite its SKILL.md (containment-checked).
+
+    Returns ``True`` iff the SKILL.md file was actually (re)written — callers
+    that gate on a confirmed write (e.g. Skill-Sleep adoption) must check this:
+    a missing row, missing skill_path, or refused containment all return
+    ``False`` without writing.
+    """
     from app.db.skills import get_user_skill, update_user_skill
 
     row = get_user_skill(int(asset_id))
     if not row:
-        return
+        return False
+    wrote = False
     if payload.get("content") or payload.get("description"):
         path = row.get("skill_path")
         if not path:
@@ -1535,7 +1545,9 @@ def _update_skill(*, asset_id, payload):
             )
         else:
             Path(path).write_text(_render_skill_md(row["skill_name"], payload), encoding="utf-8")
+            wrote = True
     update_user_skill(int(asset_id), description=payload.get("description"))
+    return wrote
 
 
 def _skill_write_allowed(asset_id, target: Path) -> bool:
