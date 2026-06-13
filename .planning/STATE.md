@@ -16,16 +16,26 @@ requirements mapped. Approved design spec:
 (+ ``.ko.md``). PR-per-phase + codex-review-until-green cadence.
 
 Phase: 21 of 22 (One-click team harness setup) — **in progress**
-Plan: 21-01 complete (persistence floor)
-Status: Plan 21-01 executed — migration 159 + harness_setup_status helpers +
-harness_setup_steps idempotent upsert; S1/S2 sanity 4/4 green, ruff clean.
-Last activity: 2026-06-13 — Completed 21-01-PLAN.md. PRAGMA-guarded migration
-159 adds projects.harness_setup_status (default 'none') + harness_setup_steps
-(PK project_id,step_key); get/set_harness_setup_status (NULL→'none') +
-upsert_harness_setup_step (ON CONFLICT idempotent) + get_harness_setup_steps in
-projects.py; GrdPlanningService.get_harness_setup_status parity classmethod.
-Double-apply no-op verified. Commits dd4faf9863/680aa084d3/c0132249a7 on
-branch grd/v0.8.0/21-21. See prior phase 17 record below.
+Plan: 21-02 complete (orchestrator skeleton) — wave 1 done
+Status: Plan 21-02 executed — TeamHarnessSetupService skeleton: 6-step dispatch,
+StepResult contract, none→running→ready/failed state machine, retry-skips-ok.
+S3 import smoke green, ruff clean, skeleton tests 6/6 green.
+Last activity: 2026-06-13 — Completed 21-02-PLAN.md. Built
+backend/app/services/team_harness_setup_service.py: HARNESS_SETUP_STEP_KEYS
+(grd_init, team_topology, bundle_binding, tesserae_enable, default_policies,
+materialize_compile — 6 ordered), StepResult dataclass, setup() that sets
+"running", iterates steps (skipping rows already status='ok'), per-step
+try/except → StepResult, persists rows via 21-01's upsert, breaks on first
+failure leaving later steps unrecorded (retryable), finalises "ready"/"failed",
+never raises. Side-effect-free placeholder _step_* bodies in _STEP_FUNCS for
+21-03..06 to replace. Skeleton tests cover S3/state-machine/failed_step/
+idempotent/retry. Commits 169dbdab6d/b2288670f0 on branch grd/v0.8.0/21-21.
+WAVE-2 CONTRACT for 21-03..06: each step is
+_step_<name>(project_id, existing_row|None) -> StepResult(step_key, status
+ok|skipped|failed, detail, fingerprint); step does NOT persist its own row;
+rebind via TeamHarnessSetupService._STEP_FUNCS[<key>]; no destructive deletes.
+Prior: 21-01 (migration 159 + helpers, dd4faf9863/680aa084d3/c0132249a7).
+See prior phase 17 record below.
 
 Prior activity: 2026-06-13 — Completed 17-06-PLAN.md (FINAL plan of phase 17).
 Shipped the forge-creator default bundle (5 global-scope agentskills.io creator
@@ -289,5 +299,6 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-06-13
-Stopped at: Merged phase 19 (GRD default driver) into main — plans 01-06 ALL complete, verification PASSED 8/8, code review warnings_only (0 blockers), eval tiers 1+2 PASS (83/83). Delivered: 3-way resolve_execution_driver() at the streaming funnel, GrdChatSessionHandler + PSM→chat-SSE bridge, turn classifier, cwd/backend bug fixes, operator driver selectors (default GRD) with 4-locale i18n. (Prior main state: phase 22 repeated-request auto-skill also complete/merged.)
+Stopped at: Completed 21-02-PLAN.md (orchestrator skeleton; wave 1 done) — next is wave-2 step-group plans 21-03..06.
+Prior stopped-at: Merged phase 19 (GRD default driver) into main — plans 01-06 ALL complete, verification PASSED 8/8, code review warnings_only (0 blockers), eval tiers 1+2 PASS (83/83). Delivered: 3-way resolve_execution_driver() at the streaming funnel, GrdChatSessionHandler + PSM→chat-SSE bridge, turn classifier, cwd/backend bug fixes, operator driver selectors (default GRD) with 4-locale i18n. (Prior main state: phase 22 repeated-request auto-skill also complete/merged.)
 Resume file: None
