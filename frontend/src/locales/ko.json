@@ -1038,80 +1038,103 @@
   },
   "planningCommandBar": {
     "title": "기획 명령",
+    "deprecated": "지원 중단",
     "groups": {
-      "projectSetup": "프로젝트 설정",
-      "phaseManagement": "페이즈 관리",
-      "researchAnalysis": "리서치 및 분석",
-      "requirements": "요구사항"
+      "plan": "기획",
+      "execute": "실행",
+      "verify": "검증",
+      "research": "리서치",
+      "harness": "하네스",
+      "misc": "기타"
     },
     "cmd": {
-      "mapCodebase": {
-        "label": "코드베이스 매핑",
-        "desc": "프로젝트 구조 분석"
+      "planPhase": {
+        "label": "페이즈 기획",
+        "desc": "페이즈 실행 계획 생성"
       },
-      "newMilestone": {
-        "label": "새 마일스톤",
-        "desc": "새 마일스톤 생성"
+      "planGaps": {
+        "label": "갭 기획",
+        "desc": "마일스톤 갭 식별 및 기획"
       },
-      "longTermRoadmap": {
-        "label": "장기 로드맵",
-        "desc": "전략 로드맵 생성"
-      },
-      "addPhase": {
-        "label": "페이즈 추가",
-        "desc": "마일스톤에 페이즈 추가"
-      },
-      "removePhase": {
-        "label": "페이즈 제거",
-        "desc": "페이즈 제거"
-      },
-      "insertPhase": {
-        "label": "페이즈 삽입",
-        "desc": "특정 위치에 페이즈 삽입"
+      "autoplan": {
+        "label": "자동 기획",
+        "desc": "남은 모든 페이즈 자동 기획"
       },
       "discussPhase": {
         "label": "페이즈 논의",
-        "desc": "AI 지원 페이즈 논의"
+        "desc": "AI 보조 페이즈 논의"
       },
-      "planPhase": {
-        "label": "페이즈 계획",
-        "desc": "실행 계획 생성"
+      "executePhase": {
+        "label": "페이즈 실행",
+        "desc": "페이즈를 완료까지 실행"
+      },
+      "autopilot": {
+        "label": "오토파일럿",
+        "desc": "자율적으로 기획 및 실행"
+      },
+      "quick": {
+        "label": "퀵",
+        "desc": "빠른 단발 작업 실행"
+      },
+      "verifyPhase": {
+        "label": "페이즈 검증",
+        "desc": "완료된 페이즈 검증"
+      },
+      "verifyWork": {
+        "label": "작업 검증",
+        "desc": "최근 작업을 계획과 대조 검증"
+      },
+      "assessBaseline": {
+        "label": "베이스라인 평가",
+        "desc": "성능 베이스라인 수립"
+      },
+      "research": {
+        "label": "리서치",
+        "desc": "리서치 스레드 시작"
       },
       "survey": {
         "label": "서베이",
-        "desc": "연구 동향 조사"
+        "desc": "리서치 지형 조사"
       },
       "deepDive": {
         "label": "딥 다이브",
         "desc": "주제 심층 분석"
       },
+      "compareMethods": {
+        "label": "방법 비교",
+        "desc": "후보 접근법 비교"
+      },
       "feasibility": {
         "label": "타당성",
         "desc": "타당성 평가"
       },
-      "assessBaseline": {
-        "label": "기준선 평가",
-        "desc": "성능 기준선 설정"
+      "harness": {
+        "label": "하네스",
+        "desc": "라이프 하네스 패널 열기"
       },
-      "compareMethods": {
-        "label": "방법 비교",
-        "desc": "접근 방식 비교"
+      "evolve": {
+        "label": "진화",
+        "desc": "하네스 자가 개선 실행 (지원 중단)"
       },
-      "listAssumptions": {
-        "label": "가정 나열",
-        "desc": "페이즈 가정 도출"
+      "settings": {
+        "label": "설정",
+        "desc": "GRD 설정 구성"
       },
-      "requirement": {
-        "label": "요구사항",
-        "desc": "요구사항 정의"
+      "sync": {
+        "label": "동기화",
+        "desc": "디스크에서 기획 상태 동기화"
       },
-      "planGaps": {
-        "label": "갭 계획",
-        "desc": "마일스톤 갭 식별"
+      "mapCodebase": {
+        "label": "코드베이스 매핑",
+        "desc": "프로젝트 구조 분석"
       },
-      "completeMilestone": {
-        "label": "마일스톤 완료",
-        "desc": "마일스톤 완료 처리"
+      "progress": {
+        "label": "진행 상황",
+        "desc": "기획 진행 상황 표시"
+      },
+      "help": {
+        "label": "도움말",
+        "desc": "사용 가능한 GRD 명령 표시"
       }
     }
   },

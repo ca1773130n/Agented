@@ -1038,80 +1038,103 @@
   },
   "planningCommandBar": {
     "title": "规划命令",
+    "deprecated": "已弃用",
     "groups": {
-      "projectSetup": "项目设置",
-      "phaseManagement": "阶段管理",
-      "researchAnalysis": "研究与分析",
-      "requirements": "需求"
+      "plan": "规划",
+      "execute": "执行",
+      "verify": "验证",
+      "research": "研究",
+      "harness": "框架",
+      "misc": "其他"
     },
     "cmd": {
-      "mapCodebase": {
-        "label": "梳理代码库",
-        "desc": "分析项目结构"
+      "planPhase": {
+        "label": "规划阶段",
+        "desc": "为阶段生成执行计划"
       },
-      "newMilestone": {
-        "label": "新建里程碑",
-        "desc": "创建新里程碑"
+      "planGaps": {
+        "label": "规划缺口",
+        "desc": "识别并规划里程碑缺口"
       },
-      "longTermRoadmap": {
-        "label": "长期路线图",
-        "desc": "生成战略路线图"
-      },
-      "addPhase": {
-        "label": "添加阶段",
-        "desc": "向里程碑添加阶段"
-      },
-      "removePhase": {
-        "label": "移除阶段",
-        "desc": "移除一个阶段"
-      },
-      "insertPhase": {
-        "label": "插入阶段",
-        "desc": "在指定位置插入阶段"
+      "autoplan": {
+        "label": "自动规划",
+        "desc": "自动规划所有剩余阶段"
       },
       "discussPhase": {
         "label": "讨论阶段",
-        "desc": "AI 辅助的阶段讨论"
+        "desc": "AI 辅助阶段讨论"
       },
-      "planPhase": {
-        "label": "规划阶段",
-        "desc": "生成执行计划"
+      "executePhase": {
+        "label": "执行阶段",
+        "desc": "将阶段执行至完成"
       },
-      "survey": {
-        "label": "调研",
-        "desc": "调研研究领域"
+      "autopilot": {
+        "label": "自动驾驶",
+        "desc": "自主规划与执行"
       },
-      "deepDive": {
-        "label": "深入分析",
-        "desc": "深入研究主题"
+      "quick": {
+        "label": "快速",
+        "desc": "运行快速单次任务"
       },
-      "feasibility": {
-        "label": "可行性",
-        "desc": "评估可行性"
+      "verifyPhase": {
+        "label": "验证阶段",
+        "desc": "验证已完成的阶段"
+      },
+      "verifyWork": {
+        "label": "验证工作",
+        "desc": "对照计划验证近期工作"
       },
       "assessBaseline": {
         "label": "评估基线",
         "desc": "建立性能基线"
       },
+      "research": {
+        "label": "研究",
+        "desc": "启动研究线程"
+      },
+      "survey": {
+        "label": "综述",
+        "desc": "调研研究全景"
+      },
+      "deepDive": {
+        "label": "深入研究",
+        "desc": "深入剖析主题"
+      },
       "compareMethods": {
         "label": "比较方法",
-        "desc": "比较各种方法"
+        "desc": "比较候选方案"
       },
-      "listAssumptions": {
-        "label": "列出假设",
-        "desc": "梳理阶段假设"
+      "feasibility": {
+        "label": "可行性",
+        "desc": "评估可行性"
       },
-      "requirement": {
-        "label": "需求",
-        "desc": "定义需求"
+      "harness": {
+        "label": "框架",
+        "desc": "打开生命框架面板"
       },
-      "planGaps": {
-        "label": "规划差距",
-        "desc": "识别里程碑差距"
+      "evolve": {
+        "label": "演进",
+        "desc": "运行框架自我改进 (已弃用)"
       },
-      "completeMilestone": {
-        "label": "完成里程碑",
-        "desc": "将里程碑标记为完成"
+      "settings": {
+        "label": "设置",
+        "desc": "配置 GRD 设置"
+      },
+      "sync": {
+        "label": "同步",
+        "desc": "从磁盘同步规划状态"
+      },
+      "mapCodebase": {
+        "label": "映射代码库",
+        "desc": "分析项目结构"
+      },
+      "progress": {
+        "label": "进度",
+        "desc": "显示规划进度"
+      },
+      "help": {
+        "label": "帮助",
+        "desc": "显示可用的 GRD 命令"
       }
     }
   },

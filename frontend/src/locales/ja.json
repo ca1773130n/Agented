@@ -1038,80 +1038,103 @@
   },
   "planningCommandBar": {
     "title": "プランニングコマンド",
+    "deprecated": "非推奨",
     "groups": {
-      "projectSetup": "プロジェクト設定",
-      "phaseManagement": "フェーズ管理",
-      "researchAnalysis": "リサーチと分析",
-      "requirements": "要件"
+      "plan": "プラン",
+      "execute": "実行",
+      "verify": "検証",
+      "research": "リサーチ",
+      "harness": "ハーネス",
+      "misc": "その他"
     },
     "cmd": {
-      "mapCodebase": {
-        "label": "コードベースマップ",
-        "desc": "プロジェクト構造を分析"
+      "planPhase": {
+        "label": "フェーズ計画",
+        "desc": "フェーズの実行計画を生成"
       },
-      "newMilestone": {
-        "label": "新規マイルストーン",
-        "desc": "新しいマイルストーンを作成"
+      "planGaps": {
+        "label": "ギャップ計画",
+        "desc": "マイルストーンのギャップを特定し計画"
       },
-      "longTermRoadmap": {
-        "label": "長期ロードマップ",
-        "desc": "戦略ロードマップを生成"
-      },
-      "addPhase": {
-        "label": "フェーズを追加",
-        "desc": "マイルストーンにフェーズを追加"
-      },
-      "removePhase": {
-        "label": "フェーズを削除",
-        "desc": "フェーズを削除"
-      },
-      "insertPhase": {
-        "label": "フェーズを挿入",
-        "desc": "指定位置にフェーズを挿入"
+      "autoplan": {
+        "label": "自動計画",
+        "desc": "残りのフェーズを自動計画"
       },
       "discussPhase": {
-        "label": "フェーズを議論",
-        "desc": "AI支援によるフェーズ議論"
+        "label": "フェーズ討議",
+        "desc": "AI支援フェーズ討議"
       },
-      "planPhase": {
-        "label": "フェーズを計画",
-        "desc": "実行プランを生成"
+      "executePhase": {
+        "label": "フェーズ実行",
+        "desc": "フェーズを完了まで実行"
+      },
+      "autopilot": {
+        "label": "オートパイロット",
+        "desc": "自律的に計画・実行"
+      },
+      "quick": {
+        "label": "クイック",
+        "desc": "素早い単発タスクを実行"
+      },
+      "verifyPhase": {
+        "label": "フェーズ検証",
+        "desc": "完了したフェーズを検証"
+      },
+      "verifyWork": {
+        "label": "作業検証",
+        "desc": "最近の作業を計画と照合検証"
+      },
+      "assessBaseline": {
+        "label": "ベースライン評価",
+        "desc": "性能ベースラインを確立"
+      },
+      "research": {
+        "label": "リサーチ",
+        "desc": "リサーチスレッドを開始"
       },
       "survey": {
         "label": "サーベイ",
-        "desc": "研究動向を調査"
+        "desc": "リサーチ領域を調査"
       },
       "deepDive": {
         "label": "ディープダイブ",
         "desc": "トピックを深掘り"
       },
+      "compareMethods": {
+        "label": "手法比較",
+        "desc": "候補アプローチを比較"
+      },
       "feasibility": {
         "label": "実現可能性",
         "desc": "実現可能性を評価"
       },
-      "assessBaseline": {
-        "label": "ベースライン評価",
-        "desc": "パフォーマンスのベースラインを確立"
+      "harness": {
+        "label": "ハーネス",
+        "desc": "ライフハーネスパネルを開く"
       },
-      "compareMethods": {
-        "label": "手法を比較",
-        "desc": "アプローチを比較"
+      "evolve": {
+        "label": "進化",
+        "desc": "ハーネス自己改善を実行 (非推奨)"
       },
-      "listAssumptions": {
-        "label": "前提を一覧",
-        "desc": "フェーズの前提を洗い出す"
+      "settings": {
+        "label": "設定",
+        "desc": "GRD設定を構成"
       },
-      "requirement": {
-        "label": "要件",
-        "desc": "要件を定義"
+      "sync": {
+        "label": "同期",
+        "desc": "ディスクからプランニング状態を同期"
       },
-      "planGaps": {
-        "label": "ギャップを計画",
-        "desc": "マイルストーンのギャップを特定"
+      "mapCodebase": {
+        "label": "コードベースマップ",
+        "desc": "プロジェクト構造を分析"
       },
-      "completeMilestone": {
-        "label": "マイルストーン完了",
-        "desc": "マイルストーンを完了としてマーク"
+      "progress": {
+        "label": "進捗",
+        "desc": "プランニング進捗を表示"
+      },
+      "help": {
+        "label": "ヘルプ",
+        "desc": "利用可能なGRDコマンドを表示"
       }
     }
   },

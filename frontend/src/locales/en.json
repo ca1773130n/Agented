@@ -1038,80 +1038,103 @@
   },
   "planningCommandBar": {
     "title": "Planning Commands",
+    "deprecated": "Deprecated",
     "groups": {
-      "projectSetup": "Project Setup",
-      "phaseManagement": "Phase Management",
-      "researchAnalysis": "Research & Analysis",
-      "requirements": "Requirements"
+      "plan": "Plan",
+      "execute": "Execute",
+      "verify": "Verify",
+      "research": "Research",
+      "harness": "Harness",
+      "misc": "Misc"
     },
     "cmd": {
-      "mapCodebase": {
-        "label": "Map Codebase",
-        "desc": "Analyze project structure"
+      "planPhase": {
+        "label": "Plan Phase",
+        "desc": "Generate execution plans for a phase"
       },
-      "newMilestone": {
-        "label": "New Milestone",
-        "desc": "Create a new milestone"
+      "planGaps": {
+        "label": "Plan Gaps",
+        "desc": "Identify and plan milestone gaps"
       },
-      "longTermRoadmap": {
-        "label": "Long-term Roadmap",
-        "desc": "Generate strategic roadmap"
-      },
-      "addPhase": {
-        "label": "Add Phase",
-        "desc": "Add a phase to milestone"
-      },
-      "removePhase": {
-        "label": "Remove Phase",
-        "desc": "Remove a phase"
-      },
-      "insertPhase": {
-        "label": "Insert Phase",
-        "desc": "Insert phase at position"
+      "autoplan": {
+        "label": "Autoplan",
+        "desc": "Plan all remaining phases automatically"
       },
       "discussPhase": {
         "label": "Discuss Phase",
         "desc": "AI-assisted phase discussion"
       },
-      "planPhase": {
-        "label": "Plan Phase",
-        "desc": "Generate execution plans"
+      "executePhase": {
+        "label": "Execute Phase",
+        "desc": "Run a phase to completion"
+      },
+      "autopilot": {
+        "label": "Autopilot",
+        "desc": "Plan and execute autonomously"
+      },
+      "quick": {
+        "label": "Quick",
+        "desc": "Run a quick one-shot task"
+      },
+      "verifyPhase": {
+        "label": "Verify Phase",
+        "desc": "Verify a completed phase"
+      },
+      "verifyWork": {
+        "label": "Verify Work",
+        "desc": "Verify recent work against the plan"
+      },
+      "assessBaseline": {
+        "label": "Assess Baseline",
+        "desc": "Establish a performance baseline"
+      },
+      "research": {
+        "label": "Research",
+        "desc": "Start a research thread"
       },
       "survey": {
         "label": "Survey",
-        "desc": "Survey research landscape"
+        "desc": "Survey the research landscape"
       },
       "deepDive": {
         "label": "Deep Dive",
-        "desc": "Deep dive into topic"
+        "desc": "Deep dive into a topic"
+      },
+      "compareMethods": {
+        "label": "Compare Methods",
+        "desc": "Compare candidate approaches"
       },
       "feasibility": {
         "label": "Feasibility",
         "desc": "Assess feasibility"
       },
-      "assessBaseline": {
-        "label": "Assess Baseline",
-        "desc": "Establish performance baseline"
+      "harness": {
+        "label": "Harness",
+        "desc": "Open the life-harness panels"
       },
-      "compareMethods": {
-        "label": "Compare Methods",
-        "desc": "Compare approaches"
+      "evolve": {
+        "label": "Evolve",
+        "desc": "Run harness self-improvement (deprecated)"
       },
-      "listAssumptions": {
-        "label": "List Assumptions",
-        "desc": "Surface phase assumptions"
+      "settings": {
+        "label": "Settings",
+        "desc": "Configure GRD settings"
       },
-      "requirement": {
-        "label": "Requirement",
-        "desc": "Define a requirement"
+      "sync": {
+        "label": "Sync",
+        "desc": "Sync planning state from disk"
       },
-      "planGaps": {
-        "label": "Plan Gaps",
-        "desc": "Identify milestone gaps"
+      "mapCodebase": {
+        "label": "Map Codebase",
+        "desc": "Analyze project structure"
       },
-      "completeMilestone": {
-        "label": "Complete Milestone",
-        "desc": "Mark milestone complete"
+      "progress": {
+        "label": "Progress",
+        "desc": "Show planning progress"
+      },
+      "help": {
+        "label": "Help",
+        "desc": "Show available GRD commands"
       }
     }
   },
