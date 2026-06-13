@@ -378,15 +378,18 @@ def skill_sleep_evaluate(
     candidate = body.get("candidate_body")
     if not candidate or not str(candidate).strip():
         raise ClientException(detail="candidate_body is required")
-    from app.services.skill_sleep_service import SkillSleepGate
+    from app.services.skill_sleep_service import SkillNotInProjectError, SkillSleepGate
 
-    return SkillSleepGate.evaluate_skill(
-        project_id,
-        skill_name,
-        candidate_body=str(candidate),
-        n=int(body.get("n", 6)),
-        seed=int(body.get("seed", 0)),
-    )
+    try:
+        return SkillSleepGate.evaluate_skill(
+            project_id,
+            skill_name,
+            candidate_body=str(candidate),
+            n=int(body.get("n", 6)),
+            seed=int(body.get("seed", 0)),
+        )
+    except SkillNotInProjectError as e:
+        raise NotFoundException(detail=str(e)) from e
 
 
 @get("/{project_id:str}/skill-sleep", sync_to_thread=False)

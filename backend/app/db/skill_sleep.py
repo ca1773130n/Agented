@@ -41,11 +41,14 @@ def finalize_run(
     candidate_score: Optional[float] = None,
     question_count: int = 0,
     candidate_body: Optional[str] = None,
+    current_body_hash: Optional[str] = None,
     reason: Optional[str] = None,
 ) -> bool:
     """Record the verdict + scores and stamp finished_at. Returns True if updated.
 
     ``delta`` is computed as candidate - current when both are present.
+    ``current_body_hash`` pins the current body the candidate beat, so adoption
+    can detect that the skill changed since gating (stale-adoption guard).
     """
     delta = None
     if current_score is not None and candidate_score is not None:
@@ -53,14 +56,15 @@ def finalize_run(
     with get_connection() as conn:
         cur = conn.execute(
             """UPDATE skill_sleep_runs SET
-                   status          = ?,
-                   current_score   = ?,
-                   candidate_score = ?,
-                   delta           = ?,
-                   question_count  = ?,
-                   candidate_body  = ?,
-                   reason          = ?,
-                   finished_at     = datetime('now')
+                   status            = ?,
+                   current_score     = ?,
+                   candidate_score   = ?,
+                   delta             = ?,
+                   question_count    = ?,
+                   candidate_body    = ?,
+                   current_body_hash = ?,
+                   reason            = ?,
+                   finished_at       = datetime('now')
                WHERE id = ?""",
             (
                 status,
@@ -69,6 +73,7 @@ def finalize_run(
                 delta,
                 int(question_count),
                 candidate_body,
+                current_body_hash,
                 reason,
                 run_id,
             ),

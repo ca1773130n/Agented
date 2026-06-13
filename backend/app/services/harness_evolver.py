@@ -1516,12 +1516,20 @@ def _owning_project_id_for_skill(asset_id) -> Optional[str]:
         return None
 
 
-def _update_skill(*, asset_id, payload):
+def _update_skill(*, asset_id, payload) -> bool:
+    """Update a skill row + rewrite its SKILL.md (containment-checked).
+
+    Returns ``True`` iff the SKILL.md file was actually (re)written — callers
+    that gate on a confirmed write (e.g. Skill-Sleep adoption) must check this:
+    a missing row, missing skill_path, or refused containment all return
+    ``False`` without writing.
+    """
     from app.db.skills import get_user_skill, update_user_skill
 
     row = get_user_skill(int(asset_id))
     if not row:
-        return
+        return False
+    wrote = False
     if payload.get("content") or payload.get("description"):
         path = row.get("skill_path")
         if not path:
@@ -1537,7 +1545,9 @@ def _update_skill(*, asset_id, payload):
             )
         else:
             Path(path).write_text(_render_skill_md(row["skill_name"], payload), encoding="utf-8")
+            wrote = True
     update_user_skill(int(asset_id), description=payload.get("description"))
+    return wrote
 
 
 def _skill_write_allowed(asset_id, target: Path) -> bool:

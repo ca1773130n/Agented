@@ -156,3 +156,70 @@ def test_judge_prompt_is_blind(isolated_db):
         assert "candidate" not in low
         assert "current skill" not in low
         assert "arm a" not in low and "arm b" not in low
+
+
+def test_nan_judge_score_fails_closed(isolated_db):
+    """A judge emitting NaN must NOT clamp to a perfect 1.0 and accept — strict
+    parse rejects non-finite values → fail closed (codex review HIGH)."""
+    from app.services.skill_sleep_service import SkillSleepGate
+
+    _seed_corpus("proj-nan")
+
+    def _nan_for_candidate(messages):
+        if "CAND-answer" in messages[0]["content"]:
+            return '{"groundedness": NaN, "sufficiency": NaN, "quality": NaN, "reason": "x"}'
+        return '{"groundedness": 0.3, "sufficiency": 0.3, "quality": 0.3, "reason": "x"}'
+
+    v = SkillSleepGate.evaluate_candidate(
+        "proj-nan",
+        skill_name="s",
+        current_body="CURR",
+        candidate_body="CAND",
+        answer_call=_answer_call,
+        judge_call=_nan_for_candidate,
+        n=4,
+        seed=1,
+    )
+    assert v["accepted"] is False
+    assert v["status"] == "failed"
+
+
+def test_malformed_judge_fails_closed(isolated_db):
+    from app.services.skill_sleep_service import SkillSleepGate
+
+    _seed_corpus("proj-malformed")
+    v = SkillSleepGate.evaluate_candidate(
+        "proj-malformed",
+        skill_name="s",
+        current_body="CURR",
+        candidate_body="CAND",
+        answer_call=_answer_call,
+        judge_call=lambda m: "not json at all",
+        n=4,
+        seed=1,
+    )
+    assert v["accepted"] is False
+    assert v["status"] == "failed"
+
+
+def test_unexpected_error_finalizes_run_failed(isolated_db, monkeypatch):
+    """An error after create_run (e.g. build_question_set) must finalize the
+    run as failed, never leave it 'running' (codex review MEDIUM)."""
+    from app.db import skill_sleep
+    from app.services.skill_sleep_service import SkillSleepGate
+
+    _seed_corpus("proj-boom")
+    monkeypatch.setattr(
+        "app.services.answer_eval_service.AnswerEvalService.build_question_set",
+        staticmethod(lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))),
+    )
+    v = SkillSleepGate.evaluate_candidate(
+        "proj-boom",
+        skill_name="s",
+        current_body="CURR",
+        candidate_body="CAND",
+        answer_call=_answer_call,
+        judge_call=_judge_favoring_candidate,
+    )
+    assert v["status"] == "failed"
+    assert skill_sleep.get_run(v["run_id"])["status"] == "failed"
