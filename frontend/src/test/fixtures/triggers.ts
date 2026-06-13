@@ -81,14 +81,3 @@ export const mockTriggers: Trigger[] = [
     path_count: 0
   }
 ]
-
-export const mockTriggerWithWebhook: Trigger = {
-  ...mockTrigger,
-  id: 'bot-webhook',
-  name: 'Webhook Trigger',
-  trigger_source: 'webhook',
-  match_field_path: 'event.type',
-  match_field_value: 'security_alert',
-  text_field_path: 'event.text',
-  detection_keyword: 'vulnerability'
-}

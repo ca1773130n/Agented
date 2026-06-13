@@ -25,7 +25,7 @@ function geminiModelOrder(windowType: string): number {
   return 5;
 }
 
-export function sortWindows(
+function sortWindows(
   windows: MonitoringStatus['windows'],
   backendType: string,
 ): MonitoringStatus['windows'] {
