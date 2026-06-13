@@ -116,11 +116,6 @@ export const MOCK_TRIGGER = {
 
 // --- Mock data for specific sections ---
 
-export const MOCK_COMMANDS = { commands: [] };
-export const MOCK_RULES = { rules: [] };
-export const MOCK_AGENTS = { agents: [] };
-export const MOCK_SKILLS = { skills: [] };
-
 export const MOCK_HOOK = {
   id: 1,
   name: 'test-hook',
@@ -148,11 +143,3 @@ export const MOCK_RULE = {
 };
 
 export const MOCK_ACCOUNTS = { accounts: [] };
-
-export const MOCK_DASHBOARD_SUMMARY = {
-  dashboards: [
-    { id: 'security', name: 'Security Scan', type: 'security' },
-    { id: 'pr-review', name: 'PR Review', type: 'pr-review' },
-    { id: 'token-usage', name: 'Token Usage', type: 'token-usage' },
-  ],
-};

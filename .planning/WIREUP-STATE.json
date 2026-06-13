@@ -1,8 +1,8 @@
 {
-  "features_discovered": 32,
-  "scenarios_generated": 32,
-  "scenarios_passed": 15,
-  "scenarios_failed": 17,
+  "features_discovered": 85,
+  "scenarios_generated": 85,
+  "scenarios_passed": 57,
+  "scenarios_failed": 28,
   "fixes_applied": 0,
   "iteration_history": [
     {
@@ -15,9 +15,20 @@
       "features_tested": 32,
       "issues_found": 8,
       "fixes_verified": 0
+    },
+    {
+      "iteration": 2,
+      "timestamp": "2026-06-13T05:27:30.314Z",
+      "scenarios_run": 53,
+      "passed": 42,
+      "failed": 11,
+      "fixes_applied": 0,
+      "features_tested": 53,
+      "issues_found": 5,
+      "fixes_verified": 0
     }
   ],
-  "timestamp": "2026-03-23T15:39:41.239Z",
+  "timestamp": "2026-06-13T05:27:30.314Z",
   "milestone": "v0.5.0",
-  "last_report_path": "/Users/neo/Developer/Workspaces/projects/Agented/.planning/milestones/anonymous/wireup/WIREUP-REPORT.md"
+  "last_report_path": "/Users/neo/Developer/Projects/Agented/.planning/milestones/anonymous/wireup/WIREUP-REPORT.md"
 }

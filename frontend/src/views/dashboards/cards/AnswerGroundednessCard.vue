@@ -100,8 +100,8 @@ onMounted(loadData);
     <EmptyState
       v-else
       data-testid="answer-eval-empty"
-      :message="t('answerEval.noRuns')"
-      :hint="t('answerEval.noRunsHint')"
+      :title="t('answerEval.noRuns')"
+      :description="t('answerEval.noRunsHint')"
     />
   </section>
 </template>

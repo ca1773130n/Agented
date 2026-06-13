@@ -74,7 +74,7 @@ export const BACKEND_PLAN_OPTIONS: Record<string, { value: string; label: string
  * generated/rotated after first load) is always picked up. This keeps
  * parity with the token wiring in `main.ts`.
  */
-export function getAiAccountsClient(): AiAccountsClient {
+function getAiAccountsClient(): AiAccountsClient {
   return new AiAccountsClient({ baseUrl: '', token: getApiKey() ?? undefined });
 }
 

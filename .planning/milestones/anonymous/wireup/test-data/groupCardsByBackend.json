@@ -1,0 +1,10 @@
+{
+  "feature": "groupCardsByBackend",
+  "parameters": {
+    "cards": [
+      "item-1",
+      "item-2"
+    ]
+  },
+  "generated_at": "2026-06-13T05:04:55.236Z"
+}

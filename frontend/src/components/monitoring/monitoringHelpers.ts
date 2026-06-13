@@ -16,7 +16,7 @@ import {
   type RateWindow,
 } from './types';
 
-export function geminiModelOrder(windowType: string): number {
+function geminiModelOrder(windowType: string): number {
   if (windowType.includes('gemini-3-pro')) return 0;
   if (windowType.includes('gemini-3-flash')) return 1;
   if (windowType.includes('gemini-2.5-pro')) return 2;
@@ -25,7 +25,7 @@ export function geminiModelOrder(windowType: string): number {
   return 5;
 }
 
-export function sortWindows(
+function sortWindows(
   windows: MonitoringStatus['windows'],
   backendType: string,
 ): MonitoringStatus['windows'] {

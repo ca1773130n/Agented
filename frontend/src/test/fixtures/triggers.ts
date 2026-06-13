@@ -81,30 +81,3 @@ export const mockTriggers: Trigger[] = [
     path_count: 0
   }
 ]
-
-export const mockTriggerWithGitHub: Trigger = {
-  ...mockTrigger,
-  id: 'bot-github',
-  name: 'GitHub Trigger',
-  trigger_source: 'github',
-  paths: [
-    {
-      id: 3,
-      local_project_path: '/tmp/github-repo',
-      path_type: 'github',
-      github_repo_url: 'https://github.com/owner/repo',
-      created_at: '2024-01-04T00:00:00Z'
-    }
-  ]
-}
-
-export const mockTriggerWithWebhook: Trigger = {
-  ...mockTrigger,
-  id: 'bot-webhook',
-  name: 'Webhook Trigger',
-  trigger_source: 'webhook',
-  match_field_path: 'event.type',
-  match_field_value: 'security_alert',
-  text_field_path: 'event.text',
-  detection_keyword: 'vulnerability'
-}
