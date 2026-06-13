@@ -15,11 +15,14 @@ requirements mapped. Approved design spec:
 ``docs/superpowers/specs/2026-06-13-team-harness-self-improvement-design.md``
 (+ ``.ko.md``). PR-per-phase + codex-review-until-green cadence.
 
-Phase: 17 of 22 (Forge creation surface) — **all plans complete (ready for verify)**
-Plan: 6 complete (17-01, 17-02, 17-03, 17-04, 17-05, 17-06)
-Status: Plan 17-06 executed (forge-creator bundle + gated session auto-import,
-6/6 proxy + 174 backend green; phase house gates run)
-Last activity: 2026-06-13 — Completed 17-06-PLAN.md (FINAL plan of phase 17).
+Phase: 20 of 22 (GRD frontend wiring) — plan 20-01 (backend slice) complete
+Plan: 20-01 complete (1 of N)
+Status: 20-01 executed — GrdResearchSessionHandler (grd_research) + 5
+/research/* routes + research CLI helpers; 27 backend tests green (19 new
++ 8 grd_chat regression), ruff clean. Unblocks Wave B (Research page, REQ-15).
+Last activity: 2026-06-13 — Completed 20-01-PLAN.md.
+
+Prior phase-17 activity: 2026-06-13 — Completed 17-06-PLAN.md (FINAL plan of phase 17).
 Shipped the forge-creator default bundle (5 global-scope agentskills.io creator
 skills — skill/rule/hook/command/subagent-creator — seeded idempotently at startup,
 predefined-bot pattern) and the session-completion auto-import pipeline: a 4th
@@ -255,6 +258,20 @@ Progress: [##########] 100%
   en/ko/ja/zh. Tests 5/5; full FE suite 1485 passed / 7 known-baseline /
   0 NEW; build fails only on pre-existing AnswerGroundednessCard.vue TS error
   (zero FE files of that touched). Phase 19 plans 01-06 ALL complete.
+
+- [Phase 20]: 20-01: GrdResearchSessionHandler registered as 'grd_research'
+  — mirrors GrdChatSessionHandler verbatim, spawns one-shot claude -p
+  stream-json `/grd:research <json.dumps(question)>` (or `resume <thread_id>`)
+  in cwd from resolve_working_directory (ValueError preserved when no clone),
+  forwards forge_bundle+super_agent_id; optional --max-iterations/--no-gates
+  appended only when provided; stop stops PSM (no orphan). GrdCliService gains
+  research_status (gd round-trip) + list_threads/read_thread (ON-DISK reads of
+  THREAD/HYPOTHESES/FINDING — list_threads returns [] for missing dir, tiny
+  frontmatter line-parser coerces iteration ints); NO gd research report/portfolio
+  invented (report=FINDING.md, portfolio=thread list). Five /api/projects/{id}/
+  research/* routes reuse the generic /sessions/{id}/output SSE (no research bridge).
+  27 tests green (19 new + 8 grd_chat regression); ruff clean; grd_chat untouched.
+  Unblocks Wave B (Research page, REQ-15). Live SSE through PSM deferred (DEFER-20-01).
 
 ### Pending Todos
 
