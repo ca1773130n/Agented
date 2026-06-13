@@ -9065,6 +9065,111 @@
         "completed": "Completed",
         "iterations": "Iterations"
       }
+    },
+    "harness": {
+      "title": "Life-Harness",
+      "subtitle": "Autonomy, evolution rounds, shared forge, and GRD panels",
+      "autonomy": {
+        "title": "Autonomy policy",
+        "unconfigured": "not configured",
+        "loading": "Loading policy…",
+        "autoPlan": "Auto-plan phases",
+        "autoExecute": "Auto-execute plans",
+        "autoVerify": "Auto-verify phases",
+        "maxRounds": "Max evolution rounds",
+        "save": "Save policy",
+        "saving": "Saving…",
+        "saved": "Autonomy policy saved",
+        "saveFailed": "Failed to save autonomy policy"
+      },
+      "rounds": {
+        "title": "Evolution rounds",
+        "detailTitle": "Round detail",
+        "loading": "Loading rounds…",
+        "empty": "No evolution rounds yet",
+        "unknownStatus": "unknown",
+        "selectPrompt": "Select a round to view its detail and impact",
+        "idLabel": "Round",
+        "statusLabel": "Status",
+        "approve": "Approve",
+        "abort": "Abort",
+        "revert": "Revert",
+        "revertWarning": "Reverting is destructive: it undoes this round’s applied changes (git-reversible). Confirm to proceed.",
+        "revertConfirm": "Confirm revert",
+        "revertCancel": "Cancel",
+        "approved": "Round approved",
+        "aborted": "Round aborted",
+        "reverted": "Round reverted",
+        "actionFailed": "Round action failed"
+      },
+      "forge": {
+        "title": "Shared forge",
+        "loading": "Loading shared bindings…",
+        "empty": "No shared-forge bindings available",
+        "adopt": "Adopt",
+        "adopting": "Adopting…",
+        "adopted": "Shared binding adopted",
+        "adoptFailed": "Failed to adopt shared binding"
+      },
+      "panels": {
+        "health": {
+          "tab": "Health",
+          "title": "Project health",
+          "refresh": "Refresh",
+          "empty": "No health data"
+        },
+        "think": {
+          "tab": "Think",
+          "title": "Think briefing",
+          "run": "Generate briefing",
+          "empty": "No briefing yet"
+        },
+        "deadEnds": {
+          "tab": "Dead-ends",
+          "title": "Dead-ends",
+          "empty": "No dead-ends recorded",
+          "approach": "Approach",
+          "reason": "Reason",
+          "phase": "Phase",
+          "add": "Add dead-end",
+          "promote": "Promote phase dead-ends",
+          "promotePlaceholder": "Phase id"
+        },
+        "genome": {
+          "tab": "Genome",
+          "title": "Project genome",
+          "snapshot": "Take snapshot",
+          "latest": "Latest snapshot",
+          "history": "Snapshot history",
+          "empty": "No genome data"
+        },
+        "verify": {
+          "tab": "Verify",
+          "title": "Mechanical verification",
+          "run": "Run mechanical verify",
+          "phasePlaceholder": "Phase id",
+          "empty": "No verification run yet"
+        },
+        "reflections": {
+          "tab": "Reflections",
+          "title": "Reflections & verdicts",
+          "phasePlaceholder": "Phase id",
+          "load": "Load reflections",
+          "verdicts": "Verdict counts",
+          "empty": "No reflections loaded"
+        },
+        "evolve": {
+          "tab": "Evolve",
+          "title": "Evolve runs",
+          "start": "Start evolve run",
+          "stop": "Stop",
+          "refresh": "Refresh runs",
+          "empty": "No evolve runs",
+          "detail": "Run detail"
+        }
+      },
+      "tablistLabel": "Harness panels",
+      "loadError": "Failed to load harness data"
     }
   }
 }

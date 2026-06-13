@@ -9065,6 +9065,111 @@
         "completed": "已完成",
         "iterations": "迭代"
       }
+    },
+    "harness": {
+      "title": "生命线束",
+      "subtitle": "自治、演化轮次、共享熔炉和 GRD 面板",
+      "autonomy": {
+        "title": "自治策略",
+        "unconfigured": "未配置",
+        "loading": "正在加载策略…",
+        "autoPlan": "自动规划阶段",
+        "autoExecute": "自动执行计划",
+        "autoVerify": "自动验证阶段",
+        "maxRounds": "最大演化轮次",
+        "save": "保存策略",
+        "saving": "正在保存…",
+        "saved": "已保存自治策略",
+        "saveFailed": "保存自治策略失败"
+      },
+      "rounds": {
+        "title": "演化轮次",
+        "detailTitle": "轮次详情",
+        "loading": "正在加载轮次…",
+        "empty": "尚无演化轮次",
+        "unknownStatus": "未知",
+        "selectPrompt": "选择一个轮次以查看其详情和影响",
+        "idLabel": "轮次",
+        "statusLabel": "状态",
+        "approve": "批准",
+        "abort": "中止",
+        "revert": "回退",
+        "revertWarning": "回退是破坏性的：它会撤销此轮次已应用的更改（可通过 git 恢复）。请确认以继续。",
+        "revertConfirm": "确认回退",
+        "revertCancel": "取消",
+        "approved": "已批准轮次",
+        "aborted": "已中止轮次",
+        "reverted": "已回退轮次",
+        "actionFailed": "轮次操作失败"
+      },
+      "forge": {
+        "title": "共享熔炉",
+        "loading": "正在加载共享绑定…",
+        "empty": "没有可用的共享熔炉绑定",
+        "adopt": "采用",
+        "adopting": "正在采用…",
+        "adopted": "已采用共享绑定",
+        "adoptFailed": "采用共享绑定失败"
+      },
+      "panels": {
+        "health": {
+          "tab": "健康",
+          "title": "项目健康",
+          "refresh": "刷新",
+          "empty": "无健康数据"
+        },
+        "think": {
+          "tab": "思考",
+          "title": "思考简报",
+          "run": "生成简报",
+          "empty": "尚无简报"
+        },
+        "deadEnds": {
+          "tab": "死胡同",
+          "title": "死胡同",
+          "empty": "未记录死胡同",
+          "approach": "方法",
+          "reason": "原因",
+          "phase": "阶段",
+          "add": "添加死胡同",
+          "promote": "提升阶段死胡同",
+          "promotePlaceholder": "阶段 ID"
+        },
+        "genome": {
+          "tab": "基因组",
+          "title": "项目基因组",
+          "snapshot": "创建快照",
+          "latest": "最新快照",
+          "history": "快照历史",
+          "empty": "无基因组数据"
+        },
+        "verify": {
+          "tab": "验证",
+          "title": "机械验证",
+          "run": "运行机械验证",
+          "phasePlaceholder": "阶段 ID",
+          "empty": "尚无验证运行"
+        },
+        "reflections": {
+          "tab": "反思",
+          "title": "反思与裁定",
+          "phasePlaceholder": "阶段 ID",
+          "load": "加载反思",
+          "verdicts": "裁定计数",
+          "empty": "未加载反思"
+        },
+        "evolve": {
+          "tab": "演化",
+          "title": "演化运行",
+          "start": "启动演化运行",
+          "stop": "停止",
+          "refresh": "刷新运行",
+          "empty": "无演化运行",
+          "detail": "运行详情"
+        }
+      },
+      "tablistLabel": "线束面板",
+      "loadError": "加载线束数据失败"
     }
   }
 }
