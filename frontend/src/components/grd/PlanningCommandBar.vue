@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
+import { GRD_COMMAND_MANIFEST } from './planningCommands';
 
 const { t } = useI18n();
 
@@ -12,50 +13,13 @@ const emit = defineEmits<{
   invoke: [command: string, args?: Record<string, string>];
 }>();
 
-const commandGroups = [
-  {
-    labelKey: 'planningCommandBar.groups.projectSetup',
-    commands: [
-      { name: 'map-codebase', labelKey: 'planningCommandBar.cmd.mapCodebase.label', descKey: 'planningCommandBar.cmd.mapCodebase.desc' },
-      { name: 'new-milestone', labelKey: 'planningCommandBar.cmd.newMilestone.label', descKey: 'planningCommandBar.cmd.newMilestone.desc' },
-      { name: 'long-term-roadmap', labelKey: 'planningCommandBar.cmd.longTermRoadmap.label', descKey: 'planningCommandBar.cmd.longTermRoadmap.desc' },
-    ],
-  },
-  {
-    labelKey: 'planningCommandBar.groups.phaseManagement',
-    commands: [
-      { name: 'add-phase', labelKey: 'planningCommandBar.cmd.addPhase.label', descKey: 'planningCommandBar.cmd.addPhase.desc' },
-      { name: 'remove-phase', labelKey: 'planningCommandBar.cmd.removePhase.label', descKey: 'planningCommandBar.cmd.removePhase.desc' },
-      { name: 'insert-phase', labelKey: 'planningCommandBar.cmd.insertPhase.label', descKey: 'planningCommandBar.cmd.insertPhase.desc' },
-      { name: 'discuss-phase', labelKey: 'planningCommandBar.cmd.discussPhase.label', descKey: 'planningCommandBar.cmd.discussPhase.desc' },
-      { name: 'plan-phase', labelKey: 'planningCommandBar.cmd.planPhase.label', descKey: 'planningCommandBar.cmd.planPhase.desc' },
-    ],
-  },
-  {
-    labelKey: 'planningCommandBar.groups.researchAnalysis',
-    commands: [
-      { name: 'survey', labelKey: 'planningCommandBar.cmd.survey.label', descKey: 'planningCommandBar.cmd.survey.desc' },
-      { name: 'deep-dive', labelKey: 'planningCommandBar.cmd.deepDive.label', descKey: 'planningCommandBar.cmd.deepDive.desc' },
-      { name: 'feasibility', labelKey: 'planningCommandBar.cmd.feasibility.label', descKey: 'planningCommandBar.cmd.feasibility.desc' },
-      { name: 'assess-baseline', labelKey: 'planningCommandBar.cmd.assessBaseline.label', descKey: 'planningCommandBar.cmd.assessBaseline.desc' },
-      { name: 'compare-methods', labelKey: 'planningCommandBar.cmd.compareMethods.label', descKey: 'planningCommandBar.cmd.compareMethods.desc' },
-      { name: 'list-phase-assumptions', labelKey: 'planningCommandBar.cmd.listAssumptions.label', descKey: 'planningCommandBar.cmd.listAssumptions.desc' },
-    ],
-  },
-  {
-    labelKey: 'planningCommandBar.groups.requirements',
-    commands: [
-      { name: 'requirement', labelKey: 'planningCommandBar.cmd.requirement.label', descKey: 'planningCommandBar.cmd.requirement.desc' },
-      { name: 'plan-milestone-gaps', labelKey: 'planningCommandBar.cmd.planGaps.label', descKey: 'planningCommandBar.cmd.planGaps.desc' },
-      { name: 'complete-milestone', labelKey: 'planningCommandBar.cmd.completeMilestone.label', descKey: 'planningCommandBar.cmd.completeMilestone.desc' },
-    ],
-  },
-] as const;
+// Single declarative source of truth — see planningCommands.ts.
+const commandGroups = GRD_COMMAND_MANIFEST;
 
 const isDisabled = (status: string) => status === 'running' || status === 'waiting_input';
 
-function handleClick(commandName: string) {
-  emit('invoke', commandName);
+function handleClick(commandName: string, group?: string) {
+  emit('invoke', commandName, group ? { group } : undefined);
 }
 </script>
 
@@ -75,11 +39,17 @@ function handleClick(commandName: string) {
           v-for="cmd in group.commands"
           :key="cmd.name"
           class="command-btn"
+          :class="{ 'is-deprecated': cmd.deprecated }"
           :disabled="isDisabled(status)"
           :title="t(cmd.descKey)"
-          @click="handleClick(cmd.name)"
+          :data-command="cmd.name"
+          :data-group="cmd.group"
+          @click="handleClick(cmd.name, cmd.group)"
         >
           {{ t(cmd.labelKey) }}
+          <span v-if="cmd.deprecated" class="deprecated-badge">{{
+            t('planningCommandBar.deprecated')
+          }}</span>
         </button>
       </div>
     </div>
@@ -177,5 +147,21 @@ function handleClick(commandName: string) {
 .command-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.command-btn.is-deprecated {
+  opacity: 0.65;
+}
+
+.deprecated-badge {
+  margin-left: 6px;
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 4px;
+  border-radius: 3px;
+  color: var(--accent-amber, #ffb74d);
+  background: rgba(255, 183, 77, 0.12);
 }
 </style>
