@@ -100,17 +100,13 @@ class GrdCliService:
         if plugin_root:
             candidate = os.path.join(plugin_root, "bin", filename)
             if os.path.isfile(candidate):
-                logger.info(
-                    "GRD %s binary found via CLAUDE_PLUGIN_ROOT: %s", label, candidate
-                )
+                logger.info("GRD %s binary found via CLAUDE_PLUGIN_ROOT: %s", label, candidate)
                 return candidate, True
 
         # 3. Glob known install locations (most recently modified first)
         patterns = [
             os.path.expanduser(f"~/.claude/plugins/*/GRD/bin/{filename}"),
-            os.path.expanduser(
-                f"~/.claude/plugins/marketplaces/*/plugins/GRD/bin/{filename}"
-            ),
+            os.path.expanduser(f"~/.claude/plugins/marketplaces/*/plugins/GRD/bin/{filename}"),
             os.path.expanduser(f"~/.claude-*/plugins/*/GRD/bin/{filename}"),
         ]
         for pattern in patterns:
@@ -206,9 +202,7 @@ class GrdCliService:
             }
 
     @classmethod
-    def _run(
-        cls, binary: Optional[str], cwd: str, argv: list, *, raw: bool
-    ) -> dict:
+    def _run(cls, binary: Optional[str], cwd: str, argv: list, *, raw: bool) -> dict:
         """Shared subprocess runner used by both ``run_command`` and
         ``run_gd``. ``raw=True`` appends the ``grd-tools`` ``--raw`` flag
         which suppresses prompts; ``gd`` doesn't use that flag.
@@ -412,6 +406,131 @@ class GrdCliService:
                 "output": None,
                 "error": "phase is required",
             }
-        return cls.run_command(
-            project_path, "verify", "mechanical", "--phase", str(phase)
-        )
+        return cls.run_command(project_path, "verify", "mechanical", "--phase", str(phase))
+
+    # -----------------------------------------------------------------
+    # Research (v0.8.0 — REQ-14, autoresearch loop browser surface)
+    #
+    # These are the READ-ONLY / status surfaces around ``gd research``;
+    # the long loop itself runs through ``GrdResearchSessionHandler`` as
+    # a streamed PSM session, NOT through these helpers. The on-disk
+    # readers are deliberate: a research thread's THREAD.md / HYPOTHESES.md
+    # / FINDING.md are the source of truth the loop writes, so the browser
+    # reads them directly rather than paying a CLI round-trip. There is no
+    # ``gd research report`` or ``gd research portfolio`` command — the
+    # report IS FINDING.md on disk and the portfolio IS the thread list.
+    # -----------------------------------------------------------------
+
+    _RESEARCH_THREADS_REL = os.path.join(".planning", "research", "threads")
+
+    @classmethod
+    def research_status(cls, project_path: str, thread_id: Optional[str] = None) -> dict:
+        """``gd research status [thread_id]`` — JSON snapshot of the
+        active/most-recent research loop. Returns ``{"error": ...}`` when
+        the ``gd`` binary isn't available (status is a v0.8.0-only command,
+        no legacy fallback exists).
+        """
+        if not cls._gd_available:
+            return {
+                "success": False,
+                "data": None,
+                "error": "gd binary not available (v0.8.0+ required for research)",
+            }
+        args = ["research", "status"]
+        if thread_id:
+            args.append(thread_id)
+        return cls.run_gd_json(project_path, *args)
+
+    @classmethod
+    def list_threads(cls, project_path: str) -> list[dict]:
+        """Portfolio/browser — read the frontmatter of every
+        ``.planning/research/threads/<id>/THREAD.md`` on disk.
+
+        Returns ``[]`` when the threads directory is missing (it does not
+        exist until the first research run, so the absence is normal, not
+        an error). Each entry carries the parsed
+        ``id``/``question``/``status``/``iteration``/``max_iterations``
+        frontmatter fields (missing fields are ``None``). This is an
+        on-disk read, not a CLI round-trip.
+        """
+        threads_dir = os.path.join(project_path, cls._RESEARCH_THREADS_REL)
+        if not os.path.isdir(threads_dir):
+            return []
+
+        out: list[dict] = []
+        for entry in sorted(os.listdir(threads_dir)):
+            thread_path = os.path.join(threads_dir, entry)
+            if not os.path.isdir(thread_path):
+                continue
+            thread_md = os.path.join(thread_path, "THREAD.md")
+            fm = cls._read_frontmatter(thread_md)
+            out.append(
+                {
+                    "id": fm.get("id") or entry,
+                    "question": fm.get("question"),
+                    "status": fm.get("status"),
+                    "iteration": fm.get("iteration"),
+                    "max_iterations": fm.get("max_iterations"),
+                }
+            )
+        return out
+
+    @classmethod
+    def read_thread(cls, project_path: str, thread_id: str) -> dict:
+        """Bundle the three on-disk documents for one research thread:
+        ``THREAD.md`` + ``HYPOTHESES.md`` + ``FINDING.md`` from
+        ``.planning/research/threads/<id>/``.
+
+        Each field is ``None`` when its file is absent (a thread mid-loop
+        may not have written FINDING.md yet), so callers get a None-safe
+        bundle rather than a partial dict or an exception.
+        """
+        thread_path = os.path.join(project_path, cls._RESEARCH_THREADS_REL, thread_id)
+        return {
+            "id": thread_id,
+            "thread": cls._read_text(os.path.join(thread_path, "THREAD.md")),
+            "hypotheses": cls._read_text(os.path.join(thread_path, "HYPOTHESES.md")),
+            "finding": cls._read_text(os.path.join(thread_path, "FINDING.md")),
+        }
+
+    @staticmethod
+    def _read_text(path: str) -> Optional[str]:
+        """Read a file, returning ``None`` when it is absent or unreadable."""
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                return fh.read()
+        except (FileNotFoundError, NotADirectoryError, OSError):
+            return None
+
+    @classmethod
+    def _read_frontmatter(cls, path: str) -> dict:
+        """Parse the leading ``--- ... ---`` YAML-ish frontmatter block of
+        a markdown file into a flat ``{key: value}`` dict.
+
+        Deliberately a tiny ``key: value`` line parser (not a YAML import)
+        — research THREAD.md frontmatter is flat scalars. ``iteration`` /
+        ``max_iterations`` are coerced to ``int`` when numeric. Returns an
+        empty dict when the file is absent or has no frontmatter.
+        """
+        text = cls._read_text(path)
+        if not text:
+            return {}
+        lines = text.splitlines()
+        if not lines or lines[0].strip() != "---":
+            return {}
+        fm: dict = {}
+        for line in lines[1:]:
+            if line.strip() == "---":
+                break
+            if ":" not in line:
+                continue
+            key, _, value = line.partition(":")
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if not key:
+                continue
+            if key in ("iteration", "max_iterations") and value.isdigit():
+                fm[key] = int(value)
+            else:
+                fm[key] = value or None
+        return fm
