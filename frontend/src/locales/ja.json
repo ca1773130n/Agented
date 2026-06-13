@@ -1791,6 +1791,20 @@
       "uninstalled": "{count}件のコンポーネントをアンインストールしました"
     }
   },
+  "driver": {
+    "selectorTitle": "実行ドライバー",
+    "projectTitle": "実行ドライバー",
+    "projectDescription": "このプロジェクトのチャットおよびエージェントのターンを実行するドライバーを選択します。GRD（デフォルト）は計画された複数ステップのセッションを生成し、CLI Agent はツールを使用する単一エージェントを実行し、CLIProxy は通常のトークンチャットです。",
+    "saLabel": "ドライバー",
+    "changeHint": "ドライバーの変更は保存時に適用されます。",
+    "saved": "ドライバーを更新しました。",
+    "viewGrdSession": "GRD セッションを表示",
+    "options": {
+      "grd": "GRD（デフォルト）",
+      "cli_agent": "CLI Agent",
+      "cliproxy": "CLIProxy"
+    }
+  },
   "projectTeamLeaderChat": {
     "thinkingLabel": "思考プロセス",
     "toolsLabel": "ツール実行 {count}件",

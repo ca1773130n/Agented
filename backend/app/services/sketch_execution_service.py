@@ -12,10 +12,17 @@ from ..db.connection import get_connection
 from ..db.sketches import get_sketch, update_sketch
 from ..db.super_agents import get_super_agent
 from .agent_message_bus_service import AgentMessageBusService
+from .project_workspace_service import ProjectWorkspaceService
 from .streaming_helper import run_streaming_response
 from .super_agent_session_service import SuperAgentSessionService
 
 logger = logging.getLogger(__name__)
+
+
+def _sketch_project_id(sketch_id: str) -> Optional[str]:
+    """Return the project_id associated with a sketch, or None."""
+    sketch = get_sketch(sketch_id)
+    return sketch.get("project_id") if sketch else None
 
 
 def find_team_super_agent(team_id: str) -> Optional[str]:
@@ -285,6 +292,22 @@ def _scan_mentions_and_notify(sketch_id: str, from_agent_id: str, response_text:
     sketch = get_sketch(sketch_id)
     sketch_title = (sketch.get("title") if sketch else None) or sketch_id
 
+    # Resolve the project workspace so auto-launched sessions run in the
+    # project clone instead of cwd=None. Degrades to None on unresolvable
+    # workspace (ValueError) rather than crashing the turn.
+    cwd: Optional[str] = None
+    project_id = _sketch_project_id(sketch_id)
+    if project_id:
+        try:
+            cwd = ProjectWorkspaceService.resolve_working_directory(project_id)
+        except ValueError as exc:
+            logger.warning(
+                "Sketch %s: could not resolve project %s workspace, running without cwd: %s",
+                sketch_id,
+                project_id,
+                exc,
+            )
+
     # Collect tasks per agent (dedup by agent ID)
     agent_tasks: dict[str, list[str]] = {}
 
@@ -373,6 +396,8 @@ def _scan_mentions_and_notify(sketch_id: str, from_agent_id: str, response_text:
                     session_id=session_id,
                     super_agent_id=agent_id,
                     backend=backend,
+                    cwd=cwd,
+                    chat_mode="work" if cwd else None,
                 )
                 logger.info(
                     "Sketch %s: auto-launched session %s for %s",
@@ -545,6 +570,22 @@ def execute_delegate(
     sa = get_super_agent(super_agent_id)
     backend = (sa.get("backend_type") if sa else None) or "claude"
 
+    # Resolve the project workspace so the delegate runs in the project clone
+    # instead of cwd=None. Degrades to None on unresolvable workspace
+    # (ValueError) rather than crashing the turn.
+    cwd: Optional[str] = None
+    project_id = _sketch_project_id(sketch_id)
+    if project_id:
+        try:
+            cwd = ProjectWorkspaceService.resolve_working_directory(project_id)
+        except ValueError as exc:
+            logger.warning(
+                "Sketch %s: could not resolve project %s workspace, running without cwd: %s",
+                sketch_id,
+                project_id,
+                exc,
+            )
+
     captured_session_id = session_id
     captured_super_agent_id = super_agent_id
 
@@ -600,6 +641,8 @@ def execute_delegate(
             backend=backend,
             on_complete=_on_complete,
             on_error=_on_error,
+            cwd=cwd,
+            chat_mode="work" if cwd else None,
         )
     except Exception as exc:
         logger.error(

@@ -260,6 +260,7 @@ export type {
   HarnessStatusResult,
   HarnessLoadResult,
   HarnessDeployResult,
+  ExecutionDriver,
 
   // Hook types
   HookEvent,

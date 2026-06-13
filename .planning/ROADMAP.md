@@ -35,10 +35,10 @@ gates (`just build`, backend pytest watchdog, frontend no-new-failures).
 
 - [x] **Phase 17: Forge creation surface** - `subagent` kind, atomic create+bind+materialize, cross-kind bundles, `forge-creator` bundle, session-completion auto-import `implement` ✓ 2026-06-13
 - [ ] **Phase 18: Sketch → primitive routing** - classification `action` dimension, `primitive_generator` target, PrimitiveForgeService create + ACE-style improve, outcome card with undo `implement`
-- [ ] **Phase 19: GRD default driver** - `resolve_execution_driver()` 3-way (default grd), GrdChatSessionHandler PSM→chat-SSE bridge, cwd/backend fixes, driver selector UI `implement`
+- [x] **Phase 19: GRD default driver** - `resolve_execution_driver()` 3-way (default grd), GrdChatSessionHandler PSM→chat-SSE bridge, cwd/backend fixes, driver selector UI `implement` ✓ 2026-06-13
 - [ ] **Phase 20: GRD frontend wiring** - autoresearch page, life-harness completion UI (16 unwired routes), full `/grd:` command bar, 4-locale i18n `implement`
 - [ ] **Phase 21: One-click team harness setup** - ProjectDashboard button + idempotent TeamHarnessSetupService (GRD init, topology, bundles, tesserae, policies, 4-harness materialization) `integrate`
-- [ ] **Phase 22: Repeated-request auto-skill** - `repeated_request_signals` store, embedding detection over 5 session kinds, hybrid gates, patch-over-create, provenance, security scan `implement`
+- [x] **Phase 22: Repeated-request auto-skill** - `repeated_request_signals` store, embedding detection over 5 session kinds, hybrid gates, patch-over-create, provenance, security scan `implement`
 
 ## Phase Details
 
@@ -94,12 +94,12 @@ Plans:
 **Plans**: 6 plans
 
 Plans:
-- [ ] 19-01-PLAN.md — Driver resolver + migration 158 (projects.default_driver, project_sa_instances.driver) + degrade injection (Wave 1)
-- [ ] 19-02-PLAN.md — Turn classifier classify_turn + /grd: command mapping (Wave 1)
-- [ ] 19-03-PLAN.md — cwd/backend bug fixes (execute_delegate, _scan_mentions_and_notify, project_chat) (Wave 1)
-- [ ] 19-04-PLAN.md — GrdChatSessionHandler + HANDLER_REGISTRY entry + PSM→chat-SSE bridge (Wave 2)
-- [ ] 19-05-PLAN.md — Funnel integration: 3-way branch in run_streaming_response + 2 call-site migrations + cliproxy regression (Wave 3)
-- [ ] 19-06-PLAN.md — Frontend driver selectors (default GRD) + transcript GRD-session linkage + 4-locale i18n (Wave 3)
+- [x] 19-01-PLAN.md — Driver resolver + migration 158 (projects.default_driver, project_sa_instances.driver) + degrade injection (Wave 1)
+- [x] 19-02-PLAN.md — Turn classifier classify_turn + /grd: command mapping (Wave 1)
+- [x] 19-03-PLAN.md — cwd/backend bug fixes (execute_delegate, _scan_mentions_and_notify, project_chat) (Wave 1)
+- [x] 19-04-PLAN.md — GrdChatSessionHandler + HANDLER_REGISTRY entry + PSM→chat-SSE bridge (Wave 2)
+- [x] 19-05-PLAN.md — Funnel integration: 3-way branch in run_streaming_response + 2 call-site migrations + cliproxy regression (Wave 3)
+- [x] 19-06-PLAN.md — Frontend driver selectors (default GRD) + transcript GRD-session linkage + 4-locale i18n (Wave 3)
 
 ### Phase 20: GRD frontend wiring
 **Goal**: GRD's full feature set is reachable from the frontend — autoresearch (`gd research`) has backend routes and a Research page, the life-harness completion surfaces (autonomy editor, round revert, shared-forge adopt, the 16 previously-unwired GRD routes) have UI, the PlanningCommandBar exposes the full supported `/grd:` command set from a manifest, and every new surface is fully localized.
@@ -150,10 +150,15 @@ Plans:
   4. Quality/safety: patch-over-create dedup against the bound-skills index turns near-duplicates into update proposals; origin-hash provenance never overwrites operator-modified skills; prompt-injection/exfiltration + invisible-Unicode scan rejects unsafe content (security-scan tests).
   5. Consistency fixes land: evolver `_DESIGN_GUIDE`/`_PROMPT_TEMPLATE` reflect writable skills; `tesserae_integration._build_harness_session` normalizes `project_session`/`workflow`/`team_session`.
   6. Live dogfood: replay ≥3 real session transcripts through the detector before sign-off. House gates pass.
-**Plans**: TBD
+**Plans**: 6 plans (4 waves)
 
 Plans:
-- [ ] 22-NN: TBD (set by /grd:plan-phase 22)
+- [x] 22-01-PLAN.md — repeated_request_signals store (DDL + repo + model + UPSERT invariants)
+- [x] 22-02-PLAN.md — consistency fixes: _build_harness_session 5-kind normalizers + evolver writable-skill prompts
+- [x] 22-03-PLAN.md — detection handler (register_session_handler, _FETCHERS, cosine ≥ 0.83, embed-disabled fallback, non-blocking)
+- [x] 22-04-PLAN.md — safety scanner (injection/exfiltration/invisible-Unicode) + dedup + origin-hash provenance
+- [x] 22-05-PLAN.md — hybrid gate (auto/propose/reject matrix + per-project policy + evolver skill-create dispatch)
+- [x] 22-06-PLAN.md — live dogfood: replay ≥3 real transcripts, operator review, house gates
 
 ## Dependencies
 
@@ -179,10 +184,10 @@ Plans:
 |-------|------|--------------|------------|--------------|--------|
 | 17 | Forge creation surface | REQ-01..05 | — | proxy | Complete (6/6 ✓ 2026-06-13) |
 | 18 | Sketch → primitive routing | REQ-06..09 | 17 | proxy | Not started |
-| 19 | GRD default driver | REQ-10..13 | 17 | proxy | Not started |
+| 19 | GRD default driver | REQ-10..13 | 17 | proxy | Complete ✓ 2026-06-13 |
 | 20 | GRD frontend wiring | REQ-14..18 | 19 | proxy | Not started |
 | 21 | One-click team harness setup | REQ-19..21 | 17, 19 | full | Not started |
-| 22 | Repeated-request auto-skill | REQ-22..26 | 17 | proxy | Not started |
+| 22 | Repeated-request auto-skill | REQ-22..26 | 17 | proxy | Complete (2026-06-13) |
 
 **Coverage:** 26/26 requirements mapped (REQ-01 … REQ-26), each to exactly one phase. No orphans, no duplicates.
 

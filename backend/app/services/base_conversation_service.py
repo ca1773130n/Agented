@@ -549,7 +549,7 @@ class BaseConversationService(abc.ABC):
         from .cli_agent_runner_service import (
             is_yolo_mode_enabled,
             resolve_account_config_dir,
-            should_route_via_cli_agent,
+            resolve_execution_driver,
             stream_via_cli_agent,
         )
         from .conversation_streaming import stream_llm_response
@@ -559,7 +559,13 @@ class BaseConversationService(abc.ABC):
             flush_callback=lambda text: cls._broadcast(conv_id, "response_chunk", {"content": text})
         )
 
-        if should_route_via_cli_agent(backend, use_cli_agent):
+        # Design conversations have no PSM / chat-SSE surface (they emit
+        # ``response_chunk`` via ``_broadcast``, not chat state deltas), so a
+        # GRD PSM session has nowhere to bridge here. Only the cliproxy-vs-CLI
+        # distinction matters: treat the resolved "grd" driver the same as
+        # "cli_agent" (run the subprocess runner) and "cliproxy" as before.
+        driver = resolve_execution_driver(backend=backend, use_cli_agent=use_cli_agent)
+        if driver in ("cli_agent", "grd"):
             backend_norm = (backend or "").lower()
             config_dir = resolve_account_config_dir(account_id, backend_norm)
             stream_iter = stream_via_cli_agent(

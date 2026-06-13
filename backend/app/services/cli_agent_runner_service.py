@@ -378,8 +378,12 @@ def stream_via_cli_agent(
         # minutes for the whole reply. A fresh stateful handler per call
         # streams those deltas and drops the duplicate final assistant text.
         cmd = [
-            "claude", "-p", prompt,
-            "--output-format", "stream-json", "--verbose",
+            "claude",
+            "-p",
+            prompt,
+            "--output-format",
+            "stream-json",
+            "--verbose",
             "--include-partial-messages",
         ]
         if yolo:
@@ -525,6 +529,146 @@ def resolve_account_config_dir(account_id: Optional[str], backend_kind: str) -> 
     if not config_path:
         return None
     return os.path.expanduser(config_path)
+
+
+_DRIVERS = ("cliproxy", "cli_agent", "grd")
+
+
+def _normalize_driver(value) -> Optional[str]:
+    """Coerce a raw driver string to one of the literal set, else None."""
+    if not value:
+        return None
+    v = str(value).strip().lower()
+    return v if v in _DRIVERS else None
+
+
+def resolve_execution_driver(
+    *,
+    backend: str | None,
+    use_cli_agent: Optional[bool] = None,
+    turn_driver: Optional[str] = None,
+    super_agent_id: Optional[str] = None,
+    project_id: Optional[str] = None,
+    instance_id: Optional[str] = None,
+    _grd_available=None,
+    _resolve_workspace=None,
+) -> str:
+    """Resolve the execution driver for a chat turn (Phase 19, REQ-10).
+
+    A pure, precedence-driven, default-GRD, degrade-safe resolver returning
+    one of ``"cliproxy" | "cli_agent" | "grd"`` for EVERY input. It replaces
+    the 2-way ``should_route_via_cli_agent`` boolean (callers migrate in
+    19-04; this function is purely additive).
+
+    Precedence — first non-None source wins (19-RESEARCH.md §1 table):
+
+      1. Turn override: explicit ``turn_driver``; else legacy ``use_cli_agent``
+         (True → ``cli_agent``, False → ``cliproxy``).
+      2. SuperAgent: ``config_json.driver`` for ``super_agent_id``.
+      3. Instance: ``project_sa_instances.driver`` for ``instance_id``.
+      4. Project default: ``projects.default_driver`` for ``project_id``.
+      5. Global default: ``"grd"``.
+
+    Backend guard: a backend outside the CLI-runnable set ({claude, codex,
+    gemini}) cannot run grd/cli_agent, so it always resolves to ``cliproxy``
+    — the same constraint ``should_route_via_cli_agent`` enforces.
+
+    Degrade (grd → cli_agent): when the resolved driver is ``"grd"``, both the
+    GRD binary and a resolvable project workspace must be present. If the
+    injected ``_grd_available()`` reports unavailable, OR ``_resolve_workspace``
+    raises ``ValueError`` (no clone path), degrade to ``cli_agent`` (never
+    crash). Both checks are injectable so the degrade path is unit-testable
+    with no real binary/workspace.
+
+    Defensive: ANY unexpected exception degrades toward the legacy choice
+    (``cli_agent`` if the backend is CLI-runnable, else ``cliproxy``) — a read
+    failure during precedence resolution must never crash the turn.
+    """
+    backend_norm = (backend or "").lower()
+    cli_runnable = backend_norm in _CLI_RUNNABLE_BACKENDS
+    legacy_choice = "cli_agent" if cli_runnable else "cliproxy"
+
+    try:
+        # Non-CLI backends can only ever use CLIProxy.
+        if not cli_runnable:
+            return "cliproxy"
+
+        resolved: Optional[str] = None
+
+        # 1. Turn override.
+        resolved = _normalize_driver(turn_driver)
+        if resolved is None and use_cli_agent is not None:
+            resolved = "cli_agent" if use_cli_agent else "cliproxy"
+
+        # 2. SuperAgent config_json.driver.
+        if resolved is None and super_agent_id:
+            try:
+                from ..db.super_agents import get_super_agent
+
+                sa = get_super_agent(super_agent_id)
+                if sa:
+                    cfg = json.loads(sa.get("config_json") or "{}")
+                    resolved = _normalize_driver(cfg.get("driver"))
+            except Exception:
+                logger.debug("SuperAgent driver read failed", exc_info=True)
+
+        # 3. Instance driver.
+        if resolved is None and instance_id:
+            try:
+                from ..db.project_sa_instances import get_instance_driver
+
+                resolved = _normalize_driver(get_instance_driver(instance_id))
+            except Exception:
+                logger.debug("Instance driver read failed", exc_info=True)
+
+        # 4. Project default driver.
+        if resolved is None and project_id:
+            try:
+                from ..db.projects import get_project_default_driver
+
+                resolved = _normalize_driver(get_project_default_driver(project_id))
+            except Exception:
+                logger.debug("Project default driver read failed", exc_info=True)
+
+        # 5. Global default.
+        if resolved is None:
+            resolved = "grd"
+
+        # Degrade grd → cli_agent when GRD or the workspace is unavailable.
+        if resolved == "grd":
+            grd_available = _grd_available
+            if grd_available is None:
+                from .grd_cli_service import GrdCliService
+
+                grd_available = GrdCliService.available
+            resolve_workspace = _resolve_workspace
+            if resolve_workspace is None:
+                from .project_workspace_service import ProjectWorkspaceService
+
+                resolve_workspace = ProjectWorkspaceService.resolve_working_directory
+
+            report = grd_available()
+            ok = (
+                bool(report.get("grd_tools_available") or report.get("gd_available"))
+                if isinstance(report, dict)
+                else bool(report)
+            )
+            if ok:
+                try:
+                    resolve_workspace(project_id)
+                except ValueError:
+                    ok = False
+            if not ok:
+                logger.info(
+                    "GRD driver unavailable, degrading to cli_agent for project=%s",
+                    project_id,
+                )
+                return "cli_agent"
+
+        return resolved
+    except Exception:
+        logger.debug("resolve_execution_driver fell through to legacy choice", exc_info=True)
+        return legacy_choice
 
 
 def should_route_via_cli_agent(

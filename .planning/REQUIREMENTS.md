@@ -46,11 +46,11 @@ to exactly one phase).
 
 ## Repeated-request auto-skill (ASK)
 
-- [ ] **REQ-22** — `repeated_request_signals` store: UPSERT preserving `first_seen_at`, incrementing `occurrence_count`, embedding, capped `example_session_ids`, `verified_success_count`, `skill_created`. (Phase: 22)
-- [ ] **REQ-23** — Detection handler on the session-completion bus for all five session kinds: user-turn extraction via `_FETCHERS`, embedding match (cosine ≥ 0.83), tesserae cross-check, verification-record awareness. (Phase: 22)
-- [ ] **REQ-24** — Hybrid gates: auto path (≥3 occurrences/30d + ≥1 verified + scan pass → `discovered_procedure` takeaway conf 0.9 → auto-apply skill); propose path (conf 0.65, operator queue); takeaway auto-apply promoted from env flag to per-project policy. (Phase: 22)
-- [ ] **REQ-25** — Quality/safety: patch-over-create dedup against bound-skills index, origin-hash provenance (never overwrite operator-modified), prompt-injection/exfiltration + invisible-Unicode scan. (Phase: 22)
-- [ ] **REQ-26** — Consistency fixes: evolver `_DESIGN_GUIDE`/`_PROMPT_TEMPLATE` reflect writable skills; `tesserae_integration._build_harness_session` normalizes `project_session`/`workflow`/`team_session`. (Phase: 22)
+- [x] **REQ-22** — `repeated_request_signals` store: UPSERT preserving `first_seen_at`, incrementing `occurrence_count`, embedding, capped `example_session_ids`, `verified_success_count`, `skill_created`. (Phase: 22)
+- [x] **REQ-23** — Detection handler on the session-completion bus for all five session kinds: user-turn extraction via `_FETCHERS`, embedding match (cosine ≥ 0.83), tesserae cross-check, verification-record awareness. (Phase: 22)
+- [x] **REQ-24** — Hybrid gates: auto path (≥3 occurrences/30d + ≥1 verified + scan pass → `discovered_procedure` takeaway conf 0.9 → auto-apply skill); propose path (conf 0.65, operator queue); takeaway auto-apply promoted from env flag to per-project policy. (Phase: 22)
+- [x] **REQ-25** — Quality/safety: patch-over-create dedup against bound-skills index, origin-hash provenance (never overwrite operator-modified), prompt-injection/exfiltration + invisible-Unicode scan. (Phase: 22)
+- [x] **REQ-26** — Consistency fixes: evolver `_DESIGN_GUIDE`/`_PROMPT_TEMPLATE` reflect writable skills; `tesserae_integration._build_harness_session` normalizes `project_session`/`workflow`/`team_session`. (Phase: 22)
 
 ## Out of scope (this milestone)
 

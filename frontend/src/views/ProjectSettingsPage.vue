@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { Project, Team, Product, SuperAgent } from '../services/api';
+import type { Project, Team, Product, SuperAgent, ExecutionDriver } from '../services/api';
 import {
   projectApi, teamApi, productApi, superAgentApi, ApiError,
 } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
+import SuperAgentDriverSelector from '../components/super-agents/SuperAgentDriverSelector.vue';
 import ProjectMcpPanel from '../components/project/ProjectMcpPanel.vue';
 import ProjectAllowedAccountsPanel from '../components/project/ProjectAllowedAccountsPanel.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
@@ -45,6 +46,10 @@ const originalDescription = ref('');
 const superAgents = ref<SuperAgent[]>([]);
 const selectedManagerSaId = ref<string>('');
 const originalManagerSaId = ref<string>('');
+// Phase 19 (REQ-13) — project default execution driver. Defaults to
+// 'grd' until the project row says otherwise.
+const selectedDriver = ref<ExecutionDriver>('grd');
+const originalDriver = ref<ExecutionDriver>('grd');
 const cloneStatus = ref<string>('none');
 const cloneError = ref<string>('');
 const lastSyncedAt = ref<string>('');
@@ -103,6 +108,9 @@ async function loadData() {
     superAgents.value = saData.super_agents || [];
     selectedManagerSaId.value = projectData.manager_super_agent_id || '';
     originalManagerSaId.value = projectData.manager_super_agent_id || '';
+    // Default driver — NULL inherits the global 'grd' default.
+    selectedDriver.value = projectData.default_driver || 'grd';
+    originalDriver.value = projectData.default_driver || 'grd';
     // Initialize selected teams from project's current teams
     const teamIds = project.value.teams?.map(t => t.id) || [];
     selectedTeamIds.value = [...teamIds];
@@ -140,7 +148,7 @@ async function saveSettings() {
   isSaving.value = true;
   try {
     // Update product, owner team, local path, name, and description if changed
-    const updateData: { name?: string; description?: string; product_id?: string; owner_team_id?: string; local_path?: string; manager_super_agent_id?: string } = {};
+    const updateData: { name?: string; description?: string; product_id?: string; owner_team_id?: string; local_path?: string; manager_super_agent_id?: string; default_driver?: ExecutionDriver } = {};
     if (editName.value !== originalName.value) updateData.name = editName.value;
     if (editDescription.value !== originalDescription.value) updateData.description = editDescription.value;
     if (selectedProductId.value !== originalProductId.value) {
@@ -155,6 +163,9 @@ async function saveSettings() {
     if (selectedManagerSaId.value !== originalManagerSaId.value) {
       updateData.manager_super_agent_id = selectedManagerSaId.value;
     }
+    if (selectedDriver.value !== originalDriver.value) {
+      updateData.default_driver = selectedDriver.value;
+    }
     if (Object.keys(updateData).length > 0) {
       await projectApi.update(projectId.value, updateData);
       originalName.value = editName.value;
@@ -163,6 +174,7 @@ async function saveSettings() {
       originalOwnerTeamId.value = selectedOwnerTeamId.value;
       originalLocalPath.value = editLocalPath.value;
       originalManagerSaId.value = selectedManagerSaId.value;
+      originalDriver.value = selectedDriver.value;
     }
 
     // Find teams to add (in selected but not in original)
@@ -379,6 +391,22 @@ async function retryClone() {
 
           <p v-if="selectedManagerSaId !== originalManagerSaId" class="change-hint">
             {{ t('projectSettings.teamLeaderChangeHint') }}
+          </p>
+        </div>
+      </div>
+
+      <!-- Execution Driver Section (Phase 19 / REQ-13) -->
+      <div class="card" data-testid="project-driver-card">
+        <div class="card-header">
+          <h3>{{ t('driver.projectTitle') }}</h3>
+        </div>
+        <div class="card-body">
+          <p class="section-description">{{ t('driver.projectDescription') }}</p>
+
+          <SuperAgentDriverSelector v-model="selectedDriver" />
+
+          <p v-if="selectedDriver !== originalDriver" class="change-hint">
+            {{ t('driver.changeHint') }}
           </p>
         </div>
       </div>

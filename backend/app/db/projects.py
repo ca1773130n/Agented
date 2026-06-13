@@ -138,6 +138,19 @@ def get_project(project_id: str) -> Optional[dict]:
         return dict(row) if row else None
 
 
+def get_project_default_driver(project_id: str) -> Optional[str]:
+    """Return ``projects.default_driver`` for ``project_id`` (Phase 19).
+
+    NULL/missing row → ``None`` (caller inherits the global default).
+    """
+    with get_connection() as conn:
+        cursor = conn.execute("SELECT default_driver FROM projects WHERE id = ?", (project_id,))
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return row["default_driver"] if hasattr(row, "keys") else row[0]
+
+
 def get_all_projects(limit: Optional[int] = None, offset: int = 0) -> List[dict]:
     """Get all projects with team counts and owner team name, with optional pagination."""
     with get_connection() as conn:
