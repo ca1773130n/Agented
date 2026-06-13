@@ -25,12 +25,15 @@ Contract (what 21-03..06 implement against):
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import os
 from dataclasses import dataclass
 from typing import Callable, Optional
 
 from app.db.projects import (
     get_harness_setup_steps,
+    get_project,
     set_harness_setup_status,
     upsert_harness_setup_step,
 )
@@ -132,12 +135,111 @@ class TeamHarnessSetupService:
 # ---------------------------------------------------------------------------
 
 
+def _planning_fingerprint(planning_dir: str) -> Optional[str]:
+    """Hash presence + mtime of ``.planning/`` so a re-run after init skips.
+
+    Returns ``None`` when the directory is absent (init has not happened),
+    else a short hash of ``(path, mtime)`` — stable while .planning/ is
+    untouched, so the orchestrator's already-ok floor + this fingerprint both
+    converge on skip.
+    """
+    if not os.path.isdir(planning_dir):
+        return None
+    try:
+        mtime = os.path.getmtime(planning_dir)
+    except OSError:
+        mtime = 0.0
+    digest = hashlib.sha256(f"{planning_dir}:{mtime}".encode()).hexdigest()
+    return digest[:16]
+
+
 def _step_grd_init(project_id: str, existing_row: Optional[dict]) -> StepResult:
-    return StepResult("grd_init", "ok")
+    """Step a — reconcile GRD initialization (never re-init a populated repo).
+
+    If the project's ``<local_path>/.planning/`` already exists we are done:
+    return ``skipped`` (reconcile — no destructive re-init, SC4). Otherwise
+    trigger the GRD-init path via :meth:`GrdPlanningService.auto_init_project`
+    (fire-and-forget background work); we record ``ok`` ("init triggered") and
+    let the deferred dogfood (D1) validate real completion.
+    """
+    project = get_project(project_id)
+    if not project:
+        raise ValueError(f"grd_init: project {project_id} not found")
+
+    local_path = project.get("local_path")
+    if not local_path:
+        raise ValueError(f"grd_init: project {project_id} has no local_path")
+
+    planning_dir = os.path.join(local_path, ".planning")
+    fingerprint = _planning_fingerprint(planning_dir)
+
+    # Reconcile: .planning/ already present → never re-init (no destructive deletes).
+    if fingerprint is not None:
+        return StepResult(
+            "grd_init", "skipped", "planning already present", fingerprint=fingerprint
+        )
+
+    # No .planning/ yet → trigger the (background) GRD-init path. Imported lazily
+    # so tests can monkeypatch GrdPlanningService.auto_init_project cheaply.
+    from app.services.grd_planning_service import GrdPlanningService
+
+    GrdPlanningService.auto_init_project(project_id, local_path)
+    return StepResult("grd_init", "ok", "init triggered")
 
 
 def _step_team_topology(project_id: str, existing_row: Optional[dict]) -> StepResult:
-    return StepResult("team_topology", "ok")
+    """Step b — team topology + SA instances tagged ``driver='grd'`` (Phase 19).
+
+    Two phase-sharp pitfalls handled here:
+
+    1. SA-instance creation is NOT constraint-deduped at this layer, so we
+       EXISTENCE-CHECK first: if instances already exist for the project we do
+       not call ``create_team_instances`` again (P1 — no duplicate rows on
+       re-run). We still reconcile ``driver`` below so a skip converges too.
+    2. ``InstanceService.create_team_instances`` takes no ``driver`` kwarg, so
+       we post-update each SA instance's ``driver`` column to ``"grd"`` via
+       ``update_project_sa_instance(..., driver="grd")`` (Open Question 2:
+       change kept local to this phase) and verify with ``get_instance_driver``.
+    """
+    from app.db.project_sa_instances import (
+        get_instance_driver,
+        get_project_sa_instances_for_project,
+        update_project_sa_instance,
+    )
+    from app.services.instance_service import InstanceService
+
+    project = get_project(project_id)
+    if not project:
+        raise ValueError(f"team_topology: project {project_id} not found")
+
+    team_id = project.get("owner_team_id")
+    if not team_id:
+        raise ValueError(f"team_topology: project {project_id} has no owner_team_id")
+
+    # PITFALL 1 — existence check FIRST (SA creation is not constraint-deduped).
+    existing_instances = get_project_sa_instances_for_project(project_id)
+    if existing_instances:
+        status = "skipped"
+        detail_prefix = "instances already present"
+        instances = existing_instances
+    else:
+        created = InstanceService.create_team_instances(project_id, team_id)
+        if not created:
+            raise RuntimeError(
+                f"team_topology: create_team_instances returned no result for "
+                f"project={project_id} team={team_id}"
+            )
+        status = "ok"
+        detail_prefix = "instances created"
+        instances = get_project_sa_instances_for_project(project_id)
+
+    # PITFALL 2 — reconcile driver='grd' on EVERY SA instance (runs on both
+    # the create and the skip path so re-runs converge to driver=grd).
+    for inst in instances:
+        if get_instance_driver(inst["id"]) != "grd":
+            update_project_sa_instance(inst["id"], driver="grd")
+
+    return StepResult("team_topology", status, f"{detail_prefix}: {len(instances)} SA instances")
 
 
 def _step_bundle_binding(project_id: str, existing_row: Optional[dict]) -> StepResult:
