@@ -37,7 +37,7 @@ export interface StartResearchResponse {
   session_id: string;
 }
 
-export interface ListThreadsResponse {
+export interface ResearchThreadsResponse {
   threads: ResearchThread[];
 }
 
@@ -87,7 +87,7 @@ export const researchApi = {
 
   /** GET /api/projects/{id}/research/threads — the thread browser / portfolio. */
   listThreads: (projectId: string) =>
-    apiFetch<ListThreadsResponse>(`/api/projects/${projectId}/research/threads`),
+    apiFetch<ResearchThreadsResponse>(`/api/projects/${projectId}/research/threads`),
 
   /** GET /api/projects/{id}/research/threads/{threadId} — THREAD/HYPOTHESES/FINDING bundle. */
   getThread: (projectId: string, threadId: string) =>
