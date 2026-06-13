@@ -29,6 +29,7 @@ from __future__ import annotations
 import concurrent.futures
 import json
 import logging
+import os
 import re
 import time
 from dataclasses import dataclass
@@ -173,6 +174,64 @@ def _project_execution_ids(project_id: str) -> set[str]:
     except Exception:
         logger.debug("_project_execution_ids failed for %s", project_id, exc_info=True)
         return set()
+
+
+# ---------------------------------------------------------------------------
+# Per-project corpus-health gate (answer-eval run-6 finding)
+# ---------------------------------------------------------------------------
+
+
+def _rag_min_corpus() -> int:
+    """Minimum durable project corpus size for the live RAG gate (env-tunable
+    via AGENTED_RAG_MIN_CORPUS)."""
+    try:
+        return int(os.environ.get("AGENTED_RAG_MIN_CORPUS", "8"))
+    except (TypeError, ValueError):
+        return 8
+
+
+def corpus_health(
+    project_id: str, *, min_items: Optional[int] = None, sample_cap: int = 200
+) -> dict:
+    """Count durable, project-scoped retrievable items to judge whether the RAG
+    pipeline can plausibly help this project.
+
+    Counts the genuinely-grounded sources — kg signals, session takeaways, and
+    project-scoped execution logs — and EXCLUDES generative Tesserae (which
+    always answers, so it is not evidence of a real corpus). ``healthy`` is
+    total >= the threshold (env ``AGENTED_RAG_MIN_CORPUS``, default 8: a
+    conservative floor calibrated from answer-eval run 6, where a 6-item corpus
+    was measured net-negative; raise it as richer corpora prove positive).
+
+    The live leader-chat path skips the whole pipeline when unhealthy (saving
+    planner/fanout/sufficiency cost and avoiding answer degradation). The eval
+    deliberately does NOT gate, so it keeps measuring the full pipeline and can
+    show operators the net-negative that justifies the gate.
+    """
+    threshold = _rag_min_corpus() if min_items is None else int(min_items)
+    kg = tk = 0
+    try:
+        from app.db.harness_kg_signals import list_signals
+
+        kg = len(list_signals(project_id, limit=sample_cap))
+    except Exception:
+        logger.debug("corpus_health: kg_signals count failed for %s", project_id, exc_info=True)
+    try:
+        from app.db.harness_takeaways import list_for_project
+
+        tk = len(list_for_project(project_id, limit=sample_cap))
+    except Exception:
+        logger.debug("corpus_health: takeaways count failed for %s", project_id, exc_info=True)
+    ex = len(_project_execution_ids(project_id))
+    total = kg + tk + ex
+    return {
+        "kg_signals": kg,
+        "takeaways": tk,
+        "executions": ex,
+        "total": total,
+        "min_items": threshold,
+        "healthy": total >= threshold,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -401,6 +460,79 @@ def _get_project_tesserae_root(project_id: str) -> Optional[str]:
 
 
 # ---------------------------------------------------------------------------
+# Retrieval-strength gate (answer-eval run-3 calibration)
+# ---------------------------------------------------------------------------
+
+# Function words carrying no retrieval signal. Excluded from the overlap
+# measure so a chunk sharing only "the"/"is"/"how" with the query does not
+# register as relevant.
+_STOPWORDS = frozenset(
+    "a an and are as at be been but by can could did do does for from has have "
+    "he how in into is it its may might not of on or our she should so that the "
+    "their them then there these this to was we were what when where which who "
+    "why will with would you your about over under between across".split()
+)
+
+_WORD_RE = re.compile(r"[a-z0-9]+")
+
+# Sources whose retrieval mechanism already establishes relevance: a full-text
+# match on execution logs is a genuine hit (FTS returns nothing for an
+# off-topic query). Tesserae is deliberately EXCLUDED — it is generative RAG
+# that ALWAYS returns an answer and tends to echo the query, so its presence
+# is not evidence of relevance and must not, by itself, open the injection
+# gate (answer-eval run 4: tesserae-only questions tanked groundedness, e.g.
+# "monitoring & observability" baseline 0.90 → pipeline 0.10). A Tesserae
+# chunk still rides along when other sources open the gate.
+_INTRINSIC_RELEVANCE_SOURCES = frozenset({"execution_log"})
+
+# A generative source whose presence never counts toward the gate.
+_NON_SELF_JUSTIFYING_SOURCES = frozenset({"tesserae"})
+
+# Minimum meaningful shared terms for a word-overlap chunk to count as
+# relevant. One shared term is too easily coincidental (and a thin stopword
+# list lets generic vocab through); two demonstrates the chunk is actually
+# about the question.
+_MIN_TERMS_FOR_RELEVANCE = 2
+
+# Default minimum demonstrated relevance required to inject retrieved context,
+# measured in number of independently-relevant chunks. 1.0 == "at least one
+# chunk that genuinely addresses the question".
+_DEFAULT_MIN_INJECTION_STRENGTH = 1.0
+
+
+def _meaningful_terms(text: str) -> set[str]:
+    """Lowercase whole-word tokens with stopwords and single chars removed."""
+    return {w for w in _WORD_RE.findall(text.lower()) if len(w) >= 2 and w not in _STOPWORDS}
+
+
+def _chunk_is_relevant(qterms: set[str], chunk: RetrievedChunk) -> bool:
+    """Whether a single chunk demonstrably addresses the query.
+
+    FTS-matched sources are intrinsically relevant; generative Tesserae never
+    self-justifies; word-overlap sources need >= _MIN_TERMS_FOR_RELEVANCE
+    meaningful (non-stopword) whole-word terms shared with the query.
+    """
+    if chunk.source in _INTRINSIC_RELEVANCE_SOURCES:
+        return True
+    if chunk.source in _NON_SELF_JUSTIFYING_SOURCES:
+        return False
+    return len(qterms & _meaningful_terms(chunk.text)) >= _MIN_TERMS_FOR_RELEVANCE
+
+
+def _retrieval_strength(query: str, chunks: list[RetrievedChunk]) -> float:
+    """Number of retrieved chunks that demonstrably address the query.
+
+    The retrievers' own ``score`` is a substring overlap count (``word in
+    text``) inflated by stopword matches ("is" matches "th**is**") and by
+    verbose generic chunk text, so it is NOT used. We count corroborating
+    relevant chunks instead (see _chunk_is_relevant). The injection gate fires
+    when this count >= min_injection_strength.
+    """
+    qterms = _meaningful_terms(query)
+    return float(sum(1 for c in chunks if _chunk_is_relevant(qterms, c)))
+
+
+# ---------------------------------------------------------------------------
 # gather_context — main pipeline
 # ---------------------------------------------------------------------------
 
@@ -415,6 +547,7 @@ def gather_context(
     max_iterations: int = 2,
     tesserae_budget: int = 1,
     deadline_seconds: float = 20,
+    min_injection_strength: float = _DEFAULT_MIN_INJECTION_STRENGTH,
 ) -> dict:
     """Agentic RAG pipeline: planner → fanout → sufficiency loop.
 
@@ -429,6 +562,11 @@ def gather_context(
     max_iterations:     Maximum plan→fanout→sufficiency rounds (default 2).
     tesserae_budget:    Max Tesserae calls per gather_context invocation.
     deadline_seconds:   Wall-clock budget for the entire pipeline (default 20s).
+    min_injection_strength:
+                        Minimum demonstrated retrieval relevance (see
+                        _retrieval_strength) required to inject context.
+                        Below it, context_message is None and the caller
+                        answers from a clean baseline turn. 0 disables the gate.
 
     Returns
     -------
@@ -438,6 +576,8 @@ def gather_context(
         iterations: int,
         sufficient: bool,
         gap: str | None,
+        strength: float,               # retrieval strength used by the gate
+        injected: bool,                # whether context_message was produced
     }
     """
     start = time.monotonic()
@@ -512,8 +652,16 @@ def gather_context(
         if sufficient:
             break
 
-    # Build context message
-    context_message = _build_context_message(all_chunks, sufficient=sufficient, gap=gap)
+    # Injection gate (Google agentic-RAG "sufficient context" principle,
+    # calibrated by answer-eval run 3): injecting retrieved context that
+    # carries no demonstrated relevance measurably HURTS groundedness vs a
+    # clean baseline that can honestly abstain (run 3: 0.925 → 0.805). Below
+    # the strength floor we inject nothing and let the model answer plainly.
+    strength = _retrieval_strength(turn, all_chunks)
+    if strength >= min_injection_strength:
+        context_message = _build_context_message(all_chunks, sufficient=sufficient, gap=gap)
+    else:
+        context_message = None
 
     return {
         "chunks": all_chunks,
@@ -521,6 +669,8 @@ def gather_context(
         "iterations": iteration,  # noqa: F821 — always assigned by loop
         "sufficient": sufficient,
         "gap": gap,
+        "strength": strength,
+        "injected": context_message is not None,
     }
 
 

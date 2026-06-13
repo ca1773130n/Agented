@@ -57,13 +57,16 @@ def record_result(
         return cur.lastrowid
 
 
-def finalize_run(run_id: int, aggregates: dict) -> bool:
+def finalize_run(run_id: int, aggregates: dict, *, question_count: Optional[int] = None) -> bool:
     """Set per-arm means + deltas, mark status='complete', set finished_at.
 
     ``aggregates`` keys mirror the column names:
     baseline_groundedness, baseline_sufficiency, baseline_quality,
     pipeline_groundedness, pipeline_sufficiency, pipeline_quality,
     delta_groundedness, delta_sufficiency, delta_quality.
+
+    ``question_count`` is the size of the evaluated question set. When None the
+    existing value is preserved (COALESCE) rather than reset to the default 0.
 
     Returns True if a row was updated.
     """
@@ -79,6 +82,7 @@ def finalize_run(run_id: int, aggregates: dict) -> bool:
                    delta_groundedness    = ?,
                    delta_sufficiency     = ?,
                    delta_quality         = ?,
+                   question_count        = COALESCE(?, question_count),
                    status                = 'complete',
                    finished_at           = datetime('now')
                WHERE id = ?""",
@@ -92,6 +96,7 @@ def finalize_run(run_id: int, aggregates: dict) -> bool:
                 aggregates.get("delta_groundedness"),
                 aggregates.get("delta_sufficiency"),
                 aggregates.get("delta_quality"),
+                question_count,
                 run_id,
             ),
         )

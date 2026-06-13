@@ -89,6 +89,23 @@ def _install_common_stubs(monkeypatch, deltas, *, captured_llm_messages=None):
     except Exception:
         pass
 
+    # Per-project corpus-health gate: default to HEALTHY so the RAG hook runs.
+    # Tests that exercise the thin-corpus skip override this afterwards.
+    import app.services.answer_pipeline_service as aps
+
+    monkeypatch.setattr(
+        aps,
+        "corpus_health",
+        lambda *a, **k: {
+            "healthy": True,
+            "total": 99,
+            "kg_signals": 99,
+            "takeaways": 0,
+            "executions": 0,
+            "min_items": 8,
+        },
+    )
+
 
 # ---------------------------------------------------------------------------
 # Test 1: rag_enabled=False (default) → gather NOT called
@@ -307,6 +324,65 @@ def test_facts_persisted_and_citations_delta_pushed(monkeypatch, isolated_db):
 
     # Facts were persisted
     assert inserted == extracted
+
+
+# ---------------------------------------------------------------------------
+# Test 4b: thin corpus → per-project gate skips the pipeline entirely
+# ---------------------------------------------------------------------------
+
+
+def test_rag_thin_corpus_skips_pipeline(monkeypatch, isolated_db):
+    import app.services.answer_pipeline_service as aps
+    import app.services.streaming_helper as sh
+
+    deltas: list = []
+    _install_common_stubs(monkeypatch, deltas)
+
+    # Override the default healthy stub with an UNHEALTHY corpus.
+    monkeypatch.setattr(
+        aps,
+        "corpus_health",
+        lambda *a, **k: {
+            "healthy": False,
+            "total": 3,
+            "kg_signals": 3,
+            "takeaways": 0,
+            "executions": 0,
+            "min_items": 8,
+        },
+    )
+
+    gather_called: list = []
+    monkeypatch.setattr(
+        aps,
+        "gather_context",
+        lambda *a, **k: (
+            gather_called.append(1)
+            or {
+                "chunks": [],
+                "context_message": None,
+                "iterations": 1,
+                "sufficient": True,
+                "gap": None,
+            }
+        ),
+    )
+
+    sh.run_streaming_response(
+        session_id="sess-thin",
+        super_agent_id="sa-1",
+        backend="claude",
+        rag_enabled=True,
+        rag_project_id="proj-thin",
+    )
+
+    kinds = [k for k, _ in deltas]
+    assert not gather_called, "pipeline must be skipped for a thin corpus"
+    assert "planning" not in kinds, "no planning delta when the pipeline is skipped"
+    skip_deltas = [p for k, p in deltas if k == "retrieval" and p.get("skipped") == "thin_corpus"]
+    assert skip_deltas, f"expected a thin_corpus skip delta, got: {deltas}"
+    assert skip_deltas[0]["corpus_items"] == 3
+    assert "finish" in kinds, "baseline turn must still complete"
 
 
 # ---------------------------------------------------------------------------

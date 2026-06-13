@@ -164,29 +164,49 @@ def run_streaming_response(
             _rag_chunks: list = []
             if rag_enabled and rag_project_id:
                 try:
+                    from .answer_pipeline_service import corpus_health as _corpus_health
                     from .answer_pipeline_service import gather_context as _gather_context
 
-                    ChatStateService.push_delta(_session_id, "planning", {"status": "started"})
-                    rag = _gather_context(
-                        rag_project_id,
-                        _last_user_content,
-                        backend=backend,
-                        account_email=account_id,
-                    )
-                    ChatStateService.push_delta(
-                        _session_id,
-                        "retrieval",
-                        {
-                            "chunks": len(rag["chunks"]),
-                            "iterations": rag["iterations"],
-                            "sufficient": rag["sufficient"],
-                        },
-                    )
-                    if rag.get("context_message"):
-                        # Insert BEFORE the final user message (which is
-                        # already the last entry in llm_messages).
-                        llm_messages.insert(-1, rag["context_message"])
-                    _rag_chunks = rag["chunks"]
+                    _health = _corpus_health(rag_project_id)
+                    if not _health["healthy"]:
+                        # Per-project corpus-health gate: a corpus too thin to
+                        # help makes the RAG pipeline net-negative (answer-eval
+                        # run 6), so skip it entirely — saves planner/fanout/
+                        # sufficiency cost and avoids degrading the answer. The
+                        # per-query injection gate is the finer backstop.
+                        logger.info(
+                            "RAG skipped for %s: thin corpus (%d < %d durable items)",
+                            rag_project_id,
+                            _health["total"],
+                            _health["min_items"],
+                        )
+                        ChatStateService.push_delta(
+                            _session_id,
+                            "retrieval",
+                            {"skipped": "thin_corpus", "corpus_items": _health["total"]},
+                        )
+                    else:
+                        ChatStateService.push_delta(_session_id, "planning", {"status": "started"})
+                        rag = _gather_context(
+                            rag_project_id,
+                            _last_user_content,
+                            backend=backend,
+                            account_email=account_id,
+                        )
+                        ChatStateService.push_delta(
+                            _session_id,
+                            "retrieval",
+                            {
+                                "chunks": len(rag["chunks"]),
+                                "iterations": rag["iterations"],
+                                "sufficient": rag["sufficient"],
+                            },
+                        )
+                        if rag.get("context_message"):
+                            # Insert BEFORE the final user message (which is
+                            # already the last entry in llm_messages).
+                            llm_messages.insert(-1, rag["context_message"])
+                        _rag_chunks = rag["chunks"]
                 except Exception:
                     logger.warning(
                         "answer pipeline failed — falling back to baseline", exc_info=True

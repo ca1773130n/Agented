@@ -110,6 +110,28 @@ def test_run_lifecycle_full():
 
 
 # ---------------------------------------------------------------------------
+# finalize_run — question_count
+# ---------------------------------------------------------------------------
+
+
+def test_finalize_run_sets_question_count():
+    run_id = answer_eval.create_run("proj-qc", judge_backend="claude")
+    # A fresh run carries the schema default 0.
+    assert answer_eval.get_run(run_id)["question_count"] == 0
+
+    answer_eval.finalize_run(run_id, aggregates={}, question_count=7)
+    assert answer_eval.get_run(run_id)["question_count"] == 7
+
+
+def test_finalize_run_omitting_question_count_preserves_value():
+    run_id = answer_eval.create_run("proj-qc2", judge_backend="claude")
+    answer_eval.finalize_run(run_id, aggregates={}, question_count=4)
+    # A later finalize without the count must NOT clobber it (COALESCE guard).
+    answer_eval.finalize_run(run_id, aggregates={})
+    assert answer_eval.get_run(run_id)["question_count"] == 4
+
+
+# ---------------------------------------------------------------------------
 # list_results
 # ---------------------------------------------------------------------------
 

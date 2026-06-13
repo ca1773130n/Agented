@@ -47,10 +47,21 @@ def main() -> int:
     args = parser.parse_args()
 
     from app.services.answer_eval_service import AnswerEvalService
+    from app.services.answer_pipeline_service import corpus_health
 
     print(
         f"\nRunning answer eval for project={args.project_id!r}  "
         f"n={args.n}  judge_backend={args.judge_backend!r}\n"
+    )
+
+    # Corpus health is the signal the LIVE path gates on (the eval itself does
+    # not gate — it measures the full pipeline so the net effect is visible).
+    h = corpus_health(args.project_id)
+    print(
+        f"Corpus health: {h['total']} durable items "
+        f"(kg={h['kg_signals']} takeaways={h['takeaways']} exec={h['executions']}) "
+        f"— {'HEALTHY' if h['healthy'] else 'THIN'} (gate threshold {h['min_items']}); "
+        f"live RAG would be {'ON' if h['healthy'] else 'OFF'} for this project.\n"
     )
 
     run_id = AnswerEvalService.run_eval(
