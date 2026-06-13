@@ -6,6 +6,7 @@
  * (asserted at the end). The HarnessPanelHost mounts over TabbedViewHost.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import type { Plugin } from 'vue';
 import { mount, flushPromises } from '@vue/test-utils';
 import { createI18n } from 'vue-i18n';
 import { createRouter, createMemoryHistory } from 'vue-router';
@@ -55,7 +56,7 @@ function makeRouter() {
   return createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div/>' } }] });
 }
 function opts(withRouter = false) {
-  const plugins: unknown[] = [makeI18n()];
+  const plugins: Plugin[] = [makeI18n()];
   if (withRouter) plugins.push(makeRouter());
   return { global: { plugins, provide: { showToast: vi.fn() } } };
 }
