@@ -16,11 +16,15 @@ requirements mapped. Approved design spec:
 (+ ``.ko.md``). PR-per-phase + codex-review-until-green cadence.
 
 Phase: 21 of 22 (One-click team harness setup) — **in progress**
-Plan: 21-02 complete (orchestrator skeleton) — wave 1 done
-Status: Plan 21-02 executed — TeamHarnessSetupService skeleton: 6-step dispatch,
-StepResult contract, none→running→ready/failed state machine, retry-skips-ok.
-S3 import smoke green, ruff clean, skeleton tests 6/6 green.
-Last activity: 2026-06-13 — Completed 21-02-PLAN.md. Built
+Plan: 21-03 complete (steps a+b real bodies) — wave 2 begun
+Status: Plan 21-03 executed — _step_grd_init (reconcile: skip when .planning/
+exists via mtime fingerprint, never re-init — SC4; else fire-and-forget
+auto_init_project) and _step_team_topology (existence-check before
+create_team_instances — P1; post-update driver='grd' per SA instance on both
+create+skip paths — S4) replace placeholders. S4 + P1 green; 11/11 file tests
+pass; instance_service 37/37 regression clean. Commits 97236aa5d7/92018ca08a.
+Next: 21-04..06 implement bundle_binding/tesserae_enable/default_policies/
+materialize_compile bodies. Last activity: 2026-06-13 — Completed 21-02-PLAN.md. Built
 backend/app/services/team_harness_setup_service.py: HARNESS_SETUP_STEP_KEYS
 (grd_init, team_topology, bundle_binding, tesserae_enable, default_policies,
 materialize_compile — 6 ordered), StepResult dataclass, setup() that sets
