@@ -122,6 +122,7 @@ Progress: [##########] 100%
 | 09-post-tour-experience | 2/2 | 24min | 12min |
 | 10-integration-testing | 4/4 | 64min | 16min |
 | Phase 17 P06 | 13min | 4 tasks | 13 files |
+| Phase 19 P06 | 19min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -236,6 +237,20 @@ Progress: [##########] 100%
   the removed routing seam. Gates: 305 targeted backend green (full suite hung
   at documented point); frontend 1480/7-baseline/0-NEW; build fails only on
   pre-existing AnswerGroundednessCard.vue TS error (zero FE files touched).
+- [Phase 19-grd-default-driver]: 19-06: operator frontend cap (REQ-13,
+  success criterion 5). Reusable SuperAgentDriverSelector.vue (v-model
+  <select> over cliproxy|cli_agent|grd, default grd) mounted on project
+  settings (persists projects.default_driver via projectApi.update) and
+  per-SA card on SuperAgentsPage (merge-on-write into config_json.driver).
+  ExecutionDriver enum in types/projects.ts, imported by super-agents/agents
+  types + barrel. ProjectTeamLeaderChat renders a "View GRD session"
+  RouterLink on grd-driver finish turns, binding defensively to
+  grd_session_id|psm_session_id|session_id (backend bridge not yet emitting
+  it — forward-compatible per 19-RESEARCH risk 2), targeting
+  project-management?session=<psess>. driver.* i18n key-identical in
+  en/ko/ja/zh. Tests 5/5; full FE suite 1485 passed / 7 known-baseline /
+  0 NEW; build fails only on pre-existing AnswerGroundednessCard.vue TS error
+  (zero FE files of that touched). Phase 19 plans 01-06 ALL complete.
 
 ### Pending Todos
 
@@ -249,5 +264,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-06-13
-Stopped at: Completed 19-05-PLAN.md (GRD default driver at the streaming funnel — 3-way resolve_execution_driver branch in run_streaming_response; cliproxy block byte-identical via shared _run_cliproxy() closure; grd-task -> grd_chat handler + bridge_psm_to_chat over subscribe_raw; all three legacy routing sites migrated; regression+dispatch+degrade tests 3/3; 305 targeted backend green, FE 1480/7-baseline/0-NEW)
+Stopped at: Completed 19-06-PLAN.md (FINAL plan of phase 19 — operator frontend cap: SuperAgentDriverSelector.vue default-GRD on project + per-SA settings persisting projects.default_driver / config_json.driver; ProjectTeamLeaderChat GRD-session RouterLink on grd-driver finish turns; driver.* 4-locale i18n parity; tests 5/5, FE 1485 passed / 7 known-baseline / 0 NEW; build fails only on pre-existing AnswerGroundednessCard.vue TS error). Phase 19 plans 01-06 ALL complete — ready for verify.
 Resume file: None
