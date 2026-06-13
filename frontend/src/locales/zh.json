@@ -9194,5 +9194,31 @@
       "tablistLabel": "线束面板",
       "loadError": "加载线束数据失败"
     }
+  },
+  "harnessSetup": {
+    "setupButton": "设置团队工具链",
+    "retry": "重试工具链设置",
+    "chipRunning": "设置中...",
+    "chipReady": "工具链就绪",
+    "chipFailed": "设置失败",
+    "panelTitle": "设置进度",
+    "toastReady": "团队工具链设置完成。",
+    "toastFailed": "团队工具链设置失败。",
+    "step": {
+      "grd_init": "初始化 GRD",
+      "team_topology": "团队拓扑",
+      "bundle_binding": "捆绑绑定",
+      "tesserae_enable": "启用 Tesserae",
+      "default_policies": "默认策略",
+      "materialize_compile": "物化与编译",
+      "__done__": "完成"
+    },
+    "stepStatus": {
+      "pending": "待处理",
+      "ok": "完成",
+      "skipped": "已跳过",
+      "failed": "失败",
+      "running": "运行中"
+    }
   }
 }

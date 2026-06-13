@@ -9194,5 +9194,31 @@
       "tablistLabel": "하니스 패널",
       "loadError": "하니스 데이터 로드 실패"
     }
+  },
+  "harnessSetup": {
+    "setupButton": "팀 하네스 설정",
+    "retry": "하네스 설정 재시도",
+    "chipRunning": "설정 중...",
+    "chipReady": "하네스 준비됨",
+    "chipFailed": "설정 실패",
+    "panelTitle": "설정 진행 상황",
+    "toastReady": "팀 하네스 설정이 완료되었습니다.",
+    "toastFailed": "팀 하네스 설정에 실패했습니다.",
+    "step": {
+      "grd_init": "GRD 초기화",
+      "team_topology": "팀 토폴로지",
+      "bundle_binding": "번들 바인딩",
+      "tesserae_enable": "Tesserae 활성화",
+      "default_policies": "기본 정책",
+      "materialize_compile": "구체화 및 컴파일",
+      "__done__": "완료"
+    },
+    "stepStatus": {
+      "pending": "대기 중",
+      "ok": "완료",
+      "skipped": "건너뜀",
+      "failed": "실패",
+      "running": "진행 중"
+    }
   }
 }

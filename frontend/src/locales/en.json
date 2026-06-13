@@ -9194,5 +9194,31 @@
       "tablistLabel": "Harness panels",
       "loadError": "Failed to load harness data"
     }
+  },
+  "harnessSetup": {
+    "setupButton": "Setup Team Harness",
+    "retry": "Retry Harness Setup",
+    "chipRunning": "Setting up...",
+    "chipReady": "Harness Ready",
+    "chipFailed": "Setup Failed",
+    "panelTitle": "Setup Progress",
+    "toastReady": "Team harness setup complete.",
+    "toastFailed": "Team harness setup failed.",
+    "step": {
+      "grd_init": "Initialize GRD",
+      "team_topology": "Team Topology",
+      "bundle_binding": "Bundle Binding",
+      "tesserae_enable": "Enable Tesserae",
+      "default_policies": "Default Policies",
+      "materialize_compile": "Materialize & Compile",
+      "__done__": "Done"
+    },
+    "stepStatus": {
+      "pending": "Pending",
+      "ok": "Done",
+      "skipped": "Skipped",
+      "failed": "Failed",
+      "running": "Running"
+    }
   }
 }

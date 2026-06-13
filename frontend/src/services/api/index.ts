@@ -460,6 +460,7 @@ export type {
   GrdPlan,
   GrdSyncResult,
   GrdSyncStatus,
+  GrdHarnessSetupStep,
 } from './grd';
 
 // Onboarding automation API

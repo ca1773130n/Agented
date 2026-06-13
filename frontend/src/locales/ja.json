@@ -9194,5 +9194,31 @@
       "tablistLabel": "ハーネスパネル",
       "loadError": "ハーネスデータの読み込みに失敗しました"
     }
+  },
+  "harnessSetup": {
+    "setupButton": "チームハーネスをセットアップ",
+    "retry": "ハーネスセットアップを再試行",
+    "chipRunning": "セットアップ中...",
+    "chipReady": "ハーネス準備完了",
+    "chipFailed": "セットアップ失敗",
+    "panelTitle": "セットアップの進行状況",
+    "toastReady": "チームハーネスのセットアップが完了しました。",
+    "toastFailed": "チームハーネスのセットアップに失敗しました。",
+    "step": {
+      "grd_init": "GRD を初期化",
+      "team_topology": "チームトポロジー",
+      "bundle_binding": "バンドルバインディング",
+      "tesserae_enable": "Tesserae を有効化",
+      "default_policies": "デフォルトポリシー",
+      "materialize_compile": "マテリアライズとコンパイル",
+      "__done__": "完了"
+    },
+    "stepStatus": {
+      "pending": "保留中",
+      "ok": "完了",
+      "skipped": "スキップ",
+      "failed": "失敗",
+      "running": "実行中"
+    }
   }
 }

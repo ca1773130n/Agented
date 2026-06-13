@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { Project, HarnessStatusResult, ProjectSkill, Hook, Command, Rule, Agent, TeamMember, ProjectInstallation, SuperAgent, SuperAgentSession, ProjectSAInstance, SuperAgentActivityStatus } from '../services/api';
+import type { Project, HarnessStatusResult, ProjectSkill, Hook, Command, Rule, Agent, TeamMember, ProjectInstallation, SuperAgent, SuperAgentSession, ProjectSAInstance, SuperAgentActivityStatus, GrdHarnessSetupStep } from '../services/api';
 import { projectApi, grdApi, hookApi, commandApi, ruleApi, agentApi, teamApi, superAgentApi, superAgentSessionApi, projectInstanceApi, ApiError } from '../services/api';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import InteractiveSetup from '../components/projects/InteractiveSetup.vue';
@@ -90,6 +90,13 @@ const groupedSessions = computed<GroupedSessions[]>(() => {
 // GRD init status
 const grdInitStatus = ref<string>('none');
 let initPollInterval: ReturnType<typeof setInterval> | null = null;
+
+// v0.8.0 — one-click team harness setup (REQ-19 / SC1). Mirrors the
+// grdInit wiring: a status string drives a button + chip, and step
+// progress streams in over an EventSource into a step panel.
+const harnessSetupStatus = ref<string>('none');
+const harnessSetupSteps = ref<GrdHarnessSetupStep[]>([]);
+let harnessSetupEventSource: { close: () => void } | null = null;
 
 // SA activity-status snapshot, keyed by ``super_agent_id``. Powers the
 // "working now" badge on each session card so the user can see at a
@@ -213,6 +220,7 @@ async function loadData() {
   // Fire and forget library items load (non-critical)
   loadLibraryItems();
   loadGrdStatus();
+  loadHarnessSetupStatus();
   loadActiveSessions();
   loadSaActivityStatus();
   activityPollInterval = setInterval(loadSaActivityStatus, 7000);
@@ -301,6 +309,75 @@ async function loadGrdStatus() {
   }
 }
 
+async function loadHarnessSetupStatus() {
+  if (!projectId.value) return;
+  try {
+    const result = await grdApi.getHarnessSetupStatus(projectId.value);
+    harnessSetupStatus.value = result.harness_setup_status;
+    harnessSetupSteps.value = result.steps || [];
+    if (harnessSetupStatus.value === 'running' && !harnessSetupEventSource) {
+      openHarnessSetupStream();
+    }
+  } catch {
+    harnessSetupStatus.value = 'none';
+  }
+}
+
+function openHarnessSetupStream() {
+  if (!projectId.value || harnessSetupEventSource) return;
+  const es = grdApi.streamHarnessSetup(projectId.value);
+  es.onmessage = (event: MessageEvent) => {
+    try {
+      const payload = JSON.parse(event.data) as { step: string; status: string; detail?: string | null };
+      if (payload.step === '__done__') {
+        harnessSetupStatus.value = payload.status;
+        closeHarnessSetupStream();
+        loadHarnessSetupStatus();
+        if (payload.status === 'ready') {
+          showToast(t('harnessSetup.toastReady'), 'success');
+        } else if (payload.status === 'failed') {
+          showToast(t('harnessSetup.toastFailed'), 'error');
+        }
+        return;
+      }
+      const idx = harnessSetupSteps.value.findIndex((s) => s.step_key === payload.step);
+      const row: GrdHarnessSetupStep = {
+        step_key: payload.step,
+        status: payload.status,
+        detail: payload.detail ?? null,
+      };
+      if (idx >= 0) harnessSetupSteps.value.splice(idx, 1, row);
+      else harnessSetupSteps.value.push(row);
+    } catch {
+      // Ignore malformed frames.
+    }
+  };
+  es.onerror = () => {
+    closeHarnessSetupStream();
+  };
+  harnessSetupEventSource = es;
+}
+
+function closeHarnessSetupStream() {
+  if (harnessSetupEventSource) {
+    harnessSetupEventSource.close();
+    harnessSetupEventSource = null;
+  }
+}
+
+async function triggerHarnessSetup() {
+  if (!projectId.value) return;
+  try {
+    harnessSetupSteps.value = [];
+    const result = await grdApi.triggerHarnessSetup(projectId.value);
+    harnessSetupStatus.value = result.harness_setup_status;
+    openHarnessSetupStream();
+  } catch {
+    harnessSetupStatus.value = 'failed';
+    showToast(t('harnessSetup.toastFailed'), 'error');
+  }
+}
+
 watch(grdInitStatus, (newVal, oldVal) => {
   if (newVal === 'initializing' && !initPollInterval) {
     initPollInterval = setInterval(loadGrdStatus, 5000);
@@ -318,6 +395,7 @@ watch(grdInitStatus, (newVal, oldVal) => {
 onUnmounted(() => {
   if (initPollInterval) clearInterval(initPollInterval);
   if (activityPollInterval) clearInterval(activityPollInterval);
+  closeHarnessSetupStream();
 });
 
 async function addSkill() {
@@ -538,6 +616,53 @@ function onSetupCompleted() {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
           {{ t('projectDashboard.runSetup') }}
         </button>
+        <!-- v0.8.0 — one-click team harness setup (REQ-19 / SC1) -->
+        <button
+          v-if="harnessSetupStatus === 'none' || harnessSetupStatus === 'failed'"
+          class="action-btn harness-setup-btn"
+          data-testid="harness-setup-btn"
+          @click="triggerHarnessSetup()"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          {{ harnessSetupStatus === 'failed' ? t('harnessSetup.retry') : t('harnessSetup.setupButton') }}
+        </button>
+        <span
+          v-if="harnessSetupStatus === 'running'"
+          class="harness-setup-chip harness-setup-chip--running"
+          data-testid="harness-setup-chip"
+        >{{ t('harnessSetup.chipRunning') }}</span>
+        <span
+          v-else-if="harnessSetupStatus === 'ready'"
+          class="harness-setup-chip harness-setup-chip--ready"
+          data-testid="harness-setup-chip"
+        >{{ t('harnessSetup.chipReady') }}</span>
+        <span
+          v-else-if="harnessSetupStatus === 'failed'"
+          class="harness-setup-chip harness-setup-chip--failed"
+          data-testid="harness-setup-chip"
+        >{{ t('harnessSetup.chipFailed') }}</span>
+      </div>
+
+      <!-- v0.8.0 — harness-setup step progress panel -->
+      <div
+        v-if="harnessSetupSteps.length > 0"
+        class="harness-setup-panel"
+        data-testid="harness-setup-panel"
+      >
+        <h4 class="harness-setup-panel__title">{{ t('harnessSetup.panelTitle') }}</h4>
+        <ul class="harness-setup-panel__steps">
+          <li
+            v-for="step in harnessSetupSteps"
+            :key="step.step_key"
+            class="harness-setup-step"
+            :class="`harness-setup-step--${step.status}`"
+            data-testid="harness-setup-step"
+          >
+            <span class="harness-setup-step__key">{{ t(`harnessSetup.step.${step.step_key}`) }}</span>
+            <span class="harness-setup-step__status">{{ t(`harnessSetup.stepStatus.${step.status}`) }}</span>
+            <span v-if="step.detail" class="harness-setup-step__detail">{{ step.detail }}</span>
+          </li>
+        </ul>
       </div>
 
       <InteractiveSetup v-if="showSetup" :projectId="projectId" :initialCommand="setupCommand" @close="showSetup = false" @completed="onSetupCompleted" />
@@ -723,6 +848,21 @@ function onSetupCompleted() {
 .action-btn.planning-btn:hover { border-color: #10b981; }
 .action-btn.setup-btn { background: var(--accent-cyan-dim, rgba(0, 212, 255, 0.15)); color: var(--accent-cyan, #00d4ff); border: 1px solid transparent; }
 .action-btn.setup-btn:hover:not(:disabled) { border-color: var(--accent-cyan, #00d4ff); }
+.action-btn.harness-setup-btn { background: var(--accent-purple-dim, rgba(168, 85, 247, 0.15)); color: var(--accent-purple, #a855f7); border: 1px solid transparent; }
+.action-btn.harness-setup-btn:hover:not(:disabled) { border-color: var(--accent-purple, #a855f7); }
+.harness-setup-chip { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; }
+.harness-setup-chip--running { background: rgba(0, 212, 255, 0.15); color: var(--accent-cyan, #00d4ff); }
+.harness-setup-chip--ready { background: rgba(34, 197, 94, 0.15); color: var(--accent-green, #22c55e); }
+.harness-setup-chip--failed { background: rgba(239, 68, 68, 0.15); color: var(--accent-red, #ef4444); }
+.harness-setup-panel { margin-top: 12px; padding: 12px; border: 1px solid var(--border, rgba(255, 255, 255, 0.1)); border-radius: 8px; }
+.harness-setup-panel__title { margin: 0 0 8px; font-size: 0.85rem; color: var(--text-muted, #888); }
+.harness-setup-panel__steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.harness-setup-step { display: flex; gap: 12px; align-items: baseline; font-size: 0.85rem; }
+.harness-setup-step__key { min-width: 160px; font-weight: 600; }
+.harness-setup-step--ok .harness-setup-step__status { color: var(--accent-green, #22c55e); }
+.harness-setup-step--failed .harness-setup-step__status { color: var(--accent-red, #ef4444); }
+.harness-setup-step--skipped .harness-setup-step__status { color: var(--text-muted, #888); }
+.harness-setup-step__detail { color: var(--text-muted, #888); }
 .init-badge { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; font-size: 10px; margin-left: 2px; }
 .init-badge--loading { background: var(--color-warning, #f59e0b); color: #000; animation: pulse 1.5s ease-in-out infinite; }
 .init-badge--ready { background: var(--color-success, #10b981); color: #fff; }
