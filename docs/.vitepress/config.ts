@@ -17,6 +17,10 @@ export default defineConfig({
     'perf/**',
     'plans/**',
     'superpowers/**',
+    // Blog posts are long-form essays viewed on GitHub (the nav "Blog"
+    // link points to the GitHub blob), not built site pages — same as the
+    // repo-root BLOG-*.md posts.
+    'BLOG-*.md',
     'full-ui-test-results.md',
     'monkey-test-results.md',
     'test-scenarios.md',

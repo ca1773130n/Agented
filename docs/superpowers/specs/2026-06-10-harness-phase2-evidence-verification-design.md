@@ -3,7 +3,7 @@
 **Date:** 2026-06-10
 **Status:** Approved (design); pending spec review
 **Depends on:** Phase 1 (PR #208, `harness_runs`/`harness_checkpoints`) — merged
-**Source:** `docs/research/harness-1-integration.md` (P3 + P5); arXiv:2606.02373
+**Source:** [`harness-1-integration.md`](../../harness-1-integration.md) (P3 + P5); arXiv:2606.02373
 
 ## Motivation
 

@@ -61,7 +61,7 @@ auditability, and rollback are designed in. → [Architecture](docs/self-improvi
 planner → multi-source fanout → sufficient-context loop → grounded answer, with
 provenance-tagged extracted facts and a blind LLM-as-judge usefulness eval.
 Injection is gated on retrieval relevance **and** per-project corpus health, so
-the pipeline only runs where it measurably helps. → [Research report](docs/research/harness-1-integration.md)
+the pipeline only runs where it measurably helps. → [Research report](docs/harness-1-integration.md)
 
 **🔐 Identity sidecar** — `ai-accounts` owns AI-backend accounts, credentials, and
 login flows on `:20001`. → [Integration](docs/ai-accounts/AGENTED-INTEGRATION.md)
@@ -105,7 +105,7 @@ cd frontend && npm run test:run  # frontend suite
 |---|---|
 | Self-improving harness — architecture | [docs/self-improving-harness-architecture.md](docs/self-improving-harness-architecture.md) |
 | Self-improving harness — tutorial | [docs/self-improving-harness-tutorial.md](docs/self-improving-harness-tutorial.md) |
-| Harness-1 integration (research) | [docs/research/harness-1-integration.md](docs/research/harness-1-integration.md) |
+| Harness-1 integration (research) | [docs/harness-1-integration.md](docs/harness-1-integration.md) |
 | Security | [docs/SECURITY.md](docs/SECURITY.md) |
 | Deploy — runbook · backup · secrets | [runbook](docs/deploy/RUNBOOK.md) · [backup](docs/deploy/BACKUP.md) · [secrets](docs/deploy/SECRETS.md) |
 | ai-accounts sidecar | [docs/ai-accounts/ARCHITECTURE.md](docs/ai-accounts/ARCHITECTURE.md) |

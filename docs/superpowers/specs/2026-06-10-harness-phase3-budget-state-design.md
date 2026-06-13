@@ -3,7 +3,7 @@
 **Date:** 2026-06-10
 **Status:** Approved (design); pending plan
 **Depends on:** Phase 1 (PR #208: `harness_runs.budget_used`, checkpoints) and Phase 2 (PR #209: `verification_records`) — both merged
-**Source:** `docs/research/harness-1-integration.md` (P6 + P7-reframed); arXiv:2606.02373
+**Source:** [`harness-1-integration.md`](../../harness-1-integration.md) (P6 + P7-reframed); arXiv:2606.02373
 
 ## Motivation
 

@@ -3,7 +3,7 @@
 **Date:** 2026-06-11
 **Status:** Approved (design)
 **Depends on:** Phases 1–3 (PRs #208/#209/#210) — all merged
-**Source:** `docs/research/harness-1-integration.md` (P4 + P8, both *refuted as written* by the
+**Source:** [`harness-1-integration.md`](../../harness-1-integration.md) (P4 + P8, both *refuted as written* by the
 adversarial verification — this design implements the corrected reframes); arXiv:2606.02373
 
 ## Motivation & verified constraints
