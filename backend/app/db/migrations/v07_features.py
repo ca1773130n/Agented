@@ -1228,6 +1228,19 @@ def _migrate_160_skill_sleep(conn):
     create_skill_sleep_tables(conn)
 
 
+def _migrate_161_skill_sleep_adopted(conn):
+    """SkillOpt integration Phase 4: operator-adopt timestamp.
+
+    Adds ``skill_sleep_runs.adopted_at`` (TEXT, nullable) so an accepted
+    candidate that has been written to disk is distinguishable from one merely
+    awaiting adoption. PRAGMA-guarded ALTER — double-apply is a no-op, and
+    fresh DBs already get the column from create_fresh_schema.
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(skill_sleep_runs)")}
+    if "adopted_at" not in cols:
+        conn.execute("ALTER TABLE skill_sleep_runs ADD COLUMN adopted_at TEXT")
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -1347,4 +1360,6 @@ V07_MIGRATIONS: list = [
     (159, "harness_setup", _migrate_159_harness_setup),
     # SkillOpt integration: gated skill-optimization run store.
     (160, "skill_sleep", _migrate_160_skill_sleep),
+    # SkillOpt integration Phase 4: operator-adopt timestamp.
+    (161, "skill_sleep_adopted", _migrate_161_skill_sleep_adopted),
 ]

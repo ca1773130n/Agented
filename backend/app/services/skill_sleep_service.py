@@ -58,6 +58,33 @@ def _composite(scores: dict) -> float:
     return sum(scores.get(a, 0.0) for a in _AXES) / len(_AXES)
 
 
+def _strip_frontmatter(text: str) -> str:
+    """Drop a leading ``---\\n...\\n---`` YAML frontmatter block, if present, so
+    the current body compares apples-to-apples with an operator/evolver
+    candidate body (which is frontmatter-free; adoption re-renders it)."""
+    s = text.lstrip()
+    if not s.startswith("---"):
+        return text
+    end = s.find("\n---", 3)
+    if end == -1:
+        return text
+    return s[end + 4 :].lstrip("\n")
+
+
+def _read_current_body(skill_path: Optional[str]) -> str:
+    """Read a skill's current body from its on-disk SKILL.md (frontmatter
+    stripped). Missing/unreadable file → empty string (a new/empty skill is a
+    valid baseline; the candidate simply has to beat nothing)."""
+    if not skill_path:
+        return ""
+    try:
+        from pathlib import Path
+
+        return _strip_frontmatter(Path(skill_path).read_text(encoding="utf-8"))
+    except OSError:
+        return ""
+
+
 class SkillSleepGate:
     """Validation gate that decides whether a candidate skill body is adopted."""
 
@@ -202,3 +229,70 @@ class SkillSleepGate:
             qc=qc,
             reason="candidate did not strictly improve held-out score",
         )
+
+    @staticmethod
+    def evaluate_skill(
+        project_id: str,
+        skill_name: str,
+        *,
+        candidate_body: str,
+        n: int = 6,
+        seed: int = 0,
+        judge_backend: str = "claude",
+        answer_call: Optional[LLMCall] = None,
+        judge_call: Optional[LLMCall] = None,
+    ) -> dict:
+        """Orchestrate: resolve the skill's CURRENT on-disk body, then gate it
+        against ``candidate_body``. Does NOT write — an accepted candidate is
+        staged on the run row for operator adoption (``adopt_run``). This is
+        SkillOpt's "stage proposal → operator adopts", never auto-applied.
+        """
+        from app.db.skills import get_user_skill_by_name
+
+        row = get_user_skill_by_name(skill_name)
+        current_body = _read_current_body(row.get("skill_path") if row else None)
+        return SkillSleepGate.evaluate_candidate(
+            project_id,
+            skill_name=skill_name,
+            current_body=current_body,
+            candidate_body=candidate_body,
+            skill_id=row.get("id") if row else None,
+            answer_call=answer_call,
+            judge_call=judge_call,
+            n=n,
+            seed=seed,
+            judge_backend=judge_backend,
+        )
+
+    @staticmethod
+    def adopt_run(run_id: int) -> dict:
+        """Write an ACCEPTED run's staged candidate body to the skill's
+        ``SKILL.md`` via the evolver's containment-checked ``_update_skill``,
+        then stamp ``adopted_at``. Idempotent; refuses non-accepted runs.
+
+        Returns {adopted: bool, run_id, reason?}.
+        """
+        from app.db import skill_sleep
+
+        run = skill_sleep.get_run(run_id)
+        if run is None:
+            return {"adopted": False, "reason": "not_found"}
+        if run.get("adopted_at"):
+            return {"adopted": True, "run_id": run_id, "reason": "already"}
+        if run.get("status") != "accepted":
+            return {"adopted": False, "reason": f"not adoptable (status={run.get('status')})"}
+        body = run.get("candidate_body")
+        skill_id = run.get("skill_id")
+        if not body or skill_id is None:
+            return {"adopted": False, "reason": "no staged candidate body or skill_id"}
+
+        try:
+            from app.services.harness_evolver import _update_skill
+
+            _update_skill(asset_id=int(skill_id), payload={"content": body})
+        except Exception:
+            logger.warning("skill-sleep: adopt write failed for run %s", run_id, exc_info=True)
+            return {"adopted": False, "reason": "write failed"}
+
+        skill_sleep.mark_adopted(run_id)
+        return {"adopted": True, "run_id": run_id}

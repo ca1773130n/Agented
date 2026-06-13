@@ -77,6 +77,20 @@ def finalize_run(
     return cur.rowcount > 0
 
 
+def mark_adopted(run_id: int) -> bool:
+    """Stamp adopted_at on an accepted run (the candidate body was written to
+    disk). Idempotent: only sets it when currently NULL. Returns True if newly
+    stamped."""
+    with get_connection() as conn:
+        cur = conn.execute(
+            "UPDATE skill_sleep_runs SET adopted_at = datetime('now') "
+            "WHERE id = ? AND status = 'accepted' AND adopted_at IS NULL",
+            (run_id,),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
+
 def get_run(run_id: int) -> Optional[dict]:
     with get_connection() as conn:
         row = conn.execute("SELECT * FROM skill_sleep_runs WHERE id = ?", (run_id,)).fetchone()

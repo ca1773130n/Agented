@@ -29,7 +29,8 @@ def create_skill_sleep_tables(conn) -> None:
             candidate_body   TEXT,
             reason           TEXT,
             created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
-            finished_at      TEXT
+            finished_at      TEXT,
+            adopted_at       TEXT
         )
         """
     )
