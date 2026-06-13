@@ -1216,6 +1216,18 @@ def _migrate_159_harness_setup(conn):
     )
 
 
+def _migrate_160_skill_sleep(conn):
+    """SkillOpt integration: gated skill-optimization run store.
+
+    One row per Skill-Sleep attempt — the blind judge scored the current
+    SKILL.md (arm A) vs a candidate body (arm B) on a held-out question
+    partition; the candidate is accepted only on strict improvement.
+    """
+    from app.db.schema._skill_sleep import create_skill_sleep_tables
+
+    create_skill_sleep_tables(conn)
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -1333,4 +1345,6 @@ V07_MIGRATIONS: list = [
     # v0.8.0 (21-01): persistence floor for one-click team harness setup —
     # projects.harness_setup_status column + harness_setup_steps table.
     (159, "harness_setup", _migrate_159_harness_setup),
+    # SkillOpt integration: gated skill-optimization run store.
+    (160, "skill_sleep", _migrate_160_skill_sleep),
 ]

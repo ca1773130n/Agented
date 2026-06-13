@@ -6,17 +6,19 @@ gives Codex a workspace mirroring those primitives, parses Codex's edits
 back into Forge CRUD operations, and applies them via the existing Forge
 repos.
 
-Scope of automatic evolution:
+Scope of automatic evolution (``WRITABLE_KINDS``):
     - rules        — H3 Environment Contract suggestions
     - hooks        — H2 Action Realization (PreToolUse) +
                      H4 Trajectory Regulation (PostToolUse / Stop)
     - commands     — H5-shaped operator shortcuts
     - mcp_servers  — tool-registry additions
+    - skills       — ``.claude/skills/<name>/SKILL.md`` documents; create/update
+                     materialize via ``_create_skill`` / ``_update_skill`` with
+                     04.H5 path containment. (Earlier deferred; now writable.)
 
-Skills create/update is deferred — the ``.claude/skills/<name>/SKILL.md``
-filesystem layout needs more than a single repo call. Codex can still
-*propose* skill changes; validate_patch flags them as unsupported and the
-operator handles them manually.
+The SkillOpt integration's Skill-Sleep gate
+(``skill_sleep_service.SkillSleepGate``) drives this skill-write path behind a
+strict-improvement validation gate — see docs/research/skillopt-integration.md.
 
 Reference: arXiv 2605.22166 §5.2 Evolution Dynamics.
 """
