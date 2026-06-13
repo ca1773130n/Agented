@@ -183,6 +183,47 @@ def test_convert_auto_creates_skill_exactly_once(monkeypatch):
     assert rrs.get_signal("rh-test").skill_created is True
 
 
+def test_convert_origin_hash_matches_rendered_skill_md(monkeypatch):
+    """Blocker guard: the recorded origin hash must be the hash of the rendered
+    SKILL.md (frontmatter + body) exactly as _create_skill writes it — NOT the
+    bare body. Otherwise every auto-skill looks operator-edited on re-drive."""
+    from app.db.forge_origin import get_origin
+    from app.utils.plugin_format import content_hash
+
+    _enable_project("proj-auto", True)
+    signal = _make_signal(occurrence_count=4, verified_success_count=2, project_id="proj-auto")
+
+    result, create_calls, _ = _convert(signal, monkeypatch=monkeypatch)
+
+    assert result["route"] == "auto"
+    payload = create_calls[0]["payload"]
+    expected = content_hash(ev._render_skill_md("add-changelog", payload))
+    assert get_origin("42", "skill")["origin_hash"] == expected
+    # And explicitly NOT the bare-body hash (the pre-fix bug).
+    assert get_origin("42", "skill")["origin_hash"] != content_hash(payload["content"])
+
+
+def test_convert_idempotent_when_already_created(monkeypatch):
+    """W1 guard: re-driving a signal already marked skill_created must not create
+    a second skill or duplicate the discovered_procedure takeaway."""
+    _enable_project("proj-auto", True)
+    signal = _make_signal(occurrence_count=4, verified_success_count=2, project_id="proj-auto")
+
+    first, create_calls, _ = _convert(signal, monkeypatch=monkeypatch)
+    assert first["route"] == "auto"
+    assert len(create_calls) == 1
+
+    # Re-read the signal (now skill_created=True) and convert again.
+    reread = rrs.get_signal("rh-test")
+    assert reread.skill_created is True
+    second, create_calls_2, update_calls_2 = _convert(reread, monkeypatch=monkeypatch)
+    assert len(create_calls_2) == 0
+    assert len(update_calls_2) == 0
+    assert second["asset_id"] is None
+    assert second["takeaway_id"] is None
+    assert "already-created" in second["reasons"]
+
+
 def test_convert_dedup_hit_patches_instead_of_creating(monkeypatch):
     _enable_project("proj-auto", True)
     signal = _make_signal(occurrence_count=4, verified_success_count=2, project_id="proj-auto")

@@ -77,3 +77,22 @@ def test_clean_content_is_safe():
 def test_empty_content_is_safe():
     result = scan_skill_content("")
     assert result.safe is True
+
+
+def test_oversized_content_fails_closed():
+    """Untrusted content above the scan ceiling is refused (fail-closed) rather
+    than regex-scanned, bounding worst-case work on a hostile input."""
+    from app.services.skill_safety_scanner import _MAX_SCAN_LEN
+
+    result = scan_skill_content("a" * (_MAX_SCAN_LEN + 1))
+    assert result.safe is False
+    assert any("oversized" in r for r in result.reasons)
+
+
+def test_at_ceiling_content_is_scanned_not_refused():
+    """Content exactly at the ceiling is still scanned (boundary), and clean
+    content of that size remains safe."""
+    from app.services.skill_safety_scanner import _MAX_SCAN_LEN
+
+    result = scan_skill_content("a" * _MAX_SCAN_LEN)
+    assert result.safe is True

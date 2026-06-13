@@ -138,9 +138,10 @@ def get_signal(request_hash: str) -> RepeatedRequestSignal | None:
 def list_signals(
     project_id: str | None = None,
     session_kind: str | None = None,
+    limit: int | None = None,
 ) -> list[RepeatedRequestSignal]:
     clauses: list[str] = []
-    params: list[str] = []
+    params: list[object] = []
     if project_id is not None:
         clauses.append("project_id = ?")
         params.append(project_id)
@@ -148,11 +149,17 @@ def list_signals(
         clauses.append("session_kind = ?")
         params.append(session_kind)
     where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+    # Rows are ordered most-salient-first, so a LIMIT keeps the highest-signal
+    # candidates and bounds the cosine batch the detector runs on the bus thread.
+    limit_sql = ""
+    if limit is not None:
+        limit_sql = " LIMIT ?"
+        params.append(int(limit))
 
     with get_connection() as conn:
         rows = conn.execute(
             "SELECT * FROM repeated_request_signals"
-            f"{where} ORDER BY occurrence_count DESC, last_seen_at DESC",
+            f"{where} ORDER BY occurrence_count DESC, last_seen_at DESC{limit_sql}",
             params,
         ).fetchall()
         return [_row_to_model(r) for r in rows]

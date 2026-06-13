@@ -26,6 +26,10 @@ from app.db.forge_origin import get_origin
 from app.db.skills import get_all_user_skills, get_user_skill_by_name
 from app.utils.plugin_format import content_hash
 
+# Hard ceiling on the size of untrusted content the scanner will regex-scan.
+# Auto-forged skills are a few KB; oversized input fails closed (REQ-25).
+_MAX_SCAN_LEN = 200_000
+
 
 @dataclass
 class ScanResult:
@@ -117,6 +121,13 @@ def scan_skill_content(content: str) -> ScanResult:
     on ANY prompt-injection, exfiltration, or invisible-Unicode match; otherwise
     ``ScanResult(safe=True, reasons=[])``. Pure function — no DB, no IO."""
     reasons: list[str] = []
+
+    # Bound the regex work on untrusted content. A legitimately auto-forged
+    # skill is well under this; anything larger is refused rather than scanned.
+    if len(content) > _MAX_SCAN_LEN:
+        return ScanResult(
+            safe=False, reasons=[f"oversized: {len(content)} > {_MAX_SCAN_LEN} chars"]
+        )
 
     for pat in _INJECTION_PATTERNS:
         if pat.search(content):

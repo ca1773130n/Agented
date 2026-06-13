@@ -46,6 +46,12 @@ logger = logging.getLogger(__name__)
 # introduced by Phase 22 and tuned against the paraphrase fixtures (EVAL P1).
 _COSINE_MATCH_THRESHOLD = 0.83
 
+# Upper bound on signals pulled into a single cosine match. The store returns
+# rows most-salient-first (occurrence_count, then recency), so the cap keeps the
+# strongest candidates while bounding the work done on the session-completion
+# bus thread as the signal table grows.
+_MATCH_CANDIDATE_LIMIT = 500
+
 
 def _extract_user_request_text(payload_text: str) -> str:
     """Pull genuine user-request turns out of the payload's claude-jsonl.
@@ -83,7 +89,11 @@ def _match_existing(
 ) -> Optional[str]:
     """Return the request_hash of the best signal whose embedding cosine-matches
     ``emb`` at or above the threshold, or None if there is no such signal."""
-    candidates = [s for s in list_signals(project_id=project_id) if s.embedding is not None]
+    candidates = [
+        s
+        for s in list_signals(project_id=project_id, limit=_MATCH_CANDIDATE_LIMIT)
+        if s.embedding is not None
+    ]
     if not candidates:
         return None
     scores = cosine_similarity_batch(emb, [s.embedding for s in candidates])  # type: ignore[arg-type]

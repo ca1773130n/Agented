@@ -205,6 +205,12 @@ def convert_signal(
         # PROPOSE / REJECT: queue for the operator, never create a skill.
         return result
 
+    # Idempotency: a signal already converted must not create a second skill or
+    # duplicate the discovered_procedure takeaway when the gate is re-driven.
+    if getattr(signal, "skill_created", 0):
+        result["reasons"].append("already-created")
+        return result
+
     example_sessions = getattr(signal, "example_session_ids", []) or []
     source_session_id = example_sessions[-1] if example_sessions else None
 
@@ -234,17 +240,23 @@ def convert_signal(
     if decision.patch and dedup_existing is not None:
         asset_id = dedup_existing.get("id")
         ev._update_dispatch["skill"](asset_id=asset_id, payload=payload)
+        # The patch path renders SKILL.md under the existing skill's name.
+        written_name = dedup_existing.get("skill_name") or skill_name
     else:
         asset_id = ev._create_dispatch["skill"](
             name=skill_name, payload=payload, project_id=project_id
         )
+        written_name = skill_name
     result["asset_id"] = asset_id
 
     if asset_id is not None:
+        # Hash the rendered SKILL.md (frontmatter + body) exactly as written to
+        # disk, so a later provenance check matches and only true operator edits
+        # diverge. Hashing the bare body would make every auto-skill look edited.
         record_origin(
             str(asset_id),
             "skill",
-            origin_hash=content_hash(skill_content),
+            origin_hash=content_hash(ev._render_skill_md(written_name, payload)),
             source_session_id=source_session_id,
         )
     mark_skill_created(getattr(signal, "request_hash"))
