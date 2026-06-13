@@ -753,14 +753,18 @@ class GrdChatSessionHandler(ExecutionTypeHandler):
         grd_command = self._resolve_grd_command(session_config)
 
         # One-shot stream-json invocation — same shape GrdPlanningService
-        # uses for /grd: commands. The task is the single prompt.
+        # uses for /grd: commands. The task is the single prompt. ``task``
+        # can arrive from non-operator sources (delegation / @mention turns,
+        # 19-03), so JSON-encode it rather than naive `"{task}"` interpolation:
+        # this escapes embedded quotes/newlines/backslashes and prevents the
+        # task from breaking out of the `/grd:<cmd> "<task>"` prompt framing.
         cmd = [
             "claude",
             "-p",
             "--output-format",
             "stream-json",
             "--verbose",
-            f'{grd_command} "{task}"',
+            f"{grd_command} {json.dumps(task)}",
         ]
 
         session_id = ProjectSessionManager.create_session(
