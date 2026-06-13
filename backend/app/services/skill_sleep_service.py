@@ -699,7 +699,7 @@ class SkillSleepGate:
                 "accepted": False,
                 "reason": "reflect proposed no material change",
             }
-        if edit_budget is not None:
+        if edit_budget is not None and edit_budget > 0:
             # Rank on a CHEAP model (default seams pinned to ranker_model); the
             # gate below keeps the strong model. Injected seams win if provided.
             rank_answer = answer_call or _build_default_llm_call(judge_backend, model=ranker_model)

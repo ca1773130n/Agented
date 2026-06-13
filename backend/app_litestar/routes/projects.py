@@ -403,9 +403,12 @@ def skill_sleep_round(
     project_id: str, skill_name: str, data: dict, caller: Caller
 ) -> dict[str, Any]:
     """Run one autonomous Skill-Sleep round: Reflect (propose an improved body
-    from the project's recurring needs) → gate + outcome → stage for adoption.
+    from the project's recurring needs) → [rank] → gate + outcome → stage for
+    adoption.
 
-    Body (all optional): {"n": int, "seed": int, "measure": bool}.
+    Body (all optional): {"n": int, "seed": int, "measure": bool,
+    "edit_budget": int}. ``edit_budget`` (omit/None = off) caps the candidate
+    to its top-N edits, scored on a cheap model before the gate.
     """
     _assert_project_access(project_id, caller)
     body = data or {}
