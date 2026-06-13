@@ -8,7 +8,9 @@ Orchestrate Claude Code, Codex, and Gemini CLI into end-to-end, autonomous
 product development — from one operator console, with provenance and
 auditability built in.
 
-[Architecture](docs/self-improving-harness-architecture.md) · [Tutorial](docs/self-improving-harness-tutorial.md) · [Security](docs/SECURITY.md) · [Deploy](docs/deploy/RUNBOOK.md) · [한국어](docs/ko/index.md) · [日本語](docs/ja/index.md) · [中文](docs/zh/index.md)
+[Architecture](docs/self-improving-harness-architecture.md) · [Tutorial](docs/self-improving-harness-tutorial.md) · [Security](docs/SECURITY.md) · [Deploy](docs/deploy/RUNBOOK.md)
+
+**Docs in your language:** [한국어](docs/ko/self-improving-harness-architecture.md) · [日本語](docs/ja/self-improving-harness-architecture.md) · [中文](docs/zh/self-improving-harness-architecture.md)
 
 </div>
 

@@ -1,6 +1,6 @@
 # 教程：观看 harness 自我改进（搭配 wiki 式记忆）
 
-**语言:** [English](/self-improving-harness-tutorial) · [한국어](/ko/self-improving-harness-tutorial) · 中文 (当前)
+**语言:** [English](../self-improving-harness-tutorial.md) · [한국어](../ko/self-improving-harness-tutorial.md) · 中文 (当前)
 
 *一份动手实操的演练。在大约 30 分钟内，你将运行几个智能体会话，观看
 Agented 把它们转化为带类型的记忆，把那份记忆编译成可浏览的
@@ -10,7 +10,7 @@ Agented 把它们转化为带类型的记忆，把那份记忆编译成可浏览
 
 > 这是两份参考文档的*实地演示*配套文档。当你想了解「为什么」和「是什么」时，
 > 请阅读它们：
-> - **[自我改进 harness：架构](/zh/self-improving-harness-architecture)** — 闭合循环，逐阶段讲解，映射到真实符号。
+> - **[自我改进 harness：架构](self-improving-harness-architecture.md)** — 闭合循环，逐阶段讲解，映射到真实符号。
 > - **[博客：你的智能体没有记忆问题。它有来源问题。](https://github.com/ca1773130n/Agented/blob/main/BLOG-self-improving-harness.md)** — 本系统由之导出的论证。
 
 ---
@@ -309,13 +309,13 @@ export AGENTED_AUTONOMY=0      # hard-stop all autonomous applies
 | 轮次无法回退 | 只有带日志的 `applied` 轮次才能回退；检查是否有冲突的后续轮次 |
 | 自主从不触发 | 走一遍九道门（§9）；确认 `AGENTED_AUTONOMY` ≠ `0` 且 `score ≥ 0.85` |
 
-完整的符号映射：[架构文档](/zh/self-improving-harness-architecture#source-map-every-claim-above-is-a-symbol-in-the-tree)中的 **Source map** 表。
+完整的符号映射：[架构文档](self-improving-harness-architecture.md#source-map-every-claim-above-is-a-symbol-in-the-tree)中的 **Source map** 表。
 
 ---
 
 ## 下一步
 
-- 阅读**[架构](/zh/self-improving-harness-architecture)**，了解与 Letta/MemGPT、
+- 阅读**[架构](self-improving-harness-architecture.md)**，了解与 Letta/MemGPT、
   Hermes Agent、Mastra、Zep/Graphiti、Mem0、Cognee 的诚实比较。
 - 把 Tesserae MCP 工具接入你的智能体，让它们在任务进行当中*查询* wiki，而不是
   重新推导 — `tesserae_ask`、`find_session_findings`、`graph_ppr`、`wiki_page`。

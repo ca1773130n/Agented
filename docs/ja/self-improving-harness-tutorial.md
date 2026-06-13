@@ -1,6 +1,6 @@
 # チュートリアル: ハーネスが自己改善する様子を見る（ウィキ型メモリとともに）
 
-**言語:** [English](/self-improving-harness-tutorial) · [한국어](/ko/self-improving-harness-tutorial) · 日本語 (現在)
+**言語:** [English](../self-improving-harness-tutorial.md) · [한국어](../ko/self-improving-harness-tutorial.md) · 日本語 (現在)
 
 *手を動かすウォークスルーである。約 30 分で、エージェントセッションをいくつか
 実行し、Agented がそれを型付けされたメモリへ変える様子を見て、そのメモリを
@@ -10,7 +10,7 @@
 
 > これは二つのリファレンスドキュメントに対する *実演で見せる* 同伴ドキュメント
 > である。「なぜ」と「何を」が知りたくなったら、そちらを読むとよい:
-> - **[自己改善ハーネス: アーキテクチャ](/ja/self-improving-harness-architecture)** — 閉じたループを、ステージごとに、実在するシンボルへマッピングする。
+> - **[自己改善ハーネス: アーキテクチャ](self-improving-harness-architecture.md)** — 閉じたループを、ステージごとに、実在するシンボルへマッピングする。
 > - **[ブログ: あなたのエージェントはメモリの問題を抱えていない。来歴の問題を抱えているのだ。](https://github.com/ca1773130n/Agented/blob/main/BLOG-self-improving-harness.md)** — このシステムが導かれる論証。
 
 ---
@@ -324,7 +324,7 @@ export AGENTED_AUTONOMY=0      # すべての自律適用をハードストッ�
 | 自律が決して発火しない | 九つのゲート（§9）を歩く; `AGENTED_AUTONOMY` ≠ `0` および `score ≥ 0.85` を確認する |
 
 完全なシンボルマップ:
-[アーキテクチャドキュメント](/ja/self-improving-harness-architecture#source-map-every-claim-above-is-a-symbol-in-the-tree)の
+[アーキテクチャドキュメント](self-improving-harness-architecture.md#source-map-every-claim-above-is-a-symbol-in-the-tree)の
 **Source map** 表。
 
 ---
@@ -332,7 +332,7 @@ export AGENTED_AUTONOMY=0      # すべての自律適用をハードストッ�
 ## 次のステップ
 
 - Letta/MemGPT、Hermes Agent、Mastra、Zep/Graphiti、Mem0、Cognee との正直な
-  比較については、**[アーキテクチャ](/ja/self-improving-harness-architecture)**を
+  比較については、**[アーキテクチャ](self-improving-harness-architecture.md)**を
   読むとよい。
 - Tesserae MCP ツールをエージェントに配線し、再導出する代わりにタスクの途中で
   ウィキを*問い合わせる*ようにする — `tesserae_ask`、`find_session_findings`、

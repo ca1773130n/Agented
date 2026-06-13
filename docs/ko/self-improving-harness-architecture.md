@@ -1,6 +1,6 @@
 # 자기개선 하네스: 아키텍처
 
-**언어:** [English](/self-improving-harness-architecture) · 한국어 (현재) · [日本語](/ja/self-improving-harness-architecture) · [中文](/zh/self-improving-harness-architecture)
+**언어:** [English](../self-improving-harness-architecture.md) · 한국어 (현재) · [日本語](../ja/self-improving-harness-architecture.md) · [中文](../zh/self-improving-harness-architecture.md)
 
 *[BLOG-self-improving-harness.md](https://github.com/ca1773130n/Agented/blob/main/BLOG-self-improving-harness.ko.md)의 동반 문서.
 블로그는 에이전트 메모리 분야가 잘못된 축(회상 정확도)을 최적화하고 있으며,
