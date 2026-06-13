@@ -15,9 +15,23 @@ requirements mapped. Approved design spec:
 ``docs/superpowers/specs/2026-06-13-team-harness-self-improvement-design.md``
 (+ ``.ko.md``). PR-per-phase + codex-review-until-green cadence.
 
-Phase: 20 of 22 (GRD frontend wiring) — plans 20-01 + 20-02 + 20-03 + 20-04 complete
-Plan: 20-04 complete (4 of 6)
-Status: 20-04 executed — the life-harness completion UI (REQ-16 / SC-4). New
+Phase: 20 of 22 (GRD frontend wiring) — plans 20-01..20-05 complete
+Plan: 20-05 complete (5 of 6)
+Status: 20-05 executed — PlanningCommandBar manifest (REQ-17 / SC-5). Extracted
+the bar's inline commandGroups into a typed, unit-testable
+frontend/src/components/grd/planningCommands.ts manifest (GRD_COMMAND_MANIFEST:
+six groups Plan/Execute/Verify/Research/Harness/Misc covering the full supported
+/grd: set — 21 commands + evolve marked deprecated). The bar now imports the
+manifest (no inline array) and emits invoke(name,{group}); ProjectPlanningPage
+routes group-aware: research->project-research, harness->project-harness,
+everything else->grd_chat planning session (group arg stripped before handoff).
+planningCommandBar.* i18n expanded key-identical across en/ko/ja/zh (52 keys
+each). TDD: RED manifest test committed first, then GREEN. 15/15 grd tests green
+(9 manifest + 6 bar); vue-tsc clean for all touched files (pre-existing 16
+harness-panels/AnswerGroundednessCard errors confirmed baseline via stash).
+Unblocks 20-06 (key-diff parity + final phase wrap).
+
+Prior 20-04 status — the life-harness completion UI (REQ-16 / SC-4). New
 route project-harness at /projects/:projectId/harness composes AutonomyEditor
 (get/set autonomy), RoundList + RoundDetail (a TWO-STEP confirm-guarded revert:
 requestRevert only arms a confirmation; only confirmRevert calls
@@ -32,7 +46,7 @@ green (4 autonomy/rounds/forge + 9 panels), no Vue warn; vue-tsc clean; sibling
 grd/research suite 9/9 (no new failures). Mounted under the project surface —
 no top-level sidebar slot. Unblocks 20-05 (planning command bar deep-link to
 harness commands).
-Last activity: 2026-06-13 — Completed 20-04-PLAN.md.
+Last activity: 2026-06-13 — Completed 20-05-PLAN.md.
 
 Prior phase-17 activity: 2026-06-13 — Completed 17-06-PLAN.md (FINAL plan of phase 17).
 Shipped the forge-creator default bundle (5 global-scope agentskills.io creator
@@ -300,6 +314,7 @@ Progress: [##########] 100%
   pre-existing AnswerGroundednessCard err (PR #212, untouched). Unblocks
   20-03 (Research page) + 20-04 (life-harness panels). DEFER-20-02 = live network.
 - [Phase 20]: 20-02: /admin routes carry no special header — apiFetch already sends X-API-Key+bearer/cookie+CSRF; Group B authed purely by /admin base path
+- [Phase 20]: 20-05: PlanningCommandBar fed by GRD_COMMAND_MANIFEST (six groups Plan/Execute/Verify/Research/Harness/Misc, full /grd: set, evolve deprecated); invoke emits (name,{group}) and the page routes research->project-research, harness->project-harness, else->grd_chat; planningCommandBar.* i18n key-identical across en/ko/ja/zh (52 keys each)
 
 ### Pending Todos
 
