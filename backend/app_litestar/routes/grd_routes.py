@@ -13,7 +13,6 @@ import asyncio
 import json
 import logging
 import threading
-from datetime import datetime
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any, Optional
@@ -25,8 +24,6 @@ from litestar.exceptions import (
     NotFoundException,
 )
 from litestar.response import Stream
-
-from app.utils.timezone import utcnow as _utcnow
 
 from app.database import (
     add_project_phase,
@@ -52,11 +49,12 @@ from app.db.projects import (
 )
 from app.services.execution_type_handler import get_handler
 from app.services.grd_cli_service import GrdCliService
-from app.services.team_harness_setup_service import TeamHarnessSetupService
 from app.services.grd_planning_service import GrdPlanningService
 from app.services.grd_sync_service import GrdSyncService
 from app.services.project_session_manager import ProjectSessionManager
 from app.services.project_workspace_service import ProjectWorkspaceService
+from app.services.team_harness_setup_service import TeamHarnessSetupService
+from app.utils.timezone import utcnow as _utcnow
 
 logger = logging.getLogger(__name__)
 
