@@ -35,6 +35,7 @@ import logging
 import math
 import re
 import secrets
+from datetime import datetime, timedelta
 from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
@@ -815,3 +816,97 @@ def _resolve_and_read(project_id: str, skill_name: str) -> tuple[dict, str]:
     if row is None:
         raise SkillNotInProjectError(f"skill {skill_name!r} is not bound to project {project_id}")
     return row, _read_current_body(row.get("skill_path"))
+
+
+# ---------------------------------------------------------------------------
+# Periodic scheduler (Phase 5b) — run Skill-Sleep rounds on a cadence
+# ---------------------------------------------------------------------------
+
+
+def _discover_eligible_skills() -> list[tuple[str, str]]:
+    """(project_id, skill_name) pairs eligible for an autonomous round: every
+    skill forge-bound to an autonomy-enabled project."""
+    out: list[tuple[str, str]] = []
+    try:
+        from app.db import project_autonomy_config as cfg
+        from app.db import project_forge_bindings as fb
+        from app.db.skills import get_user_skill
+
+        for row in cfg.list_enabled():
+            project_id = row["project_id"]
+            for b in fb.list_bindings(project_id, enabled_only=True):
+                if b.get("kind") != "skill":
+                    continue
+                asset_id = str(b.get("asset_id") or "")
+                skill = get_user_skill(int(asset_id)) if asset_id.isdigit() else None
+                if skill and skill.get("skill_name"):
+                    out.append((project_id, skill["skill_name"]))
+    except Exception:
+        logger.warning("skill-sleep scheduler: eligible discovery failed", exc_info=True)
+    return out
+
+
+def _latest_run_at(project_id: str, skill_name: str) -> Optional[datetime]:
+    """When this (project, skill) last had a Skill-Sleep round, or None."""
+    from app.db import skill_sleep
+
+    runs = [
+        r for r in skill_sleep.list_runs(project_id, limit=200) if r.get("skill_name") == skill_name
+    ]
+    if not runs:
+        return None
+    ts = runs[0].get("created_at")  # list_runs is created_at DESC
+    try:
+        return datetime.fromisoformat(ts) if ts else None
+    except (TypeError, ValueError):
+        return None
+
+
+class SkillSleepScheduler:
+    """Periodic driver (Phase 5b): run a staged Skill-Sleep round for each
+    eligible (project, skill) that is past its cooldown."""
+
+    @staticmethod
+    def run_due(
+        *,
+        now: Optional[datetime] = None,
+        cooldown_hours: int = 24,
+        max_per_run: int = 10,
+        eligible_fn: Optional[Callable[[], list]] = None,
+        round_fn: Optional[Callable[[str, str], dict]] = None,
+    ) -> dict:
+        """Run rounds for due (project, skill) pairs (staged — NEVER
+        auto-adopted; an operator still adopts). Per-skill ``cooldown_hours``
+        prevents re-running too often; ``max_per_run`` bounds cost per tick.
+        Each round is isolated — one failure is skipped, never raised."""
+        now = now or datetime.utcnow()
+        pairs = (eligible_fn or _discover_eligible_skills)()
+        run = round_fn or (lambda pid, sk: SkillSleepGate.run_skill_sleep_round(pid, sk))
+        results: dict = {"ran": [], "skipped": []}
+        for project_id, skill_name in pairs[:max_per_run]:
+            last = _latest_run_at(project_id, skill_name)
+            if last is not None and (now - last) < timedelta(hours=cooldown_hours):
+                results["skipped"].append(
+                    {"project_id": project_id, "skill": skill_name, "reason": "cooldown"}
+                )
+                continue
+            try:
+                verdict = run(project_id, skill_name)
+                results["ran"].append(
+                    {
+                        "project_id": project_id,
+                        "skill": skill_name,
+                        "status": (verdict or {}).get("status"),
+                    }
+                )
+            except Exception:
+                logger.warning(
+                    "skill-sleep scheduler: round failed for %s/%s",
+                    project_id,
+                    skill_name,
+                    exc_info=True,
+                )
+                results["skipped"].append(
+                    {"project_id": project_id, "skill": skill_name, "reason": "error"}
+                )
+        return results
