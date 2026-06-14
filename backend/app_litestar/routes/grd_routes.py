@@ -1635,43 +1635,86 @@ def latest_grd_genome_snapshot(project_id: str) -> dict[str, Any]:
 
 @post("/{project_id:str}/grd/evolve/start", sync_to_thread=False)
 def start_grd_evolve(project_id: str, data: dict | None) -> dict[str, Any]:
-    """v0.7.88 — start a ``gd evolve`` session for the project.
-
-    Spawns the ``grd_evolve`` execution type via the standard
-    handler registry so the session shows up in the project's
-    sessions list and the existing SSE/stop/output endpoints
-    work unchanged. Returns ``session_id`` + ``evolve_run_id``.
+    """DEPRECATED (GRD 0.4.3): ``gd evolve`` no longer runs — it was superseded
+    by the life-harness (``gd harness round``). Starting an evolve session would
+    no-op, so this endpoint returns a pointer to the harness-round surface
+    instead. The read-only ``/grd/evolve/runs`` endpoints stay for history.
     """
+    del data
     _ensure_project(project_id)
-    from app.services.execution_type_handler import get_handler
+    return {
+        "deprecated": True,
+        "reason": "gd evolve was deprecated in GRD 0.4.3 (superseded by the life-harness).",
+        "use": f"/api/projects/{project_id}/grd/harness/round",
+    }
 
-    handler = get_handler("grd_evolve")
-    if not handler:
-        from litestar.exceptions import HTTPException
 
-        raise HTTPException(status_code=500, detail="grd_evolve handler is not registered")
+# ---------------------------------------------------------------------------
+# GRD 0.4.x life-harness rounds (gd harness round) — supersedes gd evolve
+# ---------------------------------------------------------------------------
+
+
+@post("/{project_id:str}/grd/harness/round", sync_to_thread=False)
+def grd_harness_round(project_id: str, data: dict | None) -> dict[str, Any]:
+    """Trigger a ``gd harness round`` in the background. The result is mirrored
+    into ``grd_harness_rounds`` on completion — poll the rounds list."""
+    _ensure_project(project_id)
     cwd = _project_cwd(project_id)
     body = data or {}
-    session_config = {
-        "project_id": project_id,
-        "cwd": cwd,
-        "evolve_config": {
-            "iterations": body.get("iterations"),
-            "pick_pct": body.get("pick_pct"),
-            "dry_run": body.get("dry_run"),
-            "no_worktree": body.get("no_worktree"),
-            "max_turns": body.get("max_turns"),
-            "timeout_minutes": body.get("timeout_minutes"),
-        },
-        "execution_mode": body.get("execution_mode", "autonomous"),
-        "yolo_mode": bool(body.get("yolo_mode")),
-    }
-    result = handler.start(session_config)
-    if "error" in result:
-        from litestar.exceptions import HTTPException
+    from app.services.grd_harness_round_runner import run_round
 
-        raise HTTPException(status_code=503, detail=result["error"])
+    started = run_round(
+        project_id,
+        cwd,
+        auto=bool(body.get("auto")),
+        dry_run=bool(body.get("dry_run")),
+        full_eval=bool(body.get("full_eval")),
+    )
+    if not started:
+        raise ClientException(
+            detail="GRD gd binary not detected — install @jokerized/getresearchdone"
+        )
+    return {"status": "running"}
+
+
+@get("/{project_id:str}/grd/harness/rounds", sync_to_thread=False)
+def grd_list_harness_rounds(project_id: str, limit: int = 50) -> dict[str, Any]:
+    _ensure_project(project_id)
+    from app.db import list_harness_rounds
+
+    return {"rounds": list_harness_rounds(project_id, limit=limit)}
+
+
+@get("/{project_id:str}/grd/harness/rounds/{round_id:str}", sync_to_thread=False)
+def grd_get_harness_round(project_id: str, round_id: str) -> dict[str, Any]:
+    _ensure_project(project_id)
+    from app.db import get_harness_round
+
+    row = get_harness_round(project_id, round_id)
+    if not row:
+        raise NotFoundException(detail="Harness round not found")
+    return row
+
+
+@post("/{project_id:str}/grd/harness/rounds/{round_id:str}/revert", sync_to_thread=False)
+def grd_revert_harness_round(project_id: str, round_id: str) -> dict[str, Any]:
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    from app.services.grd_harness_round_runner import revert_round
+
+    result = revert_round(cwd, round_id)
+    if not result["success"]:
+        raise ClientException(detail=result.get("error") or "revert failed")
     return result
+
+
+@get("/{project_id:str}/grd/harness/status", sync_to_thread=False)
+def grd_harness_round_status(project_id: str) -> dict[str, Any]:
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    from app.services.grd_harness_round_runner import harness_status
+
+    return harness_status(cwd)
 
 
 @get("/{project_id:str}/grd/evolve/runs", sync_to_thread=False)
@@ -1857,11 +1900,17 @@ grd_router = Router(
         list_grd_dead_ends,
         list_grd_genome_snapshots,
         latest_grd_genome_snapshot,
-        # v0.7.88 — gd evolve session runs
+        # v0.7.88 — gd evolve session runs (start deprecated; runs read-only)
         start_grd_evolve,
         list_grd_evolve_runs,
         get_grd_evolve_run,
         stop_grd_evolve_run,
+        # GRD 0.4.x life-harness rounds (supersedes gd evolve)
+        grd_harness_round,
+        grd_list_harness_rounds,
+        grd_get_harness_round,
+        grd_revert_harness_round,
+        grd_harness_round_status,
         list_milestones,
         list_phases,
         create_phase,
