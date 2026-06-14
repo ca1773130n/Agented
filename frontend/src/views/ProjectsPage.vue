@@ -9,6 +9,7 @@ import LoadingState from '../components/base/LoadingState.vue';
 import ListSearchSort from '../components/base/ListSearchSort.vue';
 import PaginationBar from '../components/base/PaginationBar.vue';
 import ConfirmModal from '../components/base/ConfirmModal.vue';
+import ProjectDiscoveryModal from '../components/projects/ProjectDiscoveryModal.vue';
 import { useToast } from '../composables/useToast';
 import { useListFilter } from '../composables/useListFilter';
 import { useFocusTrap } from '../composables/useFocusTrap';
@@ -26,6 +27,7 @@ const teams = ref<Team[]>([]);
 const isLoading = ref(true);
 const loadError = ref<string | null>(null);
 const showCreateModal = ref(false);
+const showDiscoverModal = ref(false);
 const showDeleteConfirm = ref(false);
 const projectToDelete = ref<Project | null>(null);
 const deletingId = ref<string | null>(null);
@@ -153,6 +155,11 @@ async function createProject() {
   }
 }
 
+async function onReposImported() {
+  showDiscoverModal.value = false;
+  await loadProjects();
+}
+
 function confirmDelete(project: Project) {
   projectToDelete.value = project;
   showDeleteConfirm.value = true;
@@ -196,6 +203,12 @@ onMounted(() => {
   <div class="projects-page" data-tour="assign-teams">
     <PageHeader :title="t('projects.title')" :subtitle="t('projects.subtitle')">
       <template #actions>
+        <button class="btn btn-secondary" data-testid="discover-repos-btn" @click="showDiscoverModal = true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.35-4.35" />
+          </svg>
+          {{ t('projectsDiscovery.button') }}
+        </button>
         <button class="btn btn-primary" @click="showCreateModal = true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 5v14M5 12h14"/>
@@ -348,6 +361,14 @@ onMounted(() => {
         </div>
       </div>
     </Teleport>
+
+    <ProjectDiscoveryModal
+      v-if="showDiscoverModal"
+      :teams="teams"
+      :products="products"
+      @close="showDiscoverModal = false"
+      @imported="onReposImported"
+    />
 
     <ConfirmModal
       :open="showDeleteConfirm"
