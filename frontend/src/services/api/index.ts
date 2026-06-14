@@ -273,6 +273,9 @@ export type {
 
   // Project types
   Project,
+  DiscoveredRepo,
+  DiscoverResponse,
+  ImportResponse,
   ProjectTeamEdge,
   ProjectInstallation,
   ProjectSkill,
