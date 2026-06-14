@@ -4,12 +4,12 @@
 import { ref, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { grdHarnessApi } from '../../../../services/api';
-import type { HarnessRound } from '../../../../services/api/grdHarness';
+import type { LifeHarnessRound } from '../../../../services/api/grdHarness';
 
 const props = defineProps<{ projectId: string }>();
 const { t } = useI18n();
 
-const rounds = ref<HarnessRound[]>([]);
+const rounds = ref<LifeHarnessRound[]>([]);
 const busy = ref(false);
 const auto = ref(false);
 const error = ref('');

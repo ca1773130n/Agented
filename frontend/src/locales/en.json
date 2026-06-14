@@ -5928,7 +5928,7 @@
     "colEvidence": "Evidence",
     "revert": "Revert",
     "reverted": "Reverted",
-    "gdMissing": "GRD CLI not detected — install @jokerized/getresearchdone.",
+    "gdMissing": "GRD CLI not detected — install getresearchdone.",
     "evolveDeprecated": "gd evolve is deprecated — superseded by life-harness rounds."
   },
   "projects": {

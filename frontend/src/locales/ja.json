@@ -5928,7 +5928,7 @@
     "colEvidence": "証拠",
     "revert": "取り消し",
     "reverted": "取り消し済み",
-    "gdMissing": "GRD CLI が見つかりません — @jokerized/getresearchdone をインストールしてください。",
+    "gdMissing": "GRD CLI が見つかりません — getresearchdone をインストールしてください。",
     "evolveDeprecated": "gd evolve は非推奨です — ライフハーネス ラウンドに置き換えられました。"
   },
   "projects": {

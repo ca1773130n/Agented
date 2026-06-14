@@ -42,8 +42,9 @@ export interface EvolveRun {
   [key: string]: unknown;
 }
 
-/** A mirrored GRD 0.4.x life-harness round (`gd harness round`). */
-export interface HarnessRound {
+/** A mirrored GRD 0.4.x life-harness round (`gd harness round`).
+ *  (Distinct from the Group-B ``HarnessRound`` evolution-round shape below.) */
+export interface LifeHarnessRound {
   id?: string;
   project_id?: string;
   round_id: string;
@@ -194,13 +195,13 @@ export const grdHarnessApi = {
 
   /** List mirrored harness rounds (newest first). */
   listHarnessRounds: (projectId: string, limit = 50) =>
-    apiFetch<{ rounds: HarnessRound[] }>(
+    apiFetch<{ rounds: LifeHarnessRound[] }>(
       `/api/projects/${projectId}/grd/harness/rounds?limit=${limit}`,
     ),
 
   /** One harness round (incl. patch/eval). */
   getHarnessRound: (projectId: string, roundId: string) =>
-    apiFetch<HarnessRound>(
+    apiFetch<LifeHarnessRound>(
       `/api/projects/${projectId}/grd/harness/rounds/${roundId}`,
     ),
 

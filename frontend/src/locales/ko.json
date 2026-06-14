@@ -5928,7 +5928,7 @@
     "colEvidence": "증거",
     "revert": "되돌리기",
     "reverted": "되돌림",
-    "gdMissing": "GRD CLI를 찾을 수 없습니다 — @jokerized/getresearchdone를 설치하세요.",
+    "gdMissing": "GRD CLI를 찾을 수 없습니다 — getresearchdone를 설치하세요.",
     "evolveDeprecated": "gd evolve는 더 이상 사용되지 않습니다 — 라이프 하니스 라운드로 대체되었습니다."
   },
   "projects": {

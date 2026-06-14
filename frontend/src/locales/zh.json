@@ -5928,7 +5928,7 @@
     "colEvidence": "证据",
     "revert": "回退",
     "reverted": "已回退",
-    "gdMissing": "未检测到 GRD CLI — 请安装 @jokerized/getresearchdone。",
+    "gdMissing": "未检测到 GRD CLI — 请安装 getresearchdone。",
     "evolveDeprecated": "gd evolve 已弃用 — 由生命周期工具轮次取代。"
   },
   "projects": {
