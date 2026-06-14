@@ -96,3 +96,62 @@ def _scan_fs(root: str, nested: bool, max_depth: int) -> tuple[list[dict], int]:
             _add(dirpath)
             dirnames[:] = []  # don't descend into a found repo
     return repos, unreadable
+
+
+def _short_remote(url: Optional[str]) -> Optional[str]:
+    """Normalize a git remote URL to ``host/owner/repo`` for display + dedup.
+
+    ``git@github.com:org/repo.git`` and ``https://github.com/org/repo`` both
+    collapse to ``github.com/org/repo``. Returns None for empty input.
+    """
+    if not url:
+        return None
+    s = url.strip()
+    s = re.sub(r"^git@([^:]+):", r"\1/", s)          # scp-style ssh
+    s = re.sub(r"^[a-z][a-z0-9+.-]*://", "", s, flags=re.IGNORECASE)  # scheme
+    s = re.sub(r"^[^@/]+@", "", s)                    # user@ (ssh://user@host)
+    s = re.sub(r"\.git$", "", s, flags=re.IGNORECASE)
+    s = s.rstrip("/").lower()
+    return s or None
+
+
+class ProjectDiscoveryService:
+    """Scan / dedup / import entry points for the discovery feature."""
+
+    @classmethod
+    def scan(cls, root: str, *, nested: bool = False, max_depth: int = 3) -> dict:
+        if not root or not isinstance(root, str):
+            raise ValueError("root folder is required")
+        abs_root = os.path.abspath(os.path.expanduser(root))
+        if not os.path.isdir(abs_root):
+            raise ValueError(f"not a directory: {root}")
+        repos, unreadable = _scan_fs(abs_root, nested, max_depth)
+        cls._mark_existing(repos)
+        new_count = sum(1 for r in repos if not r["already_imported"])
+        return {
+            "repos": repos,
+            "scanned": len(repos),
+            "found": len(repos),
+            "new_count": new_count,
+            "unreadable": unreadable,
+        }
+
+    @classmethod
+    def _mark_existing(cls, repos: list[dict]) -> None:
+        existing = get_all_projects()
+        path_to_id = {
+            os.path.abspath(p["local_path"]): p["id"]
+            for p in existing
+            if p.get("local_path")
+        }
+        remote_to_id = {}
+        for p in existing:
+            sr = _short_remote(p.get("github_repo"))
+            if sr:
+                remote_to_id[sr] = p["id"]
+        for r in repos:
+            ap = os.path.abspath(r["local_path"])
+            sr = _short_remote(r.get("remote_url"))
+            existing_id = path_to_id.get(ap) or (remote_to_id.get(sr) if sr else None)
+            r["already_imported"] = existing_id is not None
+            r["existing_project_id"] = existing_id

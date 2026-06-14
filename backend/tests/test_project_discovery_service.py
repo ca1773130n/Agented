@@ -51,3 +51,46 @@ def test_scan_fs_does_not_descend_into_a_found_repo(tmp_path):
 
     names = [r["name"] for r in nested]
     assert names == ["outer"]  # stops at outer, never reaches inner
+
+
+def test_short_remote_normalizes_forms():
+    assert pds._short_remote("git@github.com:org/repo.git") == "github.com/org/repo"
+    assert pds._short_remote("https://github.com/org/repo") == "github.com/org/repo"
+    assert pds._short_remote("https://github.com/org/repo.git") == "github.com/org/repo"
+    assert pds._short_remote("ssh://git@gitlab.com/org/repo.git") == "gitlab.com/org/repo"
+    assert pds._short_remote(None) is None
+    assert pds._short_remote("") is None
+
+
+def test_scan_marks_already_imported_by_path_and_remote(tmp_path, isolated_db):
+    from app.database import create_project as db_create_project
+
+    root = str(tmp_path)
+    a = _make_repo(root, "alpha")   # will dedup by local_path
+    b = _make_repo(root, "beta")    # will dedup by remote
+    _make_repo(root, "gamma")       # new
+
+    db_create_project(name="Alpha", local_path=a)
+    db_create_project(name="Beta", github_repo="github.com/org/beta")
+
+    # Real git remote so beta resolves to github.com/org/beta
+    subprocess.run(["git", "init", "-q"], cwd=b, check=True)
+    subprocess.run(
+        ["git", "remote", "add", "origin", "git@github.com:org/beta.git"],
+        cwd=b, check=True,
+    )
+
+    result = pds.ProjectDiscoveryService.scan(root, nested=False, max_depth=3)
+
+    by_name = {r["name"]: r for r in result["repos"]}
+    assert by_name["alpha"]["already_imported"] is True
+    assert by_name["beta"]["already_imported"] is True
+    assert by_name["gamma"]["already_imported"] is False
+    assert result["new_count"] == 1
+
+
+def test_scan_rejects_missing_root():
+    import pytest
+
+    with pytest.raises(ValueError):
+        pds.ProjectDiscoveryService.scan("/no/such/folder/xyz", nested=False, max_depth=3)
