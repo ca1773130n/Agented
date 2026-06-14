@@ -21,9 +21,18 @@ logger = logging.getLogger(__name__)
 
 BUNDLE_MARKETPLACE_URL = "https://github.com/ca1773130n/claude-code-plugin-marketplace"
 BUNDLE_MARKETPLACE_NAME = "Claude Code Plugin Marketplace"
+# Marketplace `name` (from .claude-plugin/marketplace.json) used by the Claude
+# CLI as the `plugin@<marketplace>` qualifier when installing bundle plugins
+# into an account config that has more than one marketplace registered.
+BUNDLE_MARKETPLACE_CLI_NAME = "claude-plugin-marketplace"
+
+# Plugins imported into the Agented DB (commands/agents surfaced in-app) via
+# DeployService.load_from_marketplace. The three harness plugins
+# (HarnessSync / GRD / Tesserae) are first-class and always bundled.
 BUNDLE_PLUGINS = [
     {"remote_name": "harness-sync", "is_harness": True},
     {"remote_name": "grd", "is_harness": False},
+    {"remote_name": "tesserae", "is_harness": False},
 ]
 
 # CLI plugins to install into each Claude Code account's config directory.
@@ -45,6 +54,12 @@ BUNDLE_CLI_PLUGINS = [
     "playwright",
 ]
 
+# Harness plugins installed into each Claude account's config from the bundle
+# marketplace, so the spawned `claude` harness (and its `gd` / `tesserae`
+# binaries) are active when agents run. Installed as `<name>@<marketplace>`
+# after registering the bundle marketplace in that account's config.
+BUNDLE_HARNESS_CLI_PLUGINS = ["grd", "tesserae", "harness-sync"]
+
 
 class SetupBundleService:
     """Service for first-launch bundle installation."""
@@ -53,7 +68,16 @@ class SetupBundleService:
     def bundle_install() -> Tuple[dict, int]:
         """Auto-install bundled marketplace and plugins on first launch."""
         if get_setting("bundle_installed") == "true":
-            return {"status": "already_installed"}, HTTPStatus.OK
+            # The marketplace import is done, but the per-account CLI plugin
+            # install is gated on a Claude account existing. On first run no
+            # account exists yet (onboarding registers it later), so retry the
+            # CLI install on subsequent boots until it lands — otherwise GRD/
+            # Tesserae/HarnessSync never get installed into the harness config.
+            scheduled = SetupBundleService._maybe_schedule_cli_install()
+            return {
+                "status": "already_installed",
+                "cli_plugins_scheduled": scheduled,
+            }, HTTPStatus.OK
 
         # Find or create marketplace
         marketplace_created = False
@@ -102,15 +126,10 @@ class SetupBundleService:
             except Exception as e:
                 logger.warning("Failed to install bundle plugin '%s': %s", remote_name, e)
 
-        # Schedule CLI plugin install + proxy token refresh as background tasks.
-        # (subprocess + gevent fork crashes on macOS if run inline.)
+        # Schedule CLI plugin install (self-healing, gated on a Claude account)
+        # + proxy token refresh as background tasks. (subprocess + gevent fork
+        # crashes on macOS if run inline.)
         import threading
-
-        def _safe_install():
-            try:
-                SetupBundleService._install_cli_plugins_all_accounts()
-            except Exception as e:
-                logger.warning("Background CLI plugin install failed: %s", e)
 
         def _safe_refresh():
             try:
@@ -118,7 +137,7 @@ class SetupBundleService:
             except Exception as e:
                 logger.warning("Background proxy token refresh failed: %s", e)
 
-        threading.Thread(target=_safe_install, daemon=True).start()
+        cli_scheduled = SetupBundleService._maybe_schedule_cli_install()
         threading.Thread(target=_safe_refresh, daemon=True).start()
 
         set_setting("bundle_installed", "true")
@@ -129,8 +148,35 @@ class SetupBundleService:
             "marketplace_id": marketplace_id,
             "plugins_installed": plugins_installed,
             "harness_plugin_set": harness_plugin_set,
-            "cli_plugins_scheduled": True,
+            "cli_plugins_scheduled": cli_scheduled,
         }, HTTPStatus.CREATED
+
+    @staticmethod
+    def _maybe_schedule_cli_install() -> bool:
+        """Schedule the per-account CLI plugin install in the background unless
+        it already completed.
+
+        Self-healing: when the first run finds no Claude account it leaves the
+        ``cli_plugins_installed`` flag unset, so a later boot (after onboarding
+        registers an account) retries. Returns True if a run was scheduled.
+        """
+        if get_setting("cli_plugins_installed") == "true":
+            return False
+
+        import threading
+
+        def _run():
+            try:
+                res = SetupBundleService._install_cli_plugins_all_accounts()
+                # Only mark done once we actually installed into ≥1 account —
+                # otherwise (no accounts yet / claude CLI missing) keep retrying.
+                if res.get("accounts", 0) > 0:
+                    set_setting("cli_plugins_installed", "true")
+            except Exception as e:
+                logger.warning("Background CLI plugin install failed: %s", e)
+
+        threading.Thread(target=_run, daemon=True).start()
+        return True
 
     @staticmethod
     def _set_harness_from_existing(marketplace_id: str, remote_name: str) -> None:
@@ -168,21 +214,46 @@ class SetupBundleService:
 
             config_dir = os.path.expanduser(config_path)
             account_name = account.get("account_name", "unknown")
+            env = {
+                **os.environ,
+                "CLAUDE_CONFIG_DIR": config_dir,
+                "OBJC_DISABLE_INITIALIZE_FORK_SAFETY": "YES",
+            }
             installed = []
 
-            for plugin_name in BUNDLE_CLI_PLUGINS:
+            # Register the bundle marketplace in this account's config so the
+            # harness plugins (grd/tesserae/harness-sync) resolve. Idempotent —
+            # a repeat add is a no-op the CLI reports without failing the run.
+            try:
+                subprocess.run(
+                    ["claude", "plugins", "marketplace", "add", BUNDLE_MARKETPLACE_URL],
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+            except subprocess.TimeoutExpired:
+                logger.warning("Timeout adding bundle marketplace for '%s'", account_name)
+            except FileNotFoundError:
+                logger.warning("claude CLI not found — cannot install CLI plugins")
+                return {"accounts": 0, "error": "claude CLI not found"}
+            except Exception as e:
+                logger.warning("Error adding bundle marketplace for '%s': %s", account_name, e)
+
+            # Default-marketplace plugins install by bare name; bundle-marketplace
+            # harness plugins are qualified with @<marketplace> to disambiguate.
+            plugin_specs = list(BUNDLE_CLI_PLUGINS) + [
+                f"{p}@{BUNDLE_MARKETPLACE_CLI_NAME}" for p in BUNDLE_HARNESS_CLI_PLUGINS
+            ]
+
+            for plugin_name in plugin_specs:
                 try:
-                    env = {
-                        **os.environ,
-                        "CLAUDE_CONFIG_DIR": config_dir,
-                        "OBJC_DISABLE_INITIALIZE_FORK_SAFETY": "YES",
-                    }
                     result = subprocess.run(
                         ["claude", "plugins", "install", plugin_name],
                         env=env,
                         capture_output=True,
                         text=True,
-                        timeout=60,
+                        timeout=120,
                     )
                     if result.returncode == 0:
                         installed.append(plugin_name)
@@ -228,7 +299,7 @@ class SetupBundleService:
                     "account": account_name,
                     "config_dir": config_dir,
                     "installed": installed,
-                    "total": len(BUNDLE_CLI_PLUGINS),
+                    "total": len(plugin_specs),
                 }
             )
 
