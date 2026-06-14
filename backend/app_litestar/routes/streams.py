@@ -10,12 +10,11 @@ with the CRUD routers from earlier waves without collisions.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
-from litestar import MediaType, Request, Router, get, post
+from litestar import Request, Router, get, post
 from litestar.exceptions import (
     ClientException,
-    HTTPException,
     NotFoundException,
 )
 from litestar.response import Stream
@@ -34,7 +33,6 @@ from app.services.rule_conversation_service import RuleConversationService
 from app.services.setup_execution_service import SetupExecutionService
 from app.services.team_generation_service import TeamGenerationService
 from app_litestar.auth import Caller
-
 
 SSE_HEADERS = {
     "Cache-Control": "no-cache",
@@ -264,6 +262,27 @@ def stream_super_agent_messages(super_agent_id: str) -> Stream:
     return _sse_response(generate())
 
 
+def _ensure_chat_session_registered(session_id: str) -> bool:
+    """Pre-register a REAL super-agent session in ChatStateService before the
+    SSE subscribes.
+
+    The leader chat opens this stream when its panel MOUNTS — before any
+    message turn has registered the session (unlike the sketch/message flow,
+    where the POST eagerly init_session's first). Without this, an idle or
+    just-refreshed leader chat subscribes to an unregistered session and gets
+    a "Session not found" error → the EventSource reconnect-loops. Registering
+    a real session (idempotent) makes the subscriber wait for the first turn's
+    deltas instead. A genuinely unknown session_id is left unregistered so
+    subscribe still reports not-found. Returns True if registered.
+    """
+    from app.db.super_agents import get_super_agent_session
+
+    if get_super_agent_session(session_id) is None:
+        return False
+    ChatStateService.init_session(session_id)
+    return True
+
+
 @get(
     "/{super_agent_id:str}/sessions/{session_id:str}/chat/stream",
     media_type="text/event-stream",
@@ -280,6 +299,7 @@ def stream_super_agent_chat(
         last_seq = 0
 
     def generate():
+        _ensure_chat_session_registered(session_id)
         yield from ChatStateService.subscribe(session_id, last_seq)
 
     return _sse_response(generate())
