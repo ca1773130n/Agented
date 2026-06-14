@@ -16,6 +16,7 @@ import DeadEndsPanel from './panels/DeadEndsPanel.vue';
 import GenomePanel from './panels/GenomePanel.vue';
 import VerifyPanel from './panels/VerifyPanel.vue';
 import ReflectionsPanel from './panels/ReflectionsPanel.vue';
+import HarnessRoundsPanel from './panels/HarnessRoundsPanel.vue';
 import EvolvePanel from './panels/EvolvePanel.vue';
 
 const props = defineProps<{ projectId: string }>();
@@ -34,6 +35,7 @@ const tabs = computed(() => [
   { key: 'genome', labelKey: 'surface.harness.panels.genome.tab', component: bind(GenomePanel, props.projectId) },
   { key: 'verify', labelKey: 'surface.harness.panels.verify.tab', component: bind(VerifyPanel, props.projectId) },
   { key: 'reflections', labelKey: 'surface.harness.panels.reflections.tab', component: bind(ReflectionsPanel, props.projectId) },
+  { key: 'harness-rounds', labelKey: 'grdHarnessRounds.title', component: bind(HarnessRoundsPanel, props.projectId) },
   { key: 'evolve', labelKey: 'surface.harness.panels.evolve.tab', component: bind(EvolvePanel, props.projectId) },
 ]);
 </script>

@@ -51,6 +51,7 @@ onMounted(load);
 
 <template>
   <div class="panel">
+    <p class="deprecated">{{ t('grdHarnessRounds.evolveDeprecated') }}</p>
     <div class="panel-head">
       <h4>{{ t('surface.harness.panels.evolve.title') }}</h4>
       <div class="head-actions">
@@ -90,4 +91,6 @@ onMounted(load);
 .lbl { color: var(--text-tertiary, #888); font-size: 0.8rem; }
 .json { background: var(--bg-tertiary, #1a1a24); border-radius: 6px; padding: 0.75rem; font-size: 0.75rem; overflow: auto; max-height: 240px; color: var(--text-secondary, #aaa); }
 .muted { color: var(--text-tertiary, #666); font-size: 0.85rem; }
+.deprecated { margin: 0 0 0.25rem; padding: 6px 10px; border-radius: 6px; font-size: 0.78rem;
+  background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.28); color: var(--accent-amber, #eab308); }
 </style>

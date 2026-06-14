@@ -153,10 +153,11 @@ describe('GRD-route panels', () => {
     expect(calls.stopEvolveRun).toHaveBeenCalledWith('proj-1', 'run-1');
   });
 
-  it('HarnessPanelHost mounts over TabbedViewHost with 7 tabs', async () => {
+  it('HarnessPanelHost mounts over TabbedViewHost with 8 tabs', async () => {
     const w = mount(HarnessPanelHost, { props: P, ...opts(true) });
     await flushPromises();
-    expect(w.findAll('[role="tab"]').length).toBe(7);
+    // 7 original panels + the new life-harness rounds panel.
+    expect(w.findAll('[role="tab"]').length).toBe(8);
   });
 });
 
