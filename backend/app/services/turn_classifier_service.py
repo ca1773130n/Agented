@@ -12,9 +12,10 @@ per-kind default model and NEVER hardcodes a claude default (house rule:
 feedback_llm_features_support_all_backends).
 """
 
-import json
 import logging
 from typing import Dict, Optional, Set
+
+from ..utils.llm_json import extract_json_object
 
 logger = logging.getLogger(__name__)
 
@@ -189,8 +190,14 @@ def _llm_classify(text: str, *, backend_kind: str, model_override: Optional[str]
             kwargs["api_base"] = api_base
 
         response = litellm.completion(**kwargs)
-        content = response.choices[0].message.content.strip()
-        result = json.loads(content)
+        # An empty / prose / fenced LLM reply is an expected outcome (the proxy
+        # may return nothing or wrap the object): extract the JSON object and
+        # fall back to keyword classification silently rather than crashing
+        # json.loads (or .strip() on a None body) on every call.
+        result = extract_json_object(response.choices[0].message.content)
+        if result is None:
+            logger.debug("LLM turn classification returned no JSON body; falling back")
+            return None
 
         if "shape" not in result or "intent" not in result:
             logger.warning("LLM turn classification missing keys: %s", result)
