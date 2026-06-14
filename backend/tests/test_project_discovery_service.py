@@ -94,3 +94,62 @@ def test_scan_rejects_missing_root():
 
     with pytest.raises(ValueError):
         pds.ProjectDiscoveryService.scan("/no/such/folder/xyz", nested=False, max_depth=3)
+
+
+def test_import_repos_creates_projects_and_skips_dupes(tmp_path, isolated_db):
+    from app.database import create_project as db_create_project, get_all_projects
+
+    existing_path = str(tmp_path / "already")
+    db_create_project(name="Already", local_path=existing_path)
+
+    repos = [
+        {"name": "fresh", "local_path": str(tmp_path / "fresh"),
+         "remote_url": "git@github.com:org/fresh.git"},
+        {"name": "Already", "local_path": existing_path, "remote_url": None},
+        {"name": "", "local_path": "", "remote_url": None},  # invalid
+    ]
+
+    result = pds.ProjectDiscoveryService.import_repos(repos, run_harness_setup=False)
+
+    assert [i["name"] for i in result["imported"]] == ["fresh"]
+    reasons = {s["name"]: s["reason"] for s in result["skipped"]}
+    assert reasons["Already"] == "already imported"
+    assert "(unknown)" in reasons
+    assert result["setup_started"] is False
+    # The fresh project is persisted with the normalized remote.
+    created = [p for p in get_all_projects() if p["name"] == "fresh"][0]
+    assert created["github_repo"] == "github.com/org/fresh"
+
+
+def test_import_repos_spawns_harness_setup_when_team_given(tmp_path, isolated_db, monkeypatch):
+    from app.db.teams import create_team
+
+    team_id = create_team(name="Backend")  # owner_team_id has a FK to teams
+
+    calls = []
+    monkeypatch.setattr(
+        pds.ProjectDiscoveryService, "_spawn_harness_setup",
+        classmethod(lambda cls, pid: calls.append(pid)),
+    )
+
+    repos = [{"name": "fresh", "local_path": str(tmp_path / "fresh"), "remote_url": None}]
+    result = pds.ProjectDiscoveryService.import_repos(
+        repos, owner_team_id=team_id, run_harness_setup=True,
+    )
+
+    assert result["setup_started"] is True
+    assert calls == [result["imported"][0]["project_id"]]
+
+
+def test_import_repos_no_setup_without_team(tmp_path, isolated_db, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        pds.ProjectDiscoveryService, "_spawn_harness_setup",
+        classmethod(lambda cls, pid: calls.append(pid)),
+    )
+    repos = [{"name": "fresh", "local_path": str(tmp_path / "fresh"), "remote_url": None}]
+    result = pds.ProjectDiscoveryService.import_repos(
+        repos, owner_team_id=None, run_harness_setup=True,
+    )
+    assert result["setup_started"] is False
+    assert calls == []

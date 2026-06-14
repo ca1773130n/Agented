@@ -155,3 +155,83 @@ class ProjectDiscoveryService:
             existing_id = path_to_id.get(ap) or (remote_to_id.get(sr) if sr else None)
             r["already_imported"] = existing_id is not None
             r["existing_project_id"] = existing_id
+
+    @classmethod
+    def import_repos(
+        cls,
+        repos: list[dict],
+        *,
+        product_id: Optional[str] = None,
+        owner_team_id: Optional[str] = None,
+        run_harness_setup: bool = False,
+        user_id: Optional[str] = None,
+    ) -> dict:
+        existing = get_all_projects()
+        path_ids = {
+            os.path.abspath(p["local_path"]): p["id"]
+            for p in existing
+            if p.get("local_path")
+        }
+        remote_ids = {}
+        for p in existing:
+            sr = _short_remote(p.get("github_repo"))
+            if sr:
+                remote_ids[sr] = p["id"]
+
+        imported: list[dict] = []
+        skipped: list[dict] = []
+        for r in repos:
+            name = (r.get("name") or "").strip()
+            local_path = (r.get("local_path") or "").strip()
+            if not name or not local_path:
+                skipped.append({"name": name or "(unknown)", "reason": "missing name or local_path"})
+                continue
+            ap = os.path.abspath(local_path)
+            sr = _short_remote(r.get("github_repo") or r.get("remote_url"))
+            if ap in path_ids or (sr and sr in remote_ids):
+                skipped.append({"name": name, "reason": "already imported"})
+                continue
+            try:
+                pid = db_create_project(
+                    name=name,
+                    github_repo=sr,
+                    local_path=local_path,
+                    owner_team_id=owner_team_id,
+                    product_id=product_id,
+                    user_id=user_id,
+                )
+            except Exception:
+                logger.warning("import: create_project failed for %s", name, exc_info=True)
+                pid = None
+            if not pid:
+                skipped.append({"name": name, "reason": "create failed"})
+                continue
+            imported.append({"project_id": pid, "name": name})
+            path_ids[ap] = pid
+            if sr:
+                remote_ids[sr] = pid
+
+        setup_started = False
+        if run_harness_setup and owner_team_id and imported:
+            for it in imported:
+                cls._spawn_harness_setup(it["project_id"])
+            setup_started = True
+        return {"imported": imported, "skipped": skipped, "setup_started": setup_started}
+
+    @classmethod
+    def _spawn_harness_setup(cls, project_id: str) -> None:
+        """Flip status to running + run the 6-step setup off-thread (mirrors
+        grd_routes.trigger_harness_setup)."""
+        try:
+            from app.db.projects import set_harness_setup_status
+            from app.services.team_harness_setup_service import TeamHarnessSetupService
+
+            set_harness_setup_status(project_id, "running")
+            threading.Thread(
+                target=TeamHarnessSetupService.setup,
+                args=(project_id,),
+                daemon=True,
+                name=f"harness-setup-{project_id}",
+            ).start()
+        except Exception:
+            logger.warning("harness setup spawn failed for %s", project_id, exc_info=True)
