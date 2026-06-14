@@ -180,7 +180,7 @@ def test_grd_task_dispatches_handler_and_bridge(monkeypatch):
     monkeypatch.setattr(
         bridge_mod,
         "bridge_psm_to_chat",
-        lambda sid, events, css: bridged.update(sid=sid, n=len(list(events))),
+        lambda sid, events, css, **kw: bridged.update(sid=sid, n=len(list(events)), **kw),
     )
 
     # Guard: cliproxy stream must NOT be called on the task path.

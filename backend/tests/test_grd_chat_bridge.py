@@ -88,3 +88,27 @@ def test_synthetic_finish_when_source_drains():
     bridge_psm_to_chat("s", events, cs)
     assert [d[0] for d in cs.deltas] == ["content_delta", "finish"]
     assert cs.statuses == ["complete"]
+
+
+def test_finish_carries_backend_and_stream_model():
+    # The finish delta must label the bubble with the answering backend +
+    # model; a model from the stream's assistant event wins over the fallback.
+    events = [
+        {"type": "assistant", "message": {"model": "claude-sonnet-4-20250514"}, "content": "hi"},
+        {"type": "result", "finish_reason": "stop"},
+    ]
+    cs = FakeChatState()
+    bridge_psm_to_chat("s", events, cs, backend="claude", model="sonnet-4")
+    finish = cs.deltas[-1]
+    assert finish[0] == "finish"
+    assert finish[1]["backend"] == "claude"
+    assert finish[1]["model"] == "claude-sonnet-4-20250514"
+
+
+def test_finish_uses_fallback_model_when_stream_has_none():
+    events = [{"type": "text", "content": "hi"}, {"type": "result"}]
+    cs = FakeChatState()
+    bridge_psm_to_chat("s", events, cs, backend="claude", model="sonnet-4")
+    finish = cs.deltas[-1][1]
+    assert finish["backend"] == "claude"
+    assert finish["model"] == "sonnet-4"
