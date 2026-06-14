@@ -50,6 +50,7 @@ from app.services.harness_service import HarnessService
 from app.services.project_deploy_service import ProjectDeployService
 from app.services.project_health_service import ProjectHealthService
 from app.services.project_install_service import ProjectInstallService
+from app.services.project_discovery_service import ProjectDiscoveryService
 from app.services.project_workspace_service import ProjectWorkspaceService
 from app.services.team_execution_service import TeamExecutionService
 
@@ -166,6 +167,35 @@ def create_project(data: dict, caller: Caller) -> dict[str, Any]:
     elif local_path:
         response["grd_init_status"] = "initializing"
     return response
+
+
+@post("/discover", sync_to_thread=False)
+def discover_repos(data: dict, caller: Caller) -> dict[str, Any]:
+    del caller  # auth gate only; scan reads the operator's own filesystem
+    if not data or not data.get("root"):
+        raise ClientException(detail="root folder is required")
+    try:
+        return ProjectDiscoveryService.scan(
+            data["root"],
+            nested=bool(data.get("nested", False)),
+            max_depth=int(data.get("max_depth", 3)),
+        )
+    except ValueError as e:
+        raise ClientException(detail=str(e))
+
+
+@post("/import", sync_to_thread=False)
+def import_discovered_repos(data: dict, caller: Caller) -> dict[str, Any]:
+    repos = (data or {}).get("repos") or []
+    if not repos:
+        raise ClientException(detail="repos is required")
+    return ProjectDiscoveryService.import_repos(
+        repos,
+        product_id=(data.get("product_id") or None),
+        owner_team_id=(data.get("owner_team_id") or None),
+        run_harness_setup=bool(data.get("run_harness_setup", False)),
+        user_id=caller.user_id,
+    )
 
 
 @get("/{project_id:str}", sync_to_thread=False)
@@ -657,6 +687,8 @@ projects_router = Router(
     route_handlers=[
         list_projects,
         create_project,
+        discover_repos,
+        import_discovered_repos,
         get_project_detail_endpoint,
         update_project_endpoint,
         delete_project_endpoint,

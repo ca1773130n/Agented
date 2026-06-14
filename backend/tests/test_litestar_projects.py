@@ -105,3 +105,65 @@ def test_install_validates_component_type(isolated_db):
             json={"component_type": "ghost", "component_id": "x"},
         )
     assert resp.status_code == 400
+
+
+def test_discover_lists_repos_with_new_flags(isolated_db, tmp_path):
+    import os
+    from app.database import create_project as db_create_project
+
+    create_user_role("admin-key-disc", "Admin", "admin")
+    root = str(tmp_path)
+    for n in ("alpha", "beta"):
+        os.makedirs(os.path.join(root, n, ".git"), exist_ok=True)
+    db_create_project(name="Alpha", local_path=os.path.join(root, "alpha"))
+
+    with _client() as c:
+        resp = c.post(
+            "/admin/projects/discover",
+            headers={"X-API-Key": "admin-key-disc"},
+            json={"root": root, "nested": False},
+        )
+    assert resp.status_code == 201
+    body = resp.json()
+    by_name = {r["name"]: r for r in body["repos"]}
+    assert by_name["alpha"]["already_imported"] is True
+    assert by_name["beta"]["already_imported"] is False
+    assert body["new_count"] == 1
+
+
+def test_discover_rejects_bad_root(isolated_db):
+    create_user_role("admin-key-disc2", "Admin", "admin")
+    with _client() as c:
+        resp = c.post(
+            "/admin/projects/discover",
+            headers={"X-API-Key": "admin-key-disc2"},
+            json={"root": "/no/such/dir/zzz"},
+        )
+    assert resp.status_code == 400
+
+
+def test_import_creates_projects(isolated_db, tmp_path, monkeypatch):
+    from app.db.teams import create_team
+    from app.services.project_discovery_service import ProjectDiscoveryService
+
+    # Don't spawn real setup threads in the test.
+    monkeypatch.setattr(
+        ProjectDiscoveryService, "_spawn_harness_setup",
+        classmethod(lambda cls, pid: None),
+    )
+    create_user_role("admin-key-imp", "Admin", "admin")
+    team_id = create_team(name="Backend")  # owner_team_id has a FK to teams
+    with _client() as c:
+        resp = c.post(
+            "/admin/projects/import",
+            headers={"X-API-Key": "admin-key-imp"},
+            json={
+                "repos": [{"name": "fresh", "local_path": str(tmp_path / "fresh")}],
+                "owner_team_id": team_id,
+                "run_harness_setup": True,
+            },
+        )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert [i["name"] for i in body["imported"]] == ["fresh"]
+    assert body["setup_started"] is True
