@@ -983,8 +983,9 @@ describe('ProjectDiscoveryModal', () => {
     expect(projectApi.discover).toHaveBeenCalledWith({ root: '/p', nested: false, max_depth: 3 });
     expect(wrapper.text()).toContain('alpha');
     expect(wrapper.text()).toContain('beta');
-    // Only the 1 new repo is pre-selected.
-    const checked = wrapper.findAll('input[type="checkbox"]:checked');
+    // Only the 1 new repo is pre-selected (scope to the repo list, ignoring
+    // the directOnly / runSetup control checkboxes).
+    const checked = wrapper.findAll('.repo-list input[type="checkbox"]:checked');
     expect(checked.length).toBe(1);
   });
 
