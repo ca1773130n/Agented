@@ -5912,6 +5912,25 @@
     "importError": "Import failed",
     "close": "Close"
   },
+  "grdHarnessRounds": {
+    "title": "Life-harness rounds",
+    "description": "Evidence-driven self-improvement of GRD's primitives (gd harness round).",
+    "runRound": "Run round",
+    "running": "Running…",
+    "auto": "Auto-apply",
+    "dryRun": "Dry run",
+    "fullEval": "Full eval",
+    "noRounds": "No rounds yet.",
+    "colRound": "Round",
+    "colStatus": "Status",
+    "colSummary": "Summary",
+    "colConfidence": "Confidence",
+    "colEvidence": "Evidence",
+    "revert": "Revert",
+    "reverted": "Reverted",
+    "gdMissing": "GRD CLI not detected — install @jokerized/getresearchdone.",
+    "evolveDeprecated": "gd evolve is deprecated — superseded by life-harness rounds."
+  },
   "projects": {
     "title": "Projects",
     "subtitle": "Manage your projects and their team assignments",

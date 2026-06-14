@@ -5912,6 +5912,25 @@
     "importError": "가져오기 실패",
     "close": "닫기"
   },
+  "grdHarnessRounds": {
+    "title": "라이프 하니스 라운드",
+    "description": "GRD 기본 요소의 증거 기반 자기 개선 (gd harness round).",
+    "runRound": "라운드 실행",
+    "running": "실행 중…",
+    "auto": "자동 적용",
+    "dryRun": "드라이런",
+    "fullEval": "전체 평가",
+    "noRounds": "아직 라운드가 없습니다.",
+    "colRound": "라운드",
+    "colStatus": "상태",
+    "colSummary": "요약",
+    "colConfidence": "신뢰도",
+    "colEvidence": "증거",
+    "revert": "되돌리기",
+    "reverted": "되돌림",
+    "gdMissing": "GRD CLI를 찾을 수 없습니다 — @jokerized/getresearchdone를 설치하세요.",
+    "evolveDeprecated": "gd evolve는 더 이상 사용되지 않습니다 — 라이프 하니스 라운드로 대체되었습니다."
+  },
   "projects": {
     "title": "프로젝트",
     "subtitle": "프로젝트와 팀 배정을 관리합니다",

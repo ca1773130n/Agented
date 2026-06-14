@@ -5912,6 +5912,25 @@
     "importError": "インポートに失敗しました",
     "close": "閉じる"
   },
+  "grdHarnessRounds": {
+    "title": "ライフハーネス ラウンド",
+    "description": "GRD プリミティブの証拠駆動型の自己改善 (gd harness round)。",
+    "runRound": "ラウンド実行",
+    "running": "実行中…",
+    "auto": "自動適用",
+    "dryRun": "ドライラン",
+    "fullEval": "フル評価",
+    "noRounds": "まだラウンドがありません。",
+    "colRound": "ラウンド",
+    "colStatus": "ステータス",
+    "colSummary": "概要",
+    "colConfidence": "信頼度",
+    "colEvidence": "証拠",
+    "revert": "取り消し",
+    "reverted": "取り消し済み",
+    "gdMissing": "GRD CLI が見つかりません — @jokerized/getresearchdone をインストールしてください。",
+    "evolveDeprecated": "gd evolve は非推奨です — ライフハーネス ラウンドに置き換えられました。"
+  },
   "projects": {
     "title": "プロジェクト",
     "subtitle": "プロジェクトとチームの割り当てを管理します",
