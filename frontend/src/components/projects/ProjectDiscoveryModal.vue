@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { projectApi, ApiError } from '../../services/api';
+import { projectApi, settingsApi, ApiError } from '../../services/api';
 import type { Team, Product, DiscoveredRepo } from '../../services/api';
 import { useToast } from '../../composables/useToast';
+import DirectoryBrowser from '../base/DirectoryBrowser.vue';
 
 const props = defineProps<{ teams: Team[]; products: Product[] }>();
 const emit = defineEmits<{ close: []; imported: [] }>();
@@ -12,6 +13,7 @@ const { t } = useI18n();
 const showToast = useToast();
 
 const root = ref('');
+const showBrowser = ref(false);
 const nested = ref(false);
 const maxDepth = ref(3);
 const repos = ref<DiscoveredRepo[]>([]);
@@ -31,6 +33,17 @@ const importLabel = computed(() =>
     ? t('projectsDiscovery.import', { count: selectedRepos.value.length })
     : t('projectsDiscovery.importNoSetup', { count: selectedRepos.value.length }),
 );
+
+onMounted(async () => {
+  // Default the scan folder to the configured workspace root so the picker
+  // opens there and the common case (scan my workspace) needs zero typing.
+  try {
+    const { value } = await settingsApi.get('workspace_root');
+    if (value && !root.value) root.value = value;
+  } catch {
+    // workspace_root not configured yet — leave the field empty.
+  }
+});
 
 async function scan() {
   if (!root.value.trim()) {
@@ -120,6 +133,14 @@ async function runImport() {
                 :placeholder="t('projectsDiscovery.folderPlaceholder')"
                 @keydown.enter="scan"
               />
+              <button
+                class="btn btn-secondary"
+                type="button"
+                data-testid="discover-browse"
+                @click="showBrowser = true"
+              >
+                {{ t('common.browse') }}
+              </button>
               <button class="btn btn-primary" data-testid="discover-scan" :disabled="scanning" @click="scan">
                 {{ scanning ? t('projectsDiscovery.scanning') : t('projectsDiscovery.scan') }}
               </button>
@@ -194,6 +215,7 @@ async function runImport() {
             {{ importing ? t('projectsDiscovery.importing') : importLabel }}
           </button>
         </div>
+        <DirectoryBrowser v-model="root" :visible="showBrowser" @close="showBrowser = false" />
       </div>
     </div>
   </Teleport>

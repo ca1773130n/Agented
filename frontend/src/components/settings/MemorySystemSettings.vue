@@ -98,9 +98,13 @@ async function refreshTesserae(project: TesseraeProjectState) {
   try {
     const res = await memorySystemApi.refreshTesserae(project.project_id);
     if (res.skipped_reason) {
+      // Benign "nothing to do" skips (returned with HTTP 201) are NOT errors —
+      // they're normal states for a fresh/empty project. Only genuine failures
+      // (import_failed:<rc>, cli_missing, timeout) warrant an error toast.
+      const benignSkips = ['tesserae_disabled', 'no_sessions', 'tesserae_not_initialized'];
       showToast(
         t('settings.memory.toastRefreshSkipped', { reason: res.skipped_reason }),
-        res.skipped_reason === 'tesserae_disabled' ? 'info' : 'error',
+        benignSkips.includes(res.skipped_reason) ? 'info' : 'error',
       );
     } else {
       showToast(
