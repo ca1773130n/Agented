@@ -70,6 +70,10 @@ GENOME_SNAPSHOT_ID_LENGTH = 8
 EVOLVE_RUN_ID_PREFIX = "evol-"
 EVOLVE_RUN_ID_LENGTH = 8
 
+# GRD 0.4.x life-harness rounds (gd harness round)
+HARNESS_ROUND_ID_PREFIX = "hround-"
+HARNESS_ROUND_ID_LENGTH = 8
+
 ROTATION_EVENT_ID_PREFIX = "rot-"
 ROTATION_EVENT_ID_LENGTH = 8
 
@@ -472,6 +476,21 @@ def _get_unique_evolve_run_id(conn) -> str:
         )
         if cursor.fetchone() is None:
             return eid
+
+
+def generate_harness_round_id() -> str:
+    """Generate a unique harness-round mirror ID like 'hround-abc12345'."""
+    return generate_id(HARNESS_ROUND_ID_PREFIX, HARNESS_ROUND_ID_LENGTH)
+
+
+def _get_unique_harness_round_id(conn) -> str:
+    while True:
+        hid = generate_harness_round_id()
+        cursor = conn.execute(
+            "SELECT id FROM grd_harness_rounds WHERE id = ?", (hid,)
+        )
+        if cursor.fetchone() is None:
+            return hid
 
 
 def generate_rotation_event_id() -> str:

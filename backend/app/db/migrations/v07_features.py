@@ -1284,6 +1284,44 @@ def _migrate_164_skill_sleep_current_body(conn):
         conn.execute("ALTER TABLE skill_sleep_runs ADD COLUMN current_body TEXT")
 
 
+def _migrate_165_grd_harness_rounds(conn) -> None:
+    """GRD 0.4.x life-harness: mirror ``gd harness round`` records.
+
+    GRD's life-harness (``gd harness round``) gathers Tesserae Session
+    findings, proposes ONE eval-gated patch to GRD's own primitives, and
+    records the outcome under ``.planning/harness/rounds/<round_id>/``. We
+    mirror each round (one row per ``(project_id, round_id)``) so operators
+    can list rounds + their patch/eval/confidence across reloads and point a
+    "revert" button at applied rounds — the same shape as the (now-deprecated)
+    ``grd_evolve_runs`` mirror.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS grd_harness_rounds (
+            id              TEXT PRIMARY KEY,
+            project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            round_id        TEXT NOT NULL,
+            status          TEXT NOT NULL DEFAULT 'running',
+            detail          TEXT,
+            evidence_count  INTEGER,
+            patch_hash      TEXT,
+            confidence      REAL,
+            summary         TEXT,
+            applied_sha     TEXT,
+            eval_json       TEXT,
+            patch_json      TEXT,
+            created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (project_id, round_id)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_grd_harness_rounds_project "
+        "ON grd_harness_rounds(project_id, created_at DESC)"
+    )
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -1411,4 +1449,5 @@ V07_MIGRATIONS: list = [
     (163, "skill_sleep_outcome", _migrate_163_skill_sleep_outcome),
     # SkillOpt follow-up: store current body for the review-drawer diff.
     (164, "skill_sleep_current_body", _migrate_164_skill_sleep_current_body),
+    (165, "grd_harness_rounds", _migrate_165_grd_harness_rounds),
 ]
