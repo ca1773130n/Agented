@@ -8,8 +8,6 @@ import json
 import logging
 from typing import Dict, List, Optional
 
-from ..utils.llm_json import extract_json_object
-
 logger = logging.getLogger(__name__)
 
 
