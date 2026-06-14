@@ -8,6 +8,8 @@ import json
 import logging
 from typing import Dict, List, Optional
 
+from ..utils.llm_json import extract_json_object
+
 logger = logging.getLogger(__name__)
 
 
@@ -270,12 +272,25 @@ class SketchRoutingService:
 
             response = litellm.completion(**kwargs)
 
-            content = response.choices[0].message.content.strip()
-            result = json.loads(content)
+            raw = (response.choices[0].message.content or "").strip()
+            content = cls._extract_json(raw)
+
+            # An empty or non-JSON LLM reply is an expected outcome (the proxy
+            # may return nothing, or prose): fall back to keyword classification
+            # silently rather than capturing a runtime_error on every call.
+            if not content:
+                logger.debug("LLM classification returned no JSON body; falling back")
+                return None
+
+            try:
+                result = json.loads(content)
+            except json.JSONDecodeError:
+                logger.debug("LLM classification returned non-JSON content; falling back")
+                return None
 
             # Validate required keys
             required = {"phase", "domains", "complexity", "confidence"}
-            if not required.issubset(result.keys()):
+            if not isinstance(result, dict) or not required.issubset(result.keys()):
                 logger.warning("LLM classification missing required keys: %s", result)
                 return None
 
@@ -293,6 +308,29 @@ class SketchRoutingService:
                 context={"service": "sketch_routing", "model": model},
             )
             return None
+
+    @staticmethod
+    def _extract_json(raw: str) -> str:
+        """Best-effort extraction of a JSON object from an LLM reply.
+
+        Strips Markdown code fences (``` or ```json) and trims anything
+        outside the outermost ``{...}`` so common LLM wrapping doesn't crash
+        ``json.loads``. Returns "" when no object-like span is present.
+        """
+        if not raw:
+            return ""
+        text = raw.strip()
+        if text.startswith("```"):
+            # Drop the opening fence line (``` or ```json) and any closing fence.
+            text = text.split("\n", 1)[1] if "\n" in text else ""
+            if text.rstrip().endswith("```"):
+                text = text.rstrip()[: -len("```")]
+            text = text.strip()
+        start = text.find("{")
+        end = text.rfind("}")
+        if start == -1 or end == -1 or end < start:
+            return ""
+        return text[start : end + 1]
 
     @classmethod
     def route(cls, classification: dict, project_id: str = None) -> dict:
