@@ -73,7 +73,6 @@ describe('setupStatusToCompleted', () => {
     expect(completed['backends.codex']).toBe(true)
     expect(completed['backends.gemini']).toBe(false)
     expect(completed['backends.opencode']).toBe(false)
-    expect(completed.verification).toBe(true)
     expect(completed.create_product).toBe(true)
   })
 
@@ -153,7 +152,6 @@ describe('autoSkipCompletedSteps — real machine walker', () => {
       'backends.gemini': true,
       'backends.opencode': true,
       monitoring: true,
-      verification: true,
       create_product: true,
       create_project: true,
       create_team: true,

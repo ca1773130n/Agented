@@ -169,21 +169,10 @@ export const tourMachine = setup({
     monitoring: {
       on: {
         NEXT: {
-          target: 'verification',
-          actions: ['markStepCompleted'],
-        },
-        BACK: { target: 'backends' },
-        SKIP: { target: 'verification' },
-      },
-    },
-
-    verification: {
-      on: {
-        NEXT: {
           target: 'create_product',
           actions: ['markStepCompleted'],
         },
-        BACK: { target: 'monitoring' },
+        BACK: { target: 'backends' },
         SKIP: { target: 'create_product' },
       },
     },
@@ -194,7 +183,7 @@ export const tourMachine = setup({
           target: 'create_project',
           actions: ['markStepCompleted'],
         },
-        BACK: { target: 'verification' },
+        BACK: { target: 'monitoring' },
         SKIP: { target: 'create_project' },
       },
     },

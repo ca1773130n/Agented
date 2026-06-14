@@ -589,7 +589,7 @@
     },
     "harness": {
       "title": "Harness Integration Plugin",
-      "description": "Select which marketplace plugin to use for harness integration. This plugin will be used when loading skills from or deploying to the marketplace.",
+      "description": "The harness integration plugin is configured automatically during setup. It is used when loading skills from or deploying to the marketplace.",
       "loadingSettings": "Loading settings...",
       "marketplaceLabel": "Marketplace",
       "selectMarketplace": "Select a marketplace...",
@@ -601,6 +601,7 @@
       "saving": "Saving...",
       "saveSettings": "Save Settings",
       "currentConfig": "Current Configuration:",
+      "autoConfigured": "Configured automatically during setup — no action needed.",
       "unknown": "Unknown",
       "syncTitle": "Plugin Sync",
       "loadingExported": "Loading exported plugins...",

@@ -63,7 +63,6 @@ describe('TourCompletionScreen', () => {
       'backends.gemini',
       'backends.opencode',
       'monitoring',
-      'verification',
       'create_product',
       'create_project',
       'create_team',

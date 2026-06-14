@@ -589,7 +589,7 @@
     },
     "harness": {
       "title": "Harness 集成插件",
-      "description": "选择用于 Harness 集成的市场插件。从市场加载技能或部署到市场时将使用此插件。",
+      "description": "Harness 集成插件在设置过程中自动配置。用于从市场加载技能或部署到市场。",
       "loadingSettings": "正在加载设置...",
       "marketplaceLabel": "市场",
       "selectMarketplace": "选择市场...",
@@ -601,6 +601,7 @@
       "saving": "保存中...",
       "saveSettings": "保存设置",
       "currentConfig": "当前配置：",
+      "autoConfigured": "在设置过程中自动配置 — 无需操作。",
       "unknown": "未知",
       "syncTitle": "插件同步",
       "loadingExported": "正在加载已导出的插件...",

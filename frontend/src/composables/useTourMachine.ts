@@ -107,7 +107,6 @@ export function setupStatusToCompleted(
     'backends.gemini': status.has_gemini_account,
     'backends.opencode': status.has_opencode_account,
     monitoring: false, // read-only step, never auto-skipped
-    verification: status.has_harness_synced,
     create_product: status.has_first_product,
     create_project: false,
     create_team: false,
