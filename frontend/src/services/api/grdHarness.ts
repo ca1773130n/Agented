@@ -42,6 +42,24 @@ export interface EvolveRun {
   [key: string]: unknown;
 }
 
+/** A mirrored GRD 0.4.x life-harness round (`gd harness round`). */
+export interface HarnessRound {
+  id?: string;
+  project_id?: string;
+  round_id: string;
+  status: string;
+  detail?: string | null;
+  evidence_count?: number | null;
+  patch_hash?: string | null;
+  confidence?: number | null;
+  summary?: string | null;
+  applied_sha?: string | null;
+  eval?: Record<string, unknown> | null;
+  patch?: Record<string, unknown> | null;
+  created_at?: string;
+  [key: string]: unknown;
+}
+
 // ─── Group B shapes ───
 export interface AutonomyConfigResponse {
   project_id: string;
@@ -160,6 +178,43 @@ export const grdHarnessApi = {
     apiFetch<Record<string, unknown>>(
       `/api/projects/${projectId}/grd/evolve/runs/${runId}/stop`,
       { method: 'POST' },
+    ),
+
+  // ─── GRD 0.4.x life-harness rounds (supersede gd evolve) ───
+
+  /** Run a `gd harness round` (background; poll listHarnessRounds for the result). */
+  runHarnessRound: (
+    projectId: string,
+    opts?: { auto?: boolean; dry_run?: boolean; full_eval?: boolean },
+  ) =>
+    apiFetch<{ status: string }>(
+      `/api/projects/${projectId}/grd/harness/round`,
+      { method: 'POST', body: JSON.stringify(opts ?? {}) },
+    ),
+
+  /** List mirrored harness rounds (newest first). */
+  listHarnessRounds: (projectId: string, limit = 50) =>
+    apiFetch<{ rounds: HarnessRound[] }>(
+      `/api/projects/${projectId}/grd/harness/rounds?limit=${limit}`,
+    ),
+
+  /** One harness round (incl. patch/eval). */
+  getHarnessRound: (projectId: string, roundId: string) =>
+    apiFetch<HarnessRound>(
+      `/api/projects/${projectId}/grd/harness/rounds/${roundId}`,
+    ),
+
+  /** Revert an applied harness round. */
+  revertHarnessRound: (projectId: string, roundId: string) =>
+    apiFetch<{ success: boolean; output?: string; error?: string }>(
+      `/api/projects/${projectId}/grd/harness/rounds/${roundId}/revert`,
+      { method: 'POST' },
+    ),
+
+  /** Live `gd harness status`. */
+  harnessStatus: (projectId: string) =>
+    apiFetch<{ success: boolean; rounds: unknown[]; error?: string | null }>(
+      `/api/projects/${projectId}/grd/harness/status`,
     ),
 
   // ═══════════════════════════ Group B — /admin/* (admin-gated) ═══════════════════════════

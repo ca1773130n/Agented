@@ -211,3 +211,43 @@ describe('grdHarnessApi — Group B (/admin/* admin-gated)', () => {
     }
   });
 });
+
+describe('grdHarnessApi — life-harness rounds', () => {
+  it('runHarnessRound POSTs /grd/harness/round with opts', async () => {
+    await grdHarnessApi.runHarnessRound('p1', { auto: true });
+    expect(mock()).toHaveBeenCalledWith('/api/projects/p1/grd/harness/round', {
+      method: 'POST',
+      body: JSON.stringify({ auto: true }),
+    });
+  });
+
+  it('runHarnessRound defaults to empty body', async () => {
+    await grdHarnessApi.runHarnessRound('p1');
+    expect(mock()).toHaveBeenCalledWith('/api/projects/p1/grd/harness/round', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  });
+
+  it('listHarnessRounds GETs /grd/harness/rounds with limit', async () => {
+    await grdHarnessApi.listHarnessRounds('p1', 10);
+    expect(mock()).toHaveBeenCalledWith('/api/projects/p1/grd/harness/rounds?limit=10');
+  });
+
+  it('getHarnessRound GETs the round', async () => {
+    await grdHarnessApi.getHarnessRound('p1', '20260614-120000');
+    expect(mock()).toHaveBeenCalledWith('/api/projects/p1/grd/harness/rounds/20260614-120000');
+  });
+
+  it('revertHarnessRound POSTs revert', async () => {
+    await grdHarnessApi.revertHarnessRound('p1', 'r1');
+    expect(mock()).toHaveBeenCalledWith('/api/projects/p1/grd/harness/rounds/r1/revert', {
+      method: 'POST',
+    });
+  });
+
+  it('harnessStatus GETs status', async () => {
+    await grdHarnessApi.harnessStatus('p1');
+    expect(mock()).toHaveBeenCalledWith('/api/projects/p1/grd/harness/status');
+  });
+});
