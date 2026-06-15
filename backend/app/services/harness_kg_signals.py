@@ -19,7 +19,12 @@ from datetime import datetime, timezone
 
 from app.db.harness_kg_signals import first_seen_at_for, record_signal
 from app.models.harness_evolution import KGSignalItem
-from app.services.tesserae_integration import ask_tesserae, get_tesserae_root
+from app.services.tesserae_integration import (
+    ask_tesserae,
+    context_tesserae,
+    get_distill_enabled,
+    get_tesserae_root,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -117,12 +122,20 @@ def gather_kg_signals(
         if root is None:
             return []
         now = now or _now()
+        # When distillation is on, retrieve via multi-pool `context` so the
+        # distilled Runbook/Gotcha/Event pools enter the signal corpus;
+        # otherwise keep the plain `ask` path.
+        distill = get_distill_enabled(project_id)
         results: list[KGSignalItem] = []
         for q in _DISCOVERY_QUESTIONS:
             try:
-                ans = ask_tesserae(project_id, q, top_k=5)
+                ans = (
+                    context_tesserae(project_id, q, multi_pool=True)
+                    if distill
+                    else ask_tesserae(project_id, q, top_k=5)
+                )
             except Exception:
-                logger.warning("ask_tesserae failed for a discovery question", exc_info=True)
+                logger.warning("tesserae query failed for a discovery question", exc_info=True)
                 continue
             if not ans:
                 continue

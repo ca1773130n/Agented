@@ -123,6 +123,30 @@ async function refreshTesserae(project: TesseraeProjectState) {
   }
 }
 
+async function toggleDistill(project: TesseraeProjectState) {
+  busyProjectId.value = project.project_id;
+  try {
+    const res = await memorySystemApi.setTesseraeDistill(
+      project.project_id,
+      !project.distill_enabled,
+    );
+    const nowOn = !!res.project?.distill_enabled;
+    showToast(
+      nowOn
+        ? t('settings.memory.toastDistillEnabled', { name: project.project_name })
+        : t('settings.memory.toastDistillDisabled', { name: project.project_name }),
+      'success',
+    );
+    const reload = await memorySystemApi.listTesseraeProjects();
+    tesseraeProjects.value = reload.projects || [];
+  } catch (err) {
+    const msg = err instanceof ApiError ? err.message : t('settings.memory.toastDistillFailed');
+    showToast(msg, 'error');
+  } finally {
+    busyProjectId.value = null;
+  }
+}
+
 function fmtTimestamp(iso: string | null): string {
   if (!iso) return '—';
   try {
@@ -378,6 +402,16 @@ onMounted(loadAll);
                   >
                     {{ t('settings.memory.refresh') }}
                   </button>
+                  <label class="distill-toggle" :title="t('settings.memory.distillHelp')">
+                    <input
+                      type="checkbox"
+                      :checked="!!p.distill_enabled"
+                      :disabled="!p.enabled || busyProjectId === p.project_id"
+                      :data-testid="`tesserae-distill-${p.project_id}`"
+                      @change="toggleDistill(p)"
+                    />
+                    {{ t('settings.memory.distillLabel') }}
+                  </label>
                 </td>
               </tr>
               <tr
@@ -574,6 +608,8 @@ onMounted(loadAll);
 .btn-enable { border-color: var(--accent-green, #10b981); color: var(--accent-green, #10b981); }
 .btn-disable { border-color: var(--accent-red, #ef4444); color: var(--accent-red, #ef4444); }
 .btn-refresh { border-color: var(--accent-cyan, #06b6d4); color: var(--accent-cyan, #06b6d4); }
+.distill-toggle { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; font-size: 0.8rem; color: var(--text-tertiary, #888); cursor: pointer; }
+.distill-toggle input { cursor: pointer; }
 
 .disclosure {
   background: none; border: none;

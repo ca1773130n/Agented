@@ -1322,6 +1322,22 @@ def _migrate_165_grd_harness_rounds(conn) -> None:
     )
 
 
+def _migrate_166_projects_tesserae_distill(conn) -> None:
+    """Tesserae 0.9.0 distilled memory: per-project opt-in to AgentRunbook
+    distillation (``tesserae compile --distill`` → Event/Runbook/Gotcha layers).
+
+    Defaults 0 (off). When on, Agented's compile passes ``--distill`` and the
+    harness KG-signal path retrieves via ``tesserae context --multi-pool``
+    instead of ``ask`` — so the distilled pools enrich the life-harness rounds.
+    """
+    cursor = conn.execute("PRAGMA table_info(projects)")
+    cols = {row[1] for row in cursor.fetchall()}
+    if "tesserae_distill_enabled" not in cols:
+        conn.execute(
+            "ALTER TABLE projects ADD COLUMN tesserae_distill_enabled INTEGER DEFAULT 0"
+        )
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -1450,4 +1466,6 @@ V07_MIGRATIONS: list = [
     # SkillOpt follow-up: store current body for the review-drawer diff.
     (164, "skill_sleep_current_body", _migrate_164_skill_sleep_current_body),
     (165, "grd_harness_rounds", _migrate_165_grd_harness_rounds),
+    # v0.6: Tesserae 0.9.0 per-project distilled-memory (Runbook/Gotcha) toggle.
+    (166, "projects_tesserae_distill", _migrate_166_projects_tesserae_distill),
 ]
