@@ -9235,7 +9235,20 @@
           "snapshot": "创建快照",
           "latest": "最新快照",
           "history": "快照历史",
-          "empty": "无基因组数据"
+          "empty": "无基因组数据",
+          "patterns": {
+            "title": "模式 → 建议",
+            "mine": "挖掘（预览）",
+            "mining": "挖掘中…",
+            "save": "挖掘并保存",
+            "meta": "{reflections} 条反思 · 基线 {baseline}",
+            "promote": "提升",
+            "promoted": "已将 {slug} 提升到 GENOME.md",
+            "saveFirst": "请先用\"挖掘并保存\"生成 GENOME-SUGGESTIONS.md",
+            "vsBaseline": "相对基线 {baseline}",
+            "none": "尚无显著模式。",
+            "failed": "模式挖掘失败"
+          }
         },
         "verify": {
           "tab": "验证",

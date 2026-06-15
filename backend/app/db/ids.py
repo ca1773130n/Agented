@@ -78,6 +78,10 @@ HARNESS_ROUND_ID_LENGTH = 8
 PLAN_SELECTION_ID_PREFIX = "psel-"
 PLAN_SELECTION_ID_LENGTH = 8
 
+# GRD 0.4.1 pattern mining (gd patterns → GENOME-SUGGESTIONS)
+GENOME_SUGGESTIONS_ID_PREFIX = "gsug-"
+GENOME_SUGGESTIONS_ID_LENGTH = 8
+
 ROTATION_EVENT_ID_PREFIX = "rot-"
 ROTATION_EVENT_ID_LENGTH = 8
 
@@ -510,6 +514,21 @@ def _get_unique_plan_selection_id(conn) -> str:
         )
         if cursor.fetchone() is None:
             return pid
+
+
+def generate_genome_suggestions_id() -> str:
+    """Generate a unique genome-suggestions mirror ID like 'gsug-abc12345'."""
+    return generate_id(GENOME_SUGGESTIONS_ID_PREFIX, GENOME_SUGGESTIONS_ID_LENGTH)
+
+
+def _get_unique_genome_suggestions_id(conn) -> str:
+    while True:
+        gid = generate_genome_suggestions_id()
+        cursor = conn.execute(
+            "SELECT id FROM grd_genome_suggestions WHERE id = ?", (gid,)
+        )
+        if cursor.fetchone() is None:
+            return gid
 
 
 def generate_rotation_event_id() -> str:

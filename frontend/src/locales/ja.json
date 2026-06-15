@@ -9235,7 +9235,20 @@
           "snapshot": "スナップショットを取得",
           "latest": "最新スナップショット",
           "history": "スナップショット履歴",
-          "empty": "ゲノムデータなし"
+          "empty": "ゲノムデータなし",
+          "patterns": {
+            "title": "パターン → 提案",
+            "mine": "採掘（プレビュー）",
+            "mining": "採掘中…",
+            "save": "採掘して保存",
+            "meta": "振り返り {reflections}件 · ベースライン {baseline}",
+            "promote": "昇格",
+            "promoted": "{slug} を GENOME.md に昇格しました",
+            "saveFirst": "まず「採掘して保存」で GENOME-SUGGESTIONS.md を作成してください",
+            "vsBaseline": "ベースライン {baseline} 比",
+            "none": "有意なパターンはまだありません。",
+            "failed": "パターン採掘に失敗しました"
+          }
         },
         "verify": {
           "tab": "検証",

@@ -29,6 +29,10 @@ const calls = vi.hoisted(() => ({
   listEvolveRuns: vi.fn().mockResolvedValue({ runs: [{ id: 'run-1', status: 'running' }] }),
   getEvolveRun: vi.fn().mockResolvedValue({ id: 'run-1', status: 'running' }),
   stopEvolveRun: vi.fn().mockResolvedValue({}),
+  // GRD 0.4.1 pattern mining (GenomePanel calls getGenomeSuggestions on mount)
+  minePatterns: vi.fn().mockResolvedValue({ success: true, data: { suggestions: [] }, error: null, mirrored: null }),
+  getGenomeSuggestions: vi.fn().mockRejectedValue(new Error('404')),
+  promoteSuggestion: vi.fn().mockResolvedValue({ success: true, data: {}, error: null }),
 }));
 
 vi.mock('../../../../services/api', async (orig) => {

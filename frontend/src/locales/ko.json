@@ -9235,7 +9235,20 @@
           "snapshot": "스냅샷 생성",
           "latest": "최신 스냅샷",
           "history": "스냅샷 기록",
-          "empty": "게놈 데이터 없음"
+          "empty": "게놈 데이터 없음",
+          "patterns": {
+            "title": "패턴 → 제안",
+            "mine": "채굴 (미리보기)",
+            "mining": "채굴 중…",
+            "save": "채굴 및 저장",
+            "meta": "회고 {reflections}개 · 베이스라인 {baseline}",
+            "promote": "승격",
+            "promoted": "{slug}을(를) GENOME.md로 승격했습니다",
+            "saveFirst": "먼저 \"채굴 및 저장\"으로 GENOME-SUGGESTIONS.md를 생성하세요",
+            "vsBaseline": "베이스라인 {baseline} 대비",
+            "none": "아직 유의미한 패턴이 없습니다.",
+            "failed": "패턴 채굴에 실패했습니다"
+          }
         },
         "verify": {
           "tab": "검증",

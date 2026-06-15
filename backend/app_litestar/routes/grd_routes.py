@@ -281,6 +281,60 @@ def grd_genome_snapshot(project_id: str) -> dict[str, Any]:
     return {"output": result.get("output")}
 
 
+@post("/{project_id:str}/grd/genome/patterns", sync_to_thread=False)
+def grd_mine_patterns(project_id: str, data: dict | None) -> dict[str, Any]:
+    """GRD 0.4.1 ``gd patterns`` — deterministic statistical pattern miner over
+    REFLECTION.md history. ``apply`` writes ``.planning/GENOME-SUGGESTIONS.md``.
+    Body: ``{apply?, min_occurrences?, effect_size?, fdr_q?}``. The latest run
+    is mirrored into ``grd_genome_suggestions``."""
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    body = data or {}
+    from app.services.grd_genome_patterns_runner import mine_patterns
+
+    result = mine_patterns(
+        project_id,
+        cwd,
+        apply=bool(body.get("apply")),
+        min_occurrences=body.get("min_occurrences"),
+        effect_size=body.get("effect_size"),
+        fdr_q=body.get("fdr_q"),
+    )
+    if not result["success"]:
+        raise ClientException(detail=result.get("error") or "gd patterns failed")
+    return result
+
+
+@get("/{project_id:str}/grd/genome/suggestions", sync_to_thread=False)
+def grd_get_genome_suggestions(project_id: str) -> dict[str, Any]:
+    """The latest mirrored ``gd patterns`` run for this project."""
+    _ensure_project(project_id)
+    from app.db import get_genome_suggestions
+
+    row = get_genome_suggestions(project_id)
+    if not row:
+        raise NotFoundException(detail="No pattern-mining run recorded for this project")
+    return row
+
+
+@post("/{project_id:str}/grd/genome/promote-suggestion", sync_to_thread=False)
+def grd_promote_suggestion(project_id: str, data: dict) -> dict[str, Any]:
+    """Promote one mined suggestion into ``GENOME.md`` via
+    ``gd genome promote-suggestion <slug>``. Body: ``{slug}`` (e.g.
+    ``"<token>-rate"``)."""
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    slug = (data or {}).get("slug")
+    if not slug:
+        raise ClientException(detail="slug is required")
+    from app.services.grd_genome_patterns_runner import promote_suggestion
+
+    result = promote_suggestion(cwd, str(slug))
+    if not result["success"]:
+        raise ClientException(detail=result.get("error") or "promote-suggestion failed")
+    return result
+
+
 @post("/{project_id:str}/grd/verify/mechanical/{phase:str}", sync_to_thread=False)
 def grd_verify_mechanical(project_id: str, phase: str) -> dict[str, Any]:
     """v0.7.84 — bundle the four PLAN.md mechanical checks via
@@ -1949,6 +2003,10 @@ grd_router = Router(
         grd_promote_dead_ends,
         grd_genome,
         grd_genome_snapshot,
+        # GRD 0.4.1 pattern mining → GENOME-SUGGESTIONS → promote
+        grd_mine_patterns,
+        grd_get_genome_suggestions,
+        grd_promote_suggestion,
         grd_verify_mechanical,
         # v0.7.85 — Ouroboros DB-mirror read endpoints
         list_phase_reflections,

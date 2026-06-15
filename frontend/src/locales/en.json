@@ -9235,7 +9235,20 @@
           "snapshot": "Take snapshot",
           "latest": "Latest snapshot",
           "history": "Snapshot history",
-          "empty": "No genome data"
+          "empty": "No genome data",
+          "patterns": {
+            "title": "Patterns → suggestions",
+            "mine": "Mine (preview)",
+            "mining": "Mining…",
+            "save": "Mine & save",
+            "meta": "{reflections} reflections · baseline {baseline}",
+            "promote": "Promote",
+            "promoted": "Promoted {slug} into GENOME.md",
+            "saveFirst": "Run \"Mine & save\" first to write GENOME-SUGGESTIONS.md",
+            "vsBaseline": "vs {baseline} baseline",
+            "none": "No significant patterns yet.",
+            "failed": "Pattern mining failed"
+          }
         },
         "verify": {
           "tab": "Verify",

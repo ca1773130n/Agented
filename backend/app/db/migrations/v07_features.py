@@ -1322,6 +1322,33 @@ def _migrate_165_grd_harness_rounds(conn) -> None:
     )
 
 
+def _migrate_168_grd_genome_suggestions(conn) -> None:
+    """GRD 0.4.1 pattern mining: mirror ``gd patterns`` (→ GENOME-SUGGESTIONS).
+
+    The deterministic miner scans REFLECTION.md history for statistically
+    significant token→outcome patterns and writes ``GENOME-SUGGESTIONS.md``.
+    We mirror the LATEST run per project (full-replace) so operators see the
+    suggestions + stats across reloads and can promote one into GENOME.md.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS grd_genome_suggestions (
+            id                      TEXT PRIMARY KEY,
+            project_id              TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            reflections_scanned     INTEGER,
+            baseline_confirmed_rate REAL,
+            tokens_tested           INTEGER,
+            suggestions_json        TEXT,
+            applied                 INTEGER DEFAULT 0,
+            suggestions_path        TEXT,
+            created_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (project_id)
+        )
+        """
+    )
+
+
 def _migrate_167_grd_plan_selections(conn) -> None:
     """GRD 0.4.5 multi-candidate planning: mirror ``gd select-candidate``.
 
@@ -1502,4 +1529,6 @@ V07_MIGRATIONS: list = [
     (166, "projects_tesserae_distill", _migrate_166_projects_tesserae_distill),
     # v0.6: GRD 0.4.5 multi-candidate plan selection (gd select-candidate) mirror.
     (167, "grd_plan_selections", _migrate_167_grd_plan_selections),
+    # v0.6: GRD 0.4.1 pattern mining (gd patterns → GENOME-SUGGESTIONS) mirror.
+    (168, "grd_genome_suggestions", _migrate_168_grd_genome_suggestions),
 ]

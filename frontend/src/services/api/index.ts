@@ -81,6 +81,11 @@ export type {
   AutonomyConfigResponse,
   HarnessRound,
   SharedForgeBinding,
+  PatternSuggestion,
+  PatternsMineOptions,
+  GenomeSuggestionsResult,
+  MinePatternsResponse,
+  MirroredGenomeSuggestions,
 } from './grdHarness';
 export { grdPlanningApi } from './grdPlanning';
 export type {

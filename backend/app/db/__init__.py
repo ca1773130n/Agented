@@ -256,6 +256,11 @@ from .grd_plan_selections import (  # noqa: F401
     list_plan_selections,
     upsert_plan_selection,
 )
+from .grd_genome_suggestions import (  # noqa: F401
+    get_genome_suggestions,
+    list_genome_suggestions,
+    upsert_genome_suggestions,
+)
 
 # Health alerts
 from .health_alerts import (  # noqa: F401
