@@ -5937,6 +5937,20 @@
     "gdMissing": "GRD CLI not detected — install getresearchdone.",
     "evolveDeprecated": "gd evolve is deprecated — superseded by life-harness rounds."
   },
+  "grdPlanSelection": {
+    "title": "Plan candidates",
+    "help": "Score this phase's PLAN-N.md candidates, then promote the winner to PLAN.md (deterministic — no LLM).",
+    "score": "Score (dry-run)",
+    "scoring": "Scoring…",
+    "promote": "Select & promote",
+    "promotedTo": "Promoted winner → {path}",
+    "failed": "Plan selection failed",
+    "winner": "winner",
+    "deadEnd": "dead-end: {slug}",
+    "mergedInto": "merged → {rep}",
+    "scoreLabel": "score {score}",
+    "noCandidates": "No PLAN-N.md candidates in this phase yet — run a planning session first."
+  },
   "projects": {
     "title": "Projects",
     "subtitle": "Manage your projects and their team assignments",

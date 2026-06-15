@@ -74,6 +74,10 @@ EVOLVE_RUN_ID_LENGTH = 8
 HARNESS_ROUND_ID_PREFIX = "hround-"
 HARNESS_ROUND_ID_LENGTH = 8
 
+# GRD 0.4.5 multi-candidate plan selection (gd select-candidate)
+PLAN_SELECTION_ID_PREFIX = "psel-"
+PLAN_SELECTION_ID_LENGTH = 8
+
 ROTATION_EVENT_ID_PREFIX = "rot-"
 ROTATION_EVENT_ID_LENGTH = 8
 
@@ -491,6 +495,21 @@ def _get_unique_harness_round_id(conn) -> str:
         )
         if cursor.fetchone() is None:
             return hid
+
+
+def generate_plan_selection_id() -> str:
+    """Generate a unique plan-selection mirror ID like 'psel-abc12345'."""
+    return generate_id(PLAN_SELECTION_ID_PREFIX, PLAN_SELECTION_ID_LENGTH)
+
+
+def _get_unique_plan_selection_id(conn) -> str:
+    while True:
+        pid = generate_plan_selection_id()
+        cursor = conn.execute(
+            "SELECT id FROM grd_plan_selections WHERE id = ?", (pid,)
+        )
+        if cursor.fetchone() is None:
+            return pid
 
 
 def generate_rotation_event_id() -> str:

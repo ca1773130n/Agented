@@ -82,6 +82,14 @@ export type {
   HarnessRound,
   SharedForgeBinding,
 } from './grdHarness';
+export { grdPlanningApi } from './grdPlanning';
+export type {
+  PlanCandidate,
+  PlanSelectionResult,
+  SelectCandidateResponse,
+  MirroredPlanSelection,
+  SelectCandidateOptions,
+} from './grdPlanning';
 export { mcpServerApi } from './mcp-servers';
 export { replayApi } from './replay';
 export { collaborativeApi } from './collaborative';

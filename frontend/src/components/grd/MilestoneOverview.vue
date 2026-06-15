@@ -2,6 +2,7 @@
 import { computed, ref, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { GrdMilestone, GrdPhase, GrdPlan } from '../../services/api';
+import PlanSelectionPanel from './PlanSelectionPanel.vue';
 
 const { t } = useI18n();
 
@@ -9,6 +10,7 @@ const props = defineProps<{
   milestone: GrdMilestone | null;
   phases: GrdPhase[];
   plans: GrdPlan[];
+  projectId: string;
 }>();
 
 const emit = defineEmits<{
@@ -208,6 +210,7 @@ const statusPills = computed(() => [
             @click="emit('phaseCommand', phase.phase_number, 'survey')"
           >{{ t('milestoneOverview.research') }}</button>
         </div>
+        <PlanSelectionPanel :project-id="props.projectId" :phase="phase.phase_number" />
       </div>
     </div>
   </div>

@@ -5937,6 +5937,20 @@
     "gdMissing": "GRD CLI が見つかりません — getresearchdone をインストールしてください。",
     "evolveDeprecated": "gd evolve は非推奨です — ライフハーネス ラウンドに置き換えられました。"
   },
+  "grdPlanSelection": {
+    "title": "プラン候補",
+    "help": "このフェーズの PLAN-N.md 候補を採点し、勝者を PLAN.md に昇格します（決定論的 — LLM なし）。",
+    "score": "採点（ドライラン）",
+    "scoring": "採点中…",
+    "promote": "選択して昇格",
+    "promotedTo": "勝者を昇格 → {path}",
+    "failed": "プラン選択に失敗しました",
+    "winner": "勝者",
+    "deadEnd": "デッドエンド: {slug}",
+    "mergedInto": "統合 → {rep}",
+    "scoreLabel": "スコア {score}",
+    "noCandidates": "このフェーズにはまだ PLAN-N.md 候補がありません — まずプランニングセッションを実行してください。"
+  },
   "projects": {
     "title": "プロジェクト",
     "subtitle": "プロジェクトとチームの割り当てを管理します",

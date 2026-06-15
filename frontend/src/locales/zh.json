@@ -5937,6 +5937,20 @@
     "gdMissing": "未检测到 GRD CLI — 请安装 getresearchdone。",
     "evolveDeprecated": "gd evolve 已弃用 — 由生命周期工具轮次取代。"
   },
+  "grdPlanSelection": {
+    "title": "计划候选",
+    "help": "为该阶段的 PLAN-N.md 候选评分，然后将获胜者提升为 PLAN.md（确定性 — 无 LLM）。",
+    "score": "评分（试运行）",
+    "scoring": "评分中…",
+    "promote": "选择并提升",
+    "promotedTo": "已提升获胜者 → {path}",
+    "failed": "计划选择失败",
+    "winner": "获胜者",
+    "deadEnd": "死胡同：{slug}",
+    "mergedInto": "已合并 → {rep}",
+    "scoreLabel": "得分 {score}",
+    "noCandidates": "此阶段尚无 PLAN-N.md 候选 — 请先运行规划会话。"
+  },
   "projects": {
     "title": "项目",
     "subtitle": "管理您的项目及其团队分配",

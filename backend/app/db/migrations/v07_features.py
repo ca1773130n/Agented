@@ -1322,6 +1322,38 @@ def _migrate_165_grd_harness_rounds(conn) -> None:
     )
 
 
+def _migrate_167_grd_plan_selections(conn) -> None:
+    """GRD 0.4.5 multi-candidate planning: mirror ``gd select-candidate``.
+
+    The deterministic selector scores a phase's ``PLAN-N.md`` candidates,
+    promotes the winner to ``PLAN.md``, and writes ``PLAN-SELECTION.json``. We
+    mirror the latest selection per ``(project_id, phase)`` so operators can
+    see the ranked candidates + winner + axis breakdowns across reloads —
+    same shape as the ``grd_harness_rounds`` mirror.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS grd_plan_selections (
+            id               TEXT PRIMARY KEY,
+            project_id       TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            phase            TEXT NOT NULL,
+            milestone        TEXT,
+            winner_rel       TEXT,
+            promoted_to      TEXT,
+            candidates_json  TEXT,
+            audit_json       TEXT,
+            created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (project_id, phase)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_grd_plan_selections_project "
+        "ON grd_plan_selections(project_id, created_at DESC)"
+    )
+
+
 def _migrate_166_projects_tesserae_distill(conn) -> None:
     """Tesserae 0.9.0 distilled memory: per-project opt-in to AgentRunbook
     distillation (``tesserae compile --distill`` → Event/Runbook/Gotcha layers).
@@ -1468,4 +1500,6 @@ V07_MIGRATIONS: list = [
     (165, "grd_harness_rounds", _migrate_165_grd_harness_rounds),
     # v0.6: Tesserae 0.9.0 per-project distilled-memory (Runbook/Gotcha) toggle.
     (166, "projects_tesserae_distill", _migrate_166_projects_tesserae_distill),
+    # v0.6: GRD 0.4.5 multi-candidate plan selection (gd select-candidate) mirror.
+    (167, "grd_plan_selections", _migrate_167_grd_plan_selections),
 ]

@@ -5937,6 +5937,20 @@
     "gdMissing": "GRD CLI를 찾을 수 없습니다 — getresearchdone를 설치하세요.",
     "evolveDeprecated": "gd evolve는 더 이상 사용되지 않습니다 — 라이프 하니스 라운드로 대체되었습니다."
   },
+  "grdPlanSelection": {
+    "title": "플랜 후보",
+    "help": "이 페이즈의 PLAN-N.md 후보를 채점한 뒤 승자를 PLAN.md로 승격합니다 (결정론적 — LLM 없음).",
+    "score": "채점 (드라이런)",
+    "scoring": "채점 중…",
+    "promote": "선택 및 승격",
+    "promotedTo": "승자 승격 → {path}",
+    "failed": "플랜 선택에 실패했습니다",
+    "winner": "승자",
+    "deadEnd": "데드엔드: {slug}",
+    "mergedInto": "병합됨 → {rep}",
+    "scoreLabel": "점수 {score}",
+    "noCandidates": "이 페이즈에 아직 PLAN-N.md 후보가 없습니다 — 먼저 플래닝 세션을 실행하세요."
+  },
   "projects": {
     "title": "프로젝트",
     "subtitle": "프로젝트와 팀 배정을 관리합니다",

@@ -1717,6 +1717,62 @@ def grd_harness_round_status(project_id: str) -> dict[str, Any]:
     return harness_status(cwd)
 
 
+@post("/{project_id:str}/grd/plan/{phase:str}/select", sync_to_thread=False)
+def grd_select_plan_candidate(project_id: str, phase: str, data: dict | None) -> dict[str, Any]:
+    """Run ``gd select-candidate <phase>`` (deterministic scorer). ``dry_run``
+    previews the ranking without promoting; a real run promotes the winner to
+    ``PLAN.md`` and mirrors the selection. Body:
+    ``{dry_run?, force?, run_verification_commands?}``."""
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    body = data or {}
+    from app.services.grd_plan_selection_runner import select_candidate
+
+    result = select_candidate(
+        project_id,
+        cwd,
+        phase,
+        dry_run=bool(body.get("dry_run")),
+        force=bool(body.get("force")),
+        run_verification_commands=bool(body.get("run_verification_commands")),
+    )
+    if not result["success"]:
+        raise ClientException(detail=result.get("error") or "select-candidate failed")
+    return result
+
+
+@get("/{project_id:str}/grd/plan/{phase:str}/selection", sync_to_thread=False)
+def grd_get_plan_selection(project_id: str, phase: str) -> dict[str, Any]:
+    """The latest mirrored ``gd select-candidate`` result for this phase."""
+    _ensure_project(project_id)
+    from app.db import get_plan_selection
+
+    row = get_plan_selection(project_id, phase)
+    if not row:
+        raise NotFoundException(detail="No plan selection recorded for this phase")
+    return row
+
+
+@post("/{project_id:str}/grd/plan/tournament", sync_to_thread=False)
+def grd_plan_tournament(project_id: str, data: dict) -> dict[str, Any]:
+    """Run ``gd plan-tournament --phase <N> --candidates <paths…>`` — ad-hoc
+    ranked scoring over explicit candidate paths (no promotion). Body:
+    ``{phase, candidates: [paths]}``."""
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    body = data or {}
+    phase = body.get("phase")
+    candidates = body.get("candidates")
+    if not phase or not isinstance(candidates, list) or not candidates:
+        raise ClientException(detail="phase and a non-empty candidates list are required")
+    from app.services.grd_plan_selection_runner import plan_tournament
+
+    result = plan_tournament(cwd, str(phase), [str(c) for c in candidates])
+    if not result["success"]:
+        raise ClientException(detail=result.get("error") or "plan-tournament failed")
+    return result
+
+
 @get("/{project_id:str}/grd/evolve/runs", sync_to_thread=False)
 def list_grd_evolve_runs(
     project_id: str, status: Optional[str] = None, limit: int = 20
@@ -1911,6 +1967,10 @@ grd_router = Router(
         grd_get_harness_round,
         grd_revert_harness_round,
         grd_harness_round_status,
+        # GRD 0.4.5 multi-candidate plan selection (gd select-candidate)
+        grd_select_plan_candidate,
+        grd_get_plan_selection,
+        grd_plan_tournament,
         list_milestones,
         list_phases,
         create_phase,
