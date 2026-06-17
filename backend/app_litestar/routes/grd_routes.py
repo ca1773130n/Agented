@@ -281,6 +281,60 @@ def grd_genome_snapshot(project_id: str) -> dict[str, Any]:
     return {"output": result.get("output")}
 
 
+@post("/{project_id:str}/grd/genome/patterns", sync_to_thread=False)
+def grd_mine_patterns(project_id: str, data: dict | None) -> dict[str, Any]:
+    """GRD 0.4.1 ``gd patterns`` — deterministic statistical pattern miner over
+    REFLECTION.md history. ``apply`` writes ``.planning/GENOME-SUGGESTIONS.md``.
+    Body: ``{apply?, min_occurrences?, effect_size?, fdr_q?}``. The latest run
+    is mirrored into ``grd_genome_suggestions``."""
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    body = data or {}
+    from app.services.grd_genome_patterns_runner import mine_patterns
+
+    result = mine_patterns(
+        project_id,
+        cwd,
+        apply=bool(body.get("apply")),
+        min_occurrences=body.get("min_occurrences"),
+        effect_size=body.get("effect_size"),
+        fdr_q=body.get("fdr_q"),
+    )
+    if not result["success"]:
+        raise ClientException(detail=result.get("error") or "gd patterns failed")
+    return result
+
+
+@get("/{project_id:str}/grd/genome/suggestions", sync_to_thread=False)
+def grd_get_genome_suggestions(project_id: str) -> dict[str, Any]:
+    """The latest mirrored ``gd patterns`` run for this project."""
+    _ensure_project(project_id)
+    from app.db import get_genome_suggestions
+
+    row = get_genome_suggestions(project_id)
+    if not row:
+        raise NotFoundException(detail="No pattern-mining run recorded for this project")
+    return row
+
+
+@post("/{project_id:str}/grd/genome/promote-suggestion", sync_to_thread=False)
+def grd_promote_suggestion(project_id: str, data: dict) -> dict[str, Any]:
+    """Promote one mined suggestion into ``GENOME.md`` via
+    ``gd genome promote-suggestion <slug>``. Body: ``{slug}`` (e.g.
+    ``"<token>-rate"``)."""
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    slug = (data or {}).get("slug")
+    if not slug:
+        raise ClientException(detail="slug is required")
+    from app.services.grd_genome_patterns_runner import promote_suggestion
+
+    result = promote_suggestion(cwd, str(slug))
+    if not result["success"]:
+        raise ClientException(detail=result.get("error") or "promote-suggestion failed")
+    return result
+
+
 @post("/{project_id:str}/grd/verify/mechanical/{phase:str}", sync_to_thread=False)
 def grd_verify_mechanical(project_id: str, phase: str) -> dict[str, Any]:
     """v0.7.84 — bundle the four PLAN.md mechanical checks via
@@ -1635,42 +1689,141 @@ def latest_grd_genome_snapshot(project_id: str) -> dict[str, Any]:
 
 @post("/{project_id:str}/grd/evolve/start", sync_to_thread=False)
 def start_grd_evolve(project_id: str, data: dict | None) -> dict[str, Any]:
-    """v0.7.88 — start a ``gd evolve`` session for the project.
-
-    Spawns the ``grd_evolve`` execution type via the standard
-    handler registry so the session shows up in the project's
-    sessions list and the existing SSE/stop/output endpoints
-    work unchanged. Returns ``session_id`` + ``evolve_run_id``.
+    """DEPRECATED (GRD 0.4.3): ``gd evolve`` no longer runs — it was superseded
+    by the life-harness (``gd harness round``). Starting an evolve session would
+    no-op, so this endpoint returns a pointer to the harness-round surface
+    instead. The read-only ``/grd/evolve/runs`` endpoints stay for history.
     """
+    del data
     _ensure_project(project_id)
-    from app.services.execution_type_handler import get_handler
+    return {
+        "deprecated": True,
+        "reason": "gd evolve was deprecated in GRD 0.4.3 (superseded by the life-harness).",
+        "use": f"/api/projects/{project_id}/grd/harness/round",
+    }
 
-    handler = get_handler("grd_evolve")
-    if not handler:
-        from litestar.exceptions import HTTPException
 
-        raise HTTPException(status_code=500, detail="grd_evolve handler is not registered")
+# ---------------------------------------------------------------------------
+# GRD 0.4.x life-harness rounds (gd harness round) — supersedes gd evolve
+# ---------------------------------------------------------------------------
+
+
+@post("/{project_id:str}/grd/harness/round", sync_to_thread=False)
+def grd_harness_round(project_id: str, data: dict | None) -> dict[str, Any]:
+    """Trigger a ``gd harness round`` in the background. The result is mirrored
+    into ``grd_harness_rounds`` on completion — poll the rounds list."""
+    _ensure_project(project_id)
     cwd = _project_cwd(project_id)
     body = data or {}
-    session_config = {
-        "project_id": project_id,
-        "cwd": cwd,
-        "evolve_config": {
-            "iterations": body.get("iterations"),
-            "pick_pct": body.get("pick_pct"),
-            "dry_run": body.get("dry_run"),
-            "no_worktree": body.get("no_worktree"),
-            "max_turns": body.get("max_turns"),
-            "timeout_minutes": body.get("timeout_minutes"),
-        },
-        "execution_mode": body.get("execution_mode", "autonomous"),
-        "yolo_mode": bool(body.get("yolo_mode")),
-    }
-    result = handler.start(session_config)
-    if "error" in result:
-        from litestar.exceptions import HTTPException
+    from app.services.grd_harness_round_runner import run_round
 
-        raise HTTPException(status_code=503, detail=result["error"])
+    started = run_round(
+        project_id,
+        cwd,
+        auto=bool(body.get("auto")),
+        dry_run=bool(body.get("dry_run")),
+        full_eval=bool(body.get("full_eval")),
+    )
+    if not started:
+        raise ClientException(
+            detail="GRD gd binary not detected — install @jokerized/getresearchdone"
+        )
+    return {"status": "running"}
+
+
+@get("/{project_id:str}/grd/harness/rounds", sync_to_thread=False)
+def grd_list_harness_rounds(project_id: str, limit: int = 50) -> dict[str, Any]:
+    _ensure_project(project_id)
+    from app.db import list_harness_rounds
+
+    return {"rounds": list_harness_rounds(project_id, limit=limit)}
+
+
+@get("/{project_id:str}/grd/harness/rounds/{round_id:str}", sync_to_thread=False)
+def grd_get_harness_round(project_id: str, round_id: str) -> dict[str, Any]:
+    _ensure_project(project_id)
+    from app.db import get_harness_round
+
+    row = get_harness_round(project_id, round_id)
+    if not row:
+        raise NotFoundException(detail="Harness round not found")
+    return row
+
+
+@post("/{project_id:str}/grd/harness/rounds/{round_id:str}/revert", sync_to_thread=False)
+def grd_revert_harness_round(project_id: str, round_id: str) -> dict[str, Any]:
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    from app.services.grd_harness_round_runner import revert_round
+
+    result = revert_round(cwd, round_id)
+    if not result["success"]:
+        raise ClientException(detail=result.get("error") or "revert failed")
+    return result
+
+
+@get("/{project_id:str}/grd/harness/status", sync_to_thread=False)
+def grd_harness_round_status(project_id: str) -> dict[str, Any]:
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    from app.services.grd_harness_round_runner import harness_status
+
+    return harness_status(cwd)
+
+
+@post("/{project_id:str}/grd/plan/{phase:str}/select", sync_to_thread=False)
+def grd_select_plan_candidate(project_id: str, phase: str, data: dict | None) -> dict[str, Any]:
+    """Run ``gd select-candidate <phase>`` (deterministic scorer). ``dry_run``
+    previews the ranking without promoting; a real run promotes the winner to
+    ``PLAN.md`` and mirrors the selection. Body:
+    ``{dry_run?, force?, run_verification_commands?}``."""
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    body = data or {}
+    from app.services.grd_plan_selection_runner import select_candidate
+
+    result = select_candidate(
+        project_id,
+        cwd,
+        phase,
+        dry_run=bool(body.get("dry_run")),
+        force=bool(body.get("force")),
+        run_verification_commands=bool(body.get("run_verification_commands")),
+    )
+    if not result["success"]:
+        raise ClientException(detail=result.get("error") or "select-candidate failed")
+    return result
+
+
+@get("/{project_id:str}/grd/plan/{phase:str}/selection", sync_to_thread=False)
+def grd_get_plan_selection(project_id: str, phase: str) -> dict[str, Any]:
+    """The latest mirrored ``gd select-candidate`` result for this phase."""
+    _ensure_project(project_id)
+    from app.db import get_plan_selection
+
+    row = get_plan_selection(project_id, phase)
+    if not row:
+        raise NotFoundException(detail="No plan selection recorded for this phase")
+    return row
+
+
+@post("/{project_id:str}/grd/plan/tournament", sync_to_thread=False)
+def grd_plan_tournament(project_id: str, data: dict) -> dict[str, Any]:
+    """Run ``gd plan-tournament --phase <N> --candidates <paths…>`` — ad-hoc
+    ranked scoring over explicit candidate paths (no promotion). Body:
+    ``{phase, candidates: [paths]}``."""
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    body = data or {}
+    phase = body.get("phase")
+    candidates = body.get("candidates")
+    if not phase or not isinstance(candidates, list) or not candidates:
+        raise ClientException(detail="phase and a non-empty candidates list are required")
+    from app.services.grd_plan_selection_runner import plan_tournament
+
+    result = plan_tournament(cwd, str(phase), [str(c) for c in candidates])
+    if not result["success"]:
+        raise ClientException(detail=result.get("error") or "plan-tournament failed")
     return result
 
 
@@ -1850,6 +2003,10 @@ grd_router = Router(
         grd_promote_dead_ends,
         grd_genome,
         grd_genome_snapshot,
+        # GRD 0.4.1 pattern mining → GENOME-SUGGESTIONS → promote
+        grd_mine_patterns,
+        grd_get_genome_suggestions,
+        grd_promote_suggestion,
         grd_verify_mechanical,
         # v0.7.85 — Ouroboros DB-mirror read endpoints
         list_phase_reflections,
@@ -1857,11 +2014,21 @@ grd_router = Router(
         list_grd_dead_ends,
         list_grd_genome_snapshots,
         latest_grd_genome_snapshot,
-        # v0.7.88 — gd evolve session runs
+        # v0.7.88 — gd evolve session runs (start deprecated; runs read-only)
         start_grd_evolve,
         list_grd_evolve_runs,
         get_grd_evolve_run,
         stop_grd_evolve_run,
+        # GRD 0.4.x life-harness rounds (supersedes gd evolve)
+        grd_harness_round,
+        grd_list_harness_rounds,
+        grd_get_harness_round,
+        grd_revert_harness_round,
+        grd_harness_round_status,
+        # GRD 0.4.5 multi-candidate plan selection (gd select-candidate)
+        grd_select_plan_candidate,
+        grd_get_plan_selection,
+        grd_plan_tournament,
         list_milestones,
         list_phases,
         create_phase,

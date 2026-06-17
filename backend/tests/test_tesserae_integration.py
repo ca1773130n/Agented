@@ -144,7 +144,7 @@ def test_handler_invokes_cli_with_normalized_batch(isolated_db, tmp_path):
         captured["cmd"] = cmd
         # Verify the tempfile contains valid JSON with at least one
         # normalised entry.
-        json_path = cmd[4]
+        json_path = cmd[3]
         captured["payload"] = json.loads(Path(json_path).read_text())
         return _FakeResult()
 
@@ -153,7 +153,9 @@ def test_handler_invokes_cli_with_normalized_batch(isolated_db, tmp_path):
             "super_agent", "sess-go", "proj-go", "completed", None,
         )
 
-    assert captured["cmd"][1:4] == ["project", "sessions", "import"]
+    # Modern top-level form (0.9.0 retired `tesserae project sessions import`).
+    assert captured["cmd"][1:3] == ["sessions", "import"]
+    assert "project" not in captured["cmd"][:3]
     assert "--project" in captured["cmd"]
     assert str(tmp_path.resolve()) in captured["cmd"]
     # Payload normalized correctly.
@@ -260,7 +262,7 @@ def test_re_enable_tesserae_re_enables_existing_binding(isolated_db, tmp_path):
 
 def test_export_skips_when_tesserae_root_uninitialized(isolated_db, tmp_path):
     """Tesserae column set, but the workspace at that path doesn't have
-    ``.tesserae/`` yet (operator forgot to ``tesserae project init``).
+    ``.tesserae/`` yet (operator forgot to ``tesserae init``).
     Skip the import and log a hint — don't try anyway."""
     _seed_project_with_tesserae("proj-uninit", root=tmp_path)
     # NOTE: no .tesserae/ created
@@ -268,3 +270,55 @@ def test_export_skips_when_tesserae_root_uninitialized(isolated_db, tmp_path):
     result = ti.export_sessions_to_tesserae("proj-uninit")
     assert result["imported"] == 0
     assert result["skipped_reason"] == "tesserae_not_initialized"
+
+
+# ── 0.9.0 migration: init / ingest / build-site use MODERN top-level argv ──
+# (Tesserae 0.9.0 retired the `tesserae project <cmd>` group; these regress to
+#  exit-2 stubs if the `project` prefix ever creeps back in.)
+
+def _capture_argv(monkeypatch):
+    cap: dict = {}
+
+    class _Ok:
+        returncode = 0
+        stdout = "ok"
+        stderr = ""
+
+    monkeypatch.setattr(ti.subprocess, "run", lambda cmd, **kw: cap.update(cmd=cmd) or _Ok())
+    return cap
+
+
+def test_init_uses_modern_top_level_argv(isolated_db, tmp_path, monkeypatch):
+    _seed_project_with_tesserae("proj-init", root=tmp_path)
+    cap = _capture_argv(monkeypatch)
+    res = ti.init_workspace("proj-init")
+    assert res.ok
+    assert cap["cmd"][1] == "init" and "project" not in cap["cmd"][:2]
+    assert "--project" in cap["cmd"] and "--bare" in cap["cmd"] and "--yes" in cap["cmd"]
+
+
+def test_ingest_uses_modern_top_level_argv(isolated_db, tmp_path, monkeypatch):
+    (tmp_path / "README.md").write_text("# r")
+    _seed_project_with_tesserae("proj-ing", root=tmp_path)
+    cap = _capture_argv(monkeypatch)
+    res = ti.ingest_paths("proj-ing", ["README.md"])
+    assert res.ok
+    assert cap["cmd"][1] == "ingest" and "project" not in cap["cmd"][:2]
+    assert "--project" in cap["cmd"]
+    assert str((tmp_path / "README.md")) in cap["cmd"]
+
+
+def test_build_site_maps_to_serve_dry_run(isolated_db, tmp_path, monkeypatch):
+    _seed_project_with_tesserae("proj-bs", root=tmp_path)
+    cap = _capture_argv(monkeypatch)
+    res = ti.build_site("proj-bs")
+    assert res.ok
+    # 0.9.0 has no `build-site`; the site is built by `serve` (auto-build),
+    # and `--dry-run` builds without starting a blocking server.
+    assert cap["cmd"][1] == "serve" and "--dry-run" in cap["cmd"]
+    assert "build-site" not in cap["cmd"] and "project" not in cap["cmd"][:2]
+
+
+def test_run_tesserae_subcommand_helper_is_gone():
+    # The dead helper that hardcoded the broken `project` prefix must stay gone.
+    assert not hasattr(ti, "_run_tesserae_subcommand")

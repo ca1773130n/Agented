@@ -103,10 +103,27 @@ def _extract_finish_reason(event: dict) -> Optional[str]:
     return "complete"
 
 
+def _extract_model(event: dict) -> Optional[str]:
+    """Best-effort model id from a stream-json assistant event
+    (``{"model": …}`` or ``{"message": {"model": …}}``)."""
+    val = event.get("model")
+    if isinstance(val, str) and val:
+        return val
+    msg = event.get("message")
+    if isinstance(msg, dict):
+        m = msg.get("model")
+        if isinstance(m, str) and m:
+            return m
+    return None
+
+
 def bridge_psm_to_chat(
     session_id: str,
     psm_event_iter: Iterable[dict],
     chat_state_service,
+    *,
+    backend: Optional[str] = None,
+    model: Optional[str] = None,
 ) -> None:
     """Tail PSM stream-json events and bridge them to chat SSE deltas.
 
@@ -122,8 +139,26 @@ def bridge_psm_to_chat(
     ``complete`` (finish) or ``error`` (error/abort). Order is
     preserved 1:1 with the source.
     """
+    # Track who answered so the terminal `finish` delta can label the chat
+    # bubble with the backend + model (the bubble shows "Assistant" otherwise).
+    # A model captured from the stream's assistant events wins over the
+    # caller-supplied fallback.
+    seen_model: Optional[str] = None
+
+    def _finish_data(reason: Optional[str]) -> dict:
+        data: dict = {"finish_reason": reason}
+        if backend:
+            data["backend"] = backend
+        resolved = seen_model or model
+        if resolved:
+            data["model"] = resolved
+        return data
+
     terminated = False
     for event in psm_event_iter:
+        captured = _extract_model(event)
+        if captured:
+            seen_model = captured
         kind = _event_type(event)
 
         if kind == "content_delta":
@@ -136,9 +171,7 @@ def bridge_psm_to_chat(
             )
         elif kind == "finish":
             chat_state_service.push_delta(
-                session_id,
-                "finish",
-                {"finish_reason": _extract_finish_reason(event)},
+                session_id, "finish", _finish_data(_extract_finish_reason(event))
             )
             chat_state_service.push_status(session_id, "complete")
             terminated = True
@@ -155,7 +188,5 @@ def bridge_psm_to_chat(
     # synthetic finish so the frontend's stream closes cleanly (mirrors
     # goal_loop_runner teardown — never leave the chat status hanging).
     if not terminated:
-        chat_state_service.push_delta(
-            session_id, "finish", {"finish_reason": "complete"}
-        )
+        chat_state_service.push_delta(session_id, "finish", _finish_data("complete"))
         chat_state_service.push_status(session_id, "complete")

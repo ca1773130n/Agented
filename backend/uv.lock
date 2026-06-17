@@ -96,7 +96,7 @@ dev = [
 
 [[package]]
 name = "ai-accounts-core"
-version = "0.3.21"
+version = "0.3.16"
 source = { editable = "../../ai-accounts/packages/core" }
 dependencies = [
     { name = "aiosqlite" },
@@ -116,7 +116,7 @@ provides-extras = ["testing"]
 
 [[package]]
 name = "ai-accounts-litestar"
-version = "0.3.15"
+version = "0.3.16"
 source = { editable = "../../ai-accounts/packages/litestar" }
 dependencies = [
     { name = "ai-accounts-core" },

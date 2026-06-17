@@ -58,6 +58,53 @@ def _record_tool_use_evidence(session_id: str, super_agent_id, event) -> None:
         logger.debug("evidence ledger write failed for %s: %s", session_id, e)
 
 
+def _clean_model_label(raw: str, backend: Optional[str]) -> str:
+    """Turn a raw model id into a compact pill label for the chat bubble.
+
+    Drops a provider path prefix (``opencode/glm-4.7-free`` -> ``glm-4.7-free``)
+    and a trailing date stamp (``claude-sonnet-4-20250514`` -> ``claude-sonnet-4``),
+    then drops a leading provider token that just duplicates the backend already
+    shown as the bubble's author (``claude-sonnet-4`` with backend ``claude`` ->
+    ``sonnet-4``). Conservative on purpose — no aggressive title-casing that
+    would mangle acronyms like GPT / GLM.
+    """
+    import re
+
+    s = raw.split("/")[-1]
+    s = re.sub(r"-\d{6,}$", "", s)
+    if backend:
+        head = s.split("-", 1)[0].lower()
+        if head == backend.lower() and "-" in s:
+            s = s.split("-", 1)[1]
+    return s
+
+
+def _resolve_finish_model(model: Optional[str], backend: Optional[str]) -> Optional[str]:
+    """Resolve the model to show on a finish/persisted assistant turn.
+
+    A requested ``model`` passes through (cleaned). When none was requested —
+    the routed super-agent / default case — resolve the backend's default model
+    (mirrors the cliproxy resolution in ``conversation_streaming``) so the
+    bubble shows the concrete model that answered instead of a blank pill.
+    Best-effort: never raises (runs on the streaming background thread).
+    """
+    raw = model
+    if not raw:
+        try:
+            from .conversation_streaming import _get_default_model
+
+            raw = _get_default_model(backend or "claude")
+        except Exception:
+            logger.debug("finish-model resolution failed", exc_info=True)
+            raw = None
+    if not raw:
+        return None
+    try:
+        return _clean_model_label(raw, backend)
+    except Exception:
+        return raw
+
+
 def run_streaming_response(
     session_id: str,
     super_agent_id: str,
@@ -216,9 +263,13 @@ def run_streaming_response(
 
             def _finalize(accumulated: list, used_backend: str) -> None:
                 full_response = "".join(accumulated)
+                # Resolve the concrete model that answered (the request often
+                # omits it for routed super-agent turns) so the bubble shows a
+                # model pill, not just the backend name.
+                finish_model = _resolve_finish_model(model, used_backend)
                 if full_response:
                     SuperAgentSessionService.add_assistant_message(
-                        _session_id, full_response, backend=used_backend
+                        _session_id, full_response, backend=used_backend, model=finish_model
                     )
                     if used_backend:
                         try:
@@ -228,7 +279,9 @@ def run_streaming_response(
                         except Exception:
                             logger.error("Failed to update backend last used", exc_info=True)
                 ChatStateService.push_delta(
-                    _session_id, "finish", {"content": full_response, "backend": used_backend}
+                    _session_id,
+                    "finish",
+                    {"content": full_response, "backend": used_backend, "model": finish_model},
                 )
                 ChatStateService.push_status(_session_id, "idle")
                 if on_complete:
@@ -389,7 +442,13 @@ def run_streaming_response(
                                     yield payload
 
                             try:
-                                bridge_psm_to_chat(_session_id, _psm_events(), ChatStateService)
+                                bridge_psm_to_chat(
+                                    _session_id,
+                                    _psm_events(),
+                                    ChatStateService,
+                                    backend=backend,
+                                    model=_resolve_finish_model(model, backend),
+                                )
                             finally:
                                 ProjectSessionManager.unsubscribe_raw(grd_session_id, raw_q)
                             if on_complete:

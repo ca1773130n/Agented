@@ -28,6 +28,10 @@ interface ChatMsg {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp?: string;
+  /** Backend that produced an assistant turn (claude/codex/gemini/opencode). */
+  backend?: string;
+  /** Model that produced an assistant turn (shown as a pill beside the name). */
+  model?: string;
 }
 
 const props = defineProps<{
@@ -187,10 +191,20 @@ session.onOutputDelta((delta: string) => {
   clearDiagnostic();
 });
 
-session.onComplete((status: string, _exitCode: number) => {
+session.onComplete((status: string, _exitCode: number, meta) => {
   awaitingResponse.value = false;
   clearDiagnostic();
   if (isDirectMode.value) {
+    // Label the session's assistant bubbles with who actually answered
+    // (backend + model arrive on the terminal `complete` event).
+    if (meta?.backend || meta?.model) {
+      for (const m of messages.value) {
+        if (m.role === 'assistant') {
+          if (meta.backend) m.backend = meta.backend;
+          if (meta.model) m.model = meta.model;
+        }
+      }
+    }
     messages.value.push({
       role: 'system',
       content: t('projectSessionPanel.sessionEnded', { status }),

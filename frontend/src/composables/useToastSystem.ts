@@ -65,7 +65,20 @@ export function useToastSystem(tour: TourMachine): UseToastSystem {
           (localized && message.includes(localized)) ||
           (meta?.autoAdvanceOnToast ? message.includes(meta.autoAdvanceOnToast) : false);
         if (meta && matches) {
-          setTimeout(() => tour.nextStep(), 800);
+          // Capture the step that armed this timer and only advance if the
+          // tour is STILL on it when the timer fires. Without this guard a
+          // caller that ALSO advances explicitly (e.g. saveWorkspaceRoot
+          // calls tour.nextStep() right after this success toast) produced a
+          // DOUBLE advance — workspace→backends.claude (explicit) then
+          // backends.claude→backends.codex (this stale timer), silently
+          // skipping the Claude Code account step. Re-checking the step makes
+          // auto-advance idempotent w.r.t. explicit advances.
+          const armedStep = step;
+          setTimeout(() => {
+            if (tour.isActive.value && tour.currentStep.value === armedStep) {
+              tour.nextStep();
+            }
+          }, 800);
         }
       }
     }

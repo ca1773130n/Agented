@@ -458,6 +458,12 @@ def _extract_stream_json_events(
 
     if event_type == "assistant":
         msg = event.get("message", {})
+        # Capture the model that produced this turn (best-effort — present
+        # on claude/codex stream-json) so the transcript can show a pill.
+        if session_info is not None:
+            _model = msg.get("model")
+            if _model:
+                session_info.model = _model
         events: list[tuple[str, dict]] = []
         # Each block emits at most one event. Text + non-AskUser tool_use
         # blocks accumulate into one "output" event so the chat bubble
@@ -746,6 +752,22 @@ class SessionPersistError(RuntimeError):
         self.constraint_hint = constraint_hint
 
 
+_KNOWN_BACKENDS = {"claude", "codex", "gemini", "opencode"}
+
+
+def _backend_from_cmd(cmd: Optional[list]) -> Optional[str]:
+    """Derive the answering backend kind from the spawned command.
+
+    Project sessions run a CLI subprocess (``cmd[0]`` is the binary —
+    ``claude`` / ``codex`` / ``gemini`` / ``opencode``), so the backend is
+    the command name. Returns None for anything unrecognized.
+    """
+    if not cmd:
+        return None
+    binary = os.path.basename(str(cmd[0])).lower()
+    return binary if binary in _KNOWN_BACKENDS else None
+
+
 @dataclass
 class SessionInfo:
     """In-memory state for an active session.
@@ -775,6 +797,12 @@ class SessionInfo:
     max_lifetime_seconds: int = 14400
     paused: bool = False  # When True, output buffers but SSE broadcast is suppressed
     stream_json: bool = False  # When True, parse claude stream-json events for display
+    # Who produced this session's output, so the transcript can label
+    # assistant bubbles with the backend + model instead of "Assistant".
+    # ``backend`` is derived from the spawned CLI (cmd[0]); ``model`` is
+    # captured best-effort from stream-json ``assistant`` events.
+    backend: Optional[str] = None
+    model: Optional[str] = None
     # Set on pipe-mode sessions only. None means PTY-mode (legacy path).
     popen: Optional[subprocess.Popen] = field(default=None, repr=False)
     # v0.7.67 — true after at least one ``content_block_delta`` text
@@ -1051,6 +1079,7 @@ class ProjectSessionManager:
             execution_type=execution_type,
             execution_mode=execution_mode,
             stream_json=stream_json,
+            backend=_backend_from_cmd(cmd),
             popen=popen,
         )
 
@@ -1476,12 +1505,16 @@ class ProjectSessionManager:
                 exc_info=True,
             )
 
-        # Broadcast completion
-        cls._broadcast(
-            session_id,
-            "complete",
-            {"status": status, "exit_code": exit_code},
-        )
+        # Broadcast completion — carry who answered (backend + model) so the
+        # transcript can label the assistant bubbles instead of "Assistant".
+        complete_payload: dict = {"status": status, "exit_code": exit_code}
+        _si = cls._sessions.get(session_id)
+        if _si is not None:
+            if _si.backend:
+                complete_payload["backend"] = _si.backend
+            if _si.model:
+                complete_payload["model"] = _si.model
+        cls._broadcast(session_id, "complete", complete_payload)
 
         # Signal end to all subscribers
         with cls._lock:

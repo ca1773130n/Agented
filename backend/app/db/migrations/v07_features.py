@@ -1284,6 +1284,119 @@ def _migrate_164_skill_sleep_current_body(conn):
         conn.execute("ALTER TABLE skill_sleep_runs ADD COLUMN current_body TEXT")
 
 
+def _migrate_165_grd_harness_rounds(conn) -> None:
+    """GRD 0.4.x life-harness: mirror ``gd harness round`` records.
+
+    GRD's life-harness (``gd harness round``) gathers Tesserae Session
+    findings, proposes ONE eval-gated patch to GRD's own primitives, and
+    records the outcome under ``.planning/harness/rounds/<round_id>/``. We
+    mirror each round (one row per ``(project_id, round_id)``) so operators
+    can list rounds + their patch/eval/confidence across reloads and point a
+    "revert" button at applied rounds — the same shape as the (now-deprecated)
+    ``grd_evolve_runs`` mirror.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS grd_harness_rounds (
+            id              TEXT PRIMARY KEY,
+            project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            round_id        TEXT NOT NULL,
+            status          TEXT NOT NULL DEFAULT 'running',
+            detail          TEXT,
+            evidence_count  INTEGER,
+            patch_hash      TEXT,
+            confidence      REAL,
+            summary         TEXT,
+            applied_sha     TEXT,
+            eval_json       TEXT,
+            patch_json      TEXT,
+            created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (project_id, round_id)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_grd_harness_rounds_project "
+        "ON grd_harness_rounds(project_id, created_at DESC)"
+    )
+
+
+def _migrate_168_grd_genome_suggestions(conn) -> None:
+    """GRD 0.4.1 pattern mining: mirror ``gd patterns`` (→ GENOME-SUGGESTIONS).
+
+    The deterministic miner scans REFLECTION.md history for statistically
+    significant token→outcome patterns and writes ``GENOME-SUGGESTIONS.md``.
+    We mirror the LATEST run per project (full-replace) so operators see the
+    suggestions + stats across reloads and can promote one into GENOME.md.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS grd_genome_suggestions (
+            id                      TEXT PRIMARY KEY,
+            project_id              TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            reflections_scanned     INTEGER,
+            baseline_confirmed_rate REAL,
+            tokens_tested           INTEGER,
+            suggestions_json        TEXT,
+            applied                 INTEGER DEFAULT 0,
+            suggestions_path        TEXT,
+            created_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (project_id)
+        )
+        """
+    )
+
+
+def _migrate_167_grd_plan_selections(conn) -> None:
+    """GRD 0.4.5 multi-candidate planning: mirror ``gd select-candidate``.
+
+    The deterministic selector scores a phase's ``PLAN-N.md`` candidates,
+    promotes the winner to ``PLAN.md``, and writes ``PLAN-SELECTION.json``. We
+    mirror the latest selection per ``(project_id, phase)`` so operators can
+    see the ranked candidates + winner + axis breakdowns across reloads —
+    same shape as the ``grd_harness_rounds`` mirror.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS grd_plan_selections (
+            id               TEXT PRIMARY KEY,
+            project_id       TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            phase            TEXT NOT NULL,
+            milestone        TEXT,
+            winner_rel       TEXT,
+            promoted_to      TEXT,
+            candidates_json  TEXT,
+            audit_json       TEXT,
+            created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (project_id, phase)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_grd_plan_selections_project "
+        "ON grd_plan_selections(project_id, created_at DESC)"
+    )
+
+
+def _migrate_166_projects_tesserae_distill(conn) -> None:
+    """Tesserae 0.9.0 distilled memory: per-project opt-in to AgentRunbook
+    distillation (``tesserae compile --distill`` → Event/Runbook/Gotcha layers).
+
+    Defaults 0 (off). When on, Agented's compile passes ``--distill`` and the
+    harness KG-signal path retrieves via ``tesserae context --multi-pool``
+    instead of ``ask`` — so the distilled pools enrich the life-harness rounds.
+    """
+    cursor = conn.execute("PRAGMA table_info(projects)")
+    cols = {row[1] for row in cursor.fetchall()}
+    if "tesserae_distill_enabled" not in cols:
+        conn.execute(
+            "ALTER TABLE projects ADD COLUMN tesserae_distill_enabled INTEGER DEFAULT 0"
+        )
+
+
 V07_MIGRATIONS: list = [
     # v0.7.7: super-agent activity inspector — timeline + rollup.
     (116, "super_agent_activity", _migrate_116_super_agent_activity),
@@ -1411,4 +1524,11 @@ V07_MIGRATIONS: list = [
     (163, "skill_sleep_outcome", _migrate_163_skill_sleep_outcome),
     # SkillOpt follow-up: store current body for the review-drawer diff.
     (164, "skill_sleep_current_body", _migrate_164_skill_sleep_current_body),
+    (165, "grd_harness_rounds", _migrate_165_grd_harness_rounds),
+    # v0.6: Tesserae 0.9.0 per-project distilled-memory (Runbook/Gotcha) toggle.
+    (166, "projects_tesserae_distill", _migrate_166_projects_tesserae_distill),
+    # v0.6: GRD 0.4.5 multi-candidate plan selection (gd select-candidate) mirror.
+    (167, "grd_plan_selections", _migrate_167_grd_plan_selections),
+    # v0.6: GRD 0.4.1 pattern mining (gd patterns → GENOME-SUGGESTIONS) mirror.
+    (168, "grd_genome_suggestions", _migrate_168_grd_genome_suggestions),
 ]

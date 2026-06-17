@@ -34,11 +34,80 @@ export interface GenomeSnapshot {
   [key: string]: unknown;
 }
 
+/** One mined token→outcome pattern from `gd patterns` (TokenStat). */
+export interface PatternSuggestion {
+  token: string;
+  n: number;
+  confirmed: number;
+  confirmed_rate: number;
+  baseline: number;
+  effect_size: number;
+  raw_p: number;
+  fdr_q: number;
+  significant: boolean;
+}
+
+export interface PatternsMineOptions {
+  apply?: boolean;
+  min_occurrences?: number;
+  effect_size?: number;
+  fdr_q?: number;
+}
+
+export interface GenomeSuggestionsResult {
+  reflections_scanned: number;
+  baseline_confirmed_rate: number;
+  tokens_tested: number;
+  suggestions: PatternSuggestion[];
+  applied: boolean;
+  suggestions_path: string | null;
+}
+
+export interface MinePatternsResponse {
+  success: boolean;
+  data: GenomeSuggestionsResult | null;
+  error: string | null;
+  mirrored: string | null;
+}
+
+/** The mirrored latest run from `GET .../grd/genome/suggestions`. */
+export interface MirroredGenomeSuggestions {
+  id: string;
+  project_id: string;
+  reflections_scanned: number | null;
+  baseline_confirmed_rate: number | null;
+  tokens_tested: number | null;
+  suggestions: PatternSuggestion[] | null;
+  applied: boolean;
+  suggestions_path: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface EvolveRun {
   id?: string;
   run_id?: string;
   project_id?: string;
   status?: string;
+  [key: string]: unknown;
+}
+
+/** A mirrored GRD 0.4.x life-harness round (`gd harness round`).
+ *  (Distinct from the Group-B ``HarnessRound`` evolution-round shape below.) */
+export interface LifeHarnessRound {
+  id?: string;
+  project_id?: string;
+  round_id: string;
+  status: string;
+  detail?: string | null;
+  evidence_count?: number | null;
+  patch_hash?: string | null;
+  confidence?: number | null;
+  summary?: string | null;
+  applied_sha?: string | null;
+  eval?: Record<string, unknown> | null;
+  patch?: Record<string, unknown> | null;
+  created_at?: string;
   [key: string]: unknown;
 }
 
@@ -114,6 +183,28 @@ export const grdHarnessApi = {
   latestGenomeSnapshot: (projectId: string) =>
     apiFetch<GenomeSnapshot>(`/api/projects/${projectId}/grd/genome/latest`),
 
+  // ─── GRD 0.4.1 pattern mining (gd patterns → GENOME-SUGGESTIONS) ───
+
+  /** Run `gd patterns`. apply=true writes GENOME-SUGGESTIONS.md (else dry-run). */
+  minePatterns: (projectId: string, opts: PatternsMineOptions = {}) =>
+    apiFetch<MinePatternsResponse>(
+      `/api/projects/${projectId}/grd/genome/patterns`,
+      { method: 'POST', body: JSON.stringify(opts) },
+    ),
+
+  /** The latest mirrored `gd patterns` run for the project. */
+  getGenomeSuggestions: (projectId: string) =>
+    apiFetch<MirroredGenomeSuggestions>(
+      `/api/projects/${projectId}/grd/genome/suggestions`,
+    ),
+
+  /** Promote one suggestion into GENOME.md (slug = `<token>-rate`). */
+  promoteSuggestion: (projectId: string, slug: string) =>
+    apiFetch<{ success: boolean; data: Record<string, unknown> | null; error: string | null }>(
+      `/api/projects/${projectId}/grd/genome/promote-suggestion`,
+      { method: 'POST', body: JSON.stringify({ slug }) },
+    ),
+
   /** 10. POST /grd/verify/mechanical/{phase} — mechanical verify result. */
   verifyMechanical: (projectId: string, phase: string) =>
     apiFetch<Record<string, unknown>>(
@@ -160,6 +251,43 @@ export const grdHarnessApi = {
     apiFetch<Record<string, unknown>>(
       `/api/projects/${projectId}/grd/evolve/runs/${runId}/stop`,
       { method: 'POST' },
+    ),
+
+  // ─── GRD 0.4.x life-harness rounds (supersede gd evolve) ───
+
+  /** Run a `gd harness round` (background; poll listHarnessRounds for the result). */
+  runHarnessRound: (
+    projectId: string,
+    opts?: { auto?: boolean; dry_run?: boolean; full_eval?: boolean },
+  ) =>
+    apiFetch<{ status: string }>(
+      `/api/projects/${projectId}/grd/harness/round`,
+      { method: 'POST', body: JSON.stringify(opts ?? {}) },
+    ),
+
+  /** List mirrored harness rounds (newest first). */
+  listHarnessRounds: (projectId: string, limit = 50) =>
+    apiFetch<{ rounds: LifeHarnessRound[] }>(
+      `/api/projects/${projectId}/grd/harness/rounds?limit=${limit}`,
+    ),
+
+  /** One harness round (incl. patch/eval). */
+  getHarnessRound: (projectId: string, roundId: string) =>
+    apiFetch<LifeHarnessRound>(
+      `/api/projects/${projectId}/grd/harness/rounds/${roundId}`,
+    ),
+
+  /** Revert an applied harness round. */
+  revertHarnessRound: (projectId: string, roundId: string) =>
+    apiFetch<{ success: boolean; output?: string; error?: string }>(
+      `/api/projects/${projectId}/grd/harness/rounds/${roundId}/revert`,
+      { method: 'POST' },
+    ),
+
+  /** Live `gd harness status`. */
+  harnessStatus: (projectId: string) =>
+    apiFetch<{ success: boolean; rounds: unknown[]; error?: string | null }>(
+      `/api/projects/${projectId}/grd/harness/status`,
     ),
 
   // ═══════════════════════════ Group B — /admin/* (admin-gated) ═══════════════════════════

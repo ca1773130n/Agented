@@ -65,6 +65,10 @@ class ConversationMessage:
     role: str  # 'user' | 'assistant' | 'system'
     content: str
     timestamp: str
+    # Who answered (assistant turns only) so a resumed conversation can
+    # label the bubble with the backend + model instead of "Assistant".
+    backend: Optional[str] = None
+    model: Optional[str] = None
 
 
 class AgentConversationService:
@@ -296,6 +300,8 @@ class AgentConversationService:
                 role="assistant",
                 content=full_response,
                 timestamp=datetime.datetime.now().isoformat(),
+                backend=backend,
+                model=model,
             )
 
             with cls._lock:
@@ -311,7 +317,7 @@ class AgentConversationService:
             cls._broadcast(
                 conv_id,
                 "response_complete",
-                {"msg_id": msg_id, "content": full_response, "backend": backend or "claude"},
+                {"msg_id": msg_id, "content": full_response, "backend": backend or "claude", "model": model},
             )
 
         except FileNotFoundError as e:

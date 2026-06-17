@@ -80,6 +80,10 @@ class ConversationMessage:
     role: str  # 'user' | 'assistant' | 'system'
     content: str
     timestamp: str
+    # Who answered (assistant turns only) so a resumed conversation can
+    # label the bubble with the backend + model instead of "Assistant".
+    backend: Optional[str] = None
+    model: Optional[str] = None
 
 
 class PluginConversationService:
@@ -190,7 +194,13 @@ class PluginConversationService:
         if not row or row["status"] != "active":
             return False
         messages = [
-            ConversationMessage(role=m["role"], content=m["content"], timestamp=m["timestamp"])
+            ConversationMessage(
+                role=m["role"],
+                content=m["content"],
+                timestamp=m["timestamp"],
+                backend=m.get("backend"),
+                model=m.get("model"),
+            )
             for m in row["messages"]
         ]
         with cls._lock:
@@ -656,6 +666,8 @@ class PluginConversationService:
                 role="assistant",
                 content=response,
                 timestamp=datetime.datetime.now().isoformat(),
+                backend=backend,
+                model=model,
             )
             conv["messages"].append(assistant_msg)
             # v0.7.83 — persist after assistant reply so a refresh
@@ -665,7 +677,7 @@ class PluginConversationService:
             cls._broadcast(
                 conv_id,
                 "response_complete",
-                {"content": response, "backend": backend or "claude"},
+                {"content": response, "backend": backend or "claude", "model": model},
             )
 
         except Exception as e:

@@ -121,18 +121,6 @@ export const TOUR_STEP_DEFINITIONS: TourStepDefinition[] = [
     autoAdvanceI18nKey: 'settings.general.toastMonitoringSaved',
   },
   {
-    key: 'verification',
-    localeKey: 'verification',
-    label: 'Harness Verification',
-    target: '[data-tour="harness-plugins"]',
-    title: 'Harness Verification',
-    message: 'Verify the harness integration plugin is configured for deploying skills to your marketplace.',
-    skippable: true,
-    route: '/settings',
-    routeHash: '#harness',
-    stepNumber: 4,
-  },
-  {
     key: 'create_product',
     localeKey: 'product',
     label: 'First Product',
@@ -141,7 +129,7 @@ export const TOUR_STEP_DEFINITIONS: TourStepDefinition[] = [
     message: 'Products group related projects under a shared context. Click to create your first product.',
     skippable: true,
     route: '/products',
-    stepNumber: 5,
+    stepNumber: 4,
   },
   {
     key: 'create_project',
@@ -152,7 +140,7 @@ export const TOUR_STEP_DEFINITIONS: TourStepDefinition[] = [
     message: 'Projects track work within a product. Click to add your first project.',
     skippable: true,
     route: '/products',
-    stepNumber: 6,
+    stepNumber: 5,
   },
   {
     key: 'create_team',
@@ -163,7 +151,7 @@ export const TOUR_STEP_DEFINITIONS: TourStepDefinition[] = [
     message: 'Bundled teams with pre-configured super agents are ready to use. Click into any project on this page to assign them — you can create custom teams and agents later.',
     skippable: true,
     route: '/projects',
-    stepNumber: 7,
+    stepNumber: 6,
   },
 ]
 

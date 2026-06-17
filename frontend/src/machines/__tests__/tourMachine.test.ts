@@ -4,7 +4,7 @@
  * Tests the machine as a black box: createActor -> send events -> assert on
  * getSnapshot().value and .context. No Vue, no DOM, no mocks.
  *
- * Covers: all 10 states, forward/backward/skip navigation, SKIP_ALL guard,
+ * Covers: all 9 states, forward/backward/skip navigation, SKIP_ALL guard,
  * RESTART reset, markStepCompleted action, clearProgress action, event
  * rejection in invalid states, and hierarchical backends substates.
  */
@@ -46,8 +46,7 @@ const toBackendsCodex = [...toBackendsClaude, { type: 'NEXT' }] as const
 const toBackendsGemini = [...toBackendsCodex, { type: 'NEXT' }] as const
 const toBackendsOpencode = [...toBackendsGemini, { type: 'NEXT' }] as const
 const toMonitoring = [...toBackendsOpencode, { type: 'NEXT' }] as const
-const toVerification = [...toMonitoring, { type: 'NEXT' }] as const
-const toCreateProduct = [...toVerification, { type: 'NEXT' }] as const
+const toCreateProduct = [...toMonitoring, { type: 'NEXT' }] as const
 const toCreateProject = [...toCreateProduct, { type: 'NEXT' }] as const
 const toCreateTeam = [...toCreateProject, { type: 'NEXT' }] as const
 const toComplete = [...toCreateTeam, { type: 'NEXT' }] as const
@@ -139,24 +138,14 @@ describe('forward navigation (NEXT)', () => {
     )
   })
 
-  it('monitoring -> NEXT -> verification (marks monitoring completed)', () => {
+  it('monitoring -> NEXT -> create_product (marks monitoring completed)', () => {
     const actor = startActor()
     navigateTo(actor, [...toMonitoring])
     actor.send({ type: 'NEXT' })
 
     const snap = actor.getSnapshot()
-    expect(snap.value).toBe('verification')
-    expect(snap.context.completedSteps).toContain('monitoring')
-  })
-
-  it('verification -> NEXT -> create_product', () => {
-    const actor = startActor()
-    navigateTo(actor, [...toVerification])
-    actor.send({ type: 'NEXT' })
-
-    const snap = actor.getSnapshot()
     expect(snap.value).toBe('create_product')
-    expect(snap.context.completedSteps).toContain('verification')
+    expect(snap.context.completedSteps).toContain('monitoring')
   })
 
   it('create_product -> NEXT -> create_project', () => {
@@ -229,7 +218,6 @@ describe('forward navigation (NEXT)', () => {
       JSON.stringify({ backends: 'gemini' }),
       JSON.stringify({ backends: 'opencode' }),
       'monitoring',
-      'verification',
       'create_product',
       'create_project',
       'create_team',
@@ -277,9 +265,9 @@ describe('backward navigation (BACK)', () => {
     expect(actor.getSnapshot().value).toEqual({ backends: 'gemini' })
   })
 
-  it('verification -> BACK -> monitoring', () => {
+  it('create_product -> BACK -> monitoring', () => {
     const actor = startActor()
-    navigateTo(actor, [...toVerification])
+    navigateTo(actor, [...toCreateProduct])
     actor.send({ type: 'BACK' })
     expect(actor.getSnapshot().value).toBe('monitoring')
   })
@@ -367,20 +355,11 @@ describe('skip navigation (SKIP)', () => {
     expect(actor.getSnapshot().value).toBe('monitoring')
   })
 
-  it('monitoring -> SKIP -> verification', () => {
+  it('monitoring -> SKIP -> create_product', () => {
     const actor = startActor()
     navigateTo(actor, [...toMonitoring])
     actor.send({ type: 'SKIP' })
-    expect(actor.getSnapshot().value).toBe('verification')
-  })
-
-  it('verification -> SKIP -> create_product', () => {
-    const actor = startActor()
-    navigateTo(actor, [...toVerification])
-    actor.send({ type: 'SKIP' })
-
-    const snap = actor.getSnapshot()
-    expect(snap.value).toBe('create_product')
+    expect(actor.getSnapshot().value).toBe('create_product')
   })
 
   it('create_product -> SKIP -> create_project', () => {
@@ -417,8 +396,7 @@ describe('skip navigation (SKIP)', () => {
     actor.send({ type: 'SKIP' }) // codex -> gemini
     actor.send({ type: 'SKIP' }) // gemini -> opencode
     actor.send({ type: 'SKIP' }) // opencode -> monitoring (parent)
-    actor.send({ type: 'SKIP' }) // monitoring -> verification
-    actor.send({ type: 'SKIP' }) // verification -> create_product
+    actor.send({ type: 'SKIP' }) // monitoring -> create_product
     actor.send({ type: 'SKIP' }) // create_product -> create_project
     actor.send({ type: 'SKIP' }) // create_project -> create_team
     actor.send({ type: 'SKIP' }) // create_team -> complete
@@ -455,11 +433,11 @@ describe('SKIP_ALL global event', () => {
     expect(actor.getSnapshot().value).toEqual({ backends: 'claude' })
   })
 
-  it('default: SKIP_ALL is blocked from verification', () => {
+  it('default: SKIP_ALL is blocked from create_product', () => {
     const actor = startActor()
-    navigateTo(actor, [...toVerification])
+    navigateTo(actor, [...toCreateProduct])
     actor.send({ type: 'SKIP_ALL' })
-    expect(actor.getSnapshot().value).toBe('verification')
+    expect(actor.getSnapshot().value).toBe('create_product')
   })
 
   it('with guard override: SKIP_ALL from welcome -> complete', () => {
@@ -505,7 +483,7 @@ describe('SKIP_ALL global event', () => {
     expect(actor.getSnapshot().value).toBe('complete')
   })
 
-  it('with guard override: SKIP_ALL from verification -> complete', () => {
+  it('with guard override: SKIP_ALL from create_product -> complete', () => {
     const overridden = tourMachine.provide({
       guards: { canSkipAll: () => true },
     })
@@ -513,7 +491,7 @@ describe('SKIP_ALL global event', () => {
     actor.start()
     activeActor = actor
 
-    navigateTo(actor, [...toVerification])
+    navigateTo(actor, [...toCreateProduct])
     actor.send({ type: 'SKIP_ALL' })
     expect(actor.getSnapshot().value).toBe('complete')
   })
@@ -560,16 +538,16 @@ describe('RESTART global event', () => {
     expect(snap.context.completedSteps).toEqual([])
   })
 
-  it('from verification: RESTART -> idle', () => {
+  it('from create_product: RESTART -> idle', () => {
     const actor = startActor()
-    navigateTo(actor, [...toVerification])
+    navigateTo(actor, [...toCreateProduct])
     actor.send({ type: 'RESTART' })
     expect(actor.getSnapshot().value).toBe('idle')
   })
 
   it('context is fully reset after RESTART', () => {
     const actor = startActor()
-    navigateTo(actor, [...toVerification])
+    navigateTo(actor, [...toCreateProduct])
 
     actor.send({ type: 'RESTART' })
     const snap = actor.getSnapshot()
@@ -652,7 +630,7 @@ describe('markStepCompleted action', () => {
 describe('clearProgress action', () => {
   it('RESTART clears completedSteps', () => {
     const actor = startActor()
-    navigateTo(actor, [...toVerification])
+    navigateTo(actor, [...toCreateProduct])
     expect(actor.getSnapshot().context.completedSteps.length).toBeGreaterThan(0)
 
     actor.send({ type: 'RESTART' })

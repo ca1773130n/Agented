@@ -1,4 +1,4 @@
-"""GRD CLI Service — subprocess wrapper for the GRD plugin (v0.3.24+).
+"""GRD CLI Service — subprocess wrapper for the GRD plugin (v0.3.24–v0.4.x).
 
 Provides binary auto-detection and graceful degradation when GRD isn't
 installed. The plugin ships two entry points:
@@ -22,6 +22,7 @@ import glob as glob_module
 import json
 import logging
 import os
+import shutil
 import subprocess
 from typing import Optional
 
@@ -43,10 +44,16 @@ class GrdCliService:
     want the ``grd-tools.js`` path (most internal callers).
     """
 
-    _binary_path: Optional[str] = None  # grd-tools.js — write ops
-    _gd_path: Optional[str] = None  # gd.js — v0.3.24 Ouroboros surface
+    _binary_path: Optional[str] = None  # grd-tools(.js) — write ops
+    _gd_path: Optional[str] = None  # gd(.js) — Ouroboros / harness surface
     _binary_available: bool = False
     _gd_available: bool = False
+    # v0.4.x: the binary may resolve to a direct executable on PATH (npm
+    # `@jokerized/getresearchdone` symlinks `gd` / `grd-tools`) rather than a
+    # `.js` file. Direct executables are invoked as `gd …`; `.js` paths as
+    # `node …/gd.js …`.
+    _binary_is_exec: bool = False
+    _gd_is_exec: bool = False
 
     @classmethod
     def detect_binary(cls) -> Optional[str]:
@@ -67,22 +74,29 @@ class GrdCliService:
           3. Glob known install locations (most recently modified wins)
           4. Mark unavailable if nothing matches
         """
-        cls._binary_path, cls._binary_available = cls._detect_one(
+        cls._binary_path, cls._binary_available, cls._binary_is_exec = cls._detect_one(
             filename="grd-tools.js",
+            exec_name="grd-tools",
             setting_key="grd_binary_path",
             label="grd-tools",
         )
-        cls._gd_path, cls._gd_available = cls._detect_one(
+        cls._gd_path, cls._gd_available, cls._gd_is_exec = cls._detect_one(
             filename="gd.js",
+            exec_name="gd",
             setting_key="gd_binary_path",
             label="gd",
         )
 
     @classmethod
     def _detect_one(
-        cls, *, filename: str, setting_key: str, label: str
-    ) -> tuple[Optional[str], bool]:
-        """Locate a single GRD entry-point binary."""
+        cls, *, filename: str, exec_name: str, setting_key: str, label: str
+    ) -> tuple[Optional[str], bool, bool]:
+        """Locate a single GRD entry-point binary.
+
+        Returns ``(path, available, is_exec)`` — ``is_exec`` True when the
+        resolved path is a direct executable (invoke ``<path> …``), False for a
+        ``.js`` file (invoke ``node <path> …``).
+        """
         # 1. Settings table override
         try:
             from app.database import get_setting
@@ -90,21 +104,35 @@ class GrdCliService:
             stored = get_setting(setting_key)
             if stored and os.path.isfile(stored):
                 logger.info("GRD %s binary found via settings: %s", label, stored)
-                return stored, True
+                return stored, True, not stored.endswith(".js")
         except Exception:
             # Settings table may not be available during import.
             pass
 
-        # 2. CLAUDE_PLUGIN_ROOT env var
+        # 2. On PATH (npm @jokerized/getresearchdone symlinks `gd` / `grd-tools`)
+        which = shutil.which(exec_name)
+        if which:
+            logger.info("GRD %s binary found on PATH: %s", label, which)
+            return which, True, True
+
+        # 3. CLAUDE_PLUGIN_ROOT env var
         plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT")
         if plugin_root:
             candidate = os.path.join(plugin_root, "bin", filename)
             if os.path.isfile(candidate):
                 logger.info("GRD %s binary found via CLAUDE_PLUGIN_ROOT: %s", label, candidate)
-                return candidate, True
+                return candidate, True, False
 
-        # 3. Glob known install locations (most recently modified first)
+        # 4. Glob known install locations (most recently modified first). The
+        # v0.4.x marketplace cache is lowercase `grd/<version>/bin`; the npm
+        # global lives under node_modules/@jokerized/getresearchdone; the
+        # uppercase `GRD` paths are kept for legacy (v0.3.x) installs.
         patterns = [
+            os.path.expanduser(f"~/.claude-*/plugins/cache/*/grd/*/bin/{filename}"),
+            os.path.expanduser(f"~/.claude/plugins/cache/*/grd/*/bin/{filename}"),
+            os.path.expanduser(
+                f"~/.nvm/versions/node/*/lib/node_modules/@jokerized/getresearchdone/bin/{filename}"
+            ),
             os.path.expanduser(f"~/.claude/plugins/*/GRD/bin/{filename}"),
             os.path.expanduser(f"~/.claude/plugins/marketplaces/*/plugins/GRD/bin/{filename}"),
             os.path.expanduser(f"~/.claude-*/plugins/*/GRD/bin/{filename}"),
@@ -114,13 +142,13 @@ class GrdCliService:
             if matches:
                 matches.sort(key=os.path.getmtime, reverse=True)
                 logger.info("GRD %s binary found via glob: %s", label, matches[0])
-                return matches[0], True
+                return matches[0], True, False
 
         logger.warning(
             "GRD %s binary not found — related operations will be unavailable",
             label,
         )
-        return None, False
+        return None, False, False
 
     # -----------------------------------------------------------------
     # Status accessors used by routes / health probes
@@ -160,7 +188,7 @@ class GrdCliService:
         plan-tournament / verify mechanical) without forking on binary
         detection.
         """
-        return cls._run(cls._binary_path, cwd, list(args), raw=True)
+        return cls._run(cls._binary_path, cwd, list(args), raw=True, is_exec=cls._binary_is_exec)
 
     @classmethod
     def run_gd(cls, cwd: str, *args, json_output: bool = False) -> dict:
@@ -175,7 +203,7 @@ class GrdCliService:
         argv = list(args)
         if json_output and "--json" not in argv:
             argv.append("--json")
-        return cls._run(cls._gd_path, cwd, argv, raw=False)
+        return cls._run(cls._gd_path, cwd, argv, raw=False, is_exec=cls._gd_is_exec)
 
     @classmethod
     def run_gd_json(cls, cwd: str, *args) -> dict:
@@ -202,10 +230,13 @@ class GrdCliService:
             }
 
     @classmethod
-    def _run(cls, binary: Optional[str], cwd: str, argv: list, *, raw: bool) -> dict:
+    def _run(
+        cls, binary: Optional[str], cwd: str, argv: list, *, raw: bool, is_exec: bool = False
+    ) -> dict:
         """Shared subprocess runner used by both ``run_command`` and
         ``run_gd``. ``raw=True`` appends the ``grd-tools`` ``--raw`` flag
-        which suppresses prompts; ``gd`` doesn't use that flag.
+        which suppresses prompts; ``gd`` doesn't use that flag. ``is_exec``
+        True invokes the binary directly (``gd …``); False via node (a ``.js``).
         """
         if not binary:
             return {
@@ -213,7 +244,7 @@ class GrdCliService:
                 "output": None,
                 "error": "GRD binary not available",
             }
-        cmd = ["node", binary] + list(argv)
+        cmd = ([binary] if is_exec else ["node", binary]) + list(argv)
         if raw:
             cmd.append("--raw")
         try:

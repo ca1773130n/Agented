@@ -61,7 +61,7 @@ def _install_common_stubs(monkeypatch, deltas, *, captured_llm_messages=None):
     monkeypatch.setattr(
         sh.SuperAgentSessionService,
         "add_assistant_message",
-        lambda sid, content, backend=None: None,
+        lambda sid, content, backend=None, model=None: None,
     )
 
     # Force CLIProxy path — not the CLI agent runner. The funnel resolves the

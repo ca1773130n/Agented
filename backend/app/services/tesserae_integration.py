@@ -100,6 +100,38 @@ def get_tesserae_root(project_id: str) -> Optional[Path]:
         return None
 
 
+def get_distill_enabled(project_id: str) -> bool:
+    """Return True iff AgentRunbook distillation is enabled for this project
+    (``projects.tesserae_distill_enabled``). False when unset, off, or the
+    project/column doesn't exist (degrades to non-distilled behavior)."""
+    try:
+        from app.db.connection import get_connection
+
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT tesserae_distill_enabled FROM projects WHERE id = ?",
+                (project_id,),
+            ).fetchone()
+        return bool(row and row["tesserae_distill_enabled"])
+    except Exception:
+        logger.warning(
+            "tesserae: distill-flag lookup failed for %s", project_id, exc_info=True
+        )
+        return False
+
+
+def set_distill_enabled(project_id: str, enabled: bool) -> None:
+    """Persist the per-project distillation toggle."""
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE projects SET tesserae_distill_enabled = ? WHERE id = ?",
+            (1 if enabled else 0, project_id),
+        )
+        conn.commit()
+
+
 def set_tesserae_root(project_id: str, root: Path) -> None:
     """Persist the Tesserae workspace path on the project. Idempotent
     re-set is fine. Also upserts + binds the per-project Tesserae MCP
@@ -632,7 +664,7 @@ def export_sessions_to_tesserae(project_id: str) -> dict[str, Any]:
     if not (root / ".tesserae").is_dir():
         logger.warning(
             "tesserae: workspace not initialized at %s — run "
-            "`tesserae project init` in that directory first",
+            "`tesserae init` in that directory first",
             root,
         )
         return {"imported": 0, "skipped_reason": "tesserae_not_initialized"}
@@ -667,9 +699,10 @@ def export_sessions_to_tesserae(project_id: str) -> dict[str, Any]:
         tmp_path = fh.name
 
     try:
+        # Modern top-level `tesserae sessions import` (0.9.0 retired the
+        # `tesserae project sessions ...` group).
         cmd = [
             _TESSERAE_CMD,
-            "project",
             "sessions",
             "import",
             tmp_path,
@@ -713,9 +746,10 @@ def export_sessions_to_tesserae(project_id: str) -> dict[str, Any]:
 # Per-op operations — init / ingest / compile / build-site / status
 # ---------------------------------------------------------------------------
 #
-# Each op shells out to ``tesserae project <subcommand>`` with the
-# project root passed via ``--project``. All return a result dict with
-# at least ``{"ok": bool, "stdout"?, "stderr"?, "reason"?}``. Long ops
+# Each op shells out to a MODERN top-level ``tesserae <subcommand>`` (0.9.0
+# retired the ``project`` group) with the project root passed via
+# ``--project``. All return a result dict with at least
+# ``{"ok": bool, "stdout"?, "stderr"?, "reason"?}``. Long ops
 # (compile, build-site) can also be invoked via ``run_async`` which
 # dispatches to a daemon thread and returns immediately with a job id;
 # operator polls ``get_op_status`` for completion.
@@ -761,77 +795,57 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _run_tesserae_subcommand(
+def _run_tesserae(
     op: str,
     args: list[str],
     *,
     cwd: Path,
     timeout: int,
 ) -> TesseraeOpResult:
-    """Run ``tesserae project <subcommand>`` with the given args.
-
-    Returns a populated TesseraeOpResult — never raises, even on
-    CLI-missing / timeout / non-zero exit. Operators see the failure
-    via the result dict.
-    """
-    cmd = [_TESSERAE_CMD, "project", *args]
+    """Run a MODERN top-level ``tesserae <args>`` command (no ``project``
+    prefix). Tesserae 0.9.0 retired the ``project`` subcommand group; init /
+    ingest / compile / serve are now top-level. Returns a populated
+    TesseraeOpResult — never raises (CLI-missing / timeout / non-zero exit all
+    surface via the result dict)."""
+    cmd = [_TESSERAE_CMD, *args]
     started = _time.monotonic()
     started_iso = _now_iso()
     try:
         proc = subprocess.run(
-            cmd,
-            cwd=str(cwd),
-            capture_output=True,
-            text=True,
-            timeout=timeout,
+            cmd, cwd=str(cwd), capture_output=True, text=True, timeout=timeout
         )
     except FileNotFoundError:
         return TesseraeOpResult(
-            op=op,
-            ok=False,
-            reason="cli_missing",
-            started_at=started_iso,
-            finished_at=_now_iso(),
+            op=op, ok=False, reason="cli_missing",
+            started_at=started_iso, finished_at=_now_iso(),
             elapsed_seconds=_time.monotonic() - started,
         )
     except subprocess.TimeoutExpired:
         return TesseraeOpResult(
-            op=op,
-            ok=False,
-            reason=f"timeout_after_{timeout}s",
-            started_at=started_iso,
-            finished_at=_now_iso(),
+            op=op, ok=False, reason=f"timeout_after_{timeout}s",
+            started_at=started_iso, finished_at=_now_iso(),
             elapsed_seconds=_time.monotonic() - started,
         )
     finished_iso = _now_iso()
     elapsed = _time.monotonic() - started
     if proc.returncode != 0:
         return TesseraeOpResult(
-            op=op,
-            ok=False,
-            stdout=proc.stdout or "",
-            stderr=proc.stderr or "",
+            op=op, ok=False, stdout=proc.stdout or "", stderr=proc.stderr or "",
             reason=f"exit_{proc.returncode}",
-            started_at=started_iso,
-            finished_at=finished_iso,
-            elapsed_seconds=elapsed,
+            started_at=started_iso, finished_at=finished_iso, elapsed_seconds=elapsed,
         )
     return TesseraeOpResult(
-        op=op,
-        ok=True,
-        stdout=proc.stdout or "",
-        stderr=proc.stderr or "",
-        started_at=started_iso,
-        finished_at=finished_iso,
-        elapsed_seconds=elapsed,
+        op=op, ok=True, stdout=proc.stdout or "", stderr=proc.stderr or "",
+        started_at=started_iso, finished_at=finished_iso, elapsed_seconds=elapsed,
     )
 
 
 def init_workspace(project_id: str) -> TesseraeOpResult:
     """Create the ``.tesserae/`` skeleton inside the project root.
 
-    Idempotent — Tesserae's ``project init`` is safe to run on an
-    already-initialized directory (it surfaces a warning, returns 0).
+    Modern top-level ``tesserae init`` (0.9.0 retired ``tesserae project init``).
+    ``--bare --yes`` skips the interactive wizard / detection so it runs
+    non-interactively in a subprocess; idempotent on an already-init'd dir.
     """
     root = get_tesserae_root(project_id)
     if root is None:
@@ -842,9 +856,9 @@ def init_workspace(project_id: str) -> TesseraeOpResult:
             started_at=_now_iso(),
             finished_at=_now_iso(),
         )
-    return _run_tesserae_subcommand(
+    return _run_tesserae(
         "init",
-        ["init"],
+        ["init", "--project", str(root), "--bare", "--yes"],
         cwd=root,
         timeout=_TESSERAE_INIT_TIMEOUT,
     )
@@ -884,9 +898,10 @@ def ingest_paths(
             started_at=_now_iso(),
             finished_at=_now_iso(),
         )
-    return _run_tesserae_subcommand(
+    # Modern top-level `tesserae ingest` (0.9.0 retired `tesserae project ingest`).
+    return _run_tesserae(
         "ingest",
-        ["ingest", *resolved],
+        ["ingest", "--project", str(root), *resolved],
         cwd=root,
         timeout=_TESSERAE_INGEST_TIMEOUT,
     )
@@ -908,16 +923,25 @@ def compile_workspace(project_id: str) -> TesseraeOpResult:
             started_at=_now_iso(),
             finished_at=_now_iso(),
         )
-    return _run_tesserae_subcommand(
+    # Modern top-level `tesserae compile` (the old `tesserae project compile`
+    # is a 0.9.0 deprecation stub). Pass distillation explicitly so the
+    # per-project toggle reliably overrides any global config/env default.
+    distill_flag = "--distill" if get_distill_enabled(project_id) else "--no-distill"
+    return _run_tesserae(
         "compile",
-        ["compile"],
+        ["compile", "--project", str(root), distill_flag],
         cwd=root,
         timeout=_TESSERAE_COMPILE_TIMEOUT,
     )
 
 
 def build_site(project_id: str) -> TesseraeOpResult:
-    """Build the static frontend site from the compiled graph."""
+    """Build the static frontend site from the compiled graph.
+
+    0.9.0 retired ``build-site``; the static site is built by ``tesserae serve``
+    (auto-builds if missing/stale). ``--dry-run`` performs that build and prints
+    the URL WITHOUT starting a (blocking) server — a one-shot site build.
+    """
     root = get_tesserae_root(project_id)
     if root is None:
         return TesseraeOpResult(
@@ -927,9 +951,9 @@ def build_site(project_id: str) -> TesseraeOpResult:
             started_at=_now_iso(),
             finished_at=_now_iso(),
         )
-    return _run_tesserae_subcommand(
+    return _run_tesserae(
         "build-site",
-        ["build-site"],
+        ["serve", "--project", str(root), "--dry-run"],
         cwd=root,
         timeout=_TESSERAE_BUILD_SITE_TIMEOUT,
     )
@@ -1198,6 +1222,42 @@ def ask_tesserae(
     if result.returncode != 0:
         logger.warning(
             "tesserae: ask exit=%s stderr=%s",
+            result.returncode,
+            (result.stderr or "").strip()[:200],
+        )
+        return None
+    return result.stdout or None
+
+
+def context_tesserae(
+    project_id: str,
+    question: str,
+    *,
+    multi_pool: bool = True,
+    budget: Optional[int] = None,
+) -> Optional[str]:
+    """Run ``tesserae context`` for the project's compiled graph and return the
+    cited context doc as text (or ``None`` on any failure).
+
+    With ``multi_pool=True`` (0.9.0 ``--multi-pool``) retrieval reserves slots
+    for the distilled Runbook/Gotcha/Event memory layers — which ``ask`` cannot
+    do. Mirrors ``ask_tesserae``'s degrade-gracefully contract."""
+    root = get_tesserae_root(project_id)
+    if root is None:
+        return None
+    cmd = [_TESSERAE_CMD, "context", question, "--project", str(root)]
+    if multi_pool:
+        cmd.append("--multi-pool")
+    if budget is not None:
+        cmd += ["--budget", str(budget)]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        logger.warning("tesserae: context failed: %s", exc)
+        return None
+    if result.returncode != 0:
+        logger.warning(
+            "tesserae: context exit=%s stderr=%s",
             result.returncode,
             (result.stderr or "").strip()[:200],
         )

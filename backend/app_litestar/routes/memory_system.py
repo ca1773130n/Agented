@@ -73,7 +73,8 @@ def _tesserae_per_project_state() -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     with get_connection() as conn:
         for row in conn.execute(
-            "SELECT id, name, local_path, tesserae_project_root "
+            "SELECT id, name, local_path, tesserae_project_root, "
+            "tesserae_distill_enabled "
             "FROM projects ORDER BY name COLLATE NOCASE"
         ).fetchall():
             root = row["tesserae_project_root"]
@@ -83,6 +84,7 @@ def _tesserae_per_project_state() -> list[dict[str, Any]]:
                 "local_path": row["local_path"],
                 "tesserae_project_root": root,
                 "enabled": bool(root),
+                "distill_enabled": bool(row["tesserae_distill_enabled"]),
                 "workspace_initialized": False,
                 "session_count": 0,
                 "last_imported_at": None,
@@ -200,6 +202,37 @@ def set_tesserae_for_project(
         ti.set_tesserae_root(project_id, resolved_path)
 
     # Return the fresh per-project state (single row).
+    state = [
+        p for p in _tesserae_per_project_state()
+        if p["project_id"] == project_id
+    ]
+    return {"project": state[0] if state else None}
+
+
+@post(
+    "/system/memory/tesserae/projects/{project_id:str}/distill",
+    sync_to_thread=True,
+)
+def set_tesserae_distill_for_project(
+    project_id: str, data: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    """Toggle AgentRunbook distillation for a project.
+
+    Body: ``{"enabled": bool}``. When on, compile runs with ``--distill`` and
+    the harness KG-signal path retrieves via ``tesserae context --multi-pool``.
+    Returns the refreshed per-project state row.
+    """
+    payload = data or {}
+    if "enabled" not in payload:
+        raise ValidationException(detail="missing 'enabled' in request body")
+    enabled = bool(payload["enabled"])
+    with get_connection() as conn:
+        exists = conn.execute(
+            "SELECT 1 FROM projects WHERE id = ?", (project_id,),
+        ).fetchone()
+    if not exists:
+        raise NotFoundException(detail=f"project not found: {project_id}")
+    ti.set_distill_enabled(project_id, enabled)
     state = [
         p for p in _tesserae_per_project_state()
         if p["project_id"] == project_id
@@ -349,6 +382,7 @@ memory_system_router = Router(
         list_memory_systems,
         list_tesserae_projects,
         set_tesserae_for_project,
+        set_tesserae_distill_for_project,
         refresh_tesserae_for_project,
         tesserae_workspace_status,
         tesserae_init,

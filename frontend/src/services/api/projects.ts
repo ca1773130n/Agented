@@ -12,6 +12,8 @@ import type {
   HarnessDeployResult,
   ProjectTeamEdge,
   ExecutionDriver,
+  DiscoverResponse,
+  ImportResponse,
 } from './types';
 
 // v0.7.70 — Forge context bindings + per-prompt attachments. The
@@ -85,6 +87,23 @@ export const projectApi = {
     method: 'POST',
     body: JSON.stringify(data),
   }),
+
+  discover: (data: { root: string; nested?: boolean; max_depth?: number }) =>
+    apiFetch<DiscoverResponse>('/admin/projects/discover', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  importRepos: (data: {
+    repos: { name: string; local_path: string; github_repo?: string }[];
+    product_id?: string;
+    owner_team_id?: string;
+    run_harness_setup?: boolean;
+  }) =>
+    apiFetch<ImportResponse>('/admin/projects/import', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 
   update: (projectId: string, data: Partial<{
     name: string;

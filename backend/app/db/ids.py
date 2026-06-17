@@ -70,6 +70,18 @@ GENOME_SNAPSHOT_ID_LENGTH = 8
 EVOLVE_RUN_ID_PREFIX = "evol-"
 EVOLVE_RUN_ID_LENGTH = 8
 
+# GRD 0.4.x life-harness rounds (gd harness round)
+HARNESS_ROUND_ID_PREFIX = "hround-"
+HARNESS_ROUND_ID_LENGTH = 8
+
+# GRD 0.4.5 multi-candidate plan selection (gd select-candidate)
+PLAN_SELECTION_ID_PREFIX = "psel-"
+PLAN_SELECTION_ID_LENGTH = 8
+
+# GRD 0.4.1 pattern mining (gd patterns → GENOME-SUGGESTIONS)
+GENOME_SUGGESTIONS_ID_PREFIX = "gsug-"
+GENOME_SUGGESTIONS_ID_LENGTH = 8
+
 ROTATION_EVENT_ID_PREFIX = "rot-"
 ROTATION_EVENT_ID_LENGTH = 8
 
@@ -472,6 +484,51 @@ def _get_unique_evolve_run_id(conn) -> str:
         )
         if cursor.fetchone() is None:
             return eid
+
+
+def generate_harness_round_id() -> str:
+    """Generate a unique harness-round mirror ID like 'hround-abc12345'."""
+    return generate_id(HARNESS_ROUND_ID_PREFIX, HARNESS_ROUND_ID_LENGTH)
+
+
+def _get_unique_harness_round_id(conn) -> str:
+    while True:
+        hid = generate_harness_round_id()
+        cursor = conn.execute(
+            "SELECT id FROM grd_harness_rounds WHERE id = ?", (hid,)
+        )
+        if cursor.fetchone() is None:
+            return hid
+
+
+def generate_plan_selection_id() -> str:
+    """Generate a unique plan-selection mirror ID like 'psel-abc12345'."""
+    return generate_id(PLAN_SELECTION_ID_PREFIX, PLAN_SELECTION_ID_LENGTH)
+
+
+def _get_unique_plan_selection_id(conn) -> str:
+    while True:
+        pid = generate_plan_selection_id()
+        cursor = conn.execute(
+            "SELECT id FROM grd_plan_selections WHERE id = ?", (pid,)
+        )
+        if cursor.fetchone() is None:
+            return pid
+
+
+def generate_genome_suggestions_id() -> str:
+    """Generate a unique genome-suggestions mirror ID like 'gsug-abc12345'."""
+    return generate_id(GENOME_SUGGESTIONS_ID_PREFIX, GENOME_SUGGESTIONS_ID_LENGTH)
+
+
+def _get_unique_genome_suggestions_id(conn) -> str:
+    while True:
+        gid = generate_genome_suggestions_id()
+        cursor = conn.execute(
+            "SELECT id FROM grd_genome_suggestions WHERE id = ?", (gid,)
+        )
+        if cursor.fetchone() is None:
+            return gid
 
 
 def generate_rotation_event_id() -> str:

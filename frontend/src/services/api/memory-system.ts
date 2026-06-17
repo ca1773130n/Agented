@@ -28,6 +28,8 @@ export interface TesseraeProjectState {
   local_path: string | null;
   tesserae_project_root: string | null;
   enabled: boolean;
+  /** AgentRunbook distillation (Runbook/Gotcha) opt-in for this project. */
+  distill_enabled?: boolean;
   workspace_initialized: boolean;
   session_count: number;
   last_imported_at: string | null;
@@ -90,6 +92,15 @@ export const memorySystemApi = {
       {
         method: 'POST',
         body: JSON.stringify({ root }),
+      },
+    ),
+
+  setTesseraeDistill: (projectId: string, enabled: boolean) =>
+    apiFetch<{ project: TesseraeProjectState }>(
+      `/admin/system/memory/tesserae/projects/${encodeURIComponent(projectId)}/distill`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ enabled }),
       },
     ),
 

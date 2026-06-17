@@ -100,4 +100,15 @@ describe('ProjectsPage', () => {
 
     expect(projectApi.delete).toHaveBeenCalledWith('proj-1')
   })
+
+  it('opens the discovery modal from the Discover button', async () => {
+    const wrapper = mountComponent()
+    await flushPromises()
+    const btn = wrapper.find('[data-testid="discover-repos-btn"]')
+    expect(btn.exists()).toBe(true)
+    await btn.trigger('click')
+    // The modal Teleports to body; with stubs:{teleport:true} its content
+    // renders inline, so its root-folder input becomes findable.
+    expect(wrapper.find('[data-testid="discover-root"]').exists()).toBe(true)
+  })
 })

@@ -12,6 +12,7 @@ import pytest
 from app.services.project_session_manager import (
     ProjectSessionManager,
     SessionInfo,
+    _backend_from_cmd,
     _extract_hook_decision_events,
     _extract_stream_json_events,
     _extract_stream_json_text,
@@ -1559,3 +1560,14 @@ class TestSessionPersistErrorCleanup:
 
         # Cleanup.
         ProjectSessionManager._sessions.pop(sid, None)
+
+
+def test_backend_from_cmd_maps_known_clis():
+    """The session transcript labels assistant bubbles by the spawned CLI,
+    derived from cmd[0]; unknown commands yield None (no label)."""
+    assert _backend_from_cmd(["claude", "-p", "hi"]) == "claude"
+    assert _backend_from_cmd(["/usr/local/bin/codex", "run"]) == "codex"
+    assert _backend_from_cmd(["gemini"]) == "gemini"
+    assert _backend_from_cmd(["python", "foo.py"]) is None
+    assert _backend_from_cmd([]) is None
+    assert _backend_from_cmd(None) is None

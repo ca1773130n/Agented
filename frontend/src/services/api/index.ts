@@ -81,7 +81,20 @@ export type {
   AutonomyConfigResponse,
   HarnessRound,
   SharedForgeBinding,
+  PatternSuggestion,
+  PatternsMineOptions,
+  GenomeSuggestionsResult,
+  MinePatternsResponse,
+  MirroredGenomeSuggestions,
 } from './grdHarness';
+export { grdPlanningApi } from './grdPlanning';
+export type {
+  PlanCandidate,
+  PlanSelectionResult,
+  SelectCandidateResponse,
+  MirroredPlanSelection,
+  SelectCandidateOptions,
+} from './grdPlanning';
 export { mcpServerApi } from './mcp-servers';
 export { replayApi } from './replay';
 export { collaborativeApi } from './collaborative';
@@ -273,6 +286,9 @@ export type {
 
   // Project types
   Project,
+  DiscoveredRepo,
+  DiscoverResponse,
+  ImportResponse,
   ProjectTeamEdge,
   ProjectInstallation,
   ProjectSkill,

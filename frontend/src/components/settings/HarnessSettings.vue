@@ -1,24 +1,22 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import type { Marketplace, MarketplacePlugin } from '../../services/api';
-import { settingsApi, marketplaceApi, pluginApi, pluginExportApi, ApiError } from '../../services/api';
+import type { Marketplace } from '../../services/api';
+import { settingsApi, pluginApi, pluginExportApi } from '../../services/api';
 import SyncStatusPanel from '../plugins/SyncStatusPanel.vue';
-import { useToast } from '../../composables/useToast';
 
 defineProps<{
   marketplaces: Marketplace[];
 }>();
 
 const { t } = useI18n();
-const showToast = useToast();
 
-// Harness plugin settings
+// The harness integration plugin (HarnessSync) is configured automatically
+// during first-launch bundle install — no user prompt. This tab shows the
+// resolved config read-only.
 const harnessMarketplaceId = ref<string | null>(null);
 const harnessPluginName = ref<string>('');
-const harnessPluginsList = ref<MarketplacePlugin[]>([]);
 const loadingHarnessSettings = ref(false);
-const savingHarnessSettings = ref(false);
 
 // Sync panel state -- exported plugins with export records
 const exportedPlugins = ref<Array<{ plugin_id: string; plugin_name: string; export_path: string }>>([]);
@@ -30,54 +28,12 @@ async function loadHarnessSettings() {
     const data = await settingsApi.getHarnessPlugin();
     harnessMarketplaceId.value = data.marketplace_id || null;
     harnessPluginName.value = data.plugin_name || '';
-    // Load plugins for the selected marketplace if set
-    if (harnessMarketplaceId.value) {
-      await loadHarnessPlugins(harnessMarketplaceId.value);
-    }
   } catch (err) {
-    // Settings not configured yet, that's okay
+    // Not configured yet (auto-config runs once a Claude account exists).
     harnessMarketplaceId.value = null;
     harnessPluginName.value = '';
   } finally {
     loadingHarnessSettings.value = false;
-  }
-}
-
-async function loadHarnessPlugins(marketplaceId: string) {
-  try {
-    const data = await marketplaceApi.listPlugins(marketplaceId);
-    harnessPluginsList.value = data.plugins || [];
-  } catch (err) {
-    harnessPluginsList.value = [];
-  }
-}
-
-async function onHarnessMarketplaceChange(marketplaceId: string) {
-  harnessMarketplaceId.value = marketplaceId;
-  harnessPluginName.value = '';
-  harnessPluginsList.value = [];
-  if (marketplaceId) {
-    await loadHarnessPlugins(marketplaceId);
-  }
-}
-
-async function saveHarnessSettings() {
-  if (!harnessMarketplaceId.value || !harnessPluginName.value) {
-    showToast(t('settings.harness.toastSelectMarketplacePlugin'), 'error');
-    return;
-  }
-  savingHarnessSettings.value = true;
-  try {
-    await settingsApi.setHarnessPlugin({
-      marketplace_id: harnessMarketplaceId.value,
-      plugin_name: harnessPluginName.value,
-    });
-    showToast(t('settings.harness.toastSaved'), 'success');
-  } catch (err) {
-    const message = err instanceof ApiError ? err.message : t('settings.harness.toastSaveFailed');
-    showToast(message, 'error');
-  } finally {
-    savingHarnessSettings.value = false;
   }
 }
 
@@ -121,7 +77,7 @@ onMounted(() => {
 
 <template>
   <div class="tab-content">
-    <div class="card" data-tour="harness-plugins">
+    <div class="card">
       <div class="card-header">
         <h3>{{ t('settings.harness.title') }}</h3>
       </div>
@@ -136,62 +92,7 @@ onMounted(() => {
         </div>
 
         <template v-else>
-          <div class="form-group">
-            <label>{{ t('settings.harness.marketplaceLabel') }}</label>
-            <select
-              :value="harnessMarketplaceId || ''"
-              @change="onHarnessMarketplaceChange(($event.target as HTMLSelectElement).value)"
-            >
-              <option value="">{{ t('settings.harness.selectMarketplace') }}</option>
-              <option v-for="mp in marketplaces" :key="mp.id" :value="mp.id">
-                {{ mp.name }}
-              </option>
-            </select>
-            <span v-if="marketplaces.length === 0" class="help-text">
-              {{ t('settings.harness.noMarketplaces') }}
-            </span>
-          </div>
-
-          <div v-if="harnessMarketplaceId" class="form-group">
-            <label>{{ t('settings.harness.pluginLabel') }}</label>
-            <select
-              v-if="harnessPluginsList.length > 0"
-              :value="harnessPluginName"
-              @change="harnessPluginName = ($event.target as HTMLSelectElement).value"
-            >
-              <option value="">{{ t('settings.harness.selectPlugin') }}</option>
-              <option v-for="plugin in harnessPluginsList" :key="plugin.id" :value="plugin.remote_name">
-                {{ plugin.remote_name }}{{ plugin.version ? ` (v${plugin.version})` : '' }}
-              </option>
-            </select>
-            <input
-              v-else
-              v-model="harnessPluginName"
-              type="text"
-              :placeholder="t('settings.harness.pluginPlaceholder')"
-            />
-            <span v-if="harnessPluginsList.length === 0" class="help-text">
-              {{ t('settings.harness.noPlugins') }}
-            </span>
-          </div>
-
-          <div class="form-actions">
-            <button
-              class="btn btn-primary"
-              :disabled="!harnessMarketplaceId || !harnessPluginName || savingHarnessSettings"
-              @click="saveHarnessSettings"
-            >
-              <template v-if="savingHarnessSettings">
-                <div class="spinner-sm"></div>
-                {{ t('settings.harness.saving') }}
-              </template>
-              <template v-else>
-                {{ t('settings.harness.saveSettings') }}
-              </template>
-            </button>
-          </div>
-
-          <div v-if="harnessMarketplaceId && harnessPluginName" class="current-config">
+          <div v-if="harnessPluginName" class="current-config">
             <span class="config-label">{{ t('settings.harness.currentConfig') }}</span>
             <div class="config-value">
               <span class="marketplace-name">
@@ -201,6 +102,7 @@ onMounted(() => {
               <span class="plugin-name-display">{{ harnessPluginName }}</span>
             </div>
           </div>
+          <p v-else class="muted">{{ t('settings.harness.autoConfigured') }}</p>
         </template>
       </div>
     </div>

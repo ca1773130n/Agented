@@ -34,6 +34,28 @@ export interface Project {
   teams?: { id: string; name: string; color: string }[];
 }
 
+export interface DiscoveredRepo {
+  name: string;
+  local_path: string;
+  remote_url: string | null;
+  already_imported: boolean;
+  existing_project_id: string | null;
+}
+
+export interface DiscoverResponse {
+  repos: DiscoveredRepo[];
+  scanned: number;
+  found: number;
+  new_count: number;
+  unreadable: number;
+}
+
+export interface ImportResponse {
+  imported: { project_id: string; name: string }[];
+  skipped: { name: string; reason: string }[];
+  setup_started: boolean;
+}
+
 export interface ProjectTeamEdge {
   id: number;
   project_id: string;

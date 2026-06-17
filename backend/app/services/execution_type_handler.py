@@ -558,8 +558,9 @@ class GrdEvolveSessionHandler(ExecutionTypeHandler):
         if not gd_path:
             return {
                 "error": (
-                    "gd binary not detected — install GRD v0.3.24+ or set "
-                    "CLAUDE_PLUGIN_ROOT so the binary detection finds it."
+                    "gd binary not detected — install GRD v0.4.x "
+                    "(@jokerized/getresearchdone) or set CLAUDE_PLUGIN_ROOT so "
+                    "the binary detection finds it."
                 )
             }
 

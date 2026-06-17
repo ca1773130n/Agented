@@ -126,6 +126,29 @@ describe('useToastSystem', () => {
     expect(tour.nextStep).toHaveBeenCalledTimes(1);
   });
 
+  it('does NOT double-advance when the step already moved before the 800ms timer fires', () => {
+    // Mirrors saveWorkspaceRoot: the success toast arms the 800ms auto-advance
+    // timer, then the caller advances explicitly (workspace → backends.claude).
+    // When the timer fires the step has already moved, so it must NOT advance
+    // again — the old behavior double-advanced and skipped the Claude Code
+    // account step (landing on Codex).
+    const active = ref(true);
+    const step = ref('workspace');
+    const nextStep = vi.fn();
+    const tour = {
+      isActive: computed(() => active.value),
+      currentStep: computed(() => step.value),
+      nextStep,
+    };
+    const { showToast } = useToastSystem(tour as never);
+
+    showToast('Workspace root saved', 'success');
+    // Caller advances explicitly right after the toast, before the 800ms timer.
+    step.value = 'backends.claude';
+    vi.advanceTimersByTime(800);
+    expect(nextStep).not.toHaveBeenCalled();
+  });
+
   it('does NOT auto-advance when tour is inactive', () => {
     const tour = makeTour({ active: false, step: 'workspace' });
     const { showToast } = useToastSystem(tour as never);

@@ -411,6 +411,7 @@ onUnmounted(() => {
           :milestone="selectedMilestone"
           :phases="filteredPhases"
           :plans="filteredPlans"
+          :project-id="projectId"
           @create-phase="handleCreatePhase"
         />
 

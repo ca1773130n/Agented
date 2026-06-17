@@ -225,6 +225,7 @@ watch(selectedMilestoneId, () => {
               :milestone="selectedMilestone"
               :phases="filteredPhases"
               :plans="filteredPlans"
+              :project-id="projectId"
               @create-phase="handleCreatePhase"
               @phase-command="handlePhaseCommand"
             />
