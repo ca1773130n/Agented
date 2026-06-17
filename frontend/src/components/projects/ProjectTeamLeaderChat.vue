@@ -23,6 +23,7 @@ import { useToast } from '../../composables/useToast';
 import LoadingState from '../base/LoadingState.vue';
 import ErrorState from '../base/ErrorState.vue';
 import MarkdownContent from '../base/MarkdownContent.vue';
+import { authorName, modelDisplayName } from '../../utils/assistantLabel';
 
 const props = defineProps<{ projectId: string }>();
 const showToast = useToast();
@@ -50,6 +51,10 @@ interface ChatMessage {
   content: string;
   message_id?: string;
   timestamp?: string;
+  /** Backend that produced an assistant turn (claude/codex/gemini/opencode). */
+  backend?: string;
+  /** Model that produced an assistant turn (shown as a pill beside the name). */
+  model?: string;
   citations?: Citation[];
   tool_uses?: ToolUseRecord[];
   // Phase 19 (REQ-13) — when this turn ran on the ``grd`` driver, the
@@ -227,6 +232,10 @@ function connectStream(session: TeamLeaderChatSession) {
     } else if (deltaType === 'finish') {
       if (activeAssistant) {
         activeAssistant.citations = extractCitations(activeAssistant.content);
+        // Label the bubble with who actually answered — the resolved
+        // backend + model are carried on the finish delta.
+        if (data.backend) activeAssistant.backend = data.backend;
+        if (data.model) activeAssistant.model = data.model;
         // Phase 19 (REQ-13) — a grd-driver turn carries the spawned PSM
         // session id on the finish delta (any of these field names —
         // 19-RESEARCH §7/risk 2; bind defensively). When present, render
@@ -490,7 +499,12 @@ onUnmounted(closeStream);
           :data-role="m.role"
         >
           <div class="msg__head">
-            <span class="msg__role">{{ m.role }}</span>
+            <span class="msg__role">{{ authorName(m.role, m.backend) }}</span>
+            <span
+              v-if="m.role === 'assistant' && modelDisplayName(m.model)"
+              class="msg__model"
+              >{{ modelDisplayName(m.model) }}</span
+            >
             <span v-if="m.timestamp" class="msg__time">{{ formatTime(m.timestamp) }}</span>
           </div>
           <!-- Reasoning — folded by default; expand to read the thinking. -->
@@ -641,6 +655,11 @@ onUnmounted(closeStream);
 .msg__role {
   font-size: 10px; text-transform: uppercase;
   letter-spacing: 0.06em; color: var(--text-tertiary);
+}
+.msg__model {
+  font-size: 10px; padding: 1px 6px; border-radius: 4px;
+  background: var(--bg-tertiary, rgba(255, 255, 255, 0.06));
+  color: var(--text-tertiary); font-variant-numeric: tabular-nums;
 }
 .msg__time {
   font-size: 10px; color: var(--text-quaternary, var(--text-tertiary));

@@ -148,13 +148,14 @@ export function useConversation<TConfig>(
         streamingParser.write(data.content);
       },
       response_complete: (event) => {
-        const data = safeParseSSE<{ content?: string; backend?: string }>(event, 'conversation/response_complete');
+        const data = safeParseSSE<{ content?: string; backend?: string; model?: string }>(event, 'conversation/response_complete');
         isProcessing.value = false;
         streamingParser.finalize();
         if (!data) { streamingContent.value = ''; return; }
 
         if (data.content) {
           const resolvedBackend = data.backend || (selectedBackend.value !== 'auto' ? selectedBackend.value : undefined);
+          const resolvedModel = data.model || selectedModel.value || undefined;
           const entry: ConversationMessage = {
             role: 'assistant',
             content: data.content,
@@ -162,6 +163,9 @@ export function useConversation<TConfig>(
           };
           if (resolvedBackend) {
             entry.backend = resolvedBackend;
+          }
+          if (resolvedModel) {
+            entry.model = resolvedModel;
           }
           messages.value.push(entry);
 

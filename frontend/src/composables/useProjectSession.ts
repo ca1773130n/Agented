@@ -107,7 +107,9 @@ export function useProjectSession(projectId: Ref<string>) {
   // is on). Frontend appends to the live bubble without separators,
   // giving the same word-by-word streaming feel as the TUI.
   let onOutputDeltaCb: ((delta: string) => void) | undefined;
-  let onCompleteCb: ((status: string, exitCode: number) => void) | undefined;
+  let onCompleteCb:
+    | ((status: string, exitCode: number, meta?: { backend?: string; model?: string }) => void)
+    | undefined;
   let onErrorCb: ((message: string) => void) | undefined;
   // v0.7.63 — claude's ``AskUserQuestion`` tool surfaces here as a
   // structured payload (the backend splits it off the regular output
@@ -340,7 +342,10 @@ export function useProjectSession(projectId: Ref<string>) {
           if (idx !== -1) {
             sessions.value[idx] = { ...sessions.value[idx], status: data.status };
           }
-          onCompleteCb?.(data.status, data.exit_code);
+          onCompleteCb?.(data.status, data.exit_code, {
+            backend: data.backend,
+            model: data.model,
+          });
           // The subprocess has exited cleanly. The backend has yielded
           // ``complete`` and poisoned its subscriber queue, so the SSE
           // stream is about to close. Close it ourselves first — that
@@ -622,7 +627,9 @@ export function useProjectSession(projectId: Ref<string>) {
     onOutputDeltaCb = cb;
   }
 
-  function onComplete(cb: (status: string, exitCode: number) => void) {
+  function onComplete(
+    cb: (status: string, exitCode: number, meta?: { backend?: string; model?: string }) => void,
+  ) {
     onCompleteCb = cb;
   }
 

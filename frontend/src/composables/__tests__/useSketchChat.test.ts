@@ -35,6 +35,7 @@ vi.mock('vue', async () => {
 });
 
 import { useSketchChat } from '../useSketchChat';
+import { superAgentSessionApi } from '../../services/api';
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -250,6 +251,51 @@ describe('useSketchChat', () => {
 
       expect(chat.error.value).toBe('Route failed');
       expect(chat.isProcessing.value).toBe(false);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // streaming finish — backend + model labelling
+  // -----------------------------------------------------------------------
+  describe('streaming finish', () => {
+    it('labels the streamed assistant turn with the finish backend + model', async () => {
+      vi.useFakeTimers();
+      try {
+        const listeners: Record<string, (e: MessageEvent) => void> = {};
+        const fakeSource = {
+          addEventListener: (type: string, cb: (e: MessageEvent) => void) => {
+            listeners[type] = cb;
+          },
+          close: vi.fn(),
+          onerror: null as unknown,
+        };
+        (superAgentSessionApi.chatStream as ReturnType<typeof vi.fn>).mockReturnValue(fakeSource);
+
+        mockSketchApiRoute.mockResolvedValue({
+          routing: { target_type: 'agent', target_id: 'agent-1', reason: 'ok' },
+          session_id: 'sess-1',
+          super_agent_id: 'sa-1',
+        });
+        mockSketchApiGet.mockResolvedValue({ id: 'sk-1' });
+        mockSketchApiList.mockResolvedValue({ sketches: [] });
+
+        await chat.routeSketch('sk-1');
+
+        // Stream a chunk, then finish carrying the resolved backend + model.
+        listeners['state_delta']({
+          data: JSON.stringify({ type: 'content_delta', content: 'Hi there' }),
+        } as MessageEvent);
+        listeners['state_delta']({
+          data: JSON.stringify({ type: 'finish', data: { backend: 'codex', model: 'gpt-5.1' } }),
+        } as MessageEvent);
+
+        const reply = chat.messages.value.find((m) => m.role === 'assistant');
+        expect(reply?.content).toBe('Hi there');
+        expect(reply?.backend).toBe('codex');
+        expect(reply?.model).toBe('gpt-5.1');
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

@@ -241,8 +241,16 @@ export function useSketchChat() {
                 }
                 break;
               }
-              case 'finish':
+              case 'finish': {
                 isStreaming.value = false;
+                // Label the assistant bubble with who actually answered —
+                // the resolved backend + model carried on the finish delta.
+                const fin = data.data || data;
+                const finished = messages.value[msgIndex];
+                if (finished) {
+                  if (fin.backend) finished.backend = fin.backend;
+                  if (fin.model) finished.model = fin.model;
+                }
                 if (eventSource) {
                   eventSource.close();
                   eventSource = null;
@@ -250,6 +258,7 @@ export function useSketchChat() {
                 // Check for delegations (team collaboration)
                 startDelegationPolling(sketchId);
                 break;
+              }
               case 'error': {
                 isStreaming.value = false;
                 // Surface the backend reason (e.g. "all accounts
@@ -375,16 +384,27 @@ export function useSketchChat() {
             // an empty string when the field is missing so we get a
             // clean ``null`` back instead of a TS error.
             const log = parseJsonBlock(session.conversation_log ?? '') as
-              | Array<{ role?: string; content?: string; timestamp?: string }>
+              | Array<{
+                  role?: string;
+                  content?: string;
+                  timestamp?: string;
+                  backend?: string;
+                  model?: string;
+                }>
               | null;
             if (Array.isArray(log)) {
               for (const turn of log) {
                 if (turn?.role === 'assistant' && typeof turn.content === 'string' && turn.content.trim()) {
-                  messages.value.push({
+                  // Carry the persisted backend/model so a resumed sketch
+                  // labels the bubble with who answered, not "Assistant".
+                  const restored: ConversationMessage = {
                     role: 'assistant',
                     content: turn.content,
                     timestamp: turn.timestamp || sketch.updated_at || new Date().toISOString(),
-                  });
+                  };
+                  if (turn.backend) restored.backend = turn.backend;
+                  if (turn.model) restored.model = turn.model;
+                  messages.value.push(restored);
                 }
               }
             }

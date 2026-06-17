@@ -164,6 +164,19 @@ describe('useConversation', () => {
     expect(conv.isProcessing.value).toBe(false);
   });
 
+  it('SSE response_complete records the answering backend + model', async () => {
+    const api = createMockApi();
+    const conv = useConversation(api, parseTestConfig);
+
+    await conv.startConversation();
+
+    capturedEvents['response_complete'](sseEvent({ content: 'hi', backend: 'claude', model: 'opus' }));
+
+    const reply = conv.messages.value.find((m) => m.role === 'assistant' && m.content === 'hi');
+    expect(reply?.backend).toBe('claude');
+    expect(reply?.model).toBe('opus');
+  });
+
   it('SSE response_complete detects config in response', async () => {
     const api = createMockApi();
     const conv = useConversation(api, parseTestConfig);

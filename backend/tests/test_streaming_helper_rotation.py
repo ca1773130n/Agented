@@ -78,7 +78,9 @@ def _install_common_stubs(monkeypatch, deltas):
     monkeypatch.setattr(
         sh.SuperAgentSessionService,
         "add_assistant_message",
-        lambda sid, content, backend=None: saved.update(content=content, backend=backend),
+        lambda sid, content, backend=None, model=None: saved.update(
+            content=content, backend=backend, model=model
+        ),
     )
 
     # Force the CLI-agent path.
@@ -117,6 +119,7 @@ def test_rotates_to_next_account_on_rate_limit(monkeypatch, two_claude_accounts)
         super_agent_id="psa-1",
         backend="claude",
         account_id=None,
+        model="sonnet",
     )
 
     kinds = [k for k, _ in deltas]
@@ -130,11 +133,34 @@ def test_rotates_to_next_account_on_rate_limit(monkeypatch, two_claude_accounts)
     assert saved.get("content") == "Hello from Personal2"
     finish = next(p for k, p in deltas if k == "finish")
     assert finish["content"] == "Hello from Personal2"
+    # The finish delta carries who actually answered so the chat bubble can
+    # label the turn with the backend + model instead of a generic "AI".
+    assert finish["backend"] == "claude"
+    assert finish["model"] == "sonnet"
 
     # Personal1 was marked rate-limited; Personal2 was not.
     accts = {a["account_name"]: a for a in get_accounts_for_backend_type("claude")}
     assert RateLimitService.is_rate_limited(accts["Personal1"]["id"]) is True
     assert RateLimitService.is_rate_limited(accts["Personal2"]["id"]) is False
+
+
+def test_resolve_finish_model_resolves_default_when_unset(monkeypatch):
+    """When no model is requested (the routed super-agent case), the finish
+    delta must still carry a concrete model so the bubble shows a pill — the
+    backend default, cleaned of its date stamp + redundant provider token."""
+    import app.services.streaming_helper as sh
+    from app.services import conversation_streaming as cs
+
+    monkeypatch.setattr(cs, "_get_default_model", lambda b: "claude-sonnet-4-20250514")
+
+    # Missing model → resolve the backend default, drop date stamp + the
+    # leading provider token that duplicates the (Claude) username.
+    assert sh._resolve_finish_model(None, "claude") == "sonnet-4"
+    # A provided model passes through unchanged (no resolution, no munging).
+    assert sh._resolve_finish_model("sonnet", "claude") == "sonnet"
+    assert sh._resolve_finish_model("gpt-5.3-codex", "codex") == "gpt-5.3-codex"
+    # Provider path prefix is stripped.
+    assert sh._clean_model_label("opencode/glm-4.7-free", "opencode") == "glm-4.7-free"
 
 
 def test_all_accounts_rate_limited_queues_the_turn(monkeypatch, two_claude_accounts):

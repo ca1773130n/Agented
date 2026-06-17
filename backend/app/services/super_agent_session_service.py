@@ -240,12 +240,18 @@ class SuperAgentSessionService:
 
     @classmethod
     def add_assistant_message(
-        cls, session_id: str, content: str, backend: Optional[str] = None
+        cls,
+        session_id: str,
+        content: str,
+        backend: Optional[str] = None,
+        model: Optional[str] = None,
     ) -> bool:
         """Append an assistant message to the session conversation log.
 
         Called after streaming completes to persist the full response.
-        Returns True on success.
+        ``backend`` / ``model`` record who actually answered so a resumed
+        session can label the bubble (Claude · Opus) instead of a generic
+        "Assistant". Returns True on success.
         """
         with cls._lock:
             session = cls._active_sessions.get(session_id)
@@ -263,6 +269,8 @@ class SuperAgentSessionService:
             }
             if backend:
                 message["backend"] = backend
+            if model:
+                message["model"] = model
 
             session["conversation_log"].append(message)
             session["token_count"] += token_estimate

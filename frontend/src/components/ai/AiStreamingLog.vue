@@ -18,7 +18,7 @@ const props = withDefaults(
     assistantName?: string;
   }>(),
   {
-    assistantName: 'AI',
+    assistantName: 'Assistant',
   },
 );
 

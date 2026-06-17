@@ -1185,3 +1185,35 @@ class TestSubclassStateIsolation:
         assert cmd_id not in HookConversationService._conversations
         assert hook_id in HookConversationService._conversations
         assert hook_id not in CommandConversationService._conversations
+
+
+def test_conversation_message_round_trips_backend_and_model():
+    """Assistant turns persist the answering backend + model so a resumed
+    conversation can label the bubble instead of falling back to 'Assistant'."""
+    from dataclasses import asdict
+
+    msg = ConversationMessage(
+        role="assistant",
+        content="hi",
+        timestamp="2026-06-14T00:00:00",
+        backend="claude",
+        model="opus",
+    )
+    serialized = asdict(msg)
+    assert serialized["backend"] == "claude"
+    assert serialized["model"] == "opus"
+
+    # Reload-style reconstruction (mirrors the *_ensure_loaded / resume paths).
+    restored = ConversationMessage(
+        role=serialized["role"],
+        content=serialized["content"],
+        timestamp=serialized["timestamp"],
+        backend=serialized.get("backend"),
+        model=serialized.get("model"),
+    )
+    assert restored.backend == "claude"
+    assert restored.model == "opus"
+
+    # Legacy rows without the fields still load (optional, default None).
+    legacy = ConversationMessage(role="user", content="q", timestamp="t")
+    assert legacy.backend is None and legacy.model is None

@@ -24,6 +24,8 @@ export interface ConversationMessage {
   timestamp: string;
   /** Which backend produced this message (for display name). */
   backend?: string;
+  /** Which model produced this message (shown as a pill beside the name). */
+  model?: string;
 }
 
 // Health API types

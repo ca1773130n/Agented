@@ -68,6 +68,10 @@ class ConversationMessage:
     role: str  # 'user' | 'assistant' | 'system'
     content: str
     timestamp: str
+    # Who answered (assistant turns only) so a resumed conversation can
+    # label the bubble with the backend + model instead of "Assistant".
+    backend: Optional[str] = None
+    model: Optional[str] = None
 
 
 class BaseConversationService(abc.ABC):
@@ -593,7 +597,14 @@ class BaseConversationService(abc.ABC):
         return response
 
     @classmethod
-    def _persist_message(cls, conv_id: str, role: str, content: str) -> None:
+    def _persist_message(
+        cls,
+        conv_id: str,
+        role: str,
+        content: str,
+        backend: Optional[str] = None,
+        model: Optional[str] = None,
+    ) -> None:
         """Append a message to the conversation and persist to DB."""
         conv = cls._conversations.get(conv_id)
         if conv is None:
@@ -602,6 +613,8 @@ class BaseConversationService(abc.ABC):
             role=role,
             content=content,
             timestamp=datetime.datetime.now().isoformat(),
+            backend=backend,
+            model=model,
         )
         conv["messages"].append(msg)
         cls._persist_messages(conv_id)
@@ -661,12 +674,12 @@ class BaseConversationService(abc.ABC):
                 conv_id, messages, model, backend, account_id, use_cli_agent=use_cli_agent
             )
 
-            cls._persist_message(conv_id, "assistant", response)
+            cls._persist_message(conv_id, "assistant", response, backend=backend, model=model)
 
             cls._broadcast(
                 conv_id,
                 "response_complete",
-                {"content": response, "backend": backend or "claude"},
+                {"content": response, "backend": backend or "claude", "model": model},
             )
 
         except Exception as e:
@@ -757,6 +770,8 @@ class BaseConversationService(abc.ABC):
                     role=m.get("role", "user"),
                     content=m.get("content", ""),
                     timestamp=m.get("timestamp", datetime.datetime.now().isoformat()),
+                    backend=m.get("backend"),
+                    model=m.get("model"),
                 )
             )
 
