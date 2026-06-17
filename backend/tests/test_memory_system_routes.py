@@ -231,7 +231,9 @@ def test_init_invokes_cli_with_init_subcommand(client, tmp_path):
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["ok"] is True
-    assert captured["cmd"][1:3] == ["project", "init"]
+    # Modern top-level form (0.9.0 retired `tesserae project init`).
+    assert captured["cmd"][1] == "init"
+    assert "project" not in captured["cmd"][:2]
     assert captured["cwd"] == str(tmp_path)
 
 
