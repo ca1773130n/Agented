@@ -77,7 +77,10 @@ _MAX_TURN_TEXT_CHARS = 8 * 1024
 _JUDGE_SYSTEM = (
     "You are a strict goal-judging assistant. Read the goal and the "
     "agent's latest turn. Decide if the goal is met. Reply ONLY with "
-    'a JSON object: {"met": true|false, "reason": "..."}. '
+    'a JSON object: {"met": true|false, "reason": "...", '
+    '"confidence": 0.0-1.0}. '
+    'The "confidence" is your certainty in the verdict (0–1) and is '
+    "optional — omit it if unsure and it defaults to fully confident. "
     "Be concise — the reason is one sentence."
 )
 
@@ -324,16 +327,20 @@ class GoalJudgeService:
             )
         base_url, _api_key = url_and_key
         turn_text = (last_assistant_text or "")[-_MAX_TURN_TEXT_CHARS:]
+        user_content = _JUDGE_USER_TEMPLATE.format(
+            goal=goal.strip(),
+            turn=turn_text.strip(),
+        )
+        if quality_gate and quality_gate.rubric:
+            user_content = f"{user_content}\n\nRubric:\n{quality_gate.rubric.strip()}"
+        judge_version = quality_gate.judge_version if quality_gate else None
         payload = {
             "model": model,
             "messages": [
                 {"role": "system", "content": _JUDGE_SYSTEM},
                 {
                     "role": "user",
-                    "content": _JUDGE_USER_TEMPLATE.format(
-                        goal=goal.strip(),
-                        turn=turn_text.strip(),
-                    ),
+                    "content": user_content,
                 },
             ],
             "stream": False,
@@ -357,12 +364,14 @@ class GoalJudgeService:
                 met=False,
                 source="llm",
                 reason=f"judge request failed: {exc}",
+                judge_version=judge_version,
             )
         if resp.status_code != 200:
             return JudgeVerdict(
                 met=False,
                 source="llm",
                 reason=f"judge HTTP {resp.status_code}",
+                judge_version=judge_version,
             )
         try:
             body = resp.json()
@@ -373,6 +382,7 @@ class GoalJudgeService:
                 met=False,
                 source="llm",
                 reason=f"judge response malformed: {exc}",
+                judge_version=judge_version,
             )
         parsed = _parse_judge_json(content)
         if parsed is None:
@@ -382,14 +392,17 @@ class GoalJudgeService:
                 reason="judge output unparseable (treated as not_met)",
                 tokens_in=usage.get("prompt_tokens", 0),
                 tokens_out=usage.get("completion_tokens", 0),
+                judge_version=judge_version,
             )
-        met, reason = parsed
+        met, reason, confidence = parsed
         return JudgeVerdict(
             met=met,
             source="llm",
             reason=reason,
             tokens_in=usage.get("prompt_tokens", 0),
             tokens_out=usage.get("completion_tokens", 0),
+            confidence=confidence,
+            judge_version=judge_version,
         )
 
     # -----------------------------------------------------------------
@@ -487,13 +500,14 @@ class GoalJudgeService:
                     tokens_out=usage.get("completion_tokens", 0),
                     ouroboros_verdict="unknown",
                 )
-            met_fb, reason_fb = fallback
+            met_fb, reason_fb, confidence_fb = fallback
             return JudgeVerdict(
                 met=met_fb,
                 source="llm",
                 reason=reason_fb,
                 tokens_in=usage.get("prompt_tokens", 0),
                 tokens_out=usage.get("completion_tokens", 0),
+                confidence=confidence_fb,
                 ouroboros_verdict="confirmed" if met_fb else "unknown",
             )
         met, verdict, reason = parsed
@@ -510,13 +524,18 @@ class GoalJudgeService:
 _JSON_BLOB_RE = re.compile(r"\{[\s\S]*?\}")
 
 
-def _parse_judge_json(content: str) -> Optional[tuple[bool, str]]:
+def _parse_judge_json(content: str) -> Optional[tuple[bool, str, float]]:
     """Forgiving JSON parser for the judge output.
 
     The model occasionally wraps the JSON in ``` ```json ``` ``` fences
     or adds a prose preamble. Extract the first ``{...}`` blob and
-    try to parse. Returns ``(met, reason)`` or ``None`` when no
-    valid blob is found.
+    try to parse. Returns ``(met, reason, confidence)`` or ``None``
+    when no valid blob is found.
+
+    ``confidence`` is the judge's optional self-reported certainty
+    (0–1). Backward-safe: when the judge omits it, we default to
+    ``1.0`` so legacy "absent" replies still terminate as before.
+    Out-of-range values are clamped to ``[0, 1]``.
     """
     if not isinstance(content, str):
         return None
@@ -529,7 +548,12 @@ def _parse_judge_json(content: str) -> Optional[tuple[bool, str]]:
             continue
         met = bool(blob.get("met"))
         reason = str(blob.get("reason") or "").strip() or "(no reason given)"
-        return met, reason
+        try:
+            confidence = float(blob.get("confidence", 1.0))
+        except (TypeError, ValueError):
+            confidence = 1.0
+        confidence = max(0.0, min(1.0, confidence))
+        return met, reason, confidence
     return None
 
 
