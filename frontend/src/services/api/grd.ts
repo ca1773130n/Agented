@@ -127,14 +127,27 @@ export interface CreateSessionRequest {
   // v0.7.74 — goal-loop config. Only consumed by the ``goal_loop``
   // execution-type handler; other types ignore it. Empty when not
   // creating a goal-loop session.
-  goal_loop_config?: {
-    goal: string;
-    check_cmd?: string | null;
-    max_iterations?: number;
-    max_wall_seconds?: number;
-    judge_backend_kind?: 'claude' | 'codex' | 'gemini' | 'opencode';
-    judge_model_override?: string | null;
-  };
+  goal_loop_config?: GoalLoopConfig;
+}
+
+// v0.7.74 / v0.6.0 — goal-loop config consumed by the ``goal_loop``
+// execution-type handler. The v0.6.0 unified-loops fields
+// (``max_tokens`` / ``context_policy`` / ``stagnation_no_progress_for``)
+// map onto the typed ``LoopSpec`` exit/state in the backend.
+export interface GoalLoopConfig {
+  goal: string;
+  check_cmd?: string | null;
+  max_iterations?: number;
+  max_wall_seconds?: number;
+  max_cost_usd?: number;
+  ouroboros?: boolean;
+  judge_backend_kind?: 'claude' | 'codex' | 'gemini' | 'opencode';
+  judge_model_override?: string | null;
+  metric_spec?: Record<string, unknown> | null;
+  // v0.6.0 unified loops
+  max_tokens?: number;
+  context_policy?: 'carry' | 'reset';
+  stagnation_no_progress_for?: number;
 }
 
 // v0.7.74 — goal-loop iteration audit row + container response.

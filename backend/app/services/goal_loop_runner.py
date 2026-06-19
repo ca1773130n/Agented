@@ -20,9 +20,10 @@ import re
 import threading
 import time
 from dataclasses import dataclass, field
-from queue import Empty
+from queue import Empty, Queue
 from typing import Optional
 
+from app.config import AUTORESEARCH_KERNEL_ENABLED
 from app.db import (
     add_goal_loop_dead_end,
     list_goal_loop_dead_ends,
@@ -30,10 +31,11 @@ from app.db import (
     record_goal_loop_iteration_complete,
     record_goal_loop_iteration_start,
 )
+from app.models.loop_spec import LoopSpec
 
+from . import loop_progress
 from .goal_judge_service import GoalJudgeService
 from .project_session_manager import ProjectSessionManager
-from app.config import AUTORESEARCH_KERNEL_ENABLED
 
 # autoresearch_core.should_promote_dead_end is imported lazily inside
 # _maybe_promote_kernel_dead_end so flag-off deployments don't require the
@@ -92,6 +94,10 @@ def _extract_hypothesis(turn_text: str) -> tuple[Optional[str], Optional[str]]:
     hypothesis = hyp_match.group(1).strip() if hyp_match else None
     predicted = pred_match.group(1).strip() if pred_match else None
     return hypothesis, predicted
+
+
+def _token_cap_exceeded(total: int, max_tokens: int) -> bool:
+    return max_tokens > 0 and total >= max_tokens
 
 
 def _approach_hash(hypothesis: str) -> str:
@@ -236,6 +242,10 @@ class _RunnerState:
     not_met_streak: int = 0
     total_cost_usd: float = 0.0
     stop_event: threading.Event = field(default_factory=threading.Event)
+    spec: Optional[LoopSpec] = None  # parsed once at start; ladder reads from here
+    total_tokens: int = 0
+    no_progress_streak: int = 0
+    last_commit: Optional[str] = None
 
 
 _runners: dict[str, _RunnerState] = {}
@@ -251,10 +261,12 @@ def start_runner(session_id: str, config: dict, cwd: Optional[str]) -> None:
     with _runners_lock:
         if session_id in _runners:
             return
+        execution_type = config.get("_execution_type") or "goal_loop"
         state = _RunnerState(
             session_id=session_id,
             config=config,
             started_at=time.time(),
+            spec=LoopSpec.from_legacy_config(config, execution_type=execution_type),
         )
         _runners[session_id] = state
 
@@ -283,8 +295,8 @@ def get_runner_state(session_id: str) -> Optional[dict]:
         return None
     return {
         "iteration": state.iteration,
-        "max_iterations": state.config.get("max_iterations", 20),
-        "max_wall_seconds": state.config.get("max_wall_seconds", 1800),
+        "max_iterations": state.spec.exit.max_iterations,
+        "max_wall_seconds": state.spec.exit.max_wall_seconds,
         "elapsed_seconds": int(time.time() - state.started_at),
         "not_met_streak": state.not_met_streak,
     }
@@ -303,25 +315,27 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
     5. Wall-time cap reached.
     """
     session_id = state.session_id
+    # The runner registry is keyed by the ORIGINAL session_id. Under
+    # context_policy=reset the loop re-points ``session_id`` to freshly-spawned
+    # child processes, but the registry key (and the route's stop_runner target)
+    # must stay stable — so cleanup/teardown always use this captured key.
+    registry_key = session_id
     config = state.config
     goal = (config.get("goal") or "").strip()
     if not goal:
         logger.warning("goal_loop: session %s has empty goal; runner exits", session_id)
-        _cleanup(session_id)
+        _cleanup(registry_key)
         return
 
     check_cmd = config.get("check_cmd")
     metric_spec = config.get("metric_spec")
     backend_kind = config.get("judge_backend_kind", "claude")
     model_override = config.get("judge_model_override")
-    max_iterations = int(config.get("max_iterations") or 20)
-    max_wall_seconds = int(config.get("max_wall_seconds") or 1800)
+    max_iterations = state.spec.exit.max_iterations
+    max_wall_seconds = state.spec.exit.max_wall_seconds
     # Optional cost ceiling (USD). 0/unset disables — the loop is then bounded
     # only by iteration + wall caps (06 H1). Each judge verdict records cost_usd.
-    try:
-        max_cost_usd = float(config.get("max_cost_usd") or 0.0)
-    except (TypeError, ValueError):
-        max_cost_usd = 0.0
+    max_cost_usd = state.spec.exit.max_cost_usd
     # v0.7.87 — Ouroboros is the default goal-loop mode. The
     # config flag is preserved so operators can disable it
     # (``"ouroboros": false``) when the agent backend is a poor
@@ -335,7 +349,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
     # ``_extract_hypothesis`` returns ``(None, None)`` and the
     # judge falls back to its legacy binary mode for that
     # iteration without losing the audit row.
-    ouroboros = bool(config.get("ouroboros", True))
+    ouroboros = state.spec.exit.convergence
     if metric_spec is not None and not AUTORESEARCH_KERNEL_ENABLED:
         # Operator configured a metric_spec but the kernel flag is off — it's
         # silently ignored. Log once so this isn't a confusing no-op.
@@ -453,6 +467,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                 hypothesis=hypothesis,
                 predicted_outcome=predicted_outcome,
                 ouroboros_verdict=verdict.ouroboros_verdict,
+                body_kind=state.spec.body.kind,
             )
             ProjectSessionManager._broadcast(
                 session_id,
@@ -482,6 +497,20 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                     session_id,
                     reason="budget_cap",
                     detail=f"cost ${state.total_cost_usd:.4f} reached cap ${max_cost_usd:.4f}",
+                )
+                ProjectSessionManager.stop_session(session_id)
+                break
+
+            # Token-budget circuit breaker (v0.6.0 unified loops): accumulate
+            # tokens_in+out across iterations and stop once a configured
+            # ``max_tokens`` ceiling is reached. 0/unset disables. Checked after
+            # the cost-cap so both budgets are enforced last in the ladder.
+            state.total_tokens += int((verdict.tokens_in or 0) + (verdict.tokens_out or 0))
+            if _token_cap_exceeded(state.total_tokens, state.spec.exit.max_tokens):
+                _broadcast_end(
+                    session_id,
+                    reason="token_cap",
+                    detail=f"tokens {state.total_tokens} reached cap {state.spec.exit.max_tokens}",
                 )
                 ProjectSessionManager.stop_session(session_id)
                 break
@@ -557,14 +586,52 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                     ProjectSessionManager.stop_session(session_id)
                     break
 
-            _send_continue(
-                session_id,
-                goal,
-                verdict.reason,
+            # Generic stagnation circuit breaker (v0.6.0 unified loops): when a
+            # ``stagnation_no_progress_for`` threshold is configured, stop once
+            # the loop has made no progress for that many iterations. agent_task
+            # bodies (Ralph) detect progress via a new git commit landing;
+            # eval_refine bodies reuse the existing not-met streak. 0 = off.
+            threshold = state.spec.exit.stagnation_no_progress_for
+            if threshold > 0:
+                if state.spec.body.kind == "agent_task":
+                    cur = loop_progress.head_commit(cwd or ".")
+                    if loop_progress.made_progress(state.last_commit, cur):
+                        state.no_progress_streak = 0
+                    else:
+                        state.no_progress_streak += 1
+                    state.last_commit = cur
+                    streak = state.no_progress_streak
+                else:
+                    streak = state.not_met_streak
+                if streak >= threshold:
+                    _broadcast_end(
+                        session_id,
+                        reason="stagnation",
+                        detail=f"no progress for {threshold} iterations",
+                    )
+                    ProjectSessionManager.stop_session(session_id)
+                    break
+
+            fresh_session_id = _next_iteration(
+                policy=state.spec.state.context_policy,
+                session_id=session_id,
+                cwd=cwd,
+                goal=goal,
+                reason=verdict.reason,
                 ouroboros=ouroboros,
                 dead_ends_block=_dead_ends_context(session_id) if ouroboros else "",
                 result_block=result_block,
             )
+            # context_policy=reset spawned a fresh claude process (clean context
+            # window). Re-point the loop's polling to the new child so subsequent
+            # turn boundaries come from it, and release the old subscription. The
+            # SAME _RunnerState keeps accumulating budgets/iteration counts.
+            if fresh_session_id and fresh_session_id != session_id:
+                new_queue = _repoint_runner_to_fresh_session(registry_key, fresh_session_id)
+                if new_queue is not None:
+                    ProjectSessionManager.unsubscribe_raw(session_id, queue)
+                    session_id = fresh_session_id
+                    queue = new_queue
     except Exception as exc:
         # The normal termination paths (met / iteration_cap / convergence /
         # operator stop) all break out of the loop and reach `finally`, never
@@ -580,7 +647,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
             logger.error("goal_loop: failed to emit error-end for %s", session_id, exc_info=True)
     finally:
         ProjectSessionManager.unsubscribe_raw(session_id, queue)
-        _cleanup(session_id)
+        _cleanup(registry_key)
 
 
 def _send_continue(
@@ -603,6 +670,115 @@ def _send_continue(
             result_block=result_block,
         ),
     )
+
+
+def _repoint_runner_to_fresh_session(registry_key: str, fresh_session_id: str) -> Optional["Queue"]:
+    """Re-point the live ``_RunnerState`` at the freshly-spawned child process.
+
+    The runner registry stays keyed by the ORIGINAL session_id (``registry_key``,
+    so the route's ``stop_runner`` / ``stop_session`` keep working), but
+    ``state.session_id`` is swapped to the fresh child so per-iteration tracking
+    (iteration rows, broadcasts, stop checks) target the clean-context process.
+    Returns a freshly-subscribed raw queue for the new session so the ``_run``
+    loop polls the fresh process's turn boundaries; ``None`` if the runner has
+    already been torn down."""
+    with _runners_lock:
+        state = _runners.get(registry_key)
+        if state is None:
+            return None
+        state.session_id = fresh_session_id
+    return ProjectSessionManager.subscribe_raw(fresh_session_id)
+
+
+def _advance_iteration(
+    *,
+    session_id: str,
+    cwd,
+    goal: str,
+    reason: str = "",
+    ouroboros: bool = True,
+    dead_ends_block: str = "",
+    result_block: str = "",
+    **_kw,
+) -> Optional[str]:
+    """``context_policy=reset`` advance: tear down the carried-context process and
+    START A NEW claude OS process with a CLEAN context window.
+
+    Reuses the ``_spawn_resumed_session`` recipe (``_create_fresh_loop_child`` — a
+    fresh, no-PTY, stream-json ``claude`` subprocess) so the next iteration begins
+    from an empty context rather than ``_send_continue``-ing into the same
+    long-lived process (which would retain the full conversation history and defeat
+    the reset). The fresh process is re-seeded from durable iteration history via
+    ``_build_resume_context`` plus the goal prompt; the OLD process is stopped.
+
+    Budgets/tracking continue to accumulate on the SAME ``_RunnerState`` (the
+    registry key is unchanged); the runner re-points its polling to the fresh
+    child via ``_repoint_runner_to_fresh_session``. Returns the new session_id so
+    the caller (``_run``) can swap which queue it polls. Falls back to a continue
+    prompt (returning ``None``) only when no origin row exists to spawn from."""
+    from ..db.connection import get_connection
+
+    with get_connection() as conn:
+        row = conn.execute("SELECT * FROM project_sessions WHERE id = ?", (session_id,)).fetchone()
+    if not row:
+        logger.warning(
+            "goal_loop: cannot reset-advance %s (session row missing); falling back to continue",
+            session_id,
+        )
+        _send_continue(
+            session_id,
+            goal,
+            reason,
+            ouroboros=ouroboros,
+            dead_ends_block=dead_ends_block,
+            result_block=result_block,
+        )
+        return None
+
+    origin_session = dict(row)
+    resume_context = _build_resume_context(session_id)
+
+    # Spawn a genuinely fresh process (clean context window). Provenance is
+    # recorded so the new child traces back to the origin in the session graph.
+    new_session_id = _create_fresh_loop_child(origin_session, cwd)
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE project_sessions SET resumed_from = ? WHERE id = ?",
+            (session_id, new_session_id),
+        )
+        conn.commit()
+
+    # Stop the carried-context process — its conversation history is exactly what
+    # we are discarding. (After re-pointing the runner key still maps to the same
+    # state, so an external stop continues to work.)
+    try:
+        ProjectSessionManager.stop_session(session_id)
+    except Exception:
+        logger.debug("goal_loop: failed to stop origin %s during reset", session_id, exc_info=True)
+
+    # Seed the FRESH child with accumulated knowledge + the goal — never the
+    # origin process (that would write into the discarded context window).
+    _send_initial(
+        new_session_id,
+        goal,
+        ouroboros=ouroboros,
+        result_block=result_block,
+        resume_context=resume_context,
+    )
+    return new_session_id
+
+
+def _next_iteration(*, policy: str, session_id: str, cwd, goal: str, **kw) -> Optional[str]:
+    """Advance one iteration under the active ``context_policy``.
+
+    ``carry`` (default) writes a synthetic continue prompt into the same
+    long-lived process (byte-identical to the prior behavior). ``reset`` drops
+    the carried conversation by spawning a fresh claude process and returns its
+    new session_id so the caller can re-point polling. ``carry`` returns ``None``."""
+    if policy == "reset":
+        return _advance_iteration(session_id=session_id, cwd=cwd, goal=goal, **kw)
+    _send_continue(session_id, goal=goal, **kw)
+    return None
 
 
 def _send_initial(
@@ -759,6 +935,47 @@ def _build_resume_context(session_id: str) -> str:
     return "\n".join(p for p in parts if p)
 
 
+def _create_fresh_loop_child(origin_session: dict, cwd: Optional[str]) -> str:
+    """Spawn a brand-new claude OS process with a CLEAN context window.
+
+    This is the shared fresh-session recipe — a no-PTY, stream-json ``claude``
+    subprocess that mirrors ``GoalLoopSessionHandler.start()``. It carries no
+    conversation history from any prior process, which is exactly what both the
+    resume route and ``context_policy=reset`` need: the new process starts from
+    an empty context and is re-seeded from durable iteration knowledge.
+
+    Returns the new session_id. Does NOT persist provenance, set config, or
+    start a runner — callers compose those steps so the same recipe serves both
+    "spawn + own runner" (resume) and "spawn + re-point existing runner" (reset).
+    """
+    cmd = [
+        "claude",
+        "--output-format",
+        "stream-json",
+        "--input-format",
+        "stream-json",
+        "-p",
+        "--verbose",
+    ]
+    return ProjectSessionManager.create_session(
+        project_id=origin_session["project_id"],
+        cmd=cmd,
+        cwd=cwd or ".",
+        phase_id=origin_session.get("phase_id"),
+        plan_id=origin_session.get("plan_id"),
+        agent_id=origin_session.get("agent_id"),
+        worktree_path=origin_session.get("worktree_path"),
+        execution_type="goal_loop",
+        execution_mode=origin_session.get("execution_mode") or "autonomous",
+        stream_json=True,
+        use_pty=False,
+        # Preserve the origin's yolo mode: a non-yolo respawn would activate
+        # the permission-hook overlay and block the unattended loop. The
+        # original handler expresses yolo solely via this flag — mirror it.
+        yolo_mode=bool(origin_session.get("yolo_mode")),
+    )
+
+
 def _spawn_resumed_session(origin_session_id: str, goal_config: dict, origin_session: dict) -> str:
     """Create and start a fresh goal-loop session seeded with the origin's config.
 
@@ -778,35 +995,7 @@ def _spawn_resumed_session(origin_session_id: str, goal_config: dict, origin_ses
         except Exception:
             cwd = None
 
-    # Build a minimal cmd for the fresh session — use the same pattern as
-    # GoalLoopSessionHandler (claude with stream-json, no PTY).
-    cmd = [
-        "claude",
-        "--output-format",
-        "stream-json",
-        "--input-format",
-        "stream-json",
-        "-p",
-        "--verbose",
-    ]
-
-    new_session_id = ProjectSessionManager.create_session(
-        project_id=origin_session["project_id"],
-        cmd=cmd,
-        cwd=cwd or ".",
-        phase_id=origin_session.get("phase_id"),
-        plan_id=origin_session.get("plan_id"),
-        agent_id=origin_session.get("agent_id"),
-        worktree_path=origin_session.get("worktree_path"),
-        execution_type="goal_loop",
-        execution_mode=origin_session.get("execution_mode") or "autonomous",
-        stream_json=True,
-        use_pty=False,
-        # Preserve the origin's yolo mode: a non-yolo respawn would activate
-        # the permission-hook overlay and block the unattended loop. The
-        # original handler expresses yolo solely via this flag — mirror it.
-        yolo_mode=bool(origin_session.get("yolo_mode")),
-    )
+    new_session_id = _create_fresh_loop_child(origin_session, cwd)
 
     # Persist resumed_from provenance (direct UPDATE — not in update_project_session allowlist)
     with get_connection() as conn:

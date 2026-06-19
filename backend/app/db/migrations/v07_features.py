@@ -1322,6 +1322,19 @@ def _migrate_165_grd_harness_rounds(conn) -> None:
     )
 
 
+def _migrate_169_loop_iteration_cols(conn) -> None:
+    """v0.6.0 unified loops: tag each goal_loop_iterations row with the loop
+    body kind (so Ralph's agent_task iterations share the table) and store a
+    convenience tokens_total for the token-budget circuit breaker."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(goal_loop_iterations)")}
+    if "body_kind" not in cols:
+        conn.execute(
+            "ALTER TABLE goal_loop_iterations ADD COLUMN body_kind TEXT DEFAULT 'eval_refine'"
+        )
+    if "tokens_total" not in cols:
+        conn.execute("ALTER TABLE goal_loop_iterations ADD COLUMN tokens_total INTEGER")
+
+
 def _migrate_168_grd_genome_suggestions(conn) -> None:
     """GRD 0.4.1 pattern mining: mirror ``gd patterns`` (→ GENOME-SUGGESTIONS).
 
@@ -1392,9 +1405,7 @@ def _migrate_166_projects_tesserae_distill(conn) -> None:
     cursor = conn.execute("PRAGMA table_info(projects)")
     cols = {row[1] for row in cursor.fetchall()}
     if "tesserae_distill_enabled" not in cols:
-        conn.execute(
-            "ALTER TABLE projects ADD COLUMN tesserae_distill_enabled INTEGER DEFAULT 0"
-        )
+        conn.execute("ALTER TABLE projects ADD COLUMN tesserae_distill_enabled INTEGER DEFAULT 0")
 
 
 V07_MIGRATIONS: list = [
@@ -1531,4 +1542,6 @@ V07_MIGRATIONS: list = [
     (167, "grd_plan_selections", _migrate_167_grd_plan_selections),
     # v0.6: GRD 0.4.1 pattern mining (gd patterns → GENOME-SUGGESTIONS) mirror.
     (168, "grd_genome_suggestions", _migrate_168_grd_genome_suggestions),
+    # v0.6.0: unified-loops iteration tagging + token-total column.
+    (169, "loop_iteration_cols", _migrate_169_loop_iteration_cols),
 ]

@@ -1,238 +1,41 @@
-"""RalphMonitorService -- git-commit-based iteration tracking and circuit breaker for Ralph loop sessions.
+"""RalphMonitorService -- DEPRECATED (v0.6.0 unified loops).
 
-ALL STATE IN THIS SERVICE IS TRANSIENT (IN-MEMORY ONLY).
+Ralph is now a thin profile over the goal-loop executor (``goal_loop_runner``),
+which owns iteration tracking, the stagnation circuit breaker, and termination.
+The git-commit no-progress signal that used to live here has been extracted to
+``app.services.loop_progress`` and is consumed directly by the executor's
+stagnation exit.
 
-This service is intentionally NOT crash-recoverable. All monitor state (iteration counts,
-commit hashes, circuit breaker status) is held in class-level dicts protected by a threading
-lock. If the Flask server restarts, all active monitors are lost. Sessions must be re-checked
-manually after a server restart.
-
-The circuit breaker halts a Ralph session after N consecutive no-progress checks (default 3).
-Progress is detected by comparing the latest git commit hash in the working directory. A
-secondary signal (PTY output activity) is also considered -- if the session is still producing
-output, it is assumed to be working even without new commits (e.g., during compilation).
+This module is retained only as a thin no-op shim so any lingering import does
+not break; it has no live behavior and should not be wired into new code.
 """
 
 import logging
-import subprocess
-import threading
-import time
-from typing import Dict, Optional
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
 class RalphMonitorService:
-    """Monitors Ralph loop progress via git commit frequency with circuit breaker.
+    """Deprecated no-op shim. See ``goal_loop_runner`` + ``loop_progress``.
 
-    Follows the classmethod singleton pattern from ProjectSessionManager.
-    All state is class-level, protected by a threading lock.
+    The Ralph side-monitor was retired when Ralph was deep-unified onto the
+    goal-loop executor. All methods are inert: starting/stopping a monitor is a
+    no-op and ``get_state`` always returns ``None`` (callers should read the
+    runner state via ``goal_loop_runner.get_runner_state`` instead).
     """
 
-    _monitors: Dict[str, dict] = {}
-    _lock = threading.Lock()
+    @classmethod
+    def start_monitoring(cls, *args, **kwargs) -> None:
+        """No-op. Iteration tracking now lives in the goal-loop executor."""
+        logger.debug("RalphMonitorService.start_monitoring is deprecated; ignored.")
 
     @classmethod
-    def start_monitoring(
-        cls,
-        session_id: str,
-        cwd: str,
-        max_iterations: int,
-        no_progress_threshold: int = 3,
-    ) -> None:
-        """Start monitoring a Ralph loop session for iteration progress.
-
-        Records the initial git commit hash and starts a daemon thread that
-        polls for new commits every 30 seconds.
-
-        Args:
-            session_id: The session to monitor.
-            cwd: Working directory (git repo) for commit tracking.
-            max_iterations: Maximum iterations configured for the Ralph loop.
-            no_progress_threshold: Consecutive no-progress checks before circuit break.
-        """
-        initial_hash = cls._get_latest_commit(cwd)
-
-        state = {
-            "iteration": 0,
-            "max_iterations": max_iterations,
-            "last_commit_hash": initial_hash,
-            "no_progress_count": 0,
-            "triggered": False,
-            "active": True,
-            "thread": None,
-            # Set on stop so the poll loop wakes immediately instead of sleeping
-            # out the full 30s cycle (06 H2).
-            "stop_event": threading.Event(),
-        }
-
-        monitor_thread = threading.Thread(
-            target=cls._monitor_loop,
-            args=(session_id, cwd, max_iterations, no_progress_threshold),
-            daemon=True,
-        )
-        state["thread"] = monitor_thread
-
-        with cls._lock:
-            cls._monitors[session_id] = state
-
-        monitor_thread.start()
-        logger.info(
-            f"Started Ralph monitor for session {session_id} "
-            f"(max_iterations={max_iterations}, threshold={no_progress_threshold})"
-        )
-
-    @classmethod
-    def _monitor_loop(
-        cls,
-        session_id: str,
-        cwd: str,
-        max_iterations: int,
-        threshold: int,
-    ) -> None:
-        """Poll git commits every 30s, track iterations, trigger circuit breaker.
-
-        Runs in a daemon thread. Exits when state["active"] is set to False
-        or when the circuit breaker triggers.
-        """
-        # Import here to avoid circular imports at module level
-        from .project_session_manager import ProjectSessionManager
-
-        with cls._lock:
-            s0 = cls._monitors.get(session_id)
-            stop_event = s0["stop_event"] if s0 else None
-        if stop_event is None:
-            return
-
-        while True:
-            # Interruptible wait — wakes immediately on stop instead of sleeping
-            # out the full 30s (06 H2).
-            if stop_event.wait(30):
-                return
-
-            with cls._lock:
-                state = cls._monitors.get(session_id)
-                if not state or not state["active"]:
-                    return
-
-            current_hash = cls._get_latest_commit(cwd)
-            session_info = ProjectSessionManager.get_session_info(session_id)
-
-            with cls._lock:
-                state = cls._monitors.get(session_id)
-                if not state or not state["active"]:
-                    return
-
-                if current_hash and current_hash != state["last_commit_hash"]:
-                    # Progress detected -- new commit
-                    state["iteration"] += 1
-                    state["last_commit_hash"] = current_hash
-                    state["no_progress_count"] = 0
-
-                    ProjectSessionManager._broadcast(
-                        session_id,
-                        "ralph_iteration",
-                        {
-                            "iteration": state["iteration"],
-                            "max_iterations": max_iterations,
-                        },
-                    )
-                    logger.debug(f"Ralph session {session_id}: iteration {state['iteration']}")
-                elif session_info and session_info.get("status") == "active":
-                    # No new commit -- check secondary signal (PTY output)
-                    output_lines = session_info.get("output_lines", 0)
-                    if output_lines > 0:
-                        # Output is being produced, assume still working
-                        state["no_progress_count"] = 0
-                    else:
-                        state["no_progress_count"] += 1
-                else:
-                    # Session no longer active
-                    state["active"] = False
-                    return
-
-                # Check circuit breaker
-                if state["no_progress_count"] >= threshold:
-                    state["triggered"] = True
-                    state["active"] = False
-
-                    logger.warning(
-                        f"Circuit breaker triggered for Ralph session {session_id} "
-                        f"after {state['no_progress_count']} consecutive no-progress checks"
-                    )
-
-                    ProjectSessionManager._broadcast(
-                        session_id,
-                        "circuit_breaker",
-                        {
-                            "reason": "no_progress",
-                            "iterations_without_progress": state["no_progress_count"],
-                        },
-                    )
-
-            # Stop session outside lock to avoid deadlock
-            if state.get("triggered"):
-                ProjectSessionManager.stop_session(session_id)
-                return
-
-    @classmethod
-    def stop_monitoring(cls, session_id: str) -> None:
-        """Stop monitoring a Ralph loop session.
-
-        Sets active=False so the monitor thread will exit on its next cycle,
-        then removes the entry from _monitors to prevent memory leaks.
-        """
-        with cls._lock:
-            state = cls._monitors.pop(session_id, None)
-        if state:
-            state["active"] = False
-            # Wake the poll loop now (don't wait up to 30s) and join it so
-            # threads don't accumulate on rapid start/stop churn (06 H2).
-            ev = state.get("stop_event")
-            if ev is not None:
-                ev.set()
-            thread = state.get("thread")
-            if thread is not None and thread is not threading.current_thread():
-                thread.join(timeout=5)
-            logger.info(f"Stopped Ralph monitor for session {session_id}")
+    def stop_monitoring(cls, *args, **kwargs) -> None:
+        """No-op. The executor owns the runner thread lifecycle."""
+        logger.debug("RalphMonitorService.stop_monitoring is deprecated; ignored.")
 
     @classmethod
     def get_state(cls, session_id: str) -> Optional[dict]:
-        """Get a copy of the monitor state for a session.
-
-        Returns:
-            Dict with iteration, max_iterations, no_progress_count, triggered, active.
-            None if session is not being monitored.
-        """
-        with cls._lock:
-            state = cls._monitors.get(session_id)
-            if not state:
-                return None
-            # Return a copy without the thread reference
-            return {
-                "iteration": state["iteration"],
-                "max_iterations": state["max_iterations"],
-                "last_commit_hash": state["last_commit_hash"],
-                "no_progress_count": state["no_progress_count"],
-                "triggered": state["triggered"],
-                "active": state["active"],
-            }
-
-    @staticmethod
-    def _get_latest_commit(cwd: str) -> str:
-        """Get the latest git commit hash from the working directory.
-
-        Returns:
-            The commit hash string, or empty string on error.
-        """
-        try:
-            result = subprocess.run(
-                ["git", "log", "-1", "--format=%H"],
-                cwd=cwd,
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            return result.stdout.strip()
-        except Exception:
-            return ""
+        """Always ``None``; read ``goal_loop_runner.get_runner_state`` instead."""
+        return None

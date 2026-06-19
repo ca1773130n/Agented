@@ -1962,6 +1962,13 @@
     "pickAll": "해당하는 항목 모두 선택",
     "sendAnswer": "답변 보내기"
   },
+  "loopConfig": {
+    "tokenBudget": "토큰 예산",
+    "contextPolicy": "컨텍스트 정책",
+    "contextCarry": "컨텍스트 유지",
+    "contextReset": "반복마다 새 컨텍스트",
+    "stagnation": "진행 없이 N회 반복 후 중지"
+  },
   "permissionPromptCard": {
     "header": "Claude가 도구를 사용하려고 합니다",
     "fullInput": "전체 입력",

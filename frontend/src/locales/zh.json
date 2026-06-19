@@ -1962,6 +1962,13 @@
     "pickAll": "选择所有适用项",
     "sendAnswer": "发送回答"
   },
+  "loopConfig": {
+    "tokenBudget": "令牌预算",
+    "contextPolicy": "上下文策略",
+    "contextCarry": "保留上下文",
+    "contextReset": "每次迭代使用新上下文",
+    "stagnation": "无进展达 N 次迭代后停止"
+  },
   "permissionPromptCard": {
     "header": "Claude 想要使用工具",
     "fullInput": "完整输入",
