@@ -229,7 +229,12 @@ class RalphSessionHandler(ExecutionTypeHandler):
             plan_id=session_config.get("plan_id"),
             agent_id=session_config.get("agent_id"),
             worktree_path=session_config.get("worktree_path"),
-            execution_type="ralph",
+            # Persist the registry-consistent key so the generic monitor/stop
+            # endpoint (grd_routes.monitor_session -> get_handler) can resolve a
+            # handler. The runner reads cfg["_execution_type"]="ralph" (set above)
+            # to drive LoopSpec parsing — that tag lives on the config dict, not
+            # the DB row, so the two concerns stay decoupled.
+            execution_type="ralph_loop",
             execution_mode=session_config.get("execution_mode", "autonomous"),
             stream_json=True,
             use_pty=False,
