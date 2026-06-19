@@ -88,6 +88,7 @@ def record_iteration_complete(
     hypothesis: Optional[str] = None,
     predicted_outcome: Optional[str] = None,
     ouroboros_verdict: Optional[str] = None,
+    body_kind: str = "eval_refine",
 ) -> None:
     """Fill in the verdict + cost telemetry on a pending iteration row.
 
@@ -95,7 +96,12 @@ def record_iteration_complete(
     predicted_outcome, ouroboros_verdict). All optional so the
     pre-Ouroboros call shape still works for callers that don't
     opt in.
+
+    v0.6.0 unified loops — adds ``body_kind`` (so Ralph's
+    agent_task iterations share the table) and persists a
+    convenience ``tokens_total`` for the token-budget breaker.
     """
+    tokens_total = (tokens_in or 0) + (tokens_out or 0)
     with get_connection() as conn:
         conn.execute(
             """
@@ -110,7 +116,9 @@ def record_iteration_complete(
                 cost_usd = ?,
                 hypothesis = ?,
                 predicted_outcome = ?,
-                ouroboros_verdict = ?
+                ouroboros_verdict = ?,
+                body_kind = ?,
+                tokens_total = ?
             WHERE id = ?
             """,
             (
@@ -124,6 +132,8 @@ def record_iteration_complete(
                 hypothesis,
                 predicted_outcome,
                 ouroboros_verdict,
+                body_kind,
+                tokens_total,
                 row_id,
             ),
         )
@@ -233,7 +243,7 @@ def list_iterations(session_id: str) -> List[dict]:
             """
             SELECT id, session_id, iteration, started_at, ended_at,
                    verdict, judge_source, judge_reason, judge_stdout,
-                   tokens_in, tokens_out, cost_usd
+                   tokens_in, tokens_out, cost_usd, body_kind, tokens_total
             FROM goal_loop_iterations
             WHERE session_id = ?
             ORDER BY iteration ASC, id ASC
@@ -257,4 +267,6 @@ def _row_to_dict(row: Any) -> dict:
         "tokens_in": row[9],
         "tokens_out": row[10],
         "cost_usd": row[11],
+        "body_kind": row[12],
+        "tokens_total": row[13],
     }
