@@ -34,6 +34,7 @@ from app.db import (
 from .goal_judge_service import GoalJudgeService
 from .project_session_manager import ProjectSessionManager
 from app.config import AUTORESEARCH_KERNEL_ENABLED
+from app.models.loop_spec import LoopSpec
 
 # autoresearch_core.should_promote_dead_end is imported lazily inside
 # _maybe_promote_kernel_dead_end so flag-off deployments don't require the
@@ -236,6 +237,8 @@ class _RunnerState:
     not_met_streak: int = 0
     total_cost_usd: float = 0.0
     stop_event: threading.Event = field(default_factory=threading.Event)
+    spec: Optional[LoopSpec] = None  # parsed once at start; ladder reads from here
+    total_tokens: int = 0
 
 
 _runners: dict[str, _RunnerState] = {}
@@ -251,10 +254,12 @@ def start_runner(session_id: str, config: dict, cwd: Optional[str]) -> None:
     with _runners_lock:
         if session_id in _runners:
             return
+        execution_type = (config.get("_execution_type") or "goal_loop")
         state = _RunnerState(
             session_id=session_id,
             config=config,
             started_at=time.time(),
+            spec=LoopSpec.from_legacy_config(config, execution_type=execution_type),
         )
         _runners[session_id] = state
 
@@ -283,8 +288,8 @@ def get_runner_state(session_id: str) -> Optional[dict]:
         return None
     return {
         "iteration": state.iteration,
-        "max_iterations": state.config.get("max_iterations", 20),
-        "max_wall_seconds": state.config.get("max_wall_seconds", 1800),
+        "max_iterations": state.spec.exit.max_iterations,
+        "max_wall_seconds": state.spec.exit.max_wall_seconds,
         "elapsed_seconds": int(time.time() - state.started_at),
         "not_met_streak": state.not_met_streak,
     }
@@ -314,14 +319,11 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
     metric_spec = config.get("metric_spec")
     backend_kind = config.get("judge_backend_kind", "claude")
     model_override = config.get("judge_model_override")
-    max_iterations = int(config.get("max_iterations") or 20)
-    max_wall_seconds = int(config.get("max_wall_seconds") or 1800)
+    max_iterations = state.spec.exit.max_iterations
+    max_wall_seconds = state.spec.exit.max_wall_seconds
     # Optional cost ceiling (USD). 0/unset disables — the loop is then bounded
     # only by iteration + wall caps (06 H1). Each judge verdict records cost_usd.
-    try:
-        max_cost_usd = float(config.get("max_cost_usd") or 0.0)
-    except (TypeError, ValueError):
-        max_cost_usd = 0.0
+    max_cost_usd = state.spec.exit.max_cost_usd
     # v0.7.87 — Ouroboros is the default goal-loop mode. The
     # config flag is preserved so operators can disable it
     # (``"ouroboros": false``) when the agent backend is a poor
@@ -335,7 +337,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
     # ``_extract_hypothesis`` returns ``(None, None)`` and the
     # judge falls back to its legacy binary mode for that
     # iteration without losing the audit row.
-    ouroboros = bool(config.get("ouroboros", True))
+    ouroboros = state.spec.exit.convergence
     if metric_spec is not None and not AUTORESEARCH_KERNEL_ENABLED:
         # Operator configured a metric_spec but the kernel flag is off — it's
         # silently ignored. Log once so this isn't a confusing no-op.
