@@ -95,6 +95,10 @@ def _extract_hypothesis(turn_text: str) -> tuple[Optional[str], Optional[str]]:
     return hypothesis, predicted
 
 
+def _token_cap_exceeded(total: int, max_tokens: int) -> bool:
+    return max_tokens > 0 and total >= max_tokens
+
+
 def _approach_hash(hypothesis: str) -> str:
     """Stable hash of a hypothesis for the dead-end UNIQUE
     constraint. SHA-1 truncated to 16 hex chars — short enough to
@@ -455,6 +459,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                 hypothesis=hypothesis,
                 predicted_outcome=predicted_outcome,
                 ouroboros_verdict=verdict.ouroboros_verdict,
+                body_kind=state.spec.body.kind,
             )
             ProjectSessionManager._broadcast(
                 session_id,
@@ -484,6 +489,20 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                     session_id,
                     reason="budget_cap",
                     detail=f"cost ${state.total_cost_usd:.4f} reached cap ${max_cost_usd:.4f}",
+                )
+                ProjectSessionManager.stop_session(session_id)
+                break
+
+            # Token-budget circuit breaker (v0.6.0 unified loops): accumulate
+            # tokens_in+out across iterations and stop once a configured
+            # ``max_tokens`` ceiling is reached. 0/unset disables. Checked after
+            # the cost-cap so both budgets are enforced last in the ladder.
+            state.total_tokens += int((verdict.tokens_in or 0) + (verdict.tokens_out or 0))
+            if _token_cap_exceeded(state.total_tokens, state.spec.exit.max_tokens):
+                _broadcast_end(
+                    session_id,
+                    reason="token_cap",
+                    detail=f"tokens {state.total_tokens} reached cap {state.spec.exit.max_tokens}",
                 )
                 ProjectSessionManager.stop_session(session_id)
                 break
