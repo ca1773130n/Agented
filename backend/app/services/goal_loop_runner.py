@@ -31,6 +31,7 @@ from app.db import (
     record_goal_loop_iteration_start,
 )
 
+from . import loop_progress
 from .goal_judge_service import GoalJudgeService
 from .project_session_manager import ProjectSessionManager
 from app.config import AUTORESEARCH_KERNEL_ENABLED
@@ -243,6 +244,8 @@ class _RunnerState:
     stop_event: threading.Event = field(default_factory=threading.Event)
     spec: Optional[LoopSpec] = None  # parsed once at start; ladder reads from here
     total_tokens: int = 0
+    no_progress_streak: int = 0
+    last_commit: Optional[str] = None
 
 
 _runners: dict[str, _RunnerState] = {}
@@ -574,6 +577,32 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                             f"converged on '{recent[0]}' — stopping to avoid "
                             f"further wasted attempts"
                         ),
+                    )
+                    ProjectSessionManager.stop_session(session_id)
+                    break
+
+            # Generic stagnation circuit breaker (v0.6.0 unified loops): when a
+            # ``stagnation_no_progress_for`` threshold is configured, stop once
+            # the loop has made no progress for that many iterations. agent_task
+            # bodies (Ralph) detect progress via a new git commit landing;
+            # eval_refine bodies reuse the existing not-met streak. 0 = off.
+            threshold = state.spec.exit.stagnation_no_progress_for
+            if threshold > 0:
+                if state.spec.body.kind == "agent_task":
+                    cur = loop_progress.head_commit(cwd or ".")
+                    if loop_progress.made_progress(state.last_commit, cur):
+                        state.no_progress_streak = 0
+                    else:
+                        state.no_progress_streak += 1
+                    state.last_commit = cur
+                    streak = state.no_progress_streak
+                else:
+                    streak = state.not_met_streak
+                if streak >= threshold:
+                    _broadcast_end(
+                        session_id,
+                        reason="stagnation",
+                        detail=f"no progress for {threshold} iterations",
                     )
                     ProjectSessionManager.stop_session(session_id)
                     break
