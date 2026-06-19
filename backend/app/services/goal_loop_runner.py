@@ -607,10 +607,12 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                     ProjectSessionManager.stop_session(session_id)
                     break
 
-            _send_continue(
-                session_id,
-                goal,
-                verdict.reason,
+            _next_iteration(
+                policy=state.spec.state.context_policy,
+                session_id=session_id,
+                cwd=cwd,
+                goal=goal,
+                reason=verdict.reason,
                 ouroboros=ouroboros,
                 dead_ends_block=_dead_ends_context(session_id) if ouroboros else "",
                 result_block=result_block,
@@ -653,6 +655,68 @@ def _send_continue(
             result_block=result_block,
         ),
     )
+
+
+def _advance_iteration(
+    *,
+    session_id: str,
+    cwd,
+    goal: str,
+    reason: str = "",
+    ouroboros: bool = True,
+    dead_ends_block: str = "",
+    result_block: str = "",
+    **_kw,
+) -> None:
+    """``context_policy=reset`` advance: drop the carried conversation and seed a
+    FRESH stream-json session with the accumulated knowledge + the goal.
+
+    Reuses the ``_spawn_resumed_session`` recipe (a fresh, no-PTY, stream-json
+    claude process) so the next iteration starts from a clean context window
+    rather than ``_send_continue``-ing into the same long-lived process. The
+    fresh session re-enters from durable iteration history via
+    ``_build_resume_context`` plus the goal prompt; budgets/tracking continue to
+    accumulate on the SAME ``_RunnerState`` because the runner keeps polling the
+    origin session's queue until ``__end__``."""
+    from ..db.connection import get_connection
+
+    with get_connection() as conn:
+        row = conn.execute("SELECT * FROM project_sessions WHERE id = ?", (session_id,)).fetchone()
+    if not row:
+        logger.warning(
+            "goal_loop: cannot reset-advance %s (session row missing); falling back to continue",
+            session_id,
+        )
+        _send_continue(
+            session_id,
+            goal,
+            reason,
+            ouroboros=ouroboros,
+            dead_ends_block=dead_ends_block,
+            result_block=result_block,
+        )
+        return
+
+    resume_context = _build_resume_context(session_id)
+    _send_initial(
+        session_id,
+        goal,
+        ouroboros=ouroboros,
+        result_block=result_block,
+        resume_context=resume_context,
+    )
+
+
+def _next_iteration(*, policy: str, session_id: str, cwd, goal: str, **kw) -> None:
+    """Advance one iteration under the active ``context_policy``.
+
+    ``carry`` (default) writes a synthetic continue prompt into the same
+    long-lived process (byte-identical to the prior behavior). ``reset`` drops
+    the carried conversation and re-seeds a fresh context window."""
+    if policy == "reset":
+        _advance_iteration(session_id=session_id, cwd=cwd, goal=goal, **kw)
+    else:
+        _send_continue(session_id, goal=goal, **kw)
 
 
 def _send_initial(
