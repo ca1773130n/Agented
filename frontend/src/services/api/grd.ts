@@ -130,6 +130,21 @@ export interface CreateSessionRequest {
   goal_loop_config?: GoalLoopConfig;
 }
 
+// v0.6.0 sub-project #2 — loop quality-gate. Maps onto the backend
+// ``QualityGate`` struct on ``LoopExit``. ``test_pass`` gates on a
+// check_cmd exit code, ``metric`` on a named metric vs threshold, and
+// ``llm_judge`` on an LLM verdict (optionally rubric-steered, version-
+// stamped, and confidence-floored via ``min_confidence``).
+export interface QualityGate {
+  kind: 'test_pass' | 'metric' | 'llm_judge';
+  metric_name?: string;
+  threshold?: number;
+  comparator?: '>=' | '<=' | '>' | '<' | '==';
+  rubric?: string;
+  judge_version?: string;
+  min_confidence?: number;
+}
+
 // v0.7.74 / v0.6.0 — goal-loop config consumed by the ``goal_loop``
 // execution-type handler. The v0.6.0 unified-loops fields
 // (``max_tokens`` / ``context_policy`` / ``stagnation_no_progress_for``)
@@ -148,6 +163,11 @@ export interface GoalLoopConfig {
   max_tokens?: number;
   context_policy?: 'carry' | 'reset';
   stagnation_no_progress_for?: number;
+  // v0.6.0 sub-project #2 — eval quality-gate + sandbox boundary.
+  // ``sandbox`` controls whether the gate's check_cmd runs against an
+  // isolated, env-scrubbed workspace snapshot (default) or in-place.
+  quality_gate?: QualityGate;
+  sandbox?: 'isolated' | 'inherit';
 }
 
 // v0.7.74 — goal-loop iteration audit row + container response.

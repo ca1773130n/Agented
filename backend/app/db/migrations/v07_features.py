@@ -1335,6 +1335,16 @@ def _migrate_169_loop_iteration_cols(conn) -> None:
         conn.execute("ALTER TABLE goal_loop_iterations ADD COLUMN tokens_total INTEGER")
 
 
+def _migrate_170_iteration_confidence(conn) -> None:
+    """v0.6.0 sub-project #2: record judge confidence + judge_version per
+    iteration (dynamic early-termination + judge-drift auditing)."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(goal_loop_iterations)")}
+    if "confidence" not in cols:
+        conn.execute("ALTER TABLE goal_loop_iterations ADD COLUMN confidence REAL")
+    if "judge_version" not in cols:
+        conn.execute("ALTER TABLE goal_loop_iterations ADD COLUMN judge_version TEXT")
+
+
 def _migrate_168_grd_genome_suggestions(conn) -> None:
     """GRD 0.4.1 pattern mining: mirror ``gd patterns`` (→ GENOME-SUGGESTIONS).
 
@@ -1544,4 +1554,6 @@ V07_MIGRATIONS: list = [
     (168, "grd_genome_suggestions", _migrate_168_grd_genome_suggestions),
     # v0.6.0: unified-loops iteration tagging + token-total column.
     (169, "loop_iteration_cols", _migrate_169_loop_iteration_cols),
+    # v0.6.0 sub-project #2: judge confidence + judge_version per iteration.
+    (170, "iteration_confidence", _migrate_170_iteration_confidence),
 ]

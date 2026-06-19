@@ -26,12 +26,15 @@ import logging
 import re
 import subprocess
 from dataclasses import dataclass
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import httpx
 
 from .cliproxy_manager import CLIProxyManager
 from app.config import AUTORESEARCH_KERNEL_ENABLED
+
+if TYPE_CHECKING:
+    from app.models.loop_spec import QualityGate
 
 # autoresearch_core is imported lazily inside the flag-guarded kernel branch
 # (see judge()), so a default-OFF deployment has no hard import dependency on
@@ -74,7 +77,10 @@ _MAX_TURN_TEXT_CHARS = 8 * 1024
 _JUDGE_SYSTEM = (
     "You are a strict goal-judging assistant. Read the goal and the "
     "agent's latest turn. Decide if the goal is met. Reply ONLY with "
-    'a JSON object: {"met": true|false, "reason": "..."}. '
+    'a JSON object: {"met": true|false, "reason": "...", '
+    '"confidence": 0.0-1.0}. '
+    'The "confidence" is your certainty in the verdict (0–1) and is '
+    "optional — omit it if unsure and it defaults to fully confident. "
     "Be concise — the reason is one sentence."
 )
 
@@ -134,6 +140,8 @@ class JudgeVerdict:
     cost_usd: float = 0.0
     ouroboros_verdict: Optional[str] = None
     metric_spec: Optional[dict] = None
+    confidence: float = 1.0
+    judge_version: Optional[str] = None
     kernel_record: Optional[object] = (
         None  # transient autoresearch_core.VerdictRecord; not persisted
     )
@@ -155,6 +163,8 @@ class GoalJudgeService:
         hypothesis: Optional[str] = None,
         predicted_outcome: Optional[str] = None,
         metric_spec: Optional[dict] = None,
+        quality_gate: Optional["QualityGate"] = None,
+        sandbox: str = "isolated",
     ) -> JudgeVerdict:
         """v0.7.86 — when both ``hypothesis`` and ``predicted_outcome``
         are supplied, the LLM judge runs in Ouroboros mode and
@@ -218,54 +228,80 @@ class GoalJudgeService:
                 ),
             )
         if check_cmd:
-            return cls._run_deterministic(check_cmd, cwd)
+            return cls._run_deterministic(check_cmd, cwd, sandbox=sandbox)
         model = model_override or DEFAULT_JUDGE_MODEL.get(backend_kind, "auto")
         if hypothesis and predicted_outcome:
             return cls._run_ouroboros_judge(
                 goal, last_assistant_text, hypothesis, predicted_outcome, backend_kind, model
             )
-        return cls._run_llm_judge(goal, last_assistant_text, backend_kind, model)
+        return cls._run_llm_judge(
+            goal, last_assistant_text, backend_kind, model, quality_gate=quality_gate
+        )
 
     # -----------------------------------------------------------------
     # Deterministic check
     # -----------------------------------------------------------------
 
     @staticmethod
-    def _run_deterministic(check_cmd: str, cwd: Optional[str]) -> JudgeVerdict:
-        try:
-            proc = subprocess.run(
-                check_cmd,
-                shell=True,
-                cwd=cwd,
-                capture_output=True,
-                text=True,
-                timeout=_CHECK_TIMEOUT_SECONDS,
-            )
-        except subprocess.TimeoutExpired:
-            return JudgeVerdict(
-                met=False,
-                source="deterministic",
-                reason=f"check timed out after {_CHECK_TIMEOUT_SECONDS}s",
-            )
-        except (OSError, ValueError) as exc:
-            return JudgeVerdict(
-                met=False,
-                source="deterministic",
-                reason=f"check failed to run: {exc}",
-            )
-        stdout = (proc.stdout or "")[-4096:]  # tail-cap for storage
-        if proc.returncode == 0:
+    def _run_deterministic(
+        check_cmd: str, cwd: Optional[str], *, sandbox: str = "isolated"
+    ) -> JudgeVerdict:
+        if sandbox == "isolated":
+            # Reward-hacking mitigation (F9): grade against a throwaway,
+            # env-scrubbed snapshot of the workspace so the live agent
+            # session can't race/tamper with the running eval.
+            from .sandbox_eval import run_isolated_check
+
+            r = run_isolated_check(check_cmd, cwd or ".", timeout=_CHECK_TIMEOUT_SECONDS)
+            returncode = r.returncode
+            stdout = (r.stdout or "")[-4096:]  # tail-cap for storage
+            if returncode == 124:
+                return JudgeVerdict(
+                    met=False,
+                    source="deterministic",
+                    reason=f"check timed out after {_CHECK_TIMEOUT_SECONDS}s",
+                    confidence=0.0,
+                )
+        else:
+            try:
+                proc = subprocess.run(
+                    check_cmd,
+                    shell=True,
+                    cwd=cwd,
+                    capture_output=True,
+                    text=True,
+                    timeout=_CHECK_TIMEOUT_SECONDS,
+                )
+            except subprocess.TimeoutExpired:
+                return JudgeVerdict(
+                    met=False,
+                    source="deterministic",
+                    reason=f"check timed out after {_CHECK_TIMEOUT_SECONDS}s",
+                    confidence=0.0,
+                )
+            except (OSError, ValueError) as exc:
+                return JudgeVerdict(
+                    met=False,
+                    source="deterministic",
+                    reason=f"check failed to run: {exc}",
+                    confidence=0.0,
+                )
+            returncode = proc.returncode
+            stdout = (proc.stdout or "")[-4096:]  # tail-cap for storage
+        if returncode == 0:
             return JudgeVerdict(
                 met=True,
                 source="deterministic",
                 reason="check command exited 0",
                 stdout=stdout,
+                confidence=1.0,
             )
         return JudgeVerdict(
             met=False,
             source="deterministic",
-            reason=f"check exited {proc.returncode}",
+            reason=f"check exited {returncode}",
             stdout=stdout,
+            confidence=0.0,
         )
 
     # -----------------------------------------------------------------
@@ -279,6 +315,8 @@ class GoalJudgeService:
         last_assistant_text: str,
         backend_kind: str,
         model: str,
+        *,
+        quality_gate: Optional["QualityGate"] = None,
     ) -> JudgeVerdict:
         url_and_key = CLIProxyManager.get_url_and_key()
         if not url_and_key:
@@ -289,16 +327,20 @@ class GoalJudgeService:
             )
         base_url, _api_key = url_and_key
         turn_text = (last_assistant_text or "")[-_MAX_TURN_TEXT_CHARS:]
+        user_content = _JUDGE_USER_TEMPLATE.format(
+            goal=goal.strip(),
+            turn=turn_text.strip(),
+        )
+        if quality_gate and quality_gate.rubric:
+            user_content = f"{user_content}\n\nRubric:\n{quality_gate.rubric.strip()}"
+        judge_version = quality_gate.judge_version if quality_gate else None
         payload = {
             "model": model,
             "messages": [
                 {"role": "system", "content": _JUDGE_SYSTEM},
                 {
                     "role": "user",
-                    "content": _JUDGE_USER_TEMPLATE.format(
-                        goal=goal.strip(),
-                        turn=turn_text.strip(),
-                    ),
+                    "content": user_content,
                 },
             ],
             "stream": False,
@@ -322,12 +364,14 @@ class GoalJudgeService:
                 met=False,
                 source="llm",
                 reason=f"judge request failed: {exc}",
+                judge_version=judge_version,
             )
         if resp.status_code != 200:
             return JudgeVerdict(
                 met=False,
                 source="llm",
                 reason=f"judge HTTP {resp.status_code}",
+                judge_version=judge_version,
             )
         try:
             body = resp.json()
@@ -338,6 +382,7 @@ class GoalJudgeService:
                 met=False,
                 source="llm",
                 reason=f"judge response malformed: {exc}",
+                judge_version=judge_version,
             )
         parsed = _parse_judge_json(content)
         if parsed is None:
@@ -347,14 +392,17 @@ class GoalJudgeService:
                 reason="judge output unparseable (treated as not_met)",
                 tokens_in=usage.get("prompt_tokens", 0),
                 tokens_out=usage.get("completion_tokens", 0),
+                judge_version=judge_version,
             )
-        met, reason = parsed
+        met, reason, confidence = parsed
         return JudgeVerdict(
             met=met,
             source="llm",
             reason=reason,
             tokens_in=usage.get("prompt_tokens", 0),
             tokens_out=usage.get("completion_tokens", 0),
+            confidence=confidence,
+            judge_version=judge_version,
         )
 
     # -----------------------------------------------------------------
@@ -452,13 +500,14 @@ class GoalJudgeService:
                     tokens_out=usage.get("completion_tokens", 0),
                     ouroboros_verdict="unknown",
                 )
-            met_fb, reason_fb = fallback
+            met_fb, reason_fb, confidence_fb = fallback
             return JudgeVerdict(
                 met=met_fb,
                 source="llm",
                 reason=reason_fb,
                 tokens_in=usage.get("prompt_tokens", 0),
                 tokens_out=usage.get("completion_tokens", 0),
+                confidence=confidence_fb,
                 ouroboros_verdict="confirmed" if met_fb else "unknown",
             )
         met, verdict, reason = parsed
@@ -475,13 +524,18 @@ class GoalJudgeService:
 _JSON_BLOB_RE = re.compile(r"\{[\s\S]*?\}")
 
 
-def _parse_judge_json(content: str) -> Optional[tuple[bool, str]]:
+def _parse_judge_json(content: str) -> Optional[tuple[bool, str, float]]:
     """Forgiving JSON parser for the judge output.
 
     The model occasionally wraps the JSON in ``` ```json ``` ``` fences
     or adds a prose preamble. Extract the first ``{...}`` blob and
-    try to parse. Returns ``(met, reason)`` or ``None`` when no
-    valid blob is found.
+    try to parse. Returns ``(met, reason, confidence)`` or ``None``
+    when no valid blob is found.
+
+    ``confidence`` is the judge's optional self-reported certainty
+    (0–1). Backward-safe: when the judge omits it, we default to
+    ``1.0`` so legacy "absent" replies still terminate as before.
+    Out-of-range values are clamped to ``[0, 1]``.
     """
     if not isinstance(content, str):
         return None
@@ -494,7 +548,12 @@ def _parse_judge_json(content: str) -> Optional[tuple[bool, str]]:
             continue
         met = bool(blob.get("met"))
         reason = str(blob.get("reason") or "").strip() or "(no reason given)"
-        return met, reason
+        try:
+            confidence = float(blob.get("confidence", 1.0))
+        except (TypeError, ValueError):
+            confidence = 1.0
+        confidence = max(0.0, min(1.0, confidence))
+        return met, reason, confidence
     return None
 
 

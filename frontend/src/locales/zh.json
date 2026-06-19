@@ -1967,7 +1967,17 @@
     "contextPolicy": "上下文策略",
     "contextCarry": "保留上下文",
     "contextReset": "每次迭代使用新上下文",
-    "stagnation": "无进展达 N 次迭代后停止"
+    "stagnation": "无进展达 N 次迭代后停止",
+    "qualityGate": "质量门禁",
+    "gateTestPass": "测试通过",
+    "gateMetric": "指标阈值",
+    "gateLlmJudge": "LLM 评审",
+    "rubric": "评审标准",
+    "judgeVersion": "评审版本",
+    "minConfidence": "最低置信度",
+    "sandbox": "评估沙箱",
+    "sandboxIsolated": "隔离快照（推荐）",
+    "sandboxInherit": "在工作区中运行"
   },
   "permissionPromptCard": {
     "header": "Claude 想要使用工具",

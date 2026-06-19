@@ -29,6 +29,7 @@ def test_parse_judge_json_bare_object():
     assert _parse_judge_json('{"met": true, "reason": "done"}') == (
         True,
         "done",
+        1.0,
     )
 
 
@@ -38,12 +39,12 @@ def test_parse_judge_json_fenced():
 {"met": false, "reason": "tests still fail"}
 ```
 trailing"""
-    assert _parse_judge_json(payload) == (False, "tests still fail")
+    assert _parse_judge_json(payload) == (False, "tests still fail", 1.0)
 
 
 def test_parse_judge_json_with_preamble():
     payload = 'After review: {"met": true, "reason": "ok"} — full stop.'
-    assert _parse_judge_json(payload) == (True, "ok")
+    assert _parse_judge_json(payload) == (True, "ok", 1.0)
 
 
 def test_parse_judge_json_missing_met_key():
@@ -57,9 +58,10 @@ def test_parse_judge_json_garbage():
 
 
 def test_parse_judge_json_empty_reason_defaults():
-    met, reason = _parse_judge_json('{"met": false, "reason": ""}')
+    met, reason, confidence = _parse_judge_json('{"met": false, "reason": ""}')
     assert met is False
     assert reason == "(no reason given)"
+    assert confidence == 1.0
 
 
 def test_default_judge_model_covers_all_backends():
@@ -136,9 +138,7 @@ def _install_mock_proxy(monkeypatch, response: httpx.Response):
         "get_url_and_key",
         classmethod(lambda cls: ("http://127.0.0.1:8317/v1", "not-needed")),
     )
-    monkeypatch.setattr(
-        goal_judge_service.httpx, "post", lambda *a, **kw: response
-    )
+    monkeypatch.setattr(goal_judge_service.httpx, "post", lambda *a, **kw: response)
 
 
 def test_llm_judge_met_verdict(monkeypatch):
@@ -167,9 +167,7 @@ def test_llm_judge_met_verdict(monkeypatch):
 
 def test_llm_judge_not_met_verdict(monkeypatch):
     body = {
-        "choices": [
-            {"message": {"content": '{"met": false, "reason": "tests fail"}'}}
-        ],
+        "choices": [{"message": {"content": '{"met": false, "reason": "tests fail"}'}}],
         "usage": {"prompt_tokens": 30, "completion_tokens": 10},
     }
     _install_mock_proxy(monkeypatch, httpx.Response(200, json=body))
@@ -218,9 +216,7 @@ def test_llm_judge_uses_per_backend_default_model(monkeypatch):
         return httpx.Response(
             200,
             json={
-                "choices": [
-                    {"message": {"content": '{"met": true, "reason": "ok"}'}}
-                ],
+                "choices": [{"message": {"content": '{"met": true, "reason": "ok"}'}}],
                 "usage": {"prompt_tokens": 0, "completion_tokens": 0},
             },
         )
@@ -247,9 +243,7 @@ def test_llm_judge_model_override_wins(monkeypatch):
         return httpx.Response(
             200,
             json={
-                "choices": [
-                    {"message": {"content": '{"met": true, "reason": "ok"}'}}
-                ],
+                "choices": [{"message": {"content": '{"met": true, "reason": "ok"}'}}],
                 "usage": {},
             },
         )
@@ -261,9 +255,7 @@ def test_llm_judge_model_override_wins(monkeypatch):
     )
     monkeypatch.setattr(goal_judge_service.httpx, "post", capture_post)
 
-    GoalJudgeService.judge(
-        "g", "t", backend_kind="claude", model_override="claude-opus-4-7"
-    )
+    GoalJudgeService.judge("g", "t", backend_kind="claude", model_override="claude-opus-4-7")
     assert captured["model"] == "claude-opus-4-7"
 
 
