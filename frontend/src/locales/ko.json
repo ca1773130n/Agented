@@ -1967,7 +1967,17 @@
     "contextPolicy": "컨텍스트 정책",
     "contextCarry": "컨텍스트 유지",
     "contextReset": "반복마다 새 컨텍스트",
-    "stagnation": "진행 없이 N회 반복 후 중지"
+    "stagnation": "진행 없이 N회 반복 후 중지",
+    "qualityGate": "품질 게이트",
+    "gateTestPass": "테스트 통과",
+    "gateMetric": "메트릭 임계값",
+    "gateLlmJudge": "LLM 심사",
+    "rubric": "심사 기준",
+    "judgeVersion": "심사 버전",
+    "minConfidence": "최소 신뢰도",
+    "sandbox": "평가 샌드박스",
+    "sandboxIsolated": "격리된 스냅샷 (권장)",
+    "sandboxInherit": "작업 공간에서 실행"
   },
   "permissionPromptCard": {
     "header": "Claude가 도구를 사용하려고 합니다",

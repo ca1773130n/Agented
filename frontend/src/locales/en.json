@@ -1967,7 +1967,17 @@
     "contextPolicy": "Context policy",
     "contextCarry": "Carry context",
     "contextReset": "Fresh context each iteration",
-    "stagnation": "Stop after N iterations without progress"
+    "stagnation": "Stop after N iterations without progress",
+    "qualityGate": "Quality gate",
+    "gateTestPass": "Tests pass",
+    "gateMetric": "Metric threshold",
+    "gateLlmJudge": "LLM judge",
+    "rubric": "Judge rubric",
+    "judgeVersion": "Judge version",
+    "minConfidence": "Minimum confidence",
+    "sandbox": "Eval sandbox",
+    "sandboxIsolated": "Isolated snapshot (recommended)",
+    "sandboxInherit": "Run in workspace"
   },
   "permissionPromptCard": {
     "header": "Claude wants to use a tool",
