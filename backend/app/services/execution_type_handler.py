@@ -17,8 +17,8 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional
 
+from .goal_loop_runner import get_runner_state, start_runner, stop_runner
 from .project_session_manager import ProjectSessionManager
-from .ralph_monitor_service import RalphMonitorService
 from .team_monitor_service import TeamMonitorService
 
 logger = logging.getLogger(__name__)
@@ -139,11 +139,16 @@ class DirectExecutionHandler(ExecutionTypeHandler):
 
 
 class RalphSessionHandler(ExecutionTypeHandler):
-    """Handler for Ralph Wiggum autonomous loop execution.
+    """Handler for Ralph autonomous loop execution (v0.6.0 unified loops).
 
-    Wraps ProjectSessionManager with Ralph-specific command construction
-    (injecting /ralph-loop into the Claude Code prompt) and delegates
-    iteration tracking and circuit breaking to RalphMonitorService.
+    Ralph is now a thin profile over the goal-loop executor: it builds a
+    ``LoopSpec`` legacy dict (``agent_task`` body, ``context_policy=reset``,
+    git-commit stagnation circuit breaker) and drives the SAME
+    ``goal_loop_runner`` that powers ``goal_loop`` sessions. The session is a
+    stream-json claude process (no PTY), so a Ralph run is resumable and
+    fully iteration-tracked through the shared ``goal_loop_iterations`` table.
+    The retired ``RalphMonitorService`` git-progress logic now lives in
+    ``loop_progress`` and is consumed by the executor's stagnation exit.
 
     Before starting a session, checks that the ralph-wiggum plugin is
     installed in the user's Claude Code settings.
@@ -181,10 +186,13 @@ class RalphSessionHandler(ExecutionTypeHandler):
             }
 
     def start(self, session_config: dict) -> dict:
-        """Start a Ralph loop PTY session.
+        """Start a Ralph loop session on the unified goal-loop executor.
 
-        Checks for ralph-wiggum plugin, constructs /ralph-loop CLI command,
-        creates session via ProjectSessionManager, and starts RalphMonitorService.
+        Checks for the ralph-wiggum plugin, builds a ``LoopSpec`` legacy dict
+        (tagged ``_execution_type="ralph"`` so the runner parses an
+        ``agent_task`` / ``context_policy=reset`` spec), spawns a stream-json
+        claude session (no PTY, mirroring ``GoalLoopSessionHandler``),
+        persists the config, and drives the shared ``start_runner``.
         """
         # Prerequisite check: ralph-wiggum plugin must be installed
         plugin_error = self._check_ralph_plugin()
@@ -192,19 +200,26 @@ class RalphSessionHandler(ExecutionTypeHandler):
             return plugin_error
 
         ralph_config = session_config.get("ralph_config", {})
-        max_iterations = ralph_config.get("max_iterations", 50)
-        completion_promise = ralph_config.get("completion_promise", "COMPLETE")
         task_description = ralph_config.get("task_description", "Complete the task.")
-        no_progress_threshold = ralph_config.get("no_progress_threshold", 3)
 
-        # Construct the prompt that invokes /ralph-loop inside Claude Code
-        prompt = (
-            f'/ralph-loop "{task_description}" '
-            f"--max-iterations {max_iterations} "
-            f'--completion-promise "{completion_promise}"'
-        )
+        # Tag the legacy dict so the runner parses it through the ralph branch
+        # of LoopSpec.from_legacy_config (agent_task body, reset context,
+        # git-commit stagnation circuit breaker).
+        cfg = {**ralph_config, "_execution_type": "ralph"}
 
-        cmd = ["claude", "-p", prompt, "--dangerously-skip-permissions"]
+        # Stream-json claude session — same shape as GoalLoopSessionHandler.
+        # The runner pumps the goal/continue prompts via the input route.
+        cmd = session_config.get("cmd") or [
+            "claude",
+            "--print",
+            "--input-format",
+            "stream-json",
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--include-hook-events",
+            "--include-partial-messages",
+        ]
 
         session_id = ProjectSessionManager.create_session(
             project_id=session_config["project_id"],
@@ -214,57 +229,61 @@ class RalphSessionHandler(ExecutionTypeHandler):
             plan_id=session_config.get("plan_id"),
             agent_id=session_config.get("agent_id"),
             worktree_path=session_config.get("worktree_path"),
-            execution_type="ralph_loop",
-            execution_mode="autonomous",
+            execution_type="ralph",
+            execution_mode=session_config.get("execution_mode", "autonomous"),
+            stream_json=True,
+            use_pty=False,
+            yolo_mode=session_config.get("yolo_mode", False),
+            forge_bundle=session_config.get("forge_bundle"),
+            super_agent_id=session_config.get("super_agent_id"),
         )
 
-        # Start iteration monitor (git commit tracking + circuit breaker)
-        RalphMonitorService.start_monitoring(
-            session_id=session_id,
-            cwd=session_config["cwd"],
-            max_iterations=max_iterations,
-            no_progress_threshold=no_progress_threshold,
-        )
+        # Persist config + spawn the shared driver thread.
+        from app.db import set_goal_loop_config
+
+        try:
+            set_goal_loop_config(session_id, cfg)
+        except Exception:
+            logger.warning("ralph: failed to persist config for %s", session_id, exc_info=True)
+        start_runner(session_id, cfg, cwd=session_config.get("cwd"))
 
         info = ProjectSessionManager.get_session_info(session_id)
         return {
             "session_id": session_id,
             "pid": info["pid"] if info else None,
             "status": "active",
+            "goal": task_description,
         }
 
     def monitor(self, session_id: str) -> dict:
         """Check Ralph session status including iteration tracking.
 
-        Merges base session info with RalphMonitorService state.
+        Merges base session info with the shared goal-loop runner state.
         """
         info = ProjectSessionManager.get_session_info(session_id)
-        if not info:
-            base = {
-                "alive": False,
-                "status": "unknown",
-                "output_lines": 0,
-                "last_activity_at": None,
-            }
-        else:
-            base = {
+        base = (
+            {
                 "alive": info["status"] == "active",
                 "status": info["status"],
                 "output_lines": info.get("output_lines", 0),
                 "last_activity_at": info.get("last_activity_at"),
             }
-
-        ralph_state = RalphMonitorService.get_state(session_id)
-        if ralph_state:
-            base["iteration"] = ralph_state.get("iteration", 0)
-            base["max_iterations"] = ralph_state.get("max_iterations", 0)
-            base["circuit_breaker_triggered"] = ralph_state.get("triggered", False)
-
+            if info
+            else {
+                "alive": False,
+                "status": "unknown",
+                "output_lines": 0,
+                "last_activity_at": None,
+            }
+        )
+        runner = get_runner_state(session_id)
+        if runner:
+            base.update(runner)
         return base
 
     def stop(self, session_id: str) -> bool:
-        """Stop Ralph session and its monitor."""
-        RalphMonitorService.stop_monitoring(session_id)
+        """Stop Ralph session and its shared runner thread."""
+        stop_runner(session_id)
         return ProjectSessionManager.stop_session(session_id)
 
     def get_output(self, session_id: str, last_n: int = 100) -> list[str]:
