@@ -20,9 +20,10 @@ import re
 import threading
 import time
 from dataclasses import dataclass, field
-from queue import Empty
+from queue import Empty, Queue
 from typing import Optional
 
+from app.config import AUTORESEARCH_KERNEL_ENABLED
 from app.db import (
     add_goal_loop_dead_end,
     list_goal_loop_dead_ends,
@@ -30,12 +31,11 @@ from app.db import (
     record_goal_loop_iteration_complete,
     record_goal_loop_iteration_start,
 )
+from app.models.loop_spec import LoopSpec
 
 from . import loop_progress
 from .goal_judge_service import GoalJudgeService
 from .project_session_manager import ProjectSessionManager
-from app.config import AUTORESEARCH_KERNEL_ENABLED
-from app.models.loop_spec import LoopSpec
 
 # autoresearch_core.should_promote_dead_end is imported lazily inside
 # _maybe_promote_kernel_dead_end so flag-off deployments don't require the
@@ -261,7 +261,7 @@ def start_runner(session_id: str, config: dict, cwd: Optional[str]) -> None:
     with _runners_lock:
         if session_id in _runners:
             return
-        execution_type = (config.get("_execution_type") or "goal_loop")
+        execution_type = config.get("_execution_type") or "goal_loop"
         state = _RunnerState(
             session_id=session_id,
             config=config,
@@ -315,11 +315,16 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
     5. Wall-time cap reached.
     """
     session_id = state.session_id
+    # The runner registry is keyed by the ORIGINAL session_id. Under
+    # context_policy=reset the loop re-points ``session_id`` to freshly-spawned
+    # child processes, but the registry key (and the route's stop_runner target)
+    # must stay stable — so cleanup/teardown always use this captured key.
+    registry_key = session_id
     config = state.config
     goal = (config.get("goal") or "").strip()
     if not goal:
         logger.warning("goal_loop: session %s has empty goal; runner exits", session_id)
-        _cleanup(session_id)
+        _cleanup(registry_key)
         return
 
     check_cmd = config.get("check_cmd")
@@ -607,7 +612,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                     ProjectSessionManager.stop_session(session_id)
                     break
 
-            _next_iteration(
+            fresh_session_id = _next_iteration(
                 policy=state.spec.state.context_policy,
                 session_id=session_id,
                 cwd=cwd,
@@ -617,6 +622,16 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                 dead_ends_block=_dead_ends_context(session_id) if ouroboros else "",
                 result_block=result_block,
             )
+            # context_policy=reset spawned a fresh claude process (clean context
+            # window). Re-point the loop's polling to the new child so subsequent
+            # turn boundaries come from it, and release the old subscription. The
+            # SAME _RunnerState keeps accumulating budgets/iteration counts.
+            if fresh_session_id and fresh_session_id != session_id:
+                new_queue = _repoint_runner_to_fresh_session(registry_key, fresh_session_id)
+                if new_queue is not None:
+                    ProjectSessionManager.unsubscribe_raw(session_id, queue)
+                    session_id = fresh_session_id
+                    queue = new_queue
     except Exception as exc:
         # The normal termination paths (met / iteration_cap / convergence /
         # operator stop) all break out of the loop and reach `finally`, never
@@ -632,7 +647,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
             logger.error("goal_loop: failed to emit error-end for %s", session_id, exc_info=True)
     finally:
         ProjectSessionManager.unsubscribe_raw(session_id, queue)
-        _cleanup(session_id)
+        _cleanup(registry_key)
 
 
 def _send_continue(
@@ -657,6 +672,24 @@ def _send_continue(
     )
 
 
+def _repoint_runner_to_fresh_session(registry_key: str, fresh_session_id: str) -> Optional["Queue"]:
+    """Re-point the live ``_RunnerState`` at the freshly-spawned child process.
+
+    The runner registry stays keyed by the ORIGINAL session_id (``registry_key``,
+    so the route's ``stop_runner`` / ``stop_session`` keep working), but
+    ``state.session_id`` is swapped to the fresh child so per-iteration tracking
+    (iteration rows, broadcasts, stop checks) target the clean-context process.
+    Returns a freshly-subscribed raw queue for the new session so the ``_run``
+    loop polls the fresh process's turn boundaries; ``None`` if the runner has
+    already been torn down."""
+    with _runners_lock:
+        state = _runners.get(registry_key)
+        if state is None:
+            return None
+        state.session_id = fresh_session_id
+    return ProjectSessionManager.subscribe_raw(fresh_session_id)
+
+
 def _advance_iteration(
     *,
     session_id: str,
@@ -667,17 +700,22 @@ def _advance_iteration(
     dead_ends_block: str = "",
     result_block: str = "",
     **_kw,
-) -> None:
-    """``context_policy=reset`` advance: drop the carried conversation and seed a
-    FRESH stream-json session with the accumulated knowledge + the goal.
+) -> Optional[str]:
+    """``context_policy=reset`` advance: tear down the carried-context process and
+    START A NEW claude OS process with a CLEAN context window.
 
-    Reuses the ``_spawn_resumed_session`` recipe (a fresh, no-PTY, stream-json
-    claude process) so the next iteration starts from a clean context window
-    rather than ``_send_continue``-ing into the same long-lived process. The
-    fresh session re-enters from durable iteration history via
-    ``_build_resume_context`` plus the goal prompt; budgets/tracking continue to
-    accumulate on the SAME ``_RunnerState`` because the runner keeps polling the
-    origin session's queue until ``__end__``."""
+    Reuses the ``_spawn_resumed_session`` recipe (``_create_fresh_loop_child`` — a
+    fresh, no-PTY, stream-json ``claude`` subprocess) so the next iteration begins
+    from an empty context rather than ``_send_continue``-ing into the same
+    long-lived process (which would retain the full conversation history and defeat
+    the reset). The fresh process is re-seeded from durable iteration history via
+    ``_build_resume_context`` plus the goal prompt; the OLD process is stopped.
+
+    Budgets/tracking continue to accumulate on the SAME ``_RunnerState`` (the
+    registry key is unchanged); the runner re-points its polling to the fresh
+    child via ``_repoint_runner_to_fresh_session``. Returns the new session_id so
+    the caller (``_run``) can swap which queue it polls. Falls back to a continue
+    prompt (returning ``None``) only when no origin row exists to spawn from."""
     from ..db.connection import get_connection
 
     with get_connection() as conn:
@@ -695,28 +733,52 @@ def _advance_iteration(
             dead_ends_block=dead_ends_block,
             result_block=result_block,
         )
-        return
+        return None
 
+    origin_session = dict(row)
     resume_context = _build_resume_context(session_id)
+
+    # Spawn a genuinely fresh process (clean context window). Provenance is
+    # recorded so the new child traces back to the origin in the session graph.
+    new_session_id = _create_fresh_loop_child(origin_session, cwd)
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE project_sessions SET resumed_from = ? WHERE id = ?",
+            (session_id, new_session_id),
+        )
+        conn.commit()
+
+    # Stop the carried-context process — its conversation history is exactly what
+    # we are discarding. (After re-pointing the runner key still maps to the same
+    # state, so an external stop continues to work.)
+    try:
+        ProjectSessionManager.stop_session(session_id)
+    except Exception:
+        logger.debug("goal_loop: failed to stop origin %s during reset", session_id, exc_info=True)
+
+    # Seed the FRESH child with accumulated knowledge + the goal — never the
+    # origin process (that would write into the discarded context window).
     _send_initial(
-        session_id,
+        new_session_id,
         goal,
         ouroboros=ouroboros,
         result_block=result_block,
         resume_context=resume_context,
     )
+    return new_session_id
 
 
-def _next_iteration(*, policy: str, session_id: str, cwd, goal: str, **kw) -> None:
+def _next_iteration(*, policy: str, session_id: str, cwd, goal: str, **kw) -> Optional[str]:
     """Advance one iteration under the active ``context_policy``.
 
     ``carry`` (default) writes a synthetic continue prompt into the same
     long-lived process (byte-identical to the prior behavior). ``reset`` drops
-    the carried conversation and re-seeds a fresh context window."""
+    the carried conversation by spawning a fresh claude process and returns its
+    new session_id so the caller can re-point polling. ``carry`` returns ``None``."""
     if policy == "reset":
-        _advance_iteration(session_id=session_id, cwd=cwd, goal=goal, **kw)
-    else:
-        _send_continue(session_id, goal=goal, **kw)
+        return _advance_iteration(session_id=session_id, cwd=cwd, goal=goal, **kw)
+    _send_continue(session_id, goal=goal, **kw)
+    return None
 
 
 def _send_initial(
@@ -873,6 +935,47 @@ def _build_resume_context(session_id: str) -> str:
     return "\n".join(p for p in parts if p)
 
 
+def _create_fresh_loop_child(origin_session: dict, cwd: Optional[str]) -> str:
+    """Spawn a brand-new claude OS process with a CLEAN context window.
+
+    This is the shared fresh-session recipe — a no-PTY, stream-json ``claude``
+    subprocess that mirrors ``GoalLoopSessionHandler.start()``. It carries no
+    conversation history from any prior process, which is exactly what both the
+    resume route and ``context_policy=reset`` need: the new process starts from
+    an empty context and is re-seeded from durable iteration knowledge.
+
+    Returns the new session_id. Does NOT persist provenance, set config, or
+    start a runner — callers compose those steps so the same recipe serves both
+    "spawn + own runner" (resume) and "spawn + re-point existing runner" (reset).
+    """
+    cmd = [
+        "claude",
+        "--output-format",
+        "stream-json",
+        "--input-format",
+        "stream-json",
+        "-p",
+        "--verbose",
+    ]
+    return ProjectSessionManager.create_session(
+        project_id=origin_session["project_id"],
+        cmd=cmd,
+        cwd=cwd or ".",
+        phase_id=origin_session.get("phase_id"),
+        plan_id=origin_session.get("plan_id"),
+        agent_id=origin_session.get("agent_id"),
+        worktree_path=origin_session.get("worktree_path"),
+        execution_type="goal_loop",
+        execution_mode=origin_session.get("execution_mode") or "autonomous",
+        stream_json=True,
+        use_pty=False,
+        # Preserve the origin's yolo mode: a non-yolo respawn would activate
+        # the permission-hook overlay and block the unattended loop. The
+        # original handler expresses yolo solely via this flag — mirror it.
+        yolo_mode=bool(origin_session.get("yolo_mode")),
+    )
+
+
 def _spawn_resumed_session(origin_session_id: str, goal_config: dict, origin_session: dict) -> str:
     """Create and start a fresh goal-loop session seeded with the origin's config.
 
@@ -892,35 +995,7 @@ def _spawn_resumed_session(origin_session_id: str, goal_config: dict, origin_ses
         except Exception:
             cwd = None
 
-    # Build a minimal cmd for the fresh session — use the same pattern as
-    # GoalLoopSessionHandler (claude with stream-json, no PTY).
-    cmd = [
-        "claude",
-        "--output-format",
-        "stream-json",
-        "--input-format",
-        "stream-json",
-        "-p",
-        "--verbose",
-    ]
-
-    new_session_id = ProjectSessionManager.create_session(
-        project_id=origin_session["project_id"],
-        cmd=cmd,
-        cwd=cwd or ".",
-        phase_id=origin_session.get("phase_id"),
-        plan_id=origin_session.get("plan_id"),
-        agent_id=origin_session.get("agent_id"),
-        worktree_path=origin_session.get("worktree_path"),
-        execution_type="goal_loop",
-        execution_mode=origin_session.get("execution_mode") or "autonomous",
-        stream_json=True,
-        use_pty=False,
-        # Preserve the origin's yolo mode: a non-yolo respawn would activate
-        # the permission-hook overlay and block the unattended loop. The
-        # original handler expresses yolo solely via this flag — mirror it.
-        yolo_mode=bool(origin_session.get("yolo_mode")),
-    )
+    new_session_id = _create_fresh_loop_child(origin_session, cwd)
 
     # Persist resumed_from provenance (direct UPDATE — not in update_project_session allowlist)
     with get_connection() as conn:
