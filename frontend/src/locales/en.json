@@ -1962,6 +1962,13 @@
     "pickAll": "pick all that apply",
     "sendAnswer": "Send answer"
   },
+  "loopConfig": {
+    "tokenBudget": "Token budget",
+    "contextPolicy": "Context policy",
+    "contextCarry": "Carry context",
+    "contextReset": "Fresh context each iteration",
+    "stagnation": "Stop after N iterations without progress"
+  },
   "permissionPromptCard": {
     "header": "Claude wants to use a tool",
     "fullInput": "Full input",
