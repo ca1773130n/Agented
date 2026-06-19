@@ -89,6 +89,8 @@ def record_iteration_complete(
     predicted_outcome: Optional[str] = None,
     ouroboros_verdict: Optional[str] = None,
     body_kind: str = "eval_refine",
+    confidence: Optional[float] = None,
+    judge_version: Optional[str] = None,
 ) -> None:
     """Fill in the verdict + cost telemetry on a pending iteration row.
 
@@ -100,6 +102,11 @@ def record_iteration_complete(
     v0.6.0 unified loops — adds ``body_kind`` (so Ralph's
     agent_task iterations share the table) and persists a
     convenience ``tokens_total`` for the token-budget breaker.
+
+    v0.6.0 sub-project #2 — adds ``confidence`` (the judge's 0–1
+    confidence in the verdict, used for dynamic early-termination)
+    and ``judge_version`` (rubric/judge version stamp for drift
+    auditing). Both optional so pre-existing callers still work.
     """
     tokens_total = (tokens_in or 0) + (tokens_out or 0)
     with get_connection() as conn:
@@ -118,7 +125,9 @@ def record_iteration_complete(
                 predicted_outcome = ?,
                 ouroboros_verdict = ?,
                 body_kind = ?,
-                tokens_total = ?
+                tokens_total = ?,
+                confidence = ?,
+                judge_version = ?
             WHERE id = ?
             """,
             (
@@ -134,6 +143,8 @@ def record_iteration_complete(
                 ouroboros_verdict,
                 body_kind,
                 tokens_total,
+                confidence,
+                judge_version,
                 row_id,
             ),
         )
@@ -243,7 +254,8 @@ def list_iterations(session_id: str) -> List[dict]:
             """
             SELECT id, session_id, iteration, started_at, ended_at,
                    verdict, judge_source, judge_reason, judge_stdout,
-                   tokens_in, tokens_out, cost_usd, body_kind, tokens_total
+                   tokens_in, tokens_out, cost_usd, body_kind, tokens_total,
+                   confidence, judge_version
             FROM goal_loop_iterations
             WHERE session_id = ?
             ORDER BY iteration ASC, id ASC
@@ -269,4 +281,6 @@ def _row_to_dict(row: Any) -> dict:
         "cost_usd": row[11],
         "body_kind": row[12],
         "tokens_total": row[13],
+        "confidence": row[14],
+        "judge_version": row[15],
     }
