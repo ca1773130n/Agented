@@ -26,12 +26,15 @@ import logging
 import re
 import subprocess
 from dataclasses import dataclass
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import httpx
 
 from .cliproxy_manager import CLIProxyManager
 from app.config import AUTORESEARCH_KERNEL_ENABLED
+
+if TYPE_CHECKING:
+    from app.models.loop_spec import QualityGate
 
 # autoresearch_core is imported lazily inside the flag-guarded kernel branch
 # (see judge()), so a default-OFF deployment has no hard import dependency on
@@ -134,6 +137,8 @@ class JudgeVerdict:
     cost_usd: float = 0.0
     ouroboros_verdict: Optional[str] = None
     metric_spec: Optional[dict] = None
+    confidence: float = 1.0
+    judge_version: Optional[str] = None
     kernel_record: Optional[object] = (
         None  # transient autoresearch_core.VerdictRecord; not persisted
     )
@@ -155,6 +160,8 @@ class GoalJudgeService:
         hypothesis: Optional[str] = None,
         predicted_outcome: Optional[str] = None,
         metric_spec: Optional[dict] = None,
+        quality_gate: Optional["QualityGate"] = None,
+        sandbox: str = "isolated",
     ) -> JudgeVerdict:
         """v0.7.86 — when both ``hypothesis`` and ``predicted_outcome``
         are supplied, the LLM judge runs in Ouroboros mode and
@@ -218,54 +225,80 @@ class GoalJudgeService:
                 ),
             )
         if check_cmd:
-            return cls._run_deterministic(check_cmd, cwd)
+            return cls._run_deterministic(check_cmd, cwd, sandbox=sandbox)
         model = model_override or DEFAULT_JUDGE_MODEL.get(backend_kind, "auto")
         if hypothesis and predicted_outcome:
             return cls._run_ouroboros_judge(
                 goal, last_assistant_text, hypothesis, predicted_outcome, backend_kind, model
             )
-        return cls._run_llm_judge(goal, last_assistant_text, backend_kind, model)
+        return cls._run_llm_judge(
+            goal, last_assistant_text, backend_kind, model, quality_gate=quality_gate
+        )
 
     # -----------------------------------------------------------------
     # Deterministic check
     # -----------------------------------------------------------------
 
     @staticmethod
-    def _run_deterministic(check_cmd: str, cwd: Optional[str]) -> JudgeVerdict:
-        try:
-            proc = subprocess.run(
-                check_cmd,
-                shell=True,
-                cwd=cwd,
-                capture_output=True,
-                text=True,
-                timeout=_CHECK_TIMEOUT_SECONDS,
-            )
-        except subprocess.TimeoutExpired:
-            return JudgeVerdict(
-                met=False,
-                source="deterministic",
-                reason=f"check timed out after {_CHECK_TIMEOUT_SECONDS}s",
-            )
-        except (OSError, ValueError) as exc:
-            return JudgeVerdict(
-                met=False,
-                source="deterministic",
-                reason=f"check failed to run: {exc}",
-            )
-        stdout = (proc.stdout or "")[-4096:]  # tail-cap for storage
-        if proc.returncode == 0:
+    def _run_deterministic(
+        check_cmd: str, cwd: Optional[str], *, sandbox: str = "isolated"
+    ) -> JudgeVerdict:
+        if sandbox == "isolated":
+            # Reward-hacking mitigation (F9): grade against a throwaway,
+            # env-scrubbed snapshot of the workspace so the live agent
+            # session can't race/tamper with the running eval.
+            from .sandbox_eval import run_isolated_check
+
+            r = run_isolated_check(check_cmd, cwd or ".", timeout=_CHECK_TIMEOUT_SECONDS)
+            returncode = r.returncode
+            stdout = (r.stdout or "")[-4096:]  # tail-cap for storage
+            if returncode == 124:
+                return JudgeVerdict(
+                    met=False,
+                    source="deterministic",
+                    reason=f"check timed out after {_CHECK_TIMEOUT_SECONDS}s",
+                    confidence=0.0,
+                )
+        else:
+            try:
+                proc = subprocess.run(
+                    check_cmd,
+                    shell=True,
+                    cwd=cwd,
+                    capture_output=True,
+                    text=True,
+                    timeout=_CHECK_TIMEOUT_SECONDS,
+                )
+            except subprocess.TimeoutExpired:
+                return JudgeVerdict(
+                    met=False,
+                    source="deterministic",
+                    reason=f"check timed out after {_CHECK_TIMEOUT_SECONDS}s",
+                    confidence=0.0,
+                )
+            except (OSError, ValueError) as exc:
+                return JudgeVerdict(
+                    met=False,
+                    source="deterministic",
+                    reason=f"check failed to run: {exc}",
+                    confidence=0.0,
+                )
+            returncode = proc.returncode
+            stdout = (proc.stdout or "")[-4096:]  # tail-cap for storage
+        if returncode == 0:
             return JudgeVerdict(
                 met=True,
                 source="deterministic",
                 reason="check command exited 0",
                 stdout=stdout,
+                confidence=1.0,
             )
         return JudgeVerdict(
             met=False,
             source="deterministic",
-            reason=f"check exited {proc.returncode}",
+            reason=f"check exited {returncode}",
             stdout=stdout,
+            confidence=0.0,
         )
 
     # -----------------------------------------------------------------
@@ -279,6 +312,8 @@ class GoalJudgeService:
         last_assistant_text: str,
         backend_kind: str,
         model: str,
+        *,
+        quality_gate: Optional["QualityGate"] = None,
     ) -> JudgeVerdict:
         url_and_key = CLIProxyManager.get_url_and_key()
         if not url_and_key:
