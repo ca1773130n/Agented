@@ -100,6 +100,19 @@ def _token_cap_exceeded(total: int, max_tokens: int) -> bool:
     return max_tokens > 0 and total >= max_tokens
 
 
+def _met_terminates(*, met: bool, confidence: float, gate) -> bool:
+    """Dynamic early-termination gate (v0.6.0 sub-project #2).
+
+    A "met" verdict only terminates the loop when its self-reported
+    ``confidence`` clears the gate's ``min_confidence`` floor. With no
+    gate (or floor 0.0) this degrades to the legacy ``met`` check.
+    """
+    if not met:
+        return False
+    floor = getattr(gate, "min_confidence", 0.0) if gate else 0.0
+    return confidence >= floor
+
+
 def _approach_hash(hypothesis: str) -> str:
     """Stable hash of a hypothesis for the dead-end UNIQUE
     constraint. SHA-1 truncated to 16 hex chars — short enough to
@@ -350,6 +363,13 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
     # judge falls back to its legacy binary mode for that
     # iteration without losing the audit row.
     ouroboros = state.spec.exit.convergence
+    # v0.6.0 sub-project #2 — the quality-gate (test/metric/llm-judge with
+    # rubric/version/min_confidence) and the sandbox mode for the eval boundary
+    # are carried on the parsed LoopSpec. Both are forwarded to the judge so the
+    # deterministic check runs isolated (default) and the LLM judge gets the
+    # rubric/version; ``gate.min_confidence`` then gates termination.
+    gate = state.spec.exit.quality_gate
+    sandbox = state.spec.state.sandbox
     if metric_spec is not None and not AUTORESEARCH_KERNEL_ENABLED:
         # Operator configured a metric_spec but the kernel flag is off — it's
         # silently ignored. Log once so this isn't a confusing no-op.
@@ -437,6 +457,8 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                 hypothesis=hypothesis,
                 predicted_outcome=predicted_outcome,
                 metric_spec=metric_spec,
+                quality_gate=gate,
+                sandbox=sandbox,
             )
 
             # If the operator clicked Stop while the judge was
@@ -468,6 +490,8 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                 predicted_outcome=predicted_outcome,
                 ouroboros_verdict=verdict.ouroboros_verdict,
                 body_kind=state.spec.body.kind,
+                confidence=verdict.confidence,
+                judge_version=verdict.judge_version,
             )
             ProjectSessionManager._broadcast(
                 session_id,
@@ -481,7 +505,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                 },
             )
 
-            if verdict.met:
+            if _met_terminates(met=verdict.met, confidence=verdict.confidence, gate=gate):
                 _broadcast_end(session_id, reason="met", detail=verdict.reason)
                 ProjectSessionManager.stop_session(session_id)
                 break

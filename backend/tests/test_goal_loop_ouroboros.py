@@ -47,16 +47,13 @@ def test_migration_128_columns_and_table(isolated_db):
     del isolated_db
     with get_connection() as conn:
         cols = {
-            row[1]
-            for row in conn.execute("PRAGMA table_info(goal_loop_iterations)").fetchall()
+            row[1] for row in conn.execute("PRAGMA table_info(goal_loop_iterations)").fetchall()
         }
         for col in ("hypothesis", "predicted_outcome", "ouroboros_verdict"):
             assert col in cols, f"migration 128 must add goal_loop_iterations.{col}"
         tables = {
             r[0]
-            for r in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
+            for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         }
         assert "goal_loop_dead_ends" in tables
 
@@ -216,9 +213,7 @@ def test_recent_iteration_verdicts_ignores_legacy_rows(isolated_db):
     sid = "psess-mixed"
     # One iteration without ouroboros_verdict (legacy shape).
     row_id = record_iteration_start(sid, 1)
-    record_iteration_complete(
-        row_id, verdict="not_met", judge_source="llm", judge_reason="legacy"
-    )
+    record_iteration_complete(row_id, verdict="not_met", judge_source="llm", judge_reason="legacy")
     # Two iterations with ouroboros_verdict.
     for i, verdict in enumerate(["falsified", "partial"], start=2):
         row_id = record_iteration_start(sid, i)
@@ -255,9 +250,7 @@ def test_judge_dispatches_to_ouroboros_mode_when_hypothesis_supplied():
             ouroboros_verdict="falsified",
         )
 
-    with patch.object(
-        GoalJudgeService, "_run_ouroboros_judge", classmethod(fake_ouroboros)
-    ):
+    with patch.object(GoalJudgeService, "_run_ouroboros_judge", classmethod(fake_ouroboros)):
         verdict = GoalJudgeService.judge(
             "goal",
             "turn text",
@@ -274,13 +267,11 @@ def test_judge_falls_back_to_binary_mode_without_hypothesis():
     """
     captured = {}
 
-    def fake_legacy(cls, goal, turn, backend, model):
+    def fake_legacy(cls, goal, turn, backend, model, **kw):
         captured["called"] = True
         return JudgeVerdict(met=True, source="llm", reason="ok")
 
-    with patch.object(
-        GoalJudgeService, "_run_llm_judge", classmethod(fake_legacy)
-    ):
+    with patch.object(GoalJudgeService, "_run_llm_judge", classmethod(fake_legacy)):
         verdict = GoalJudgeService.judge("goal", "turn text")
     assert captured.get("called") is True
     assert verdict.ouroboros_verdict is None
