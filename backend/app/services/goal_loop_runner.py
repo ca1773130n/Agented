@@ -357,6 +357,16 @@ def _wait_if_paused(state, session_id: str) -> None:
         )
 
 
+def _apply_pending_note(state, reason: str) -> str:
+    """Consume an operator intervene/modify note (if any), prepending it to the
+    next iteration's prompt reason so both carry and reset policies pick it up."""
+    note = getattr(state, "pending_note", None)
+    if not note:
+        return reason
+    state.pending_note = None
+    return f"Operator note: {note}\n\n{reason}"
+
+
 def get_runner_state(session_id: str) -> Optional[dict]:
     """Snapshot the runner state for UI/monitor consumers."""
     with _runners_lock:
@@ -708,7 +718,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                 session_id=session_id,
                 cwd=cwd,
                 goal=goal,
-                reason=verdict.reason,
+                reason=_apply_pending_note(state, verdict.reason),
                 ouroboros=ouroboros,
                 dead_ends_block=_dead_ends_context(session_id) if ouroboros else "",
                 result_block=result_block,
