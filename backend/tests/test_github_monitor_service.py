@@ -340,6 +340,28 @@ def test_poll_due_sources_stops_on_throttle(monkeypatch):
     assert len(polled) == 1  # broke after the first throttled poll, didn't hammer
 
 
+def test_poll_due_sources_transport_error_does_not_halt_batch(monkeypatch):
+    """A per-source transport error (DNS/timeout) skips that source but must NOT
+    stop the batch — only a real 403/429 throttle does."""
+    monkeypatch.setenv(GITHUB_PAT_ENV, "ghp_test_token")
+    project_id = create_project(name="ci-transport-err")
+    CompetitorSourceService.add_source(project_id, "https://github.com/a/b")
+    CompetitorSourceService.add_source(project_id, "https://github.com/c/d")
+    _spy_record_signal(monkeypatch)
+
+    polled: list = []
+
+    def _fake_get(url, **kwargs):
+        polled.append(url)
+        if "/a/b/" in url:
+            raise gms.httpx.ConnectError("boom")  # transport error on the first source
+        return _FakeResponse(304)
+
+    monkeypatch.setattr(gms.httpx, "get", _fake_get)
+    GitHubMonitorService.poll_due_sources()
+    assert len(polled) == 2  # batch continued past the transport error
+
+
 def test_poll_source_200_without_etag_preserves_stored_etag(monkeypatch):
     """A 200 lacking an ETag header must NOT clear the stored etag (which would
     permanently disable conditional GETs for the source)."""

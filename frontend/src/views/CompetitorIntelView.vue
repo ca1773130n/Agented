@@ -122,10 +122,12 @@ function openStream() {
   signalStream = es;
 }
 
-function refreshAll() {
+async function refreshAll() {
   closeStream();
   void loadSources();
-  void loadSignals();
+  // Await the signal backlog BEFORE opening the stream: an SSE frame arriving
+  // mid-load would otherwise be overwritten by loadSignals' array replacement.
+  await loadSignals();
   openStream();
 }
 

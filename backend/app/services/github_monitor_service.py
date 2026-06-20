@@ -223,8 +223,11 @@ class GitHubMonitorService:
                 follow_redirects=False,
             )
         except httpx.HTTPError:
+            # A transport error (DNS / timeout / connection) is a PER-SOURCE
+            # failure, not a rate limit — the caller skips this source and keeps
+            # polling the rest. Only a real 403/429 (below) throttles the batch.
             logger.warning("competitor poll HTTP error for source %s", source_id, exc_info=True)
-            return {"changed": False, "throttled": True}
+            return {"changed": False, "error": True}
 
         status = resp.status_code
 
@@ -315,29 +318,30 @@ class GitHubMonitorService:
 
         from app.services.signal_summarizer_service import SignalSummarizerService
 
-        changed = 0
+        # Phase 1 — poll every source FIRST (fast, rate-limit-sensitive). A 403/429
+        # throttle stops the batch; a per-source transport error ({"error": True})
+        # or any exception is skipped without halting the rest.
+        changed_ids: list[str] = []
         for src in sources:
             try:
                 result = GitHubMonitorService.poll_source(src)
             except Exception:  # noqa: BLE001 — isolate one bad source
                 logger.warning("competitor poll raised for source %s", src.get("id"), exc_info=True)
                 continue
-            # GitHub secondary/abuse rate limit (403/429) — stop the batch rather
-            # than hammer the token on the remaining repos.
             if result.get("throttled"):
                 logger.warning("competitor poll batch stopped early — GitHub throttled")
                 break
             if result.get("changed"):
-                changed += 1
-                # Summarize the change into a ranked detected_signal so the
-                # dashboard/SSE actually surfaces it — the poll alone only
-                # snapshots. Isolated so a summarize failure can't stall the batch.
-                try:
-                    SignalSummarizerService.record_signal(src["id"])
-                except Exception:  # noqa: BLE001
-                    logger.warning(
-                        "competitor signal summarize failed for source %s",
-                        src.get("id"),
-                        exc_info=True,
-                    )
-        return changed
+                changed_ids.append(src["id"])
+
+        # Phase 2 — summarize changed sources AFTER polling, so a slow LLM call
+        # never stalls the poll loop. ponytail: sequential with the summarizer's
+        # ~60s/call ceiling; move to a job queue if competitor counts grow.
+        for source_id in changed_ids:
+            try:
+                SignalSummarizerService.record_signal(source_id)
+            except Exception:  # noqa: BLE001 — a summarize failure can't stall the rest
+                logger.warning(
+                    "competitor signal summarize failed for source %s", source_id, exc_info=True
+                )
+        return len(changed_ids)
