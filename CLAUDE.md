@@ -168,7 +168,9 @@ tiny <1 KB always-loaded blob. Don't write the same fact to both.
 
 `.planning/` holds roadmaps, codebase analysis, and phase plans.
 `config.json` is the GRD config; milestones live under
-`.planning/milestones/v*/` (v0.5.0 onboarding tour complete → v0.6.0 TBD).
+`.planning/milestones/v*/` (v0.5.0 onboarding tour → v0.6.0 unified loops
+shipped: `LoopSpec` + single executor + eval/sandbox + observability/control,
+migrations 166–170).
 
 ## Tooling
 
