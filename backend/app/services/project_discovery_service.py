@@ -12,13 +12,66 @@ import logging
 import os
 import re
 import subprocess
+import tempfile
 import threading
+from pathlib import Path
 from typing import Optional
 
 from app.database import create_project as db_create_project
-from app.database import get_all_projects
+from app.database import get_all_projects, get_setting
 
 logger = logging.getLogger(__name__)
+
+
+def _static_allowed_bases() -> list[Path]:
+    """Mirror the browse_directory / plugin-import path allowlist
+    (app_litestar/routes/leaf_crud_g.py::_ensure_path_allowed): home, /tmp,
+    /opt — plus the resolved system temp dir so the canonical temp location
+    (e.g. macOS ``/private/var/folders/...``) is covered the same way ``/tmp``
+    is on Linux.
+    """
+    bases = [Path.home(), Path("/tmp"), Path("/opt")]
+    try:
+        bases.append(Path(tempfile.gettempdir()).resolve())
+    except (OSError, ValueError):
+        pass
+    return bases
+
+
+def _allowed_bases() -> list[Path]:
+    """Static allowed bases plus the configured ``workspace_root`` (if set)."""
+    bases = _static_allowed_bases()
+    workspace_root = get_setting("workspace_root")
+    if workspace_root:
+        try:
+            bases.append(Path(workspace_root).expanduser().resolve())
+        except (OSError, ValueError):
+            logger.debug("workspace_root %r not resolvable for allowlist", workspace_root)
+    return bases
+
+
+def _ensure_path_allowed(raw_path: str) -> str:
+    """Resolve *raw_path* and confirm it lives under an allowed base.
+
+    Raises ``ValueError`` (which the route layer maps to a 4xx) for an
+    unresolvable path or one outside home / ``/tmp`` / ``/opt`` / the
+    configured ``workspace_root``.
+    """
+    try:
+        resolved = Path(raw_path).expanduser().resolve()
+    except (OSError, ValueError) as e:
+        raise ValueError("invalid path") from e
+    resolved_str = str(resolved)
+    if not any(
+        resolved_str == str(base) or resolved_str.startswith(str(base) + os.sep)
+        for base in _allowed_bases()
+    ):
+        raise ValueError(
+            "path is not allowed: must be under the home directory, /tmp, /opt, "
+            "or the configured workspace_root"
+        )
+    return resolved_str
+
 
 _IGNORE_DIRS = {
     "node_modules",
@@ -133,7 +186,8 @@ class ProjectDiscoveryService:
     def scan(cls, root: str, *, nested: bool = False, max_depth: int = 3) -> dict:
         if not root or not isinstance(root, str):
             raise ValueError("root folder is required")
-        abs_root = os.path.abspath(os.path.expanduser(root))
+        # Reject paths outside the allowlist BEFORE any os.walk / git probe runs.
+        abs_root = _ensure_path_allowed(root)
         if not os.path.isdir(abs_root):
             raise ValueError(f"not a directory: {root}")
         repos, unreadable = _scan_fs(abs_root, nested, max_depth)
