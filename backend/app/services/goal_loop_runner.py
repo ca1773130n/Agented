@@ -57,6 +57,12 @@ _STALE_CHECK_STREAK = 5
 # interval keeps the cap responsive without burning CPU.
 _QUEUE_POLL_SECONDS = 1.0
 
+# Poll interval for the pause/human-gate hold loops. The blocking
+# helpers (``_wait_if_paused``, ``_await_gate``) sleep this long
+# between re-checks so they stay responsive to ``stop_event`` (and
+# the gate's wall-time bound) without an unbounded wait.
+_PAUSE_POLL_SECONDS = 0.5
+
 # v0.7.86 — Ouroboros convergence threshold. When the last
 # ``_OUROBOROS_CONVERGENCE_WINDOW`` Ouroboros verdicts are all the
 # same value (typically ``falsified``), the runner terminates with
@@ -335,6 +341,20 @@ def submit_gate_decision(session_id: str, decision: str, message: Optional[str] 
     if st:
         st.gate_decision = (decision, message)
     return st is not None
+
+
+def _wait_if_paused(state, session_id: str) -> None:
+    """Block at the iteration boundary while paused. Always re-checks
+    stop_event so a paused loop stays stoppable (never an unbounded wait)."""
+    if not state.pause_event.is_set():
+        return
+    ProjectSessionManager._broadcast(session_id, "goal_loop_paused", {"iteration": state.iteration})
+    while state.pause_event.is_set() and not state.stop_event.is_set():
+        time.sleep(_PAUSE_POLL_SECONDS)
+    if not state.stop_event.is_set():
+        ProjectSessionManager._broadcast(
+            session_id, "goal_loop_resumed", {"iteration": state.iteration}
+        )
 
 
 def get_runner_state(session_id: str) -> Optional[dict]:
@@ -678,6 +698,10 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                     )
                     ProjectSessionManager.stop_session(session_id)
                     break
+
+            _wait_if_paused(state, session_id)
+            if state.stop_event.is_set():
+                break
 
             fresh_session_id = _next_iteration(
                 policy=state.spec.state.context_policy,
