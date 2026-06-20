@@ -243,7 +243,9 @@ class GitHubMonitorService:
 
         # 200: a real change. Hash the normalized body, snapshot, advance cursor.
         content_hash = hashlib.sha256(resp.content or b"").hexdigest()
-        new_etag = resp.headers.get("ETag")
+        # Preserve the prior ETag when a 200 omits the header, so conditional GETs
+        # keep working instead of being permanently disabled for this source.
+        new_etag = resp.headers.get("ETag") or source.get("etag")
         watermark = GitHubMonitorService._extract_watermark(resp)
         raw_ref = GitHubMonitorService._extract_content(resp)
         snapshot_id = GitHubMonitorService._persist_snapshot_and_cursor(
@@ -311,6 +313,8 @@ class GitHubMonitorService:
             ).fetchall()
         sources = [dict(r) for r in rows]
 
+        from app.services.signal_summarizer_service import SignalSummarizerService
+
         changed = 0
         for src in sources:
             try:
@@ -318,6 +322,22 @@ class GitHubMonitorService:
             except Exception:  # noqa: BLE001 — isolate one bad source
                 logger.warning("competitor poll raised for source %s", src.get("id"), exc_info=True)
                 continue
+            # GitHub secondary/abuse rate limit (403/429) — stop the batch rather
+            # than hammer the token on the remaining repos.
+            if result.get("throttled"):
+                logger.warning("competitor poll batch stopped early — GitHub throttled")
+                break
             if result.get("changed"):
                 changed += 1
+                # Summarize the change into a ranked detected_signal so the
+                # dashboard/SSE actually surfaces it — the poll alone only
+                # snapshots. Isolated so a summarize failure can't stall the batch.
+                try:
+                    SignalSummarizerService.record_signal(src["id"])
+                except Exception:  # noqa: BLE001
+                    logger.warning(
+                        "competitor signal summarize failed for source %s",
+                        src.get("id"),
+                        exc_info=True,
+                    )
         return changed

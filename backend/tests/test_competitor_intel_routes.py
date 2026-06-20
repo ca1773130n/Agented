@@ -55,6 +55,22 @@ def _seed_signal(source_id: str, signal_type: str, score: float) -> str:
 # ---------------------------------------------------------------------------
 
 
+def test_signals_denied_for_inaccessible_project(isolated_db, monkeypatch):
+    """IDOR guard: a project the caller can't access → 404, even though it exists
+    (no existence leak). Patching can_access→False exercises the guard wiring."""
+    import app_litestar.routes.competitor_intel_routes as routes
+
+    project_id = create_project(name="owned-by-someone-else")
+    monkeypatch.setattr(routes, "can_access", lambda *a, **k: False)
+    with _client() as c:
+        assert c.get(f"/api/projects/{project_id}/competitor-intel/signals").status_code == 404
+        denied = c.post(
+            f"/api/projects/{project_id}/competitor-intel/sources",
+            json={"url": "https://github.com/o/r"},
+        )
+        assert denied.status_code == 404
+
+
 def test_add_source_unknown_project_404(isolated_db):
     with _client() as c:
         resp = c.post(

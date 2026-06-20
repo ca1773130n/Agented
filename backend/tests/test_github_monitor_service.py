@@ -80,6 +80,20 @@ def _install_capture(monkeypatch, response: _FakeResponse) -> dict:
     return captured
 
 
+def _spy_record_signal(monkeypatch) -> list:
+    """Patch SignalSummarizerService.record_signal with a no-op spy (no LLM call);
+    return the list of source_ids it was invoked with."""
+    import app.services.signal_summarizer_service as sss
+
+    calls: list = []
+    monkeypatch.setattr(
+        sss.SignalSummarizerService,
+        "record_signal",
+        classmethod(lambda cls, source_id, *a, **k: (calls.append(source_id), {"id": "csig-x"})[1]),
+    )
+    return calls
+
+
 # ---------------------------------------------------------------------------
 # 304: the free path — no writes, etag preserved.
 # ---------------------------------------------------------------------------
@@ -279,12 +293,16 @@ def test_poll_due_sources_counts_changed_active_github_sources(monkeypatch):
         return _FakeResponse(304)
 
     monkeypatch.setattr(gms.httpx, "get", _fake_get)
+    record_calls = _spy_record_signal(monkeypatch)
 
     changed = GitHubMonitorService.poll_due_sources()
 
     assert changed == 1
     assert _snapshot_count(changed_src["id"]) == 1
     assert _snapshot_count(unchanged_src["id"]) == 0
+    # Pipeline wired end-to-end: a changed poll summarizes into a signal —
+    # record_signal called once, for the changed source only.
+    assert record_calls == [changed_src["id"]]
 
 
 def test_poll_due_sources_skips_paused_sources(monkeypatch):
@@ -301,6 +319,37 @@ def test_poll_due_sources_skips_paused_sources(monkeypatch):
     monkeypatch.setattr(gms.httpx, "get", _boom)
 
     assert GitHubMonitorService.poll_due_sources() == 0
+
+
+def test_poll_due_sources_stops_on_throttle(monkeypatch):
+    """A 403/429 stops the batch so the token isn't hammered on remaining repos."""
+    monkeypatch.setenv(GITHUB_PAT_ENV, "ghp_test_token")
+    project_id = create_project(name="ci-throttle")
+    CompetitorSourceService.add_source(project_id, "https://github.com/a/b")
+    CompetitorSourceService.add_source(project_id, "https://github.com/c/d")
+    _spy_record_signal(monkeypatch)
+
+    polled: list = []
+
+    def _fake_get(url, **kwargs):
+        polled.append(url)
+        return _FakeResponse(429)
+
+    monkeypatch.setattr(gms.httpx, "get", _fake_get)
+    GitHubMonitorService.poll_due_sources()
+    assert len(polled) == 1  # broke after the first throttled poll, didn't hammer
+
+
+def test_poll_source_200_without_etag_preserves_stored_etag(monkeypatch):
+    """A 200 lacking an ETag header must NOT clear the stored etag (which would
+    permanently disable conditional GETs for the source)."""
+    monkeypatch.setenv(GITHUB_PAT_ENV, "ghp_test_token")
+    source = _seed_source(etag='W/"keep-me"')
+    _install_capture(monkeypatch, _FakeResponse(200, body={"tag_name": "v9", "body": "x"}))
+
+    GitHubMonitorService.poll_source(source)
+
+    assert CompetitorSourceService.get_source(source["id"])["etag"] == 'W/"keep-me"'
 
 
 # ---------------------------------------------------------------------------

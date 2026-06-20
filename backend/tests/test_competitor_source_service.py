@@ -45,6 +45,14 @@ def test_add_source_without_label_never_blocks(isolated_db):
     assert row["watermark"] is None
 
 
+def test_add_source_non_string_label_coerced_to_none(isolated_db):
+    """A non-string label (e.g. a malformed JSON object) is coerced to NULL, not
+    bound raw to SQLite — an "optional" field must never block the insert."""
+    project_id = create_project(name="CI bad-label")
+    row = S.add_source(project_id, "https://github.com/o/r", label={"x": 1})
+    assert row["label"] is None
+
+
 def test_add_source_blank_label_normalized_to_null(isolated_db):
     project_id = create_project(name="CI blank-label")
     row = S.add_source(project_id, "https://acme.com", label="   ")

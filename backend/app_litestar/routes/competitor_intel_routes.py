@@ -34,8 +34,11 @@ from litestar.exceptions import ClientException, NotFoundException
 from litestar.response import Stream
 
 from app.database import get_connection
+from app.db.owned_entities import can_access
 from app.db.projects import get_project
 from app.services.competitor_source_service import CompetitorSourceService
+
+from ..auth import Caller
 
 logger = logging.getLogger(__name__)
 
@@ -60,12 +63,19 @@ _STREAM_POLL_SECONDS = 1.0
 _STREAM_DEADLINE_SECONDS = 600.0
 
 
-def _ensure_project(project_id: str) -> dict:
-    """404 if the project does not exist — mirrors grd_routes._ensure_project."""
-    project = get_project(project_id)
-    if not project:
+def _assert_project_access(project_id: str, caller: Caller) -> None:
+    """404 if the project doesn't exist OR the caller can't access it.
+
+    Per-object ownership guard (IDOR): a source/signal belongs to a project, so
+    only the project's owner or an admin may read or write it. ``can_access``
+    passes NON-existent rows through (so handlers can 404), hence the explicit
+    existence check first; a 404 (not 403) on denial avoids leaking which ids
+    exist. Mirrors projects._assert_project_access.
+    """
+    if not get_project(project_id):
         raise NotFoundException(detail="Project not found")
-    return project
+    if not can_access("projects", project_id, caller.user_id, caller.role):
+        raise NotFoundException(detail="Project not found")
 
 
 def _ranked_signals(project_id: str) -> list[dict[str, Any]]:
@@ -98,7 +108,7 @@ def _ranked_signals(project_id: str) -> list[dict[str, Any]]:
 
 
 @post("/{project_id:str}/competitor-intel/sources", status_code=201, sync_to_thread=False)
-def add_competitor_source(project_id: str, data: dict | None) -> dict[str, Any]:
+def add_competitor_source(project_id: str, data: dict | None, caller: Caller) -> dict[str, Any]:
     """Add a watched competitor source by URL; return the persisted row.
 
     Body: ``{"url": str, "label"?: str}``. ``url`` is required (a source must
@@ -106,7 +116,7 @@ def add_competitor_source(project_id: str, data: dict | None) -> dict[str, Any]:
     NEVER blocks the insert (REQ-27 / wizard-defaults rule); the service
     normalizes whitespace-only to NULL. ``kind`` is auto-detected from the URL.
     """
-    _ensure_project(project_id)
+    _assert_project_access(project_id, caller)
     body = data or {}
     url = body.get("url")
     if not url or not isinstance(url, str) or not url.strip():
@@ -117,9 +127,9 @@ def add_competitor_source(project_id: str, data: dict | None) -> dict[str, Any]:
 
 
 @get("/{project_id:str}/competitor-intel/sources", sync_to_thread=False)
-def list_competitor_sources(project_id: str) -> dict[str, Any]:
+def list_competitor_sources(project_id: str, caller: Caller) -> dict[str, Any]:
     """List the project's competitor sources, newest first."""
-    _ensure_project(project_id)
+    _assert_project_access(project_id, caller)
     return {"sources": CompetitorSourceService.list_sources(project_id)}
 
 
@@ -129,9 +139,9 @@ def list_competitor_sources(project_id: str) -> dict[str, Any]:
 
 
 @get("/{project_id:str}/competitor-intel/signals", sync_to_thread=False)
-def list_competitor_signals(project_id: str) -> dict[str, Any]:
+def list_competitor_signals(project_id: str, caller: Caller) -> dict[str, Any]:
     """Ranked detected_signal rows for the project (score DESC, created_at DESC)."""
-    _ensure_project(project_id)
+    _assert_project_access(project_id, caller)
     return {"signals": _ranked_signals(project_id)}
 
 
@@ -140,7 +150,7 @@ def list_competitor_signals(project_id: str) -> dict[str, Any]:
     media_type="text/event-stream",
     sync_to_thread=False,
 )
-async def competitor_signals_stream(project_id: str) -> Stream:
+async def competitor_signals_stream(project_id: str, caller: Caller) -> Stream:
     """SSE stream of newly-detected ranked signals.
 
     Polls the DB every ~1s, emits an ``event: signal`` frame per signal id not
@@ -152,7 +162,7 @@ async def competitor_signals_stream(project_id: str) -> Stream:
     exactly once). The first poll replays the existing backlog so a late
     subscriber still gets the current ranked set.
     """
-    _ensure_project(project_id)
+    _assert_project_access(project_id, caller)
 
     async def event_generator():
         seen: set[str] = set()

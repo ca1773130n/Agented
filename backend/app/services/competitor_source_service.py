@@ -78,7 +78,7 @@ class CompetitorSourceService:
         missing/blank ``label`` (REQ-27 / wizard-defaults rule).
         """
         kind = CompetitorSourceService.detect_kind(url)
-        normalized_label = label.strip() if isinstance(label, str) else label
+        normalized_label = label.strip() if isinstance(label, str) else None
         if not normalized_label:
             normalized_label = None
         source_id = generate_id("cmps-", 6)
