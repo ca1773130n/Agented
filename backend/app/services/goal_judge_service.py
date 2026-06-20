@@ -50,9 +50,14 @@ logger = logging.getLogger(__name__)
 # dollars. ``auto`` lets CLIProxyAPI route to whatever the
 # proxy considers default for that backend's accounts.
 DEFAULT_JUDGE_MODEL = {
-    "claude": "claude-haiku-4-5",
-    "codex": "o4-mini",
-    "gemini": "gemini-2.5-flash",
+    # FALLBACK only — the PRIMARY source is
+    # ``ModelDiscoveryService.cheap_model_for(kind)`` (live CLIProxyAPI catalog),
+    # so ids never go stale. Used only when discovery is unavailable. Exact
+    # catalog ids verified live (the "claude-haiku-4-5" / "o4-mini" /
+    # "gemini-2.5-flash" aliases 502 "unknown provider"). gemini creds separately 401.
+    "claude": "claude-haiku-4-5-20251001",
+    "codex": "gpt-5.4-mini",
+    "gemini": "gemini-2.5-flash-lite",
     "opencode": "auto",
 }
 
@@ -229,7 +234,13 @@ class GoalJudgeService:
             )
         if check_cmd:
             return cls._run_deterministic(check_cmd, cwd, sandbox=sandbox)
-        model = model_override or DEFAULT_JUDGE_MODEL.get(backend_kind, "auto")
+        from app.services.model_discovery_service import ModelDiscoveryService
+
+        model = (
+            model_override
+            or ModelDiscoveryService.cheap_model_for(backend_kind)
+            or DEFAULT_JUDGE_MODEL.get(backend_kind, "auto")
+        )
         if hypothesis and predicted_outcome:
             return cls._run_ouroboros_judge(
                 goal, last_assistant_text, hypothesis, predicted_outcome, backend_kind, model
