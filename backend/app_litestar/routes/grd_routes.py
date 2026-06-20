@@ -1400,6 +1400,9 @@ def pause_session(project_id: str, session_id: str) -> dict[str, Any]:
     del project_id
     if not ProjectSessionManager.pause_session(session_id):
         raise NotFoundException(detail="Session not found")
+    from app.services.goal_loop_runner import pause_runner
+
+    pause_runner(session_id)
     return {"message": "Session paused", "session_id": session_id}
 
 
@@ -1408,7 +1411,33 @@ def resume_session(project_id: str, session_id: str) -> dict[str, Any]:
     del project_id
     if not ProjectSessionManager.resume_session(session_id):
         raise NotFoundException(detail="Session not found")
+    from app.services.goal_loop_runner import resume_runner
+
+    resume_runner(session_id)
     return {"message": "Session resumed", "session_id": session_id}
+
+
+@post("/{project_id:str}/sessions/{session_id:str}/loop/intervene", sync_to_thread=False)
+def loop_intervene(project_id: str, session_id: str, data: dict) -> dict[str, Any]:
+    _ensure_project(project_id)
+    message = (data or {}).get("message")
+    if not message:
+        raise ClientException(detail="message is required")
+    from app.services.goal_loop_runner import intervene_runner
+
+    return {"ok": intervene_runner(session_id, str(message))}
+
+
+@post("/{project_id:str}/sessions/{session_id:str}/loop/gate-decision", sync_to_thread=False)
+def loop_gate_decision(project_id: str, session_id: str, data: dict) -> dict[str, Any]:
+    _ensure_project(project_id)
+    body = data or {}
+    decision = body.get("decision")
+    if decision not in ("continue", "modify", "abort"):
+        raise ClientException(detail="decision must be continue|modify|abort")
+    from app.services.goal_loop_runner import submit_gate_decision
+
+    return {"ok": submit_gate_decision(session_id, decision, body.get("message"))}
 
 
 @post("/{project_id:str}/sessions/{session_id:str}/input", sync_to_thread=False)
@@ -2059,6 +2088,8 @@ grd_router = Router(
         stop_session,
         pause_session,
         resume_session,
+        loop_intervene,
+        loop_gate_decision,
         session_input,
         create_ralph_session,
         create_team_session,

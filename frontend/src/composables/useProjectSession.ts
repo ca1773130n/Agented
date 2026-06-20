@@ -98,6 +98,14 @@ export function useProjectSession(projectId: Ref<string>) {
     tasks: Array<{ id: string; subject: string; status: string; owner?: string }>;
   } | null>(null);
 
+  // Unified-loop control state (SP3). The loop is held at the iteration
+  // boundary while ``paused``; ``awaitingHuman`` is true while the runner
+  // is blocked on a human-gate checkpoint, with ``gateReason`` describing
+  // why (e.g. "every 2 iterations" / "completion (met)").
+  const paused = ref(false);
+  const awaitingHuman = ref(false);
+  const gateReason = ref<string | null>(null);
+
   // Private state
   let errorCount = 0;
 
@@ -161,6 +169,10 @@ export function useProjectSession(projectId: Ref<string>) {
   let onGoalCheckDisagreementCb:
     | ((payload: GoalCheckDisagreementPayload) => void)
     | undefined;
+  // SP3 — operator intervene note acknowledged by the runner. The panel
+  // registers a handler to surface it as a transient toast; loop state is
+  // tracked by the ``paused``/``awaitingHuman`` refs above.
+  let onIntervenedCb: ((message: string) => void) | undefined;
 
   // SSE lifecycle managed by useEventSource.
   // sourceFactory will be set dynamically via connect() calls.
@@ -280,6 +292,41 @@ export function useProjectSession(projectId: Ref<string>) {
         } catch (e) {
           warnParse(
             '[useProjectSession] Failed to parse goal_check_disagreement event:',
+            e,
+            event.data,
+          );
+        }
+      },
+      goal_loop_paused: () => {
+        paused.value = true;
+      },
+      goal_loop_resumed: () => {
+        paused.value = false;
+      },
+      goal_loop_awaiting_human: (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          awaitingHuman.value = true;
+          gateReason.value = data.gate_reason ?? null;
+        } catch (e) {
+          warnParse(
+            '[useProjectSession] Failed to parse goal_loop_awaiting_human event:',
+            e,
+            event.data,
+          );
+        }
+      },
+      goal_loop_gate_resolved: () => {
+        awaitingHuman.value = false;
+        gateReason.value = null;
+      },
+      goal_loop_intervened: (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          onIntervenedCb?.(data.message ?? '');
+        } catch (e) {
+          warnParse(
+            '[useProjectSession] Failed to parse goal_loop_intervened event:',
             e,
             event.data,
           );
@@ -616,6 +663,9 @@ export function useProjectSession(projectId: Ref<string>) {
     isStreaming.value = false;
     ralphState.value = null;
     teamState.value = null;
+    paused.value = false;
+    awaitingHuman.value = false;
+    gateReason.value = null;
   }
 
   // Callback setters
@@ -688,6 +738,11 @@ export function useProjectSession(projectId: Ref<string>) {
     onGoalCheckDisagreementCb = cb;
   }
 
+  // SP3 — operator intervene acknowledgement handler registration.
+  function onIntervened(cb: (message: string) => void) {
+    onIntervenedCb = cb;
+  }
+
   // SSE connection cleanup is handled by useEventSource's onUnmounted.
   // This separate onUnmounted resets streaming/ralph/team state on unmount.
   onUnmounted(() => {
@@ -705,6 +760,9 @@ export function useProjectSession(projectId: Ref<string>) {
     error,
     ralphState,
     teamState,
+    paused,
+    awaitingHuman,
+    gateReason,
     // Methods
     loadSessions,
     startSession,
@@ -731,5 +789,6 @@ export function useProjectSession(projectId: Ref<string>) {
     onGoalIterationCompleted,
     onGoalLoopEnded,
     onGoalCheckDisagreement,
+    onIntervened,
   };
 }

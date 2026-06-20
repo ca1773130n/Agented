@@ -145,6 +145,15 @@ export interface QualityGate {
   min_confidence?: number;
 }
 
+// v0.6.0 sub-project #3 — human-gate checkpoint. Maps onto the backend
+// ``LoopGate`` struct on ``LoopState``. ``every_n`` pauses for an operator
+// decision every ``n`` iterations; ``on_exit`` pauses when the loop is about
+// to terminate as met; ``off`` disables gating.
+export interface LoopGate {
+  mode: 'off' | 'every_n' | 'on_exit';
+  n?: number;
+}
+
 // v0.7.74 / v0.6.0 — goal-loop config consumed by the ``goal_loop``
 // execution-type handler. The v0.6.0 unified-loops fields
 // (``max_tokens`` / ``context_policy`` / ``stagnation_no_progress_for``)
@@ -168,6 +177,8 @@ export interface GoalLoopConfig {
   // isolated, env-scrubbed workspace snapshot (default) or in-place.
   quality_gate?: QualityGate;
   sandbox?: 'isolated' | 'inherit';
+  // v0.6.0 sub-project #3 — configurable human-gate checkpoint.
+  human_gate?: LoopGate;
 }
 
 // v0.7.74 — goal-loop iteration audit row + container response.
@@ -506,6 +517,19 @@ export const grdApi = {
     apiFetch<GoalLoopAudit>(
       `/api/projects/${projectId}/sessions/${sessionId}/goal-iterations`,
     ),
+
+  // v0.6.0 sub-project #3 — mid-loop intervene. The operator note is
+  // prepended to the next iteration's prompt reason. (pauseSession /
+  // resumeSession above are reused for pause/resume control.)
+  interveneLoop: (projectId: string, sessionId: string, message: string) =>
+    apiFetch(`/api/projects/${projectId}/sessions/${sessionId}/loop/intervene`,
+      { method: 'POST', body: JSON.stringify({ message }) }),
+
+  // v0.6.0 sub-project #3 — resolve a human-gate checkpoint. ``decision``
+  // is continue|modify|abort; ``message`` carries the modify note.
+  gateDecision: (projectId: string, sessionId: string, decision: 'continue' | 'modify' | 'abort', message?: string) =>
+    apiFetch(`/api/projects/${projectId}/sessions/${sessionId}/loop/gate-decision`,
+      { method: 'POST', body: JSON.stringify({ decision, message }) }),
 
   getSessionMonitor: (projectId: string, sessionId: string) =>
     apiFetch<SessionMonitorData>(

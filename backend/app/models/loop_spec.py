@@ -14,6 +14,7 @@ import msgspec
 BodyKind = Literal["agent_task", "eval_refine"]
 ContextPolicy = Literal["carry", "reset"]
 GateKind = Literal["test_pass", "metric", "llm_judge"]
+GateMode = Literal["off", "every_n", "on_exit"]
 SandboxMode = Literal["isolated", "inherit"]
 
 
@@ -36,14 +37,19 @@ class QualityGate(msgspec.Struct, frozen=True):
     min_confidence: float = 0.0
 
 
+class LoopGate(msgspec.Struct, frozen=True):
+    mode: GateMode = "off"
+    n: int = 1
+
+
 class LoopExit(msgspec.Struct, frozen=True):
     # Quality-gate / convergence first; HARD budgets last (always enforced).
-    convergence: bool = True                  # Ouroboros verdict-convergence
-    stagnation_no_progress_for: int = 0       # 0 = off
+    convergence: bool = True  # Ouroboros verdict-convergence
+    stagnation_no_progress_for: int = 0  # 0 = off
     max_iterations: int = 20
     max_wall_seconds: int = 1800
-    max_cost_usd: float = 0.0                  # 0 = off
-    max_tokens: int = 0                        # 0 = off (tokens_in+out accumulated)
+    max_cost_usd: float = 0.0  # 0 = off
+    max_tokens: int = 0  # 0 = off (tokens_in+out accumulated)
     quality_gate: Optional[QualityGate] = None
 
 
@@ -51,6 +57,7 @@ class LoopState(msgspec.Struct, frozen=True):
     context_policy: ContextPolicy = "carry"
     checkpoint: bool = True
     sandbox: SandboxMode = "isolated"
+    human_gate: Optional[LoopGate] = None
 
 
 class LoopSpec(msgspec.Struct, frozen=True):
@@ -78,6 +85,7 @@ class LoopSpec(msgspec.Struct, frozen=True):
             state = LoopState(
                 context_policy=c.get("context_policy") or "reset",
                 sandbox=c.get("sandbox") or "isolated",
+                human_gate=_gate_cfg(c),
             )
             return LoopSpec(body=body, exit=exit_, state=state, meta_execution_type="ralph")
 
@@ -108,8 +116,16 @@ class LoopSpec(msgspec.Struct, frozen=True):
         state = LoopState(
             context_policy=c.get("context_policy") or "carry",
             sandbox=c.get("sandbox") or "isolated",
+            human_gate=_gate_cfg(c),
         )
         return LoopSpec(body=body, exit=exit_, state=state, meta_execution_type="goal_loop")
+
+
+def _gate_cfg(c: dict) -> Optional[LoopGate]:
+    hg = c.get("human_gate")
+    if isinstance(hg, dict) and hg.get("mode") and hg.get("mode") != "off":
+        return LoopGate(mode=hg["mode"], n=int(hg.get("n") or 1))
+    return None
 
 
 def _gate_from_legacy(c: dict) -> Optional[QualityGate]:

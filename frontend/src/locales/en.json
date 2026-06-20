@@ -9370,5 +9370,20 @@
     "selectSkill": "Select a skill…",
     "changesFromCurrent": "Changes from current",
     "noChanges": "No line changes"
+  },
+  "loopControl": {
+    "pause": "Pause",
+    "resume": "Resume",
+    "stop": "Stop",
+    "intervene": "Add an operator note for the next iteration…",
+    "interveneSend": "Send note",
+    "awaitingHuman": "Awaiting human decision",
+    "gateContinue": "Continue",
+    "gateModify": "Modify",
+    "gateAbort": "Abort",
+    "iteration": "Iteration",
+    "confidence": "Confidence",
+    "cost": "Cost",
+    "tokens": "Tokens"
   }
 }

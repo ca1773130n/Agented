@@ -57,6 +57,12 @@ _STALE_CHECK_STREAK = 5
 # interval keeps the cap responsive without burning CPU.
 _QUEUE_POLL_SECONDS = 1.0
 
+# Poll interval for the pause/human-gate hold loops. The blocking
+# helpers (``_wait_if_paused``, ``_await_gate``) sleep this long
+# between re-checks so they stay responsive to ``stop_event`` (and
+# the gate's wall-time bound) without an unbounded wait.
+_PAUSE_POLL_SECONDS = 0.5
+
 # v0.7.86 — Ouroboros convergence threshold. When the last
 # ``_OUROBOROS_CONVERGENCE_WINDOW`` Ouroboros verdicts are all the
 # same value (typically ``falsified``), the runner terminates with
@@ -259,6 +265,10 @@ class _RunnerState:
     total_tokens: int = 0
     no_progress_streak: int = 0
     last_commit: Optional[str] = None
+    pause_event: threading.Event = field(default_factory=threading.Event)
+    pending_note: Optional[str] = None
+    awaiting_human: bool = False
+    gate_decision: Optional[tuple] = None  # (decision, message)
 
 
 _runners: dict[str, _RunnerState] = {}
@@ -300,6 +310,87 @@ def stop_runner(session_id: str) -> None:
         state.stop_event.set()
 
 
+def _get_state(session_id: str) -> Optional[_RunnerState]:
+    with _runners_lock:
+        return _runners.get(session_id)
+
+
+def pause_runner(session_id: str) -> bool:
+    st = _get_state(session_id)
+    if st:
+        st.pause_event.set()
+    return st is not None
+
+
+def resume_runner(session_id: str) -> bool:
+    st = _get_state(session_id)
+    if st:
+        st.pause_event.clear()
+    return st is not None
+
+
+def intervene_runner(session_id: str, message: str) -> bool:
+    st = _get_state(session_id)
+    if st:
+        st.pending_note = message
+    return st is not None
+
+
+def submit_gate_decision(session_id: str, decision: str, message: Optional[str] = None) -> bool:
+    st = _get_state(session_id)
+    if st:
+        st.gate_decision = (decision, message)
+    return st is not None
+
+
+def _wait_if_paused(state, session_id: str) -> None:
+    """Block at the iteration boundary while paused. Always re-checks
+    stop_event so a paused loop stays stoppable (never an unbounded wait)."""
+    if not state.pause_event.is_set():
+        return
+    ProjectSessionManager._broadcast(session_id, "goal_loop_paused", {"iteration": state.iteration})
+    while state.pause_event.is_set() and not state.stop_event.is_set():
+        time.sleep(_PAUSE_POLL_SECONDS)
+    if not state.stop_event.is_set():
+        ProjectSessionManager._broadcast(
+            session_id, "goal_loop_resumed", {"iteration": state.iteration}
+        )
+
+
+def _apply_pending_note(state, reason: str) -> str:
+    """Consume an operator intervene/modify note (if any), prepending it to the
+    next iteration's prompt reason so both carry and reset policies pick it up."""
+    note = getattr(state, "pending_note", None)
+    if not note:
+        return reason
+    state.pending_note = None
+    return f"Operator note: {note}\n\n{reason}"
+
+
+def _gate_due(gate, iteration_no: int) -> bool:
+    return bool(gate) and gate.mode == "every_n" and gate.n > 0 and iteration_no % gate.n == 0
+
+
+def _await_gate(state, session_id: str, iteration_no: int, gate_reason: str, *, max_wall_seconds: int):
+    """Hold for a human decision. Returns (decision, message). Bounded by
+    max_wall_seconds (→ abort) and always responsive to stop_event."""
+    import time as _t
+    state.awaiting_human = True
+    state.gate_decision = None
+    entered = _t.time()
+    ProjectSessionManager._broadcast(
+        session_id, "goal_loop_awaiting_human", {"iteration": iteration_no, "gate_reason": gate_reason})
+    while state.gate_decision is None and not state.stop_event.is_set():
+        if _t.time() - entered > max_wall_seconds:
+            state.awaiting_human = False
+            return ("abort", "gate wait exceeded max_wall_seconds")
+        _t.sleep(_PAUSE_POLL_SECONDS)
+    state.awaiting_human = False
+    decision, message = state.gate_decision or ("abort", "stopped")
+    ProjectSessionManager._broadcast(session_id, "goal_loop_gate_resolved", {"decision": decision})
+    return (decision, message)
+
+
 def get_runner_state(session_id: str) -> Optional[dict]:
     """Snapshot the runner state for UI/monitor consumers."""
     with _runners_lock:
@@ -312,6 +403,12 @@ def get_runner_state(session_id: str) -> Optional[dict]:
         "max_wall_seconds": state.spec.exit.max_wall_seconds,
         "elapsed_seconds": int(time.time() - state.started_at),
         "not_met_streak": state.not_met_streak,
+        "total_cost_usd": state.total_cost_usd,
+        "total_tokens": state.total_tokens,
+        "max_cost_usd": state.spec.exit.max_cost_usd,
+        "max_tokens": state.spec.exit.max_tokens,
+        "paused": state.pause_event.is_set(),
+        "awaiting_human": state.awaiting_human,
     }
 
 
@@ -506,9 +603,23 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
             )
 
             if _met_terminates(met=verdict.met, confidence=verdict.confidence, gate=gate):
-                _broadcast_end(session_id, reason="met", detail=verdict.reason)
-                ProjectSessionManager.stop_session(session_id)
-                break
+                hg = state.spec.state.human_gate
+                if hg and hg.mode == "on_exit":
+                    decision, message = _await_gate(state, session_id, iteration_no,
+                        gate_reason="completion (met)", max_wall_seconds=max_wall_seconds)
+                    if decision == "modify":
+                        if message:
+                            state.pending_note = message
+                        # human rejects 'done' → fall through and keep iterating
+                    else:
+                        end_reason = "human_abort" if decision == "abort" else "met"
+                        _broadcast_end(session_id, reason=end_reason, detail=verdict.reason)
+                        ProjectSessionManager.stop_session(session_id)
+                        break
+                else:
+                    _broadcast_end(session_id, reason="met", detail=verdict.reason)
+                    ProjectSessionManager.stop_session(session_id)
+                    break
 
             # Budget guard (06 H1): accumulate judge cost and stop if a
             # configured ceiling is exceeded, so a misconfigured large
@@ -636,12 +747,27 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                     ProjectSessionManager.stop_session(session_id)
                     break
 
+            _wait_if_paused(state, session_id)
+            if state.stop_event.is_set():
+                break
+
+            hg = state.spec.state.human_gate
+            if _gate_due(hg, iteration_no):
+                decision, message = _await_gate(state, session_id, iteration_no,
+                    gate_reason=f"every {hg.n} iterations", max_wall_seconds=max_wall_seconds)
+                if decision == "abort":
+                    _broadcast_end(session_id, reason="human_abort", detail=message or "operator aborted")
+                    ProjectSessionManager.stop_session(session_id)
+                    break
+                if decision == "modify" and message:
+                    state.pending_note = message
+
             fresh_session_id = _next_iteration(
                 policy=state.spec.state.context_policy,
                 session_id=session_id,
                 cwd=cwd,
                 goal=goal,
-                reason=verdict.reason,
+                reason=_apply_pending_note(state, verdict.reason),
                 ouroboros=ouroboros,
                 dead_ends_block=_dead_ends_context(session_id) if ouroboros else "",
                 result_block=result_block,
