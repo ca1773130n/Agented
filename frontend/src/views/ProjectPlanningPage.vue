@@ -12,6 +12,7 @@ import EntityLayout from '../layouts/EntityLayout.vue';
 import MilestoneOverview from '../components/grd/MilestoneOverview.vue';
 import PlanningCommandBar from '../components/grd/PlanningCommandBar.vue';
 import PlanningSessionPanel from '../components/grd/PlanningSessionPanel.vue';
+import LoopBuilder from '../components/grd/LoopBuilder.vue';
 import { GRD_COMMAND_GROUP_BY_NAME, GRD_GROUP } from '../components/grd/planningCommands';
 
 const props = defineProps<{
@@ -33,6 +34,7 @@ const plans = ref<GrdPlan[]>([]);
 const selectedMilestoneId = ref<string | null>(null);
 const grdInitStatus = ref<string>('none');
 const showSessionPanel = ref(false);
+const showLoopBuilder = ref(false);
 
 // Planning session composable
 const planning = usePlanningSession(projectId);
@@ -51,6 +53,9 @@ const filteredPlans = computed(() => {
   const phaseIds = new Set(filteredPhases.value.map((p) => p.id));
   return plans.value.filter((p) => phaseIds.has(p.phase_id));
 });
+
+// Working directory the Loop Builder launches the loop session in.
+const loopCwd = computed(() => project.value?.local_path || project.value?.clone_path || undefined);
 
 
 // Data loading
@@ -158,6 +163,14 @@ function handleClearSession() {
   showSessionPanel.value = false;
 }
 
+// Loop Builder: the planning command bar requests it; the launched loop
+// session is shown in the existing inline session panel (reusing the same
+// reconnect + showSessionPanel wiring as the active-session auto-reconnect).
+function onLoopLaunched(sessionId: string) {
+  planning.reconnectSession(sessionId);
+  showSessionPanel.value = true;
+}
+
 // Refresh data when session completes
 watch(
   () => planning.status.value,
@@ -233,6 +246,7 @@ watch(selectedMilestoneId, () => {
               :status="planning.status.value"
               :grd-init-status="grdInitStatus"
               @invoke="handleInvokeCommand"
+              @build-loop="showLoopBuilder = true"
             />
           </div>
           <div v-if="showSessionPanel" class="planning-right">
@@ -247,6 +261,14 @@ watch(selectedMilestoneId, () => {
             />
           </div>
         </div>
+
+        <LoopBuilder
+          v-if="showLoopBuilder"
+          :project-id="projectId"
+          :cwd="loopCwd"
+          @close="showLoopBuilder = false"
+          @launched="onLoopLaunched"
+        />
       </div>
     </template>
   </EntityLayout>

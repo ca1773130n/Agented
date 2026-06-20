@@ -1044,6 +1044,7 @@
   },
   "planningCommandBar": {
     "title": "기획 명령",
+    "buildLoop": "루프 만들기",
     "deprecated": "지원 중단",
     "groups": {
       "plan": "기획",

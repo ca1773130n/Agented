@@ -1044,6 +1044,7 @@
   },
   "planningCommandBar": {
     "title": "规划命令",
+    "buildLoop": "构建循环",
     "deprecated": "已弃用",
     "groups": {
       "plan": "规划",

@@ -1044,6 +1044,7 @@
   },
   "planningCommandBar": {
     "title": "Planning Commands",
+    "buildLoop": "Build Loop",
     "deprecated": "Deprecated",
     "groups": {
       "plan": "Plan",
