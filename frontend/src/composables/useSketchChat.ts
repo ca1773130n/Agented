@@ -207,6 +207,15 @@ export function useSketchChat() {
         messages.value.push(assistantMsg);
         const msgIndex = messages.value.length - 1;
 
+        // Defensively tear down any prior stream + polling before opening a new
+        // one — routing a second sketch in the same component would otherwise
+        // leak the previous EventSource (it keeps receiving + mutating state).
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
+        stopDelegationPolling();
+
         // Open SSE connection (state_delta protocol — same as Playground)
         eventSource = superAgentSessionApi.chatStream(superAgentId, sessionId);
 

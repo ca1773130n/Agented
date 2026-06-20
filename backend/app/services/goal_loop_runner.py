@@ -265,6 +265,10 @@ class _RunnerState:
     total_tokens: int = 0
     no_progress_streak: int = 0
     last_commit: Optional[str] = None
+    # Separate cadence counter for the stale-check sanity layer so it no longer
+    # resets ``not_met_streak`` (which the eval_refine stagnation breaker reads —
+    # resetting it made stagnation unreachable when a check_cmd was configured).
+    stale_check_streak: int = 0
     pause_event: threading.Event = field(default_factory=threading.Event)
     pending_note: Optional[str] = None
     awaiting_human: bool = False
@@ -1011,7 +1015,10 @@ def _maybe_stale_check(
     """
     if not check_cmd:
         return
-    if state.not_met_streak < _STALE_CHECK_STREAK:
+    # Use a dedicated cadence counter — NOT not_met_streak, which the stagnation
+    # breaker owns. Fire the sanity layer once every _STALE_CHECK_STREAK not-mets.
+    state.stale_check_streak += 1
+    if state.stale_check_streak < _STALE_CHECK_STREAK:
         return
     sanity = GoalJudgeService.judge(
         goal,
@@ -1031,15 +1038,11 @@ def _maybe_stale_check(
                 "streak": state.not_met_streak,
             },
         )
-    # Reset the streak whichever way the sanity layer landed.
-    # Resetting on disagreement is essential (we just told the
-    # operator; firing again next turn is noise). Resetting on
-    # agreement is also right: leaving the streak high would
-    # re-fire the LLM judge EVERY subsequent turn, wasting
-    # tokens worse than the once-per-5-turns cadence. The
-    # original code did this; the fixed cadence is the right
-    # tradeoff.
-    state.not_met_streak = 0
+    # Reset OUR cadence counter (not not_met_streak) whichever way the sanity
+    # layer landed — re-firing the LLM judge every subsequent turn would waste
+    # tokens worse than the once-per-_STALE_CHECK_STREAK cadence. not_met_streak
+    # is left intact so the stagnation breaker can still reach its threshold.
+    state.stale_check_streak = 0
 
 
 def _broadcast_end(session_id: str, *, reason: str, detail: str) -> None:

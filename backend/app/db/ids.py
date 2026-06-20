@@ -104,9 +104,6 @@ ROLE_ID_LENGTH = 6
 USER_ID_PREFIX = "user-"
 USER_ID_LENGTH = 6
 
-SESSION_ID_PREFIX = "sess-"
-SESSION_ID_LENGTH = 6
-
 SECRET_ID_PREFIX = "sec-"
 SECRET_ID_LENGTH = 6
 
@@ -360,8 +357,13 @@ def _get_unique_super_agent_id(conn) -> str:
             return sa_id
 
 
-def _get_unique_session_id(conn) -> str:
-    """Generate a session ID that doesn't exist in the database."""
+def _get_unique_super_agent_session_id(conn) -> str:
+    """Generate a session ID unique in the ``super_agent_sessions`` table.
+
+    Distinct from ``_get_unique_session_id`` (which checks the ``sessions``
+    table). These were both named ``_get_unique_session_id`` — the later
+    definition shadowed this one, so super-agent session creation was checking
+    the WRONG table for collisions. Named apart now."""
     while True:
         sess_id = generate_session_id()
         cursor = conn.execute("SELECT id FROM super_agent_sessions WHERE id = ?", (sess_id,))
@@ -677,11 +679,6 @@ def _get_unique_user_id(conn) -> str:
         cursor = conn.execute("SELECT id FROM users WHERE id = ?", (uid,))
         if cursor.fetchone() is None:
             return uid
-
-
-def generate_session_id() -> str:
-    """Generate a unique session row ID like 'sess-abc123'."""
-    return generate_id(SESSION_ID_PREFIX, SESSION_ID_LENGTH)
 
 
 def _get_unique_session_id(conn) -> str:
