@@ -367,6 +367,30 @@ def _apply_pending_note(state, reason: str) -> str:
     return f"Operator note: {note}\n\n{reason}"
 
 
+def _gate_due(gate, iteration_no: int) -> bool:
+    return bool(gate) and gate.mode == "every_n" and gate.n > 0 and iteration_no % gate.n == 0
+
+
+def _await_gate(state, session_id: str, iteration_no: int, gate_reason: str, *, max_wall_seconds: int):
+    """Hold for a human decision. Returns (decision, message). Bounded by
+    max_wall_seconds (→ abort) and always responsive to stop_event."""
+    import time as _t
+    state.awaiting_human = True
+    state.gate_decision = None
+    entered = _t.time()
+    ProjectSessionManager._broadcast(
+        session_id, "goal_loop_awaiting_human", {"iteration": iteration_no, "gate_reason": gate_reason})
+    while state.gate_decision is None and not state.stop_event.is_set():
+        if _t.time() - entered > max_wall_seconds:
+            state.awaiting_human = False
+            return ("abort", "gate wait exceeded max_wall_seconds")
+        _t.sleep(_PAUSE_POLL_SECONDS)
+    state.awaiting_human = False
+    decision, message = state.gate_decision or ("abort", "stopped")
+    ProjectSessionManager._broadcast(session_id, "goal_loop_gate_resolved", {"decision": decision})
+    return (decision, message)
+
+
 def get_runner_state(session_id: str) -> Optional[dict]:
     """Snapshot the runner state for UI/monitor consumers."""
     with _runners_lock:
@@ -579,9 +603,23 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
             )
 
             if _met_terminates(met=verdict.met, confidence=verdict.confidence, gate=gate):
-                _broadcast_end(session_id, reason="met", detail=verdict.reason)
-                ProjectSessionManager.stop_session(session_id)
-                break
+                hg = state.spec.state.human_gate
+                if hg and hg.mode == "on_exit":
+                    decision, message = _await_gate(state, session_id, iteration_no,
+                        gate_reason="completion (met)", max_wall_seconds=max_wall_seconds)
+                    if decision == "modify":
+                        if message:
+                            state.pending_note = message
+                        # human rejects 'done' → fall through and keep iterating
+                    else:
+                        end_reason = "human_abort" if decision == "abort" else "met"
+                        _broadcast_end(session_id, reason=end_reason, detail=verdict.reason)
+                        ProjectSessionManager.stop_session(session_id)
+                        break
+                else:
+                    _broadcast_end(session_id, reason="met", detail=verdict.reason)
+                    ProjectSessionManager.stop_session(session_id)
+                    break
 
             # Budget guard (06 H1): accumulate judge cost and stop if a
             # configured ceiling is exceeded, so a misconfigured large
@@ -712,6 +750,17 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
             _wait_if_paused(state, session_id)
             if state.stop_event.is_set():
                 break
+
+            hg = state.spec.state.human_gate
+            if _gate_due(hg, iteration_no):
+                decision, message = _await_gate(state, session_id, iteration_no,
+                    gate_reason=f"every {hg.n} iterations", max_wall_seconds=max_wall_seconds)
+                if decision == "abort":
+                    _broadcast_end(session_id, reason="human_abort", detail=message or "operator aborted")
+                    ProjectSessionManager.stop_session(session_id)
+                    break
+                if decision == "modify" and message:
+                    state.pending_note = message
 
             fresh_session_id = _next_iteration(
                 policy=state.spec.state.context_policy,
