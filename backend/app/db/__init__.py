@@ -273,7 +273,6 @@ from .grd_evolve import (  # noqa: F401
 )
 from .grd_genome_suggestions import (  # noqa: F401
     get_genome_suggestions,
-    list_genome_suggestions,
     upsert_genome_suggestions,
 )
 from .grd_harness_rounds import (  # noqa: F401
@@ -298,7 +297,6 @@ from .grd_ouroboros import (  # noqa: F401
 )
 from .grd_plan_selections import (  # noqa: F401
     get_plan_selection,
-    list_plan_selections,
     upsert_plan_selection,
 )
 
