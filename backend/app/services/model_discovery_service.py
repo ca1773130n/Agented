@@ -19,6 +19,19 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+# --- cheap-model resolution (defense against stale hardcoded ids) -----------
+# Resolve a current, valid CHEAP model id per backend from the live CLIProxyAPI
+# catalog so judge/summarize/rank defaults never go stale and 502 "unknown
+# provider for model" (the o4-mini / gemini-2.5-flash class of bug).
+_CHEAP_PROVIDER_BY_BACKEND = {"claude": "anthropic", "codex": "openai", "gemini": "google"}
+# Cheapest-intent substrings, best first: the first catalog id matching the
+# highest-priority tier (after excluding expensive / non-chat models) wins.
+_CHEAP_TIER_PRIORITY = ("haiku", "flash-lite", "mini", "flash", "lite", "spark")
+# NOTE: "-review" is hyphenated on purpose — bare "review" also matches "pre·view"
+# and would wrongly drop every "*-preview" model (most of the gemini catalog).
+_CHEAP_EXCLUDE = ("image", "embed", "opus", "sonnet", "-pro", "-review", "tts", "whisper")
+_cheap_model_cache: dict[str, str] = {}
+
 
 class ModelDiscoveryService:
     """Discovers model lists from CLI tools and local config files."""
@@ -284,6 +297,43 @@ class ModelDiscoveryService:
         variant = match.group(3)
         is_pro = 1 if variant.startswith("pro") else 0
         return (major, minor, is_pro)
+
+    @classmethod
+    def cheap_model_for(cls, backend_type: str) -> Optional[str]:
+        """Resolve a current, valid, CHEAP model id for ``backend_type`` from the
+        live CLIProxyAPI catalog (the actual routing layer), cached per process.
+
+        Picks the first catalog id matching the highest-priority cheap tier
+        (haiku/flash-lite/mini/flash/…) after excluding expensive or non-chat
+        models. Returns ``None`` when the catalog is unavailable — callers fall
+        back to a pinned default. This is the guard against hardcoded model ids
+        going stale and 502-ing "unknown provider for model".
+        """
+        cached = _cheap_model_cache.get(backend_type)
+        if cached:
+            return cached
+        owned_by = _CHEAP_PROVIDER_BY_BACKEND.get(backend_type)
+        if not owned_by:
+            return None
+        try:
+            catalog = cls._discover_models_via_cliproxy(owned_by) or []
+        except Exception:  # noqa: BLE001 — discovery is best-effort
+            catalog = []
+        candidates = [
+            m
+            for m in catalog
+            if isinstance(m, str) and not any(x in m.lower() for x in _CHEAP_EXCLUDE)
+        ]
+        picked: Optional[str] = None
+        for tier in _CHEAP_TIER_PRIORITY:
+            picked = next((m for m in candidates if tier in m.lower()), None)
+            if picked:
+                break
+        if picked is None and candidates:
+            picked = candidates[0]
+        if picked:
+            _cheap_model_cache[backend_type] = picked  # cache successful picks only
+        return picked
 
     @classmethod
     def discover_models(cls, backend_type: str) -> list[str]:

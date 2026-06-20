@@ -380,7 +380,10 @@ def _select_reflect_call(reflect_backend: str, judge_backend: str) -> LLMCall:
 _DEFAULT_EDIT_BUDGET = 4
 # The per-edit ranking does N× scoring passes — route it to a cheap model
 # (the final gate keeps the default strong model). Operator-overridable.
-_DEFAULT_RANKER_MODEL = "claude-haiku-4-5"
+# FALLBACK only: the primary cheap-model source is
+# ``ModelDiscoveryService.cheap_model_for(judge_backend)`` (live catalog), so the
+# id never goes stale. This pin is the last resort when discovery is unavailable.
+_DEFAULT_RANKER_MODEL = "claude-haiku-4-5-20251001"
 
 
 def _diff_opcodes(current_body: str, candidate_body: str):
@@ -780,7 +783,7 @@ class SkillSleepGate:
         judge_backend: str = "claude",
         measure: bool = True,
         edit_budget: Optional[int] = None,
-        ranker_model: str = _DEFAULT_RANKER_MODEL,
+        ranker_model: Optional[str] = None,
         reflect_backend: str = "auto",
     ) -> dict:
         """One autonomous Skill-Sleep round: Reflect → [rank] → gate (+ outcome) → stage.
@@ -816,10 +819,20 @@ class SkillSleepGate:
                 "reason": "reflect proposed no material change",
             }
         if edit_budget is not None and edit_budget > 0:
-            # Rank on a CHEAP model (default seams pinned to ranker_model); the
+            # Rank on a CHEAP model that MATCHES judge_backend, resolved from the
+            # live CLIProxy catalog (so the id never goes stale and a non-claude
+            # judge_backend gets its OWN cheap model, not a claude id). Explicit
+            # ranker_model wins; _DEFAULT_RANKER_MODEL is the last-resort pin. The
             # gate below keeps the strong model. Injected seams win if provided.
-            rank_answer = answer_call or _build_default_llm_call(judge_backend, model=ranker_model)
-            rank_judge = judge_call or _build_default_llm_call(judge_backend, model=ranker_model)
+            from app.services.model_discovery_service import ModelDiscoveryService
+
+            ranker = (
+                ranker_model
+                or ModelDiscoveryService.cheap_model_for(judge_backend)
+                or _DEFAULT_RANKER_MODEL
+            )
+            rank_answer = answer_call or _build_default_llm_call(judge_backend, model=ranker)
+            rank_judge = judge_call or _build_default_llm_call(judge_backend, model=ranker)
             candidate = rank_edits(
                 project_id,
                 current_body,
