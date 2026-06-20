@@ -18,12 +18,10 @@ export default defineConfig({
     'plans/**',
     'superpowers/**',
     // Blog posts are long-form essays viewed on GitHub (the nav "Blog"
-    // link points to the GitHub blob), not built site pages — same as the
-    // repo-root BLOG-*.md posts.
-    'BLOG-*.md',
-    'full-ui-test-results.md',
-    'monkey-test-results.md',
-    'test-scenarios.md',
+    // link points to the GitHub blob), not built site pages. They live
+    // under docs/blog/ (with their assets/ alongside).
+    'blog/**',
+    'testing/**',
     'SECURITY.md',
   ],
 
@@ -40,7 +38,7 @@ export default defineConfig({
           { text: 'Home', link: '/' },
           { text: 'Architecture', link: '/self-improving-harness-architecture' },
           { text: 'Tutorial', link: '/self-improving-harness-tutorial' },
-          { text: 'Blog', link: `${GITHUB}/blob/main/BLOG-self-improving-harness.md` },
+          { text: 'Blog', link: `${GITHUB}/blob/main/docs/blog/BLOG-self-improving-harness.md` },
         ],
         sidebar: [
           {
@@ -69,7 +67,7 @@ export default defineConfig({
           { text: '홈', link: '/ko/' },
           { text: '아키텍처', link: '/ko/self-improving-harness-architecture' },
           { text: '튜토리얼', link: '/ko/self-improving-harness-tutorial' },
-          { text: '블로그', link: `${GITHUB}/blob/main/BLOG-self-improving-harness.ko.md` },
+          { text: '블로그', link: `${GITHUB}/blob/main/docs/blog/BLOG-self-improving-harness.ko.md` },
         ],
         sidebar: [
           {
@@ -98,7 +96,7 @@ export default defineConfig({
           { text: 'ホーム', link: '/ja/' },
           { text: 'アーキテクチャ', link: '/ja/self-improving-harness-architecture' },
           { text: 'チュートリアル', link: '/ja/self-improving-harness-tutorial' },
-          { text: 'ブログ', link: `${GITHUB}/blob/main/BLOG-self-improving-harness.md` },
+          { text: 'ブログ', link: `${GITHUB}/blob/main/docs/blog/BLOG-self-improving-harness.md` },
         ],
         sidebar: [
           {
@@ -127,7 +125,7 @@ export default defineConfig({
           { text: '首页', link: '/zh/' },
           { text: '架构', link: '/zh/self-improving-harness-architecture' },
           { text: '教程', link: '/zh/self-improving-harness-tutorial' },
-          { text: '博客', link: `${GITHUB}/blob/main/BLOG-self-improving-harness.md` },
+          { text: '博客', link: `${GITHUB}/blob/main/docs/blog/BLOG-self-improving-harness.md` },
         ],
         sidebar: [
           {

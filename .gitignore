@@ -80,7 +80,10 @@ backend/.secret_key
 /console*.log
 /codex-*.png
 /wizard-*.png
+/onboarding-*.png
 /snap-*.yml
+# Throwaway SQLite scratch DBs from local smoke/test runs.
+/tmp*.db
 
 
 # /understand analysis caches — keep top-level outputs only
