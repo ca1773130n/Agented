@@ -71,3 +71,45 @@ def test_install_cli_plugins_no_accounts_returns_zero(isolated_db):
     # Real guard, empty DB: no Claude accounts → accounts=0, nothing shelled out.
     res = SetupBundleService._install_cli_plugins_all_accounts()
     assert res["accounts"] == 0
+
+
+def test_install_cli_plugins_env_is_scoped(isolated_db, monkeypatch):
+    """The `claude plugins install` subprocess must NOT inherit the full
+    operator/CI process env (remote-code surface). It gets a scoped env:
+    PATH + the per-account CLAUDE_CONFIG_DIR (plus the fork-safety toggle),
+    but never arbitrary secrets like AWS_SECRET_ACCESS_KEY."""
+    import app.services.setup_service as setup_mod
+
+    # Plant a secret that must NOT leak to the installer subprocess.
+    monkeypatch.setenv("AGENTED_PLANTED_SECRET", "leak-me-not")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "super-secret")
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+
+    monkeypatch.setattr(
+        "app.db.backends.get_backend_accounts",
+        lambda backend_id: [{"account_name": "acct", "config_path": "/tmp/claude-acct-config"}],
+    )
+
+    captured_envs = []
+
+    class _Result:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def _fake_run(cmd, env=None, **kwargs):
+        captured_envs.append(env or {})
+        return _Result()
+
+    monkeypatch.setattr(setup_mod.subprocess, "run", _fake_run)
+
+    SetupBundleService._install_cli_plugins_all_accounts()
+
+    assert captured_envs, "expected subprocess.run to be invoked"
+    for env in captured_envs:
+        # Secrets from the parent process are NOT handed to the installer.
+        assert "AGENTED_PLANTED_SECRET" not in env
+        assert "AWS_SECRET_ACCESS_KEY" not in env
+        # But the install still has what it genuinely needs.
+        assert env.get("PATH") == "/usr/bin:/bin"
+        assert env.get("CLAUDE_CONFIG_DIR") == "/tmp/claude-acct-config"

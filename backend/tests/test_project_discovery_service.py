@@ -97,6 +97,60 @@ def test_scan_rejects_missing_root():
         pds.ProjectDiscoveryService.scan("/no/such/folder/xyz", nested=False, max_depth=3)
 
 
+def test_scan_rejects_path_outside_allowlist(monkeypatch):
+    """A path outside the allowlist (e.g. /etc) is rejected BEFORE any fs walk."""
+    import pytest
+
+    def _boom(*_a, **_k):  # pragma: no cover - must never run
+        raise AssertionError("_scan_fs ran for an out-of-allowlist path")
+
+    monkeypatch.setattr(pds, "_scan_fs", _boom)
+
+    with pytest.raises(ValueError, match="not allowed"):
+        pds.ProjectDiscoveryService.scan("/etc", nested=False, max_depth=3)
+
+
+def test_scan_accepts_in_allowlist_path_with_mocked_walk(tmp_path, isolated_db, monkeypatch):
+    """An in-allowlist path (home/tmp/opt) is accepted; the fs walk is mocked."""
+    # tmp_path resolves under the system temp dir, which is in the allowlist.
+    monkeypatch.setattr(pds, "_scan_fs", lambda *a, **k: ([], 0))
+
+    result = pds.ProjectDiscoveryService.scan(str(tmp_path), nested=False, max_depth=3)
+
+    assert result["scanned"] == 0
+    assert result["found"] == 0
+    assert result["unreadable"] == 0
+
+
+def test_scan_accepts_configured_workspace_root(isolated_db, monkeypatch):
+    """A path under the configured workspace_root is allowed even outside the
+    static bases, and rejected once that setting is cleared."""
+    import pytest
+
+    from app.db.settings import set_setting
+
+    captured = {}
+
+    def _fake_walk(root, *a, **k):
+        captured["root"] = root
+        return ([], 0)
+
+    monkeypatch.setattr(pds, "_scan_fs", _fake_walk)
+    monkeypatch.setattr(pds.os.path, "isdir", lambda _p: True)
+
+    set_setting("workspace_root", "/srv/agented-workspaces")
+
+    pds.ProjectDiscoveryService.scan("/srv/agented-workspaces/team-a", nested=False, max_depth=3)
+    assert captured["root"] == "/srv/agented-workspaces/team-a"
+
+    # Without the workspace_root setting the same path is rejected.
+    set_setting("workspace_root", "")
+    with pytest.raises(ValueError, match="not allowed"):
+        pds.ProjectDiscoveryService.scan(
+            "/srv/agented-workspaces/team-a", nested=False, max_depth=3
+        )
+
+
 def test_import_repos_creates_projects_and_skips_dupes(tmp_path, isolated_db):
     from app.database import create_project as db_create_project
     from app.database import get_all_projects

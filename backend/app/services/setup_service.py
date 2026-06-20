@@ -60,6 +60,44 @@ BUNDLE_CLI_PLUGINS = [
 # after registering the bundle marketplace in that account's config.
 BUNDLE_HARNESS_CLI_PLUGINS = ["grd", "tesserae", "harness-sync"]
 
+# Parent-process env vars the `claude plugins install` subprocess genuinely
+# needs. We pass through ONLY these (plus per-call extras like
+# CLAUDE_CONFIG_DIR) instead of inheriting all of os.environ, so operator/CI
+# secrets aren't handed to the plugin installer (remote-code surface).
+#   PATH/HOME — locate the `claude` binary + per-user config/cache roots.
+#   SHELL/TMPDIR — npm/git child processes the CLI shells out to.
+#   LANG/LC_* — locale so CLI output (and any prompts) decode cleanly.
+#   *_proxy — corporate networks where the marketplace/plugin fetch is proxied.
+_CLI_INSTALL_ENV_PASSTHROUGH = (
+    "PATH",
+    "HOME",
+    "SHELL",
+    "TMPDIR",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "no_proxy",
+)
+
+
+def _scoped_cli_install_env(config_dir: str) -> dict:
+    """Build a minimal env for the `claude plugins install` subprocess.
+
+    Inherits only an allowlist of needed parent-process vars (see
+    ``_CLI_INSTALL_ENV_PASSTHROUGH``) plus the per-account
+    ``CLAUDE_CONFIG_DIR`` and the macOS fork-safety toggle — not all of
+    ``os.environ`` — so operator/CI secrets aren't exposed to the installer.
+    """
+    env = {k: os.environ[k] for k in _CLI_INSTALL_ENV_PASSTHROUGH if k in os.environ}
+    env["CLAUDE_CONFIG_DIR"] = config_dir
+    env["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
+    return env
+
 
 class SetupBundleService:
     """Service for first-launch bundle installation."""
@@ -214,11 +252,7 @@ class SetupBundleService:
 
             config_dir = os.path.expanduser(config_path)
             account_name = account.get("account_name", "unknown")
-            env = {
-                **os.environ,
-                "CLAUDE_CONFIG_DIR": config_dir,
-                "OBJC_DISABLE_INITIALIZE_FORK_SAFETY": "YES",
-            }
+            env = _scoped_cli_install_env(config_dir)
             installed = []
 
             # Register the bundle marketplace in this account's config so the

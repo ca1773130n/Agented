@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import List, Optional
+from typing import Optional
 
 from .connection import get_connection
 from .ids import _get_unique_genome_suggestions_id
@@ -86,16 +86,6 @@ def get_genome_suggestions(project_id: str) -> Optional[dict]:
             (project_id,),
         ).fetchone()
         return _row_to_dict(row) if row else None
-
-
-def list_genome_suggestions(project_id: str, *, limit: int = 50) -> List[dict]:
-    with get_connection() as conn:
-        cur = conn.execute(
-            "SELECT * FROM grd_genome_suggestions WHERE project_id = ? "
-            "ORDER BY created_at DESC LIMIT ?",
-            (project_id, limit),
-        )
-        return [_row_to_dict(row) for row in cur.fetchall()]
 
 
 def _row_to_dict(row) -> dict:

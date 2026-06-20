@@ -308,17 +308,6 @@ class CreateTeamSessionRequest(BaseModel):
     team_config: TeamConfig = Field(default_factory=TeamConfig)
 
 
-class RalphMonitorResponse(BaseModel):
-    """Response for Ralph loop monitoring."""
-
-    session_id: str
-    iteration: int = 0
-    max_iterations: int = 0
-    circuit_breaker_triggered: bool = False
-    alive: bool = True
-    status: str = "active"
-
-
 class TeamMonitorResponse(BaseModel):
     """Response for team spawn monitoring."""
 
