@@ -11,6 +11,7 @@ defineProps<{
 
 const emit = defineEmits<{
   invoke: [command: string, args?: Record<string, string>];
+  'build-loop': [];
 }>();
 
 // Single declarative source of truth — see planningCommands.ts.
@@ -27,9 +28,21 @@ function handleClick(commandName: string, group?: string) {
   <div class="command-bar">
     <div class="command-bar-header">
       <h3 class="command-bar-title">{{ t('planningCommandBar.title') }}</h3>
-      <span v-if="grdInitStatus !== 'none'" class="init-status" :class="'init-' + grdInitStatus">
-        {{ grdInitStatus }}
-      </span>
+      <div class="command-bar-header-right">
+        <button
+          type="button"
+          class="build-loop-btn"
+          data-command="build-loop"
+          :disabled="isDisabled(status)"
+          :title="t('loopBuilder.subtitle')"
+          @click="emit('build-loop')"
+        >
+          {{ t('planningCommandBar.buildLoop') }}
+        </button>
+        <span v-if="grdInitStatus !== 'none'" class="init-status" :class="'init-' + grdInitStatus">
+          {{ grdInitStatus }}
+        </span>
+      </div>
     </div>
 
     <div v-for="group in commandGroups" :key="group.labelKey" class="command-group">
@@ -76,6 +89,36 @@ function handleClick(commandName: string, group?: string) {
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
+}
+
+.command-bar-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.build-loop-btn {
+  padding: 6px 12px;
+  background: var(--accent-cyan-dim, rgba(0, 180, 216, 0.12));
+  border: 1px solid var(--accent-cyan);
+  border-radius: 6px;
+  color: var(--accent-cyan);
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.build-loop-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--accent-cyan);
+}
+
+.build-loop-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .init-status {

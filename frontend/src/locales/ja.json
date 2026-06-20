@@ -1044,6 +1044,7 @@
   },
   "planningCommandBar": {
     "title": "プランニングコマンド",
+    "buildLoop": "ループを構築",
     "deprecated": "非推奨",
     "groups": {
       "plan": "プラン",
@@ -1978,6 +1979,51 @@
     "sandbox": "評価サンドボックス",
     "sandboxIsolated": "隔離スナップショット（推奨）",
     "sandboxInherit": "ワークスペースで実行"
+  },
+  "loopBuilder": {
+    "title": "ループを構築",
+    "subtitle": "自己改善ループを構成し、このプロジェクトに対して起動します。",
+    "pickTemplate": "パターンを選択",
+    "tpl": {
+      "agentic_task": {
+        "label": "エージェントタスク",
+        "desc": "Ralph が完了を宣言するまで再試行しながら、単一のタスクを最後まで実行します。"
+      },
+      "eval_refine": {
+        "label": "評価と改善",
+        "desc": "各試行を採点する LLM ジャッジでゲートしながら、目標に向かって反復します。"
+      },
+      "custom": {
+        "label": "カスタムループ",
+        "desc": "素のゴールループから始めて、すべてのゲートを自分で構成します。"
+      }
+    },
+    "secGoal": "目標",
+    "secExit": "終了条件",
+    "secGate": "品質ゲート",
+    "secState": "状態とコンテキスト",
+    "secJudge": "ジャッジ",
+    "goal": "目標",
+    "task": "タスク",
+    "checkCmd": "チェックコマンド",
+    "gateKind": "ゲートの種類",
+    "metricName": "メトリクス名",
+    "threshold": "しきい値",
+    "comparator": "比較演算子",
+    "rubric": "ジャッジルーブリック",
+    "judgeVersion": "ジャッジのバージョン",
+    "minConfidence": "最小信頼度",
+    "humanGate": "ヒューマンゲート",
+    "gateEveryN": "N 回の反復ごとに一時停止",
+    "account": "アカウント",
+    "yolo": "アカウントなしで実行（YOLO）",
+    "noAccount": "利用可能なアカウントがありません — アカウントを追加するか YOLO を有効にして起動してください。",
+    "launch": "ループを起動",
+    "cancel": "キャンセル",
+    "goalRequired": "起動する前に目標を入力してください。",
+    "accountRequired": "起動する前にアカウントを選択するか YOLO を有効にしてください。",
+    "launched": "ループを起動しました",
+    "launchFailed": "ループを起動できませんでした"
   },
   "permissionPromptCard": {
     "header": "Claude がツールを使用しようとしています",

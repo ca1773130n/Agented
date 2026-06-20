@@ -1044,6 +1044,7 @@
   },
   "planningCommandBar": {
     "title": "规划命令",
+    "buildLoop": "构建循环",
     "deprecated": "已弃用",
     "groups": {
       "plan": "规划",
@@ -1978,6 +1979,51 @@
     "sandbox": "评估沙箱",
     "sandboxIsolated": "隔离快照（推荐）",
     "sandboxInherit": "在工作区中运行"
+  },
+  "loopBuilder": {
+    "title": "构建循环",
+    "subtitle": "组合一个自我改进的循环，并针对此项目启动它。",
+    "pickTemplate": "选择模式",
+    "tpl": {
+      "agentic_task": {
+        "label": "智能体任务",
+        "desc": "Ralph 推动单个任务直至完成，反复重试直到它声明已完成。"
+      },
+      "eval_refine": {
+        "label": "评估与优化",
+        "desc": "朝着目标迭代，由对每次尝试评分的 LLM 评审进行把关。"
+      },
+      "custom": {
+        "label": "自定义循环",
+        "desc": "从一个空白的目标循环开始，自行配置每一个关卡。"
+      }
+    },
+    "secGoal": "目标",
+    "secExit": "退出条件",
+    "secGate": "质量关卡",
+    "secState": "状态与上下文",
+    "secJudge": "评审",
+    "goal": "目标",
+    "task": "任务",
+    "checkCmd": "检查命令",
+    "gateKind": "关卡类型",
+    "metricName": "指标名称",
+    "threshold": "阈值",
+    "comparator": "比较运算符",
+    "rubric": "评审标准",
+    "judgeVersion": "评审版本",
+    "minConfidence": "最低置信度",
+    "humanGate": "人工关卡",
+    "gateEveryN": "每 N 次迭代暂停一次",
+    "account": "账户",
+    "yolo": "无账户运行（YOLO）",
+    "noAccount": "没有可用账户 — 请添加账户或启用 YOLO 以启动。",
+    "launch": "启动循环",
+    "cancel": "取消",
+    "goalRequired": "启动前请输入目标。",
+    "accountRequired": "启动前请选择账户或启用 YOLO。",
+    "launched": "循环已启动",
+    "launchFailed": "无法启动循环"
   },
   "permissionPromptCard": {
     "header": "Claude 想要使用工具",

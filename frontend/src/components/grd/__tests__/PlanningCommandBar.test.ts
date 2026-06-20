@@ -67,4 +67,15 @@ describe('PlanningCommandBar', () => {
     const btn = wrapper.find('.command-btn');
     expect((btn.element as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it('emits build-loop when the Build Loop command is clicked', async () => {
+    const wrapper = mountBar();
+    const buildLoop = wrapper.find('[data-command="build-loop"]');
+    expect(buildLoop.exists()).toBe(true);
+    await buildLoop.trigger('click');
+    expect(wrapper.emitted('build-loop')).toBeTruthy();
+    expect(wrapper.emitted('build-loop')!).toHaveLength(1);
+    // Build Loop is a host-handled action, not a /grd: planning command.
+    expect(wrapper.emitted('invoke')).toBeFalsy();
+  });
 });

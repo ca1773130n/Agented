@@ -1044,6 +1044,7 @@
   },
   "planningCommandBar": {
     "title": "Planning Commands",
+    "buildLoop": "Build Loop",
     "deprecated": "Deprecated",
     "groups": {
       "plan": "Plan",
@@ -1978,6 +1979,51 @@
     "sandbox": "Eval sandbox",
     "sandboxIsolated": "Isolated snapshot (recommended)",
     "sandboxInherit": "Run in workspace"
+  },
+  "loopBuilder": {
+    "title": "Build a loop",
+    "subtitle": "Compose a self-improving loop and launch it against this project.",
+    "pickTemplate": "Pick a pattern",
+    "tpl": {
+      "agentic_task": {
+        "label": "Agentic task",
+        "desc": "Ralph drives a single task to completion, retrying until it promises it's done."
+      },
+      "eval_refine": {
+        "label": "Eval & refine",
+        "desc": "Iterate toward a goal, gated by an LLM judge that scores each attempt."
+      },
+      "custom": {
+        "label": "Custom loop",
+        "desc": "Start from a bare goal loop and configure every gate yourself."
+      }
+    },
+    "secGoal": "Goal",
+    "secExit": "Exit conditions",
+    "secGate": "Quality gate",
+    "secState": "State & context",
+    "secJudge": "Judge",
+    "goal": "Goal",
+    "task": "Task",
+    "checkCmd": "Check command",
+    "gateKind": "Gate type",
+    "metricName": "Metric name",
+    "threshold": "Threshold",
+    "comparator": "Comparator",
+    "rubric": "Judge rubric",
+    "judgeVersion": "Judge version",
+    "minConfidence": "Minimum confidence",
+    "humanGate": "Human gate",
+    "gateEveryN": "Pause every N iterations",
+    "account": "Account",
+    "yolo": "Run without an account (YOLO)",
+    "noAccount": "No account available — add one or enable YOLO to launch.",
+    "launch": "Launch loop",
+    "cancel": "Cancel",
+    "goalRequired": "Enter a goal before launching.",
+    "accountRequired": "Select an account or enable YOLO before launching.",
+    "launched": "Loop launched",
+    "launchFailed": "Couldn't launch the loop"
   },
   "permissionPromptCard": {
     "header": "Claude wants to use a tool",

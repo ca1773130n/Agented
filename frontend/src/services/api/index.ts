@@ -479,6 +479,12 @@ export type {
   GrdSyncResult,
   GrdSyncStatus,
   GrdHarnessSetupStep,
+  CreateSessionRequest,
+  CreateRalphSessionRequest,
+  GoalLoopConfig,
+  QualityGate,
+  LoopGate,
+  RalphConfig,
 } from './grd';
 
 // Onboarding automation API
