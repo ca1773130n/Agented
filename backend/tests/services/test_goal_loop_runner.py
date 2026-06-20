@@ -458,6 +458,191 @@ def test_get_runner_state_snapshot(fake_psm, stub_iteration_db, monkeypatch):
 
 
 # -----------------------------------------------------------------
+# Termination-ladder ORDERING (integration)
+#
+# Per-predicate termination is unit-tested above (met / iteration cap
+# / wall-time). These tests pin the *ordering* documented in ``_run``'s
+# docstring + enforced inline: when more than one cap would fire on the
+# SAME turn, the ladder resolves them in a fixed priority. The order in
+# ``_run`` after a turn is judged is:
+#
+#   1. ``met`` (gated by ``min_confidence``)  → reason "met"
+#   2. cost ceiling (``max_cost_usd``)        → reason "budget_cap"
+#   3. token ceiling (``max_tokens``)         → reason "token_cap"
+#   4. iteration cap (``max_iterations``)     → reason "iteration_cap"
+#
+# i.e. a quality win and the HARD budgets both pre-empt the iteration
+# cap, and ``met`` pre-empts everything. These assert that resolution,
+# not the individual predicates.
+# -----------------------------------------------------------------
+
+
+def _single_turn_verdict_judge(verdict: JudgeVerdict):
+    """A judge classmethod returning a fixed verdict every turn."""
+    return classmethod(lambda cls, goal, text, **kw: verdict)
+
+
+def test_met_beats_iteration_cap_on_same_turn(fake_psm, stub_iteration_db, monkeypatch):
+    """A 'met' verdict that clears ``min_confidence`` terminates with
+    reason='met' even when the iteration cap is also reached on this
+    very turn — ``_met_terminates`` is checked BEFORE the iteration-cap
+    branch in ``_run``.
+    """
+    monkeypatch.setattr(
+        goal_loop_runner.GoalJudgeService,
+        "judge",
+        _single_turn_verdict_judge(
+            JudgeVerdict(met=True, source="llm", reason="done", confidence=0.9)
+        ),
+    )
+    goal_loop_runner.start_runner(
+        "psess-met-vs-itercap",
+        {
+            "goal": "g",
+            # iteration cap is reached on the FIRST judged turn …
+            "max_iterations": 1,
+            "max_wall_seconds": 60,
+            # … and the confidence floor is cleared by the verdict above.
+            "quality_gate": {"min_confidence": 0.8},
+        },
+        cwd=None,
+    )
+    fake_psm.queue.put(("turn_done", {"text": "I did it."}))
+    assert _drive(_RunnerStateLookup("psess-met-vs-itercap"))
+    end = [b for b in fake_psm.broadcasts if b[1] == "goal_loop_ended"]
+    assert end, "expected a goal_loop_ended broadcast"
+    # met wins the tie against the iteration cap.
+    assert end[0][2]["reason"] == "met"
+    assert end[0][2]["detail"] == "done"
+
+
+def test_low_confidence_met_does_not_terminate_falls_to_iteration_cap(
+    fake_psm, stub_iteration_db, monkeypatch
+):
+    """Complement to the above: a 'met' verdict whose confidence is
+    BELOW ``min_confidence`` does NOT terminate via the met branch, so
+    the iteration cap (the next predicate that fires this turn) wins
+    with reason='iteration_cap'. Confirms ``min_confidence`` gates the
+    top rung of the ladder rather than being ignored.
+    """
+    monkeypatch.setattr(
+        goal_loop_runner.GoalJudgeService,
+        "judge",
+        _single_turn_verdict_judge(
+            JudgeVerdict(met=True, source="llm", reason="claims-done", confidence=0.3)
+        ),
+    )
+    goal_loop_runner.start_runner(
+        "psess-lowconf-itercap",
+        {
+            "goal": "g",
+            "max_iterations": 1,
+            "max_wall_seconds": 60,
+            "quality_gate": {"min_confidence": 0.8},
+        },
+        cwd=None,
+    )
+    fake_psm.queue.put(("turn_done", {"text": "looks done but unsure"}))
+    assert _drive(_RunnerStateLookup("psess-lowconf-itercap"))
+    end = [b for b in fake_psm.broadcasts if b[1] == "goal_loop_ended"]
+    assert end and end[0][2]["reason"] == "iteration_cap"
+
+
+def test_budget_cap_beats_iteration_cap_on_same_turn(fake_psm, stub_iteration_db, monkeypatch):
+    """When the cost ceiling and the iteration cap would both fire on
+    the same (not-met) turn, the cost ceiling wins — the ``budget_cap``
+    branch precedes the ``iteration_cap`` branch in ``_run``.
+    """
+    monkeypatch.setattr(
+        goal_loop_runner.GoalJudgeService,
+        "judge",
+        _single_turn_verdict_judge(
+            JudgeVerdict(met=False, source="llm", reason="not yet", cost_usd=5.0)
+        ),
+    )
+    goal_loop_runner.start_runner(
+        "psess-budget-vs-itercap",
+        {
+            "goal": "g",
+            "max_iterations": 1,  # iteration cap reached on turn 1 …
+            "max_wall_seconds": 60,
+            "max_cost_usd": 1.0,  # … but the cost ceiling is blown first.
+        },
+        cwd=None,
+    )
+    fake_psm.queue.put(("turn_done", {"text": "expensive turn"}))
+    assert _drive(_RunnerStateLookup("psess-budget-vs-itercap"))
+    end = [b for b in fake_psm.broadcasts if b[1] == "goal_loop_ended"]
+    assert end and end[0][2]["reason"] == "budget_cap"
+
+
+def test_token_cap_beats_iteration_cap_on_same_turn(fake_psm, stub_iteration_db, monkeypatch):
+    """When the token ceiling and the iteration cap would both fire on
+    the same (not-met) turn — and no cost ceiling is set — the token
+    ceiling wins, because the ``token_cap`` branch precedes the
+    ``iteration_cap`` branch in ``_run``.
+    """
+    monkeypatch.setattr(
+        goal_loop_runner.GoalJudgeService,
+        "judge",
+        _single_turn_verdict_judge(
+            JudgeVerdict(met=False, source="llm", reason="not yet", tokens_in=600, tokens_out=600)
+        ),
+    )
+    goal_loop_runner.start_runner(
+        "psess-token-vs-itercap",
+        {
+            "goal": "g",
+            "max_iterations": 1,  # iteration cap reached on turn 1 …
+            "max_wall_seconds": 60,
+            "max_cost_usd": 0.0,  # cost ceiling disabled …
+            "max_tokens": 1000,  # … but the token ceiling (1200 >= 1000) fires first.
+        },
+        cwd=None,
+    )
+    fake_psm.queue.put(("turn_done", {"text": "token-heavy turn"}))
+    assert _drive(_RunnerStateLookup("psess-token-vs-itercap"))
+    end = [b for b in fake_psm.broadcasts if b[1] == "goal_loop_ended"]
+    assert end and end[0][2]["reason"] == "token_cap"
+
+
+def test_budget_cap_beats_token_cap_on_same_turn(fake_psm, stub_iteration_db, monkeypatch):
+    """Both HARD budgets blown on the same turn: the cost ceiling is
+    checked before the token ceiling in ``_run``, so ``budget_cap``
+    wins the tie.
+    """
+    monkeypatch.setattr(
+        goal_loop_runner.GoalJudgeService,
+        "judge",
+        _single_turn_verdict_judge(
+            JudgeVerdict(
+                met=False,
+                source="llm",
+                reason="not yet",
+                cost_usd=5.0,
+                tokens_in=600,
+                tokens_out=600,
+            )
+        ),
+    )
+    goal_loop_runner.start_runner(
+        "psess-budget-vs-token",
+        {
+            "goal": "g",
+            "max_iterations": 20,  # iteration cap NOT in play this turn
+            "max_wall_seconds": 60,
+            "max_cost_usd": 1.0,  # both budgets are blown …
+            "max_tokens": 1000,  # … cost is checked first.
+        },
+        cwd=None,
+    )
+    fake_psm.queue.put(("turn_done", {"text": "expensive AND token-heavy"}))
+    assert _drive(_RunnerStateLookup("psess-budget-vs-token"))
+    end = [b for b in fake_psm.broadcasts if b[1] == "goal_loop_ended"]
+    assert end and end[0][2]["reason"] == "budget_cap"
+
+
+# -----------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------
 
