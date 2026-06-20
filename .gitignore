@@ -99,6 +99,26 @@ backend/.secret_key
 # regenerable from source, per-machine state).
 .tesserae/
 
+# Sandbox/CI temp + tool caches that land at the repo root because $TMPDIR
+# falls through to the CWD in some environments. None are ever meant to be
+# committed (the same root cause noted for agented-harness-evolution above).
+pytest-of-neo/
+/agented-eval-*/
+/agented-tess-smoke-*/
+node-compile-cache/
+torchinductor_*/
+tsx-*/
+.deepeval/
+backend/.deepeval/
+# Stray per-process uv lock copies (the real lock is backend/uv.lock, tracked).
+/uv-*.lock
+backend/uv-*.lock
+# Runtime logs (not source; dirty every run).
+*.log
+!.gitkeep
+# Ad-hoc local artifacts that recur at root during dev sessions.
+backend/~/
+
 # VitePress docs site (build cache + output + local deps)
 docs/.vitepress/cache/
 docs/.vitepress/dist/
