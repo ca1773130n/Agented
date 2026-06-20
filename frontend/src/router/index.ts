@@ -76,6 +76,16 @@ export const router = createRouter({
     ...observabilityExtRoutes,
     ...miscRoutes,
     ...observabilityRoutes,
+    // Phase 23 — project-scoped competitive-intelligence dashboard (REQ-27/30).
+    // Reachable via project context (no sidebar slot — a working backend does
+    // not earn one per the sidebar-IA convention).
+    {
+      path: '/projects/:projectId/competitor-intel',
+      name: 'project-competitor-intel',
+      component: () => import('../views/CompetitorIntelView.vue'),
+      props: true,
+      meta: { title: 'Competitor Intel', requiresEntity: 'projectId' },
+    },
     // Catch-all 404 route (must be last)
     {
       path: '/:pathMatch(.*)*',
