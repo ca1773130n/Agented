@@ -9370,5 +9370,20 @@
     "selectSkill": "选择技能…",
     "changesFromCurrent": "相对当前的更改",
     "noChanges": "无行级更改"
+  },
+  "loopControl": {
+    "pause": "暂停",
+    "resume": "继续",
+    "stop": "停止",
+    "intervene": "为下一次迭代添加操作员备注…",
+    "interveneSend": "发送备注",
+    "awaitingHuman": "等待人工决定",
+    "gateContinue": "继续",
+    "gateModify": "修改",
+    "gateAbort": "中止",
+    "iteration": "迭代",
+    "confidence": "置信度",
+    "cost": "成本",
+    "tokens": "令牌"
   }
 }

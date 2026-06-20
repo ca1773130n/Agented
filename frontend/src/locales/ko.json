@@ -9370,5 +9370,20 @@
     "selectSkill": "스킬 선택…",
     "changesFromCurrent": "현재 본문 대비 변경",
     "noChanges": "줄 변경 없음"
+  },
+  "loopControl": {
+    "pause": "일시정지",
+    "resume": "재개",
+    "stop": "중지",
+    "intervene": "다음 반복을 위한 운영자 메모를 입력하세요…",
+    "interveneSend": "메모 전송",
+    "awaitingHuman": "사람의 결정을 기다리는 중",
+    "gateContinue": "계속",
+    "gateModify": "수정",
+    "gateAbort": "중단",
+    "iteration": "반복",
+    "confidence": "신뢰도",
+    "cost": "비용",
+    "tokens": "토큰"
   }
 }

@@ -9370,5 +9370,20 @@
     "selectSkill": "スキルを選択…",
     "changesFromCurrent": "現在の本文からの変更",
     "noChanges": "行の変更なし"
+  },
+  "loopControl": {
+    "pause": "一時停止",
+    "resume": "再開",
+    "stop": "停止",
+    "intervene": "次のイテレーション用のオペレーターメモを入力…",
+    "interveneSend": "メモを送信",
+    "awaitingHuman": "人間の判断を待っています",
+    "gateContinue": "続行",
+    "gateModify": "修正",
+    "gateAbort": "中止",
+    "iteration": "イテレーション",
+    "confidence": "信頼度",
+    "cost": "コスト",
+    "tokens": "トークン"
   }
 }

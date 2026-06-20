@@ -14,6 +14,7 @@ import SessionStartDialog from './SessionStartDialog.vue';
 import SessionContextTray from './SessionContextTray.vue';
 import ContextPreviewDrawer from './ContextPreviewDrawer.vue';
 import GoalLoopStatusBanner from './GoalLoopStatusBanner.vue';
+import LoopTracePanel from '../grd/LoopTracePanel.vue';
 import InteractiveQuestionCard from './InteractiveQuestionCard.vue';
 import PlanModeCard from './PlanModeCard.vue';
 import PermissionPromptCard from './PermissionPromptCard.vue';
@@ -112,6 +113,14 @@ const goalLoopState = ref<{
 } | null>(null);
 const isGoalLoopMode = computed(
   () => executionType.value === 'goal_loop' && goalLoopState.value !== null,
+);
+// v0.6.0 sub-project #3 — the per-iteration trace + control bar + human-gate
+// card host. Shown for autonomous loops (goal_loop / ralph_loop) that have an
+// active session: those are the executors the runner control API targets.
+const showLoopTrace = computed(
+  () =>
+    (executionType.value === 'goal_loop' || executionType.value === 'ralph_loop') &&
+    !!session.activeSessionId.value,
 );
 
 // Soft diagnostic shown if no output arrives within 8s of sending a
@@ -934,6 +943,17 @@ watch(
             :ended-reason="goalLoopState.endedReason"
             :ended-detail="goalLoopState.endedDetail"
             :judging="goalLoopState.judging"
+          />
+
+          <!-- v0.6.0 sub-project #3 — per-iteration trace, control bar
+               (pause / resume / stop / intervene), and the human-gate
+               card for autonomous loops (goal_loop / ralph_loop). -->
+          <LoopTracePanel
+            v-if="showLoopTrace"
+            :project-id="projectId"
+            :session-id="session.activeSessionId.value ?? ''"
+            :awaiting-human="session.awaitingHuman.value"
+            :gate-reason="session.gateReason.value"
           />
 
           <!-- v0.7.63 — interactive ``AskUserQuestion`` widget. Shows
