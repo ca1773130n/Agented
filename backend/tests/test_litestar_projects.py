@@ -109,6 +109,7 @@ def test_install_validates_component_type(isolated_db):
 
 def test_discover_lists_repos_with_new_flags(isolated_db, tmp_path):
     import os
+
     from app.database import create_project as db_create_project
 
     create_user_role("admin-key-disc", "Admin", "admin")
@@ -148,7 +149,8 @@ def test_import_creates_projects(isolated_db, tmp_path, monkeypatch):
 
     # Don't spawn real setup threads in the test.
     monkeypatch.setattr(
-        ProjectDiscoveryService, "_spawn_harness_setup",
+        ProjectDiscoveryService,
+        "_spawn_harness_setup",
         classmethod(lambda cls, pid: None),
     )
     create_user_role("admin-key-imp", "Admin", "admin")

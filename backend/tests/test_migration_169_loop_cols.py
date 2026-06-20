@@ -9,7 +9,7 @@ def test_goal_loop_iterations_has_body_kind_and_tokens_total(isolated_db):
 
 
 def test_record_iteration_complete_persists_body_kind(isolated_db):
-    from app.db.goal_loop import record_iteration_start, record_iteration_complete, list_iterations
+    from app.db.goal_loop import list_iterations, record_iteration_complete, record_iteration_start
 
     row_id = record_iteration_start("sess-x", 1)
     record_iteration_complete(

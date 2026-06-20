@@ -132,6 +132,7 @@ from .budgets import (  # noqa: F401
     # Execution token data
     update_execution_token_data,
 )
+from .bundle_seeds import seed_bundled_teams_and_agents  # noqa: F401
 
 # Campaigns (multi-repo campaign orchestration)
 from .campaigns import (  # noqa: F401
@@ -180,6 +181,26 @@ from .conversation_branches import (  # noqa: F401
     update_branch_status,
 )
 
+# Cross-kind Forge bundles (v0.8.0 17-03 — named group spanning any kind).
+from .forge_bundles import (  # noqa: F401
+    add_bundle_item,
+    create_forge_bundle,
+    delete_forge_bundle,
+    get_forge_bundle,
+    get_forge_bundle_by_name,
+    list_forge_bundle_items,
+    list_forge_bundles,
+)
+from .forge_bundles import (
+    bind_bundle_to_project as bind_forge_bundle_to_project,
+)
+
+# Forge primitive provenance (v0.8.0 17-06 — session-auto-import origin hashes).
+from .forge_origin import (  # noqa: F401
+    get_origin,
+    record_origin,
+)
+
 # GitOps (repository config and sync state)
 from .gitops import (  # noqa: F401
     add_sync_log,
@@ -190,6 +211,25 @@ from .gitops import (  # noqa: F401
     list_sync_logs,
     update_gitops_repo,
     update_sync_state,
+)
+
+# Goal-loop execution type (v0.7.74 — per-session config + iteration audit;
+# v0.7.86 — Ouroboros dead-ends + convergence helpers)
+from .goal_loop import (  # noqa: F401
+    add_goal_loop_dead_end,
+    get_goal_loop_config,
+    list_goal_loop_dead_ends,
+    recent_iteration_verdicts,
+    set_goal_loop_config,
+)
+from .goal_loop import (
+    list_iterations as list_goal_loop_iterations,
+)
+from .goal_loop import (
+    record_iteration_complete as record_goal_loop_iteration_complete,
+)
+from .goal_loop import (
+    record_iteration_start as record_goal_loop_iteration_start,
 )
 
 # GRD (milestones, phases, plans, sessions, sync state)
@@ -222,6 +262,26 @@ from .grd import (  # noqa: F401
     upsert_project_sync_state,
 )
 
+# v0.7.88 — GRD evolve session runs
+from .grd_evolve import (  # noqa: F401
+    create_evolve_run,
+    finalize_evolve_run,
+    get_evolve_run,
+    get_evolve_run_by_session,
+    list_evolve_runs_for_project,
+    upsert_evolve_state,
+)
+from .grd_genome_suggestions import (  # noqa: F401
+    get_genome_suggestions,
+    list_genome_suggestions,
+    upsert_genome_suggestions,
+)
+from .grd_harness_rounds import (  # noqa: F401
+    get_harness_round,
+    list_harness_rounds,
+    upsert_harness_round,
+)
+
 # v0.7.85 — GRD v0.3.24 Ouroboros artifact mirror
 from .grd_ouroboros import (  # noqa: F401
     add_dead_end,
@@ -236,30 +296,10 @@ from .grd_ouroboros import (  # noqa: F401
     update_plan_ouroboros_fields,
     upsert_phase_reflection,
 )
-
-# v0.7.88 — GRD evolve session runs
-from .grd_evolve import (  # noqa: F401
-    create_evolve_run,
-    finalize_evolve_run,
-    get_evolve_run,
-    get_evolve_run_by_session,
-    list_evolve_runs_for_project,
-    upsert_evolve_state,
-)
-from .grd_harness_rounds import (  # noqa: F401
-    get_harness_round,
-    list_harness_rounds,
-    upsert_harness_round,
-)
 from .grd_plan_selections import (  # noqa: F401
     get_plan_selection,
     list_plan_selections,
     upsert_plan_selection,
-)
-from .grd_genome_suggestions import (  # noqa: F401
-    get_genome_suggestions,
-    list_genome_suggestions,
-    upsert_genome_suggestions,
 )
 
 # Health alerts
@@ -312,10 +352,6 @@ from .ids import (  # noqa: F401
     PLAN_ID_PREFIX,
     PLUGIN_ID_LENGTH,
     PLUGIN_ID_PREFIX,
-    PSA_ID_LENGTH,
-    PSA_ID_PREFIX,
-    PTI_ID_LENGTH,
-    PTI_ID_PREFIX,
     PRODUCT_DECISION_ID_LENGTH,
     PRODUCT_DECISION_ID_PREFIX,
     PRODUCT_ID_LENGTH,
@@ -326,6 +362,10 @@ from .ids import (  # noqa: F401
     PROJECT_ID_PREFIX,
     PROJECT_SESSION_ID_LENGTH,
     PROJECT_SESSION_ID_PREFIX,
+    PSA_ID_LENGTH,
+    PSA_ID_PREFIX,
+    PTI_ID_LENGTH,
+    PTI_ID_PREFIX,
     ROLE_ID_LENGTH,
     ROLE_ID_PREFIX,
     ROTATION_EVENT_ID_LENGTH,
@@ -365,13 +405,13 @@ from .ids import (  # noqa: F401
     _get_unique_phase_id,
     _get_unique_plan_id,
     _get_unique_plugin_id,
-    _get_unique_psa_id,
-    _get_unique_pti_id,
     _get_unique_product_decision_id,
     _get_unique_product_id,
     _get_unique_product_milestone_id,
     _get_unique_project_id,
     _get_unique_project_session_id,
+    _get_unique_psa_id,
+    _get_unique_pti_id,
     _get_unique_role_id,
     _get_unique_rotation_event_id,
     _get_unique_secret_id,
@@ -398,13 +438,13 @@ from .ids import (  # noqa: F401
     generate_phase_id,
     generate_plan_id,
     generate_plugin_id,
-    generate_psa_id,
-    generate_pti_id,
     generate_product_decision_id,
     generate_product_id,
     generate_product_milestone_id,
     generate_project_id,
     generate_project_session_id,
+    generate_psa_id,
+    generate_pti_id,
     generate_role_id,
     generate_rotation_event_id,
     generate_secret_id,
@@ -485,6 +525,17 @@ from .monitoring import (  # noqa: F401
     upsert_pending_retry,
 )
 
+# Plugin-creation conversations (v0.7.83 — same shape as skill
+# above; gives /plugins/new survival across page refresh + backend
+# restart with per-user scoping)
+from .plugin_conversations import (  # noqa: F401
+    create_plugin_conversation,
+    delete_plugin_conversation,
+    get_plugin_conversation,
+    list_active_plugin_conversations,
+    upsert_plugin_conversation,
+)
+
 # Plugins (includes components, marketplaces, sync state, exports)
 from .plugins import (  # noqa: F401
     add_marketplace_plugin,
@@ -533,6 +584,43 @@ from .products import (  # noqa: F401
     update_product,
 )
 
+# Project Forge bindings (v0.7.70 — sticky per-project context defaults)
+from .project_forge_bindings import (  # noqa: F401
+    VALID_KINDS as VALID_FORGE_BINDING_KINDS,
+)
+from .project_forge_bindings import (
+    add_binding as add_project_forge_binding,
+)
+from .project_forge_bindings import (
+    get_binding as get_project_forge_binding,
+)
+from .project_forge_bindings import (
+    list_bindings as list_project_forge_bindings,
+)
+from .project_forge_bindings import (
+    remove_binding as remove_project_forge_binding,
+)
+from .project_forge_bindings import (
+    replace_for_project as replace_project_forge_bindings,
+)
+
+# Project SA instances (project-scoped super agent instances)
+from .project_sa_instances import (  # noqa: F401
+    create_project_sa_instance,
+    delete_project_sa_instance,
+    get_project_sa_instance,
+    get_project_sa_instances_for_project,
+    update_project_sa_instance,
+)
+
+# Project team instances (project-scoped team instances)
+from .project_team_instances import (  # noqa: F401
+    create_project_team_instance,
+    delete_project_team_instance,
+    get_project_team_instance,
+    get_project_team_instances_for_project,
+)
+
 # Projects (includes skills, installations, team assignments)
 from .projects import (  # noqa: F401
     # Project installations
@@ -567,68 +655,6 @@ from .projects import (  # noqa: F401
     update_project_team_topology_config,
 )
 
-# Project Forge bindings (v0.7.70 — sticky per-project context defaults)
-from .project_forge_bindings import (  # noqa: F401
-    VALID_KINDS as VALID_FORGE_BINDING_KINDS,
-    add_binding as add_project_forge_binding,
-    get_binding as get_project_forge_binding,
-    list_bindings as list_project_forge_bindings,
-    remove_binding as remove_project_forge_binding,
-    replace_for_project as replace_project_forge_bindings,
-)
-
-# Cross-kind Forge bundles (v0.8.0 17-03 — named group spanning any kind).
-from .forge_bundles import (  # noqa: F401
-    add_bundle_item,
-    bind_bundle_to_project as bind_forge_bundle_to_project,
-    create_forge_bundle,
-    delete_forge_bundle,
-    get_forge_bundle,
-    get_forge_bundle_by_name,
-    list_forge_bundle_items,
-    list_forge_bundles,
-)
-
-# Forge primitive provenance (v0.8.0 17-06 — session-auto-import origin hashes).
-from .forge_origin import (  # noqa: F401
-    get_origin,
-    record_origin,
-)
-
-# Goal-loop execution type (v0.7.74 — per-session config + iteration audit;
-# v0.7.86 — Ouroboros dead-ends + convergence helpers)
-from .goal_loop import (  # noqa: F401
-    add_goal_loop_dead_end,
-    get_goal_loop_config,
-    list_goal_loop_dead_ends,
-    list_iterations as list_goal_loop_iterations,
-    recent_iteration_verdicts,
-    record_iteration_complete as record_goal_loop_iteration_complete,
-    record_iteration_start as record_goal_loop_iteration_start,
-    set_goal_loop_config,
-)
-
-# Skill-creation conversations (v0.7.78 — persist /skills/new chat
-# so refresh / backend restart doesn't lose progress)
-from .skill_conversations import (  # noqa: F401
-    create_skill_conversation,
-    delete_skill_conversation,
-    get_skill_conversation,
-    list_active_skill_conversations,
-    upsert_skill_conversation,
-)
-
-# Plugin-creation conversations (v0.7.83 — same shape as skill
-# above; gives /plugins/new survival across page refresh + backend
-# restart with per-user scoping)
-from .plugin_conversations import (  # noqa: F401
-    create_plugin_conversation,
-    delete_plugin_conversation,
-    get_plugin_conversation,
-    list_active_plugin_conversations,
-    upsert_plugin_conversation,
-)
-
 # Prompt snippets (reusable prompt fragments)
 from .prompt_snippets import (  # noqa: F401
     create_snippet,
@@ -658,20 +684,20 @@ from .rbac import (  # noqa: F401
     update_user_role,
 )
 
-# Retention policies
-from .retention_policies import (  # noqa: F401
-    create_policy,
-    delete_policy,
-    list_policies,
-    update_policy_enabled,
-)
-
 # Replay comparisons (execution replay A/B comparison)
 from .replay import (  # noqa: F401
     create_replay_comparison,
     get_all_replay_comparisons,
     get_replay_comparison,
     get_replay_comparisons_for_execution,
+)
+
+# Retention policies
+from .retention_policies import (  # noqa: F401
+    create_policy,
+    delete_policy,
+    list_policies,
+    update_policy_enabled,
 )
 
 # Rotations and organizational (rotation events, product decisions, product milestones, team connections)
@@ -726,7 +752,6 @@ from .secrets import (
 from .secrets import (
     update_secret as update_secret_record,
 )
-from .bundle_seeds import seed_bundled_teams_and_agents  # noqa: F401
 from .seeds import (  # noqa: F401
     auto_register_project_root,
     migrate_existing_paths,
@@ -753,18 +778,14 @@ from .sketches import (  # noqa: F401
     update_sketch,
 )
 
-# System errors and fix attempts
-from .system_errors import (  # noqa: F401
-    count_errors_by_status,
-    create_fix_attempt,
-    create_system_error,
-    find_recent_duplicate,
-    get_system_error,
-    get_system_error_with_fixes,
-    list_fix_attempts,
-    list_system_errors,
-    update_fix_attempt,
-    update_system_error_status,
+# Skill-creation conversations (v0.7.78 — persist /skills/new chat
+# so refresh / backend restart doesn't lose progress)
+from .skill_conversations import (  # noqa: F401
+    create_skill_conversation,
+    delete_skill_conversation,
+    get_skill_conversation,
+    list_active_skill_conversations,
+    upsert_skill_conversation,
 )
 
 # Skills (user_skills)
@@ -790,23 +811,6 @@ from .subagents import (  # noqa: F401
     update_subagent,
 )
 
-# Project SA instances (project-scoped super agent instances)
-from .project_sa_instances import (  # noqa: F401
-    create_project_sa_instance,
-    delete_project_sa_instance,
-    get_project_sa_instance,
-    get_project_sa_instances_for_project,
-    update_project_sa_instance,
-)
-
-# Project team instances (project-scoped team instances)
-from .project_team_instances import (  # noqa: F401
-    create_project_team_instance,
-    delete_project_team_instance,
-    get_project_team_instance,
-    get_project_team_instances_for_project,
-)
-
 # SuperAgents (super_agents + documents + sessions)
 from .super_agents import (  # noqa: F401
     VALID_DOC_TYPES,
@@ -828,6 +832,20 @@ from .super_agents import (  # noqa: F401
     update_super_agent,
     update_super_agent_document,
     update_super_agent_session,
+)
+
+# System errors and fix attempts
+from .system_errors import (  # noqa: F401
+    count_errors_by_status,
+    create_fix_attempt,
+    create_system_error,
+    find_recent_duplicate,
+    get_system_error,
+    get_system_error_with_fixes,
+    list_fix_attempts,
+    list_system_errors,
+    update_fix_attempt,
+    update_system_error_status,
 )
 
 # Teams (includes members, agent assignments, and edges)
@@ -943,7 +961,6 @@ from .viewer_comments import (  # noqa: F401
     get_comments_for_execution,
     get_comments_for_line,
 )
-
 
 # Workflows (workflows, versions, executions, node executions, approval states)
 from .workflows import (  # noqa: F401

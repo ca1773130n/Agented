@@ -20,7 +20,6 @@ from app.services import (
     opencode_config_overlay,
 )
 
-
 CANONICAL_BUNDLE = {
     "overlay_files": {
         "commands/deploy.md": "ship it",
@@ -95,10 +94,7 @@ def test_claude_apply_materializes_hooks(tmp_path):
     assert script.stat().st_mode & 0o100  # owner-executable
     settings = json.loads((overlay / "settings.json").read_text())
     assert settings["hooks"]["PreToolUse"][0]["matcher"] == "Bash"
-    assert (
-        settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
-        == str(script)
-    )
+    assert settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"] == str(script)
 
 
 def test_claude_apply_refuses_path_escape(tmp_path):
@@ -127,8 +123,8 @@ def test_claude_apply_noop_on_empty():
 def test_codex_prepare_symlinks_user_items(tmp_path):
     user = tmp_path / "codex_home"
     user.mkdir()
-    (user / "auth.json").write_text("{\"token\":\"abc\"}")
-    (user / "config.toml").write_text("[ui]\ntheme = \"dark\"\n")
+    (user / "auth.json").write_text('{"token":"abc"}')
+    (user / "config.toml").write_text('[ui]\ntheme = "dark"\n')
 
     overlay = codex_config_overlay.prepare_session_overlay("sess-1", str(user))
     assert overlay is not None
@@ -140,20 +136,20 @@ def test_codex_prepare_symlinks_user_items(tmp_path):
 def test_codex_apply_appends_mcp_section(tmp_path):
     overlay = tmp_path / "codex_overlay"
     overlay.mkdir()
-    (overlay / "config.toml").write_text("[ui]\ntheme = \"dark\"\n")
+    (overlay / "config.toml").write_text('[ui]\ntheme = "dark"\n')
 
     codex_config_overlay.apply_forge_bundle(str(overlay), CANONICAL_BUNDLE)
 
     toml_text = (overlay / "config.toml").read_text()
     # Existing user content preserved.
     assert "[ui]" in toml_text
-    assert "theme = \"dark\"" in toml_text
+    assert 'theme = "dark"' in toml_text
     # Our MCP sections appended.
     assert "[mcp_servers.context7]" in toml_text
-    assert "command = \"npx\"" in toml_text
-    assert "args = [\"-y\", \"mcp-context7\"]" in toml_text
+    assert 'command = "npx"' in toml_text
+    assert 'args = ["-y", "mcp-context7"]' in toml_text
     assert "[mcp_servers.github]" in toml_text
-    assert "url = \"https://mcp.example.com/github\"" in toml_text
+    assert 'url = "https://mcp.example.com/github"' in toml_text
 
 
 def test_codex_apply_writes_prompts_from_commands(tmp_path):

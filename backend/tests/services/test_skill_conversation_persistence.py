@@ -7,8 +7,6 @@ filtering, and that the message envelope round-trips byte-for-byte.
 
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from app.db import (
@@ -18,12 +16,10 @@ from app.db import (
     list_active_skill_conversations,
     upsert_skill_conversation,
 )
-from app.services import skill_conversation_service as svc
 from app.services.skill_conversation_service import (
     ConversationMessage,
     SkillConversationService,
 )
-
 
 # -----------------------------------------------------------------
 # DB module

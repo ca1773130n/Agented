@@ -3,8 +3,6 @@
 import hashlib
 import hmac
 
-import pytest
-
 
 def test_clamp_limit_caps_and_floors():
     from app_litestar.route_helpers import MAX_LIST_LIMIT, clamp_limit

@@ -60,8 +60,8 @@ def test_skill_unbind_records_deletion_for_staging(isolated_db, tmp_path):
     """When a skill is unbound, the next materialize records its prior SKILL.md
     in result.deleted so the forge commit can stage the removal — even though
     the file was already unlinked at apply time."""
-    from app.db import skills as skills_repo
     from app.db import project_forge_bindings as bindings_repo
+    from app.db import skills as skills_repo
     from app.services.forge_materialization_service import materialize_primitives
 
     with get_connection() as conn:

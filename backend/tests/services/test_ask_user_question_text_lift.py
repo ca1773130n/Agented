@@ -22,7 +22,6 @@ from app.services.project_session_manager import (
     _scan_balanced_object,
 )
 
-
 CANONICAL_QUESTIONS = [
     {
         "question": "Which backtick should I remove?",
@@ -69,9 +68,7 @@ def test_scan_balanced_object_returns_full_object_bounds():
     assert text[start] == "{"
     assert text[end - 1] == "}"
     # Round-trip through json.loads to confirm we caught a whole object.
-    assert json.loads(text[start:end]) == {
-        "questions": [{"a": [1, 2]}, {"b": {"c": 1}}]
-    }
+    assert json.loads(text[start:end]) == {"questions": [{"a": [1, 2]}, {"b": {"c": 1}}]}
 
 
 def test_scan_balanced_object_handles_braces_in_strings():

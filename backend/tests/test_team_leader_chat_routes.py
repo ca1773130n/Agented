@@ -37,7 +37,9 @@ def _seed_super_agent(sa_id: str, name: str = "Leader"):
 
 
 def _seed_project(
-    project_id: str, *, manager_sa_id: str | None = None,
+    project_id: str,
+    *,
+    manager_sa_id: str | None = None,
     tesserae_root: str | None = None,
 ):
     with get_connection() as conn:
@@ -51,17 +53,13 @@ def _seed_project(
 
 
 def test_open_chat_404_unknown_project(client):
-    r = client.post(
-        "/admin/projects/proj-ghost/team-leader/chat/session"
-    )
+    r = client.post("/admin/projects/proj-ghost/team-leader/chat/session")
     assert r.status_code == 404
 
 
 def test_open_chat_400_no_manager_configured(client):
     _seed_project("proj-no-mgr", manager_sa_id=None)
-    r = client.post(
-        "/admin/projects/proj-no-mgr/team-leader/chat/session"
-    )
+    r = client.post("/admin/projects/proj-no-mgr/team-leader/chat/session")
     assert r.status_code in (400, 422)
     body = r.json()
     msg = body.get("message") or body.get("detail") or str(body)
@@ -78,9 +76,7 @@ def test_open_chat_resolves_super_agent_and_session(client, tmp_path):
         tesserae_root=str(tmp_path),
     )
 
-    r = client.post(
-        "/admin/projects/proj-leader-x/team-leader/chat/session"
-    )
+    r = client.post("/admin/projects/proj-leader-x/team-leader/chat/session")
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["project_id"] == "proj-leader-x"
@@ -111,11 +107,10 @@ def test_open_chat_idempotent_reuses_existing_session(client):
 def test_open_chat_tesserae_disabled_flag_off_when_not_set(client):
     _seed_super_agent("sa-leader-z")
     _seed_project(
-        "proj-leader-z", manager_sa_id="sa-leader-z",
+        "proj-leader-z",
+        manager_sa_id="sa-leader-z",
         tesserae_root=None,
     )
-    r = client.post(
-        "/admin/projects/proj-leader-z/team-leader/chat/session"
-    )
+    r = client.post("/admin/projects/proj-leader-z/team-leader/chat/session")
     body = r.json()
     assert body["tesserae_enabled"] is False

@@ -75,9 +75,7 @@ def list_product_decisions(
 
 
 @post("/{product_id:str}/decisions", sync_to_thread=False)
-def create_product_decision(
-    product_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def create_product_decision(product_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     _ensure_product(product_id)
     if not data or not data.get("title"):
@@ -99,12 +97,8 @@ def create_product_decision(
     }
 
 
-@get(
-    "/{product_id:str}/decisions/{decision_id:str}", sync_to_thread=False
-)
-def get_decision(
-    product_id: str, decision_id: str, caller: Caller
-) -> dict[str, Any]:
+@get("/{product_id:str}/decisions/{decision_id:str}", sync_to_thread=False)
+def get_decision(product_id: str, decision_id: str, caller: Caller) -> dict[str, Any]:
     del caller
     _ensure_product(product_id)
     decision = get_product_decision(decision_id)
@@ -113,9 +107,7 @@ def get_decision(
     return {"decision": decision}
 
 
-@put(
-    "/{product_id:str}/decisions/{decision_id:str}", sync_to_thread=False
-)
+@put("/{product_id:str}/decisions/{decision_id:str}", sync_to_thread=False)
 def update_decision(
     product_id: str, decision_id: str, data: dict, caller: Caller
 ) -> dict[str, Any]:
@@ -126,9 +118,16 @@ def update_decision(
     kwargs = {
         k: v
         for k, v in data.items()
-        if k in (
-            "title", "description", "rationale", "tags_json", "status",
-            "decided_by", "context_json", "decision_type",
+        if k
+        in (
+            "title",
+            "description",
+            "rationale",
+            "tags_json",
+            "status",
+            "decided_by",
+            "context_json",
+            "decision_type",
         )
     }
     if not update_product_decision(decision_id, **kwargs):
@@ -144,9 +143,7 @@ def update_decision(
     status_code=200,
     sync_to_thread=False,
 )
-def delete_decision(
-    product_id: str, decision_id: str, caller: Caller
-) -> dict[str, Any]:
+def delete_decision(product_id: str, decision_id: str, caller: Caller) -> dict[str, Any]:
     del caller
     _ensure_product(product_id)
     if not delete_product_decision(decision_id):
@@ -176,16 +173,12 @@ def list_milestones(
 
     return {
         "milestones": milestones,
-        "total_count": count_milestones_by_product_owner(
-            product_id, status=status
-        ),
+        "total_count": count_milestones_by_product_owner(product_id, status=status),
     }
 
 
 @post("/{product_id:str}/milestones", sync_to_thread=False)
-def create_milestone(
-    product_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def create_milestone(product_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     _ensure_product(product_id)
     if not data or not data.get("version") or not data.get("title"):
@@ -207,12 +200,8 @@ def create_milestone(
     }
 
 
-@get(
-    "/{product_id:str}/milestones/{milestone_id:str}", sync_to_thread=False
-)
-def get_milestone(
-    product_id: str, milestone_id: str, caller: Caller
-) -> dict[str, Any]:
+@get("/{product_id:str}/milestones/{milestone_id:str}", sync_to_thread=False)
+def get_milestone(product_id: str, milestone_id: str, caller: Caller) -> dict[str, Any]:
     del caller
     _ensure_product(product_id)
     milestone = get_product_milestone(milestone_id)
@@ -222,9 +211,7 @@ def get_milestone(
     return {"milestone": milestone}
 
 
-@put(
-    "/{product_id:str}/milestones/{milestone_id:str}", sync_to_thread=False
-)
+@put("/{product_id:str}/milestones/{milestone_id:str}", sync_to_thread=False)
 def update_milestone(
     product_id: str, milestone_id: str, data: dict, caller: Caller
 ) -> dict[str, Any]:
@@ -235,9 +222,16 @@ def update_milestone(
     kwargs = {
         k: v
         for k, v in data.items()
-        if k in (
-            "version", "title", "description", "status", "target_date",
-            "sort_order", "progress_pct", "completed_date",
+        if k
+        in (
+            "version",
+            "title",
+            "description",
+            "status",
+            "target_date",
+            "sort_order",
+            "progress_pct",
+            "completed_date",
         )
     }
     if not update_product_milestone(milestone_id, **kwargs):
@@ -253,9 +247,7 @@ def update_milestone(
     status_code=200,
     sync_to_thread=False,
 )
-def delete_milestone(
-    product_id: str, milestone_id: str, caller: Caller
-) -> dict[str, Any]:
+def delete_milestone(product_id: str, milestone_id: str, caller: Caller) -> dict[str, Any]:
     del caller
     _ensure_product(product_id)
     if not delete_product_milestone(milestone_id):
@@ -281,9 +273,7 @@ def list_milestone_projects(
 ) -> dict[str, Any]:
     del caller
     _ensure_product(product_id)
-    projects = get_projects_for_milestone(
-        milestone_id, limit=limit, offset=offset or 0
-    )
+    projects = get_projects_for_milestone(milestone_id, limit=limit, offset=offset or 0)
     from app.db.rotations import count_projects_for_milestone
 
     return {
@@ -296,9 +286,7 @@ def list_milestone_projects(
     "/{product_id:str}/milestones/{milestone_id:str}/projects",
     sync_to_thread=False,
 )
-def link_project(
-    product_id: str, milestone_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def link_project(product_id: str, milestone_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     _ensure_product(product_id)
     if not data or not data.get("project_id"):
@@ -309,9 +297,7 @@ def link_project(
         contribution=data.get("contribution"),
     )
     if result is None:
-        raise ClientException(
-            detail="Failed to link project (already linked or invalid IDs)"
-        )
+        raise ClientException(detail="Failed to link project (already linked or invalid IDs)")
     return {"message": "Project linked to milestone"}
 
 
@@ -336,9 +322,7 @@ def unlink_project(
 
 
 @put("/{product_id:str}/owner", sync_to_thread=False)
-def assign_owner(
-    product_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def assign_owner(product_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     _ensure_product(product_id)
     if not data or "owner_agent_id" not in data:

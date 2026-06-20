@@ -5,8 +5,6 @@ import threading
 import time
 from unittest.mock import patch
 
-import pytest
-
 from app.db.execution_logs import (
     create_execution_log,
     get_redispatch_child,
@@ -14,7 +12,6 @@ from app.db.execution_logs import (
     update_execution_log,
 )
 from app.services.execution_service import ExecutionService
-
 
 # ---------------------------------------------------------------------------
 # Helpers

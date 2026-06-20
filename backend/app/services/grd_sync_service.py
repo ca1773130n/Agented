@@ -287,9 +287,7 @@ class GrdSyncService:
         # updates the row in place.
         for verification_file in sorted(phase_dir.glob("*VERIFICATION.md")):
             try:
-                cls._sync_phase_reflection(
-                    project_id, verification_file, phase_id, results
-                )
+                cls._sync_phase_reflection(project_id, verification_file, phase_id, results)
             except Exception as e:
                 logger.error(
                     "Error extracting reflection from %s: %s",
@@ -549,15 +547,11 @@ class GrdSyncService:
     # ``tried_in_phases`` for the ``phase_label`` column. Reverse-
     # engineered from the parser since GRD doesn't expose a JSON
     # endpoint for the file.
-    _DEAD_END_BLOCK_RE = re.compile(
-        r"^## (\S+)\s*\n+```yaml\n([\s\S]+?)\n```", re.MULTILINE
-    )
+    _DEAD_END_BLOCK_RE = re.compile(r"^## (\S+)\s*\n+```yaml\n([\s\S]+?)\n```", re.MULTILINE)
     _DEAD_END_FIELD_RE = re.compile(r"^([a-z_]+):\s*(.*)$", re.MULTILINE)
 
     @classmethod
-    def _sync_dead_ends(
-        cls, project_id: str, dead_ends_file: Path, results: dict
-    ) -> None:
+    def _sync_dead_ends(cls, project_id: str, dead_ends_file: Path, results: dict) -> None:
         """Reimport ``.planning/DEAD-ENDS.md`` into ``project_dead_ends``.
 
         Wipe-and-reload semantics: the file is the source of truth
@@ -614,9 +608,7 @@ class GrdSyncService:
         results["synced"] += 1
 
     @classmethod
-    def _sync_genome(
-        cls, project_id: str, genome_file: Path, results: dict
-    ) -> None:
+    def _sync_genome(cls, project_id: str, genome_file: Path, results: dict) -> None:
         """Append a new snapshot to ``project_genome_snapshots`` if the
         on-disk file's hash differs from the latest stored snapshot.
 

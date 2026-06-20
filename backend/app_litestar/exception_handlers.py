@@ -7,7 +7,6 @@ consistent and 500s feed into the same error_capture sink.
 from __future__ import annotations
 
 import logging
-import os
 import sqlite3
 import traceback
 from http import HTTPStatus

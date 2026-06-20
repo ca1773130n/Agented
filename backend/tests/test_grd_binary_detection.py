@@ -6,6 +6,7 @@ from app.services.grd_cli_service import GrdCliService
 def test_detect_prefers_path_executable(monkeypatch, isolated_db):
     """gd / grd-tools resolvable on PATH (npm @jokerized/getresearchdone
     symlinks) are preferred and marked as direct executables."""
+
     def fake_which(name):
         return {"gd": "/usr/local/bin/gd", "grd-tools": "/usr/local/bin/grd-tools"}.get(name)
 

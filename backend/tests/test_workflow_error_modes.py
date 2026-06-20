@@ -8,11 +8,8 @@ topologies where error handling behavior is nuanced.
 import time
 from unittest.mock import patch
 
-import pytest
-
 from app.models.workflow import WorkflowMessage
 from app.services.workflow_execution_service import WorkflowExecutionService
-
 
 # =============================================================================
 # Helpers (mirrors patterns from test_workflow_execution.py)

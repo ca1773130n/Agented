@@ -114,9 +114,7 @@ def get_distill_enabled(project_id: str) -> bool:
             ).fetchone()
         return bool(row and row["tesserae_distill_enabled"])
     except Exception:
-        logger.warning(
-            "tesserae: distill-flag lookup failed for %s", project_id, exc_info=True
-        )
+        logger.warning("tesserae: distill-flag lookup failed for %s", project_id, exc_info=True)
         return False
 
 
@@ -811,32 +809,46 @@ def _run_tesserae(
     started = _time.monotonic()
     started_iso = _now_iso()
     try:
-        proc = subprocess.run(
-            cmd, cwd=str(cwd), capture_output=True, text=True, timeout=timeout
-        )
+        proc = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, timeout=timeout)
     except FileNotFoundError:
         return TesseraeOpResult(
-            op=op, ok=False, reason="cli_missing",
-            started_at=started_iso, finished_at=_now_iso(),
+            op=op,
+            ok=False,
+            reason="cli_missing",
+            started_at=started_iso,
+            finished_at=_now_iso(),
             elapsed_seconds=_time.monotonic() - started,
         )
     except subprocess.TimeoutExpired:
         return TesseraeOpResult(
-            op=op, ok=False, reason=f"timeout_after_{timeout}s",
-            started_at=started_iso, finished_at=_now_iso(),
+            op=op,
+            ok=False,
+            reason=f"timeout_after_{timeout}s",
+            started_at=started_iso,
+            finished_at=_now_iso(),
             elapsed_seconds=_time.monotonic() - started,
         )
     finished_iso = _now_iso()
     elapsed = _time.monotonic() - started
     if proc.returncode != 0:
         return TesseraeOpResult(
-            op=op, ok=False, stdout=proc.stdout or "", stderr=proc.stderr or "",
+            op=op,
+            ok=False,
+            stdout=proc.stdout or "",
+            stderr=proc.stderr or "",
             reason=f"exit_{proc.returncode}",
-            started_at=started_iso, finished_at=finished_iso, elapsed_seconds=elapsed,
+            started_at=started_iso,
+            finished_at=finished_iso,
+            elapsed_seconds=elapsed,
         )
     return TesseraeOpResult(
-        op=op, ok=True, stdout=proc.stdout or "", stderr=proc.stderr or "",
-        started_at=started_iso, finished_at=finished_iso, elapsed_seconds=elapsed,
+        op=op,
+        ok=True,
+        stdout=proc.stdout or "",
+        stderr=proc.stderr or "",
+        started_at=started_iso,
+        finished_at=finished_iso,
+        elapsed_seconds=elapsed,
     )
 
 

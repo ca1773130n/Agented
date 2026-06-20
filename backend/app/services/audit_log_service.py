@@ -39,10 +39,10 @@ Field-level change records include a ``changes`` key in ``details``:
 """
 
 import collections
-import datetime
 import json
 import logging
 from typing import Any, Dict, List, Optional, Sequence
+
 from app.utils.timezone import utcnow as _utcnow
 
 audit_logger = logging.getLogger("agented.audit")

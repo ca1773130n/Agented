@@ -74,9 +74,7 @@ def test_advance_iteration_reads_stable_id_not_live_id(monkeypatch, isolated_db)
     _make_active_goal_session(session_id="origin-x")
     seen = {}
     monkeypatch.setattr(glr, "_build_resume_context", lambda sid: seen.update(resume=sid) or "CTX")
-    monkeypatch.setattr(
-        glr.ProjectSessionManager, "create_session", lambda **kw: "child-2"
-    )
+    monkeypatch.setattr(glr.ProjectSessionManager, "create_session", lambda **kw: "child-2")
     monkeypatch.setattr(glr.ProjectSessionManager, "subscribe_raw", lambda sid: ["q"])
     monkeypatch.setattr(glr.ProjectSessionManager, "send_input", lambda sid, p: True)
     monkeypatch.setattr(glr.ProjectSessionManager, "stop_session", lambda sid, *a, **k: True)
@@ -95,11 +93,15 @@ def test_advance_iteration_forwards_operator_note_into_seed(monkeypatch, isolate
     monkeypatch.setattr(glr.ProjectSessionManager, "stop_session", lambda sid, *a, **k: True)
     seeded = {}
     monkeypatch.setattr(
-        glr, "_send_initial",
+        glr,
+        "_send_initial",
         lambda sid, goal, **kw: seeded.update(resume_context=kw.get("resume_context")),
     )
     glr._advance_iteration(
-        live_id="origin-n", stable_id="origin-n", cwd="/tmp", goal="g",
+        live_id="origin-n",
+        stable_id="origin-n",
+        cwd="/tmp",
+        goal="g",
         reason="Operator note: focus on the parser",
     )
     assert "focus on the parser" in (seeded.get("resume_context") or "")

@@ -4,7 +4,6 @@ Stores per-execution quality ratings (1-5 stars) with optional feedback text.
 Supports per-trigger aggregation for the quality scoring dashboard.
 """
 
-import json
 import logging
 import sqlite3
 from typing import Optional

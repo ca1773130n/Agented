@@ -33,12 +33,12 @@ from ._runner import (  # noqa: F401  (re-export)
     init_db,
 )
 from .v04_initial import V04_MIGRATIONS
-from .v05_features import V05_MIGRATIONS
 from .v05_features import (  # noqa: F401  (re-export for legacy test imports)
+    V05_MIGRATIONS,
     _migrate_76_super_agent_dispatch,
 )
-from .v06_features import V06_MIGRATIONS
 from .v06_features import (  # noqa: F401  (re-export for legacy test imports)
+    V06_MIGRATIONS,
     _migrate_109_session_audit_columns,
     _migrate_113_rotated_from_token_unique,
     _migrate_114_trigger_events,
@@ -46,9 +46,7 @@ from .v06_features import (  # noqa: F401  (re-export for legacy test imports)
 )
 from .v07_features import V07_MIGRATIONS
 
-VERSIONED_MIGRATIONS = (
-    V04_MIGRATIONS + V05_MIGRATIONS + V06_MIGRATIONS + V07_MIGRATIONS
-)
+VERSIONED_MIGRATIONS = V04_MIGRATIONS + V05_MIGRATIONS + V06_MIGRATIONS + V07_MIGRATIONS
 
 # Backwards-compatible alias for callers that historically expected
 # ``run_migrations`` (the spec's preferred name). The actual entrypoint

@@ -36,6 +36,7 @@ class _Done:
 
 # ---- toggle round-trip --------------------------------------------------
 
+
 def test_distill_flag_roundtrips(isolated_db, tmp_path):
     _seed("proj-d1", tmp_path, distill=0)
     assert ti.get_distill_enabled("proj-d1") is False
@@ -51,11 +52,13 @@ def test_get_distill_false_for_unknown_project(isolated_db):
 
 # ---- compile uses modern `tesserae compile` + distill flag --------------
 
+
 def test_compile_uses_modern_command_with_distill_when_on(isolated_db, tmp_path):
     _seed("proj-c1", tmp_path, distill=1)
     captured: dict = {}
     with patch.object(
-        ti.subprocess, "run",
+        ti.subprocess,
+        "run",
         side_effect=lambda cmd, **kw: captured.update(cmd=cmd) or _Done(),
     ):
         res = ti.compile_workspace("proj-c1")
@@ -72,7 +75,8 @@ def test_compile_passes_no_distill_when_off(isolated_db, tmp_path):
     _seed("proj-c2", tmp_path, distill=0)
     captured: dict = {}
     with patch.object(
-        ti.subprocess, "run",
+        ti.subprocess,
+        "run",
         side_effect=lambda cmd, **kw: captured.update(cmd=cmd) or _Done(),
     ):
         ti.compile_workspace("proj-c2")
@@ -83,11 +87,13 @@ def test_compile_passes_no_distill_when_off(isolated_db, tmp_path):
 
 # ---- context_tesserae (multi-pool) --------------------------------------
 
+
 def test_context_tesserae_argv_and_text(isolated_db, tmp_path):
     _seed("proj-ctx", tmp_path)
     captured: dict = {}
     with patch.object(
-        ti.subprocess, "run",
+        ti.subprocess,
+        "run",
         side_effect=lambda cmd, **kw: captured.update(cmd=cmd) or _Done(out="DOC"),
     ):
         out = ti.context_tesserae("proj-ctx", "what is X?", multi_pool=True, budget=4000)
@@ -104,7 +110,8 @@ def test_context_tesserae_omits_multipool_when_false(isolated_db, tmp_path):
     _seed("proj-ctx3", tmp_path)
     captured: dict = {}
     with patch.object(
-        ti.subprocess, "run",
+        ti.subprocess,
+        "run",
         side_effect=lambda cmd, **kw: captured.update(cmd=cmd) or _Done(out="x"),
     ):
         ti.context_tesserae("proj-ctx3", "q", multi_pool=False)
@@ -114,7 +121,8 @@ def test_context_tesserae_omits_multipool_when_false(isolated_db, tmp_path):
 def test_context_tesserae_none_on_failure(isolated_db, tmp_path):
     _seed("proj-ctx2", tmp_path)
     with patch.object(
-        ti.subprocess, "run",
+        ti.subprocess,
+        "run",
         side_effect=lambda cmd, **kw: _Done(rc=2, out="", err="boom"),
     ):
         assert ti.context_tesserae("proj-ctx2", "q") is None
@@ -122,16 +130,19 @@ def test_context_tesserae_none_on_failure(isolated_db, tmp_path):
 
 # ---- kg-signal dispatch by toggle ---------------------------------------
 
+
 def _patch_kg(monkeypatch, tmp_path, *, distill: bool):
     monkeypatch.setattr(kg, "get_tesserae_root", lambda pid: tmp_path)
     monkeypatch.setattr(kg, "get_distill_enabled", lambda pid: distill)
     calls = {"ask": 0, "ctx": 0}
     monkeypatch.setattr(
-        kg, "ask_tesserae",
+        kg,
+        "ask_tesserae",
         lambda *a, **k: calls.__setitem__("ask", calls["ask"] + 1) or None,
     )
     monkeypatch.setattr(
-        kg, "context_tesserae",
+        kg,
+        "context_tesserae",
         lambda *a, **k: calls.__setitem__("ctx", calls["ctx"] + 1) or None,
     )
     return calls
@@ -152,6 +163,7 @@ def test_kg_signals_uses_ask_when_distill_off(isolated_db, tmp_path, monkeypatch
 
 
 # ---- route + per-project state ------------------------------------------
+
 
 def test_per_project_state_reflects_distill_toggle(isolated_db):
     # The route handler is thin glue over set_distill_enabled +

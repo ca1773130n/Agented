@@ -48,9 +48,7 @@ def test_adopt_shared_adopts_existing(isolated_db):
         conn.execute("INSERT INTO projects (id, name, status) VALUES ('proj-adopt', 'P', 'active')")
         conn.commit()
 
-    sb_id = create_shared_binding(
-        scope="global", kind="rule", asset_id="1", fingerprint="abc123"
-    )
+    sb_id = create_shared_binding(scope="global", kind="rule", asset_id="1", fingerprint="abc123")
     assert sb_id is not None
 
     with _client() as c:

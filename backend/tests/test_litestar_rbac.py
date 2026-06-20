@@ -211,6 +211,7 @@ class TestDeleteRoleLitestar:
 
     def test_admin_deletes_role(self, isolated_db):
         from app.db.rbac import get_user_role
+
         create_user_role("admin-del", "Admin", "admin")
         target = create_user_role("del-key", "Doomed", "viewer")
         with _client(isolated_db) as ls:
@@ -247,6 +248,7 @@ class TestRotateRoleLitestar:
 
     def test_admin_can_rotate(self, isolated_db):
         from app.db.rbac import get_user_role
+
         admin_id = create_user_role("admin-key-ls", "Admin", "admin")
         target_id = create_user_role("stale-key-ls", "Edit", "editor")
         with _client(isolated_db) as ls:

@@ -4,19 +4,17 @@ import datetime
 import json
 import threading
 from http import HTTPStatus
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from app.services.base_conversation_service import (
-    BaseConversationService,
     ConversationMessage,
     WordBoundaryAccumulator,
 )
 from app.services.command_conversation_service import CommandConversationService
 from app.services.hook_conversation_service import HookConversationService
 from app.services.rule_conversation_service import RuleConversationService
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -232,10 +230,7 @@ class TestBaseConversationServiceViaCommand:
         )
         # Flag must be cleared so a second subscriber doesn't
         # double-spawn.
-        assert (
-            CommandConversationService._conversations[conv_id].get("needs_kickoff")
-            is False
-        )
+        assert CommandConversationService._conversations[conv_id].get("needs_kickoff") is False
 
     @patch.object(CommandConversationService, "_process_with_claude")
     def test_second_subscribe_does_not_double_fire(self, mock_process):
@@ -260,9 +255,7 @@ class TestBaseConversationServiceViaCommand:
         next(gen2)
         # Give the would-be second spawn a chance to land.
         threading.Event().wait(0.05)
-        assert mock_process.call_count == 1, (
-            "Second subscribe must not re-fire the kickoff"
-        )
+        assert mock_process.call_count == 1, "Second subscribe must not re-fire the kickoff"
         gen1.close()
         gen2.close()
 
@@ -993,8 +986,8 @@ class TestConversationBranchService:
         assert branch.get("name") == "fix"
 
     def test_create_branch_copies_messages_up_to_index(self):
-        from app.services.conversation_branch_service import ConversationBranchService
         from app.db.conversation_branches import get_messages_for_branch
+        from app.services.conversation_branch_service import ConversationBranchService
 
         conv_id = self._create_agent_conversation_with_messages()
         branch = ConversationBranchService.create_branch(conv_id, fork_message_index=2)
@@ -1034,8 +1027,8 @@ class TestConversationBranchService:
         assert branch.get("name") == "main"
 
     def test_create_main_branch_copies_all_messages(self):
-        from app.services.conversation_branch_service import ConversationBranchService
         from app.db.conversation_branches import get_messages_for_branch
+        from app.services.conversation_branch_service import ConversationBranchService
 
         conv_id = self._create_agent_conversation_with_messages()
         branch = ConversationBranchService.create_main_branch(conv_id)

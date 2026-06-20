@@ -54,9 +54,7 @@ def list_super_agents(
     caller: Caller, limit: Optional[int] = None, offset: Optional[int] = None
 ) -> dict[str, Any]:
     if caller.user_id:
-        rows = get_for_user(
-            "super_agents", caller.user_id, limit=limit, offset=offset or 0
-        )
+        rows = get_for_user("super_agents", caller.user_id, limit=limit, offset=offset or 0)
         return {"super_agents": rows, "total_count": len(rows)}
     from app.db.super_agents import count_all_super_agents
 
@@ -86,8 +84,10 @@ def super_agent_activity_status() -> dict[str, Any]:
 
     SAs absent from the map have no active sessions.
     """
-    from app.db.super_agents import get_active_session_counts_by_super_agent
-    from app.db.super_agents import get_active_sessions_list
+    from app.db.super_agents import (
+        get_active_session_counts_by_super_agent,
+        get_active_sessions_list,
+    )
     from app.services.chat_state_service import ChatStateService
 
     counts = get_active_session_counts_by_super_agent()
@@ -133,18 +133,14 @@ def create_super_agent(data: dict, caller: Caller) -> dict[str, Any]:
             detail="A super agent with this name or configuration already exists",
         ) from None
     except sqlite3.OperationalError:
-        raise HTTPException(
-            status_code=503, detail="Database unavailable, please retry"
-        ) from None
+        raise HTTPException(status_code=503, detail="Database unavailable, please retry") from None
     if not sa_id:
         raise HTTPException(status_code=500, detail="Failed to create super agent")
     return {"message": "SuperAgent created", "super_agent_id": sa_id}
 
 
 @get("/{super_agent_id:str}", sync_to_thread=False)
-def get_super_agent_endpoint(
-    super_agent_id: str, caller: Caller
-) -> dict[str, Any]:
+def get_super_agent_endpoint(super_agent_id: str, caller: Caller) -> dict[str, Any]:
     del caller
     sa_id = super_agent_id
     if sa_id.startswith("psa-"):
@@ -161,9 +157,7 @@ def get_super_agent_endpoint(
 
 
 @put("/{super_agent_id:str}", sync_to_thread=False)
-def update_super_agent_endpoint(
-    super_agent_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def update_super_agent_endpoint(super_agent_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     if not data:
         raise ClientException(detail="JSON body required")
@@ -184,9 +178,7 @@ def update_super_agent_endpoint(
 
 
 @delete("/{super_agent_id:str}", status_code=200, sync_to_thread=False)
-def delete_super_agent_endpoint(
-    super_agent_id: str, caller: Caller
-) -> dict[str, Any]:
+def delete_super_agent_endpoint(super_agent_id: str, caller: Caller) -> dict[str, Any]:
     del caller
     if not delete_super_agent(super_agent_id):
         raise NotFoundException(detail="SuperAgent not found")
@@ -209,9 +201,7 @@ def list_sessions(super_agent_id: str, caller: Caller) -> dict[str, Any]:
 
 
 @post("/{super_agent_id:str}/sessions", sync_to_thread=False)
-def create_session(
-    super_agent_id: str, data: Optional[dict], caller: Caller
-) -> dict[str, Any]:
+def create_session(super_agent_id: str, data: Optional[dict], caller: Caller) -> dict[str, Any]:
     del caller
     from app.services.instance_service import InstanceService
     from app.services.super_agent_session_service import SuperAgentSessionService
@@ -243,9 +233,7 @@ def create_session(
             session_type=session_type,
         )
         if not result:
-            raise HTTPException(
-                status_code=500, detail="Failed to create session worktree"
-            )
+            raise HTTPException(status_code=500, detail="Failed to create session worktree")
         session_id = result["session_id"]
     else:
         session_id, error = SuperAgentSessionService.create_session(
@@ -274,12 +262,8 @@ def create_session(
     }
 
 
-@get(
-    "/{super_agent_id:str}/sessions/{session_id:str}", sync_to_thread=False
-)
-def get_session_endpoint(
-    super_agent_id: str, session_id: str, caller: Caller
-) -> dict[str, Any]:
+@get("/{super_agent_id:str}/sessions/{session_id:str}", sync_to_thread=False)
+def get_session_endpoint(super_agent_id: str, session_id: str, caller: Caller) -> dict[str, Any]:
     del caller, super_agent_id
     session = get_super_agent_session(session_id)
     if not session:
@@ -299,9 +283,7 @@ def send_session_message(
 
     if not data or not data.get("message"):
         raise ClientException(detail="message is required")
-    success, error = SuperAgentSessionService.send_message(
-        session_id, data["message"]
-    )
+    success, error = SuperAgentSessionService.send_message(session_id, data["message"])
     if not success:
         if "not found" in error.lower():
             raise NotFoundException(detail=error)
@@ -313,9 +295,7 @@ def send_session_message(
     "/{super_agent_id:str}/sessions/{session_id:str}/end",
     sync_to_thread=False,
 )
-def end_session(
-    super_agent_id: str, session_id: str, caller: Caller
-) -> dict[str, Any]:
+def end_session(super_agent_id: str, session_id: str, caller: Caller) -> dict[str, Any]:
     del caller, super_agent_id
     from app.services.instance_service import InstanceService
     from app.services.super_agent_session_service import SuperAgentSessionService
@@ -338,20 +318,14 @@ def end_session(
     media_type=MediaType.TEXT,
     sync_to_thread=False,
 )
-def stream_session(
-    super_agent_id: str, session_id: str, caller: Caller
-) -> Stream:
+def stream_session(super_agent_id: str, session_id: str, caller: Caller) -> Stream:
     del caller, super_agent_id
     from app.services.super_agent_session_service import SuperAgentSessionService
 
     def generate():
         while True:
             for line in SuperAgentSessionService.get_output_lines(session_id):
-                yield (
-                    "data: "
-                    + json.dumps({"type": "output", "content": line})
-                    + "\n\n"
-                )
+                yield ("data: " + json.dumps({"type": "output", "content": line}) + "\n\n")
             yield "data: " + json.dumps({"type": "heartbeat"}) + "\n\n"
             time.sleep(5)
 
@@ -396,9 +370,7 @@ def _emit_git_action_activity(
     "/{super_agent_id:str}/sessions/{session_id:str}/git-action",
     sync_to_thread=False,
 )
-def git_action(
-    super_agent_id: str, session_id: str, data: dict, caller: Caller
-) -> Any:
+def git_action(super_agent_id: str, session_id: str, data: dict, caller: Caller) -> Any:
     del caller
     from app.db.super_agents import update_super_agent_session
 
@@ -422,11 +394,15 @@ def git_action(
             message = data.get("message", "Work in progress")
             subprocess.run(
                 ["git", "-C", worktree_path, "add", "-A"],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
             result = subprocess.run(
                 ["git", "-C", worktree_path, "commit", "-m", message],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
             response = {
                 "action": action,
@@ -436,7 +412,9 @@ def git_action(
         elif action == "push":
             result = subprocess.run(
                 ["git", "-C", worktree_path, "push", "-u", "origin", branch_name],
-                capture_output=True, text=True, timeout=60,
+                capture_output=True,
+                text=True,
+                timeout=60,
             )
             response = {
                 "action": action,
@@ -448,13 +426,22 @@ def git_action(
             pr_body = data.get("pr_body", "")
             result = subprocess.run(
                 [
-                    "gh", "pr", "create",
-                    "--base", "main",
-                    "--head", branch_name,
-                    "--title", pr_title,
-                    "--body", pr_body,
+                    "gh",
+                    "pr",
+                    "create",
+                    "--base",
+                    "main",
+                    "--head",
+                    branch_name,
+                    "--title",
+                    pr_title,
+                    "--body",
+                    pr_body,
                 ],
-                capture_output=True, text=True, timeout=30, cwd=worktree_path,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                cwd=worktree_path,
             )
             if result.returncode != 0:
                 response = {"action": action, "success": False, "output": result.stderr.strip()}
@@ -471,16 +458,22 @@ def git_action(
                 if proj and proj.get("local_path"):
                     subprocess.run(
                         ["git", "-C", proj["local_path"], "pull", "--ff-only"],
-                        capture_output=True, text=True, timeout=60,
+                        capture_output=True,
+                        text=True,
+                        timeout=60,
                     )
             result = subprocess.run(
                 ["git", "-C", worktree_path, "rebase", "main"],
-                capture_output=True, text=True, timeout=60,
+                capture_output=True,
+                text=True,
+                timeout=60,
             )
             if result.returncode != 0:
                 subprocess.run(
                     ["git", "-C", worktree_path, "rebase", "--abort"],
-                    capture_output=True, text=True, timeout=10,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
                 )
                 response = {"action": action, "success": False, "output": result.stderr.strip()}
             else:
@@ -488,11 +481,15 @@ def git_action(
         elif action == "diff":
             result = subprocess.run(
                 ["git", "-C", worktree_path, "diff", "main...HEAD", "--stat"],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
             diff_detail = subprocess.run(
                 ["git", "-C", worktree_path, "diff", "main...HEAD"],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
             response = {
                 "action": action,
@@ -507,9 +504,7 @@ def git_action(
             action,
             {"action": action, "success": False, "output": f"Git {action} timed out"},
         )
-        raise HTTPException(
-            status_code=504, detail=f"Git {action} timed out"
-        ) from None
+        raise HTTPException(status_code=504, detail=f"Git {action} timed out") from None
     except Exception as exc:  # noqa: BLE001
         _emit_git_action_activity(
             super_agent_id,
@@ -517,9 +512,7 @@ def git_action(
             action,
             {"action": action, "success": False, "output": f"Git {action} failed: {exc}"},
         )
-        raise HTTPException(
-            status_code=500, detail=f"Git {action} failed: {exc}"
-        ) from None
+        raise HTTPException(status_code=500, detail=f"Git {action} failed: {exc}") from None
 
     _emit_git_action_activity(super_agent_id, session_id, action, response)
     return response
@@ -537,9 +530,7 @@ def list_documents(super_agent_id: str, caller: Caller) -> dict[str, Any]:
 
 
 @post("/{super_agent_id:str}/documents", sync_to_thread=False)
-def create_document(
-    super_agent_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def create_document(super_agent_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     if not data:
         raise ClientException(detail="JSON body required")
@@ -556,18 +547,12 @@ def create_document(
         content=data.get("content", ""),
     )
     if doc_id is None:
-        raise ClientException(
-            detail="Invalid doc_type or failed to create document"
-        )
+        raise ClientException(detail="Invalid doc_type or failed to create document")
     return {"message": "Document created", "document_id": doc_id}
 
 
-@get(
-    "/{super_agent_id:str}/documents/{doc_id:int}", sync_to_thread=False
-)
-def get_document_endpoint(
-    super_agent_id: str, doc_id: int, caller: Caller
-) -> dict[str, Any]:
+@get("/{super_agent_id:str}/documents/{doc_id:int}", sync_to_thread=False)
+def get_document_endpoint(super_agent_id: str, doc_id: int, caller: Caller) -> dict[str, Any]:
     del caller, super_agent_id
     doc = get_super_agent_document(doc_id)
     if not doc:
@@ -575,9 +560,7 @@ def get_document_endpoint(
     return doc
 
 
-@put(
-    "/{super_agent_id:str}/documents/{doc_id:int}", sync_to_thread=False
-)
+@put("/{super_agent_id:str}/documents/{doc_id:int}", sync_to_thread=False)
 def update_document_endpoint(
     super_agent_id: str, doc_id: int, data: dict, caller: Caller
 ) -> dict[str, Any]:
@@ -598,9 +581,7 @@ def update_document_endpoint(
     status_code=200,
     sync_to_thread=False,
 )
-def delete_document_endpoint(
-    super_agent_id: str, doc_id: int, caller: Caller
-) -> dict[str, Any]:
+def delete_document_endpoint(super_agent_id: str, doc_id: int, caller: Caller) -> dict[str, Any]:
     del caller, super_agent_id
     if not delete_super_agent_document(doc_id):
         raise NotFoundException(detail="Document not found")
@@ -639,9 +620,7 @@ def _resolve_default_project_for_sa(super_agent_id: str) -> Optional[str]:
 
 
 @post("/{super_agent_id:str}/ouroboros-runs", sync_to_thread=False)
-def start_ouroboros_run(
-    super_agent_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def start_ouroboros_run(super_agent_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     """v0.7.91 — bridge: spawn a goal_loop project session that
     inherits the SuperAgent's backend + model and runs in
     Ouroboros mode.
@@ -695,9 +674,7 @@ def start_ouroboros_run(
         raise NotFoundException(detail="SuperAgent not found")
 
     body = data or {}
-    project_id = body.get("project_id") or _resolve_default_project_for_sa(
-        super_agent_id
-    )
+    project_id = body.get("project_id") or _resolve_default_project_for_sa(super_agent_id)
     goal = (body.get("goal") or "").strip()
     if not project_id:
         raise ClientException(
@@ -732,9 +709,7 @@ def start_ouroboros_run(
     if not handler:
         from litestar.exceptions import HTTPException
 
-        raise HTTPException(
-            status_code=500, detail="goal_loop handler is not registered"
-        )
+        raise HTTPException(status_code=500, detail="goal_loop handler is not registered")
 
     # Mirror the SA's backend identity into the judge config so
     # judge calls go to the same backend the SA itself would use
@@ -902,9 +877,7 @@ def export_super_agent(data: dict) -> dict[str, Any]:
         raise ClientException(detail="super_agent_id is required")
     export_format = data.get("export_format", "zip")
     if export_format not in ("directory", "zip"):
-        raise ClientException(
-            detail="export_format must be 'directory' or 'zip'"
-        )
+        raise ClientException(detail="export_format must be 'directory' or 'zip'")
     try:
         if export_format == "directory":
             output_dir = data.get("output_dir") or tempfile.mkdtemp(prefix="agented-sa-export-")
@@ -920,9 +893,7 @@ def export_super_agent(data: dict) -> dict[str, Any]:
     except ValueError as exc:
         raise NotFoundException(detail=str(exc)) from None
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(
-            status_code=500, detail=f"Export failed: {exc}"
-        ) from None
+        raise HTTPException(status_code=500, detail=f"Export failed: {exc}") from None
 
 
 @post("/import", status_code=HTTPStatus.CREATED, sync_to_thread=False)
@@ -947,9 +918,7 @@ def import_super_agent(data: dict) -> dict[str, Any]:
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(
-            status_code=500, detail=f"Import failed: {exc}"
-        ) from None
+        raise HTTPException(status_code=500, detail=f"Import failed: {exc}") from None
 
 
 @post("/validate", sync_to_thread=False)
@@ -975,9 +944,7 @@ def validate_super_agent_package(data: dict) -> dict[str, Any]:
     except NotFoundException:
         raise
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(
-            status_code=500, detail=f"Validation failed: {exc}"
-        ) from None
+        raise HTTPException(status_code=500, detail=f"Validation failed: {exc}") from None
 
 
 super_agent_exports_router = Router(

@@ -6,7 +6,6 @@ from typing import Optional
 from .connection import get_connection
 from .ids import generate_id
 
-
 CONDITION_ID_PREFIX = "tcond-"
 CONDITION_ID_LENGTH = 6
 

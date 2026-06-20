@@ -1,4 +1,5 @@
 """Regression: workflow session capture must key on the execution-row id."""
+
 from __future__ import annotations
 
 import inspect
@@ -6,17 +7,15 @@ import inspect
 import pytest
 
 from app.database import get_connection
-from app.services.harness_failure_annotator import _fetch_workflow
 from app.services import workflow_execution_service as wes
+from app.services.harness_failure_annotator import _fetch_workflow
 
 
 @pytest.fixture()
 def _wf_rows(isolated_db):
     with get_connection() as conn:
         # Parent workflow template row required by FK on workflow_executions
-        conn.execute(
-            "INSERT INTO workflows (id, name) VALUES ('wf-tmpl-1', 'Test Workflow')"
-        )
+        conn.execute("INSERT INTO workflows (id, name) VALUES ('wf-tmpl-1', 'Test Workflow')")
         conn.execute(
             "INSERT INTO workflow_executions (id, workflow_id, version, status) "
             "VALUES ('wfex-1', 'wf-tmpl-1', 1, 'completed')"

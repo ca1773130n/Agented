@@ -43,8 +43,15 @@ def test_stop_route_signals_runner_so_reset_children_actually_stop():
     only kills the original (already-dead) process."""
     calls = []
     with (
-        patch("app.services.goal_loop_runner.stop_runner", side_effect=lambda sid: calls.append(("runner", sid))),
-        patch.object(gr.ProjectSessionManager, "stop_session", side_effect=lambda sid: calls.append(("psm", sid)) or True),
+        patch(
+            "app.services.goal_loop_runner.stop_runner",
+            side_effect=lambda sid: calls.append(("runner", sid)),
+        ),
+        patch.object(
+            gr.ProjectSessionManager,
+            "stop_session",
+            side_effect=lambda sid: calls.append(("psm", sid)) or True,
+        ),
     ):
         out = gr.stop_session.fn("p", "sess")
     assert ("runner", "sess") in calls

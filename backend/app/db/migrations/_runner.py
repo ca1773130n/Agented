@@ -539,5 +539,3 @@ def _migrate_to_string_ids(conn):
 
     conn.commit()
     logger.info("Migration complete. Migrated %d bots and %d paths.", len(old_bots), len(old_paths))
-
-

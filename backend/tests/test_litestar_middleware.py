@@ -2,18 +2,11 @@
 
 import os
 
-from litestar import Litestar, get
+from litestar import get
 from litestar.config.cors import CORSConfig
 from litestar.testing import create_test_client
 
 from app_litestar.exception_handlers import build_exception_handlers
-from app_litestar.middleware import (
-    ApiKeyMiddleware,
-    RateLimitMiddleware,
-    RequestContextMiddleware,
-    RequestLoggingMiddleware,
-    SecurityHeadersMiddleware,
-)
 
 
 @get("/api/test/echo", sync_to_thread=False)

@@ -208,7 +208,8 @@ class ChatStateService:
         """
         with cls._lock:
             return {
-                sid for sid, session in cls._sessions.items()
+                sid
+                for sid, session in cls._sessions.items()
                 if session.get("status") == "streaming"
             }
 

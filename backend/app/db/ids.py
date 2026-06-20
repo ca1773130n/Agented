@@ -465,9 +465,7 @@ def _get_unique_dead_end_id(conn) -> str:
 def _get_unique_genome_snapshot_id(conn) -> str:
     while True:
         gid = generate_genome_snapshot_id()
-        cursor = conn.execute(
-            "SELECT id FROM project_genome_snapshots WHERE id = ?", (gid,)
-        )
+        cursor = conn.execute("SELECT id FROM project_genome_snapshots WHERE id = ?", (gid,))
         if cursor.fetchone() is None:
             return gid
 
@@ -481,9 +479,7 @@ def generate_evolve_run_id() -> str:
 def _get_unique_evolve_run_id(conn) -> str:
     while True:
         eid = generate_evolve_run_id()
-        cursor = conn.execute(
-            "SELECT id FROM grd_evolve_runs WHERE id = ?", (eid,)
-        )
+        cursor = conn.execute("SELECT id FROM grd_evolve_runs WHERE id = ?", (eid,))
         if cursor.fetchone() is None:
             return eid
 
@@ -496,9 +492,7 @@ def generate_harness_round_id() -> str:
 def _get_unique_harness_round_id(conn) -> str:
     while True:
         hid = generate_harness_round_id()
-        cursor = conn.execute(
-            "SELECT id FROM grd_harness_rounds WHERE id = ?", (hid,)
-        )
+        cursor = conn.execute("SELECT id FROM grd_harness_rounds WHERE id = ?", (hid,))
         if cursor.fetchone() is None:
             return hid
 
@@ -511,9 +505,7 @@ def generate_plan_selection_id() -> str:
 def _get_unique_plan_selection_id(conn) -> str:
     while True:
         pid = generate_plan_selection_id()
-        cursor = conn.execute(
-            "SELECT id FROM grd_plan_selections WHERE id = ?", (pid,)
-        )
+        cursor = conn.execute("SELECT id FROM grd_plan_selections WHERE id = ?", (pid,))
         if cursor.fetchone() is None:
             return pid
 
@@ -526,9 +518,7 @@ def generate_genome_suggestions_id() -> str:
 def _get_unique_genome_suggestions_id(conn) -> str:
     while True:
         gid = generate_genome_suggestions_id()
-        cursor = conn.execute(
-            "SELECT id FROM grd_genome_suggestions WHERE id = ?", (gid,)
-        )
+        cursor = conn.execute("SELECT id FROM grd_genome_suggestions WHERE id = ?", (gid,))
         if cursor.fetchone() is None:
             return gid
 

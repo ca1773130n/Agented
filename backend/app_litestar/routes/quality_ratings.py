@@ -27,9 +27,7 @@ def list_entries(
 ) -> dict[str, Any]:
     if not (1 <= limit <= 200):
         raise ClientException(detail="limit must be between 1 and 200")
-    entries = get_quality_entries(
-        trigger_id=trigger_id or None, limit=limit, offset=offset
-    )
+    entries = get_quality_entries(trigger_id=trigger_id or None, limit=limit, offset=offset)
     return {"entries": entries, "total": len(entries)}
 
 

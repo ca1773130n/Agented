@@ -5,9 +5,6 @@ isolation, per-route override beats default, 429 response shape,
 env-driven defaults, regression of webhook rules, and health-bypass.
 """
 
-from importlib import reload
-from unittest.mock import patch
-
 import pytest
 
 
@@ -174,6 +171,7 @@ class TestResponseShape:
 
     async def test_429_body_has_rate_limited_code(self):
         import json as _json
+
         from app_litestar.middleware import RateLimitMiddleware
         from app_litestar.rate_limit_guard import register_override
 
@@ -214,14 +212,14 @@ class TestFullStackOrdering:
         a budget (key wins over IP)."""
         from litestar import get
         from litestar.testing import create_test_client
+
+        from app.database import get_connection
+        from app.db.rbac import create_user_role, generate_api_key
         from app_litestar.middleware import ApiKeyMiddleware, RateLimitMiddleware
         from app_litestar.rate_limit_guard import (
             clear_overrides,
             register_override,
         )
-        from app.database import get_connection
-        from app.db.rbac import create_user_role, generate_api_key
-        from app.db.sessions import create_session
 
         clear_overrides()
         # Tighten /api/* GET so we hit the limit fast.
@@ -266,13 +264,14 @@ class TestFullStackOrdering:
         test above which asserts the symmetric shared-budget case."""
         from litestar import get
         from litestar.testing import create_test_client
+
+        from app.database import get_connection
+        from app.db.rbac import create_user_role, generate_api_key
         from app_litestar.middleware import ApiKeyMiddleware, RateLimitMiddleware
         from app_litestar.rate_limit_guard import (
             clear_overrides,
             register_override,
         )
-        from app.database import get_connection
-        from app.db.rbac import create_user_role, generate_api_key
 
         clear_overrides()
         register_override("GET", "/api/probe-iso", 3, 60.0)

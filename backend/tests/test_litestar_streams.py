@@ -136,7 +136,6 @@ def test_stream_setup_yields_events(isolated_db, monkeypatch):
 
 def test_stream_project_chat_passes_last_event_id_cursor(isolated_db, monkeypatch):
     """Project chat stream forwards Last-Event-ID as the seq cursor; junk → 0."""
-    from app.database import get_super_agent_sessions
     from app.services import chat_state_service as svc
     from app_litestar.routes import streams as streams_module
 

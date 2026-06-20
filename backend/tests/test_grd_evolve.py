@@ -27,7 +27,6 @@ from app.db.grd_evolve import (
     upsert_evolve_state,
 )
 
-
 # ---------------------------------------------------------------------
 # Migration v129
 # ---------------------------------------------------------------------
@@ -38,15 +37,10 @@ def test_migration_129_created_grd_evolve_runs(isolated_db):
     with get_connection() as conn:
         tables = {
             r[0]
-            for r in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
+            for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         }
         assert "grd_evolve_runs" in tables, "migration 129 must create grd_evolve_runs"
-        cols = {
-            row[1]
-            for row in conn.execute("PRAGMA table_info(grd_evolve_runs)").fetchall()
-        }
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(grd_evolve_runs)").fetchall()}
         for col in (
             "id",
             "project_id",
@@ -108,9 +102,7 @@ def test_get_evolve_run_by_session(isolated_db):
     del isolated_db
     with get_connection() as conn:
         pid = _seed_project(conn)
-    create_evolve_run(
-        project_id=pid, session_id="psess-bysess1", config={}
-    )
+    create_evolve_run(project_id=pid, session_id="psess-bysess1", config={})
     run = get_evolve_run_by_session("psess-bysess1")
     assert run is not None
     assert run["session_id"] == "psess-bysess1"
@@ -158,9 +150,7 @@ def test_upsert_evolve_state_writes_iteration_and_state(isolated_db):
 def test_upsert_evolve_state_missing_session_returns_false(isolated_db):
     del isolated_db
     # No row matches → no-op, returns False (caller treats as "skip").
-    ok = upsert_evolve_state(
-        session_id="psess-nope", iteration=1, state_json="{}"
-    )
+    ok = upsert_evolve_state(session_id="psess-nope", iteration=1, state_json="{}")
     assert ok is False
 
 
@@ -223,9 +213,7 @@ def test_runner_on_state_change_writes_through(isolated_db, monkeypatch):
 
     monkeypatch.setattr(grd_evolve_runner, "ProjectSessionManager", _FakePSM)
 
-    grd_evolve_runner._on_state_change(
-        "psess-runr1", json.dumps({"iteration": 5})
-    )
+    grd_evolve_runner._on_state_change("psess-runr1", json.dumps({"iteration": 5}))
     run = get_evolve_run_by_session("psess-runr1")
     assert run["iteration"] == 5
     assert len(broadcasts) == 1
@@ -251,9 +239,7 @@ def test_runner_on_state_change_no_row_silently_skips(isolated_db, monkeypatch):
 
     monkeypatch.setattr(grd_evolve_runner, "ProjectSessionManager", _FakePSM)
     # No create_evolve_run call → upsert returns False → no broadcast.
-    grd_evolve_runner._on_state_change(
-        "psess-norow", json.dumps({"iteration": 1})
-    )
+    grd_evolve_runner._on_state_change("psess-norow", json.dumps({"iteration": 1}))
     assert broadcasts == []
 
 

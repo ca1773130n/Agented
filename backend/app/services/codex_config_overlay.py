@@ -41,9 +41,7 @@ _PASSTHROUGH = (
 _OVERLAY_PREFIX = "agented-codex-overlay"
 
 
-def prepare_session_overlay(
-    session_id: str, user_config_dir: str
-) -> Optional[str]:
+def prepare_session_overlay(session_id: str, user_config_dir: str) -> Optional[str]:
     return prepare_cli_overlay(
         session_id=session_id,
         user_config_dir=user_config_dir,
@@ -58,8 +56,8 @@ def cleanup_session_overlay(session_id: str) -> None:
 
 def _toml_quote(value: str) -> str:
     """Minimal TOML basic-string quoter — escapes backslash + quote."""
-    escaped = value.replace("\\", "\\\\").replace("\"", "\\\"")
-    return f"\"{escaped}\""
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
 
 
 def _toml_array(values) -> str:
@@ -101,9 +99,7 @@ def apply_forge_bundle(overlay_dir: str, bundle: dict) -> None:
         return
     base = Path(overlay_dir)
     if not base.exists():
-        logger.warning(
-            "codex_overlay: dir %s missing, skipping apply", overlay_dir
-        )
+        logger.warning("codex_overlay: dir %s missing, skipping apply", overlay_dir)
         return
 
     _append_mcp_servers(base, bundle.get("mcp_servers") or {})
@@ -151,9 +147,7 @@ def _write_prompts(base: Path, overlay_files: dict) -> None:
         try:
             target.relative_to(base_resolved)
         except ValueError:
-            logger.warning(
-                "codex_overlay: refusing to write outside overlay (%s)", rel
-            )
+            logger.warning("codex_overlay: refusing to write outside overlay (%s)", rel)
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
         try:

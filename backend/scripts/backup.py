@@ -15,20 +15,18 @@ Emits a JSON summary on stdout for scripted callers.
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import json
 import logging
 import os
 import shlex
-import shutil
 import sqlite3
 import subprocess
 import sys
 import time
 from pathlib import Path
 from typing import Optional
-from app.utils.timezone import utcnow as _utcnow
 
+from app.utils.timezone import utcnow as _utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +151,9 @@ def sync_remote(snapshot_path: Path, remote_cmd_template: str) -> bool:
     if result.returncode != 0:
         logger.warning(
             "backup: remote sync exit=%d cmd=%r stderr=%r",
-            result.returncode, cmd, result.stderr[:500],
+            result.returncode,
+            cmd,
+            result.stderr[:500],
         )
         return False
     return True
@@ -237,19 +237,28 @@ def main(argv: Optional[list[str]] = None) -> int:
     for label, source in targets:
         if not source.exists():
             print(f"ERROR: source DB missing: {source}", file=sys.stderr)
-            summary["targets"].append(_target_entry(
-                label=label, source=source, ok=False, error="source missing",
-            ))
+            summary["targets"].append(
+                _target_entry(
+                    label=label,
+                    source=source,
+                    ok=False,
+                    error="source missing",
+                )
+            )
             overall_ok = False
             continue
         try:
             dest = snapshot_one(label, source, dest_dir, timestamp=timestamp)
         except Exception as exc:  # noqa: BLE001
             print(f"ERROR: snapshot failed for {label}: {exc}", file=sys.stderr)
-            summary["targets"].append(_target_entry(
-                label=label, source=source, ok=False,
-                error=f"snapshot failed: {exc}",
-            ))
+            summary["targets"].append(
+                _target_entry(
+                    label=label,
+                    source=source,
+                    ok=False,
+                    error=f"snapshot failed: {exc}",
+                )
+            )
             overall_ok = False
             continue
 
@@ -260,11 +269,17 @@ def main(argv: Optional[list[str]] = None) -> int:
 
         removed = apply_retention(dest_dir, retention_days, label=label)
         summary["removed"] += removed
-        summary["targets"].append(_target_entry(
-            label=label, source=source, ok=True,
-            snapshot=dest, size_bytes=size_bytes,
-            remote_synced=remote_synced, retained_removed=removed,
-        ))
+        summary["targets"].append(
+            _target_entry(
+                label=label,
+                source=source,
+                ok=True,
+                snapshot=dest,
+                size_bytes=size_bytes,
+                remote_synced=remote_synced,
+                retained_removed=removed,
+            )
+        )
 
     summary["elapsed_seconds"] = round(time.monotonic() - started, 3)
     if not args.quiet:

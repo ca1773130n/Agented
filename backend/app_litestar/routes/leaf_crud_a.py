@@ -23,6 +23,7 @@ from app.db.bot_memory import (
     upsert_memory_entry,
 )
 from app.db.connection import get_connection
+from app.db.prompt_snippets import create_snippet as db_create_snippet
 from app.db.prompt_snippets import (
     delete_snippet,
     get_all_snippets,
@@ -30,7 +31,6 @@ from app.db.prompt_snippets import (
     get_snippet_by_name,
     update_snippet,
 )
-from app.db.prompt_snippets import create_snippet as db_create_snippet
 from app.db.scope_filters import (
     add_pattern,
     delete_pattern,

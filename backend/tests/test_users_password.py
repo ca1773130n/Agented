@@ -46,10 +46,9 @@ class TestSetPassword:
         assert set_password(uid, "secret") is True
 
         from app.db.connection import get_connection
+
         with get_connection() as conn:
-            row = conn.execute(
-                "SELECT password_hash FROM users WHERE id = ?", (uid,)
-            ).fetchone()
+            row = conn.execute("SELECT password_hash FROM users WHERE id = ?", (uid,)).fetchone()
         assert row[0] is not None
         assert verify_password("secret", row[0]) is True
 

@@ -30,19 +30,11 @@ def create_team_execution_tables(conn) -> None:
         )
         """
     )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_team_executions_team ON team_executions(team_id)")
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_team_executions_team "
-        "ON team_executions(team_id)"
+        "CREATE INDEX IF NOT EXISTS idx_team_executions_project ON team_executions(project_id)"
     )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_team_executions_status ON team_executions(status)")
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_team_executions_project "
-        "ON team_executions(project_id)"
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_team_executions_status "
-        "ON team_executions(status)"
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_team_executions_started "
-        "ON team_executions(started_at DESC)"
+        "CREATE INDEX IF NOT EXISTS idx_team_executions_started ON team_executions(started_at DESC)"
     )

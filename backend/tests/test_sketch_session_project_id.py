@@ -19,7 +19,6 @@ These tests pin three things:
 
 from __future__ import annotations
 
-import sqlite3
 from typing import Any
 
 import pytest
@@ -87,9 +86,7 @@ def _get_session_project_id(session_id: str) -> Any:
 def test_new_session_stamps_project_id(isolated_db):
     _seed_project("proj-xyz")
     sa_id = create_super_agent(name="planner")
-    sess = SuperAgentSessionService.get_or_create_session(
-        sa_id, project_id="proj-xyz"
-    )
+    sess = SuperAgentSessionService.get_or_create_session(sa_id, project_id="proj-xyz")
     assert _get_session_project_id(sess) == "proj-xyz"
     matches = get_sessions_for_project("proj-xyz")
     assert any(s["id"] == sess for s in matches)
@@ -106,9 +103,7 @@ def test_orphan_session_gets_project_id_backfilled(isolated_db):
     assert _get_session_project_id(sess) is None  # baseline
 
     # Same SA, same call shape, but now we have a project context:
-    sess2 = SuperAgentSessionService.get_or_create_session(
-        sa_id, project_id="proj-xyz"
-    )
+    sess2 = SuperAgentSessionService.get_or_create_session(sa_id, project_id="proj-xyz")
     assert sess2 == sess  # session reused, not recreated
     assert _get_session_project_id(sess) == "proj-xyz"
     assert any(s["id"] == sess for s in get_sessions_for_project("proj-xyz"))
@@ -120,12 +115,8 @@ def test_existing_project_id_is_not_overwritten(isolated_db):
     _seed_project("proj-A")
     _seed_project("proj-B")
     sa_id = create_super_agent(name="planner")
-    sess = SuperAgentSessionService.get_or_create_session(
-        sa_id, project_id="proj-A"
-    )
-    sess2 = SuperAgentSessionService.get_or_create_session(
-        sa_id, project_id="proj-B"
-    )
+    sess = SuperAgentSessionService.get_or_create_session(sa_id, project_id="proj-A")
+    sess2 = SuperAgentSessionService.get_or_create_session(sa_id, project_id="proj-B")
     assert sess2 == sess
     assert _get_session_project_id(sess) == "proj-A"
 

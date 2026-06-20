@@ -110,8 +110,7 @@ class TestSetupStatus:
 
         with get_connection() as conn:
             conn.execute(
-                "INSERT OR REPLACE INTO app_meta (key, value) VALUES "
-                "('harness_synced_at', ?)",
+                "INSERT OR REPLACE INTO app_meta (key, value) VALUES ('harness_synced_at', ?)",
                 ("2026-05-03T00:00:00Z",),
             )
             conn.commit()
@@ -215,6 +214,8 @@ class TestReadiness:
         assert body["status"] == "ok"
         assert "components" not in body
 
-    @pytest.mark.skip(reason="Authenticated readiness depends on Flask app context for ProcessManager + cli proxy; covered indirectly by Flask integration tests.")
+    @pytest.mark.skip(
+        reason="Authenticated readiness depends on Flask app context for ProcessManager + cli proxy; covered indirectly by Flask integration tests."
+    )
     def test_authenticated_full_response(self, isolated_db):
         pass

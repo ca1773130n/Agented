@@ -17,15 +17,17 @@ def test_finalize_round_mirrors_record_and_patch(tmp_path, isolated_db):
     with open(os.path.join(rounds, "patch.json"), "w") as f:
         json.dump({"summary": "tweak", "confidence": 0.72, "entries": []}, f)
 
-    stdout = json.dumps({
-        "round_id": "20260614-120000",
-        "status": "applied",
-        "detail": "ok",
-        "evidence_count": 9,
-        "patch_hash": "abcd",
-        "eval_report": {"checks": [{"name": "tsc", "exit_code": 0}]},
-        "applied_sha": "sha9",
-    })
+    stdout = json.dumps(
+        {
+            "round_id": "20260614-120000",
+            "status": "applied",
+            "detail": "ok",
+            "evidence_count": 9,
+            "patch_hash": "abcd",
+            "eval_report": {"checks": [{"name": "tsc", "exit_code": 0}]},
+            "applied_sha": "sha9",
+        }
+    )
 
     r._finalize_round(pid, cwd, stdout, 0)
 

@@ -45,8 +45,15 @@ def upsert_genome_suggestions(
                     suggestions_path = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """,
-                (reflections_scanned, baseline_confirmed_rate, tokens_tested,
-                 suggestions_json, 1 if applied else 0, suggestions_path, gid),
+                (
+                    reflections_scanned,
+                    baseline_confirmed_rate,
+                    tokens_tested,
+                    suggestions_json,
+                    1 if applied else 0,
+                    suggestions_path,
+                    gid,
+                ),
             )
         else:
             gid = _get_unique_genome_suggestions_id(conn)
@@ -57,8 +64,16 @@ def upsert_genome_suggestions(
                      tokens_tested, suggestions_json, applied, suggestions_path)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (gid, project_id, reflections_scanned, baseline_confirmed_rate,
-                 tokens_tested, suggestions_json, 1 if applied else 0, suggestions_path),
+                (
+                    gid,
+                    project_id,
+                    reflections_scanned,
+                    baseline_confirmed_rate,
+                    tokens_tested,
+                    suggestions_json,
+                    1 if applied else 0,
+                    suggestions_path,
+                ),
             )
         conn.commit()
         return gid

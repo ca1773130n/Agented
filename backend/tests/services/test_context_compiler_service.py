@@ -11,9 +11,15 @@ import pytest
 
 from app.db import (
     add_project_forge_binding,
-    create_command as db_create_command,
-    create_hook as db_create_hook,
     create_project,
+)
+from app.db import (
+    create_command as db_create_command,
+)
+from app.db import (
+    create_hook as db_create_hook,
+)
+from app.db import (
     create_rule as db_create_rule,
 )
 from app.services.context_compiler_service import (
@@ -113,8 +119,7 @@ def test_subagent_binding_included_in_bundle(project):
     assert "agents/code-reviewer.md" in bundle.overlay_files
     assert bundle.overlay_files["agents/code-reviewer.md"] == "You review code for bugs."
     assert any(
-        rb["kind"] == "subagent" and rb["asset_id"] == sa["id"]
-        for rb in bundle.resolved_bindings
+        rb["kind"] == "subagent" and rb["asset_id"] == sa["id"] for rb in bundle.resolved_bindings
     )
     assert not bundle.is_empty()
 

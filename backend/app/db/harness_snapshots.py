@@ -50,8 +50,7 @@ def upsert_snapshot(
 def get_snapshot(session_kind: str, session_id: str) -> Optional[dict]:
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT * FROM session_harness_snapshots "
-            "WHERE session_kind = ? AND session_id = ?",
+            "SELECT * FROM session_harness_snapshots WHERE session_kind = ? AND session_id = ?",
             (session_kind, session_id),
         ).fetchone()
     if row is None:
@@ -92,9 +91,7 @@ def list_for_project(
 def _row_to_dict(row) -> dict:
     d = dict(row)
     try:
-        d["resolved_bindings"] = json.loads(
-            d.pop("resolved_bindings_json") or "[]"
-        )
+        d["resolved_bindings"] = json.loads(d.pop("resolved_bindings_json") or "[]")
     except (TypeError, ValueError):
         d["resolved_bindings"] = []
     return d

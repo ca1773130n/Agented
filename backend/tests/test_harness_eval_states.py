@@ -1,4 +1,3 @@
-import pytest
 from app.database import get_connection
 from app.db import harness_evolution as evo
 
@@ -27,7 +26,7 @@ def test_evaluating_state_allowed(isolated_db):
 
 
 def test_eval_failed_is_terminal(isolated_db):
-    from app.models.harness_evolution import EvalVerdict, CheckResult
+    from app.models.harness_evolution import CheckResult, EvalVerdict
 
     rid = _seed_round()
     evo.mark_running(rid)

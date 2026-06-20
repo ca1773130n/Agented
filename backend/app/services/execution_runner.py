@@ -11,9 +11,6 @@ import subprocess
 import threading
 from typing import Dict, List, Optional
 
-from app.config import PROJECT_ROOT
-
-from ..database import PREDEFINED_TRIGGER_ID
 from ..db.health_alerts import create_health_alert
 from .audit_log_service import AuditLogService
 from .budget_service import BudgetService

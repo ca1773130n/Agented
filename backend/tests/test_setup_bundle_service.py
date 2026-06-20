@@ -6,7 +6,6 @@ exists (separate ``cli_plugins_installed`` flag, decoupled from
 ``bundle_installed``).
 """
 
-import app.services.setup_service as ss
 from app.database import get_setting, set_setting
 from app.services.setup_service import (
     BUNDLE_HARNESS_CLI_PLUGINS,

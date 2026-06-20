@@ -11,9 +11,7 @@ from app.db.users import create_user
 
 def _legacy_user_id() -> str:
     with get_connection() as conn:
-        row = conn.execute(
-            "SELECT id FROM users WHERE email = ?", ("legacy@local",)
-        ).fetchone()
+        row = conn.execute("SELECT id FROM users WHERE email = ?", ("legacy@local",)).fetchone()
     assert row is not None
     return row[0]
 

@@ -61,8 +61,18 @@ _RATE_LIMIT_TEXT_RE = re.compile(
 )
 
 _MONTHS = {
-    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
-    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+    "jan": 1,
+    "feb": 2,
+    "mar": 3,
+    "apr": 4,
+    "may": 5,
+    "jun": 6,
+    "jul": 7,
+    "aug": 8,
+    "sep": 9,
+    "oct": 10,
+    "nov": 11,
+    "dec": 12,
 }
 
 # "resets Jun 12 at 6am" / "resets June 12 at 6:30pm" — best-effort.
@@ -243,9 +253,7 @@ def rotation_candidates(
                     # backend_accounts stores the label as ``account_name``;
                     # keep display_name fallbacks for forward-compat.
                     display_name=(
-                        acct.get("account_name")
-                        or acct.get("display_name")
-                        or f"{b} #{aid}"
+                        acct.get("account_name") or acct.get("display_name") or f"{b} #{aid}"
                     ),
                 )
             )
@@ -280,5 +288,7 @@ def soonest_reset_message(backend: str, *, allow_cross_backend: bool = True) -> 
             if soonest is None or ts < soonest:
                 soonest = ts
     if soonest is not None:
-        return f"All accounts are rate-limited — soonest reset {soonest.strftime('%b %-d %-I:%M%p')}."
+        return (
+            f"All accounts are rate-limited — soonest reset {soonest.strftime('%b %-d %-I:%M%p')}."
+        )
     return "All accounts are rate-limited."

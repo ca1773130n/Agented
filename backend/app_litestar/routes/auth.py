@@ -8,6 +8,7 @@ dependency.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from litestar import Request, Router, get, post
@@ -19,12 +20,9 @@ from litestar.exceptions import (
 from litestar.status_codes import HTTP_204_NO_CONTENT
 from msgspec import Struct
 
-import logging
-
 from app.db.password_resets import consume_token, request_reset
 from app.db.rbac import ensure_user_admin, registration_open
 from app.db.sessions import create_session, revoke_session, revoke_user_sessions
-from app_litestar.rate_limit_guard import requires_rate_limit
 from app.db.users import (
     authenticate,
     create_user,
@@ -32,6 +30,7 @@ from app.db.users import (
     get_user_by_email,
     set_password,
 )
+from app_litestar.rate_limit_guard import requires_rate_limit
 
 _auth_logger = logging.getLogger("app.auth")
 

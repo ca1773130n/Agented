@@ -51,12 +51,19 @@ def log_session_event(
     metadata_json = json.dumps(metadata) if metadata else None
     try:
         _insert_event_row(
-            session_id, user_id, event_type, ip_address, user_agent, metadata_json,
+            session_id,
+            user_id,
+            event_type,
+            ip_address,
+            user_agent,
+            metadata_json,
         )
     except Exception as exc:  # noqa: BLE001 — best-effort audit write
         logger.warning(
             "log_session_event failed for session=%s event=%s: %s",
-            session_id, event_type, exc,
+            session_id,
+            event_type,
+            exc,
         )
 
 
@@ -114,7 +121,8 @@ def list_session_events(
             except (json.JSONDecodeError, TypeError):
                 logger.warning(
                     "session_events: corrupt metadata JSON on row %s; raw=%r",
-                    row[0], row[7][:200],
+                    row[0],
+                    row[7][:200],
                 )
                 d["metadata"] = None
         out.append(d)

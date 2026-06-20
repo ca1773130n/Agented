@@ -114,10 +114,10 @@ def test_empty_content_turns_are_filtered_from_llm_messages(isolated_db):
     # conversation_log with a mix of valid + empty/whitespace entries.
     log = [
         {"role": "user", "content": "hello"},
-        {"role": "assistant", "content": ""},        # empty → drop
-        {"role": "user", "content": "   \n\t  "},    # whitespace → drop
+        {"role": "assistant", "content": ""},  # empty → drop
+        {"role": "user", "content": "   \n\t  "},  # whitespace → drop
         {"role": "assistant", "content": "world"},
-        {"role": "tool", "content": None},           # None → drop (no AttributeError)
+        {"role": "tool", "content": None},  # None → drop (no AttributeError)
         {"role": "user", "content": "ok"},
     ]
 

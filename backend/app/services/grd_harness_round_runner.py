@@ -126,13 +126,17 @@ def run_round(
             _finalize_round(project_id, cwd, result.stdout, result.returncode)
         except subprocess.TimeoutExpired:
             upsert_harness_round(
-                project_id=project_id, round_id="error", status="error",
+                project_id=project_id,
+                round_id="error",
+                status="error",
                 detail=f"round timed out after {_ROUND_TIMEOUT_SECONDS}s",
             )
         except Exception:
             logger.warning("harness round failed for %s", project_id, exc_info=True)
             upsert_harness_round(
-                project_id=project_id, round_id="error", status="error",
+                project_id=project_id,
+                round_id="error",
+                status="error",
                 detail="round runner crashed (see logs)",
             )
 

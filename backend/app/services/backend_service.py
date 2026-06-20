@@ -256,11 +256,13 @@ class BackendService:
 
         try:
             models, _meta = model_cache_service.get_models(
-                backend_kind=btype, auth_method="unknown",
+                backend_kind=btype,
+                auth_method="unknown",
             )
         except Exception:
             # Cache layer is observability — never block the legacy route.
             from ..services.model_discovery_service import ModelDiscoveryService
+
             models = ModelDiscoveryService.discover_models(btype)
 
         if models:

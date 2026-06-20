@@ -14,7 +14,7 @@ import shutil
 import signal
 import subprocess
 import threading
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from app.config import (
     EXECUTION_TIMEOUT_DEFAULT,
@@ -31,6 +31,7 @@ from ..database import (
     get_paths_for_trigger_detailed,
 )
 from ..db import verification_records
+from . import trigger_event_service
 from .audit_log_service import AuditLogService
 from .budget_service import BudgetService
 from .command_builder import CommandBuilder
@@ -39,8 +40,8 @@ from .execution_log_service import ExecutionLogService
 from .execution_retry import ExecutionRetryManager
 from .execution_runner import (
     auto_resolve_and_pr,
-    build_subprocess_env,
     budget_monitor,
+    build_subprocess_env,
     clone_repos,
     fetch_pr_diff,
     stream_pipe,
@@ -48,11 +49,16 @@ from .execution_runner import (
 from .github_service import GitHubService
 from .process_manager import ProcessManager
 from .prompt_renderer import PromptRenderer
-from . import trigger_event_service
 from .trigger_dispatcher import (
     dispatch_github_event as _dispatch_github_event,
+)
+from .trigger_dispatcher import (
     dispatch_pr_comment_commands as _dispatch_pr_comment_commands,
+)
+from .trigger_dispatcher import (
     dispatch_webhook_event as _dispatch_webhook_event,
+)
+from .trigger_dispatcher import (
     match_payload as _match_payload,
 )
 

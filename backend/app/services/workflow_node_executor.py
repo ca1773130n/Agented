@@ -512,9 +512,8 @@ class NodeExecutor:
         _update_status) via a lazy import to avoid circular dependencies.
         """
         # Lazy import to access class-level approval state on WorkflowExecutionService
-        from .workflow_execution_service import WorkflowExecutionService
-
         from ..db.workflows import add_workflow_approval_state, update_workflow_approval_state
+        from .workflow_execution_service import WorkflowExecutionService
 
         timeout = node_config.get("timeout", 1800)
 

@@ -13,7 +13,6 @@ from unittest.mock import patch
 from app.db import get_plan_selection, upsert_plan_selection
 from app.services import grd_plan_selection_runner as runner
 
-
 _SELECTION = {
     "phase": "3",
     "milestone": "v0.6",
@@ -33,10 +32,12 @@ def _ok(data):
 
 # ---- select_candidate argv ----------------------------------------------
 
+
 def test_select_dry_run_argv_and_no_mirror(isolated_db):
     cap = {}
     with patch.object(
-        runner.GrdCliService, "run_gd_json",
+        runner.GrdCliService,
+        "run_gd_json",
         side_effect=lambda cwd, *a: cap.update(args=a) or _ok({**_SELECTION, "promoted_to": None}),
     ):
         res = runner.select_candidate("proj-x", "/cwd", "3", dry_run=True)
@@ -52,7 +53,8 @@ def test_select_real_run_promotes_and_mirrors(isolated_db):
     pid = create_project("SelReal")
     cap = {}
     with patch.object(
-        runner.GrdCliService, "run_gd_json",
+        runner.GrdCliService,
+        "run_gd_json",
         side_effect=lambda cwd, *a: cap.update(args=a) or _ok(_SELECTION),
     ):
         res = runner.select_candidate(pid, "/cwd", "3")
@@ -68,20 +70,23 @@ def test_select_real_run_promotes_and_mirrors(isolated_db):
 def test_select_force_and_verification_flags(isolated_db):
     cap = {}
     with patch.object(
-        runner.GrdCliService, "run_gd_json",
+        runner.GrdCliService,
+        "run_gd_json",
         side_effect=lambda cwd, *a: cap.update(args=a) or _ok(_SELECTION),
     ):
-        runner.select_candidate(
-            "p", "/cwd", "5", force=True, run_verification_commands=True
-        )
+        runner.select_candidate("p", "/cwd", "5", force=True, run_verification_commands=True)
     assert cap["args"] == (
-        "select-candidate", "5", "--force", "--run-verification-commands",
+        "select-candidate",
+        "5",
+        "--force",
+        "--run-verification-commands",
     )
 
 
 def test_select_failure_surfaces_error_no_mirror(isolated_db):
     with patch.object(
-        runner.GrdCliService, "run_gd_json",
+        runner.GrdCliService,
+        "run_gd_json",
         return_value={"success": False, "data": None, "error": "no PLAN-N.md candidates found"},
     ):
         res = runner.select_candidate("p", "/cwd", "9")
@@ -92,19 +97,27 @@ def test_select_failure_surfaces_error_no_mirror(isolated_db):
 
 # ---- plan_tournament argv -----------------------------------------------
 
+
 def test_plan_tournament_argv(isolated_db):
     cap = {}
     with patch.object(
-        runner.GrdCliService, "run_gd_json",
+        runner.GrdCliService,
+        "run_gd_json",
         side_effect=lambda cwd, *a: cap.update(args=a) or _ok({"ranked": [], "winner": None}),
     ):
         runner.plan_tournament("/cwd", "2", ["a/PLAN-1.md", "b/PLAN-2.md"])
     assert cap["args"] == (
-        "plan-tournament", "--phase", "2", "--candidates", "a/PLAN-1.md", "b/PLAN-2.md",
+        "plan-tournament",
+        "--phase",
+        "2",
+        "--candidates",
+        "a/PLAN-1.md",
+        "b/PLAN-2.md",
     )
 
 
 # ---- DB mirror round-trip ------------------------------------------------
+
 
 def test_upsert_plan_selection_is_full_replace(isolated_db):
     from app.db.projects import create_project

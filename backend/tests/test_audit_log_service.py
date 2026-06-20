@@ -2,13 +2,13 @@
 
 import json
 import logging
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from app.services.audit_log_service import (
-    AuditLogService,
     _REDACTED_FIELDS,
+    AuditLogService,
     _recent_events,
 )
 

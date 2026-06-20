@@ -314,10 +314,9 @@ class SetupBundleService:
         registered account to establish proxy credentials.
         """
         try:
-            from ..services.cliproxy_manager import CLIProxyManager
-
             # First, try to start a proxy login for each Claude account
             from ..db.backends import get_backend_accounts
+            from ..services.cliproxy_manager import CLIProxyManager
 
             for account in get_backend_accounts("backend-claude"):
                 config_path = account.get("config_path")

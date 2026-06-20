@@ -14,8 +14,9 @@ import logging
 import secrets
 from typing import Optional
 
-from .connection import get_connection
 from app.utils.timezone import utcnow as _utcnow
+
+from .connection import get_connection
 
 logger = logging.getLogger(__name__)
 DEFAULT_LIFETIME = dt.timedelta(hours=1)
@@ -44,8 +45,7 @@ def consume_token(token: str) -> Optional[str]:
     now = _utcnow()
     with get_connection() as conn:
         rows = conn.execute(
-            "SELECT id, token, user_id, expires_at, consumed_at "
-            "FROM password_reset_tokens"
+            "SELECT id, token, user_id, expires_at, consumed_at FROM password_reset_tokens"
         ).fetchall()
         for row_id, row_token, user_id, expires_at, consumed_at in rows:
             if not hmac.compare_digest(row_token, token):

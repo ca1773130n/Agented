@@ -135,9 +135,7 @@ def test_public_webhook_rejects_bad_signature(isolated_db, monkeypatch):
 
     from app.services import execution_queue_service
 
-    monkeypatch.setattr(
-        execution_queue_service.ExecutionQueueService, "enqueue", fake_enqueue
-    )
+    monkeypatch.setattr(execution_queue_service.ExecutionQueueService, "enqueue", fake_enqueue)
 
     saves: list = []
 
@@ -199,9 +197,7 @@ def test_admin_replay_bypasses_signature_validation(isolated_db, monkeypatch):
 
     from app.services import execution_queue_service
 
-    monkeypatch.setattr(
-        execution_queue_service.ExecutionQueueService, "enqueue", fake_enqueue
-    )
+    monkeypatch.setattr(execution_queue_service.ExecutionQueueService, "enqueue", fake_enqueue)
 
     saves: list = []
 
@@ -277,7 +273,7 @@ class TestFenceUntrusted:
             assert out.count("<untrusted_user_input>") == 1
             assert out.count("</untrusted_user_input>") == 1
             # No residual fence tag-name survives inside the fenced body.
-            body = out[len("<untrusted_user_input>\n"):-len("\n</untrusted_user_input>")]
+            body = out[len("<untrusted_user_input>\n") : -len("\n</untrusted_user_input>")]
             assert "untrusted_user_input" not in body.lower()
             assert "IGNORE ABOVE" in out
 

@@ -7,7 +7,6 @@ import pytest
 
 from app.services.rate_limit_service import DEFAULT_COOLDOWN_SECONDS, RateLimitService
 
-
 # ---------------------------------------------------------------------------
 # check_stderr_line
 # ---------------------------------------------------------------------------
@@ -360,7 +359,6 @@ class TestGetAllAccountStates:
 # ---------------------------------------------------------------------------
 
 import json
-import threading
 
 from app.services.execution_service import ExecutionService
 

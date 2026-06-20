@@ -1,12 +1,9 @@
 """Tests for BackendService."""
 
 from http import HTTPStatus
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from app.services.backend_service import BackendService, _resolve_backend_id
-
 
 # =============================================================================
 # _resolve_backend_id() tests

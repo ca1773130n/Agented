@@ -375,15 +375,21 @@ def _gate_due(gate, iteration_no: int) -> bool:
     return bool(gate) and gate.mode == "every_n" and gate.n > 0 and iteration_no % gate.n == 0
 
 
-def _await_gate(state, session_id: str, iteration_no: int, gate_reason: str, *, max_wall_seconds: int):
+def _await_gate(
+    state, session_id: str, iteration_no: int, gate_reason: str, *, max_wall_seconds: int
+):
     """Hold for a human decision. Returns (decision, message). Bounded by
     max_wall_seconds (→ abort) and always responsive to stop_event."""
     import time as _t
+
     state.awaiting_human = True
     state.gate_decision = None
     entered = _t.time()
     ProjectSessionManager._broadcast(
-        session_id, "goal_loop_awaiting_human", {"iteration": iteration_no, "gate_reason": gate_reason})
+        session_id,
+        "goal_loop_awaiting_human",
+        {"iteration": iteration_no, "gate_reason": gate_reason},
+    )
     while state.gate_decision is None and not state.stop_event.is_set():
         if _t.time() - entered > max_wall_seconds:
             state.awaiting_human = False
@@ -616,8 +622,13 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
             if _met_terminates(met=verdict.met, confidence=verdict.confidence, gate=gate):
                 hg = state.spec.state.human_gate
                 if hg and hg.mode == "on_exit":
-                    decision, message = _await_gate(state, session_id, iteration_no,
-                        gate_reason="completion (met)", max_wall_seconds=max_wall_seconds)
+                    decision, message = _await_gate(
+                        state,
+                        session_id,
+                        iteration_no,
+                        gate_reason="completion (met)",
+                        max_wall_seconds=max_wall_seconds,
+                    )
                     if decision == "modify":
                         if message:
                             state.pending_note = message
@@ -764,10 +775,17 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
 
             hg = state.spec.state.human_gate
             if _gate_due(hg, iteration_no):
-                decision, message = _await_gate(state, session_id, iteration_no,
-                    gate_reason=f"every {hg.n} iterations", max_wall_seconds=max_wall_seconds)
+                decision, message = _await_gate(
+                    state,
+                    session_id,
+                    iteration_no,
+                    gate_reason=f"every {hg.n} iterations",
+                    max_wall_seconds=max_wall_seconds,
+                )
                 if decision == "abort":
-                    _broadcast_end(session_id, reason="human_abort", detail=message or "operator aborted")
+                    _broadcast_end(
+                        session_id, reason="human_abort", detail=message or "operator aborted"
+                    )
                     ProjectSessionManager.stop_session(live_id)
                     break
                 if decision == "modify" and message:
@@ -814,7 +832,9 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
             try:
                 ProjectSessionManager.stop_session(live_id)
             except Exception:
-                logger.debug("goal_loop: failed to stop live %s on teardown", live_id, exc_info=True)
+                logger.debug(
+                    "goal_loop: failed to stop live %s on teardown", live_id, exc_info=True
+                )
         ProjectSessionManager.unsubscribe_raw(live_id, queue)
         _cleanup(registry_key)
 

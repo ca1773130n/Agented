@@ -2,7 +2,6 @@
 
 from litestar.testing import create_test_client
 
-from app.db.rbac import create_user_role
 from app_litestar.auth import provide_caller
 from app_litestar.routes.rules_plugins_hooks_commands import (
     commands_router,

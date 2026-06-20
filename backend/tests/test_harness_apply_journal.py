@@ -153,7 +153,6 @@ def test_asset_to_payload_includes_none_for_restore_fidelity():
 
 
 def test_skill_before_image_carries_body(isolated_db, tmp_path):
-    from app.database import get_connection
     from app.db import skills as skills_repo
     from app.services.harness_evolver import _fetch_primitive
 

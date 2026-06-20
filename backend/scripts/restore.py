@@ -28,7 +28,6 @@ from scripts.backup import (
     _utc_timestamp,
 )
 
-
 logger = logging.getLogger(__name__)
 LIVE_DB_GUARD_SECONDS = 60
 
@@ -141,8 +140,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Restore an Agented SQLite DB from a snapshot.")
     parser.add_argument("--target", choices=["agented", "ai_accounts"], default=None)
     parser.add_argument("--snapshot", default=None)
-    parser.add_argument("--yes", action="store_true",
-                        help="Skip the confirmation prompt.")
+    parser.add_argument("--yes", action="store_true", help="Skip the confirmation prompt.")
     parser.add_argument("--no-safety-snapshot", action="store_true")
     parser.add_argument("--dest-dir", default=None)
     parser.add_argument(
@@ -175,13 +173,14 @@ def main(argv: Optional[list[str]] = None) -> int:
             elif stem.startswith("ai_accounts-"):
                 label = "ai_accounts"
             else:
-                print("ERROR: could not infer --target from snapshot filename; pass --target.",
-                      file=sys.stderr)
+                print(
+                    "ERROR: could not infer --target from snapshot filename; pass --target.",
+                    file=sys.stderr,
+                )
                 return 1
     else:
         if label is None:
-            print("ERROR: pass --target {agented|ai_accounts} or --snapshot PATH.",
-                  file=sys.stderr)
+            print("ERROR: pass --target {agented|ai_accounts} or --snapshot PATH.", file=sys.stderr)
             return 1
         snapshots = list_snapshots(dest_dir, label)
         snapshot_path = _interactive_pick(snapshots)
@@ -203,9 +202,9 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     if not args.yes:
         try:
-            confirm = input(
-                f"Overwrite {target_path} with {snapshot_path.name}? [y/N]: "
-            ).strip().lower()
+            confirm = (
+                input(f"Overwrite {target_path} with {snapshot_path.name}? [y/N]: ").strip().lower()
+            )
         except EOFError:
             confirm = ""
         if confirm not in ("y", "yes"):
@@ -213,7 +212,9 @@ def main(argv: Optional[list[str]] = None) -> int:
             return 2
 
     safety_path = restore_one(
-        label, snapshot_path, target_path,
+        label,
+        snapshot_path,
+        target_path,
         safety_dir=dest_dir,
         take_safety_snapshot=not args.no_safety_snapshot,
     )

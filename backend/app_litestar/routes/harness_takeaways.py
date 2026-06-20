@@ -22,8 +22,11 @@ def list_project_takeaways(
     return {
         "project_id": project_id,
         "takeaways": repo.list_for_project(
-            project_id, kind=kind, applied=applied,
-            dismissed=dismissed, limit=capped,
+            project_id,
+            kind=kind,
+            applied=applied,
+            dismissed=dismissed,
+            limit=capped,
         ),
     }
 
@@ -38,8 +41,10 @@ def list_recent_takeaways(
     capped = max(1, min(int(limit or 25), 200))
     return {
         "takeaways": repo.list_recent(
-            project_id=project_id, applied=applied,
-            dismissed=dismissed, limit=capped,
+            project_id=project_id,
+            applied=applied,
+            dismissed=dismissed,
+            limit=capped,
         ),
     }
 
@@ -55,14 +60,17 @@ def get_takeaway(takeaway_id: str) -> dict[str, Any]:
 @post("/takeaways/{takeaway_id:str}/apply", sync_to_thread=True)
 def apply_takeaway_route(takeaway_id: str) -> dict[str, Any]:
     from app.services.harness_takeaway_extractor import apply_takeaway
+
     return apply_takeaway(takeaway_id)
 
 
 @post("/takeaways/{takeaway_id:str}/dismiss", sync_to_thread=True)
 def dismiss_takeaway_route(
-    takeaway_id: str, data: Optional[dict[str, Any]] = None,
+    takeaway_id: str,
+    data: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     from app.services.harness_takeaway_extractor import dismiss_takeaway
+
     reason = (data or {}).get("reason")
     return dismiss_takeaway(takeaway_id, reason=reason)
 

@@ -106,9 +106,7 @@ def get_skill_conversation(conv_id: str) -> Optional[dict]:
         return _row_to_dict(row) if row else None
 
 
-def list_active_skill_conversations(
-    user_id: Optional[str] = None, limit: int = 10
-) -> List[dict]:
+def list_active_skill_conversations(user_id: Optional[str] = None, limit: int = 10) -> List[dict]:
     """Most-recent ``active`` conversations.
 
     Filter semantics (v0.7.78 — codex BLOCK 1):

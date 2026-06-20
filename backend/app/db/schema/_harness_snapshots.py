@@ -34,6 +34,5 @@ def create_harness_snapshot_tables(conn) -> None:
         "ON session_harness_snapshots(project_id, created_at DESC)"
     )
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_shs_bundle "
-        "ON session_harness_snapshots(bundle_hash)"
+        "CREATE INDEX IF NOT EXISTS idx_shs_bundle ON session_harness_snapshots(bundle_hash)"
     )

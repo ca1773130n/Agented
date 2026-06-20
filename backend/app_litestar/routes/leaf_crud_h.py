@@ -32,11 +32,11 @@ from litestar.exceptions import (
 
 from app.config import PROJECT_ROOT
 from app.database import get_paths_for_trigger, get_trigger
+from app.services.audit_log_service import AuditLogService
 from app.services.backend_cli_service import BackendCLIService
 from app.services.backend_service import BackendService
 from app.services.execution_service import ExecutionService
 from app.services.github_service import GitHubService
-from app.services.audit_log_service import AuditLogService
 from app.services.skill_discovery_service import SkillDiscoveryService
 from app_litestar.auth_guards import requires_role
 from app_litestar.rate_limit_guard import requires_rate_limit
@@ -523,6 +523,8 @@ def gemini_auth_complete(data: dict) -> dict[str, Any]:
     # provider_usage_client; overridable via AGENTED_GEMINI_CLIENT_* env.
     from app.services.provider_usage_client import (
         GEMINI_CLI_CLIENT_ID as client_id,
+    )
+    from app.services.provider_usage_client import (
         GEMINI_CLI_CLIENT_SECRET as client_secret,
     )
 

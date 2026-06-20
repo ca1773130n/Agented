@@ -1,9 +1,8 @@
 """v0.5.15: restore script tests."""
+
 import sqlite3
 import time
 from pathlib import Path
-
-import pytest
 
 
 def _seed_db(path: Path, marker: str) -> None:
@@ -24,6 +23,7 @@ def _read_marker(path: Path) -> str:
 class TestListSnapshots:
     def test_returns_newest_first(self, tmp_path):
         from scripts.restore import list_snapshots
+
         # Create three files with controlled mtimes.
         old = tmp_path / "agented-2025-01-01T00-00-00Z.db"
         mid = tmp_path / "agented-2025-06-01T00-00-00Z.db"
@@ -31,6 +31,7 @@ class TestListSnapshots:
         for p in (old, mid, new):
             p.write_text("x")
         import os
+
         now = time.time()
         os.utime(old, (now - 100 * 86400, now - 100 * 86400))
         os.utime(mid, (now - 50 * 86400, now - 50 * 86400))
@@ -40,6 +41,7 @@ class TestListSnapshots:
 
     def test_filters_by_label(self, tmp_path):
         from scripts.restore import list_snapshots
+
         (tmp_path / "agented-x.db").write_text("a")
         (tmp_path / "ai_accounts-y.db").write_text("b")
         result = list_snapshots(tmp_path, "agented")
@@ -50,13 +52,14 @@ class TestListSnapshots:
 class TestRestoreOne:
     def test_overwrites_target_with_snapshot_contents(self, tmp_path):
         from scripts.restore import restore_one
+
         snap = tmp_path / "agented-snap.db"
         target = tmp_path / "agented.db"
         _seed_db(snap, "from-snapshot")
         _seed_db(target, "current-state")
-        safety = restore_one("agented", snap, target,
-                             safety_dir=tmp_path / "safety",
-                             take_safety_snapshot=True)
+        safety = restore_one(
+            "agented", snap, target, safety_dir=tmp_path / "safety", take_safety_snapshot=True
+        )
         assert _read_marker(target) == "from-snapshot"
         assert safety is not None
         assert safety.exists()
@@ -64,18 +67,20 @@ class TestRestoreOne:
 
     def test_no_safety_snapshot_when_disabled(self, tmp_path):
         from scripts.restore import restore_one
+
         snap = tmp_path / "agented-snap.db"
         target = tmp_path / "agented.db"
         _seed_db(snap, "from-snapshot")
         _seed_db(target, "current-state")
-        safety = restore_one("agented", snap, target,
-                             safety_dir=tmp_path / "safety",
-                             take_safety_snapshot=False)
+        safety = restore_one(
+            "agented", snap, target, safety_dir=tmp_path / "safety", take_safety_snapshot=False
+        )
         assert safety is None
         assert _read_marker(target) == "from-snapshot"
 
     def test_clears_stale_wal_shm(self, tmp_path):
         from scripts.restore import restore_one
+
         snap = tmp_path / "agented-snap.db"
         target = tmp_path / "agented.db"
         _seed_db(snap, "x")
@@ -84,9 +89,9 @@ class TestRestoreOne:
         shm = target.with_suffix(target.suffix + "-shm")
         wal.write_text("stale-wal")
         shm.write_text("stale-shm")
-        restore_one("agented", snap, target,
-                    safety_dir=tmp_path / "safety",
-                    take_safety_snapshot=False)
+        restore_one(
+            "agented", snap, target, safety_dir=tmp_path / "safety", take_safety_snapshot=False
+        )
         assert not wal.exists()
         assert not shm.exists()
 
@@ -94,6 +99,7 @@ class TestRestoreOne:
 class TestLiveDBGuard:
     def test_main_refuses_when_wal_is_recent(self, tmp_path, monkeypatch, capsys):
         from scripts import restore
+
         target = tmp_path / "agented.db"
         _seed_db(target, "live")
         wal = target.with_suffix(target.suffix + "-wal")
@@ -101,12 +107,16 @@ class TestLiveDBGuard:
         snap = tmp_path / "agented-snap.db"
         _seed_db(snap, "from-snap")
         monkeypatch.setattr(restore, "_default_agented_db_path", lambda: target)
-        rc = restore.main([
-            "--target", "agented",
-            "--snapshot", str(snap),
-            "--yes",
-            "--no-safety-snapshot",
-        ])
+        rc = restore.main(
+            [
+                "--target",
+                "agented",
+                "--snapshot",
+                str(snap),
+                "--yes",
+                "--no-safety-snapshot",
+            ]
+        )
         assert rc == 2
         # Target was NOT overwritten.
         assert _read_marker(target) == "live"
@@ -115,6 +125,7 @@ class TestLiveDBGuard:
         """Codex round-1 Issue 4: --force lets the operator override
         when they've manually verified the service is stopped."""
         from scripts import restore
+
         target = tmp_path / "agented.db"
         _seed_db(target, "live")
         wal = target.with_suffix(target.suffix + "-wal")
@@ -122,12 +133,16 @@ class TestLiveDBGuard:
         snap = tmp_path / "agented-snap.db"
         _seed_db(snap, "from-snap")
         monkeypatch.setattr(restore, "_default_agented_db_path", lambda: target)
-        rc = restore.main([
-            "--target", "agented",
-            "--snapshot", str(snap),
-            "--yes",
-            "--no-safety-snapshot",
-            "--force",
-        ])
+        rc = restore.main(
+            [
+                "--target",
+                "agented",
+                "--snapshot",
+                str(snap),
+                "--yes",
+                "--no-safety-snapshot",
+                "--force",
+            ]
+        )
         assert rc == 0
         assert _read_marker(target) == "from-snap"

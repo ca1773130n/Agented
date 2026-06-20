@@ -16,9 +16,7 @@ def mock_discover():
     interface tests have used since v0.7.8 (a bare list[str]) and adapts it
     into the new ``(models, source)`` tuple under the hood.
     """
-    with patch(
-        "app.services.model_cache_service.ModelDiscoveryService._discover_with_source"
-    ) as m:
+    with patch("app.services.model_cache_service.ModelDiscoveryService._discover_with_source") as m:
 
         class _Adapter:
             """Maintains the legacy ``return_value`` / ``side_effect`` API
@@ -54,9 +52,7 @@ def mock_discover():
 
 def test_first_call_populates_cache_and_returns_models(isolated_db, mock_discover):
     mock_discover.return_value = ["gpt-5", "gpt-5.1", "gpt-5.1-codex-mini"]
-    models, meta = model_cache_service.get_models(
-        backend_kind="codex", auth_method="api_key"
-    )
+    models, meta = model_cache_service.get_models(backend_kind="codex", auth_method="api_key")
     assert models == ["gpt-5", "gpt-5.1", "gpt-5.1-codex-mini"]
     assert meta["fresh"] is True
     assert meta["backend_kind"] == "codex"
@@ -70,9 +66,7 @@ def test_second_call_within_ttl_returns_cache_no_redicovery(isolated_db, mock_di
     mock_discover.return_value = ["gpt-5"]
     model_cache_service.get_models(backend_kind="codex", auth_method="api_key")
     assert mock_discover.call_count == 1
-    models, meta = model_cache_service.get_models(
-        backend_kind="codex", auth_method="api_key"
-    )
+    models, meta = model_cache_service.get_models(backend_kind="codex", auth_method="api_key")
     assert models == ["gpt-5"]
     assert meta["fresh"] is False
     assert mock_discover.call_count == 1  # not re-called
@@ -103,9 +97,7 @@ def test_expired_cache_redicovers(isolated_db, mock_discover):
         )
         conn.commit()
     mock_discover.return_value = ["gpt-5", "o1"]
-    models, meta = model_cache_service.get_models(
-        backend_kind="codex", auth_method="api_key"
-    )
+    models, meta = model_cache_service.get_models(backend_kind="codex", auth_method="api_key")
     assert models == ["gpt-5", "o1"]
     assert meta["fresh"] is True
     assert mock_discover.call_count == 2
@@ -141,8 +133,7 @@ def test_list_stale_returns_only_expired(isolated_db, mock_discover):
     past = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
     with get_connection() as conn:
         conn.execute(
-            "UPDATE model_discovery_cache SET expires_at = ? "
-            "WHERE backend_kind = ?",
+            "UPDATE model_discovery_cache SET expires_at = ? WHERE backend_kind = ?",
             (past, "codex"),
         )
         conn.commit()
@@ -153,21 +144,15 @@ def test_list_stale_returns_only_expired(isolated_db, mock_discover):
 
 def test_filter_applied_codex_oauth_drops_gpt51(isolated_db, mock_discover):
     mock_discover.return_value = ["gpt-5", "gpt-5.1", "gpt-5.1-codex-mini"]
-    models, _meta = model_cache_service.get_models(
-        backend_kind="codex", auth_method="chatgpt"
-    )
+    models, _meta = model_cache_service.get_models(backend_kind="codex", auth_method="chatgpt")
     assert "gpt-5.1" not in models
     assert "gpt-5.1-codex-mini" not in models
     assert "gpt-5" in models
 
 
-def test_discovery_failure_records_error_message_and_empty_list(
-    isolated_db, mock_discover
-):
+def test_discovery_failure_records_error_message_and_empty_list(isolated_db, mock_discover):
     mock_discover.side_effect = RuntimeError("subprocess died")
-    models, meta = model_cache_service.get_models(
-        backend_kind="codex", auth_method="api_key"
-    )
+    models, meta = model_cache_service.get_models(backend_kind="codex", auth_method="api_key")
     assert models == []
     assert meta["error_message"] is not None
     assert "RuntimeError" in meta["error_message"]

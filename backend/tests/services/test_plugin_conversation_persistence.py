@@ -21,7 +21,6 @@ from app.services.plugin_conversation_service import (
     PluginConversationService,
 )
 
-
 # -----------------------------------------------------------------
 # DB module
 # -----------------------------------------------------------------
@@ -232,9 +231,7 @@ def test_abandon_cross_user_returns_404(isolated_db):
         ],
         user_id="user-1",
     )
-    result, status = PluginConversationService.abandon_conversation(
-        cid, caller_user_id="user-2"
-    )
+    result, status = PluginConversationService.abandon_conversation(cid, caller_user_id="user-2")
     assert status == 404
     row = get_plugin_conversation(cid)
     assert row["status"] == "active"

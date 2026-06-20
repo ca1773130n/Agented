@@ -7,14 +7,13 @@ order.
 
 from __future__ import annotations
 
+import ipaddress
+
 import httpx
 import pytest
 
-import ipaddress
-
 from app.services import url_summarizer
 from app.services.url_summarizer import (
-    UrlSummary,
     _summarize_html,
     fetch_and_summarize,
 )
@@ -81,8 +80,7 @@ def test_fetch_returns_summary_for_html(monkeypatch):
         return httpx.Response(
             200,
             headers={"content-type": "text/html"},
-            content=b"<html><head><title>Page</title></head>"
-            b"<body><p>Body text</p></body></html>",
+            content=b"<html><head><title>Page</title></head><body><p>Body text</p></body></html>",
         )
 
     _install_transport(monkeypatch, handler)
@@ -248,6 +246,7 @@ def test_pin_url_preserves_pathological_userinfo():
     ``is not None`` test we use keeps them.
     """
     import ipaddress
+
     from app.services.url_summarizer import _pin_url_to_ip
 
     ip = ipaddress.ip_address("192.0.2.5")
@@ -327,6 +326,7 @@ def test_fetch_blocks_dns_rebinding_between_validate_and_connect(monkeypatch):
         # without IP pinning. With pinning, this triggers the
         # second-tier rejection.
         import ipaddress
+
         loop = ipaddress.ip_address("127.0.0.1")
         return (loop, "non-global address: 127.0.0.1")
 

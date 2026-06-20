@@ -245,7 +245,9 @@ def end_span(
                             "end_span: corrupt attributes JSON on span %s; "
                             "previous attributes will be lost. raw=%r",
                             span_id,
-                            row["attributes"][:200] if isinstance(row["attributes"], str) else row["attributes"],
+                            row["attributes"][:200]
+                            if isinstance(row["attributes"], str)
+                            else row["attributes"],
                         )
                 existing.update(attributes)
                 merged_attrs = json.dumps(existing)
@@ -290,7 +292,9 @@ def update_span(
                         "update_span: corrupt attributes JSON on span %s; "
                         "previous attributes will be lost. raw=%r",
                         span_id,
-                        row["attributes"][:200] if isinstance(row["attributes"], str) else row["attributes"],
+                        row["attributes"][:200]
+                        if isinstance(row["attributes"], str)
+                        else row["attributes"],
                     )
             existing.update(attributes)
             updates.append("attributes = ?")

@@ -15,10 +15,7 @@ classic non-atomic append race.
 from __future__ import annotations
 
 import json
-import sqlite3
 import threading
-
-import pytest
 
 from app.db.connection import get_connection
 from app.db.grd import append_session_message, get_session_messages

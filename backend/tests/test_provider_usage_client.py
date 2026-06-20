@@ -2,11 +2,9 @@
 
 import json
 import urllib.error
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from app.services.provider_usage_client import (
     CredentialResolver,
@@ -17,7 +15,6 @@ from app.services.provider_usage_client import (
     _read_json_file,
     _refresh_google_token,
 )
-
 
 # ---------------------------------------------------------------------------
 # _http_get / _http_post helpers
@@ -438,12 +435,8 @@ class TestKeychainEntryShadowing:
     def test_read_keychain_skips_shadowed_entry_without_field(self, monkeypatch):
         from app.services import provider_usage_client as puc
 
-        plugin_blob = json.dumps(
-            {"mcpOAuth": {"some-server": {"accessToken": "mcp-tok"}}}
-        )
-        claude_blob = json.dumps(
-            {"claudeAiOauth": {"accessToken": "the-real-cc-token"}}
-        )
+        plugin_blob = json.dumps({"mcpOAuth": {"some-server": {"accessToken": "mcp-tok"}}})
+        claude_blob = json.dumps({"claudeAiOauth": {"accessToken": "the-real-cc-token"}})
 
         def fake_iter(service):
             assert service == "Claude Code-credentials-deadbeef"
@@ -455,9 +448,7 @@ class TestKeychainEntryShadowing:
 
         monkeypatch.setattr(puc, "_iter_keychain_entries", fake_iter)
 
-        token = puc._read_keychain(
-            "Claude Code-credentials-deadbeef", "claudeAiOauth.accessToken"
-        )
+        token = puc._read_keychain("Claude Code-credentials-deadbeef", "claudeAiOauth.accessToken")
         assert token == "the-real-cc-token"
 
     def test_read_keychain_returns_none_when_no_entry_has_field(self, monkeypatch):
@@ -581,6 +572,7 @@ class TestIterKeychainEntries:
         monkeypatch.setattr(puc.subprocess, "run", boom)
         # Must not raise even though every subprocess.run blows up.
         assert list(puc._iter_keychain_entries("anything")) == []
+
         # Confirm we'd also tolerate TimeoutExpired/OSError variants.
         def slow(*_args, **_kwargs):
             raise real_subprocess.TimeoutExpired(cmd="security", timeout=5)
@@ -601,17 +593,13 @@ class TestCheckCredentials:
             json.dumps({"claudeAiOauth": {"accessToken": "tok-ok"}})
         )
         monkeypatch.setattr(Path, "home", lambda: tmp_path / "elsewhere")
-        monkeypatch.setattr(
-            "app.services.provider_usage_client.platform.system", lambda: "Linux"
-        )
+        monkeypatch.setattr("app.services.provider_usage_client.platform.system", lambda: "Linux")
         status = CredentialResolver.check_credentials(
             {"id": 2, "config_path": str(config_dir)}, "claude"
         )
         assert status["status"] == "ok"
 
-    def test_claude_missing_includes_remediation_and_keychain_hint(
-        self, tmp_path, monkeypatch
-    ):
+    def test_claude_missing_includes_remediation_and_keychain_hint(self, tmp_path, monkeypatch):
         # No file, no keychain — must report missing + give the
         # operator a copy-pasteable ``CLAUDE_CONFIG_DIR=... claude``
         # command and the keychain entry that was checked.
@@ -621,9 +609,7 @@ class TestCheckCredentials:
         # ~/.claude-personal2 creds and wrongly resolves to "ok".
         monkeypatch.setenv("HOME", str(tmp_path / "home"))
         monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
-        monkeypatch.setattr(
-            "app.services.provider_usage_client.platform.system", lambda: "Linux"
-        )
+        monkeypatch.setattr("app.services.provider_usage_client.platform.system", lambda: "Linux")
         config_path = "~/.claude-personal2"
         status = CredentialResolver.check_credentials(
             {"id": 2, "config_path": config_path}, "claude"
@@ -671,9 +657,7 @@ class TestCheckCredentials:
             "codex token without account_id must be reported missing"
         )
 
-    def test_codex_accepts_falsy_but_valid_account_id_zero(
-        self, tmp_path, monkeypatch
-    ):
+    def test_codex_accepts_falsy_but_valid_account_id_zero(self, tmp_path, monkeypatch):
         # Regression guard for the "not account_id" → "is None"
         # fix (PR #140 codex re-review). A JSON integer 0 is a
         # falsy-but-valid id; the check must accept it, AND the
@@ -693,9 +677,7 @@ class TestCheckCredentials:
 
     def test_gemini_missing_uses_gemini_dir_hint(self, tmp_path, monkeypatch):
         monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
-        monkeypatch.setattr(
-            "app.services.provider_usage_client.platform.system", lambda: "Linux"
-        )
+        monkeypatch.setattr("app.services.provider_usage_client.platform.system", lambda: "Linux")
         # Stub out every fallback path the gemini resolver checks so
         # the test stays hermetic regardless of dev-machine state
         # (a real ~/.gemini/oauth_creds.json would otherwise leak).
@@ -715,25 +697,19 @@ class TestCheckCredentials:
         assert "oauth_creds.json" in status["expected_location"]
 
     def test_unknown_backend_type_returns_unsupported(self):
-        status = CredentialResolver.check_credentials(
-            {"id": 99, "config_path": None}, "openrouter"
-        )
+        status = CredentialResolver.check_credentials({"id": 99, "config_path": None}, "openrouter")
         assert status["status"] == "unsupported"
         assert status["remediation"] is None
         assert status["expected_location"] is None
 
-    def test_gemini_expired_unrefreshable_token_reported_missing(
-        self, tmp_path, monkeypatch
-    ):
+    def test_gemini_expired_unrefreshable_token_reported_missing(self, tmp_path, monkeypatch):
         # oauth_creds.json has an access_token but it's expired and
         # there's no refresh_token to recover with. The real poll
         # would 401; check_credentials must mirror that as
         # ``missing`` rather than reporting ``ok`` on the stale token.
         config_dir = tmp_path / "gemini-expired"
         config_dir.mkdir()
-        expired_ms = int(
-            (datetime.now(timezone.utc) - timedelta(hours=2)).timestamp() * 1000
-        )
+        expired_ms = int((datetime.now(timezone.utc) - timedelta(hours=2)).timestamp() * 1000)
         (config_dir / "oauth_creds.json").write_text(
             json.dumps(
                 {
@@ -744,9 +720,7 @@ class TestCheckCredentials:
             )
         )
         monkeypatch.setattr(Path, "home", lambda: tmp_path / "elsewhere")
-        monkeypatch.setattr(
-            "app.services.provider_usage_client.platform.system", lambda: "Linux"
-        )
+        monkeypatch.setattr("app.services.provider_usage_client.platform.system", lambda: "Linux")
         status = CredentialResolver.check_credentials(
             {"id": 5, "config_path": str(config_dir)}, "gemini"
         )

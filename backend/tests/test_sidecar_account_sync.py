@@ -91,9 +91,7 @@ def _seed_admin_key(db_path: str, key: str = "test-admin-key") -> None:
     """Insert a row into user_roles so the sync resolver finds a key."""
     conn = sqlite3.connect(db_path)
     try:
-        conn.execute(
-            "INSERT INTO user_roles (api_key, role) VALUES (?, 'admin')", (key,)
-        )
+        conn.execute("INSERT INTO user_roles (api_key, role) VALUES (?, 'admin')", (key,))
         conn.commit()
     finally:
         conn.close()

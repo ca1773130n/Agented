@@ -133,9 +133,7 @@ def test_resume_unknown_session_404(isolated_db):
 
 def test_session_input_requires_text(isolated_db):
     with _client() as c:
-        resp = c.post(
-            "/api/projects/p-x/sessions/sess-x/input", json={}
-        )
+        resp = c.post("/api/projects/p-x/sessions/sess-x/input", json={})
     assert resp.status_code == 400
 
 
@@ -155,9 +153,7 @@ def test_session_input_stream_json_wraps_envelope(isolated_db, monkeypatch):
         captured["payload"] = payload
         return True
 
-    monkeypatch.setattr(
-        ProjectSessionManager, "is_stream_json", classmethod(lambda cls, sid: True)
-    )
+    monkeypatch.setattr(ProjectSessionManager, "is_stream_json", classmethod(lambda cls, sid: True))
     monkeypatch.setattr(
         ProjectSessionManager,
         "send_input",
@@ -201,9 +197,7 @@ def test_session_input_pty_mode_strips_non_ascii(isolated_db, monkeypatch):
         captured["payload"] = payload
         return True
 
-    monkeypatch.setattr(
-        ProjectSessionManager, "send_input", classmethod(fake_send_input)
-    )
+    monkeypatch.setattr(ProjectSessionManager, "send_input", classmethod(fake_send_input))
 
     with _client() as c:
         # Korean + emoji + a printable ASCII tail. PTY mode strips
@@ -255,8 +249,15 @@ def test_create_session_persists_dialog_fields(isolated_db, monkeypatch):
         resp = c.post(
             "/api/projects/proj-dlg/sessions",
             json={
-                "cmd": ["claude", "--print", "--input-format", "stream-json",
-                        "--output-format", "stream-json", "--verbose"],
+                "cmd": [
+                    "claude",
+                    "--print",
+                    "--input-format",
+                    "stream-json",
+                    "--output-format",
+                    "stream-json",
+                    "--verbose",
+                ],
                 "execution_type": "direct",
                 "execution_mode": "interactive",
                 "stream_json": True,
@@ -359,18 +360,14 @@ def test_answer_question_writes_tool_result_envelope(isolated_db, monkeypatch):
 
     captured: dict[str, str] = {}
 
-    monkeypatch.setattr(
-        ProjectSessionManager, "is_stream_json", classmethod(lambda cls, sid: True)
-    )
+    monkeypatch.setattr(ProjectSessionManager, "is_stream_json", classmethod(lambda cls, sid: True))
 
     def fake_send(cls, sid: str, payload: str) -> bool:
         captured["sid"] = sid
         captured["payload"] = payload
         return True
 
-    monkeypatch.setattr(
-        ProjectSessionManager, "send_input", classmethod(fake_send)
-    )
+    monkeypatch.setattr(ProjectSessionManager, "send_input", classmethod(fake_send))
 
     with _client() as c:
         resp = c.post(
@@ -416,9 +413,7 @@ def test_answer_plan_approved_writes_correct_decision(isolated_db, monkeypatch):
     from app.services.project_session_manager import ProjectSessionManager
 
     captured: dict[str, str] = {}
-    monkeypatch.setattr(
-        ProjectSessionManager, "is_stream_json", classmethod(lambda cls, sid: True)
-    )
+    monkeypatch.setattr(ProjectSessionManager, "is_stream_json", classmethod(lambda cls, sid: True))
 
     def fake_send(cls, sid: str, payload: str) -> bool:
         captured["payload"] = payload
@@ -443,15 +438,11 @@ def test_answer_plan_approved_writes_correct_decision(isolated_db, monkeypatch):
     assert "proceed" in content["content"].lower()
 
 
-def test_answer_plan_declined_writes_keep_planning_decision(
-    isolated_db, monkeypatch
-):
+def test_answer_plan_declined_writes_keep_planning_decision(isolated_db, monkeypatch):
     from app.services.project_session_manager import ProjectSessionManager
 
     captured: dict[str, str] = {}
-    monkeypatch.setattr(
-        ProjectSessionManager, "is_stream_json", classmethod(lambda cls, sid: True)
-    )
+    monkeypatch.setattr(ProjectSessionManager, "is_stream_json", classmethod(lambda cls, sid: True))
 
     def fake_send(cls, sid: str, payload: str) -> bool:
         captured["payload"] = payload

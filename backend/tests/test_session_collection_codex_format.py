@@ -10,7 +10,6 @@ The collector must:
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 from app.services.session_collection_service import SessionCollectionService
@@ -42,18 +41,39 @@ def test_parse_codex_event_msg_token_count(tmp_path: Path) -> None:
     _write_rollout(
         p,
         [
-            {"timestamp": "2026-05-04T22:10:46.000Z", "type": "session_meta",
-             "payload": {"model": "gpt-5.5"}},
-            {"timestamp": "2026-05-04T22:11:00.000Z", "type": "event_msg",
-             "payload": {"type": "token_count", "info": {
-                 "total_token_usage": {
-                     "input_tokens": 1000, "output_tokens": 50, "cached_input_tokens": 200,
-                 }}}},
-            {"timestamp": "2026-05-04T22:12:00.000Z", "type": "event_msg",
-             "payload": {"type": "token_count", "info": {
-                 "total_token_usage": {
-                     "input_tokens": 2500, "output_tokens": 120, "cached_input_tokens": 800,
-                 }}}},
+            {
+                "timestamp": "2026-05-04T22:10:46.000Z",
+                "type": "session_meta",
+                "payload": {"model": "gpt-5.5"},
+            },
+            {
+                "timestamp": "2026-05-04T22:11:00.000Z",
+                "type": "event_msg",
+                "payload": {
+                    "type": "token_count",
+                    "info": {
+                        "total_token_usage": {
+                            "input_tokens": 1000,
+                            "output_tokens": 50,
+                            "cached_input_tokens": 200,
+                        }
+                    },
+                },
+            },
+            {
+                "timestamp": "2026-05-04T22:12:00.000Z",
+                "type": "event_msg",
+                "payload": {
+                    "type": "token_count",
+                    "info": {
+                        "total_token_usage": {
+                            "input_tokens": 2500,
+                            "output_tokens": 120,
+                            "cached_input_tokens": 800,
+                        }
+                    },
+                },
+            },
         ],
     )
 
@@ -73,11 +93,17 @@ def test_parse_codex_legacy_turn_completed_still_works(tmp_path: Path) -> None:
     _write_rollout(
         p,
         [
-            {"timestamp": "2026-01-01T00:00:00Z", "type": "turn.completed",
-             "usage": {"input_tokens": 500, "output_tokens": 25, "cached_input_tokens": 50},
-             "turn_context": {"model": "gpt-4o"}},
-            {"timestamp": "2026-01-01T00:00:30Z", "type": "turn.completed",
-             "usage": {"input_tokens": 1200, "output_tokens": 80, "cached_input_tokens": 400}},
+            {
+                "timestamp": "2026-01-01T00:00:00Z",
+                "type": "turn.completed",
+                "usage": {"input_tokens": 500, "output_tokens": 25, "cached_input_tokens": 50},
+                "turn_context": {"model": "gpt-4o"},
+            },
+            {
+                "timestamp": "2026-01-01T00:00:30Z",
+                "type": "turn.completed",
+                "usage": {"input_tokens": 1200, "output_tokens": 80, "cached_input_tokens": 400},
+            },
         ],
     )
 
@@ -97,21 +123,39 @@ def test_collect_all_walks_nested_codex_rollouts(tmp_path, monkeypatch) -> None:
     _write_rollout(
         rollout,
         [
-            {"timestamp": "2026-05-04T01:23:45Z", "type": "session_meta",
-             "payload": {"model": "gpt-5.5"}},
-            {"timestamp": "2026-05-04T01:24:00Z", "type": "event_msg",
-             "payload": {"type": "token_count", "info": {
-                 "total_token_usage": {
-                     "input_tokens": 999, "output_tokens": 11, "cached_input_tokens": 0,
-                 }}}},
+            {
+                "timestamp": "2026-05-04T01:23:45Z",
+                "type": "session_meta",
+                "payload": {"model": "gpt-5.5"},
+            },
+            {
+                "timestamp": "2026-05-04T01:24:00Z",
+                "type": "event_msg",
+                "payload": {
+                    "type": "token_count",
+                    "info": {
+                        "total_token_usage": {
+                            "input_tokens": 999,
+                            "output_tokens": 11,
+                            "cached_input_tokens": 0,
+                        }
+                    },
+                },
+            },
         ],
     )
 
     monkeypatch.setenv("CODEX_HOME", str(codex_home))
     # Stub out the Claude side and DB writes — we only assert codex traversal here.
-    monkeypatch.setattr(SessionCollectionService, "_find_claude_project_dirs", classmethod(lambda cls: []))
-    monkeypatch.setattr(SessionCollectionService, "_get_imported_sessions", classmethod(lambda cls: set()))
-    monkeypatch.setattr(SessionCollectionService, "_save_imported_sessions", classmethod(lambda cls, s: None))
+    monkeypatch.setattr(
+        SessionCollectionService, "_find_claude_project_dirs", classmethod(lambda cls: [])
+    )
+    monkeypatch.setattr(
+        SessionCollectionService, "_get_imported_sessions", classmethod(lambda cls: set())
+    )
+    monkeypatch.setattr(
+        SessionCollectionService, "_save_imported_sessions", classmethod(lambda cls, s: None)
+    )
 
     recorded: list[dict] = []
 
@@ -131,22 +175,43 @@ def test_collect_all_walks_nested_codex_rollouts(tmp_path, monkeypatch) -> None:
 def test_collect_all_skips_zero_token_codex_files(tmp_path, monkeypatch) -> None:
     """A rollout with no token_count events should be skipped entirely."""
     codex_home = tmp_path / "codex_home"
-    rollout = codex_home / "sessions" / "2026" / "05" / "04" / "rollout-empty-019dddddddddddddddddddddddddd.jsonl"
+    rollout = (
+        codex_home
+        / "sessions"
+        / "2026"
+        / "05"
+        / "04"
+        / "rollout-empty-019dddddddddddddddddddddddddd.jsonl"
+    )
     _write_rollout(
         rollout,
         [
-            {"timestamp": "2026-05-04T01:23:45Z", "type": "session_meta",
-             "payload": {"model": "gpt-5.5"}},
-            {"timestamp": "2026-05-04T01:24:00Z", "type": "event_msg",
-             "payload": {"type": "agent_message", "message": "hello"}},
+            {
+                "timestamp": "2026-05-04T01:23:45Z",
+                "type": "session_meta",
+                "payload": {"model": "gpt-5.5"},
+            },
+            {
+                "timestamp": "2026-05-04T01:24:00Z",
+                "type": "event_msg",
+                "payload": {"type": "agent_message", "message": "hello"},
+            },
         ],
     )
 
     monkeypatch.setenv("CODEX_HOME", str(codex_home))
-    monkeypatch.setattr(SessionCollectionService, "_find_claude_project_dirs", classmethod(lambda cls: []))
-    monkeypatch.setattr(SessionCollectionService, "_get_imported_sessions", classmethod(lambda cls: set()))
-    monkeypatch.setattr(SessionCollectionService, "_save_imported_sessions", classmethod(lambda cls, s: None))
-    monkeypatch.setattr(SessionCollectionService, "_record_usage", classmethod(lambda cls, **kw: None))
+    monkeypatch.setattr(
+        SessionCollectionService, "_find_claude_project_dirs", classmethod(lambda cls: [])
+    )
+    monkeypatch.setattr(
+        SessionCollectionService, "_get_imported_sessions", classmethod(lambda cls: set())
+    )
+    monkeypatch.setattr(
+        SessionCollectionService, "_save_imported_sessions", classmethod(lambda cls, s: None)
+    )
+    monkeypatch.setattr(
+        SessionCollectionService, "_record_usage", classmethod(lambda cls, **kw: None)
+    )
 
     result = SessionCollectionService.collect_all()
     assert result["codex"]["sessions"] == 0

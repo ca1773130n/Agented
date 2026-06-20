@@ -54,11 +54,7 @@ def _hook_script_path() -> Path:
     in the repo. We resolve via this module's location so the path is
     correct in any deployment layout.
     """
-    return (
-        Path(__file__).resolve().parents[2]
-        / "scripts"
-        / "agented_permission_hook.py"
-    )
+    return Path(__file__).resolve().parents[2] / "scripts" / "agented_permission_hook.py"
 
 
 def _build_settings_json(user_settings_path: Optional[Path]) -> dict:
@@ -109,9 +105,7 @@ def _build_settings_json(user_settings_path: Optional[Path]) -> dict:
     return settings
 
 
-def prepare_session_overlay(
-    session_id: str, user_config_dir: str
-) -> Optional[str]:
+def prepare_session_overlay(session_id: str, user_config_dir: str) -> Optional[str]:
     """Build the session-scoped overlay dir and return its path.
 
     Returns ``None`` if the user's config dir doesn't exist (we can't
@@ -151,9 +145,7 @@ def prepare_session_overlay(
     # Write merged settings.json.
     try:
         settings = _build_settings_json(user_dir / "settings.json")
-        (overlay / "settings.json").write_text(
-            json.dumps(settings, indent=2, ensure_ascii=False)
-        )
+        (overlay / "settings.json").write_text(json.dumps(settings, indent=2, ensure_ascii=False))
     except Exception:
         logger.warning(
             "claude_config_overlay: failed to write merged settings.json",
@@ -202,9 +194,7 @@ def apply_forge_bundle(overlay_dir: str, bundle: dict) -> None:
         return
     base = Path(overlay_dir)
     if not base.exists():
-        logger.warning(
-            "apply_forge_bundle: overlay dir %s missing, skipping", overlay_dir
-        )
+        logger.warning("apply_forge_bundle: overlay dir %s missing, skipping", overlay_dir)
         return
 
     _write_overlay_files(base, bundle.get("overlay_files") or {})
@@ -223,17 +213,13 @@ def _write_overlay_files(base: Path, overlay_files: dict) -> None:
             target = (base / rel).resolve()
             target.relative_to(base_resolved)
         except (ValueError, OSError):
-            logger.warning(
-                "apply_forge_bundle: refusing to write outside overlay (%s)", rel
-            )
+            logger.warning("apply_forge_bundle: refusing to write outside overlay (%s)", rel)
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
         try:
             target.write_text(content, encoding="utf-8")
         except OSError as exc:
-            logger.warning(
-                "apply_forge_bundle: failed to write %s: %s", rel, exc
-            )
+            logger.warning("apply_forge_bundle: failed to write %s: %s", rel, exc)
 
 
 def _write_overlay_symlinks(base: Path, overlay_symlinks: dict) -> None:
@@ -269,9 +255,7 @@ def _merge_mcp_json(base: Path, mcp_servers: dict) -> None:
         try:
             existing = json.loads(mcp_path.read_text())
         except (json.JSONDecodeError, OSError):
-            logger.warning(
-                "apply_forge_bundle: existing mcp.json invalid, overwriting"
-            )
+            logger.warning("apply_forge_bundle: existing mcp.json invalid, overwriting")
             existing = {}
     servers = existing.setdefault("mcpServers", {})
     if not isinstance(servers, dict):
@@ -319,9 +303,7 @@ def _materialize_hooks(base: Path, overlay_files: dict) -> None:
             mode = script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP
             script_path.chmod(mode)
         except OSError as exc:
-            logger.warning(
-                "apply_forge_bundle: failed to write hook %s: %s", name, exc
-            )
+            logger.warning("apply_forge_bundle: failed to write hook %s: %s", name, exc)
             continue
         event_block = hooks_block.setdefault(event, [])
         if not isinstance(event_block, list):
@@ -341,9 +323,7 @@ def _materialize_hooks(base: Path, overlay_files: dict) -> None:
     try:
         settings_path.write_text(json.dumps(settings, indent=2, ensure_ascii=False))
     except OSError as exc:
-        logger.warning(
-            "apply_forge_bundle: failed to write merged settings.json: %s", exc
-        )
+        logger.warning("apply_forge_bundle: failed to write merged settings.json: %s", exc)
 
 
 def cleanup_session_overlay(session_id: str) -> None:
@@ -355,13 +335,9 @@ def cleanup_session_overlay(session_id: str) -> None:
         return
     try:
         shutil.rmtree(overlay)
-        logger.info(
-            "claude_config_overlay: removed %s", overlay
-        )
+        logger.info("claude_config_overlay: removed %s", overlay)
     except OSError as exc:
-        logger.warning(
-            "claude_config_overlay: failed to remove %s: %s", overlay, exc
-        )
+        logger.warning("claude_config_overlay: failed to remove %s: %s", overlay, exc)
 
 
 _OVERLAY_GLOB = "agented-claude-overlay-*"
@@ -406,8 +382,10 @@ def cleanup_stale_overlays(*, max_age_hours: int = _DEFAULT_MAX_AGE_HOURS) -> di
 
     if removed or errors:
         logger.info(
-            "claude_config_overlay GC: removed=%d kept=%d errors=%d "
-            "(max_age_hours=%d)",
-            removed, kept, errors, max_age_hours,
+            "claude_config_overlay GC: removed=%d kept=%d errors=%d (max_age_hours=%d)",
+            removed,
+            kept,
+            errors,
+            max_age_hours,
         )
     return {"removed": removed, "kept": kept, "errors": errors}

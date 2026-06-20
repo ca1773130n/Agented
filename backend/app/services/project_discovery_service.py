@@ -21,8 +21,17 @@ from app.database import get_all_projects
 logger = logging.getLogger(__name__)
 
 _IGNORE_DIRS = {
-    "node_modules", ".venv", "venv", "dist", "build", ".git",
-    "__pycache__", ".cache", ".tox", ".next", "target",
+    "node_modules",
+    ".venv",
+    "venv",
+    "dist",
+    "build",
+    ".git",
+    "__pycache__",
+    ".cache",
+    ".tox",
+    ".next",
+    "target",
 }
 _MAX_DEPTH_CAP = 8
 _MAX_REPOS = 500
@@ -61,11 +70,13 @@ def _scan_fs(root: str, nested: bool, max_depth: int) -> tuple[list[dict], int]:
     unreadable = 0
 
     def _add(path: str) -> None:
-        repos.append({
-            "name": os.path.basename(path.rstrip("/")),
-            "local_path": path,
-            "remote_url": _git_remote_url(path),
-        })
+        repos.append(
+            {
+                "name": os.path.basename(path.rstrip("/")),
+                "local_path": path,
+                "remote_url": _git_remote_url(path),
+            }
+        )
 
     if not nested:
         try:
@@ -107,9 +118,9 @@ def _short_remote(url: Optional[str]) -> Optional[str]:
     if not url:
         return None
     s = url.strip()
-    s = re.sub(r"^git@([^:]+):", r"\1/", s)          # scp-style ssh
+    s = re.sub(r"^git@([^:]+):", r"\1/", s)  # scp-style ssh
     s = re.sub(r"^[a-z][a-z0-9+.-]*://", "", s, flags=re.IGNORECASE)  # scheme
-    s = re.sub(r"^[^@/]+@", "", s)                    # user@ (ssh://user@host)
+    s = re.sub(r"^[^@/]+@", "", s)  # user@ (ssh://user@host)
     s = re.sub(r"\.git$", "", s, flags=re.IGNORECASE)
     s = s.rstrip("/").lower()
     return s or None
@@ -140,9 +151,7 @@ class ProjectDiscoveryService:
     def _mark_existing(cls, repos: list[dict]) -> None:
         existing = get_all_projects()
         path_to_id = {
-            os.path.abspath(p["local_path"]): p["id"]
-            for p in existing
-            if p.get("local_path")
+            os.path.abspath(p["local_path"]): p["id"] for p in existing if p.get("local_path")
         }
         remote_to_id = {}
         for p in existing:
@@ -168,9 +177,7 @@ class ProjectDiscoveryService:
     ) -> dict:
         existing = get_all_projects()
         path_ids = {
-            os.path.abspath(p["local_path"]): p["id"]
-            for p in existing
-            if p.get("local_path")
+            os.path.abspath(p["local_path"]): p["id"] for p in existing if p.get("local_path")
         }
         remote_ids = {}
         for p in existing:
@@ -184,7 +191,9 @@ class ProjectDiscoveryService:
             name = (r.get("name") or "").strip()
             local_path = (r.get("local_path") or "").strip()
             if not name or not local_path:
-                skipped.append({"name": name or "(unknown)", "reason": "missing name or local_path"})
+                skipped.append(
+                    {"name": name or "(unknown)", "reason": "missing name or local_path"}
+                )
                 continue
             ap = os.path.abspath(local_path)
             sr = _short_remote(r.get("github_repo") or r.get("remote_url"))

@@ -675,8 +675,8 @@ def test_resolve_use_cli_agent_legacy_mapping():
 
 def test_resolve_super_agent_wins_over_instance_and_project(isolated_db):
     """SuperAgent config_json.driver beats instance + project defaults."""
-    from app.db.projects import create_project
     from app.db.project_sa_instances import create_project_sa_instance
+    from app.db.projects import create_project
     from app.db.super_agents import create_super_agent
 
     pid = create_project(name="p-sa")
@@ -698,8 +698,8 @@ def test_resolve_super_agent_wins_over_instance_and_project(isolated_db):
 
 def test_resolve_instance_wins_over_project(isolated_db):
     """Instance driver beats the project default."""
-    from app.db.projects import create_project
     from app.db.project_sa_instances import create_project_sa_instance
+    from app.db.projects import create_project
     from app.db.super_agents import create_super_agent
 
     pid = create_project(name="p-inst")

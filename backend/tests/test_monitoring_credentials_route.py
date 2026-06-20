@@ -55,11 +55,12 @@ def test_credentials_endpoint_returns_per_account_status(client, isolated_db):
             "expected_location": "Claude Code-credentials-d552d744",
         },
     ]
-    with patch(
-        "app.database.get_all_accounts_with_health", return_value=accounts
-    ), patch(
-        "app.services.provider_usage_client.CredentialResolver.check_credentials",
-        side_effect=statuses,
+    with (
+        patch("app.database.get_all_accounts_with_health", return_value=accounts),
+        patch(
+            "app.services.provider_usage_client.CredentialResolver.check_credentials",
+            side_effect=statuses,
+        ),
     ):
         resp = client.get(
             "/admin/monitoring/credentials",

@@ -2,7 +2,6 @@
 
 import signal
 import subprocess
-import threading
 import time
 from unittest.mock import MagicMock, patch
 

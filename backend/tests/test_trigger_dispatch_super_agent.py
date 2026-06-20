@@ -2,8 +2,6 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 class TestTriggerDispatchSuperAgent:
     """Tests for dispatch_type=super_agent routing in dispatch_webhook_event."""

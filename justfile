@@ -134,6 +134,16 @@ ensure-backend:
 build: ensure-frontend
     {{use-node}} cd frontend && npm run build
 
+# Lint gate — ruff check + format-check on the backend. Run before pushing.
+# (Wired in v0.6 hardening: ruff was installed but never gated, so 350+ lint
+# violations + 190 unformatted files had accumulated. Keep this green.)
+lint: ensure-backend
+    cd backend && uv run ruff check . && uv run ruff format --check .
+
+# Auto-fix what ruff can (imports, sorting) + format the backend in place.
+lint-fix: ensure-backend
+    cd backend && uv run ruff check . --fix && uv run ruff format .
+
 # Run Litestar backend API server (development mode, port 20000).
 # Wave 80: Flask is retired; Litestar serves :20000 directly via uvicorn.
 dev-backend: ensure-backend

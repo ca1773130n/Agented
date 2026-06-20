@@ -15,8 +15,6 @@ These cover the funnel's 3-way driver branch:
 
 from __future__ import annotations
 
-import pytest
-
 
 class _SyncThread:
     """Run the streaming 'thread' body synchronously so the test observes
@@ -121,7 +119,11 @@ def test_grd_conversational_byte_identical_to_cliproxy_baseline(monkeypatch):
     monkeypatch.setattr(
         tcs,
         "classify_turn",
-        lambda *a, **k: {"shape": "conversational", "intent": "conversational", "grd_command": None},
+        lambda *a, **k: {
+            "shape": "conversational",
+            "intent": "conversational",
+            "grd_command": None,
+        },
     )
     _stub_cliproxy_stream(monkeypatch, chunks)
     _run()

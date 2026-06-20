@@ -87,9 +87,7 @@ def test_outbox_empty(isolated_db):
 
 def test_mark_unknown_message_404(isolated_db):
     with _client() as c:
-        resp = c.post(
-            "/admin/super-agents/sa-x/messages/missing/read", json={}
-        )
+        resp = c.post("/admin/super-agents/sa-x/messages/missing/read", json={})
     assert resp.status_code == 404
 
 
@@ -153,9 +151,7 @@ def test_generate_requires_description(isolated_db):
 
 def test_generate_too_short(isolated_db):
     with _client() as c:
-        resp = c.post(
-            "/admin/teams/generate", json={"description": "short"}
-        )
+        resp = c.post("/admin/teams/generate", json={"description": "short"})
     assert resp.status_code == 400
 
 
@@ -194,9 +190,7 @@ def test_chunked_results_unknown_404(isolated_db):
 
 def test_send_chat_requires_content(isolated_db):
     with _client() as c:
-        resp = c.post(
-            "/admin/super-agents/sa-x/sessions/sess-x/chat", json={}
-        )
+        resp = c.post("/admin/super-agents/sa-x/sessions/sess-x/chat", json={})
     assert resp.status_code == 400
 
 

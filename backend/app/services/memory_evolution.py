@@ -4,6 +4,7 @@ import logging
 import math
 import re
 from datetime import datetime, timedelta
+
 from app.utils.timezone import utcnow as _utcnow
 
 logger = logging.getLogger(__name__)

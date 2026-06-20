@@ -133,9 +133,7 @@ def get_session_by_token(
         for row in rows:
             primary_match = hmac.compare_digest(row["token"], token)
             rotated_token = row.get("rotated_from_token") or ""
-            rotated_compare = (
-                hmac.compare_digest(rotated_token, token) if rotated_token else False
-            )
+            rotated_compare = hmac.compare_digest(rotated_token, token) if rotated_token else False
             # v0.5.12 round-3: anchor grace window to `rotated_at`
             # (set only by rotate_session) instead of `last_used_at`
             # (refreshed on every successful auth). Otherwise an
@@ -148,7 +146,9 @@ def get_session_by_token(
 
             if row.get("revoked_at"):
                 failure_event = (
-                    row["id"], row["user_id"], "used_after_revocation",
+                    row["id"],
+                    row["user_id"],
+                    "used_after_revocation",
                     {"reason": row.get("revoke_reason")},
                 )
                 continue
@@ -166,7 +166,9 @@ def get_session_by_token(
                     last_used_dt = now  # tolerate corrupt timestamp
                 if now - last_used_dt > idle_lifetime:
                     failure_event = (
-                        row["id"], row["user_id"], "idle_expired",
+                        row["id"],
+                        row["user_id"],
+                        "idle_expired",
                         {"idle_minutes": int((now - last_used_dt).total_seconds() / 60)},
                     )
                     continue
@@ -184,7 +186,10 @@ def get_session_by_token(
     if matched_row is None and failure_event is not None:
         session_id, user_id, event_type, metadata = failure_event
         session_events.log_session_event(
-            session_id, user_id, event_type, metadata=metadata,
+            session_id,
+            user_id,
+            event_type,
+            metadata=metadata,
         )
     return matched_row
 
@@ -209,7 +214,9 @@ def revoke_session(token: str, *, reason: str = "logout") -> bool:
                 )
                 conn.commit()
                 session_events.log_session_event(
-                    row["id"], row["user_id"], "revoked",
+                    row["id"],
+                    row["user_id"],
+                    "revoked",
                     metadata={"reason": reason},
                 )
                 return True
@@ -233,9 +240,7 @@ def rotate_session(token: str) -> Optional[dict]:
     new_token = _generate_token()
     with get_connection() as conn:
         conn.row_factory = _row_to_dict
-        rows = conn.execute(
-            "SELECT * FROM sessions WHERE revoked_at IS NULL"
-        ).fetchall()
+        rows = conn.execute("SELECT * FROM sessions WHERE revoked_at IS NULL").fetchall()
         conn.row_factory = None
         for row in rows:
             if not hmac.compare_digest(row["token"], token):
@@ -272,7 +277,9 @@ def rotate_session(token: str) -> Optional[dict]:
             row["rotated_at"] = now
             row["last_used_at"] = now
             session_events.log_session_event(
-                row["id"], row["user_id"], "rotated",
+                row["id"],
+                row["user_id"],
+                "rotated",
                 metadata={"previous_token_hash": _hash_token(old_token)},
             )
             return row
@@ -305,7 +312,9 @@ def revoke_user_sessions(user_id: str, *, reason: str) -> int:
 
     for row in rows:
         session_events.log_session_event(
-            row["id"], user_id, "revoked",
+            row["id"],
+            user_id,
+            "revoked",
             metadata={"reason": reason},
         )
     return affected

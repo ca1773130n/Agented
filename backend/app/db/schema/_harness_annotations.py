@@ -52,10 +52,7 @@ def create_harness_annotation_tables(conn) -> None:
         "CREATE INDEX IF NOT EXISTS idx_sli_project "
         "ON session_layer_incidents(project_id, created_at DESC)"
     )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_sli_layer "
-        "ON session_layer_incidents(layer)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sli_layer ON session_layer_incidents(layer)")
 
     # Per-session roll-up. Recomputed on each annotation pass.
     conn.execute(
@@ -84,6 +81,5 @@ def create_harness_annotation_tables(conn) -> None:
         "ON session_annotations(project_id, annotated_at DESC)"
     )
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_sa_primary_layer "
-        "ON session_annotations(primary_layer)"
+        "CREATE INDEX IF NOT EXISTS idx_sa_primary_layer ON session_annotations(primary_layer)"
     )

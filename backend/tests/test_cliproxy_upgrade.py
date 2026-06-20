@@ -13,10 +13,7 @@ from __future__ import annotations
 import subprocess
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.services.cliproxy_manager import CLIProxyManager
-
 
 # ---------------------------------------------------------------------------
 # _version_lt
@@ -197,9 +194,7 @@ class TestEnsureMinVersion:
                 "detect_version",
                 side_effect=[None, "7.0.0"],
             ),
-            patch.object(
-                CLIProxyManager, "install_if_needed", return_value=True
-            ) as mock_install,
+            patch.object(CLIProxyManager, "install_if_needed", return_value=True) as mock_install,
             patch.object(CLIProxyManager, "upgrade") as mock_upgrade,
         ):
             ok, msg = CLIProxyManager.ensure_min_version()
@@ -210,9 +205,7 @@ class TestEnsureMinVersion:
     def test_returns_false_when_install_fails(self):
         with (
             patch.object(CLIProxyManager, "detect_version", return_value=None),
-            patch.object(
-                CLIProxyManager, "install_if_needed", return_value=False
-            ),
+            patch.object(CLIProxyManager, "install_if_needed", return_value=False),
         ):
             ok, msg = CLIProxyManager.ensure_min_version()
         assert ok is False
@@ -256,9 +249,7 @@ class TestUpgradeDispatch:
         mock_linux.assert_called_once()
 
     def test_unsupported_platform_returns_false(self):
-        with patch(
-            "app.services.cliproxy_manager.platform.system", return_value="Windows"
-        ):
+        with patch("app.services.cliproxy_manager.platform.system", return_value="Windows"):
             ok, msg = CLIProxyManager.upgrade()
         assert ok is False
         assert "Unsupported platform" in msg
@@ -418,9 +409,7 @@ class TestAutofixUnknownProvider:
             _fix_cliproxy_unknown_provider,
         )
 
-        fix_fn = _find_tier1_fix(
-            "proxy_error", "502 unknown provider for model claude-opus-4-7"
-        )
+        fix_fn = _find_tier1_fix("proxy_error", "502 unknown provider for model claude-opus-4-7")
         assert fix_fn is _fix_cliproxy_unknown_provider
 
     def test_pattern_matches_cli_error_variant(self):
@@ -429,9 +418,7 @@ class TestAutofixUnknownProvider:
             _fix_cliproxy_unknown_provider,
         )
 
-        fix_fn = _find_tier1_fix(
-            "cli_error", "unknown provider for model gpt-5"
-        )
+        fix_fn = _find_tier1_fix("cli_error", "unknown provider for model gpt-5")
         assert fix_fn is _fix_cliproxy_unknown_provider
 
     def test_fix_function_calls_ensure_min_version(self):

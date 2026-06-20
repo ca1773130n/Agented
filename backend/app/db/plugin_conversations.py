@@ -100,9 +100,7 @@ def get_plugin_conversation(conv_id: str) -> Optional[dict]:
         return _row_to_dict(row) if row else None
 
 
-def list_active_plugin_conversations(
-    user_id: Optional[str] = None, limit: int = 10
-) -> List[dict]:
+def list_active_plugin_conversations(user_id: Optional[str] = None, limit: int = 10) -> List[dict]:
     """Most-recent ``active`` plugin conversations, scoped by user_id.
 
     Filter semantics mirror ``list_active_skill_conversations``:

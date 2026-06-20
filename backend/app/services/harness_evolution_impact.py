@@ -58,19 +58,24 @@ def compute_impact(round_id: str, *, window_size: int = 20) -> dict[str, Any]:
 
 def _gather_window(project_id, *, before_ts=None, after_ts=None, limit=20):
     snaps = snapshots_repo.list_for_project(
-        project_id, before_ts=before_ts, after_ts=after_ts, limit=limit,
+        project_id,
+        before_ts=before_ts,
+        after_ts=after_ts,
+        limit=limit,
     )
     enriched = []
     for snap in snaps:
         session_kind = snap.get("session_kind") or "trigger_execution"
         session_id = snap["session_id"]
-        enriched.append({
-            "session_kind": session_kind,
-            "session_id": session_id,
-            "annotation": annotations_repo.get_annotation(session_kind, session_id),
-            "snapshot_at": snap["created_at"],
-            "bundle_hash": snap.get("bundle_hash"),
-        })
+        enriched.append(
+            {
+                "session_kind": session_kind,
+                "session_id": session_id,
+                "annotation": annotations_repo.get_annotation(session_kind, session_id),
+                "snapshot_at": snap["created_at"],
+                "bundle_hash": snap.get("bundle_hash"),
+            }
+        )
     return enriched
 
 
@@ -104,9 +109,7 @@ def _summarize(window: list[dict[str, Any]]) -> dict[str, Any]:
         "executions": total,
         "success_rate": successes / total,
         "failure_layers": failure_layers,
-        "mean_incident_count": (
-            incident_total / incident_observed if incident_observed else None
-        ),
+        "mean_incident_count": (incident_total / incident_observed if incident_observed else None),
     }
 
 
@@ -119,7 +122,8 @@ def _delta(before, after):
     return {
         "success_rate": _diff(before["success_rate"], after["success_rate"]),
         "mean_incident_count": _diff(
-            before["mean_incident_count"], after["mean_incident_count"],
+            before["mean_incident_count"],
+            after["mean_incident_count"],
         ),
         "failure_layers": {
             k: after["failure_layers"][k] - before["failure_layers"][k]

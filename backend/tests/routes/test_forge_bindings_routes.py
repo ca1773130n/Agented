@@ -29,9 +29,7 @@ def workspace_project(isolated_db, tmp_path):
     """A project whose local_path is a real (empty) directory, so
     materialization can resolve a working directory and write files."""
     del isolated_db
-    return create_project(
-        name="ws-test", description="fixture", local_path=str(tmp_path)
-    ), tmp_path
+    return create_project(name="ws-test", description="fixture", local_path=str(tmp_path)), tmp_path
 
 
 def test_list_returns_empty(project_id):
@@ -55,9 +53,7 @@ def test_add_then_list_then_remove(project_id):
         r = c.get(f"/admin/projects/{project_id}/forge-bindings")
         assert len(r.json()["bindings"]) == 1
 
-        r = c.delete(
-            f"/admin/projects/{project_id}/forge-bindings/{binding['id']}"
-        )
+        r = c.delete(f"/admin/projects/{project_id}/forge-bindings/{binding['id']}")
         assert r.status_code == 204
 
         r = c.get(f"/admin/projects/{project_id}/forge-bindings")
@@ -183,9 +179,7 @@ def test_forge_create_no_orphan_on_bind_failure(workspace_project, monkeypatch):
         raise RuntimeError("injected bind failure")
 
     # Patch the name as bound inside the create service module.
-    monkeypatch.setattr(
-        "app.services.forge_create_service.add_project_forge_binding", _boom
-    )
+    monkeypatch.setattr("app.services.forge_create_service.add_project_forge_binding", _boom)
     with _client() as c:
         r = c.post(
             f"/admin/projects/{project_id}/forge/create",
@@ -204,9 +198,7 @@ def test_forge_create_no_orphan_on_materialize_failure(workspace_project, monkey
     def _boom(*a, **k):
         raise RuntimeError("injected materialize failure")
 
-    monkeypatch.setattr(
-        "app.services.forge_create_service.materialize_primitives", _boom
-    )
+    monkeypatch.setattr("app.services.forge_create_service.materialize_primitives", _boom)
     with _client() as c:
         r = c.post(
             f"/admin/projects/{project_id}/forge/create",
@@ -244,9 +236,7 @@ def test_bundle_bind_cross_kind_one_call(project_id):
     add_bundle_item(bundle["id"], "subagent", sub["id"])
 
     with _client() as c:
-        r = c.post(
-            f"/admin/projects/{project_id}/forge/bundles/{bundle['id']}/bind"
-        )
+        r = c.post(f"/admin/projects/{project_id}/forge/bundles/{bundle['id']}/bind")
     assert r.status_code == 200, r.text
     assert r.json()["bound"] == 3
     bound = {(b["kind"], b["asset_id"]) for b in _bindings(project_id)}

@@ -73,8 +73,7 @@ def list_stale(*, grace_seconds: int = 0) -> list[dict[str, Any]]:
     cutoff = (datetime.now(timezone.utc) + timedelta(seconds=grace_seconds)).isoformat()
     with get_connection() as conn:
         rows = conn.execute(
-            "SELECT * FROM model_discovery_cache WHERE expires_at <= ? "
-            "ORDER BY expires_at ASC",
+            "SELECT * FROM model_discovery_cache WHERE expires_at <= ? ORDER BY expires_at ASC",
             (cutoff,),
         ).fetchall()
     return [dict(r) for r in rows]

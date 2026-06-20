@@ -51,16 +51,22 @@ def _run_gd_plain(cwd: str, args: list[str]) -> dict:
         return {"success": False, "data": None, "error": str(exc)}
     out = (result.stdout or "").strip()
     if result.returncode != 0:
-        return {"success": False, "data": None,
-                "error": (result.stderr or out or f"exit {result.returncode}").strip()[:300]}
+        return {
+            "success": False,
+            "data": None,
+            "error": (result.stderr or out or f"exit {result.returncode}").strip()[:300],
+        }
     # grd-tools prints "Error: ..." to stdout and still exits 0 — detect it.
     if not out or out.lower().startswith("error:"):
         return {"success": False, "data": None, "error": (out or "no output")[:300]}
     try:
         return {"success": True, "data": json.loads(out), "error": None}
     except json.JSONDecodeError:
-        return {"success": False, "data": None,
-                "error": f"gd returned non-JSON output: {out[:200]}"}
+        return {
+            "success": False,
+            "data": None,
+            "error": f"gd returned non-JSON output: {out[:200]}",
+        }
 
 
 def _mirror(project_id: str, data: dict) -> Optional[str]:

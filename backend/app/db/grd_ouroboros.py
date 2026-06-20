@@ -63,8 +63,7 @@ def upsert_phase_reflection(
         existing = None
         if source_path:
             cursor = conn.execute(
-                "SELECT id FROM phase_reflections "
-                "WHERE phase_id = ? AND source_path = ?",
+                "SELECT id FROM phase_reflections WHERE phase_id = ? AND source_path = ?",
                 (phase_id, source_path),
             )
             row = cursor.fetchone()

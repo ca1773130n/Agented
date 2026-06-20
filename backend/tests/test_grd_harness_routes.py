@@ -30,7 +30,8 @@ def test_harness_round_triggers_runner(isolated_db, monkeypatch, tmp_path):
 
     calls = {}
     monkeypatch.setattr(
-        runner, "run_round",
+        runner,
+        "run_round",
         lambda project_id, cwd, **kw: calls.update(project_id=project_id, kw=kw) or True,
     )
     pid = _seed_project(str(tmp_path))
@@ -68,7 +69,8 @@ def test_revert_harness_round(isolated_db, monkeypatch, tmp_path):
     import app.services.grd_harness_round_runner as runner
 
     monkeypatch.setattr(
-        runner, "revert_round",
+        runner,
+        "revert_round",
         lambda cwd, rid: {"success": True, "output": "reverted", "error": None},
     )
     pid = _seed_project(str(tmp_path))

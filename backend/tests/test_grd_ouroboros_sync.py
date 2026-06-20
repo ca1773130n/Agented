@@ -10,8 +10,6 @@ Covers:
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from app.db.connection import get_connection
 from app.db.grd_ouroboros import (
     add_dead_end,
@@ -28,7 +26,6 @@ from app.db.grd_ouroboros import (
 )
 from app.services.grd_sync_service import GrdSyncService
 
-
 # ---------------------------------------------------------------------
 # Migration v127
 # ---------------------------------------------------------------------
@@ -40,9 +37,7 @@ def test_migration_127_created_tables_and_columns(isolated_db):
         # New tables present
         tables = {
             r[0]
-            for r in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
+            for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         }
         for t in (
             "phase_reflections",
@@ -51,9 +46,7 @@ def test_migration_127_created_tables_and_columns(isolated_db):
         ):
             assert t in tables, f"migration 127 must create {t}"
         # project_plans gained the v0.3.24 frontmatter columns.
-        plan_cols = {
-            row[1] for row in conn.execute("PRAGMA table_info(project_plans)").fetchall()
-        }
+        plan_cols = {row[1] for row in conn.execute("PRAGMA table_info(project_plans)").fetchall()}
         for col in ("hypothesis", "predicted_outcome", "verdict"):
             assert col in plan_cols, f"migration 127 must add project_plans.{col}"
 
@@ -344,7 +337,6 @@ def test_sync_phase_reflection_parses_verification_table(isolated_db, tmp_path):
     del isolated_db
     with get_connection() as conn:
         phase_id = _seed_phase(conn)
-        from app.db.ids import _get_unique_project_id
 
         # Re-resolve project_id via phase's milestone.
         row = conn.execute(

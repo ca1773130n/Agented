@@ -50,8 +50,18 @@ def upsert_harness_round(
                     patch_json = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """,
-                (status, detail, evidence_count, patch_hash, confidence, summary,
-                 applied_sha, eval_json, patch_json, hid),
+                (
+                    status,
+                    detail,
+                    evidence_count,
+                    patch_hash,
+                    confidence,
+                    summary,
+                    applied_sha,
+                    eval_json,
+                    patch_json,
+                    hid,
+                ),
             )
         else:
             hid = _get_unique_harness_round_id(conn)
@@ -62,8 +72,20 @@ def upsert_harness_round(
                      patch_hash, confidence, summary, applied_sha, eval_json, patch_json)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (hid, project_id, round_id, status, detail, evidence_count, patch_hash,
-                 confidence, summary, applied_sha, eval_json, patch_json),
+                (
+                    hid,
+                    project_id,
+                    round_id,
+                    status,
+                    detail,
+                    evidence_count,
+                    patch_hash,
+                    confidence,
+                    summary,
+                    applied_sha,
+                    eval_json,
+                    patch_json,
+                ),
             )
         conn.commit()
         return hid

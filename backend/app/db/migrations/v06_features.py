@@ -397,8 +397,7 @@ def _migrate_114_trigger_events(conn):
         "ON trigger_events(trigger_id, received_at DESC)"
     )
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_trigger_events_received_at "
-        "ON trigger_events(received_at)"
+        "CREATE INDEX IF NOT EXISTS idx_trigger_events_received_at ON trigger_events(received_at)"
     )
 
 

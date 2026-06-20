@@ -2,15 +2,11 @@
 
 import hashlib
 import json
-import threading
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from app.services.sync_persistence_service import SyncService
 from app.services.plugin_file_watcher import PluginFileWatcher
-
+from app.services.sync_persistence_service import SyncService
 
 # ---------------------------------------------------------------------------
 # Helpers

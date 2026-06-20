@@ -37,10 +37,12 @@ def on_starting(server):
     In production, missing required vars cause an immediate exit
     rather than a silently-degraded boot."""
     from scripts.check_env import main as _check_env
+
     rc = _check_env([])
     if rc != 0:
         server.log.error("env-var validation failed; refusing to start")
         sys.exit(rc)
+
 
 # Bump soft file-descriptor limit early. macOS defaults to 256, which the
 # bundle plugin install + concurrent SQLite connections can blow past,

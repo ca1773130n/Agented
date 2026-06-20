@@ -18,13 +18,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import statistics
 import sys
 import time
 import urllib.error
 import urllib.request
 from typing import Optional
-
 
 _DEFAULT_ENDPOINTS = (
     "/health/liveness",
@@ -49,11 +47,14 @@ def _percentile(values: list[float], pct: float) -> float:
         return s[-1]
     # Nearest-rank: index = ceil(pct/100 * N) - 1.
     import math
+
     rank = math.ceil(pct / 100.0 * n) - 1
     return s[max(0, min(n - 1, rank))]
 
 
-def _request(url: str, *, timeout: float, headers: dict[str, str]) -> tuple[int, float, Optional[float]]:
+def _request(
+    url: str, *, timeout: float, headers: dict[str, str]
+) -> tuple[int, float, Optional[float]]:
     """Return (status, total_ms, server_app_ms or None)."""
     req = urllib.request.Request(url, headers=headers)
     started = time.monotonic()
@@ -78,7 +79,12 @@ def _request(url: str, *, timeout: float, headers: dict[str, str]) -> tuple[int,
 
 
 def profile_endpoint(
-    base: str, endpoint: str, *, n: int, timeout: float, headers: dict[str, str],
+    base: str,
+    endpoint: str,
+    *,
+    n: int,
+    timeout: float,
+    headers: dict[str, str],
 ) -> dict:
     url = base.rstrip("/") + endpoint
     totals: list[float] = []
@@ -114,7 +120,9 @@ def profile_endpoint(
 
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Profile Agented endpoints.")
-    parser.add_argument("--base", default=os.environ.get("AGENTED_BACKEND_URL", "http://127.0.0.1:20000"))
+    parser.add_argument(
+        "--base", default=os.environ.get("AGENTED_BACKEND_URL", "http://127.0.0.1:20000")
+    )
     parser.add_argument("--requests", "-n", type=int, default=50)
     parser.add_argument("--endpoints", default=",".join(_DEFAULT_ENDPOINTS))
     parser.add_argument("--api-key", default=os.environ.get("AGENTED_API_KEY"))
@@ -143,7 +151,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     for ep in endpoints:
         try:
             entry = profile_endpoint(
-                args.base, ep, n=args.requests, timeout=args.timeout, headers=headers,
+                args.base,
+                ep,
+                n=args.requests,
+                timeout=args.timeout,
+                headers=headers,
             )
         except Exception as exc:  # noqa: BLE001
             entry = {"endpoint": ep, "error": str(exc)}

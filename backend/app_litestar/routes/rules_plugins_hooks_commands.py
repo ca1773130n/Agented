@@ -55,7 +55,6 @@ from app.db.owned_entities import get_for_user
 
 from ..auth import Caller
 
-
 VALID_RULE_TYPES = ["pre_check", "post_check", "validation"]
 HOOK_EVENTS = ["PreToolUse", "PostToolUse", "Notification", "Stop", "SubagentStop"]
 

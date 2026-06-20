@@ -28,7 +28,14 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 _IGNORE_NAMES = {
-    ".git", "node_modules", ".venv", "venv", "__pycache__", ".worktrees", "dist", ".mypy_cache"
+    ".git",
+    "node_modules",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".worktrees",
+    "dist",
+    ".mypy_cache",
 }
 _IGNORE = shutil.ignore_patterns(*_IGNORE_NAMES)
 _ENV_ALLOWLIST = ("PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "TMPDIR", "SHELL")

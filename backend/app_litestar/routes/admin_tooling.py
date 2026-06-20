@@ -24,7 +24,6 @@ from app.database import (
     get_setting,
     set_setting,
 )
-from app_litestar.auth_guards import requires_role
 from app.db.gitops import (
     create_gitops_repo,
     delete_gitops_repo,
@@ -49,6 +48,7 @@ from app.db.version_pins import (
 from app.services.error_capture import capture_error
 from app.services.gitops_sync_service import GitOpsSyncService
 from app.services.secret_vault_service import SecretVaultService
+from app_litestar.auth_guards import requires_role
 from app_litestar.route_helpers import MAX_LIST_LIMIT, clamp_limit
 
 logger = logging.getLogger(__name__)

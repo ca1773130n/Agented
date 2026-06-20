@@ -83,6 +83,7 @@ class TestLogin:
     def test_token_authenticates_protected_route(self, isolated_db):
         """Wave 33 — /api/auth/me accepts session-token bearer auth."""
         from app.db.rbac import create_user_role
+
         # Need at least one role row so we're past bootstrap mode.
         create_user_role("gate-key", "Gate", "admin")
 
@@ -106,6 +107,7 @@ class TestLogin:
 
     def test_me_with_api_key_returns_user(self, isolated_db):
         from app.db.rbac import create_user_role
+
         uid = create_user("apikey-me@example.com", "ApiKey")
         create_user_role("ak-me-key", "Lbl", "admin", user_id=uid)
         with _client(isolated_db) as ls:
@@ -120,6 +122,7 @@ class TestLogin:
 
     def test_me_unauthenticated_returns_401(self, isolated_db):
         from app.db.rbac import create_user_role
+
         create_user_role("gate-2", "Gate", "admin")  # past bootstrap
         with _client(isolated_db) as ls:
             resp = ls.get("/api/auth/me")
@@ -128,6 +131,7 @@ class TestLogin:
     def test_logout_revokes_session(self, isolated_db):
         from app.db.rbac import create_user_role
         from app.db.sessions import get_session_by_token
+
         create_user_role("gate-3", "Gate", "admin")
 
         uid = create_user("logout@example.com")
@@ -154,6 +158,7 @@ class TestLogin:
 
     def test_garbage_authorization_header_falls_through_to_api_key(self, isolated_db):
         from app.db.rbac import create_user_role
+
         create_user_role("ak-fall", "Lbl", "admin")
         with _client(isolated_db) as ls:
             # Malformed header — wrong scheme, non-bearer.
@@ -169,6 +174,7 @@ class TestLogin:
     def test_signup_creates_user_and_returns_token(self, isolated_db):
         from app.db.sessions import get_session_by_token
         from app.db.users import get_user_by_email
+
         with _client(isolated_db) as ls:
             resp = ls.post(
                 "/api/auth/signup",
@@ -238,6 +244,7 @@ class TestLogin:
         set_password(uid, "x")
         # Associate an admin role row with this user.
         from app.db.rbac import create_user_role
+
         create_user_role("ignored-key", "Owned by admin user", "admin", user_id=uid)
         with _client(isolated_db) as ls:
             login_resp = ls.post(
@@ -255,6 +262,7 @@ class TestLogin:
         """Inverse — a logged-in user who only owns viewer rows is 403'd
         from admin endpoints."""
         from app.db.rbac import create_user_role
+
         uid = create_user("viewer-user@example.com", "ViewerUser")
         set_password(uid, "x")
         create_user_role("vw-only-key", "Viewer only", "viewer", user_id=uid)
@@ -272,6 +280,7 @@ class TestLogin:
 
     def test_token_authenticates_subsequent_session_lookup(self, isolated_db):
         from app.db.sessions import get_session_by_token
+
         uid = create_user("session@example.com")
         set_password(uid, "x")
         with _client(isolated_db) as ls:

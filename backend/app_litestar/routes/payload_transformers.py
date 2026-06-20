@@ -58,9 +58,7 @@ def get_transformer(trigger_id: str, authorized: Caller) -> dict[str, Any]:
     dependencies={"authorized": require_role("editor", "admin")},
     sync_to_thread=False,
 )
-def save_transformer(
-    trigger_id: str, data: UpsertBody, authorized: Caller
-) -> dict[str, Any]:
+def save_transformer(trigger_id: str, data: UpsertBody, authorized: Caller) -> dict[str, Any]:
     del authorized
     rules_json = json.dumps([r if isinstance(r, dict) else r for r in data.rules])
     upsert_transformer(trigger_id=trigger_id, name=data.name, rules_json=rules_json)

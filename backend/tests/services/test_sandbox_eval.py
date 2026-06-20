@@ -1,6 +1,6 @@
 # backend/tests/services/test_sandbox_eval.py
 import os
-from pathlib import Path
+
 from app.services.sandbox_eval import run_isolated_check
 
 
@@ -42,6 +42,7 @@ def test_escaping_symlink_is_neutralized(tmp_path):
     """A pre-planted symlink pointing OUTSIDE the workspace must not be readable
     from inside the snapshot (it's dropped during neutralization)."""
     import os
+
     secret = tmp_path.parent / "outside_secret.txt"
     secret.write_text("TOPSECRET")
     ws = tmp_path / "ws"
@@ -54,9 +55,11 @@ def test_escaping_symlink_is_neutralized(tmp_path):
 
 def test_run_check_inplace_scrubs_env(tmp_path):
     import os
+
     os.environ["SECRET_TOKEN_INPLACE"] = "leak"
     try:
         from app.services.sandbox_eval import run_check_inplace
+
         res = run_check_inplace('test -z "$SECRET_TOKEN_INPLACE"', str(tmp_path), timeout=10)
         assert res.returncode == 0 and res.sandboxed is False
     finally:

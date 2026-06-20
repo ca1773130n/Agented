@@ -20,7 +20,7 @@ from __future__ import annotations
 from typing import Any
 
 from litestar import Router, post
-from litestar.exceptions import NotFoundException, ClientException
+from litestar.exceptions import ClientException, NotFoundException
 
 from app.db.connection import get_connection
 from app.db.projects import get_project
@@ -111,7 +111,10 @@ def open_team_leader_chat(project_id: str) -> dict[str, Any]:
 
 
 def _ensure_leader_session(
-    *, template_sa_id: str, instance_id: str, project_id: str,
+    *,
+    template_sa_id: str,
+    instance_id: str,
+    project_id: str,
 ) -> str:
     """Return an existing leader session for the (template_sa, project)
     pair or create one.
@@ -123,7 +126,6 @@ def _ensure_leader_session(
     """
     from app.services.super_agent_session_service import (
         SessionLimitError,
-        SuperAgentSessionService,
     )
 
     # Scan the in-memory active sessions for a matching leader session.

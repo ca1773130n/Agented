@@ -61,9 +61,7 @@ def _make_conversation_router(
 
     @post("/start", sync_to_thread=False, name=f"{name_prefix}_start")
     def start_conversation(caller: Caller) -> Any:
-        return _result_or_raise(
-            service.start_conversation(user_id=_caller_user_id(caller))
-        )
+        return _result_or_raise(service.start_conversation(user_id=_caller_user_id(caller)))
 
     @get("/{conv_id:str}", sync_to_thread=False, name=f"{name_prefix}_get")
     def get_conversation(conv_id: str, caller: Caller) -> Any:
@@ -92,9 +90,7 @@ def _make_conversation_router(
         }
         if service is not PluginConversationService:
             send_kwargs["use_cli_agent"] = use_cli_agent
-        return _result_or_raise(
-            service.send_message(conv_id, body["message"], **send_kwargs)
-        )
+        return _result_or_raise(service.send_message(conv_id, body["message"], **send_kwargs))
 
     @post("/{conv_id:str}/finalize", sync_to_thread=False, name=f"{name_prefix}_finalize")
     def finalize_endpoint(conv_id: str, caller: Caller) -> Any:
@@ -104,16 +100,12 @@ def _make_conversation_router(
         # ``finalize_entity`` wrapper which gates ownership +
         # flips the DB status before/after calling the abstract
         # ``_finalize_entity``.
-        return _result_or_raise(
-            finalize(conv_id, caller_user_id=_caller_user_id(caller))
-        )
+        return _result_or_raise(finalize(conv_id, caller_user_id=_caller_user_id(caller)))
 
     @post("/{conv_id:str}/abandon", sync_to_thread=False, name=f"{name_prefix}_abandon")
     def abandon_conversation(conv_id: str, caller: Caller) -> Any:
         return _result_or_raise(
-            service.abandon_conversation(
-                conv_id, caller_user_id=_caller_user_id(caller)
-            )
+            service.abandon_conversation(conv_id, caller_user_id=_caller_user_id(caller))
         )
 
     @get("/active", sync_to_thread=False, name=f"{name_prefix}_active")
@@ -122,9 +114,7 @@ def _make_conversation_router(
         for the calling user. Powers the wizard's auto-resume on
         cold-cache loads.
         """
-        return _result_or_raise(
-            service.list_active(user_id=_caller_user_id(caller))
-        )
+        return _result_or_raise(service.list_active(user_id=_caller_user_id(caller)))
 
     handlers: list = [
         start_conversation,
@@ -136,21 +126,19 @@ def _make_conversation_router(
     ]
 
     if include_list:
+
         @get("/", sync_to_thread=False, name=f"{name_prefix}_list")
         def list_conversations(caller: Caller) -> Any:
-            return _result_or_raise(
-                service.list_conversations(user_id=_caller_user_id(caller))
-            )
+            return _result_or_raise(service.list_conversations(user_id=_caller_user_id(caller)))
 
         handlers.append(list_conversations)
 
     if include_resume:
+
         @post("/{conv_id:str}/resume", sync_to_thread=False, name=f"{name_prefix}_resume")
         def resume_conversation(conv_id: str, caller: Caller) -> Any:
             return _result_or_raise(
-                service.resume_conversation(
-                    conv_id, caller_user_id=_caller_user_id(caller)
-                )
+                service.resume_conversation(conv_id, caller_user_id=_caller_user_id(caller))
             )
 
         handlers.append(resume_conversation)

@@ -6,7 +6,6 @@ Covers:
   - H3: env API key authenticates as an attributable service principal.
 """
 
-import pytest
 from litestar.testing import create_test_client
 
 

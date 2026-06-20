@@ -748,7 +748,9 @@ class MonitoringService:
                 "eta": eta,
             }
             if account_id in account_blocks:
-                window_entry["rate_limited_until"] = account_blocks[account_id]["rate_limited_until"]
+                window_entry["rate_limited_until"] = account_blocks[account_id][
+                    "rate_limited_until"
+                ]
                 window_entry["rate_limit_reason"] = account_blocks[account_id]["rate_limit_reason"]
             if account_id in shared_credential_groups:
                 peer_names = [
@@ -785,7 +787,9 @@ class MonitoringService:
                     no_data_entry["rate_limited_until"] = account_blocks[acct_id][
                         "rate_limited_until"
                     ]
-                    no_data_entry["rate_limit_reason"] = account_blocks[acct_id]["rate_limit_reason"]
+                    no_data_entry["rate_limit_reason"] = account_blocks[acct_id][
+                        "rate_limit_reason"
+                    ]
                 windows.append(no_data_entry)
 
         return {

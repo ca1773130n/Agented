@@ -16,7 +16,6 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-
 REQUIRED_VARS: list[dict] = [
     {
         "name": "AGENTED_API_KEY",
@@ -243,7 +242,9 @@ OPTIONAL_VARS: list[dict] = [
 
 
 def _resolve_file_redirect(
-    name: str, *, perm_warnings: Optional[list[str]] = None,
+    name: str,
+    *,
+    perm_warnings: Optional[list[str]] = None,
 ) -> Optional[str]:
     """If `<NAME>_FILE` is set in env, read the file and return its
     stripped contents. Used for Docker-secrets / mounted secret files.
@@ -265,8 +266,7 @@ def _resolve_file_redirect(
             mode = path.stat().st_mode
             if mode & (stat.S_IROTH | stat.S_IWOTH):
                 perm_warnings.append(
-                    f"{file_var}={path_str} is world-readable/writable; "
-                    f"recommend chmod 600"
+                    f"{file_var}={path_str} is world-readable/writable; recommend chmod 600"
                 )
         except OSError:
             pass

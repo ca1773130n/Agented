@@ -166,9 +166,7 @@ def bridge_psm_to_chat(
                 session_id, "content_delta", {"content": _extract_text(event)}
             )
         elif kind == "tool_use":
-            chat_state_service.push_delta(
-                session_id, "tool_use", _extract_tool(event)
-            )
+            chat_state_service.push_delta(session_id, "tool_use", _extract_tool(event))
         elif kind == "finish":
             chat_state_service.push_delta(
                 session_id, "finish", _finish_data(_extract_finish_reason(event))

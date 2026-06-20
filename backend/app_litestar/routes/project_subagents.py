@@ -25,9 +25,7 @@ from ..auth import Caller
 
 
 @get("/", sync_to_thread=False)
-def list_subagents_endpoint(
-    caller: Caller, project_id: Optional[str] = None
-) -> dict[str, Any]:
+def list_subagents_endpoint(caller: Caller, project_id: Optional[str] = None) -> dict[str, Any]:
     del caller
     rows = list_subagents(project_id)
     return {"subagents": rows, "total_count": len(rows)}
@@ -64,9 +62,7 @@ def get_subagent_endpoint(subagent_id: str, caller: Caller) -> dict[str, Any]:
 
 
 @put("/{subagent_id:str}", sync_to_thread=False)
-def update_subagent_endpoint(
-    subagent_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def update_subagent_endpoint(subagent_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     if not update_subagent(
         subagent_id,

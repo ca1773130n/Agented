@@ -18,7 +18,6 @@ import pytest
 from app.services import goal_loop_runner
 from app.services.goal_judge_service import JudgeVerdict
 
-
 # -----------------------------------------------------------------
 # Continue-prompt synthesis (pure)
 # -----------------------------------------------------------------
@@ -94,9 +93,7 @@ class _FakePSM:
         self.sent_inputs.append(payload)
         if self.auto_echo:
             self.auto_echo_counter += 1
-            self.queue.put(
-                ("turn_done", {"text": f"echo turn {self.auto_echo_counter}"})
-            )
+            self.queue.put(("turn_done", {"text": f"echo turn {self.auto_echo_counter}"}))
         return True
 
     def _broadcast(self, session_id: str, event_type: str, data: dict) -> None:
@@ -149,12 +146,8 @@ def stub_iteration_db(monkeypatch):
     def _complete(row_id, **kwargs):
         calls["completes"].append((row_id, kwargs))
 
-    monkeypatch.setattr(
-        goal_loop_runner, "record_goal_loop_iteration_start", _start
-    )
-    monkeypatch.setattr(
-        goal_loop_runner, "record_goal_loop_iteration_complete", _complete
-    )
+    monkeypatch.setattr(goal_loop_runner, "record_goal_loop_iteration_start", _start)
+    monkeypatch.setattr(goal_loop_runner, "record_goal_loop_iteration_complete", _complete)
     return calls
 
 
@@ -179,9 +172,7 @@ def test_runner_stops_when_judge_says_met(fake_psm, stub_iteration_db, monkeypat
         goal_loop_runner.GoalJudgeService,
         "judge",
         classmethod(
-            lambda cls, goal, text, **kw: JudgeVerdict(
-                met=True, source="llm", reason="done"
-            )
+            lambda cls, goal, text, **kw: JudgeVerdict(met=True, source="llm", reason="done")
         ),
     )
     goal_loop_runner.start_runner(
@@ -193,7 +184,11 @@ def test_runner_stops_when_judge_says_met(fake_psm, stub_iteration_db, monkeypat
     fake_psm.queue.put(("turn_done", {"text": "I did it."}))
     assert _drive(_RunnerStateLookup("psess-met"))
     assert fake_psm.stopped == ["psess-met"]
-    assert ("psess-met", "goal_loop_ended", {"reason": "met", "detail": "done"}) in fake_psm.broadcasts
+    assert (
+        "psess-met",
+        "goal_loop_ended",
+        {"reason": "met", "detail": "done"},
+    ) in fake_psm.broadcasts
     # v0.7.74 — the runner sends the initial kickoff prompt before
     # it ever sees a turn_done, so exactly ONE input is written.
     # No continue prompt because the first verdict was 'met'.
@@ -210,9 +205,7 @@ def test_runner_sends_continue_on_not_met_then_iteration_cap(
         goal_loop_runner.GoalJudgeService,
         "judge",
         classmethod(
-            lambda cls, goal, text, **kw: JudgeVerdict(
-                met=False, source="llm", reason="not yet"
-            )
+            lambda cls, goal, text, **kw: JudgeVerdict(met=False, source="llm", reason="not yet")
         ),
     )
     # Enable auto-echo so each continue prompt triggers the next
@@ -227,9 +220,7 @@ def test_runner_sends_continue_on_not_met_then_iteration_cap(
     assert _drive(_RunnerStateLookup("psess-cap"))
     # Stopped due to iteration cap.
     assert fake_psm.stopped == ["psess-cap"]
-    end_event = [
-        b for b in fake_psm.broadcasts if b[1] == "goal_loop_ended"
-    ]
+    end_event = [b for b in fake_psm.broadcasts if b[1] == "goal_loop_ended"]
     assert end_event and end_event[0][2]["reason"] == "iteration_cap"
     # Sends: initial kickoff + continue after iter 1 + continue
     # after iter 2 = 3 writes. Iter 3 hits the cap so no further
@@ -269,9 +260,7 @@ def test_runner_opt_out_uses_legacy_prompts_and_skips_ouroboros_machinery(
         goal_loop_runner.GoalJudgeService,
         "judge",
         classmethod(
-            lambda cls, goal, text, **kw: JudgeVerdict(
-                met=False, source="llm", reason="not yet"
-            )
+            lambda cls, goal, text, **kw: JudgeVerdict(met=False, source="llm", reason="not yet")
         ),
     )
     # Spy on the Ouroboros side-effect helpers; opt-out must not
@@ -280,7 +269,7 @@ def test_runner_opt_out_uses_legacy_prompts_and_skips_ouroboros_machinery(
     monkeypatch.setattr(
         goal_loop_runner,
         "_extract_hypothesis",
-        lambda text: (extract_calls.append(text) or (None, None)),
+        lambda text: extract_calls.append(text) or (None, None),
     )
     dead_end_calls: list = []
     monkeypatch.setattr(
@@ -292,9 +281,7 @@ def test_runner_opt_out_uses_legacy_prompts_and_skips_ouroboros_machinery(
     monkeypatch.setattr(
         goal_loop_runner,
         "recent_iteration_verdicts",
-        lambda session_id, limit=3: (
-            convergence_calls.append((session_id, limit)) or []
-        ),
+        lambda session_id, limit=3: convergence_calls.append((session_id, limit)) or [],
     )
 
     fake_psm.auto_echo = True
@@ -335,9 +322,7 @@ def test_runner_opt_out_uses_legacy_prompts_and_skips_ouroboros_machinery(
         assert kwargs.get("ouroboros_verdict") is None
 
 
-def test_runner_records_each_iteration(
-    fake_psm, stub_iteration_db, monkeypatch
-):
+def test_runner_records_each_iteration(fake_psm, stub_iteration_db, monkeypatch):
     monkeypatch.setattr(
         goal_loop_runner.GoalJudgeService,
         "judge",
@@ -365,9 +350,7 @@ def test_runner_records_each_iteration(
 
 
 def test_runner_aborts_on_empty_goal(fake_psm, stub_iteration_db):
-    goal_loop_runner.start_runner(
-        "psess-empty", {"goal": "   ", "max_iterations": 5}, cwd=None
-    )
+    goal_loop_runner.start_runner("psess-empty", {"goal": "   ", "max_iterations": 5}, cwd=None)
     assert _drive(_RunnerStateLookup("psess-empty"))
     # Should have done nothing — no broadcasts, no inputs, no
     # iteration rows.
@@ -380,11 +363,7 @@ def test_runner_wall_time_cap(fake_psm, stub_iteration_db, monkeypatch):
     monkeypatch.setattr(
         goal_loop_runner.GoalJudgeService,
         "judge",
-        classmethod(
-            lambda cls, *a, **kw: JudgeVerdict(
-                met=False, source="llm", reason="no"
-            )
-        ),
+        classmethod(lambda cls, *a, **kw: JudgeVerdict(met=False, source="llm", reason="no")),
     )
     # Shrink the poll interval so the cap check fires quickly.
     monkeypatch.setattr(goal_loop_runner, "_QUEUE_POLL_SECONDS", 0.05)
@@ -401,9 +380,7 @@ def test_runner_wall_time_cap(fake_psm, stub_iteration_db, monkeypatch):
     assert end and end[0][2]["reason"] == "wall_time_cap"
 
 
-def test_runner_stale_check_disagreement_event(
-    fake_psm, stub_iteration_db, monkeypatch
-):
+def test_runner_stale_check_disagreement_event(fake_psm, stub_iteration_db, monkeypatch):
     """When deterministic check has been ``not_met`` 5 times in a
     row and the LLM sanity layer says ``met``, the runner emits a
     ``goal_check_disagreement`` event and resets the streak.
@@ -414,9 +391,7 @@ def test_runner_stale_check_disagreement_event(
         # Deterministic = check_cmd is set; LLM sanity layer = no check_cmd.
         if check_cmd:
             deterministic_call["n"] += 1
-            return JudgeVerdict(
-                met=False, source="deterministic", reason="exit 1"
-            )
+            return JudgeVerdict(met=False, source="deterministic", reason="exit 1")
         return JudgeVerdict(met=True, source="llm", reason="actually fine")
 
     monkeypatch.setattr(
@@ -487,9 +462,7 @@ def test_get_runner_state_snapshot(fake_psm, stub_iteration_db, monkeypatch):
 # -----------------------------------------------------------------
 
 
-def test_runner_sends_initial_prompt_before_first_turn(
-    fake_psm, stub_iteration_db, monkeypatch
-):
+def test_runner_sends_initial_prompt_before_first_turn(fake_psm, stub_iteration_db, monkeypatch):
     """Codex blocker #1 regression test. Without the initial
     kickoff send, the runner would block forever waiting for a
     turn_done that never arrives because claude has nothing to
@@ -503,9 +476,7 @@ def test_runner_sends_initial_prompt_before_first_turn(
         time.sleep(10)  # long enough that the test finishes first
         return JudgeVerdict(met=False, source="llm", reason="x")
 
-    monkeypatch.setattr(
-        goal_loop_runner.GoalJudgeService, "judge", classmethod(slow_judge)
-    )
+    monkeypatch.setattr(goal_loop_runner.GoalJudgeService, "judge", classmethod(slow_judge))
     goal_loop_runner.start_runner(
         "psess-init",
         {"goal": "the goal", "max_iterations": 5, "max_wall_seconds": 60},
@@ -545,9 +516,7 @@ def test_runner_stop_mid_iteration_avoids_misleading_audit(
         judge_returned.set()
         return JudgeVerdict(met=True, source="llm", reason="would have been met")
 
-    monkeypatch.setattr(
-        goal_loop_runner.GoalJudgeService, "judge", classmethod(slow_judge)
-    )
+    monkeypatch.setattr(goal_loop_runner.GoalJudgeService, "judge", classmethod(slow_judge))
     goal_loop_runner.start_runner(
         "psess-mid",
         {"goal": "g", "max_iterations": 5, "max_wall_seconds": 60},
@@ -564,9 +533,7 @@ def test_runner_stop_mid_iteration_avoids_misleading_audit(
 
     # The COMPLETED broadcast must NOT include this iteration —
     # only iteration_started should have fired.
-    completed_events = [
-        b for b in fake_psm.broadcasts if b[1] == "goal_iteration_completed"
-    ]
+    completed_events = [b for b in fake_psm.broadcasts if b[1] == "goal_iteration_completed"]
     assert completed_events == []
     # The audit row is finalized with judge_source='stopped' so
     # an operator inspecting the trail sees the truth.

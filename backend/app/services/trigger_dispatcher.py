@@ -164,12 +164,12 @@ def dispatch_webhook_event(
 
         # Route to super agent session if dispatch_type is configured
         if trigger.get("dispatch_type") == "super_agent" and trigger.get("super_agent_id"):
-            from .super_agent_session_service import (
-                SuperAgentSessionService,
-                SessionLimitError,
-            )
-            from ..db.triggers import create_execution_log, update_execution_log
             from ..db.ids import generate_execution_id
+            from ..db.triggers import create_execution_log, update_execution_log
+            from .super_agent_session_service import (
+                SessionLimitError,
+                SuperAgentSessionService,
+            )
 
             # Render prompt template with matched text
             prompt_template = trigger.get("prompt_template") or "{message}"
@@ -347,12 +347,12 @@ def dispatch_github_event(repo_url: str, pr_data: dict, save_trigger_event_fn=No
 
         # Route to super agent session if dispatch_type is configured
         if trigger.get("dispatch_type") == "super_agent" and trigger.get("super_agent_id"):
-            from .super_agent_session_service import (
-                SuperAgentSessionService,
-                SessionLimitError,
-            )
-            from ..db.triggers import create_execution_log
             from ..db.ids import generate_execution_id
+            from ..db.triggers import create_execution_log
+            from .super_agent_session_service import (
+                SessionLimitError,
+                SuperAgentSessionService,
+            )
 
             prompt_template = trigger.get("prompt_template") or "{message}"
             rendered_prompt = prompt_template.replace("{message}", _fence_untrusted(message_text))
@@ -497,12 +497,12 @@ def dispatch_pr_comment_commands(
 
         # Route to super agent session if dispatch_type is configured
         if trigger.get("dispatch_type") == "super_agent" and trigger.get("super_agent_id"):
-            from .super_agent_session_service import (
-                SuperAgentSessionService,
-                SessionLimitError,
-            )
-            from ..db.triggers import create_execution_log
             from ..db.ids import generate_execution_id
+            from ..db.triggers import create_execution_log
+            from .super_agent_session_service import (
+                SessionLimitError,
+                SuperAgentSessionService,
+            )
 
             prompt_template = trigger.get("prompt_template") or "{message}"
             rendered_prompt = prompt_template.replace("{message}", _fence_untrusted(message_text))

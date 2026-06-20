@@ -12,16 +12,15 @@ Covers:
 """
 
 import json
-import os
 import signal
 import subprocess
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import MagicMock, call, mock_open, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.cliproxy_manager import CLIProxyManager, _GLOBAL_AUTH_DIR, _GLOBAL_CONFIG
+from app.services.cliproxy_manager import CLIProxyManager
 
 
 @pytest.fixture(autouse=True)

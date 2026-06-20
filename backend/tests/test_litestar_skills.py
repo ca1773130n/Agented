@@ -133,12 +133,8 @@ def _seed_two_users():
             ("user-alice", "alice@test.local", "user-bob", "bob@test.local"),
         )
         conn.commit()
-    create_user_role(
-        "key-alice", "Alice", "admin", user_id="user-alice"
-    )
-    create_user_role(
-        "key-bob", "Bob", "admin", user_id="user-bob"
-    )
+    create_user_role("key-alice", "Alice", "admin", user_id="user-alice")
+    create_user_role("key-bob", "Bob", "admin", user_id="user-bob")
 
 
 def test_active_list_scopes_to_caller_user(isolated_db):

@@ -87,33 +87,39 @@ class TestSidecarDiscovery:
         monkeypatch.delenv("AI_ACCOUNTS_API_KEY", raising=False)
         monkeypatch.delenv("AGENTED_API_KEY", raising=False)
         list_body = {
-            "items": [{"id": "acc-1", "kind": "claude", "status": "ready",
-                       "auth_method": "cli_browser"}]
+            "items": [
+                {"id": "acc-1", "kind": "claude", "status": "ready", "auth_method": "cli_browser"}
+            ]
         }
-        models_body = {"items": [{"id": "claude-opus-4-7"},
-                                  {"id": "claude-sonnet-4-7"}]}
-        client = _RoutingClient({
-            "/backends/?": _FakeResp(200, list_body),
-            "/acc-1/models": _FakeResp(200, models_body),
-        })
+        models_body = {"items": [{"id": "claude-opus-4-7"}, {"id": "claude-sonnet-4-7"}]}
+        client = _RoutingClient(
+            {
+                "/backends/?": _FakeResp(200, list_body),
+                "/acc-1/models": _FakeResp(200, models_body),
+            }
+        )
         with _admin_key_patch(), patch("httpx.Client", lambda *a, **kw: client):
             result = ModelDiscoveryService._discover_via_sidecar(
-                "claude", "cli_browser",
+                "claude",
+                "cli_browser",
             )
         assert result == ["claude-opus-4-7", "claude-sonnet-4-7"]
 
     def test_returns_none_on_500(self, isolated_db, monkeypatch):
         monkeypatch.delenv("AI_ACCOUNTS_API_KEY", raising=False)
         monkeypatch.delenv("AGENTED_API_KEY", raising=False)
-        client = _RoutingClient({
-            "/backends/?": _FakeResp(200, {"items": [
-                {"id": "acc-1", "kind": "claude", "status": "ready"}
-            ]}),
-            "/acc-1/models": _FakeResp(500, {"detail": "boom"}),
-        })
+        client = _RoutingClient(
+            {
+                "/backends/?": _FakeResp(
+                    200, {"items": [{"id": "acc-1", "kind": "claude", "status": "ready"}]}
+                ),
+                "/acc-1/models": _FakeResp(500, {"detail": "boom"}),
+            }
+        )
         with _admin_key_patch(), patch("httpx.Client", lambda *a, **kw: client):
             result = ModelDiscoveryService._discover_via_sidecar(
-                "claude", "cli_browser",
+                "claude",
+                "cli_browser",
             )
         assert result is None
 
@@ -123,31 +129,40 @@ class TestSidecarDiscovery:
         client = _RoutingClient({}, raise_on_match=httpx.TimeoutException("slow"))
         with _admin_key_patch(), patch("httpx.Client", lambda *a, **kw: client):
             result = ModelDiscoveryService._discover_via_sidecar(
-                "claude", "cli_browser",
+                "claude",
+                "cli_browser",
             )
         assert result is None
 
     def test_returns_none_when_no_account(self, isolated_db, monkeypatch):
         monkeypatch.delenv("AI_ACCOUNTS_API_KEY", raising=False)
         monkeypatch.delenv("AGENTED_API_KEY", raising=False)
-        client = _RoutingClient({
-            "/backends/?": _FakeResp(200, {"items": []}),
-        })
+        client = _RoutingClient(
+            {
+                "/backends/?": _FakeResp(200, {"items": []}),
+            }
+        )
         with _admin_key_patch(), patch("httpx.Client", lambda *a, **kw: client):
             result = ModelDiscoveryService._discover_via_sidecar(
-                "claude", "cli_browser",
+                "claude",
+                "cli_browser",
             )
         assert result is None
 
     def test_picks_account_matching_auth_method(self, isolated_db, monkeypatch):
         monkeypatch.delenv("AI_ACCOUNTS_API_KEY", raising=False)
         monkeypatch.delenv("AGENTED_API_KEY", raising=False)
-        list_body = {"items": [
-            {"id": "acc-key", "kind": "claude", "status": "ready",
-             "auth_method": "api_key"},
-            {"id": "acc-oauth", "kind": "claude", "status": "ready",
-             "auth_method": "cli_browser"},
-        ]}
+        list_body = {
+            "items": [
+                {"id": "acc-key", "kind": "claude", "status": "ready", "auth_method": "api_key"},
+                {
+                    "id": "acc-oauth",
+                    "kind": "claude",
+                    "status": "ready",
+                    "auth_method": "cli_browser",
+                },
+            ]
+        }
         captured_urls = []
 
         class _Recorder:
@@ -171,8 +186,7 @@ class TestSidecarDiscovery:
     def test_uses_bearer_auth_header_not_x_api_key(self, isolated_db, monkeypatch):
         monkeypatch.delenv("AI_ACCOUNTS_API_KEY", raising=False)
         monkeypatch.delenv("AGENTED_API_KEY", raising=False)
-        list_body = {"items": [{"id": "acc-1", "kind": "claude",
-                                 "status": "ready"}]}
+        list_body = {"items": [{"id": "acc-1", "kind": "claude", "status": "ready"}]}
         captured_headers = []
 
         class _Recorder:

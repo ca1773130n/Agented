@@ -101,9 +101,7 @@ def test_run_gd_json_handles_non_json_output():
     _reset_cli()
     GrdCliService._gd_path = "/fake/gd.js"
     GrdCliService._gd_available = True
-    with patch.object(
-        GrdCliService, "_run", return_value=_mock_runner(True, output="not-json")
-    ):
+    with patch.object(GrdCliService, "_run", return_value=_mock_runner(True, output="not-json")):
         result = GrdCliService.run_gd_json("/proj", "health")
     assert result["success"] is False
     assert result["data"] is None

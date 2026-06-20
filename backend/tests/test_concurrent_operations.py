@@ -6,11 +6,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.execution_service import ExecutionService, ExecutionState
-from app.services.process_manager import ProcessManager, ProcessInfo
-from app.services.team_execution_service import TeamExecutionService
 from app.services.execution_queue_service import ExecutionQueueService
-
+from app.services.execution_service import ExecutionService
+from app.services.process_manager import ProcessManager
+from app.services.team_execution_service import TeamExecutionService
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -268,7 +267,7 @@ class TestTeamParallelExecution:
         def mock_run_agent(team, agent_id, message, event, trigger_type, wd=None):
             with call_lock:
                 call_count["n"] += 1
-                idx = call_count["n"]
+                call_count["n"]
             # Simulate some work
             time.sleep(0.01)
             return f"exec-{agent_id}", f"output-{agent_id}"
@@ -371,7 +370,7 @@ class TestTeamConcurrentExecutions:
 
         # Patches must be started before threads so they apply globally
         p_strategy = patch.object(TeamExecutionService, "_run_strategy")
-        p_detail = patch.object(
+        patch.object(
             TeamExecutionService,
             "execute_team",
             wraps=TeamExecutionService.execute_team,
@@ -392,7 +391,7 @@ class TestTeamConcurrentExecutions:
             "app.database.get_team_detail",
             side_effect=fake_get_team_detail,
         )
-        mock_strategy = p_strategy.start()
+        p_strategy.start()
         p_detail_db.start()
 
         try:

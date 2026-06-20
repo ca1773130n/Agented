@@ -91,9 +91,12 @@ def _migrate_legacy_backends(legacy_db: str, target_db: str) -> None:
         legacy = sqlite3.connect(legacy_db)
         legacy.row_factory = sqlite3.Row
         try:
-            tables = {r[0] for r in legacy.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()}
+            tables = {
+                r[0]
+                for r in legacy.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()
+            }
             if "backend_accounts" not in tables or "ai_backends" not in tables:
                 return
             rows = legacy.execute(
@@ -146,12 +149,15 @@ def _migrate_legacy_backends(legacy_db: str, target_db: str) -> None:
             logger.warning(
                 "migrated %d legacy backend account(s) from %s to %s as "
                 "placeholders (re-authentication required)",
-                migrated, legacy_db, target_db,
+                migrated,
+                legacy_db,
+                target_db,
             )
     except sqlite3.Error as exc:
         logger.warning("migration: skipped due to sqlite error: %s", exc)
     finally:
         target.close()
+
 
 # Pick an auth strategy.
 #
@@ -205,9 +211,7 @@ class LazyFlaskKeyAuth:
         self._db_path = db_path
         from ai_accounts_core.domain.principal import Principal
 
-        self._principal = Principal(
-            id="api_key", display_name="API Key", scopes=frozenset({"*"})
-        )
+        self._principal = Principal(id="api_key", display_name="API Key", scopes=frozenset({"*"}))
         self._cache: set[str] | None = None
         self._cache_at: float = 0.0
         self._last_miss_refresh: float = 0.0
@@ -247,10 +251,7 @@ class LazyFlaskKeyAuth:
         import time
 
         now = time.monotonic()
-        if (
-            self._cache is not None
-            and (now - self._cache_at) < self._CACHE_TTL_SECONDS
-        ):
+        if self._cache is not None and (now - self._cache_at) < self._CACHE_TTL_SECONDS:
             return self._cache
         keys = self._read_keys_from_db()
         self._cache = keys
@@ -260,9 +261,7 @@ class LazyFlaskKeyAuth:
     async def authenticate(self, request):
         import hmac
 
-        header = request.headers.get("authorization") or request.headers.get(
-            "Authorization"
-        )
+        header = request.headers.get("authorization") or request.headers.get("Authorization")
         if not header or not header.lower().startswith(self._PREFIX):
             return None
         presented = header[len(self._PREFIX) :]
@@ -302,9 +301,7 @@ else:
 # AI_ACCOUNTS_VAULT_KEY (no silent dev-fallback).
 _AGENTED_ENV = os.environ.get("AGENTED_ENV", "development")
 if _AGENTED_ENV not in ("development", "production"):
-    raise RuntimeError(
-        f"AGENTED_ENV must be 'development' or 'production', got {_AGENTED_ENV!r}"
-    )
+    raise RuntimeError(f"AGENTED_ENV must be 'development' or 'production', got {_AGENTED_ENV!r}")
 
 app = create_app(
     AiAccountsConfig(

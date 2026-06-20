@@ -391,7 +391,7 @@ def fetch_and_summarize(url: str) -> UrlSummary:
                             url=url,
                             title="",
                             text="",
-                            error=f"redirect blocked: scheme not allowed",
+                            error="redirect blocked: scheme not allowed",
                         )
                     current_url = nxt
                     continue
@@ -400,9 +400,7 @@ def fetch_and_summarize(url: str) -> UrlSummary:
                 body = resp.content[:_MAX_BYTES]
                 break
     except httpx.HTTPStatusError as exc:
-        summary = UrlSummary(
-            url=url, title="", text="", error=f"HTTP {exc.response.status_code}"
-        )
+        summary = UrlSummary(url=url, title="", text="", error=f"HTTP {exc.response.status_code}")
         _put_cache(url, summary)
         return summary
     except httpx.RequestError as exc:

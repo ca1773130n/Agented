@@ -14,7 +14,6 @@ from typing import Any, Iterable, Optional
 from .connection import get_connection
 from .ids import generate_id
 
-
 LAYER_PRIORITY: dict[str, int] = {"h2": 2, "h3": 3, "h4": 4, "general": 5}
 
 
@@ -58,8 +57,7 @@ def replace_incidents(
 
     with get_connection() as conn:
         conn.execute(
-            "DELETE FROM session_layer_incidents WHERE session_kind = ? "
-            "AND session_id = ?",
+            "DELETE FROM session_layer_incidents WHERE session_kind = ? AND session_id = ?",
             (session_kind, session_id),
         )
         if rows:
@@ -109,8 +107,7 @@ def replace_incidents(
 def get_annotation(session_kind: str, session_id: str) -> Optional[dict]:
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT * FROM session_annotations "
-            "WHERE session_kind = ? AND session_id = ?",
+            "SELECT * FROM session_annotations WHERE session_kind = ? AND session_id = ?",
             (session_kind, session_id),
         ).fetchone()
     return dict(row) if row else None

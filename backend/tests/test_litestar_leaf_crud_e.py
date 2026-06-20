@@ -104,9 +104,7 @@ def test_orchestration_health(isolated_db):
 
 def test_clear_unknown_account_404(isolated_db):
     with _client() as c:
-        resp = c.post(
-            "/admin/orchestration/accounts/999/clear-rate-limit", json={}
-        )
+        resp = c.post("/admin/orchestration/accounts/999/clear-rate-limit", json={})
     assert resp.status_code == 404
 
 

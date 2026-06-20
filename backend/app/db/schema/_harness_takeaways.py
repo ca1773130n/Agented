@@ -59,13 +59,9 @@ def create_harness_takeaway_tables(conn) -> None:
         "ON session_takeaways(project_id, created_at DESC)"
     )
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_tk_session "
-        "ON session_takeaways(session_kind, session_id)"
+        "CREATE INDEX IF NOT EXISTS idx_tk_session ON session_takeaways(session_kind, session_id)"
     )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_tk_kind ON session_takeaways(kind)")
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_tk_kind ON session_takeaways(kind)"
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_tk_status "
-        "ON session_takeaways(applied, dismissed)"
+        "CREATE INDEX IF NOT EXISTS idx_tk_status ON session_takeaways(applied, dismissed)"
     )

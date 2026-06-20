@@ -1,6 +1,6 @@
 """v0.5.13: env-var validator tests."""
-import pytest
 
+import pytest
 
 _AGENTED_VARS = (
     "AGENTED_API_KEY",
@@ -47,6 +47,7 @@ def _clean_env(monkeypatch):
 class TestValidate:
     def test_dev_posture_does_not_fail_on_missing(self):
         from scripts.check_env import validate
+
         ok, missing, warnings = validate()
         assert ok is True
         assert missing == []
@@ -55,6 +56,7 @@ class TestValidate:
     def test_production_posture_fails_on_missing_required(self, monkeypatch):
         monkeypatch.setenv("AGENTED_ENV", "production")
         from scripts.check_env import validate
+
         ok, missing, warnings = validate()
         assert ok is False
         assert "AGENTED_API_KEY" in missing
@@ -69,6 +71,7 @@ class TestValidate:
         monkeypatch.setenv("AI_ACCOUNTS_VAULT_KEY", "k3")
         monkeypatch.setenv("AGENTED_VAULT_KEYS", "k4")
         from scripts.check_env import validate
+
         ok, missing, warnings = validate()
         assert ok is True
         assert missing == []
@@ -85,6 +88,7 @@ class TestFileRedirect:
         monkeypatch.setenv("AI_ACCOUNTS_VAULT_KEY", "k3")
         monkeypatch.setenv("AGENTED_VAULT_KEYS", "k4")
         from scripts.check_env import resolve, validate
+
         assert resolve("AGENTED_API_KEY") == "real-secret-value"
         ok, missing, _ = validate()
         assert ok is True
@@ -96,6 +100,7 @@ class TestFileRedirect:
         monkeypatch.setenv("AI_ACCOUNTS_VAULT_KEY", "k3")
         monkeypatch.setenv("AGENTED_VAULT_KEYS", "k4")
         from scripts.check_env import validate
+
         ok, missing, _ = validate()
         assert ok is False
         assert "AGENTED_API_KEY" in missing
@@ -106,6 +111,7 @@ class TestFileRedirect:
         monkeypatch.setenv("AGENTED_API_KEY", "from-env")
         monkeypatch.setenv("AGENTED_API_KEY_FILE", str(secret_file))
         from scripts.check_env import resolve
+
         assert resolve("AGENTED_API_KEY") == "from-env"
 
     def test_world_readable_FILE_emits_permission_warning(self, monkeypatch, tmp_path):
@@ -118,6 +124,7 @@ class TestFileRedirect:
         monkeypatch.setenv("AI_ACCOUNTS_VAULT_KEY", "k3")
         monkeypatch.setenv("AGENTED_VAULT_KEYS", "k4")
         from scripts.check_env import validate
+
         ok, _, warnings = validate()
         assert ok is True
         assert any("world-readable" in w for w in warnings)
@@ -126,12 +133,14 @@ class TestFileRedirect:
 class TestCLI:
     def test_main_exits_0_in_dev_with_warnings(self, capsys):
         from scripts.check_env import main
+
         rc = main([])
         assert rc == 0
 
     def test_main_exits_1_in_production_with_missing(self, capsys, monkeypatch):
         monkeypatch.setenv("AGENTED_ENV", "production")
         from scripts.check_env import main
+
         rc = main([])
         assert rc == 1
         captured = capsys.readouterr()

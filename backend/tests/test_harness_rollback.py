@@ -54,8 +54,8 @@ def test_set_revert_error_leaves_applied(isolated_db):
 
 def test_reverse_journal_update_restores_before(isolated_db):
     from app.database import get_connection
-    from app.db import rules as rules_repo
     from app.db import project_forge_bindings as bindings_repo
+    from app.db import rules as rules_repo
     from app.services.harness_evolution_rollback import reverse_apply_journal
 
     with get_connection() as conn:
@@ -90,8 +90,8 @@ def test_reverse_journal_update_restores_before(isolated_db):
 
 def test_reverse_journal_create_deletes_and_unbinds(isolated_db):
     from app.database import get_connection
-    from app.db import rules as rules_repo
     from app.db import project_forge_bindings as bindings_repo
+    from app.db import rules as rules_repo
     from app.services.harness_evolution_rollback import reverse_apply_journal
 
     with get_connection() as conn:
@@ -218,8 +218,8 @@ def test_revert_round_refuses_missing_journal(isolated_db):
 
 def test_revert_round_reverts_applied(isolated_db):
     from app.database import get_connection
-    from app.db import rules as rules_repo
     from app.db import project_forge_bindings as bindings_repo
+    from app.db import rules as rules_repo
     from app.services.harness_evolution_rollback import revert_round
 
     with get_connection() as conn:
@@ -335,8 +335,8 @@ def test_revert_round_retry_after_db_reversed_is_idempotent(isolated_db):
     leaving status applied) must revert cleanly on retry — the DB reversal is
     idempotent, so a second revert_round (revert_git=False) succeeds."""
     from app.database import get_connection
-    from app.db import rules as rules_repo
     from app.db import project_forge_bindings as bindings_repo
+    from app.db import rules as rules_repo
     from app.services.harness_evolution_rollback import revert_round
 
     with get_connection() as conn:

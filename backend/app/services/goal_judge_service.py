@@ -29,8 +29,9 @@ from typing import TYPE_CHECKING, Optional
 
 import httpx
 
-from .cliproxy_manager import CLIProxyManager
 from app.config import AUTORESEARCH_KERNEL_ENABLED
+
+from .cliproxy_manager import CLIProxyManager
 
 if TYPE_CHECKING:
     from app.models.loop_spec import QualityGate

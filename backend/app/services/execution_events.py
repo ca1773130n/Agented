@@ -91,6 +91,7 @@ def register_completion_handler(callback: CompletionCallback) -> None:
 
     Wrapped so it can subscribe to the new 5-arg session channel.
     """
+
     def _shim(session_kind, session_id, project_id, status, output):
         try:
             callback(session_kind, session_id, status, output)
@@ -99,7 +100,9 @@ def register_completion_handler(callback: CompletionCallback) -> None:
             # asserting on this log message continue to pass.
             logger.exception(
                 "execution_events handler %r raised on %s/%s",
-                callback, session_kind, session_id,
+                callback,
+                session_kind,
+                session_id,
             )
 
     _shim.__wrapped_target__ = callback  # type: ignore[attr-defined]

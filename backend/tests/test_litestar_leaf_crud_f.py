@@ -71,9 +71,7 @@ def _make_agent_with_corrupt_memory_config(raw: str = "{not valid"):
     agent_id = create_agent(name="MemCfgAgent", description="x")
     assert agent_id is not None
     with get_connection() as conn:
-        conn.execute(
-            "UPDATE agents SET memory_config = ? WHERE id = ?", (raw, agent_id)
-        )
+        conn.execute("UPDATE agents SET memory_config = ? WHERE id = ?", (raw, agent_id))
         conn.commit()
     return agent_id
 
@@ -151,9 +149,7 @@ def test_bulk_triggers_requires_items(isolated_db):
 
 def test_bulk_plugins_invalid_items(isolated_db):
     with _client() as c:
-        resp = c.post(
-            "/admin/bulk/plugins", json={"action": "create", "items": "x"}
-        )
+        resp = c.post("/admin/bulk/plugins", json={"action": "create", "items": "x"})
     assert resp.status_code == 400
 
 
@@ -197,9 +193,7 @@ def test_diff_context_requires_diff_text(isolated_db):
 
 def test_create_branch_requires_fork_index(isolated_db):
     with _client() as c:
-        resp = c.post(
-            "/admin/conversations/conv-x/branches", json={}
-        )
+        resp = c.post("/admin/conversations/conv-x/branches", json={})
     assert resp.status_code == 400
 
 

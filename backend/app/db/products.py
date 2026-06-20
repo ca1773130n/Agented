@@ -19,9 +19,7 @@ def _resolve_user_id(conn, user_id: Optional[str]) -> Optional[str]:
     """Default to the legacy user when caller didn't pass one."""
     if user_id:
         return user_id
-    row = conn.execute(
-        "SELECT id FROM users WHERE email = ?", ("legacy@local",)
-    ).fetchone()
+    row = conn.execute("SELECT id FROM users WHERE email = ?", ("legacy@local",)).fetchone()
     return row[0] if row else None
 
 

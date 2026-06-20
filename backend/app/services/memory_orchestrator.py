@@ -75,15 +75,15 @@ def orchestrated_recall(
         get_messages,
         recall_messages,
     )
-    from .embedding_service import (
-        hybrid_recall,
-        vector_recall,
-    )
     from ..db.knowledge_graph import (
         get_entity_context,
         promote_entity,
         search_entities,
         traverse_graph,
+    )
+    from .embedding_service import (
+        hybrid_recall,
+        vector_recall,
     )
 
     effective_thread_id = None if include_cross_thread else thread_id
