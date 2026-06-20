@@ -225,12 +225,49 @@ def test_llm_judge_uses_per_backend_default_model(monkeypatch):
         classmethod(lambda cls: ("http://127.0.0.1:8317/v1", "k")),
     )
     monkeypatch.setattr(goal_judge_service.httpx, "post", capture_post)
+    # Force discovery to None so this test deterministically exercises the
+    # per-backend DEFAULT fallback (a live catalog would otherwise make
+    # cheap_model_for win — and the DEFAULT branch is what this asserts).
+    monkeypatch.setattr(
+        "app.services.model_discovery_service.ModelDiscoveryService.cheap_model_for",
+        classmethod(lambda cls, backend: None),
+    )
 
     for kind, expected_model in DEFAULT_JUDGE_MODEL.items():
         captured.clear()
         GoalJudgeService.judge("g", "t", backend_kind=kind)
         assert captured["model"] == expected_model
         assert captured["backend_kind"] == kind
+
+
+def test_llm_judge_prefers_discovered_cheap_model(monkeypatch):
+    """When the live catalog yields a cheap model it WINS over the pinned DEFAULT
+    (the anti-staleness path)."""
+    captured: dict = {}
+
+    def capture_post(url, *, json, headers, timeout):
+        captured["model"] = json["model"]
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": '{"met": true, "reason": "ok"}'}}],
+                "usage": {},
+            },
+        )
+
+    monkeypatch.setattr(
+        goal_judge_service.CLIProxyManager,
+        "get_url_and_key",
+        classmethod(lambda cls: ("http://127.0.0.1:8317/v1", "k")),
+    )
+    monkeypatch.setattr(goal_judge_service.httpx, "post", capture_post)
+    monkeypatch.setattr(
+        "app.services.model_discovery_service.ModelDiscoveryService.cheap_model_for",
+        classmethod(lambda cls, backend: "discovered-cheap"),
+    )
+
+    GoalJudgeService.judge("g", "t", backend_kind="claude")
+    assert captured["model"] == "discovered-cheap"
 
 
 def test_llm_judge_model_override_wins(monkeypatch):
