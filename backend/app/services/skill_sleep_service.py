@@ -382,8 +382,28 @@ _DEFAULT_EDIT_BUDGET = 4
 # (the final gate keeps the default strong model). Operator-overridable.
 # FALLBACK only: the primary cheap-model source is
 # ``ModelDiscoveryService.cheap_model_for(judge_backend)`` (live catalog), so the
-# id never goes stale. This pin is the last resort when discovery is unavailable.
-_DEFAULT_RANKER_MODEL = "claude-haiku-4-5-20251001"
+# id never goes stale. This per-backend pin is the last resort when discovery is
+# unavailable — keyed by backend so a non-claude judge_backend never gets a
+# claude id (provider mismatch). Mirrors goal_judge_service.DEFAULT_JUDGE_MODEL.
+_RANKER_FALLBACK = {
+    "claude": "claude-haiku-4-5-20251001",
+    "codex": "gpt-5.4-mini",
+    "gemini": "gemini-2.5-flash-lite",
+    "opencode": "auto",
+}
+
+
+def _resolve_ranker_model(ranker_model: Optional[str], judge_backend: str) -> str:
+    """Cheap ranker model for ``judge_backend``: explicit override → live-discovered
+    cheap model → per-backend pinned fallback. Never returns a model for the wrong
+    provider (the bug a single claude default caused)."""
+    from app.services.model_discovery_service import ModelDiscoveryService
+
+    return (
+        ranker_model
+        or ModelDiscoveryService.cheap_model_for(judge_backend)
+        or _RANKER_FALLBACK.get(judge_backend, "auto")
+    )
 
 
 def _diff_opcodes(current_body: str, candidate_body: str):
@@ -819,18 +839,11 @@ class SkillSleepGate:
                 "reason": "reflect proposed no material change",
             }
         if edit_budget is not None and edit_budget > 0:
-            # Rank on a CHEAP model that MATCHES judge_backend, resolved from the
-            # live CLIProxy catalog (so the id never goes stale and a non-claude
-            # judge_backend gets its OWN cheap model, not a claude id). Explicit
-            # ranker_model wins; _DEFAULT_RANKER_MODEL is the last-resort pin. The
-            # gate below keeps the strong model. Injected seams win if provided.
-            from app.services.model_discovery_service import ModelDiscoveryService
-
-            ranker = (
-                ranker_model
-                or ModelDiscoveryService.cheap_model_for(judge_backend)
-                or _DEFAULT_RANKER_MODEL
-            )
+            # Rank on a CHEAP model that MATCHES judge_backend (resolved from the
+            # live CLIProxy catalog, falling back per-backend so a non-claude
+            # backend never gets a claude id). The gate below keeps the strong
+            # model. Injected seams win if provided.
+            ranker = _resolve_ranker_model(ranker_model, judge_backend)
             rank_answer = answer_call or _build_default_llm_call(judge_backend, model=ranker)
             rank_judge = judge_call or _build_default_llm_call(judge_backend, model=ranker)
             candidate = rank_edits(

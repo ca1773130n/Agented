@@ -329,8 +329,9 @@ class ModelDiscoveryService:
             picked = next((m for m in candidates if tier in m.lower()), None)
             if picked:
                 break
-        if picked is None and candidates:
-            picked = candidates[0]
+        # No cheap-tier match → return None so the caller falls back to its pinned
+        # cheap id, rather than risk an arbitrary (possibly expensive / non-chat)
+        # catalog entry via candidates[0].
         if picked:
             _cheap_model_cache[backend_type] = picked  # cache successful picks only
         return picked

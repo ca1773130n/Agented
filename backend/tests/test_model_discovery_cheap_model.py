@@ -55,6 +55,13 @@ def test_none_when_catalog_empty(monkeypatch):
     assert ModelDiscoveryService.cheap_model_for("claude") is None
 
 
+def test_no_cheap_tier_match_returns_none_not_arbitrary(monkeypatch):
+    # Only non-cheap-tier ids (no haiku/mini/flash/...), none excluded -> return
+    # None so the caller uses its pinned fallback, NOT an arbitrary candidates[0].
+    _patch_catalog(monkeypatch, {"openai": ["gpt-5.5", "gpt-5.4"]})
+    assert ModelDiscoveryService.cheap_model_for("codex") is None
+
+
 def test_none_for_unknown_backend(monkeypatch):
     _patch_catalog(monkeypatch, {})
     assert ModelDiscoveryService.cheap_model_for("opencode") is None
