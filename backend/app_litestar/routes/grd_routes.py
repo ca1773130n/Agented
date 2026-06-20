@@ -1390,6 +1390,15 @@ def session_messages(project_id: str, session_id: str) -> dict[str, Any]:
 @post("/{project_id:str}/sessions/{session_id:str}/stop", sync_to_thread=False)
 def stop_session(project_id: str, session_id: str) -> dict[str, Any]:
     del project_id
+    # Signal any goal-loop/ralph runner FIRST so its loop thread exits and stops
+    # the live child it owns. Under context_policy=reset the runner re-points to a
+    # fresh child whose id this route never learns — without stop_runner (keyed by
+    # the stable registry id) the live child would keep iterating + spending after
+    # the route only kills the original (already-dead) process. No-op for
+    # non-runner sessions.
+    from app.services.goal_loop_runner import stop_runner
+
+    stop_runner(session_id)
     if not ProjectSessionManager.stop_session(session_id):
         raise NotFoundException(detail="Session not found or already stopped")
     return {"message": "Session stopped", "session_id": session_id}

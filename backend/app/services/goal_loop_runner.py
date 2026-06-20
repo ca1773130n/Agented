@@ -430,6 +430,13 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
     # child processes, but the registry key (and the route's stop_runner target)
     # must stay stable — so cleanup/teardown always use this captured key.
     registry_key = session_id
+    # v0.6.0 hardening: ``session_id`` is the STABLE operator-facing id and is
+    # NEVER reassigned — all broadcasts, iteration records, and cross-iteration
+    # memory key off it so the operator's stream + history stay continuous across
+    # a context_policy=reset. ``live_id`` tracks the CURRENT live child process
+    # and is the only thing used for subprocess I/O (subscribe/send/stop); it is
+    # re-pointed when reset spawns a fresh process.
+    live_id = session_id
     config = state.config
     goal = (config.get("goal") or "").strip()
     if not goal:
@@ -480,7 +487,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
         else ""
     )
 
-    queue = ProjectSessionManager.subscribe_raw(session_id)
+    queue = ProjectSessionManager.subscribe_raw(live_id)
     try:
         # Kick off the first turn by sending the goal as the
         # initial user message. Without this the runner would
@@ -489,7 +496,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
         # will trigger the first ``turn_done`` and the normal
         # judge-then-continue loop takes over from there.
         _send_initial(
-            session_id,
+            live_id,
             goal,
             ouroboros=ouroboros,
             result_block=result_block,
@@ -502,7 +509,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                     reason="wall_time_cap",
                     detail=f"exceeded {max_wall_seconds}s",
                 )
-                ProjectSessionManager.stop_session(session_id)
+                ProjectSessionManager.stop_session(live_id)
                 break
 
             try:
@@ -614,11 +621,11 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                     else:
                         end_reason = "human_abort" if decision == "abort" else "met"
                         _broadcast_end(session_id, reason=end_reason, detail=verdict.reason)
-                        ProjectSessionManager.stop_session(session_id)
+                        ProjectSessionManager.stop_session(live_id)
                         break
                 else:
                     _broadcast_end(session_id, reason="met", detail=verdict.reason)
-                    ProjectSessionManager.stop_session(session_id)
+                    ProjectSessionManager.stop_session(live_id)
                     break
 
             # Budget guard (06 H1): accumulate judge cost and stop if a
@@ -633,7 +640,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                     reason="budget_cap",
                     detail=f"cost ${state.total_cost_usd:.4f} reached cap ${max_cost_usd:.4f}",
                 )
-                ProjectSessionManager.stop_session(session_id)
+                ProjectSessionManager.stop_session(live_id)
                 break
 
             # Token-budget circuit breaker (v0.6.0 unified loops): accumulate
@@ -647,7 +654,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                     reason="token_cap",
                     detail=f"tokens {state.total_tokens} reached cap {state.spec.exit.max_tokens}",
                 )
-                ProjectSessionManager.stop_session(session_id)
+                ProjectSessionManager.stop_session(live_id)
                 break
 
             # v0.7.87 — record falsified hypotheses into the
@@ -691,7 +698,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                     reason="iteration_cap",
                     detail=f"reached {max_iterations} iterations",
                 )
-                ProjectSessionManager.stop_session(session_id)
+                ProjectSessionManager.stop_session(live_id)
                 break
 
             # v0.7.87 — convergence termination runs only when
@@ -718,7 +725,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                             f"further wasted attempts"
                         ),
                     )
-                    ProjectSessionManager.stop_session(session_id)
+                    ProjectSessionManager.stop_session(live_id)
                     break
 
             # Generic stagnation circuit breaker (v0.6.0 unified loops): when a
@@ -744,7 +751,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                         reason="stagnation",
                         detail=f"no progress for {threshold} iterations",
                     )
-                    ProjectSessionManager.stop_session(session_id)
+                    ProjectSessionManager.stop_session(live_id)
                     break
 
             _wait_if_paused(state, session_id)
@@ -757,14 +764,15 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                     gate_reason=f"every {hg.n} iterations", max_wall_seconds=max_wall_seconds)
                 if decision == "abort":
                     _broadcast_end(session_id, reason="human_abort", detail=message or "operator aborted")
-                    ProjectSessionManager.stop_session(session_id)
+                    ProjectSessionManager.stop_session(live_id)
                     break
                 if decision == "modify" and message:
                     state.pending_note = message
 
-            fresh_session_id = _next_iteration(
+            fresh_session_id, new_queue = _next_iteration(
                 policy=state.spec.state.context_policy,
-                session_id=session_id,
+                live_id=live_id,
+                stable_id=session_id,
                 cwd=cwd,
                 goal=goal,
                 reason=_apply_pending_note(state, verdict.reason),
@@ -773,15 +781,13 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                 result_block=result_block,
             )
             # context_policy=reset spawned a fresh claude process (clean context
-            # window). Re-point the loop's polling to the new child so subsequent
-            # turn boundaries come from it, and release the old subscription. The
-            # SAME _RunnerState keeps accumulating budgets/iteration counts.
-            if fresh_session_id and fresh_session_id != session_id:
-                new_queue = _repoint_runner_to_fresh_session(registry_key, fresh_session_id)
-                if new_queue is not None:
-                    ProjectSessionManager.unsubscribe_raw(session_id, queue)
-                    session_id = fresh_session_id
-                    queue = new_queue
+            # window) and already subscribed to it. Re-point the loop's polling to
+            # the new child and release the old subscription. ``session_id`` stays
+            # the STABLE operator id; only ``live_id`` follows the live process.
+            if fresh_session_id and new_queue is not None and fresh_session_id != live_id:
+                ProjectSessionManager.unsubscribe_raw(live_id, queue)
+                live_id = fresh_session_id
+                queue = new_queue
     except Exception as exc:
         # The normal termination paths (met / iteration_cap / convergence /
         # operator stop) all break out of the loop and reach `finally`, never
@@ -792,11 +798,20 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
         logger.error("goal_loop runner crashed for %s", session_id, exc_info=True)
         try:
             _broadcast_end(session_id, reason="error", detail=str(exc)[:300])
-            ProjectSessionManager.stop_session(session_id)
+            ProjectSessionManager.stop_session(live_id)
         except Exception:
             logger.error("goal_loop: failed to emit error-end for %s", session_id, exc_info=True)
     finally:
-        ProjectSessionManager.unsubscribe_raw(session_id, queue)
+        # On an operator stop (stop_runner sets the event from the /stop route),
+        # the loop breaks WITHOUT a terminal stop_session — so kill the live child
+        # here, otherwise a context_policy=reset child keeps running after the
+        # runner thread exits (the route only ever knew the original id).
+        if state.stop_event.is_set():
+            try:
+                ProjectSessionManager.stop_session(live_id)
+            except Exception:
+                logger.debug("goal_loop: failed to stop live %s on teardown", live_id, exc_info=True)
+        ProjectSessionManager.unsubscribe_raw(live_id, queue)
         _cleanup(registry_key)
 
 
@@ -822,27 +837,10 @@ def _send_continue(
     )
 
 
-def _repoint_runner_to_fresh_session(registry_key: str, fresh_session_id: str) -> Optional["Queue"]:
-    """Re-point the live ``_RunnerState`` at the freshly-spawned child process.
-
-    The runner registry stays keyed by the ORIGINAL session_id (``registry_key``,
-    so the route's ``stop_runner`` / ``stop_session`` keep working), but
-    ``state.session_id`` is swapped to the fresh child so per-iteration tracking
-    (iteration rows, broadcasts, stop checks) target the clean-context process.
-    Returns a freshly-subscribed raw queue for the new session so the ``_run``
-    loop polls the fresh process's turn boundaries; ``None`` if the runner has
-    already been torn down."""
-    with _runners_lock:
-        state = _runners.get(registry_key)
-        if state is None:
-            return None
-        state.session_id = fresh_session_id
-    return ProjectSessionManager.subscribe_raw(fresh_session_id)
-
-
 def _advance_iteration(
     *,
-    session_id: str,
+    live_id: str,
+    stable_id: str,
     cwd,
     goal: str,
     reason: str = "",
@@ -850,64 +848,72 @@ def _advance_iteration(
     dead_ends_block: str = "",
     result_block: str = "",
     **_kw,
-) -> Optional[str]:
+) -> tuple[Optional[str], Optional["Queue"]]:
     """``context_policy=reset`` advance: tear down the carried-context process and
     START A NEW claude OS process with a CLEAN context window.
 
-    Reuses the ``_spawn_resumed_session`` recipe (``_create_fresh_loop_child`` — a
-    fresh, no-PTY, stream-json ``claude`` subprocess) so the next iteration begins
-    from an empty context rather than ``_send_continue``-ing into the same
-    long-lived process (which would retain the full conversation history and defeat
-    the reset). The fresh process is re-seeded from durable iteration history via
-    ``_build_resume_context`` plus the goal prompt; the OLD process is stopped.
-
-    Budgets/tracking continue to accumulate on the SAME ``_RunnerState`` (the
-    registry key is unchanged); the runner re-points its polling to the fresh
-    child via ``_repoint_runner_to_fresh_session``. Returns the new session_id so
-    the caller (``_run``) can swap which queue it polls. Falls back to a continue
-    prompt (returning ``None``) only when no origin row exists to spawn from."""
+    ``live_id`` is the current live process (to stop); ``stable_id`` is the
+    operator-facing id whose durable iteration history we resume FROM (the live
+    child's own rows are empty — all records key off the stable id). Spawns a
+    fresh, no-PTY, stream-json ``claude`` subprocess via ``_create_fresh_loop_child``
+    so the next iteration begins from an empty context, SUBSCRIBES to it BEFORE
+    seeding (so a fast first turn / immediate ``__end__`` can't be missed), then
+    stops the old live process and seeds the fresh child. Returns
+    ``(new_session_id, new_queue)`` so the caller can swap which queue it polls;
+    ``(None, None)`` (falling back to a continue prompt) when no origin row exists.
+    """
     from ..db.connection import get_connection
 
     with get_connection() as conn:
-        row = conn.execute("SELECT * FROM project_sessions WHERE id = ?", (session_id,)).fetchone()
+        row = conn.execute("SELECT * FROM project_sessions WHERE id = ?", (stable_id,)).fetchone()
     if not row:
         logger.warning(
-            "goal_loop: cannot reset-advance %s (session row missing); falling back to continue",
-            session_id,
+            "goal_loop: cannot reset-advance %s (origin row missing); falling back to continue",
+            stable_id,
         )
         _send_continue(
-            session_id,
+            live_id,
             goal,
             reason,
             ouroboros=ouroboros,
             dead_ends_block=dead_ends_block,
             result_block=result_block,
         )
-        return None
+        return None, None
 
     origin_session = dict(row)
-    resume_context = _build_resume_context(session_id)
+    resume_context = _build_resume_context(stable_id)
+    # Forward the operator's intervene/modify note + last-check reason into the
+    # fresh seed — it would otherwise be lost on reset (the fresh child is empty).
+    if reason:
+        resume_context = (
+            f"Operator note / last check: {reason}\n\n{resume_context}"
+            if resume_context
+            else f"Operator note / last check: {reason}"
+        )
 
-    # Spawn a genuinely fresh process (clean context window). Provenance is
-    # recorded so the new child traces back to the origin in the session graph.
+    # Spawn a genuinely fresh process (clean context window); provenance traces
+    # the child back to the operator-facing origin in the session graph.
     new_session_id = _create_fresh_loop_child(origin_session, cwd)
     with get_connection() as conn:
         conn.execute(
             "UPDATE project_sessions SET resumed_from = ? WHERE id = ?",
-            (session_id, new_session_id),
+            (stable_id, new_session_id),
         )
         conn.commit()
 
-    # Stop the carried-context process — its conversation history is exactly what
-    # we are discarding. (After re-pointing the runner key still maps to the same
-    # state, so an external stop continues to work.)
-    try:
-        ProjectSessionManager.stop_session(session_id)
-    except Exception:
-        logger.debug("goal_loop: failed to stop origin %s during reset", session_id, exc_info=True)
+    # Subscribe to the fresh child BEFORE seeding so its first turn boundary (or an
+    # immediate __end__) is never dropped in the gap between spawn and subscribe.
+    new_queue = ProjectSessionManager.subscribe_raw(new_session_id)
 
-    # Seed the FRESH child with accumulated knowledge + the goal — never the
-    # origin process (that would write into the discarded context window).
+    # Stop the carried-context process — its conversation history is exactly what
+    # we are discarding.
+    try:
+        ProjectSessionManager.stop_session(live_id)
+    except Exception:
+        logger.debug("goal_loop: failed to stop live %s during reset", live_id, exc_info=True)
+
+    # Seed the FRESH child with accumulated knowledge + the goal.
     _send_initial(
         new_session_id,
         goal,
@@ -915,20 +921,22 @@ def _advance_iteration(
         result_block=result_block,
         resume_context=resume_context,
     )
-    return new_session_id
+    return new_session_id, new_queue
 
 
-def _next_iteration(*, policy: str, session_id: str, cwd, goal: str, **kw) -> Optional[str]:
+def _next_iteration(
+    *, policy: str, live_id: str, stable_id: str, cwd, goal: str, **kw
+) -> tuple[Optional[str], Optional["Queue"]]:
     """Advance one iteration under the active ``context_policy``.
 
     ``carry`` (default) writes a synthetic continue prompt into the same
-    long-lived process (byte-identical to the prior behavior). ``reset`` drops
-    the carried conversation by spawning a fresh claude process and returns its
-    new session_id so the caller can re-point polling. ``carry`` returns ``None``."""
+    long-lived process (byte-identical to the prior behavior) and returns
+    ``(None, None)``. ``reset`` spawns a fresh claude process and returns
+    ``(new_session_id, new_queue)`` so the caller can re-point polling."""
     if policy == "reset":
-        return _advance_iteration(session_id=session_id, cwd=cwd, goal=goal, **kw)
-    _send_continue(session_id, goal=goal, **kw)
-    return None
+        return _advance_iteration(live_id=live_id, stable_id=stable_id, cwd=cwd, goal=goal, **kw)
+    _send_continue(live_id, goal=goal, **kw)
+    return None, None
 
 
 def _send_initial(
