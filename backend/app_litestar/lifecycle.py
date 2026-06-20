@@ -329,6 +329,31 @@ def _setup_scheduler(app: Any) -> None:
         except Exception:
             logger.warning("monitoring daemon job registration failed", exc_info=True)
 
+        # Competitive-intelligence poller (REQ-28). Authenticated conditional
+        # polling of competitor github_repo sources (ETag/If-None-Match -> free
+        # 304s). Registered as a SEPARATE config-gated interval job, mirroring
+        # the monitoring-daemon block above — default DISABLED, and it does NOT
+        # touch the periodic_jobs list or the Phase-D autonomy poller.
+        try:
+            from app.services.github_monitor_service import (
+                GitHubMonitorService,
+                get_competitor_intel_config,
+            )
+
+            _ci_cfg = get_competitor_intel_config()
+            if _ci_cfg.get("enabled"):
+                _ci_interval = max(1, int(_ci_cfg.get("polling_minutes", 15)))
+                SchedulerService._scheduler.add_job(
+                    func=GitHubMonitorService.poll_due_sources,
+                    trigger="interval",
+                    minutes=_ci_interval,
+                    id="competitor_intel_poll",
+                    replace_existing=True,
+                )
+                logger.info("Competitor-intel poll job registered: every %d min", _ci_interval)
+        except Exception:
+            logger.warning("competitor-intel poll job registration failed", exc_info=True)
+
         # When a standalone usage daemon (scripts/run_usage_daemon.py) owns
         # background tracking, drop the in-process collection + monitoring
         # jobs so the same work isn't done twice (and two writers don't

@@ -9431,5 +9431,29 @@
     "confidence": "信頼度",
     "cost": "コスト",
     "tokens": "トークン"
+  },
+  "competitorIntel": {
+    "title": "競合インテリジェンス",
+    "subtitle": "競合の GitHub リポジトリ、arXiv リスト、または製品ページを監視し、AI が要約したランク付き変更シグナルを確認します。",
+    "urlLabel": "ソース URL",
+    "urlPlaceholder": "https://github.com/owner/repo",
+    "labelOptional": "ラベル（任意）",
+    "labelPlaceholder": "例：主要競合",
+    "submit": "ソースを追加",
+    "adding": "追加中…",
+    "addedToast": "ソースを追加しました（{kind}）",
+    "addError": "ソースの追加に失敗しました",
+    "loadError": "競合データの読み込みに失敗しました",
+    "sourcesTitle": "監視中のソース",
+    "sourcesEmpty": "まだソースがありません。上に URL を追加して監視を開始してください。",
+    "signalsTitle": "ランク付きシグナル",
+    "signalsEmpty": "まだシグナルは検出されていません。",
+    "loading": "読み込み中…",
+    "scoreLabel": "スコア",
+    "noSummary": "（要約なし）",
+    "kindGithub": "GitHub リポジトリ",
+    "kindArxiv": "arXiv",
+    "kindProduct": "製品ページ",
+    "kindUnknown": "不明"
   }
 }

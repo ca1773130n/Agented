@@ -9431,5 +9431,29 @@
     "confidence": "Confidence",
     "cost": "Cost",
     "tokens": "Tokens"
+  },
+  "competitorIntel": {
+    "title": "Competitor Intelligence",
+    "subtitle": "Watch a competitor's GitHub repo, arXiv listing, or product page and see ranked, AI-summarized change signals.",
+    "urlLabel": "Source URL",
+    "urlPlaceholder": "https://github.com/owner/repo",
+    "labelOptional": "Label (optional)",
+    "labelPlaceholder": "e.g. Main rival",
+    "submit": "Add source",
+    "adding": "Adding…",
+    "addedToast": "Source added ({kind})",
+    "addError": "Failed to add source",
+    "loadError": "Failed to load competitor data",
+    "sourcesTitle": "Watched sources",
+    "sourcesEmpty": "No sources yet. Add a URL above to start watching.",
+    "signalsTitle": "Ranked signals",
+    "signalsEmpty": "No signals detected yet.",
+    "loading": "Loading…",
+    "scoreLabel": "Score",
+    "noSummary": "(no summary)",
+    "kindGithub": "GitHub repo",
+    "kindArxiv": "arXiv",
+    "kindProduct": "Product page",
+    "kindUnknown": "Unknown"
   }
 }

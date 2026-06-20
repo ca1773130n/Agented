@@ -64,6 +64,8 @@ export type { SuperAgentActivityStatus } from './super-agents';
 export { workflowApi, workflowExecutionApi } from './workflows';
 export { sketchApi } from './sketches';
 export { grdApi } from './grd';
+export { competitorIntelApi } from './competitor-intel';
+export type { CompetitorSource, DetectedSignal } from './competitor-intel';
 export { researchApi } from './research';
 export type {
   ResearchThread,

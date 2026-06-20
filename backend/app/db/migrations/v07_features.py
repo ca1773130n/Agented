@@ -1345,6 +1345,75 @@ def _migrate_170_iteration_confidence(conn) -> None:
         conn.execute("ALTER TABLE goal_loop_iterations ADD COLUMN judge_version TEXT")
 
 
+def _migrate_171_competitor_intel(conn) -> None:
+    """v0.9.0 phase 23 (REQ-27): competitive-intelligence MVP persistence.
+
+    Three project-scoped entities for the GitHub-competitor monitor:
+
+    - ``competitor_source`` — a watched URL (GitHub repo / arXiv / product page)
+      with an auto-detected ``kind``. ``etag``/``watermark`` are conditional-GET
+      / high-watermark cursors the poller (plan 23-02) fills in later, so they
+      are NULLable; ``label`` is the operator's optional display name and MUST
+      never block an add (REQ-27 / wizard-defaults rule).
+    - ``competitor_snapshot`` — one row per fetch: a content hash + a reference
+      to the (out-of-band) raw payload, for change detection.
+    - ``detected_signal`` — a summarized, scored change extracted from snapshots
+      (the summarizer plan 23-03 writes these).
+
+    Idempotent (CREATE TABLE/INDEX IF NOT EXISTS); no destructive ops. Mirrors
+    the project-scoped FK + index shape of ``_migrate_167_grd_plan_selections``.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS competitor_source (
+            id         TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            kind       TEXT NOT NULL,
+            url        TEXT NOT NULL,
+            origin     TEXT NOT NULL DEFAULT 'manual',
+            etag       TEXT,
+            watermark  TEXT,
+            status     TEXT NOT NULL DEFAULT 'active',
+            label      TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_competitor_source_project ON competitor_source(project_id)"
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS competitor_snapshot (
+            id           TEXT PRIMARY KEY,
+            source_id    TEXT NOT NULL REFERENCES competitor_source(id) ON DELETE CASCADE,
+            fetched_at   TIMESTAMP,
+            content_hash TEXT,
+            raw_ref      TEXT
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_competitor_snapshot_source "
+        "ON competitor_snapshot(source_id)"
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS detected_signal (
+            id          TEXT PRIMARY KEY,
+            source_id   TEXT NOT NULL REFERENCES competitor_source(id) ON DELETE CASCADE,
+            summary     TEXT,
+            signal_type TEXT,
+            score       REAL,
+            created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_detected_signal_source ON detected_signal(source_id)"
+    )
+
+
 def _migrate_168_grd_genome_suggestions(conn) -> None:
     """GRD 0.4.1 pattern mining: mirror ``gd patterns`` (→ GENOME-SUGGESTIONS).
 
@@ -1556,4 +1625,7 @@ V07_MIGRATIONS: list = [
     (169, "loop_iteration_cols", _migrate_169_loop_iteration_cols),
     # v0.6.0 sub-project #2: judge confidence + judge_version per iteration.
     (170, "iteration_confidence", _migrate_170_iteration_confidence),
+    # v0.9.0 phase 23 (REQ-27): competitive-intelligence MVP — project-scoped
+    # competitor_source / competitor_snapshot / detected_signal tables.
+    (171, "competitor_intel", _migrate_171_competitor_intel),
 ]

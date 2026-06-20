@@ -9431,5 +9431,29 @@
     "confidence": "置信度",
     "cost": "成本",
     "tokens": "令牌"
+  },
+  "competitorIntel": {
+    "title": "竞争对手情报",
+    "subtitle": "监控竞争对手的 GitHub 仓库、arXiv 列表或产品页面，查看 AI 摘要的排序变更信号。",
+    "urlLabel": "来源 URL",
+    "urlPlaceholder": "https://github.com/owner/repo",
+    "labelOptional": "标签（可选）",
+    "labelPlaceholder": "例如：主要竞争对手",
+    "submit": "添加来源",
+    "adding": "添加中…",
+    "addedToast": "已添加来源（{kind}）",
+    "addError": "添加来源失败",
+    "loadError": "加载竞争对手数据失败",
+    "sourcesTitle": "监控的来源",
+    "sourcesEmpty": "暂无来源。在上方添加 URL 以开始监控。",
+    "signalsTitle": "排序信号",
+    "signalsEmpty": "尚未检测到信号。",
+    "loading": "加载中…",
+    "scoreLabel": "分数",
+    "noSummary": "（无摘要）",
+    "kindGithub": "GitHub 仓库",
+    "kindArxiv": "arXiv",
+    "kindProduct": "产品页面",
+    "kindUnknown": "未知"
   }
 }
