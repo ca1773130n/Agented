@@ -259,6 +259,10 @@ class _RunnerState:
     total_tokens: int = 0
     no_progress_streak: int = 0
     last_commit: Optional[str] = None
+    pause_event: threading.Event = field(default_factory=threading.Event)
+    pending_note: Optional[str] = None
+    awaiting_human: bool = False
+    gate_decision: Optional[tuple] = None  # (decision, message)
 
 
 _runners: dict[str, _RunnerState] = {}
@@ -300,6 +304,39 @@ def stop_runner(session_id: str) -> None:
         state.stop_event.set()
 
 
+def _get_state(session_id: str) -> Optional[_RunnerState]:
+    with _runners_lock:
+        return _runners.get(session_id)
+
+
+def pause_runner(session_id: str) -> bool:
+    st = _get_state(session_id)
+    if st:
+        st.pause_event.set()
+    return st is not None
+
+
+def resume_runner(session_id: str) -> bool:
+    st = _get_state(session_id)
+    if st:
+        st.pause_event.clear()
+    return st is not None
+
+
+def intervene_runner(session_id: str, message: str) -> bool:
+    st = _get_state(session_id)
+    if st:
+        st.pending_note = message
+    return st is not None
+
+
+def submit_gate_decision(session_id: str, decision: str, message: Optional[str] = None) -> bool:
+    st = _get_state(session_id)
+    if st:
+        st.gate_decision = (decision, message)
+    return st is not None
+
+
 def get_runner_state(session_id: str) -> Optional[dict]:
     """Snapshot the runner state for UI/monitor consumers."""
     with _runners_lock:
@@ -312,6 +349,12 @@ def get_runner_state(session_id: str) -> Optional[dict]:
         "max_wall_seconds": state.spec.exit.max_wall_seconds,
         "elapsed_seconds": int(time.time() - state.started_at),
         "not_met_streak": state.not_met_streak,
+        "total_cost_usd": state.total_cost_usd,
+        "total_tokens": state.total_tokens,
+        "max_cost_usd": state.spec.exit.max_cost_usd,
+        "max_tokens": state.spec.exit.max_tokens,
+        "paused": state.pause_event.is_set(),
+        "awaiting_human": state.awaiting_human,
     }
 
 
