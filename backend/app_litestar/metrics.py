@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import threading
 from collections import defaultdict
-from typing import Optional
-
 
 # Bucket upper-bound list shared by all histograms.
 _HISTOGRAM_BUCKETS_MS: tuple[float, ...] = (10.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 5000.0)
@@ -106,7 +104,9 @@ class _Registry:
             durations = dict(self._http_duration)
 
         # http_requests_total
-        lines.append("# HELP agented_http_requests_total Total HTTP requests by method, path prefix, and status.")
+        lines.append(
+            "# HELP agented_http_requests_total Total HTTP requests by method, path prefix, and status."
+        )
         lines.append("# TYPE agented_http_requests_total counter")
         for (method, prefix, status), n in sorted(requests.items()):
             lines.append(
@@ -114,7 +114,9 @@ class _Registry:
             )
 
         # rate_limit_denied_total
-        lines.append("# HELP agented_rate_limit_denied_total Rate-limit 429s by path prefix and key kind.")
+        lines.append(
+            "# HELP agented_rate_limit_denied_total Rate-limit 429s by path prefix and key kind."
+        )
         lines.append("# TYPE agented_rate_limit_denied_total counter")
         for (prefix, key_kind), n in sorted(denied.items()):
             lines.append(
@@ -122,7 +124,9 @@ class _Registry:
             )
 
         # http_request_duration_ms
-        lines.append("# HELP agented_http_request_duration_ms HTTP request handler duration in milliseconds.")
+        lines.append(
+            "# HELP agented_http_request_duration_ms HTTP request handler duration in milliseconds."
+        )
         lines.append("# TYPE agented_http_request_duration_ms histogram")
         for (method, prefix), hist in sorted(durations.items()):
             counts, total_sum, total_count, buckets = hist.snapshot()
@@ -143,6 +147,7 @@ class _Registry:
         # session_events_total — sourced from DB on demand for accuracy.
         try:
             from app.database import get_connection
+
             with get_connection() as conn:
                 rows = conn.execute(
                     "SELECT event_type, COUNT(*) FROM session_events GROUP BY event_type"
@@ -154,11 +159,7 @@ class _Registry:
                 # requires `\` → `\\` BEFORE `"` → `\"` (otherwise an
                 # event_type containing a backslash produces malformed
                 # exposition that scrapers may reject).
-                safe = (
-                    (event_type or "unknown")
-                    .replace("\\", "\\\\")
-                    .replace('"', '\\"')
-                )
+                safe = (event_type or "unknown").replace("\\", "\\\\").replace('"', '\\"')
                 lines.append(f'agented_session_events_total{{event_type="{safe}"}} {n}')
         except Exception:  # noqa: BLE001 — best-effort, never fail the scrape
             pass

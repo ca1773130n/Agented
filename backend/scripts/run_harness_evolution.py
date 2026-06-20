@@ -23,19 +23,20 @@ def main() -> int:
         description="Run one Life-Harness evolution round (project-scoped).",
     )
     parser.add_argument("project_id")
-    parser.add_argument("--since", default=None,
-                        help="ISO-8601 lower bound on snapshot.created_at")
-    parser.add_argument("--until", default=None,
-                        help="ISO-8601 upper bound on snapshot.created_at")
-    parser.add_argument("--limit", type=int, default=25,
-                        help="Max recent executions to include (default 25)")
+    parser.add_argument("--since", default=None, help="ISO-8601 lower bound on snapshot.created_at")
+    parser.add_argument("--until", default=None, help="ISO-8601 upper bound on snapshot.created_at")
     parser.add_argument(
-        "--dry-run", action="store_true",
-        help="Stop after validating Codex's patch; round transitions to "
-             "'awaiting_approval' for human review.",
+        "--limit", type=int, default=25, help="Max recent executions to include (default 25)"
     )
     parser.add_argument(
-        "--force", action="store_true",
+        "--dry-run",
+        action="store_true",
+        help="Stop after validating Codex's patch; round transitions to "
+        "'awaiting_approval' for human review.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
         help="Bypass the 24h-default rate-limit guard.",
     )
     args = parser.parse_args()

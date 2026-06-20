@@ -240,9 +240,7 @@ def get_highest_role_for_user(user_id: str) -> Optional[str]:
     if not user_id:
         return None
     with get_connection() as conn:
-        rows = conn.execute(
-            "SELECT role FROM user_roles WHERE user_id = ?", (user_id,)
-        ).fetchall()
+        rows = conn.execute("SELECT role FROM user_roles WHERE user_id = ?", (user_id,)).fetchall()
     if not rows:
         return None
     best = max(rows, key=lambda r: _ROLE_RANK.get(r[0], -1))
@@ -314,9 +312,7 @@ def update_user_role(role_id: str, label: Optional[str] = None, role: Optional[s
         changed = cursor.rowcount > 0
         # v0.5.12: invalidate the user's bearer sessions on role change.
         if changed:
-            row = conn.execute(
-                "SELECT user_id FROM user_roles WHERE id = ?", (role_id,)
-            ).fetchone()
+            row = conn.execute("SELECT user_id FROM user_roles WHERE id = ?", (role_id,)).fetchone()
             user_id = row[0] if row else None
         else:
             user_id = None
@@ -355,9 +351,7 @@ def rotate_user_role(role_id: str) -> Optional[dict]:
         conn.execute("DELETE FROM user_roles WHERE id = ?", (role_id,))
         conn.commit()
 
-        new_row = conn.execute(
-            "SELECT * FROM user_roles WHERE id = ?", (new_id,)
-        ).fetchone()
+        new_row = conn.execute("SELECT * FROM user_roles WHERE id = ?", (new_id,)).fetchone()
         conn.row_factory = None
 
     invalidate_key_cache()

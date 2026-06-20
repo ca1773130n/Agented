@@ -111,9 +111,7 @@ class SuperAgentSessionService:
                 session["branch_name"] = branch_name
 
     @classmethod
-    def get_or_create_session(
-        cls, super_agent_id: str, project_id: Optional[str] = None
-    ) -> str:
+    def get_or_create_session(cls, super_agent_id: str, project_id: Optional[str] = None) -> str:
         """Return an existing session for the super agent, or create a new one.
 
         - If an active session exists for the super_agent_id, return its session_id.
@@ -180,9 +178,7 @@ class SuperAgentSessionService:
                 )
                 conn.commit()
         except Exception:
-            logger.debug(
-                "Backfill project_id failed for session %s", session_id, exc_info=True
-            )
+            logger.debug("Backfill project_id failed for session %s", session_id, exc_info=True)
 
     @classmethod
     def send_message(

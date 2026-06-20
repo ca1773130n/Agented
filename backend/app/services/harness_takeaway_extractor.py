@@ -35,12 +35,14 @@ import re
 import subprocess
 import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Optional
 
 from app.db import harness_takeaways as repo
 from app.services.harness_failure_annotator import (
-    SessionPayload,
     _FETCHERS,
+    SessionPayload,
+    TurnEvent,
     parse_claude_stream,
 )
 from app.services.provider_cli_map import resolve_llm_cmd
@@ -729,7 +731,6 @@ def _project_local_or_user_path(
        project_id into the artifact itself) so multiple projects
        coexist without collision.
     """
-    from pathlib import Path
 
     try:
         from app.db.connection import get_connection
@@ -801,7 +802,6 @@ def _apply_to_skill(takeaway: dict[str, Any]) -> Optional[str]:
     """Materialize a takeaway as a ``.claude/skills/<name>/SKILL.md`` package
     and register it via Forge's existing ``add_project_skill``. Returns the
     skill_name (the natural identifier) on success."""
-    from pathlib import Path
 
     project_id = takeaway.get("project_id")
     if not project_id:

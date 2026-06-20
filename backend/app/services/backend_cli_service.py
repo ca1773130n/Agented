@@ -18,7 +18,7 @@ import time
 import uuid
 from queue import Empty, Full, Queue
 from typing import Dict, Generator, List, Optional
-from urllib.parse import parse_qs, quote, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qs, urlparse
 
 from .pty_service import strip_ansi
 
@@ -187,9 +187,8 @@ class BackendCLIService:
         )
 
         # Create fake browser script BEFORE fork so parent knows the URL file path
-        import tempfile as _tf
-
         import shlex as _shlex
+        import tempfile as _tf
 
         _url_dir = _tf.mkdtemp(prefix="agented-oauth-")
         _url_file = os.path.join(_url_dir, "url.txt")
@@ -208,7 +207,9 @@ class BackendCLIService:
         # Set wide terminal to prevent URL wrapping/corruption
         master_fd, slave_fd = pty.openpty()
         # Set very wide terminal so URLs don't get wrapped/corrupted
-        import fcntl, struct, termios
+        import fcntl
+        import struct
+        import termios
 
         winsize = struct.pack("HHHH", 50, 500, 0, 0)  # rows=50, cols=500
         try:

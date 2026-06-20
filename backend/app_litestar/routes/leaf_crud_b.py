@@ -15,19 +15,6 @@ from litestar.exceptions import (
     HTTPException,
     NotFoundException,
 )
-from litestar.params import Parameter
-
-from app.db import integrations as db_integrations
-from app.models.common import PaginationQuery
-
-# AuditLogService → activity-event log (who did what; /admin/audit-events).
-# AuditService    → security-scan findings (bot-security results; /admin/audit-history).
-# Two services, two domains — see each module's docstring for the boundary.
-from app.services.audit_log_service import AuditLogService
-from app.services.audit_service import AuditService
-from app.services.github_service import GitHubService
-from app.services.integration_config_service import IntegrationConfigService
-from app.services.pr_review_service import PrReviewService
 
 from app.database import (
     add_marketplace_plugin,
@@ -41,6 +28,16 @@ from app.database import (
 from app.database import (
     create_marketplace as db_create_marketplace,
 )
+from app.db import integrations as db_integrations
+
+# AuditLogService → activity-event log (who did what; /admin/audit-events).
+# AuditService    → security-scan findings (bot-security results; /admin/audit-history).
+# Two services, two domains — see each module's docstring for the boundary.
+from app.services.audit_log_service import AuditLogService
+from app.services.audit_service import AuditService
+from app.services.github_service import GitHubService
+from app.services.integration_config_service import IntegrationConfigService
+from app.services.pr_review_service import PrReviewService
 from app_litestar.route_helpers import MAX_LIST_LIMIT, clamp_limit
 
 logger = logging.getLogger(__name__)

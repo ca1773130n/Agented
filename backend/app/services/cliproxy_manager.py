@@ -386,9 +386,7 @@ class CLIProxyManager:
         )
         logger.info("CLIProxy codex login started: pid=%s", proc.pid)
 
-        oauth_url = cls._capture_oauth_url(
-            proc, ["openai", "codex", "auth", "authorize"], "codex"
-        )
+        oauth_url = cls._capture_oauth_url(proc, ["openai", "codex", "auth", "authorize"], "codex")
         logger.info("CLIProxy codex login: oauth_url=%s", oauth_url)
         return proc, {"url": oauth_url}
 

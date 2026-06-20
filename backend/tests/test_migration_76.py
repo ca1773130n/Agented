@@ -1,5 +1,5 @@
 import sqlite3
-import pytest
+
 from app.db.migrations import _migrate_76_super_agent_dispatch
 
 

@@ -24,11 +24,7 @@ _SRC = Path(__file__).resolve().parents[1] / "scripts" / "run_ai_accounts.py"
 
 def _load_lazy_auth_class():
     tree = ast.parse(_SRC.read_text())
-    cls = next(
-        n
-        for n in tree.body
-        if isinstance(n, ast.ClassDef) and n.name == "LazyFlaskKeyAuth"
-    )
+    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "LazyFlaskKeyAuth")
     # Stub the `ai_accounts_core.domain.principal.Principal` import the class
     # does inside __init__ so we don't pull in the whole sidecar package.
     for name in ("ai_accounts_core", "ai_accounts_core.domain"):

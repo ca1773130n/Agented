@@ -121,9 +121,7 @@ def test_ouroboros_run_wires_sa_backend_and_ouroboros_flag(client, isolated_db):
     """
     del isolated_db
     _seed_admin_key()
-    pid, sa_id = _seed_project_and_sa(
-        sa_backend="gemini", sa_model="gemini-2.5-pro"
-    )
+    pid, sa_id = _seed_project_and_sa(sa_backend="gemini", sa_model="gemini-2.5-pro")
 
     captured: dict = {}
 
@@ -164,9 +162,7 @@ def test_ouroboros_run_wires_sa_backend_and_ouroboros_flag(client, isolated_db):
     assert cfg["goal"] == "ship feature X"
     assert cfg["max_iterations"] == 5
     assert cfg["max_wall_seconds"] == 600
-    assert cfg["judge_backend_kind"] == "gemini", (
-        "judge must inherit the SA's backend_type"
-    )
+    assert cfg["judge_backend_kind"] == "gemini", "judge must inherit the SA's backend_type"
     assert cfg["judge_model_override"] == "gemini-2.5-pro", (
         "judge must inherit the SA's preferred_model"
     )
@@ -208,13 +204,16 @@ def test_ouroboros_run_falls_back_to_recent_project(client, isolated_db):
         captured.update(session_config)
         return {"session_id": "psess-fb1234567", "pid": 1, "status": "active"}
 
-    with patch(
-        "app.services.execution_type_handler.GoalLoopSessionHandler.start",
-        new=fake_start,
-    ), patch(
-        "app.services.project_workspace_service."
-        "ProjectWorkspaceService.resolve_working_directory",
-        return_value="/tmp/bridge-test",
+    with (
+        patch(
+            "app.services.execution_type_handler.GoalLoopSessionHandler.start",
+            new=fake_start,
+        ),
+        patch(
+            "app.services.project_workspace_service."
+            "ProjectWorkspaceService.resolve_working_directory",
+            return_value="/tmp/bridge-test",
+        ),
     ):
         resp = client.post(
             f"/admin/super-agents/{sa_id}/ouroboros-runs",
@@ -248,17 +247,21 @@ def test_ouroboros_run_forwards_assembled_system_prompt(client, isolated_db):
 
     fake_prompt = "## ROLE\n\nYou are the test SA.\n"
 
-    with patch(
-        "app.services.execution_type_handler.GoalLoopSessionHandler.start",
-        new=fake_start,
-    ), patch(
-        "app.services.project_workspace_service."
-        "ProjectWorkspaceService.resolve_working_directory",
-        return_value="/tmp/bridge-test",
-    ), patch(
-        "app.services.super_agent_session_service."
-        "SuperAgentSessionService.assemble_system_prompt",
-        return_value=fake_prompt,
+    with (
+        patch(
+            "app.services.execution_type_handler.GoalLoopSessionHandler.start",
+            new=fake_start,
+        ),
+        patch(
+            "app.services.project_workspace_service."
+            "ProjectWorkspaceService.resolve_working_directory",
+            return_value="/tmp/bridge-test",
+        ),
+        patch(
+            "app.services.super_agent_session_service."
+            "SuperAgentSessionService.assemble_system_prompt",
+            return_value=fake_prompt,
+        ),
     ):
         resp = client.post(
             f"/admin/super-agents/{sa_id}/ouroboros-runs",
@@ -272,9 +275,7 @@ def test_ouroboros_run_forwards_assembled_system_prompt(client, isolated_db):
     assert captured.get("system_prompt_override") == fake_prompt
 
 
-def test_ouroboros_run_no_system_prompt_when_assembly_returns_empty(
-    client, isolated_db
-):
+def test_ouroboros_run_no_system_prompt_when_assembly_returns_empty(client, isolated_db):
     """SAs with no documents → empty assembled prompt → no
     ``--system-prompt`` injection (avoids passing an empty
     string to the claude CLI).
@@ -289,17 +290,21 @@ def test_ouroboros_run_no_system_prompt_when_assembly_returns_empty(
         captured.update(session_config)
         return {"session_id": "psess-empty12345", "pid": 1, "status": "active"}
 
-    with patch(
-        "app.services.execution_type_handler.GoalLoopSessionHandler.start",
-        new=fake_start,
-    ), patch(
-        "app.services.project_workspace_service."
-        "ProjectWorkspaceService.resolve_working_directory",
-        return_value="/tmp/bridge-test",
-    ), patch(
-        "app.services.super_agent_session_service."
-        "SuperAgentSessionService.assemble_system_prompt",
-        return_value="",
+    with (
+        patch(
+            "app.services.execution_type_handler.GoalLoopSessionHandler.start",
+            new=fake_start,
+        ),
+        patch(
+            "app.services.project_workspace_service."
+            "ProjectWorkspaceService.resolve_working_directory",
+            return_value="/tmp/bridge-test",
+        ),
+        patch(
+            "app.services.super_agent_session_service."
+            "SuperAgentSessionService.assemble_system_prompt",
+            return_value="",
+        ),
     ):
         resp = client.post(
             f"/admin/super-agents/{sa_id}/ouroboros-runs",
@@ -477,8 +482,7 @@ def test_ouroboros_run_scoped_to_caller_user_id(client, isolated_db):
     with get_connection() as conn:
         pid = _get_unique_project_id(conn)
         conn.execute(
-            "INSERT INTO projects (id, name, local_path, user_id) "
-            "VALUES (?, ?, ?, ?)",
+            "INSERT INTO projects (id, name, local_path, user_id) VALUES (?, ?, ?, ?)",
             (pid, "alice-proj", "/tmp/alice", "user-alice-id"),
         )
         # SA owned by a DIFFERENT user.
@@ -493,9 +497,7 @@ def test_ouroboros_run_scoped_to_caller_user_id(client, isolated_db):
         headers={"X-API-Key": "user-alice"},
         json={"project_id": pid, "goal": "exfil"},
     )
-    assert resp.status_code == 404, (
-        "scope check must hide other users' SAs as 404 (not 403/200)"
-    )
+    assert resp.status_code == 404, "scope check must hide other users' SAs as 404 (not 403/200)"
 
 
 # --- v0.7.97: delete/start race regression (PR #139 deferred MINOR) -------
@@ -520,17 +522,18 @@ def test_ouroboros_run_returns_409_when_persist_fails_on_race(client, isolated_d
     from app.services.project_session_manager import SessionPersistError
 
     def fake_start(self, session_config):
-        raise SessionPersistError(
-            "Session persist failed: parent resource missing"
-        )
+        raise SessionPersistError("Session persist failed: parent resource missing")
 
-    with patch(
-        "app.services.execution_type_handler.GoalLoopSessionHandler.start",
-        new=fake_start,
-    ), patch(
-        "app.services.project_workspace_service."
-        "ProjectWorkspaceService.resolve_working_directory",
-        return_value="/tmp/bridge-test",
+    with (
+        patch(
+            "app.services.execution_type_handler.GoalLoopSessionHandler.start",
+            new=fake_start,
+        ),
+        patch(
+            "app.services.project_workspace_service."
+            "ProjectWorkspaceService.resolve_working_directory",
+            return_value="/tmp/bridge-test",
+        ),
     ):
         resp = client.post(
             f"/admin/super-agents/{sa_id}/ouroboros-runs",

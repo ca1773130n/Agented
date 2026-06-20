@@ -33,4 +33,20 @@ describe('LoopTracePanel', () => {
     await w.find('[data-testid="gate-continue"]').trigger('click');
     expect(calls.gateDecision).toHaveBeenCalledWith('p', 's', 'continue', undefined);
   });
+  it('Modify sends the trimmed gate note', async () => {
+    const w = mountP({ awaitingHuman: true }); await flushPromises();
+    await w.find('[data-testid="gate-note"]').setValue('  fix the parser  ');
+    await w.find('[data-testid="gate-modify"]').trigger('click');
+    expect(calls.gateDecision).toHaveBeenCalledWith('p', 's', 'modify', 'fix the parser');
+  });
+  it('Modify with an empty note coalesces to undefined', async () => {
+    const w = mountP({ awaitingHuman: true }); await flushPromises();
+    await w.find('[data-testid="gate-modify"]').trigger('click');
+    expect(calls.gateDecision).toHaveBeenCalledWith('p', 's', 'modify', undefined);
+  });
+  it('Abort calls gateDecision with abort', async () => {
+    const w = mountP({ awaitingHuman: true }); await flushPromises();
+    await w.find('[data-testid="gate-abort"]').trigger('click');
+    expect(calls.gateDecision).toHaveBeenCalledWith('p', 's', 'abort', undefined);
+  });
 });

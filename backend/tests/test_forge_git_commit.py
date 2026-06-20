@@ -53,8 +53,8 @@ def test_commit_returns_none_when_no_local_path(tmp_path):
 def test_materialize_round_resolves_project_and_kinds(isolated_db, tmp_path):
     from app.database import get_connection
     from app.db import commands as commands_repo
-    from app.db import project_forge_bindings as bindings_repo
     from app.db import harness_evolution as evo_repo
+    from app.db import project_forge_bindings as bindings_repo
     from app.services.forge_materialization_service import materialize_round
 
     with get_connection() as conn:
@@ -86,7 +86,7 @@ def test_materialize_round_resolves_project_and_kinds(isolated_db, tmp_path):
 
 
 def test_materialize_round_returns_empty_for_missing_round(isolated_db, tmp_path):
-    from app.services.forge_materialization_service import materialize_round, MaterializationResult
+    from app.services.forge_materialization_service import MaterializationResult, materialize_round
 
     result = materialize_round("her-does-not-exist", tmp_path)
     assert isinstance(result, MaterializationResult)

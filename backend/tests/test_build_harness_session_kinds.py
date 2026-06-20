@@ -4,6 +4,7 @@ REQ-26 consistency gap: project_session / workflow / team_session used to
 fall through to None in _build_harness_session, collapsing tesserae signal
 coverage to 2/5. Each kind must now return a non-None HarnessSession dict.
 """
+
 import json
 from pathlib import Path
 
@@ -36,8 +37,7 @@ def test_super_agent_session_normalizes(tmp_path):
         ("sa-111111", "Agent", "claude"),
     )
     _seed(
-        "INSERT INTO super_agent_sessions (id, super_agent_id, conversation_log) "
-        "VALUES (?,?,?)",
+        "INSERT INTO super_agent_sessions (id, super_agent_id, conversation_log) VALUES (?,?,?)",
         ("sas-111111", "sa-111111", json.dumps([{"role": "user", "content": "hi"}])),
     )
     rec = _call("super_agent", "sas-111111", tmp_path)
@@ -87,8 +87,7 @@ def test_workflow_normalizes(tmp_path):
         ("wf-111111", "WF"),
     )
     _seed(
-        "INSERT INTO workflow_executions (id, workflow_id, version, status) "
-        "VALUES (?,?,?,?)",
+        "INSERT INTO workflow_executions (id, workflow_id, version, status) VALUES (?,?,?,?)",
         ("wfx-111111", "wf-111111", 1, "completed"),
     )
     _seed(
@@ -111,14 +110,26 @@ def test_team_session_normalizes(tmp_path):
     _seed(
         "INSERT INTO execution_logs (execution_id, trigger_type, started_at, "
         "backend_type, status, stdout_log) VALUES (?,?,?,?,?,?)",
-        ("exec-team01", "manual", "2026-01-01T00:00:00Z", "claude", "completed",
-         "component stdout"),
+        (
+            "exec-team01",
+            "manual",
+            "2026-01-01T00:00:00Z",
+            "claude",
+            "completed",
+            "component stdout",
+        ),
     )
     _seed(
         "INSERT INTO team_executions (id, team_id, topology, status, message, "
         "execution_ids) VALUES (?,?,?,?,?,?)",
-        ("tex-111111", "team-111111", "pipeline", "completed", "team msg",
-         json.dumps(["exec-team01"])),
+        (
+            "tex-111111",
+            "team-111111",
+            "pipeline",
+            "completed",
+            "team msg",
+            json.dumps(["exec-team01"]),
+        ),
     )
     rec = _call("team_session", "tex-111111", tmp_path)
     assert rec is not None

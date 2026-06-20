@@ -51,9 +51,7 @@ def list_activity(
 )
 def get_rollup(super_agent_id: str, window_days: int = 7) -> dict[str, Any]:
     try:
-        r = super_agent_activity_service.rollup(
-            super_agent_id, window_days=window_days
-        )
+        r = super_agent_activity_service.rollup(super_agent_id, window_days=window_days)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return asdict(r)
@@ -65,11 +63,7 @@ def get_rollup(super_agent_id: str, window_days: int = 7) -> dict[str, Any]:
     guards=[requires_role("admin")],
 )
 def list_session_activity(session_id: str, limit: int = 200) -> dict[str, Any]:
-    return {
-        "events": super_agent_activity_service.list_for_session(
-            session_id, limit=limit
-        )
-    }
+    return {"events": super_agent_activity_service.list_for_session(session_id, limit=limit)}
 
 
 super_agent_activity_router = Router(

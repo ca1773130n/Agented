@@ -66,9 +66,9 @@ def test_scan_marks_already_imported_by_path_and_remote(tmp_path, isolated_db):
     from app.database import create_project as db_create_project
 
     root = str(tmp_path)
-    a = _make_repo(root, "alpha")   # will dedup by local_path
-    b = _make_repo(root, "beta")    # will dedup by remote
-    _make_repo(root, "gamma")       # new
+    a = _make_repo(root, "alpha")  # will dedup by local_path
+    b = _make_repo(root, "beta")  # will dedup by remote
+    _make_repo(root, "gamma")  # new
 
     db_create_project(name="Alpha", local_path=a)
     db_create_project(name="Beta", github_repo="github.com/org/beta")
@@ -77,7 +77,8 @@ def test_scan_marks_already_imported_by_path_and_remote(tmp_path, isolated_db):
     subprocess.run(["git", "init", "-q"], cwd=b, check=True)
     subprocess.run(
         ["git", "remote", "add", "origin", "git@github.com:org/beta.git"],
-        cwd=b, check=True,
+        cwd=b,
+        check=True,
     )
 
     result = pds.ProjectDiscoveryService.scan(root, nested=False, max_depth=3)
@@ -97,14 +98,18 @@ def test_scan_rejects_missing_root():
 
 
 def test_import_repos_creates_projects_and_skips_dupes(tmp_path, isolated_db):
-    from app.database import create_project as db_create_project, get_all_projects
+    from app.database import create_project as db_create_project
+    from app.database import get_all_projects
 
     existing_path = str(tmp_path / "already")
     db_create_project(name="Already", local_path=existing_path)
 
     repos = [
-        {"name": "fresh", "local_path": str(tmp_path / "fresh"),
-         "remote_url": "git@github.com:org/fresh.git"},
+        {
+            "name": "fresh",
+            "local_path": str(tmp_path / "fresh"),
+            "remote_url": "git@github.com:org/fresh.git",
+        },
         {"name": "Already", "local_path": existing_path, "remote_url": None},
         {"name": "", "local_path": "", "remote_url": None},  # invalid
     ]
@@ -128,13 +133,16 @@ def test_import_repos_spawns_harness_setup_when_team_given(tmp_path, isolated_db
 
     calls = []
     monkeypatch.setattr(
-        pds.ProjectDiscoveryService, "_spawn_harness_setup",
+        pds.ProjectDiscoveryService,
+        "_spawn_harness_setup",
         classmethod(lambda cls, pid: calls.append(pid)),
     )
 
     repos = [{"name": "fresh", "local_path": str(tmp_path / "fresh"), "remote_url": None}]
     result = pds.ProjectDiscoveryService.import_repos(
-        repos, owner_team_id=team_id, run_harness_setup=True,
+        repos,
+        owner_team_id=team_id,
+        run_harness_setup=True,
     )
 
     assert result["setup_started"] is True
@@ -144,12 +152,15 @@ def test_import_repos_spawns_harness_setup_when_team_given(tmp_path, isolated_db
 def test_import_repos_no_setup_without_team(tmp_path, isolated_db, monkeypatch):
     calls = []
     monkeypatch.setattr(
-        pds.ProjectDiscoveryService, "_spawn_harness_setup",
+        pds.ProjectDiscoveryService,
+        "_spawn_harness_setup",
         classmethod(lambda cls, pid: calls.append(pid)),
     )
     repos = [{"name": "fresh", "local_path": str(tmp_path / "fresh"), "remote_url": None}]
     result = pds.ProjectDiscoveryService.import_repos(
-        repos, owner_team_id=None, run_harness_setup=True,
+        repos,
+        owner_team_id=None,
+        run_harness_setup=True,
     )
     assert result["setup_started"] is False
     assert calls == []

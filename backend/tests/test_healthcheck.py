@@ -1,8 +1,7 @@
 """v0.5.13: healthcheck CLI tests."""
-from unittest.mock import patch, MagicMock
-import urllib.error
 
-import pytest
+import urllib.error
+from unittest.mock import MagicMock, patch
 
 
 def _ok_response(status: int = 200):
@@ -16,6 +15,7 @@ def _ok_response(status: int = 200):
 class TestProbe:
     def test_returns_ok_on_200(self):
         from scripts.healthcheck import _probe
+
         with patch("scripts.healthcheck.urllib.request.urlopen", return_value=_ok_response(200)):
             ok, detail = _probe("http://x/health")
         assert ok is True
@@ -23,6 +23,7 @@ class TestProbe:
 
     def test_returns_red_on_non_200(self):
         from scripts.healthcheck import _probe
+
         with patch("scripts.healthcheck.urllib.request.urlopen", return_value=_ok_response(503)):
             ok, detail = _probe("http://x/health")
         assert ok is False
@@ -30,6 +31,7 @@ class TestProbe:
 
     def test_returns_red_on_url_error(self):
         from scripts.healthcheck import _probe
+
         with patch(
             "scripts.healthcheck.urllib.request.urlopen",
             side_effect=urllib.error.URLError("connection refused"),
@@ -42,6 +44,7 @@ class TestProbe:
 class TestRun:
     def test_all_green_when_three_probes_ok(self):
         from scripts.healthcheck import run
+
         with patch("scripts.healthcheck.urllib.request.urlopen", return_value=_ok_response(200)):
             rc, results = run()
         assert rc == 0
@@ -50,9 +53,9 @@ class TestRun:
 
     def test_red_when_any_probe_fails(self):
         from scripts.healthcheck import run
+
         # First two ok, third fails.
-        responses = [_ok_response(200), _ok_response(200),
-                     urllib.error.URLError("nope")]
+        responses = [_ok_response(200), _ok_response(200), urllib.error.URLError("nope")]
 
         def fake_urlopen(url, timeout=None):
             r = responses.pop(0)
@@ -69,6 +72,7 @@ class TestRun:
 class TestCLI:
     def test_main_exits_0_on_all_green(self, capsys):
         from scripts.healthcheck import main
+
         with patch("scripts.healthcheck.urllib.request.urlopen", return_value=_ok_response(200)):
             rc = main([])
         assert rc == 0
@@ -77,6 +81,7 @@ class TestCLI:
 
     def test_main_exits_1_with_structured_stderr(self, capsys):
         from scripts.healthcheck import main
+
         with patch(
             "scripts.healthcheck.urllib.request.urlopen",
             side_effect=urllib.error.URLError("down"),
@@ -93,8 +98,11 @@ class TestLivenessOnly:
         """Container HEALTHCHECK uses --liveness-only because the sidecar
         is a separate container in compose. Probing localhost:20001 from
         inside the backend container would always fail."""
-        from scripts.healthcheck import run, main
-        with patch("scripts.healthcheck.urllib.request.urlopen", return_value=_ok_response(200)) as up:
+        from scripts.healthcheck import run
+
+        with patch(
+            "scripts.healthcheck.urllib.request.urlopen", return_value=_ok_response(200)
+        ) as up:
             rc, results = run(liveness_only=True)
         assert rc == 0
         assert set(results) == {"backend.liveness"}
@@ -102,6 +110,7 @@ class TestLivenessOnly:
 
     def test_liveness_only_via_CLI_flag(self, capsys):
         from scripts.healthcheck import main
+
         with patch("scripts.healthcheck.urllib.request.urlopen", return_value=_ok_response(200)):
             rc = main(["--liveness-only"])
         assert rc == 0

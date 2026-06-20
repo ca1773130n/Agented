@@ -2,8 +2,6 @@
 
 import json
 
-import pytest
-
 from app.db.agent_memory import (
     count_messages,
     count_threads,
@@ -261,7 +259,6 @@ class TestCorruptJSON:
         assert wm["content"] == "not_json_at_all"
         assert wm["content_parsed"] is None
         assert any(
-            "content is not valid JSON" in r.message
-            and "agent-test01" in r.message
+            "content is not valid JSON" in r.message and "agent-test01" in r.message
             for r in caplog.records
         )

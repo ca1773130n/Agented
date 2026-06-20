@@ -9,8 +9,6 @@ traversal + cap), atomic per-file write, legacy schema shim.
 from __future__ import annotations
 
 import json
-import os
-from pathlib import Path
 
 import pytest
 
@@ -147,10 +145,7 @@ def test_reject_file_too_large():
 def test_reject_too_many_files():
     cfg = {
         **_GOOD,
-        "files": [
-            {"path": f"scripts/h{i}.py", "content": "x"}
-            for i in range(svc._MAX_FILES + 1)
-        ],
+        "files": [{"path": f"scripts/h{i}.py", "content": "x"} for i in range(svc._MAX_FILES + 1)],
     }
     with pytest.raises(_SkillConfigError) as exc:
         SkillConversationService._build_package_preview(_conv_with(cfg))
@@ -214,9 +209,7 @@ def test_legacy_schema_body_synthesized():
 # -----------------------------------------------------------------
 
 
-def test_finalize_writes_full_package_to_disk(
-    isolated_db, tmp_path, monkeypatch
-):
+def test_finalize_writes_full_package_to_disk(isolated_db, tmp_path, monkeypatch):
     """Finalize writes SKILL.md + each helper/reference file
     atomically to the playground working dir, and the
     user_skills row is created."""
@@ -226,9 +219,11 @@ def test_finalize_writes_full_package_to_disk(
     conv_id = "skill_testtesttesttest"
     SkillConversationService._conversations[conv_id] = {
         "messages": [
-            ConversationMessage(role="assistant",
-                                content="---SKILL_CONFIG---\n" + json.dumps(_GOOD) + "\n---END_CONFIG---",
-                                timestamp="t"),
+            ConversationMessage(
+                role="assistant",
+                content="---SKILL_CONFIG---\n" + json.dumps(_GOOD) + "\n---END_CONFIG---",
+                timestamp="t",
+            ),
         ],
     }
     SkillConversationService._subscribers[conv_id] = []
@@ -269,9 +264,7 @@ def test_preview_returns_stable_config_hash():
     assert p3["config_hash"] != p1["config_hash"]
 
 
-def test_finalize_rejects_stale_config_hash(
-    isolated_db, tmp_path, monkeypatch
-):
+def test_finalize_rejects_stale_config_hash(isolated_db, tmp_path, monkeypatch):
     """v0.7.77 codex BLOCK 4 — when the operator passes a hash
     that doesn't match the latest config in the conversation,
     finalize returns 409 instead of silently writing a config the
@@ -282,9 +275,11 @@ def test_finalize_rejects_stale_config_hash(
     conv_id = "skill_stalehashstaleha"
     SkillConversationService._conversations[conv_id] = {
         "messages": [
-            ConversationMessage(role="assistant",
-                                content="---SKILL_CONFIG---\n" + json.dumps(_GOOD) + "\n---END_CONFIG---",
-                                timestamp="t"),
+            ConversationMessage(
+                role="assistant",
+                content="---SKILL_CONFIG---\n" + json.dumps(_GOOD) + "\n---END_CONFIG---",
+                timestamp="t",
+            ),
         ],
     }
     SkillConversationService._subscribers[conv_id] = []
@@ -303,9 +298,7 @@ def test_finalize_rejects_stale_config_hash(
         SkillConversationService._subscribers.pop(conv_id, None)
 
 
-def test_finalize_refuses_to_overwrite_existing_skill(
-    isolated_db, tmp_path, monkeypatch
-):
+def test_finalize_refuses_to_overwrite_existing_skill(isolated_db, tmp_path, monkeypatch):
     """v0.7.77 codex BLOCK 6 spinoff — if a skill of the same
     name already exists, finalize 409s rather than silently
     merging or overwriting. Operator must delete the existing
@@ -319,9 +312,11 @@ def test_finalize_refuses_to_overwrite_existing_skill(
     conv_id = "skill_existskillexists"
     SkillConversationService._conversations[conv_id] = {
         "messages": [
-            ConversationMessage(role="assistant",
-                                content="---SKILL_CONFIG---\n" + json.dumps(_GOOD) + "\n---END_CONFIG---",
-                                timestamp="t"),
+            ConversationMessage(
+                role="assistant",
+                content="---SKILL_CONFIG---\n" + json.dumps(_GOOD) + "\n---END_CONFIG---",
+                timestamp="t",
+            ),
         ],
     }
     SkillConversationService._subscribers[conv_id] = []
@@ -365,9 +360,7 @@ def test_extract_distinguishes_no_block_from_malformed_block():
     assert "malformed" in exc.value.message.lower()
 
 
-def test_finalize_metadata_omits_skill_md_content(
-    isolated_db, tmp_path, monkeypatch
-):
+def test_finalize_metadata_omits_skill_md_content(isolated_db, tmp_path, monkeypatch):
     """v0.7.77 codex NIT 5 — the user_skills metadata row stores
     paths + frontmatter only, not the full SKILL.md body
     (consumers read from disk). Avoids fat DB rows when SKILL.md
@@ -378,9 +371,11 @@ def test_finalize_metadata_omits_skill_md_content(
     conv_id = "skill_metadataomitsmd"
     SkillConversationService._conversations[conv_id] = {
         "messages": [
-            ConversationMessage(role="assistant",
-                                content="---SKILL_CONFIG---\n" + json.dumps(_GOOD) + "\n---END_CONFIG---",
-                                timestamp="t"),
+            ConversationMessage(
+                role="assistant",
+                content="---SKILL_CONFIG---\n" + json.dumps(_GOOD) + "\n---END_CONFIG---",
+                timestamp="t",
+            ),
         ],
     }
     SkillConversationService._subscribers[conv_id] = []
@@ -397,9 +392,7 @@ def test_finalize_metadata_omits_skill_md_content(
         SkillConversationService._subscribers.pop(conv_id, None)
 
 
-def test_finalize_rejects_bad_config_without_partial_write(
-    isolated_db, tmp_path, monkeypatch
-):
+def test_finalize_rejects_bad_config_without_partial_write(isolated_db, tmp_path, monkeypatch):
     """A config that fails validation should not leave any files
     on disk — the validator runs before any write."""
     del isolated_db
@@ -408,9 +401,11 @@ def test_finalize_rejects_bad_config_without_partial_write(
     conv_id = "skill_testbadbadbadbad"
     SkillConversationService._conversations[conv_id] = {
         "messages": [
-            ConversationMessage(role="assistant",
-                                content="---SKILL_CONFIG---\n" + json.dumps(bad_cfg) + "\n---END_CONFIG---",
-                                timestamp="t"),
+            ConversationMessage(
+                role="assistant",
+                content="---SKILL_CONFIG---\n" + json.dumps(bad_cfg) + "\n---END_CONFIG---",
+                timestamp="t",
+            ),
         ],
     }
     SkillConversationService._subscribers[conv_id] = []

@@ -36,10 +36,8 @@ from app.db.sketches import (
 from app.db.sketches import create_sketch as db_create_sketch
 from app.logging_config import current_user_var
 from app.services.agent_conversation_service import AgentConversationService
-from app_litestar.auth import Caller
 from app.services.sketch_execution_service import execute_sketch, find_team_super_agent
-
-from ..auth import Caller
+from app_litestar.auth import Caller
 
 logger = logging.getLogger(__name__)
 

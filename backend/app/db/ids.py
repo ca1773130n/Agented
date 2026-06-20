@@ -104,9 +104,6 @@ ROLE_ID_LENGTH = 6
 USER_ID_PREFIX = "user-"
 USER_ID_LENGTH = 6
 
-SESSION_ID_PREFIX = "sess-"
-SESSION_ID_LENGTH = 6
-
 SECRET_ID_PREFIX = "sec-"
 SECRET_ID_LENGTH = 6
 
@@ -360,8 +357,13 @@ def _get_unique_super_agent_id(conn) -> str:
             return sa_id
 
 
-def _get_unique_session_id(conn) -> str:
-    """Generate a session ID that doesn't exist in the database."""
+def _get_unique_super_agent_session_id(conn) -> str:
+    """Generate a session ID unique in the ``super_agent_sessions`` table.
+
+    Distinct from ``_get_unique_session_id`` (which checks the ``sessions``
+    table). These were both named ``_get_unique_session_id`` — the later
+    definition shadowed this one, so super-agent session creation was checking
+    the WRONG table for collisions. Named apart now."""
     while True:
         sess_id = generate_session_id()
         cursor = conn.execute("SELECT id FROM super_agent_sessions WHERE id = ?", (sess_id,))
@@ -463,9 +465,7 @@ def _get_unique_dead_end_id(conn) -> str:
 def _get_unique_genome_snapshot_id(conn) -> str:
     while True:
         gid = generate_genome_snapshot_id()
-        cursor = conn.execute(
-            "SELECT id FROM project_genome_snapshots WHERE id = ?", (gid,)
-        )
+        cursor = conn.execute("SELECT id FROM project_genome_snapshots WHERE id = ?", (gid,))
         if cursor.fetchone() is None:
             return gid
 
@@ -479,9 +479,7 @@ def generate_evolve_run_id() -> str:
 def _get_unique_evolve_run_id(conn) -> str:
     while True:
         eid = generate_evolve_run_id()
-        cursor = conn.execute(
-            "SELECT id FROM grd_evolve_runs WHERE id = ?", (eid,)
-        )
+        cursor = conn.execute("SELECT id FROM grd_evolve_runs WHERE id = ?", (eid,))
         if cursor.fetchone() is None:
             return eid
 
@@ -494,9 +492,7 @@ def generate_harness_round_id() -> str:
 def _get_unique_harness_round_id(conn) -> str:
     while True:
         hid = generate_harness_round_id()
-        cursor = conn.execute(
-            "SELECT id FROM grd_harness_rounds WHERE id = ?", (hid,)
-        )
+        cursor = conn.execute("SELECT id FROM grd_harness_rounds WHERE id = ?", (hid,))
         if cursor.fetchone() is None:
             return hid
 
@@ -509,9 +505,7 @@ def generate_plan_selection_id() -> str:
 def _get_unique_plan_selection_id(conn) -> str:
     while True:
         pid = generate_plan_selection_id()
-        cursor = conn.execute(
-            "SELECT id FROM grd_plan_selections WHERE id = ?", (pid,)
-        )
+        cursor = conn.execute("SELECT id FROM grd_plan_selections WHERE id = ?", (pid,))
         if cursor.fetchone() is None:
             return pid
 
@@ -524,9 +518,7 @@ def generate_genome_suggestions_id() -> str:
 def _get_unique_genome_suggestions_id(conn) -> str:
     while True:
         gid = generate_genome_suggestions_id()
-        cursor = conn.execute(
-            "SELECT id FROM grd_genome_suggestions WHERE id = ?", (gid,)
-        )
+        cursor = conn.execute("SELECT id FROM grd_genome_suggestions WHERE id = ?", (gid,))
         if cursor.fetchone() is None:
             return gid
 
@@ -677,11 +669,6 @@ def _get_unique_user_id(conn) -> str:
         cursor = conn.execute("SELECT id FROM users WHERE id = ?", (uid,))
         if cursor.fetchone() is None:
             return uid
-
-
-def generate_session_id() -> str:
-    """Generate a unique session row ID like 'sess-abc123'."""
-    return generate_id(SESSION_ID_PREFIX, SESSION_ID_LENGTH)
 
 
 def _get_unique_session_id(conn) -> str:

@@ -49,7 +49,11 @@ def test_detects_rate_limit_assistant_event_error_field():
 def test_normal_assistant_event_is_not_rate_limit():
     event = {
         "type": "assistant",
-        "message": {"content": [{"type": "text", "text": "Here is your answer about rate limiting algorithms."}]},
+        "message": {
+            "content": [
+                {"type": "text", "text": "Here is your answer about rate limiting algorithms."}
+            ]
+        },
     }
     # No error/429 fields → not a rate limit, even though text says "rate limit".
     assert detect_rate_limit_from_event(event) is None
@@ -125,9 +129,17 @@ def seeded_db(isolated_db):
             conn,
             "claude",
             [
-                {"display_name": "Personal1", "config_path": "~/.claude-personal1", "is_default": 1},
+                {
+                    "display_name": "Personal1",
+                    "config_path": "~/.claude-personal1",
+                    "is_default": 1,
+                },
                 {"display_name": "Personal2", "config_path": "~/.claude-personal2"},
-                {"display_name": "LimitedC", "config_path": "~/.claude-limited", "rate_limited_until": future},
+                {
+                    "display_name": "LimitedC",
+                    "config_path": "~/.claude-limited",
+                    "rate_limited_until": future,
+                },
             ],
         )
         _make_backend_and_accounts(
@@ -157,7 +169,9 @@ def test_candidates_same_backend_first_then_cross(seeded_db):
 def test_candidates_exclude_attempted(seeded_db):
     from app.db.backends import get_accounts_for_backend_type
 
-    p1 = next(a for a in get_accounts_for_backend_type("claude") if a["account_name"] == "Personal1")
+    p1 = next(
+        a for a in get_accounts_for_backend_type("claude") if a["account_name"] == "Personal1"
+    )
     cands = rotation_candidates("claude", exclude_account_ids={p1["id"]})
     assert "Personal1" not in _names(cands)
     assert "Personal2" in _names(cands)

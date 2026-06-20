@@ -1,4 +1,5 @@
 """v0.6.4: plugin discovery service tests."""
+
 import json
 from pathlib import Path
 
@@ -31,14 +32,21 @@ def _seed_single_file_plugin(root: Path, name: str) -> Path:
 class TestDiscover:
     def test_returns_empty_when_no_plugins_present(self, plugin_root):
         from app.services.plugin_discovery_service import discover
+
         assert discover() == []
 
     def test_finds_directory_plugin(self, plugin_root):
         from app.services.plugin_discovery_service import discover
+
         _seed_directory_plugin(
-            plugin_root, "my-plugin",
-            {"name": "my-plugin", "version": "1.0.0",
-             "description": "test", "type": "skill-bundle"},
+            plugin_root,
+            "my-plugin",
+            {
+                "name": "my-plugin",
+                "version": "1.0.0",
+                "description": "test",
+                "type": "skill-bundle",
+            },
         )
         result = discover()
         assert len(result) == 1
@@ -49,6 +57,7 @@ class TestDiscover:
 
     def test_finds_single_file_plugin(self, plugin_root):
         from app.services.plugin_discovery_service import discover
+
         _seed_single_file_plugin(plugin_root, "shimmer")
         result = discover()
         assert len(result) == 1
@@ -58,6 +67,7 @@ class TestDiscover:
 
     def test_skips_dotfiles_and_unmarked_dirs(self, plugin_root):
         from app.services.plugin_discovery_service import discover
+
         # A directory without plugin.json should not be picked up.
         (plugin_root / "not-a-plugin").mkdir()
         (plugin_root / "not-a-plugin" / "README.md").write_text("just docs")
@@ -72,6 +82,7 @@ class TestDiscover:
 
     def test_stable_sort(self, plugin_root):
         from app.services.plugin_discovery_service import discover
+
         _seed_directory_plugin(plugin_root, "zeta", {"name": "zeta"})
         _seed_directory_plugin(plugin_root, "alpha", {"name": "alpha"})
         _seed_single_file_plugin(plugin_root, "mid")
@@ -80,6 +91,7 @@ class TestDiscover:
 
     def test_corrupt_manifest_is_silently_skipped(self, plugin_root):
         from app.services.plugin_discovery_service import discover
+
         bad = plugin_root / "broken"
         bad.mkdir()
         (bad / "plugin.json").write_text("{not valid json")
@@ -95,6 +107,7 @@ class TestDiscover:
 class TestEnvVarPath:
     def test_AGENTED_PLUGIN_PATHS_is_colon_separated(self, tmp_path, monkeypatch):
         from app.services.plugin_discovery_service import discover
+
         a = tmp_path / "first"
         b = tmp_path / "second"
         a.mkdir()

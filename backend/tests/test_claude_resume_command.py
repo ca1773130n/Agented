@@ -26,7 +26,6 @@ def test_build_command_gemini_ignores_resume():
 
 def test_post_run_usage_capture_writes_session_id():
     """The usage-recording path persists claude's session_id onto execution_logs."""
-    from unittest.mock import patch
 
     from app.db.execution_logs import create_execution_log, get_execution_log
     from app.services.execution_service import _capture_session_id

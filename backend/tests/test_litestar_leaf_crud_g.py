@@ -144,9 +144,7 @@ def test_delegations_unknown_sketch_404(isolated_db):
 
 def test_send_message_requires_message(isolated_db):
     with _client() as c:
-        resp = c.post(
-            "/api/agents/conversations/conv-x/message", json={}
-        )
+        resp = c.post("/api/agents/conversations/conv-x/message", json={})
     assert resp.status_code == 400
 
 
@@ -176,9 +174,7 @@ def test_import_requires_source(isolated_db):
 
 def test_import_marketplace_requires_id(isolated_db):
     with _client() as c:
-        resp = c.post(
-            "/admin/plugin-exports/import-from-marketplace", json={}
-        )
+        resp = c.post("/admin/plugin-exports/import-from-marketplace", json={})
     assert resp.status_code == 400
 
 

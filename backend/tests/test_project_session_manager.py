@@ -13,7 +13,6 @@ from app.services.project_session_manager import (
     ProjectSessionManager,
     SessionInfo,
     _backend_from_cmd,
-    _extract_hook_decision_events,
     _extract_stream_json_events,
     _extract_stream_json_text,
     _heal_stray_backtick_before_heading,
@@ -178,9 +177,7 @@ class TestExtractStreamJsonEvents:
             json.dumps(
                 {
                     "type": "assistant",
-                    "message": {
-                        "content": [{"type": "text", "text": "Hello world."}]
-                    },
+                    "message": {"content": [{"type": "text", "text": "Hello world."}]},
                 }
             ),
             session_info=si,
@@ -355,7 +352,7 @@ class TestExtractStreamJsonEvents:
         ev_type, ev_data = events[0]
         assert ev_type == "output"
         assert "Reading file." in ev_data["line"]
-        assert 'tool-call--file' in ev_data["line"]
+        assert "tool-call--file" in ev_data["line"]
 
     def test_unknown_event_returns_empty_list(self):
         for payload in (
@@ -404,9 +401,7 @@ class TestExtractStreamJsonEvents:
             "subtype": "hook_response",
             "hook_event": "SessionStart",
             "hook_name": "context-mode-init",
-            "output": json.dumps(
-                {"hookSpecificOutput": {"additionalContext": "boilerplate"}}
-            ),
+            "output": json.dumps({"hookSpecificOutput": {"additionalContext": "boilerplate"}}),
         }
         assert _extract_stream_json_events(json.dumps(hook_event)) == []
         # Also non-JSON output
@@ -447,9 +442,7 @@ class TestExtractStreamJsonEvents:
                 ]
             },
         }
-        events = _strip_turn_done(
-            _extract_stream_json_events(json.dumps(event), session_info=si)
-        )
+        events = _strip_turn_done(_extract_stream_json_events(json.dumps(event), session_info=si))
         # No output with "Hello world" — only the tool chip.
         assert len(events) == 1
         ev_type, ev_data = events[0]
@@ -655,10 +648,7 @@ class TestUnwrapMarkdownFences:
             assert _unwrap_markdown_fences(text) == text
 
     def test_handles_multiple_markdown_fences(self):
-        text = (
-            "first:\n```markdown\n# one\n```\n\n"
-            "second:\n```md\n# two\n```\n"
-        )
+        text = "first:\n```markdown\n# one\n```\n\nsecond:\n```md\n# two\n```\n"
         out = _unwrap_markdown_fences(text)
         assert "# one" in out
         assert "# two" in out
@@ -676,9 +666,7 @@ class TestRenderToolUse:
     let users click-to-expand the full input."""
 
     def test_bash_returns_details_with_shell_kind(self):
-        rendered = _render_tool_use(
-            {"name": "Bash", "input": {"command": "ls /tmp"}}
-        )
+        rendered = _render_tool_use({"name": "Bash", "input": {"command": "ls /tmp"}})
         assert '<details class="tool-call tool-call--shell">' in rendered
         assert '<span class="tool-name">▸ Bash</span>' in rendered
         # Command chip in the summary…
@@ -692,17 +680,13 @@ class TestRenderToolUse:
 
     def test_file_ops_use_path_chip(self):
         for name in ("Read", "Edit", "Write", "MultiEdit", "NotebookEdit"):
-            rendered = _render_tool_use(
-                {"name": name, "input": {"file_path": "/etc/hosts"}}
-            )
+            rendered = _render_tool_use({"name": name, "input": {"file_path": "/etc/hosts"}})
             assert f'<span class="tool-name">▸ {name}</span>' in rendered
             assert '<code class="tool-path">/etc/hosts</code>' in rendered
             assert "tool-call--file" in rendered
 
     def test_grep_renders_pattern_and_path_chips(self):
-        rendered = _render_tool_use(
-            {"name": "Grep", "input": {"pattern": "TODO", "path": "src/"}}
-        )
+        rendered = _render_tool_use({"name": "Grep", "input": {"pattern": "TODO", "path": "src/"}})
         assert '<code class="tool-pattern">TODO</code>' in rendered
         assert '<span class="tool-sep">in</span>' in rendered
         assert '<code class="tool-path">src/</code>' in rendered
@@ -720,9 +704,7 @@ class TestRenderToolUse:
 
     def test_long_arg_is_truncated_in_summary_full_in_body(self):
         long_query = "x" * 200
-        rendered = _render_tool_use(
-            {"name": "ctx_execute", "input": {"command": long_query}}
-        )
+        rendered = _render_tool_use({"name": "ctx_execute", "input": {"command": long_query}})
         # Summary chip is one-line truncated at ~80.
         import re
 
@@ -1240,10 +1222,7 @@ class TestSessionPersistErrorCleanup:
         assert _extract_fk_hint("FOREIGN KEY constraint failed") is None
         # Hypothetical informative message — column extracted.
         assert (
-            _extract_fk_hint(
-                "FOREIGN KEY constraint failed (super_agent_id)"
-            )
-            == "super_agent_id"
+            _extract_fk_hint("FOREIGN KEY constraint failed (super_agent_id)") == "super_agent_id"
         )
         # Unrecognized column — None.
         assert _extract_fk_hint("FOREIGN KEY constraint failed (custom_id)") is None
@@ -1254,15 +1233,14 @@ class TestSessionPersistErrorCleanup:
         cleanup logic directly via a patched IntegrityError.
         """
         import sqlite3 as _sqlite3
+
         from app.services.project_session_manager import (
             ProjectSessionManager,
             SessionPersistError,
         )
 
         sid = "psess-racetest"
-        ProjectSessionManager._sessions[sid] = _make_session_info(
-            session_id=sid
-        )
+        ProjectSessionManager._sessions[sid] = _make_session_info(session_id=sid)
 
         stop_calls: list[dict] = []
 
@@ -1279,9 +1257,7 @@ class TestSessionPersistErrorCleanup:
         # cleanup block inside ``create_session``.
         try:
             try:
-                raise _sqlite3.IntegrityError(
-                    "FOREIGN KEY constraint failed (super_agent_id)"
-                )
+                raise _sqlite3.IntegrityError("FOREIGN KEY constraint failed (super_agent_id)")
             except _sqlite3.IntegrityError as exc:
                 from app.services.project_session_manager import _extract_fk_hint
 
@@ -1306,9 +1282,7 @@ class TestSessionPersistErrorCleanup:
         )
         assert sid not in ProjectSessionManager._sessions
 
-    def test_watchdog_escalates_to_sigkill_when_sigterm_ignored(
-        self, monkeypatch
-    ):
+    def test_watchdog_escalates_to_sigkill_when_sigterm_ignored(self, monkeypatch):
         """When the spawned process ignores SIGTERM and runs past
         the grace window, the watchdog must call
         ``waitpid(WNOHANG)`` (PTY path), see "still running", and
@@ -1339,12 +1313,8 @@ class TestSessionPersistErrorCleanup:
             waitpid_calls.append((pid, flags))
             return (0, 0)
 
-        monkeypatch.setattr(
-            "app.services.project_session_manager.os.killpg", fake_killpg
-        )
-        monkeypatch.setattr(
-            "app.services.project_session_manager.os.waitpid", fake_waitpid
-        )
+        monkeypatch.setattr("app.services.project_session_manager.os.killpg", fake_killpg)
+        monkeypatch.setattr("app.services.project_session_manager.os.waitpid", fake_waitpid)
         monkeypatch.setattr(
             "app.services.project_session_manager.time.sleep",
             lambda _: None,
@@ -1356,9 +1326,7 @@ class TestSessionPersistErrorCleanup:
         )
 
         sid = "psess-watchdog-escalate"
-        thread = ProjectSessionManager._spawn_kill_watchdog(
-            sid, 9001, 9001, None
-        )
+        thread = ProjectSessionManager._spawn_kill_watchdog(sid, 9001, 9001, None)
         thread.join(timeout=2.0)
         assert not thread.is_alive(), "watchdog thread didn't exit in 2s"
 
@@ -1376,9 +1344,7 @@ class TestSessionPersistErrorCleanup:
             f"watchdog must SIGKILL when SIGTERM ignored; got {killpg_calls}"
         )
 
-    def test_watchdog_returns_when_process_exits_naturally(
-        self, monkeypatch
-    ):
+    def test_watchdog_returns_when_process_exits_naturally(self, monkeypatch):
         """v0.7.97 — when ``popen.poll()`` returns non-None inside
         the grace window, the watchdog must return without
         escalating. Joins the thread for determinism.
@@ -1394,9 +1360,7 @@ class TestSessionPersistErrorCleanup:
         def fake_killpg(pgid, sig):
             killpg_calls.append((pgid, sig))
 
-        monkeypatch.setattr(
-            "app.services.project_session_manager.os.killpg", fake_killpg
-        )
+        monkeypatch.setattr("app.services.project_session_manager.os.killpg", fake_killpg)
         monkeypatch.setattr(
             "app.services.project_session_manager.time.sleep",
             lambda _: None,
@@ -1415,15 +1379,12 @@ class TestSessionPersistErrorCleanup:
         )
 
         sid = "psess-watchdog-natural"
-        thread = ProjectSessionManager._spawn_kill_watchdog(
-            sid, 9100, 9100, popen
-        )
+        thread = ProjectSessionManager._spawn_kill_watchdog(sid, 9100, 9100, popen)
         thread.join(timeout=2.0)
         assert not thread.is_alive(), "watchdog thread didn't exit in 2s"
 
         assert killpg_calls == [], (
-            "watchdog must not SIGKILL when process exited naturally; "
-            f"got {killpg_calls}"
+            f"watchdog must not SIGKILL when process exited naturally; got {killpg_calls}"
         )
 
     def test_watchdog_pty_path_returns_on_reaped_child(self, monkeypatch):
@@ -1444,12 +1405,8 @@ class TestSessionPersistErrorCleanup:
         def fake_waitpid(pid, _flags):
             return (pid, 0)
 
-        monkeypatch.setattr(
-            "app.services.project_session_manager.os.killpg", fake_killpg
-        )
-        monkeypatch.setattr(
-            "app.services.project_session_manager.os.waitpid", fake_waitpid
-        )
+        monkeypatch.setattr("app.services.project_session_manager.os.killpg", fake_killpg)
+        monkeypatch.setattr("app.services.project_session_manager.os.waitpid", fake_waitpid)
         monkeypatch.setattr(
             "app.services.project_session_manager.time.sleep",
             lambda _: None,
@@ -1460,9 +1417,7 @@ class TestSessionPersistErrorCleanup:
         )
 
         sid = "psess-watchdog-pty"
-        thread = ProjectSessionManager._spawn_kill_watchdog(
-            sid, 9200, 9200, None
-        )
+        thread = ProjectSessionManager._spawn_kill_watchdog(sid, 9200, 9200, None)
         thread.join(timeout=2.0)
         assert not thread.is_alive(), "watchdog thread didn't exit in 2s"
 
@@ -1497,9 +1452,7 @@ class TestSessionPersistErrorCleanup:
             "app.services.project_session_manager.os.killpg",
             lambda *_a, **_k: None,
         )
-        monkeypatch.setattr(
-            ProjectSessionManager, "_spawn_kill_watchdog", fake_spawn
-        )
+        monkeypatch.setattr(ProjectSessionManager, "_spawn_kill_watchdog", fake_spawn)
 
         assert ProjectSessionManager.stop_session(sid, wait=False) is True
         assert watchdog_calls == [(sid, 4242, 4242)], (
@@ -1532,16 +1485,11 @@ class TestSessionPersistErrorCleanup:
 
         def boom_sleep(_):
             raise AssertionError(
-                "stop_session(wait=False) must not call time.sleep "
-                "on the main thread"
+                "stop_session(wait=False) must not call time.sleep on the main thread"
             )
 
-        monkeypatch.setattr(
-            "app.services.project_session_manager.os.killpg", fake_killpg
-        )
-        monkeypatch.setattr(
-            "app.services.project_session_manager.time.sleep", boom_sleep
-        )
+        monkeypatch.setattr("app.services.project_session_manager.os.killpg", fake_killpg)
+        monkeypatch.setattr("app.services.project_session_manager.time.sleep", boom_sleep)
         # Stub the watchdog so its background thread's time.sleep
         # doesn't fire the boom_sleep guard.
         monkeypatch.setattr(

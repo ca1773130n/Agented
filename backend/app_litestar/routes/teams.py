@@ -23,6 +23,7 @@ from app.database import (
     add_team_member,
     count_teams,
     delete_team,
+    delete_team_edge,
     delete_team_edges_by_team,
     get_all_teams,
     get_team,
@@ -31,7 +32,6 @@ from app.database import (
     get_team_edges,
     get_team_members,
     update_team,
-    delete_team_edge,
 )
 from app.db.owned_entities import get_for_user
 from app.models.team import VALID_EDGE_TYPES, VALID_TOPOLOGIES
@@ -51,7 +51,9 @@ def _auto_generate_topology_edges(team_id: str, topology: str, topology_config=N
     if len(members) > _MAX_TOPOLOGY_MEMBERS:
         logger.warning(
             "Team %s has %d members, exceeding the topology edge generation limit of %d.",
-            team_id, len(members), _MAX_TOPOLOGY_MEMBERS,
+            team_id,
+            len(members),
+            _MAX_TOPOLOGY_MEMBERS,
         )
         return
 
@@ -115,9 +117,7 @@ def create_team(data: CreateTeamBody, authorized: Caller) -> dict[str, Any]:
     if len(name) > 255:
         raise ClientException(detail="name must not exceed 255 characters")
     if get_team_by_name(name):
-        raise HTTPException(
-            status_code=409, detail="A team with this name already exists"
-        )
+        raise HTTPException(status_code=409, detail="A team with this name already exists")
 
     from app.database import create_team as db_create_team
 
@@ -138,9 +138,7 @@ def create_team(data: CreateTeamBody, authorized: Caller) -> dict[str, Any]:
             detail="A team with this name or configuration already exists",
         ) from None
     except sqlite3.OperationalError:
-        raise HTTPException(
-            status_code=503, detail="Database unavailable, please retry"
-        ) from None
+        raise HTTPException(status_code=503, detail="Database unavailable, please retry") from None
 
     if not team_id:
         raise HTTPException(status_code=500, detail="Failed to create team")
@@ -176,9 +174,7 @@ class UpdateTeamBody(Struct, kw_only=True):
     dependencies={"authorized": require_role("editor", "admin")},
     sync_to_thread=False,
 )
-def update_team_endpoint(
-    team_id: str, data: UpdateTeamBody, authorized: Caller
-) -> dict[str, Any]:
+def update_team_endpoint(team_id: str, data: UpdateTeamBody, authorized: Caller) -> dict[str, Any]:
     del authorized
     new_name = data.name
     if new_name is not None:
@@ -189,9 +185,7 @@ def update_team_endpoint(
             raise ClientException(detail="name must not exceed 255 characters")
         existing = get_team_by_name(new_name)
         if existing and existing["id"] != team_id:
-            raise HTTPException(
-                status_code=409, detail="A team with this name already exists"
-            )
+            raise HTTPException(status_code=409, detail="A team with this name already exists")
 
     if not update_team(
         team_id,
@@ -232,9 +226,7 @@ class TopologyBody(Struct, kw_only=True):
     dependencies={"authorized": require_role("editor", "admin")},
     sync_to_thread=False,
 )
-def update_topology(
-    team_id: str, data: TopologyBody, authorized: Caller
-) -> dict[str, Any]:
+def update_topology(team_id: str, data: TopologyBody, authorized: Caller) -> dict[str, Any]:
     del authorized
     if not get_team(team_id):
         raise NotFoundException(detail="Team not found")
@@ -255,9 +247,7 @@ def update_topology(
     config_str: Optional[str] = None
     if topology_config is not None:
         config_str = (
-            json.dumps(topology_config)
-            if isinstance(topology_config, dict)
-            else topology_config
+            json.dumps(topology_config) if isinstance(topology_config, dict) else topology_config
         )
 
     update_kwargs: dict[str, Any] = {}
@@ -291,9 +281,7 @@ class TeamTriggerBody(Struct, kw_only=True):
     dependencies={"authorized": require_role("editor", "admin")},
     sync_to_thread=False,
 )
-def update_team_trigger(
-    team_id: str, data: TeamTriggerBody, authorized: Caller
-) -> dict[str, Any]:
+def update_team_trigger(team_id: str, data: TeamTriggerBody, authorized: Caller) -> dict[str, Any]:
     del authorized
     if not get_team(team_id):
         raise NotFoundException(detail="Team not found")
@@ -331,9 +319,7 @@ class TeamRunBody(Struct):
     dependencies={"authorized": require_role("operator", "editor", "admin")},
     sync_to_thread=False,
 )
-def manual_run(
-    team_id: str, data: TeamRunBody, authorized: Caller
-) -> dict[str, Any]:
+def manual_run(team_id: str, data: TeamRunBody, authorized: Caller) -> dict[str, Any]:
     del authorized
     team = get_team(team_id)
     if not team:
@@ -384,15 +370,11 @@ def list_team_members_endpoint(team_id: str, authorized: Caller) -> dict[str, An
     dependencies={"authorized": require_role("editor", "admin")},
     sync_to_thread=False,
 )
-def add_member_endpoint(
-    team_id: str, data: MemberBody, authorized: Caller
-) -> dict[str, Any]:
+def add_member_endpoint(team_id: str, data: MemberBody, authorized: Caller) -> dict[str, Any]:
     del authorized
     if not data.agent_id:
         raise ClientException(detail="agent_id is required")
-    member_id = add_team_member(
-        team_id=team_id, agent_id=data.agent_id, role=data.role or "member"
-    )
+    member_id = add_team_member(team_id=team_id, agent_id=data.agent_id, role=data.role or "member")
     if not member_id:
         raise ClientException(detail="Could not add member")
     return {"message": "Member added", "id": member_id}
@@ -420,9 +402,7 @@ def update_member_endpoint(
     status_code=200,
     sync_to_thread=False,
 )
-def remove_member_endpoint(
-    team_id: str, member_id: int, authorized: Caller
-) -> dict[str, Any]:
+def remove_member_endpoint(team_id: str, member_id: int, authorized: Caller) -> dict[str, Any]:
     del authorized
     from app.database import remove_team_member
 
@@ -470,9 +450,7 @@ def create_assignment(
     dependencies={"authorized": require_role("viewer", "operator", "editor", "admin")},
     sync_to_thread=False,
 )
-def list_agent_assignments(
-    team_id: str, agent_id: str, authorized: Caller
-) -> dict[str, Any]:
+def list_agent_assignments(team_id: str, agent_id: str, authorized: Caller) -> dict[str, Any]:
     del authorized
     from app.database import get_team_assignments_for_agent
 
@@ -497,9 +475,7 @@ def list_team_assignments(team_id: str, authorized: Caller) -> dict[str, Any]:
     status_code=200,
     sync_to_thread=False,
 )
-def delete_assignment(
-    team_id: str, assignment_id: int, authorized: Caller
-) -> dict[str, Any]:
+def delete_assignment(team_id: str, assignment_id: int, authorized: Caller) -> dict[str, Any]:
     del authorized, team_id
     from app.database import delete_team_assignment
 
@@ -514,9 +490,7 @@ def delete_assignment(
     status_code=200,
     sync_to_thread=False,
 )
-def clear_agent_assignments(
-    team_id: str, agent_id: str, authorized: Caller
-) -> dict[str, Any]:
+def clear_agent_assignments(team_id: str, agent_id: str, authorized: Caller) -> dict[str, Any]:
     del authorized
     from app.database import clear_team_assignments_for_agent
 
@@ -577,9 +551,7 @@ def create_team_connection(
     status_code=200,
     sync_to_thread=False,
 )
-def remove_team_connection(
-    team_id: str, connection_id: int, authorized: Caller
-) -> dict[str, Any]:
+def remove_team_connection(team_id: str, connection_id: int, authorized: Caller) -> dict[str, Any]:
     del authorized, team_id
     from app.db.rotations import delete_team_connection
 
@@ -619,9 +591,7 @@ def list_edges(team_id: str, authorized: Caller) -> dict[str, Any]:
 def create_edge(team_id: str, data: EdgeBody, authorized: Caller) -> dict[str, Any]:
     del authorized
     if data.source_member_id is None or data.target_member_id is None:
-        raise ClientException(
-            detail="source_member_id and target_member_id are required"
-        )
+        raise ClientException(detail="source_member_id and target_member_id are required")
     if data.edge_type not in VALID_EDGE_TYPES:
         raise ClientException(
             detail=f"Invalid edge_type. Must be one of: {', '.join(VALID_EDGE_TYPES)}"

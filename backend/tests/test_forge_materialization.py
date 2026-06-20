@@ -5,9 +5,9 @@ from __future__ import annotations
 import pytest
 
 from app.database import get_connection
-from app.db import rules as rules_repo
 from app.db import commands as commands_repo
 from app.db import project_forge_bindings as bindings_repo
+from app.db import rules as rules_repo
 from app.services.forge_materialization_service import (
     MaterializationResult,
     materialize_primitives,
@@ -62,9 +62,9 @@ def test_materialize_is_deterministic(_project_with_primitives, tmp_path):
 
 
 def test_frontmatter_value_with_colon_and_newline_is_yaml_safe(isolated_db, tmp_path):
-    from app.db import rules as rules_repo
-    from app.db import project_forge_bindings as bindings_repo
     from app.database import get_connection
+    from app.db import project_forge_bindings as bindings_repo
+    from app.db import rules as rules_repo
 
     with get_connection() as conn:
         conn.execute("INSERT INTO projects (id, name, status) VALUES ('proj-2', 'P', 'active')")
@@ -88,8 +88,8 @@ def test_frontmatter_value_with_colon_and_newline_is_yaml_safe(isolated_db, tmp_
 
 
 def test_non_numeric_asset_id_skipped_not_crash(isolated_db, tmp_path):
-    from app.db import project_forge_bindings as bindings_repo
     from app.database import get_connection
+    from app.db import project_forge_bindings as bindings_repo
 
     with get_connection() as conn:
         conn.execute("INSERT INTO projects (id, name, status) VALUES ('proj-3', 'P', 'active')")
@@ -102,9 +102,10 @@ def test_non_numeric_asset_id_skipped_not_crash(isolated_db, tmp_path):
 
 def test_materialize_writes_hook_and_settings(isolated_db, tmp_path):
     import json as _json
+
+    from app.database import get_connection
     from app.db import hooks as hooks_repo
     from app.db import project_forge_bindings as bindings_repo
-    from app.database import get_connection
 
     with get_connection() as conn:
         conn.execute("INSERT INTO projects (id, name, status) VALUES ('proj-h', 'P', 'active')")
@@ -132,9 +133,10 @@ def test_materialize_writes_hook_and_settings(isolated_db, tmp_path):
 
 def test_hook_materialization_is_idempotent(isolated_db, tmp_path):
     import json as _json
+
+    from app.database import get_connection
     from app.db import hooks as hooks_repo
     from app.db import project_forge_bindings as bindings_repo
-    from app.database import get_connection
 
     with get_connection() as conn:
         conn.execute("INSERT INTO projects (id, name, status) VALUES ('proj-hi', 'P', 'active')")
@@ -152,7 +154,7 @@ def test_hook_materialization_is_idempotent(isolated_db, tmp_path):
     data = _json.loads((tmp_path / ".claude" / "settings.json").read_text())
     assert len(data["hooks"]["PreToolUse"]) == 1  # not duplicated
     # executable bit set
-    import os, stat
+    import stat
 
     mode = (tmp_path / ".claude" / "hooks" / "guard.sh").stat().st_mode
     assert mode & stat.S_IXUSR
@@ -160,9 +162,10 @@ def test_hook_materialization_is_idempotent(isolated_db, tmp_path):
 
 def test_hook_materialization_preserves_operator_entries(isolated_db, tmp_path):
     import json as _json
+
+    from app.database import get_connection
     from app.db import hooks as hooks_repo
     from app.db import project_forge_bindings as bindings_repo
-    from app.database import get_connection
 
     # Pre-seed an operator-authored settings.json with a hook entry (no marker).
     (tmp_path / ".claude").mkdir(parents=True)
@@ -193,10 +196,11 @@ def test_hook_materialization_preserves_operator_entries(isolated_db, tmp_path):
 
 def test_materialize_writes_mcp_json_idempotent_and_operator_safe(isolated_db, tmp_path):
     import json as _json
+
+    from app.database import get_connection
     from app.db import mcp_servers as mcp_repo
     from app.db import project_forge_bindings as bindings_repo
     from app.services.harness_evolver import _find_mcp_server_id_by_name
-    from app.database import get_connection
 
     with get_connection() as conn:
         conn.execute("INSERT INTO projects (id, name, status) VALUES ('proj-m', 'P', 'active')")
@@ -229,9 +233,9 @@ def test_materialize_writes_mcp_json_idempotent_and_operator_safe(isolated_db, t
 
 
 def test_cleanup_removes_stale_per_asset_file(isolated_db, tmp_path):
+    from app.database import get_connection
     from app.db import commands as commands_repo
     from app.db import project_forge_bindings as bindings_repo
-    from app.database import get_connection
 
     with get_connection() as conn:
         conn.execute("INSERT INTO projects (id, name, status) VALUES ('proj-cl', 'P', 'active')")
@@ -254,9 +258,10 @@ def test_cleanup_removes_stale_per_asset_file(isolated_db, tmp_path):
 
 def test_manifest_written(isolated_db, tmp_path):
     import json as _json
+
+    from app.database import get_connection
     from app.db import commands as commands_repo
     from app.db import project_forge_bindings as bindings_repo
-    from app.database import get_connection
 
     with get_connection() as conn:
         conn.execute("INSERT INTO projects (id, name, status) VALUES ('proj-mf', 'P', 'active')")
@@ -274,11 +279,10 @@ def test_manifest_written(isolated_db, tmp_path):
 
 def test_partial_kinds_run_does_not_delete_other_kinds(isolated_db, tmp_path):
     """A subsequent kinds=['command'] run must NOT delete still-bound rule files."""
-    import json as _json
-    from app.db import commands as commands_repo
-    from app.db import rules as rules_repo
-    from app.db import project_forge_bindings as bindings_repo
     from app.database import get_connection
+    from app.db import commands as commands_repo
+    from app.db import project_forge_bindings as bindings_repo
+    from app.db import rules as rules_repo
 
     with get_connection() as conn:
         conn.execute("INSERT INTO projects (id, name, status) VALUES ('proj-pk', 'P', 'active')")
@@ -302,10 +306,9 @@ def test_partial_kinds_run_does_not_delete_other_kinds(isolated_db, tmp_path):
 
 def test_cleanup_never_deletes_shared_files(isolated_db, tmp_path):
     # settings.json / mcp.json must survive even when no hooks/mcp are bound this run.
-    import json as _json
+    from app.database import get_connection
     from app.db import hooks as hooks_repo
     from app.db import project_forge_bindings as bindings_repo
-    from app.database import get_connection
 
     with get_connection() as conn:
         conn.execute("INSERT INTO projects (id, name, status) VALUES ('proj-sh', 'P', 'active')")
@@ -327,9 +330,9 @@ def test_cleanup_never_deletes_shared_files(isolated_db, tmp_path):
 def test_materialize_writes_subagent(isolated_db, tmp_path):
     """A bound subagent materializes to .claude/agents/<safe>.md with Agented
     frontmatter markers, and is tracked in the manifest's subagent bucket."""
-    from app.db import subagents as subagents_repo
-    from app.db import project_forge_bindings as bindings_repo
     from app.database import get_connection
+    from app.db import project_forge_bindings as bindings_repo
+    from app.db import subagents as subagents_repo
 
     with get_connection() as conn:
         conn.execute("INSERT INTO projects (id, name, status) VALUES ('proj-sa', 'P', 'active')")
@@ -359,17 +362,15 @@ def test_materialize_writes_subagent(isolated_db, tmp_path):
 
     import json as _json
 
-    manifest = _json.loads(
-        (tmp_path / ".claude" / "agented-forge" / "manifest.json").read_text()
-    )
+    manifest = _json.loads((tmp_path / ".claude" / "agented-forge" / "manifest.json").read_text())
     assert ".claude/agents/code-reviewer.md" in manifest["paths_by_kind"]["subagent"]
 
 
 def test_materialize_subagent_is_deterministic(isolated_db, tmp_path):
     """A second identical run yields byte-identical output + no manifest churn."""
-    from app.db import subagents as subagents_repo
-    from app.db import project_forge_bindings as bindings_repo
     from app.database import get_connection
+    from app.db import project_forge_bindings as bindings_repo
+    from app.db import subagents as subagents_repo
 
     with get_connection() as conn:
         conn.execute("INSERT INTO projects (id, name, status) VALUES ('proj-sad', 'P', 'active')")
@@ -398,10 +399,11 @@ def test_materialize_subagent_is_deterministic(isolated_db, tmp_path):
 
 def test_mcp_json_idempotent_marker_length_and_bad_file_recovery(isolated_db, tmp_path):
     import json as _json
+
+    from app.database import get_connection
     from app.db import mcp_servers as mcp_repo
     from app.db import project_forge_bindings as bindings_repo
     from app.services.harness_evolver import _find_mcp_server_id_by_name
-    from app.database import get_connection
 
     with get_connection() as conn:
         conn.execute("INSERT INTO projects (id, name, status) VALUES ('proj-mj', 'P', 'active')")

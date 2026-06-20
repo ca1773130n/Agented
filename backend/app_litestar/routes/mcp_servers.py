@@ -31,7 +31,6 @@ from app.services.project_workspace_service import ProjectWorkspaceService
 
 from ..auth import Caller
 
-
 # ---------------------------------------------------------------------------
 # Request bodies
 # ---------------------------------------------------------------------------
@@ -91,9 +90,7 @@ def list_mcp_servers(
     caller: Caller, limit: Optional[int] = None, offset: Optional[int] = None
 ) -> dict[str, Any]:
     if caller.user_id:
-        rows = get_for_user(
-            "mcp_servers", caller.user_id, limit=limit, offset=offset or 0
-        )
+        rows = get_for_user("mcp_servers", caller.user_id, limit=limit, offset=offset or 0)
         return {"servers": rows, "total_count": len(rows)}
     return {
         "servers": get_all_mcp_servers(limit=limit, offset=offset or 0),
@@ -111,9 +108,7 @@ def get_mcp_server_endpoint(server_id: str, caller: Caller) -> dict[str, Any]:
 
 
 @post("/", sync_to_thread=False)
-def create_mcp_server_endpoint(
-    data: CreateMcpBody, caller: Caller
-) -> dict[str, Any]:
+def create_mcp_server_endpoint(data: CreateMcpBody, caller: Caller) -> dict[str, Any]:
     del caller
     if not data.name:
         raise ClientException(detail="name is required")
@@ -150,9 +145,21 @@ def update_mcp_server_endpoint(
 
     updates: dict[str, Any] = {}
     for f in (
-        "name", "description", "server_type", "command", "args", "env_json",
-        "url", "enabled", "display_name", "category", "headers_json",
-        "timeout_ms", "icon", "documentation_url", "npm_package",
+        "name",
+        "description",
+        "server_type",
+        "command",
+        "args",
+        "env_json",
+        "url",
+        "enabled",
+        "display_name",
+        "category",
+        "headers_json",
+        "timeout_ms",
+        "icon",
+        "documentation_url",
+        "npm_package",
     ):
         v = getattr(data, f, None)
         if v is not None:
@@ -281,13 +288,9 @@ def update_project_mcp_assignment_endpoint(
     status_code=200,
     sync_to_thread=False,
 )
-def unassign_mcp(
-    project_id: str, server_id: str, caller: Caller
-) -> dict[str, Any]:
+def unassign_mcp(project_id: str, server_id: str, caller: Caller) -> dict[str, Any]:
     del caller
-    success = unassign_mcp_from_project(
-        project_id=project_id, mcp_server_id=server_id
-    )
+    success = unassign_mcp_from_project(project_id=project_id, mcp_server_id=server_id)
     if not success:
         raise NotFoundException(detail="Assignment not found")
     return {"message": "Unassigned"}

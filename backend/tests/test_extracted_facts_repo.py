@@ -1,6 +1,5 @@
 """TDD tests for extracted_facts store (migration 153)."""
 
-
 import pytest
 
 from app.db import extracted_facts

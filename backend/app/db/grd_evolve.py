@@ -13,7 +13,7 @@ import json
 import logging
 from typing import List, Optional
 
-from .connection import get_connection, safe_set_clause
+from .connection import get_connection
 from .ids import _get_unique_evolve_run_id
 
 logger = logging.getLogger(__name__)
@@ -52,9 +52,7 @@ def create_evolve_run(
 
 def get_evolve_run(run_id: str) -> Optional[dict]:
     with get_connection() as conn:
-        row = conn.execute(
-            "SELECT * FROM grd_evolve_runs WHERE id = ?", (run_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM grd_evolve_runs WHERE id = ?", (run_id,)).fetchone()
         return _row_to_dict(row) if row else None
 
 
@@ -154,12 +152,27 @@ def finalize_evolve_run(
 
 
 def _row_to_dict(row) -> dict:
-    cols = row.keys() if hasattr(row, "keys") else [
-        "id", "project_id", "session_id", "status", "config_json",
-        "iteration", "total_iterations", "pick_pct", "last_state_json",
-        "last_state_synced_at", "started_at", "ended_at", "error_message",
-        "created_at", "updated_at",
-    ]
+    cols = (
+        row.keys()
+        if hasattr(row, "keys")
+        else [
+            "id",
+            "project_id",
+            "session_id",
+            "status",
+            "config_json",
+            "iteration",
+            "total_iterations",
+            "pick_pct",
+            "last_state_json",
+            "last_state_synced_at",
+            "started_at",
+            "ended_at",
+            "error_message",
+            "created_at",
+            "updated_at",
+        ]
+    )
     d = {k: row[k] for k in cols}
     # Parse JSON columns for caller convenience.
     if d.get("config_json"):

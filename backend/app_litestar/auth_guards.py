@@ -13,7 +13,6 @@ from typing import Optional
 
 from litestar.exceptions import PermissionDeniedException
 
-
 ROLE_RANK: dict[str, int] = {
     "viewer": 0,
     "operator": 1,

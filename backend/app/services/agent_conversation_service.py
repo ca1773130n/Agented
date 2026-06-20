@@ -317,7 +317,12 @@ class AgentConversationService:
             cls._broadcast(
                 conv_id,
                 "response_complete",
-                {"msg_id": msg_id, "content": full_response, "backend": backend or "claude", "model": model},
+                {
+                    "msg_id": msg_id,
+                    "content": full_response,
+                    "backend": backend or "claude",
+                    "model": model,
+                },
             )
 
         except FileNotFoundError as e:

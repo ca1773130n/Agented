@@ -53,9 +53,7 @@ def record(
     error_message: str | None = None,
     duration_ms: int | None = None,
 ) -> int:
-    payload_str = (
-        payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False)
-    )
+    payload_str = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False)
     recorded_at = datetime.now(timezone.utc).isoformat()
     with get_connection() as conn:
         cur = conn.execute(

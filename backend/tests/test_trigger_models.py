@@ -1,4 +1,4 @@
-from app.models.trigger import CreateTriggerRequest, UpdateTriggerRequest, Trigger
+from app.models.trigger import CreateTriggerRequest, Trigger, UpdateTriggerRequest
 
 
 class TestTriggerModelDispatchFields:

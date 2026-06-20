@@ -1,6 +1,6 @@
 """Tests for OrchestrationService — fallback chain execution and account rotation."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 

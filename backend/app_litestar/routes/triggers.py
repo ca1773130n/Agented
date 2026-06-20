@@ -50,9 +50,7 @@ def list_triggers(
 ) -> dict[str, Any]:
     """List triggers, scoped by user when authenticated."""
     if authorized.user_id:
-        rows = get_for_user(
-            "triggers", authorized.user_id, limit=limit, offset=offset or 0
-        )
+        rows = get_for_user("triggers", authorized.user_id, limit=limit, offset=offset or 0)
         return {"triggers": rows, "total_count": len(rows)}
     body, _ = TriggerService.list_triggers(limit=limit, offset=offset or 0)
     return body
@@ -120,9 +118,7 @@ def list_trigger_paths(
     offset: Optional[int] = None,
 ) -> dict[str, Any]:
     del authorized
-    return _result_or_raise(
-        TriggerService.list_paths(trigger_id, limit=limit, offset=offset or 0)
-    )
+    return _result_or_raise(TriggerService.list_paths(trigger_id, limit=limit, offset=offset or 0))
 
 
 @post(
@@ -130,9 +126,7 @@ def list_trigger_paths(
     dependencies={"authorized": require_role("editor", "admin")},
     sync_to_thread=False,
 )
-def add_trigger_path(
-    trigger_id: str, data: dict, authorized: Caller
-) -> dict[str, Any]:
+def add_trigger_path(trigger_id: str, data: dict, authorized: Caller) -> dict[str, Any]:
     del authorized
     if not data:
         raise ClientException(detail="JSON body required")
@@ -145,9 +139,7 @@ def add_trigger_path(
     status_code=200,
     sync_to_thread=False,
 )
-def remove_trigger_path(
-    trigger_id: str, data: dict, authorized: Caller
-) -> dict[str, Any]:
+def remove_trigger_path(trigger_id: str, data: dict, authorized: Caller) -> dict[str, Any]:
     del authorized
     if not data:
         raise ClientException(detail="JSON body required")
@@ -183,9 +175,7 @@ def add_trigger_project(
     status_code=200,
     sync_to_thread=False,
 )
-def remove_trigger_project(
-    trigger_id: str, project_id: str, authorized: Caller
-) -> dict[str, Any]:
+def remove_trigger_project(trigger_id: str, project_id: str, authorized: Caller) -> dict[str, Any]:
     del authorized
     return _result_or_raise(TriggerService.remove_project(trigger_id, project_id))
 
@@ -204,13 +194,9 @@ class AutoResolveBody(Struct):
     dependencies={"authorized": require_role("editor", "admin")},
     sync_to_thread=False,
 )
-def set_auto_resolve(
-    trigger_id: str, data: AutoResolveBody, authorized: Caller
-) -> dict[str, Any]:
+def set_auto_resolve(trigger_id: str, data: AutoResolveBody, authorized: Caller) -> dict[str, Any]:
     del authorized
-    return _result_or_raise(
-        TriggerService.update_auto_resolve(trigger_id, bool(data.auto_resolve))
-    )
+    return _result_or_raise(TriggerService.update_auto_resolve(trigger_id, bool(data.auto_resolve)))
 
 
 @get(
@@ -235,9 +221,7 @@ class RunTriggerBody(Struct):
     dependencies={"authorized": require_role("operator", "editor", "admin")},
     sync_to_thread=False,
 )
-def run_trigger(
-    trigger_id: str, data: RunTriggerBody, authorized: Caller
-) -> dict[str, Any]:
+def run_trigger(trigger_id: str, data: RunTriggerBody, authorized: Caller) -> dict[str, Any]:
     del authorized
     return _result_or_raise(TriggerService.run(trigger_id, data.message))
 
@@ -252,9 +236,7 @@ def run_trigger(
     dependencies={"authorized": require_role("viewer", "operator", "editor", "admin")},
     sync_to_thread=False,
 )
-def preview_trigger_prompt(
-    trigger_id: str, data: dict, authorized: Caller
-) -> dict[str, Any]:
+def preview_trigger_prompt(trigger_id: str, data: dict, authorized: Caller) -> dict[str, Any]:
     del authorized
     return _result_or_raise(TriggerService.preview_prompt(trigger_id, data or {}))
 
@@ -282,9 +264,7 @@ class RollbackBody(Struct):
     dependencies={"authorized": require_role("editor", "admin")},
     sync_to_thread=False,
 )
-def rollback_prompt(
-    trigger_id: str, data: RollbackBody, authorized: Caller
-) -> dict[str, Any]:
+def rollback_prompt(trigger_id: str, data: RollbackBody, authorized: Caller) -> dict[str, Any]:
     del authorized
     if not data.version_id:
         raise ClientException(detail="version_id is required")
@@ -298,13 +278,9 @@ def rollback_prompt(
     dependencies={"authorized": require_role("viewer", "operator", "editor", "admin")},
     sync_to_thread=False,
 )
-def preview_trigger_prompt_full(
-    trigger_id: str, data: dict, authorized: Caller
-) -> dict[str, Any]:
+def preview_trigger_prompt_full(trigger_id: str, data: dict, authorized: Caller) -> dict[str, Any]:
     del authorized
-    return _result_or_raise(
-        TriggerService.preview_prompt_full(trigger_id, data or {})
-    )
+    return _result_or_raise(TriggerService.preview_prompt_full(trigger_id, data or {}))
 
 
 # ---------------------------------------------------------------------------
@@ -322,9 +298,7 @@ class CronBody(Struct):
     dependencies={"authorized": require_role("viewer", "operator", "editor", "admin")},
     sync_to_thread=False,
 )
-def validate_cron_expression(
-    data: CronBody, authorized: Caller
-) -> dict[str, Any]:
+def validate_cron_expression(data: CronBody, authorized: Caller) -> dict[str, Any]:
     del authorized
     if not data.expression:
         raise ClientException(detail="Missing 'expression' field")
@@ -333,9 +307,7 @@ def validate_cron_expression(
         import pytz
         from apscheduler.triggers.cron import CronTrigger
     except ImportError:
-        raise HTTPException(
-            status_code=503, detail="APScheduler not installed"
-        ) from None
+        raise HTTPException(status_code=503, detail="APScheduler not installed") from None
 
     from app.utils.timezone import get_local_timezone
 
@@ -376,9 +348,7 @@ def validate_cron_expression(
     dependencies={"authorized": require_role("viewer", "operator", "editor", "admin")},
     sync_to_thread=False,
 )
-def dry_run_trigger(
-    trigger_id: str, data: dict, authorized: Caller
-) -> dict[str, Any]:
+def dry_run_trigger(trigger_id: str, data: dict, authorized: Caller) -> dict[str, Any]:
     del authorized
     return _result_or_raise(TriggerService.dry_run(trigger_id, data or {}))
 
@@ -388,9 +358,7 @@ def dry_run_trigger(
     dependencies={"authorized": require_role("viewer", "operator", "editor", "admin")},
     sync_to_thread=False,
 )
-def estimate_trigger_cost(
-    trigger_id: str, data: dict, authorized: Caller
-) -> dict[str, Any]:
+def estimate_trigger_cost(trigger_id: str, data: dict, authorized: Caller) -> dict[str, Any]:
     del authorized
     preview, status = TriggerService.preview_prompt(trigger_id, data or {})
     if status >= 400:
@@ -417,9 +385,7 @@ class GenerateStreamBody(Struct):
     media_type=MediaType.TEXT,
     sync_to_thread=False,
 )
-def generate_trigger_stream(
-    data: GenerateStreamBody, authorized: Caller
-) -> Stream:
+def generate_trigger_stream(data: GenerateStreamBody, authorized: Caller) -> Stream:
     """Server-sent events from TriggerGenerationService."""
     del authorized
     from app.services.trigger_generation_service import TriggerGenerationService
@@ -461,5 +427,3 @@ triggers_router = Router(
         generate_trigger_stream,
     ],
 )
-
-

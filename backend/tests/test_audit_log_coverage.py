@@ -8,11 +8,9 @@ AuditLogService.log_field_changes() is invoked with the correct parameters.
 """
 
 from http import HTTPStatus
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # TriggerService — audit log coverage

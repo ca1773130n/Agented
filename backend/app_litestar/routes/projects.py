@@ -48,9 +48,9 @@ from app.services.github_service import GitHubService
 from app.services.grd_planning_service import GrdPlanningService
 from app.services.harness_service import HarnessService
 from app.services.project_deploy_service import ProjectDeployService
+from app.services.project_discovery_service import ProjectDiscoveryService
 from app.services.project_health_service import ProjectHealthService
 from app.services.project_install_service import ProjectInstallService
-from app.services.project_discovery_service import ProjectDiscoveryService
 from app.services.project_workspace_service import ProjectWorkspaceService
 from app.services.team_execution_service import TeamExecutionService
 

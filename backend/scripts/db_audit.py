@@ -21,36 +21,40 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sqlite3
 import sys
 from pathlib import Path
 from typing import Optional
 
-import sqlite3
-
-
 # Hot-path query templates. (label, sql, expected_index_hint).
 _HOT_QUERIES: list[tuple[str, str]] = [
     # Auth + session lookup paths (called on EVERY authenticated request).
-    ("sessions_lookup_by_token",
-     "SELECT * FROM sessions WHERE token = 'x' OR rotated_from_token = 'x'"),
-    ("sessions_active_for_user",
-     "SELECT id FROM sessions WHERE user_id = 'u' AND revoked_at IS NULL"),
-    ("user_roles_by_api_key",
-     "SELECT role, user_id FROM user_roles WHERE api_key = 'k'"),
+    (
+        "sessions_lookup_by_token",
+        "SELECT * FROM sessions WHERE token = 'x' OR rotated_from_token = 'x'",
+    ),
+    (
+        "sessions_active_for_user",
+        "SELECT id FROM sessions WHERE user_id = 'u' AND revoked_at IS NULL",
+    ),
+    ("user_roles_by_api_key", "SELECT role, user_id FROM user_roles WHERE api_key = 'k'"),
     # Audit log reads (admin /admin/auth/session-events).
-    ("session_events_by_session",
-     "SELECT * FROM session_events WHERE session_id = 's' ORDER BY occurred_at DESC LIMIT 10"),
-    ("session_events_by_user",
-     "SELECT * FROM session_events WHERE user_id = 'u' ORDER BY occurred_at DESC LIMIT 10"),
+    (
+        "session_events_by_session",
+        "SELECT * FROM session_events WHERE session_id = 's' ORDER BY occurred_at DESC LIMIT 10",
+    ),
+    (
+        "session_events_by_user",
+        "SELECT * FROM session_events WHERE user_id = 'u' ORDER BY occurred_at DESC LIMIT 10",
+    ),
     # List-page hot paths (operator UI default views).
-    ("agents_list",
-     "SELECT * FROM agents ORDER BY created_at DESC LIMIT 50"),
-    ("projects_list",
-     "SELECT * FROM projects ORDER BY created_at DESC LIMIT 50"),
-    ("triggers_list",
-     "SELECT * FROM triggers ORDER BY created_at DESC LIMIT 50"),
-    ("agent_conversations_for_agent",
-     "SELECT * FROM agent_conversations WHERE agent_id = 'a' ORDER BY started_at DESC LIMIT 20"),
+    ("agents_list", "SELECT * FROM agents ORDER BY created_at DESC LIMIT 50"),
+    ("projects_list", "SELECT * FROM projects ORDER BY created_at DESC LIMIT 50"),
+    ("triggers_list", "SELECT * FROM triggers ORDER BY created_at DESC LIMIT 50"),
+    (
+        "agent_conversations_for_agent",
+        "SELECT * FROM agent_conversations WHERE agent_id = 'a' ORDER BY started_at DESC LIMIT 20",
+    ),
 ]
 
 
@@ -116,8 +120,7 @@ def explain_query(conn: sqlite3.Connection, sql: str) -> dict:
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Audit SQLite indices + hot-path query plans.")
     parser.add_argument("--db", default=None, help="DB path (overrides AGENTED_DB_PATH).")
-    parser.add_argument("--json", action="store_true",
-                        help="Emit JSON only; suppress human table.")
+    parser.add_argument("--json", action="store_true", help="Emit JSON only; suppress human table.")
     args = parser.parse_args(argv)
 
     db_path = Path(args.db).expanduser().resolve() if args.db else _default_db_path()
@@ -160,8 +163,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 print(f"    {step}", file=sys.stderr)
         print(file=sys.stderr)
         if scan_only_count:
-            print(f"WARNING: {scan_only_count} hot query/queries hit SCAN TABLE.",
-                  file=sys.stderr)
+            print(f"WARNING: {scan_only_count} hot query/queries hit SCAN TABLE.", file=sys.stderr)
         # Always emit the JSON to stdout for scripting.
         print(json.dumps(summary, indent=2))
 

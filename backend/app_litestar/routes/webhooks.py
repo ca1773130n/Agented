@@ -20,7 +20,6 @@ from litestar import Request, Response, Router, get, post
 from litestar.exceptions import (
     ClientException,
     HTTPException,
-    NotFoundException,
 )
 
 from app.database import add_pr_review

@@ -33,15 +33,11 @@ def test_register_returns_distinct_request_ids():
 def test_resolve_unblocks_wait():
     """Classic producer/consumer — the wait MUST return the decision
     after another thread resolves the request."""
-    req = PermissionPromptRegistry.register(
-        "psess-1", "Bash", {"command": "ls"}
-    )
+    req = PermissionPromptRegistry.register("psess-1", "Bash", {"command": "ls"})
     decisions: list[str | None] = []
 
     def waiter() -> None:
-        decisions.append(
-            PermissionPromptRegistry.wait_for_decision(req.request_id, timeout=2.0)
-        )
+        decisions.append(PermissionPromptRegistry.wait_for_decision(req.request_id, timeout=2.0))
 
     t = threading.Thread(target=waiter)
     t.start()
@@ -56,12 +52,8 @@ def test_resolve_unblocks_wait():
 
 
 def test_wait_times_out_returns_none():
-    req = PermissionPromptRegistry.register(
-        "psess-1", "Bash", {"command": "ls"}
-    )
-    decision = PermissionPromptRegistry.wait_for_decision(
-        req.request_id, timeout=0.05
-    )
+    req = PermissionPromptRegistry.register("psess-1", "Bash", {"command": "ls"})
+    decision = PermissionPromptRegistry.wait_for_decision(req.request_id, timeout=0.05)
     assert decision is None
     # Registry cleaned up on timeout too
     assert req.request_id not in PermissionPromptRegistry._pending
@@ -87,9 +79,7 @@ def test_cancel_session_unblocks_waiters():
     decisions: list[str | None] = []
 
     def waiter(rid: str) -> None:
-        decisions.append(
-            PermissionPromptRegistry.wait_for_decision(rid, timeout=2.0)
-        )
+        decisions.append(PermissionPromptRegistry.wait_for_decision(rid, timeout=2.0))
 
     ts = [
         threading.Thread(target=waiter, args=(r1.request_id,)),

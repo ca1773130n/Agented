@@ -35,8 +35,9 @@ def _mirror_selection(project_id: str, phase: str, data: dict) -> Optional[str]:
             audit_json=json.dumps(data),
         )
     except Exception:
-        logger.warning("plan-selection mirror failed for %s phase %s", project_id, phase,
-                       exc_info=True)
+        logger.warning(
+            "plan-selection mirror failed for %s phase %s", project_id, phase, exc_info=True
+        )
         return None
 
 

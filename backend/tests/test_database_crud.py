@@ -22,6 +22,8 @@ from app.database import (
     assign_team_to_project,
     # Agent functions
     count_agents,
+    count_all_triggers,
+    count_teams,
     create_agent,
     create_agent_conversation,
     # Command functions
@@ -44,8 +46,6 @@ from app.database import (
     create_trigger,
     # Workflow functions
     create_workflow,
-    count_all_triggers,
-    count_teams,
     delete_agent,
     delete_agent_conversation,
     delete_command,
@@ -1382,7 +1382,6 @@ from app.database import (
     delete_project_skill,
     delete_project_skill_by_id,
     # Additional team functions
-    delete_team_agent_assignments_bulk,
     get_active_execution_count,
     get_all_execution_logs,
     get_all_marketplaces,

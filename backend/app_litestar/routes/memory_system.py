@@ -30,10 +30,10 @@ from litestar.exceptions import NotFoundException, ValidationException
 from app.db.connection import get_connection
 from app.services import tesserae_integration as ti
 
-
 # ---------------------------------------------------------------------------
 # Status discovery
 # ---------------------------------------------------------------------------
+
 
 def _tesserae_cli_status() -> dict[str, Any]:
     cli_path = shutil.which("tesserae")
@@ -47,15 +47,13 @@ def _tesserae_cli_status() -> dict[str, Any]:
     try:
         result = subprocess.run(
             ["tesserae", "--version"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         candidate = (result.stdout or result.stderr or "").strip().splitlines()
         first = candidate[0] if candidate else ""
-        if (
-            result.returncode == 0
-            and first
-            and not first.lower().startswith("usage:")
-        ):
+        if result.returncode == 0 and first and not first.lower().startswith("usage:"):
             version = first
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
@@ -95,6 +93,7 @@ def _tesserae_per_project_state() -> list[dict[str, Any]]:
                 manifest = tess_dir / "harness_sessions" / "manifest.json"
                 if manifest.is_file():
                     import json as _json
+
                     try:
                         data = _json.loads(manifest.read_text())
                         sessions = data.get("sessions") or []
@@ -103,11 +102,11 @@ def _tesserae_per_project_state() -> list[dict[str, Any]]:
                         pass
                     try:
                         from datetime import datetime, timezone
+
                         mtime = manifest.stat().st_mtime
-                        entry["last_imported_at"] = (
-                            datetime.fromtimestamp(mtime, tz=timezone.utc)
-                            .isoformat()
-                        )
+                        entry["last_imported_at"] = datetime.fromtimestamp(
+                            mtime, tz=timezone.utc
+                        ).isoformat()
                     except OSError:
                         pass
             rows.append(entry)
@@ -152,12 +151,14 @@ def list_tesserae_projects() -> dict[str, Any]:
 # Per-project enable / disable / refresh
 # ---------------------------------------------------------------------------
 
+
 @post(
     "/system/memory/tesserae/projects/{project_id:str}",
     sync_to_thread=True,
 )
 def set_tesserae_for_project(
-    project_id: str, data: Optional[dict[str, Any]] = None,
+    project_id: str,
+    data: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """Set or clear ``projects.tesserae_project_root`` for a project.
 
@@ -177,7 +178,8 @@ def set_tesserae_for_project(
 
     with get_connection() as conn:
         exists = conn.execute(
-            "SELECT 1 FROM projects WHERE id = ?", (project_id,),
+            "SELECT 1 FROM projects WHERE id = ?",
+            (project_id,),
         ).fetchone()
         if not exists:
             raise NotFoundException(detail=f"project not found: {project_id}")
@@ -188,8 +190,8 @@ def set_tesserae_for_project(
         # stays for history.
         with get_connection() as conn:
             conn.execute(
-                "UPDATE projects SET tesserae_project_root = NULL "
-                "WHERE id = ?", (project_id,),
+                "UPDATE projects SET tesserae_project_root = NULL WHERE id = ?",
+                (project_id,),
             )
             conn.commit()
         ti.unset_tesserae_root_bindings(project_id)
@@ -202,10 +204,7 @@ def set_tesserae_for_project(
         ti.set_tesserae_root(project_id, resolved_path)
 
     # Return the fresh per-project state (single row).
-    state = [
-        p for p in _tesserae_per_project_state()
-        if p["project_id"] == project_id
-    ]
+    state = [p for p in _tesserae_per_project_state() if p["project_id"] == project_id]
     return {"project": state[0] if state else None}
 
 
@@ -214,7 +213,8 @@ def set_tesserae_for_project(
     sync_to_thread=True,
 )
 def set_tesserae_distill_for_project(
-    project_id: str, data: Optional[dict[str, Any]] = None,
+    project_id: str,
+    data: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """Toggle AgentRunbook distillation for a project.
 
@@ -228,15 +228,13 @@ def set_tesserae_distill_for_project(
     enabled = bool(payload["enabled"])
     with get_connection() as conn:
         exists = conn.execute(
-            "SELECT 1 FROM projects WHERE id = ?", (project_id,),
+            "SELECT 1 FROM projects WHERE id = ?",
+            (project_id,),
         ).fetchone()
     if not exists:
         raise NotFoundException(detail=f"project not found: {project_id}")
     ti.set_distill_enabled(project_id, enabled)
-    state = [
-        p for p in _tesserae_per_project_state()
-        if p["project_id"] == project_id
-    ]
+    state = [p for p in _tesserae_per_project_state() if p["project_id"] == project_id]
     return {"project": state[0] if state else None}
 
 
@@ -253,7 +251,8 @@ def refresh_tesserae_for_project(project_id: str) -> dict[str, Any]:
     """
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT 1 FROM projects WHERE id = ?", (project_id,),
+            "SELECT 1 FROM projects WHERE id = ?",
+            (project_id,),
         ).fetchone()
     if not row:
         raise NotFoundException(detail=f"project not found: {project_id}")
@@ -270,7 +269,8 @@ def tesserae_workspace_status(project_id: str) -> dict[str, Any]:
     count? last-modified timestamps. No subprocess call."""
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT 1 FROM projects WHERE id = ?", (project_id,),
+            "SELECT 1 FROM projects WHERE id = ?",
+            (project_id,),
         ).fetchone()
     if not row:
         raise NotFoundException(detail=f"project not found: {project_id}")
@@ -286,7 +286,8 @@ def tesserae_init(project_id: str) -> dict[str, Any]:
     Synchronous (instant)."""
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT 1 FROM projects WHERE id = ?", (project_id,),
+            "SELECT 1 FROM projects WHERE id = ?",
+            (project_id,),
         ).fetchone()
     if not row:
         raise NotFoundException(detail=f"project not found: {project_id}")
@@ -298,14 +299,16 @@ def tesserae_init(project_id: str) -> dict[str, Any]:
     sync_to_thread=True,
 )
 def tesserae_ingest(
-    project_id: str, data: Optional[dict[str, Any]] = None,
+    project_id: str,
+    data: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """``tesserae project ingest`` — pull markdown sources into the
     extraction queue. Body optional ``{paths: [str]}`` to override the
     default set (README/CLAUDE/AGENTS/CONVENTIONS/.planning)."""
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT 1 FROM projects WHERE id = ?", (project_id,),
+            "SELECT 1 FROM projects WHERE id = ?",
+            (project_id,),
         ).fetchone()
     if not row:
         raise NotFoundException(detail=f"project not found: {project_id}")
@@ -327,7 +330,8 @@ def tesserae_compile(project_id: str) -> dict[str, Any]:
     ``job_id`` the caller polls via the jobs endpoint."""
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT 1 FROM projects WHERE id = ?", (project_id,),
+            "SELECT 1 FROM projects WHERE id = ?",
+            (project_id,),
         ).fetchone()
     if not row:
         raise NotFoundException(detail=f"project not found: {project_id}")
@@ -336,8 +340,7 @@ def tesserae_compile(project_id: str) -> dict[str, Any]:
             detail="Tesserae not enabled for this project",
         )
     job_id = ti.run_op_async(project_id, "compile")
-    return {"job_id": job_id, "project_id": project_id, "op": "compile",
-            "status": "running"}
+    return {"job_id": job_id, "project_id": project_id, "op": "compile", "status": "running"}
 
 
 @post(
@@ -349,7 +352,8 @@ def tesserae_build_site(project_id: str) -> dict[str, Any]:
     the compiled graph. Long-running; dispatched async."""
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT 1 FROM projects WHERE id = ?", (project_id,),
+            "SELECT 1 FROM projects WHERE id = ?",
+            (project_id,),
         ).fetchone()
     if not row:
         raise NotFoundException(detail=f"project not found: {project_id}")
@@ -358,8 +362,7 @@ def tesserae_build_site(project_id: str) -> dict[str, Any]:
             detail="Tesserae not enabled for this project",
         )
     job_id = ti.run_op_async(project_id, "build-site")
-    return {"job_id": job_id, "project_id": project_id,
-            "op": "build-site", "status": "running"}
+    return {"job_id": job_id, "project_id": project_id, "op": "build-site", "status": "running"}
 
 
 @get(

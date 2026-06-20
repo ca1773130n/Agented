@@ -5,14 +5,14 @@ Usage:
 """
 
 import argparse
-import sys
 import os
+import sys
 
 # Add backend to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.db.migrations import init_db
-from app.db.rbac import count_user_roles, create_user_role, generate_api_key
+from app.db.rbac import create_user_role, generate_api_key
 
 
 def main():
@@ -40,7 +40,7 @@ def main():
     print(f"  Role:     {args.role}")
     print(f"  Label:    {args.label}")
     print(f"  Role ID:  {role_id}")
-    print(f"\n  Save this key — it will not be shown again.\n")
+    print("\n  Save this key — it will not be shown again.\n")
 
 
 if __name__ == "__main__":

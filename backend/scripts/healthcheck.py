@@ -19,7 +19,6 @@ import urllib.error
 import urllib.request
 from typing import Optional
 
-
 _DEFAULT_BACKEND = "http://127.0.0.1:20000"
 _DEFAULT_SIDECAR = "http://127.0.0.1:20001"
 

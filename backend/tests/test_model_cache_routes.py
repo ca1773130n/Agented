@@ -64,18 +64,14 @@ def client(isolated_db):
 def mock_discover():
     # v0.7.9: cache service now calls _discover_with_source which returns
     # (models, source) tuples.
-    with patch(
-        "app.services.model_cache_service.ModelDiscoveryService._discover_with_source"
-    ) as m:
+    with patch("app.services.model_cache_service.ModelDiscoveryService._discover_with_source") as m:
         m.return_value = (["gpt-5", "gpt-5.1"], "sidecar")
         yield m
 
 
 def test_get_models_happy_path(client, mock_discover):
     headers = {"X-API-Key": _setup_admin_user()}
-    r = client.get(
-        "/admin/backends/codex/models?auth_method=api_key", headers=headers
-    )
+    r = client.get("/admin/backends/codex/models?auth_method=api_key", headers=headers)
     assert r.status_code == 200
     body = r.json()
     assert body["models"] == ["gpt-5", "gpt-5.1"]
@@ -113,13 +109,9 @@ def test_list_cache_returns_entries(client, mock_discover):
 
 def test_non_admin_gets_403(client, mock_discover):
     headers = {"X-API-Key": _setup_editor_user()}
-    r = client.get(
-        "/admin/backends/codex/models?auth_method=api_key", headers=headers
-    )
+    r = client.get("/admin/backends/codex/models?auth_method=api_key", headers=headers)
     assert r.status_code == 403
-    r = client.post(
-        "/admin/backends/codex/models/refresh?auth_method=api_key", headers=headers
-    )
+    r = client.post("/admin/backends/codex/models/refresh?auth_method=api_key", headers=headers)
     assert r.status_code == 403
     r = client.get("/admin/backends/models/cache", headers=headers)
     assert r.status_code == 403

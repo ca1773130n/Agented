@@ -11,7 +11,6 @@ from litestar.exceptions import HTTPException, NotFoundException
 from litestar.response import Stream
 
 from app.db.owned_entities import can_access, get_for_user
-from app_litestar.route_helpers import clamp_limit
 from app.db.tracing import (
     count_traces,
     create_span,
@@ -28,6 +27,7 @@ from app.db.tracing import (
 )
 from app.services.agent_service import AgentService
 from app.services.skills_service import SkillsService
+from app_litestar.route_helpers import clamp_limit
 
 from ..auth import Caller
 

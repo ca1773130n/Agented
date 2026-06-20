@@ -8,8 +8,9 @@ import datetime
 import logging
 from typing import Optional
 
-from ..db.connection import get_connection
 from app.utils.timezone import utcnow as _utcnow
+
+from ..db.connection import get_connection
 
 logger = logging.getLogger(__name__)
 

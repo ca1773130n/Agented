@@ -1,6 +1,6 @@
 """v0.5.12: ApiKeyMiddleware enforces role + rotates session token."""
-import pytest
-from litestar import get, post, delete
+
+from litestar import delete, get, post
 from litestar.testing import create_test_client
 
 

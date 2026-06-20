@@ -54,8 +54,16 @@ def upsert_plan_selection(
                      candidates_json, audit_json)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (pid, project_id, phase, milestone, winner_rel, promoted_to,
-                 candidates_json, audit_json),
+                (
+                    pid,
+                    project_id,
+                    phase,
+                    milestone,
+                    winner_rel,
+                    promoted_to,
+                    candidates_json,
+                    audit_json,
+                ),
             )
         conn.commit()
         return pid

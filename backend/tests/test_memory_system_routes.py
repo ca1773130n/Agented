@@ -29,7 +29,10 @@ def client(isolated_db):
 
 
 def _seed_project(
-    project_id: str, *, root: str | None = None, name: str = "Test",
+    project_id: str,
+    *,
+    root: str | None = None,
+    name: str = "Test",
     local_path: str | None = None,
 ):
     with get_connection() as conn:
@@ -43,6 +46,7 @@ def _seed_project(
 
 
 # ---------- GET /admin/system/memory -------------------------------------
+
 
 def test_list_memory_systems_envelope(client):
     """Always returns the bundled memory-system list. Designed to
@@ -64,8 +68,7 @@ def test_list_memory_systems_envelope(client):
 def test_list_memory_systems_reports_cli_uninstalled(client):
     """When the CLI isn't on PATH, ``cli.installed`` is False and the
     operator gets a clear hint instead of a silent failure later."""
-    with patch("app_litestar.routes.memory_system.shutil.which",
-               return_value=None):
+    with patch("app_litestar.routes.memory_system.shutil.which", return_value=None):
         r = client.get("/admin/system/memory")
     body = r.json()
     t = next(f for f in body["memory_systems"] if f["id"] == "tesserae")
@@ -74,6 +77,7 @@ def test_list_memory_systems_reports_cli_uninstalled(client):
 
 
 # ---------- GET /admin/system/memory/tesserae/projects -------------------
+
 
 def test_list_tesserae_projects_empty(client):
     r = client.get("/admin/system/memory/tesserae/projects")
@@ -96,24 +100,29 @@ def test_list_tesserae_projects_disabled_and_enabled(client, tmp_path):
 
 def test_list_tesserae_projects_session_count_from_manifest(client, tmp_path):
     import json
+
     tess = tmp_path / ".tesserae"
     tess.mkdir()
     hs = tess / "harness_sessions"
     hs.mkdir()
-    (hs / "manifest.json").write_text(json.dumps({
-        "version": "1",
-        "sessions": [{"id": "a"}, {"id": "b"}, {"id": "c"}],
-    }))
+    (hs / "manifest.json").write_text(
+        json.dumps(
+            {
+                "version": "1",
+                "sessions": [{"id": "a"}, {"id": "b"}, {"id": "c"}],
+            }
+        )
+    )
     _seed_project("proj-with-manifest", root=str(tmp_path))
 
     r = client.get("/admin/system/memory/tesserae/projects")
-    p = next(x for x in r.json()["projects"]
-             if x["project_id"] == "proj-with-manifest")
+    p = next(x for x in r.json()["projects"] if x["project_id"] == "proj-with-manifest")
     assert p["session_count"] == 3
     assert p["last_imported_at"] is not None
 
 
 # ---------- POST set/unset --------------------------------------------------
+
 
 def test_set_tesserae_root_enables_project(client, tmp_path):
     _seed_project("proj-set", root=None)
@@ -157,11 +166,10 @@ def test_set_tesserae_root_validation_missing_body(client):
 
 # ---------- POST refresh ----------------------------------------------------
 
+
 def test_refresh_returns_skipped_reason_when_disabled(client):
     _seed_project("proj-refresh-off", root=None)
-    r = client.post(
-        "/admin/system/memory/tesserae/projects/proj-refresh-off/refresh"
-    )
+    r = client.post("/admin/system/memory/tesserae/projects/proj-refresh-off/refresh")
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["imported"] == 0
@@ -169,31 +177,34 @@ def test_refresh_returns_skipped_reason_when_disabled(client):
 
 
 def test_refresh_404_unknown_project(client):
-    r = client.post(
-        "/admin/system/memory/tesserae/projects/proj-ghost/refresh"
-    )
+    r = client.post("/admin/system/memory/tesserae/projects/proj-ghost/refresh")
     assert r.status_code == 404
 
 
 # ---------- per-op endpoints (init / ingest / compile / build-site /
 #            status / job) ---------------------------------------------------
 
+
 def test_status_returns_workspace_introspection(client, tmp_path):
     import json
+
     tess = tmp_path / ".tesserae"
     tess.mkdir()
     # Plant a graph + manifest so status reports the populated state
-    (tess / "graph.json").write_text('{"nodes": [{"x": 1}]}' + ' ' * 200)
+    (tess / "graph.json").write_text('{"nodes": [{"x": 1}]}' + " " * 200)
     hs = tess / "harness_sessions"
     hs.mkdir()
-    (hs / "manifest.json").write_text(json.dumps({
-        "version": "1", "sessions": [{"id": "a"}],
-    }))
+    (hs / "manifest.json").write_text(
+        json.dumps(
+            {
+                "version": "1",
+                "sessions": [{"id": "a"}],
+            }
+        )
+    )
     _seed_project("proj-status", root=str(tmp_path))
 
-    r = client.get(
-        "/admin/system/memory/tesserae/projects/proj-status/status"
-    )
+    r = client.get("/admin/system/memory/tesserae/projects/proj-status/status")
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["workspace_initialized"] is True
@@ -202,9 +213,7 @@ def test_status_returns_workspace_introspection(client, tmp_path):
 
 
 def test_status_404_unknown_project(client):
-    r = client.get(
-        "/admin/system/memory/tesserae/projects/proj-ghost/status"
-    )
+    r = client.get("/admin/system/memory/tesserae/projects/proj-ghost/status")
     assert r.status_code == 404
 
 
@@ -224,10 +233,9 @@ def test_init_invokes_cli_with_init_subcommand(client, tmp_path):
         return _FakeResult()
 
     from app.services import tesserae_integration as ti
+
     with patch.object(ti.subprocess, "run", side_effect=_fake_run):
-        r = client.post(
-            "/admin/system/memory/tesserae/projects/proj-init/init"
-        )
+        r = client.post("/admin/system/memory/tesserae/projects/proj-init/init")
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["ok"] is True
@@ -243,10 +251,9 @@ def test_ingest_skips_when_no_paths_exist(client, tmp_path):
     invokes the CLI."""
     _seed_project("proj-ingest-empty", root=str(tmp_path))
     from app.services import tesserae_integration as ti
+
     with patch.object(ti.subprocess, "run") as mock_run:
-        r = client.post(
-            "/admin/system/memory/tesserae/projects/proj-ingest-empty/ingest"
-        )
+        r = client.post("/admin/system/memory/tesserae/projects/proj-ingest-empty/ingest")
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["ok"] is False
@@ -265,15 +272,15 @@ def test_ingest_passes_resolved_paths_to_cli(client, tmp_path):
         stderr = ""
 
     captured: dict = {}
+
     def _fake_run(cmd, **kwargs):
         captured["cmd"] = cmd
         return _FakeResult()
 
     from app.services import tesserae_integration as ti
+
     with patch.object(ti.subprocess, "run", side_effect=_fake_run):
-        r = client.post(
-            "/admin/system/memory/tesserae/projects/proj-ingest-yes/ingest"
-        )
+        r = client.post("/admin/system/memory/tesserae/projects/proj-ingest-yes/ingest")
     assert r.status_code == 201
     assert r.json()["ok"] is True
     # Both README.md + CLAUDE.md should be in the argv.
@@ -284,9 +291,7 @@ def test_ingest_passes_resolved_paths_to_cli(client, tmp_path):
 
 def test_compile_dispatches_async_returns_job_id(client, tmp_path):
     _seed_project("proj-compile", root=str(tmp_path))
-    r = client.post(
-        "/admin/system/memory/tesserae/projects/proj-compile/compile"
-    )
+    r = client.post("/admin/system/memory/tesserae/projects/proj-compile/compile")
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["status"] == "running"
@@ -295,23 +300,17 @@ def test_compile_dispatches_async_returns_job_id(client, tmp_path):
 
 
 def test_compile_404_unknown_project(client):
-    r = client.post(
-        "/admin/system/memory/tesserae/projects/proj-ghost/compile"
-    )
+    r = client.post("/admin/system/memory/tesserae/projects/proj-ghost/compile")
     assert r.status_code == 404
 
 
 def test_compile_rejects_disabled_project(client):
     _seed_project("proj-disabled", root=None)
-    r = client.post(
-        "/admin/system/memory/tesserae/projects/proj-disabled/compile"
-    )
+    r = client.post("/admin/system/memory/tesserae/projects/proj-disabled/compile")
     # ValidationException → 400 or 422
     assert r.status_code in (400, 422)
 
 
 def test_job_status_404_unknown_job(client):
-    r = client.get(
-        "/admin/system/memory/tesserae/jobs/tess-bogus-aabbccdd"
-    )
+    r = client.get("/admin/system/memory/tesserae/jobs/tess-bogus-aabbccdd")
     assert r.status_code == 404

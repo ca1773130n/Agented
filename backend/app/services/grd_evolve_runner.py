@@ -80,9 +80,9 @@ def stop_evolve_state_sync(session_id: str) -> None:
 
 def _run(session_id: str, planning_dir: str, stop_event: threading.Event) -> None:
     """Polling loop. Exits on:
-      * ``stop_event`` set (external stop)
-      * underlying PSM session ended (``status != 'active'``)
-      * wall-time cap reached
+    * ``stop_event`` set (external stop)
+    * underlying PSM session ended (``status != 'active'``)
+    * wall-time cap reached
     """
     state_file = Path(planning_dir) / "EVOLVE-STATE.json"
     started_at = time.time()
@@ -137,8 +137,7 @@ def _on_state_change(session_id: str, content: str) -> None:
         # ``last_state_json`` still carries the raw bytes so the
         # UI can show "syncing…" rather than blank.
         logger.warning(
-            "grd_evolve: EVOLVE-STATE.json for %s was not valid JSON; "
-            "storing raw bytes anyway",
+            "grd_evolve: EVOLVE-STATE.json for %s was not valid JSON; storing raw bytes anyway",
             session_id,
         )
 

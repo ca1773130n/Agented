@@ -2,8 +2,6 @@
 
 import time
 
-import pytest
-
 from app.db.tracing import (
     count_traces,
     create_span,
@@ -11,7 +9,6 @@ from app.db.tracing import (
     delete_trace,
     end_span,
     end_trace,
-    get_span,
     get_trace,
     get_trace_stats,
     get_trace_with_spans,
@@ -287,9 +284,7 @@ class TestCorruptStartedAt:
             )
             conn.commit()
 
-    def test_end_trace_logs_and_nulls_duration_on_corrupt_started_at(
-        self, isolated_db, caplog
-    ):
+    def test_end_trace_logs_and_nulls_duration_on_corrupt_started_at(self, isolated_db, caplog):
         trace = create_trace("T", "agent", "agent-01")
         self._corrupt_started_at("traces", trace["id"])
         with caplog.at_level("WARNING", logger="app.db.tracing"):
@@ -301,9 +296,7 @@ class TestCorruptStartedAt:
             for r in caplog.records
         )
 
-    def test_end_span_logs_and_nulls_duration_on_corrupt_started_at(
-        self, isolated_db, caplog
-    ):
+    def test_end_span_logs_and_nulls_duration_on_corrupt_started_at(self, isolated_db, caplog):
         trace = create_trace("T", "agent", "agent-01")
         span = create_span(trace["id"], "S", "TOOL_CALL")
         self._corrupt_started_at("trace_spans", span["id"])

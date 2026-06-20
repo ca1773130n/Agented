@@ -55,9 +55,7 @@ _MD_FENCE_RE = re.compile(
 # left so we don't accidentally match a legitimate fenced code block
 # (``\n`` then text + backtick) or an isolated header. Captures the
 # leading non-space so the replacement preserves it.
-_STRAY_BACKTICK_BEFORE_HEADING_RE = re.compile(
-    r"(\S)[ \t]*`[ \t]*(?=#{1,6}[ \t])"
-)
+_STRAY_BACKTICK_BEFORE_HEADING_RE = re.compile(r"(\S)[ \t]*`[ \t]*(?=#{1,6}[ \t])")
 
 
 def _heal_stray_backtick_before_heading(text: str) -> str:
@@ -290,24 +288,18 @@ def _render_tool_use(block: dict) -> str:
     if name == "Bash":
         cmd = (inp.get("command") or "").strip()
         if cmd:
-            summary_chips += (
-                f' <code class="tool-arg">{_html.escape(_one_line(cmd, 80))}</code>'
-            )
+            summary_chips += f' <code class="tool-arg">{_html.escape(_one_line(cmd, 80))}</code>'
 
     elif name in ("Read", "Edit", "Write", "MultiEdit", "NotebookEdit"):
         path = inp.get("file_path") or inp.get("path") or ""
         if path:
-            summary_chips += (
-                f' <code class="tool-path">{_html.escape(path)}</code>'
-            )
+            summary_chips += f' <code class="tool-path">{_html.escape(path)}</code>'
 
     elif name in ("Grep", "Glob"):
         pattern = inp.get("pattern") or inp.get("query") or ""
         path = inp.get("path") or ""
         if pattern:
-            summary_chips += (
-                f' <code class="tool-pattern">{_html.escape(pattern)}</code>'
-            )
+            summary_chips += f' <code class="tool-pattern">{_html.escape(pattern)}</code>'
         if path:
             summary_chips += (
                 f' <span class="tool-sep">in</span>'
@@ -317,27 +309,19 @@ def _render_tool_use(block: dict) -> str:
     elif name == "WebFetch":
         url = inp.get("url") or ""
         if url:
-            summary_chips += (
-                f' <code class="tool-arg">{_html.escape(url)}</code>'
-            )
+            summary_chips += f' <code class="tool-arg">{_html.escape(url)}</code>'
 
     elif name == "WebSearch":
         query = inp.get("query") or ""
         if query:
-            summary_chips += (
-                f' <code class="tool-arg">{_html.escape(_one_line(query, 80))}</code>'
-            )
+            summary_chips += f' <code class="tool-arg">{_html.escape(_one_line(query, 80))}</code>'
 
     elif name == "Task":
         subagent = inp.get("subagent_type") or "general"
         desc = inp.get("description") or ""
-        summary_chips += (
-            f' <span class="tool-meta">({_html.escape(subagent)})</span>'
-        )
+        summary_chips += f' <span class="tool-meta">({_html.escape(subagent)})</span>'
         if desc:
-            summary_chips += (
-                f' <code class="tool-arg">{_html.escape(_one_line(desc, 80))}</code>'
-            )
+            summary_chips += f' <code class="tool-arg">{_html.escape(_one_line(desc, 80))}</code>'
 
     else:
         # MCP / ToolSearch / etc. Best-effort: pick the most
@@ -351,9 +335,7 @@ def _render_tool_use(block: dict) -> str:
             or ""
         )
         if detail:
-            summary_chips += (
-                f' <code class="tool-arg">{_html.escape(_one_line(detail, 80))}</code>'
-            )
+            summary_chips += f' <code class="tool-arg">{_html.escape(_one_line(detail, 80))}</code>'
 
     # Expanded body: full JSON input. Empty inputs collapse to
     # ``(no arguments)`` so the disclosure arrow isn't a dead end.
@@ -368,9 +350,9 @@ def _render_tool_use(block: dict) -> str:
 
     return (
         f'<details class="tool-call tool-call--{kind}">'
-        f'<summary>{summary_chips}</summary>'
-        f'{body}'
-        f'</details>'
+        f"<summary>{summary_chips}</summary>"
+        f"{body}"
+        f"</details>"
     )
 
 
@@ -414,9 +396,7 @@ def _extract_stream_json_text(line: str) -> Optional[str]:
     # with newlines). Interactive events (ask_user_question, …) don't
     # have an SSE-style textual form.
     deltas = "".join(
-        ev_data.get("text", "")
-        for ev_type, ev_data in events
-        if ev_type == "output_delta"
+        ev_data.get("text", "") for ev_type, ev_data in events if ev_type == "output_delta"
     )
     outputs = "\n".join(
         ev_data.get("line", "")
@@ -485,9 +465,7 @@ def _extract_stream_json_events(
                 thinking_text = block.get("thinking", "")
                 if thinking_text:
                     if text_buffer:
-                        events.append(
-                            ("output", {"line": "\n".join(text_buffer)})
-                        )
+                        events.append(("output", {"line": "\n".join(text_buffer)}))
                         text_buffer = []
                     events.append(
                         ("thinking", {"text": thinking_text}),
@@ -512,16 +490,12 @@ def _extract_stream_json_events(
                 # such payload into a real ``ask_user_question``
                 # event so InteractiveQuestionCard fires the same
                 # way it does for the structured tool_use path.
-                stripped_text, synthetic_q = _extract_text_ask_question(
-                    normalized
-                )
+                stripped_text, synthetic_q = _extract_text_ask_question(normalized)
                 if stripped_text.strip():
                     text_buffer.append(stripped_text)
                 if synthetic_q is not None:
                     if text_buffer:
-                        events.append(
-                            ("output", {"line": "\n".join(text_buffer)})
-                        )
+                        events.append(("output", {"line": "\n".join(text_buffer)}))
                         text_buffer = []
                     events.append(("ask_user_question", synthetic_q))
             elif block_type == "tool_use":
@@ -530,18 +504,14 @@ def _extract_stream_json_events(
                     # Flush accumulated text first so chronological
                     # order is preserved (text before the question).
                     if text_buffer:
-                        events.append(
-                            ("output", {"line": "\n".join(text_buffer)})
-                        )
+                        events.append(("output", {"line": "\n".join(text_buffer)}))
                         text_buffer = []
                     events.append(
                         (
                             "ask_user_question",
                             {
                                 "tool_use_id": block.get("id", ""),
-                                "questions": (block.get("input") or {}).get(
-                                    "questions", []
-                                ),
+                                "questions": (block.get("input") or {}).get("questions", []),
                             },
                         )
                     )
@@ -552,18 +522,14 @@ def _extract_stream_json_events(
                     # the plan payload so the frontend can render an
                     # approve / keep-planning card.
                     if text_buffer:
-                        events.append(
-                            ("output", {"line": "\n".join(text_buffer)})
-                        )
+                        events.append(("output", {"line": "\n".join(text_buffer)}))
                         text_buffer = []
                     events.append(
                         (
                             "exit_plan_mode",
                             {
                                 "tool_use_id": block.get("id", ""),
-                                "plan": (block.get("input") or {}).get(
-                                    "plan", ""
-                                ),
+                                "plan": (block.get("input") or {}).get("plan", ""),
                             },
                         )
                     )
@@ -687,16 +653,8 @@ def _extract_hook_decision_events(hook_event: dict) -> list[tuple[str, dict]]:
             {
                 "hook_event": spec.get("hookEventName") or hook_event.get("hook_event"),
                 "hook_name": hook_event.get("hook_name"),
-                "tool_name": (
-                    hook_event.get("tool_name")
-                    or spec.get("toolName")
-                    or ""
-                ),
-                "tool_input": (
-                    hook_event.get("tool_input")
-                    or spec.get("toolInput")
-                    or {}
-                ),
+                "tool_name": (hook_event.get("tool_name") or spec.get("toolName") or ""),
+                "tool_input": (hook_event.get("tool_input") or spec.get("toolInput") or {}),
                 "decision": decision,
                 "outcome": hook_event.get("outcome"),
             },
@@ -926,13 +884,7 @@ class ProjectSessionManager:
         # everything else (plugins/, mcp.json, projects/, …) so the
         # subprocess still sees the user's skills + MCP servers. The
         # user's real ~/.claude is never mutated.
-        if (
-            cmd
-            and cmd[0] == "claude"
-            and stream_json
-            and not yolo_mode
-            and user_config_dir
-        ):
+        if cmd and cmd[0] == "claude" and stream_json and not yolo_mode and user_config_dir:
             try:
                 from .claude_config_overlay import prepare_session_overlay
 
@@ -1050,9 +1002,7 @@ class ProjectSessionManager:
         # process group. The pid > 0 guard prevents killpg(0) from
         # broadcasting to the caller's whole pgroup.
         if pid <= 0:
-            raise RuntimeError(
-                f"create_session: spawn returned non-positive pid {pid}"
-            )
+            raise RuntimeError(f"create_session: spawn returned non-positive pid {pid}")
         pgid = pid
 
         now = datetime.now()
@@ -1150,8 +1100,7 @@ class ProjectSessionManager:
                 with cls._lock:
                     cls._sessions.pop(session_id, None)
                 raise SessionPersistError(
-                    "Session persist failed: parent resource missing "
-                    "(likely deleted during spawn)",
+                    "Session persist failed: parent resource missing (likely deleted during spawn)",
                     constraint_hint=hint,
                 ) from exc
             except Exception:
@@ -1250,9 +1199,7 @@ class ProjectSessionManager:
                     try:
                         from app.db.grd import append_session_message
 
-                        append_session_message(
-                            session_id, "assistant", ev_data["line"]
-                        )
+                        append_session_message(session_id, "assistant", ev_data["line"])
                     except Exception:
                         logger.warning(
                             "reader: failed to persist assistant message for %s",
@@ -1409,11 +1356,10 @@ class ProjectSessionManager:
         # Life-Harness: emit session-completion event so the annotator +
         # snapshot service observe project sessions. Best-effort.
         try:
-            from app.services.execution_events import emit_session_complete
-
             # project_id is on the DB row (project_sessions.project_id NOT NULL);
             # avoid an extra round-trip by fetching it directly.
             from app.database import get_connection as _gc
+            from app.services.execution_events import emit_session_complete
 
             with _gc() as _conn:
                 _row = _conn.execute(

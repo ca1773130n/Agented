@@ -24,14 +24,14 @@ from __future__ import annotations
 import json
 import logging
 import re
-import subprocess
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
 import httpx
 
-from .cliproxy_manager import CLIProxyManager
 from app.config import AUTORESEARCH_KERNEL_ENABLED
+
+from .cliproxy_manager import CLIProxyManager
 
 if TYPE_CHECKING:
     from app.models.loop_spec import QualityGate
@@ -246,48 +246,33 @@ class GoalJudgeService:
     def _run_deterministic(
         check_cmd: str, cwd: Optional[str], *, sandbox: str = "isolated"
     ) -> JudgeVerdict:
-        if sandbox == "isolated":
-            # Reward-hacking mitigation (F9): grade against a throwaway,
-            # env-scrubbed snapshot of the workspace so the live agent
-            # session can't race/tamper with the running eval.
-            from .sandbox_eval import run_isolated_check
+        # Both paths run through the hardened sandbox_eval runner (scrubbed env +
+        # process-group SIGKILL on timeout). ``isolated`` (default, F9) grades
+        # against a throwaway snapshot; ``inherit`` (escape hatch) runs in the
+        # agent's cwd but STILL scrubs the env so secrets don't leak into the
+        # operator's check_cmd.
+        from .sandbox_eval import run_check_inplace, run_isolated_check
 
+        if sandbox == "isolated":
             r = run_isolated_check(check_cmd, cwd or ".", timeout=_CHECK_TIMEOUT_SECONDS)
-            returncode = r.returncode
-            stdout = (r.stdout or "")[-4096:]  # tail-cap for storage
-            if returncode == 124:
-                return JudgeVerdict(
-                    met=False,
-                    source="deterministic",
-                    reason=f"check timed out after {_CHECK_TIMEOUT_SECONDS}s",
-                    confidence=0.0,
-                )
         else:
-            try:
-                proc = subprocess.run(
-                    check_cmd,
-                    shell=True,
-                    cwd=cwd,
-                    capture_output=True,
-                    text=True,
-                    timeout=_CHECK_TIMEOUT_SECONDS,
-                )
-            except subprocess.TimeoutExpired:
-                return JudgeVerdict(
-                    met=False,
-                    source="deterministic",
-                    reason=f"check timed out after {_CHECK_TIMEOUT_SECONDS}s",
-                    confidence=0.0,
-                )
-            except (OSError, ValueError) as exc:
-                return JudgeVerdict(
-                    met=False,
-                    source="deterministic",
-                    reason=f"check failed to run: {exc}",
-                    confidence=0.0,
-                )
-            returncode = proc.returncode
-            stdout = (proc.stdout or "")[-4096:]  # tail-cap for storage
+            r = run_check_inplace(check_cmd, cwd or ".", timeout=_CHECK_TIMEOUT_SECONDS)
+        returncode = r.returncode
+        stdout = (r.stdout or "")[-4096:]  # tail-cap for storage
+        if returncode == 124:
+            return JudgeVerdict(
+                met=False,
+                source="deterministic",
+                reason=f"check timed out after {_CHECK_TIMEOUT_SECONDS}s",
+                confidence=0.0,
+            )
+        if returncode == 127:
+            return JudgeVerdict(
+                met=False,
+                source="deterministic",
+                reason=f"check failed to run: {(r.stderr or '').strip()[:200]}",
+                confidence=0.0,
+            )
         if returncode == 0:
             return JudgeVerdict(
                 met=True,

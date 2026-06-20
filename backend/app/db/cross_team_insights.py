@@ -8,7 +8,6 @@ return empty lists with data_available: false.
 
 import logging
 import sqlite3
-from typing import List
 
 from .connection import get_connection
 from .teams import get_all_teams
@@ -30,7 +29,6 @@ def get_cross_team_insights() -> dict:
 
     with get_connection() as conn:
         for team in teams:
-            team_id = team["id"]
             insight = _build_team_insight(conn, team)
             team_insights.append(insight)
 

@@ -67,12 +67,8 @@ def test_list_activity_filters_by_types(client):
     super_agent_activity_service.record(
         super_agent_id="sa-1", event_type="message_turn", payload={}
     )
-    super_agent_activity_service.record(
-        super_agent_id="sa-1", event_type="tool_call", payload={}
-    )
-    super_agent_activity_service.record(
-        super_agent_id="sa-1", event_type="git_action", payload={}
-    )
+    super_agent_activity_service.record(super_agent_id="sa-1", event_type="tool_call", payload={})
+    super_agent_activity_service.record(super_agent_id="sa-1", event_type="git_action", payload={})
     headers = _admin_headers()
     r = client.get(
         "/admin/super-agents/sa-1/activity?types=message_turn,tool_call",
@@ -88,9 +84,7 @@ def test_list_activity_respects_limit(client):
     from app.services import super_agent_activity_service
 
     for _ in range(5):
-        super_agent_activity_service.record(
-            super_agent_id="sa-1", event_type="t", payload={}
-        )
+        super_agent_activity_service.record(super_agent_id="sa-1", event_type="t", payload={})
     headers = _admin_headers()
     r = client.get("/admin/super-agents/sa-1/activity?limit=2", headers=headers)
     assert r.status_code == 200
@@ -146,9 +140,7 @@ def test_session_activity_returns_session_events(client):
         payload={},
     )
     headers = _admin_headers()
-    r = client.get(
-        "/admin/super-agents/sessions/sess-A/activity", headers=headers
-    )
+    r = client.get("/admin/super-agents/sessions/sess-A/activity", headers=headers)
     assert r.status_code == 200
     body = r.json()
     assert len(body["events"]) == 1

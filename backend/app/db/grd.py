@@ -454,8 +454,7 @@ def add_allowed_account(project_id: str, account_id: str) -> bool:
     with get_connection() as conn:
         try:
             cursor = conn.execute(
-                "INSERT INTO project_allowed_accounts (project_id, account_id) "
-                "VALUES (?, ?)",
+                "INSERT INTO project_allowed_accounts (project_id, account_id) VALUES (?, ?)",
                 (project_id, account_id),
             )
             conn.commit()
@@ -473,8 +472,7 @@ def remove_allowed_account(project_id: str, account_id: str) -> bool:
     """
     with get_connection() as conn:
         cursor = conn.execute(
-            "DELETE FROM project_allowed_accounts "
-            "WHERE project_id = ? AND account_id = ?",
+            "DELETE FROM project_allowed_accounts WHERE project_id = ? AND account_id = ?",
             (project_id, account_id),
         )
         conn.commit()

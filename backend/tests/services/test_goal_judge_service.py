@@ -9,7 +9,6 @@ fields making it through to the verdict.
 from __future__ import annotations
 
 import httpx
-import pytest
 
 from app.services import goal_judge_service
 from app.services.goal_judge_service import (
@@ -18,7 +17,6 @@ from app.services.goal_judge_service import (
     JudgeVerdict,
     _parse_judge_json,
 )
-
 
 # -----------------------------------------------------------------
 # Pure helpers

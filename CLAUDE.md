@@ -88,6 +88,17 @@ credentials/login flows.
 - `app/database.py` — Raw SQLite, `get_connection()` context manager, no ORM.
 - `app/services/` — Business logic. `ExecutionService` runs CLI harnesses
   via `subprocess.Popen`.
+- **Unified loop layer (v0.6.0)** — `LoopSpec` (`app/models/loop_spec.py`,
+  `from_legacy_config`) is the one schema for all loop patterns; the SINGLE
+  executor is `goal_loop_runner.py`, which drives BOTH goal-loops and Ralph
+  (deep-unified). It owns the exit ladder (quality-gate → stagnation →
+  convergence → budgets), per-iteration records (`goal_loop_iterations`,
+  migrations 166–170), checkpoint/resume, pause/intervene/human-gate control,
+  and `context_policy` (`carry` vs `reset`-per-iteration). The eval quality-gate
+  runs through `goal_judge_service.py`; deterministic checks are sandboxed via
+  `sandbox_eval.py` (snapshot + scrubbed env + process-group kill). In the
+  runner, the stable operator id never moves — only `live_id` follows a reset
+  child (broadcasts/DB/memory always key off the stable id).
 - `app/models/` — Pydantic v2 + msgspec Struct request/response.
 - Entity IDs: prefixed random (`bot-`, `agent-`, `conv-`, `team-`, `prod-`,
   `proj-`, `plug-` + 6-char suffix).
@@ -157,7 +168,9 @@ tiny <1 KB always-loaded blob. Don't write the same fact to both.
 
 `.planning/` holds roadmaps, codebase analysis, and phase plans.
 `config.json` is the GRD config; milestones live under
-`.planning/milestones/v*/` (v0.5.0 onboarding tour complete → v0.6.0 TBD).
+`.planning/milestones/v*/` (v0.5.0 onboarding tour → v0.6.0 unified loops
+shipped: `LoopSpec` + single executor + eval/sandbox + observability/control,
+migrations 166–170).
 
 ## Tooling
 

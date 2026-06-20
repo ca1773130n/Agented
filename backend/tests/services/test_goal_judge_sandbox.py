@@ -1,6 +1,6 @@
 # backend/tests/services/test_goal_judge_sandbox.py
-from app.services.goal_judge_service import GoalJudgeService, JudgeVerdict
 from app.models.loop_spec import QualityGate
+from app.services.goal_judge_service import GoalJudgeService, JudgeVerdict
 
 
 def test_verdict_has_confidence_and_version_defaults():
@@ -44,3 +44,25 @@ def test_inherit_sandbox_runs_in_place(tmp_path):
         sandbox="inherit",
     )
     assert v.met is True
+
+
+def test_inherit_path_scrubs_parent_env(tmp_path):
+    """sandbox=inherit must still scrub the env (secrets must not reach check_cmd)."""
+    import os
+
+    from app.models.loop_spec import QualityGate
+    from app.services.goal_judge_service import GoalJudgeService
+
+    os.environ["SECRET_TOKEN_JUDGE"] = "leak"
+    try:
+        v = GoalJudgeService.judge(
+            "g",
+            "",
+            check_cmd='test -z "$SECRET_TOKEN_JUDGE"',
+            cwd=str(tmp_path),
+            quality_gate=QualityGate(kind="test_pass"),
+            sandbox="inherit",
+        )
+        assert v.met is True  # secret absent in scrubbed env → test -z passes
+    finally:
+        os.environ.pop("SECRET_TOKEN_JUDGE", None)

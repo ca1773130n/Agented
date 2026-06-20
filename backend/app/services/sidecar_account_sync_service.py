@@ -161,9 +161,7 @@ def sync_sidecar_accounts(*, timeout: float = 10.0) -> int:
             )
             synced += 1
         except Exception as exc:
-            logger.warning(
-                "Sidecar sync: upsert failed for %s/%s: %s", kind, account_name, exc
-            )
+            logger.warning("Sidecar sync: upsert failed for %s/%s: %s", kind, account_name, exc)
 
     if synced:
         logger.info("Sidecar sync: upserted %d account(s)", synced)

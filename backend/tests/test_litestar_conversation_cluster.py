@@ -31,9 +31,7 @@ def client():
     ["plugins", "commands", "hooks", "rules"],
 )
 def test_send_message_requires_message(client, namespace, isolated_db):
-    resp = client.post(
-        f"/api/{namespace}/conversations/conv-x/message", json={}
-    )
+    resp = client.post(f"/api/{namespace}/conversations/conv-x/message", json={})
     assert resp.status_code == 400
 
 

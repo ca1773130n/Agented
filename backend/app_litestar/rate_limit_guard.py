@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from typing import Optional
 
-
 # (method, path) → (limit, window_seconds). Populated lazily by
 # requires_rate_limit's guard on first request to each protected route.
 _PER_ROUTE_OVERRIDES: dict[tuple[str, str], tuple[int, float]] = {}

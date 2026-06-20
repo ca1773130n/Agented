@@ -49,9 +49,7 @@ def test_no_duplicate_names():
 def test_runner_callable():
     assert callable(run_migrations)
     assert callable(init_db)
-    assert run_migrations is init_db, (
-        "run_migrations is documented as an alias for init_db"
-    )
+    assert run_migrations is init_db, "run_migrations is documented as an alias for init_db"
 
 
 def test_buckets_concatenate_to_registry():

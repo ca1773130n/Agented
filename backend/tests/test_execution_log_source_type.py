@@ -1,5 +1,5 @@
-import pytest
 from datetime import datetime
+
 from app.db import triggers as trigger_db
 
 

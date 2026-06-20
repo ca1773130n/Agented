@@ -1,4 +1,5 @@
 """v0.6.0: PerformanceMiddleware tests."""
+
 import re
 
 import pytest
@@ -30,6 +31,7 @@ async def _stub_next(scope, receive, send):
 class TestPerformanceMiddleware:
     async def test_server_timing_header_present_on_response(self):
         from app_litestar.middleware import PerformanceMiddleware
+
         mw = PerformanceMiddleware()
         sender = _StubSend()
         await mw.handle(_make_scope(), None, sender, _stub_next)
@@ -39,6 +41,7 @@ class TestPerformanceMiddleware:
 
     async def test_server_timing_value_is_app_dur_format(self):
         from app_litestar.middleware import PerformanceMiddleware
+
         mw = PerformanceMiddleware()
         sender = _StubSend()
         await mw.handle(_make_scope(), None, sender, _stub_next)
@@ -54,6 +57,7 @@ class TestPerformanceMiddleware:
     async def test_non_http_scope_passes_through(self):
         """WebSocket / lifespan scopes shouldn't trigger header injection."""
         from app_litestar.middleware import PerformanceMiddleware
+
         mw = PerformanceMiddleware()
         sender = _StubSend()
         scope = {"type": "websocket", "path": "/ws"}
@@ -64,5 +68,5 @@ class TestPerformanceMiddleware:
         await mw.handle(scope, None, sender, ws_next)
         # No server-timing injection on non-http.
         for m in sender.messages:
-            for (name, _) in m.get("headers", []):
+            for name, _ in m.get("headers", []):
                 assert name != b"server-timing"

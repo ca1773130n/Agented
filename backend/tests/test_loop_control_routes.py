@@ -34,3 +34,27 @@ def test_gate_decision_rejects_bad_decision():
     with patch.object(gr, "_ensure_project", lambda pid: {"id": pid}):
         with pytest.raises(ClientException):
             gr.loop_gate_decision.fn("p", "sess", {"decision": "nope"})
+
+
+def test_stop_route_signals_runner_so_reset_children_actually_stop():
+    """The generic /stop route must call stop_runner (keyed by the stable id)
+    BEFORE ProjectSessionManager.stop_session — otherwise a context_policy=reset
+    loop, whose live child has a different id, keeps iterating after the route
+    only kills the original (already-dead) process."""
+    calls = []
+    with (
+        patch(
+            "app.services.goal_loop_runner.stop_runner",
+            side_effect=lambda sid: calls.append(("runner", sid)),
+        ),
+        patch.object(
+            gr.ProjectSessionManager,
+            "stop_session",
+            side_effect=lambda sid: calls.append(("psm", sid)) or True,
+        ),
+    ):
+        out = gr.stop_session.fn("p", "sess")
+    assert ("runner", "sess") in calls
+    # stop_runner is signalled before (or with) the PSM kill.
+    assert calls.index(("runner", "sess")) < calls.index(("psm", "sess"))
+    assert out["session_id"] == "sess"

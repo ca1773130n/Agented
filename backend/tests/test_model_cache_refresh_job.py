@@ -7,9 +7,7 @@ from app_litestar.lifecycle import refresh_stale_model_caches_job
 
 def test_no_stale_rows_no_refresh_calls():
     with (
-        patch(
-            "app.services.model_cache_service.list_stale", return_value=[]
-        ) as list_stale_mock,
+        patch("app.services.model_cache_service.list_stale", return_value=[]) as list_stale_mock,
         patch("app.services.model_cache_service.refresh") as refresh_mock,
     ):
         refresh_stale_model_caches_job()
@@ -23,9 +21,7 @@ def test_refreshes_each_stale_entry():
         {"backend_kind": "claude", "auth_method": "chatgpt"},
     ]
     with (
-        patch(
-            "app.services.model_cache_service.list_stale", return_value=stale_rows
-        ),
+        patch("app.services.model_cache_service.list_stale", return_value=stale_rows),
         patch("app.services.model_cache_service.refresh") as refresh_mock,
     ):
         refresh_stale_model_caches_job()
@@ -46,12 +42,8 @@ def test_one_failing_refresh_does_not_block_others():
         return {"ok": True}
 
     with (
-        patch(
-            "app.services.model_cache_service.list_stale", return_value=stale_rows
-        ),
-        patch(
-            "app.services.model_cache_service.refresh", side_effect=side_effect
-        ) as refresh_mock,
+        patch("app.services.model_cache_service.list_stale", return_value=stale_rows),
+        patch("app.services.model_cache_service.refresh", side_effect=side_effect) as refresh_mock,
     ):
         refresh_stale_model_caches_job()
     assert refresh_mock.call_count == 2

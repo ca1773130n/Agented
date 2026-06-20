@@ -20,8 +20,7 @@ def test_record_inserts_row(isolated_db):
     assert eid > 0
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT trigger_id, payload, dispatch_status, matched "
-            "FROM trigger_events WHERE id=?",
+            "SELECT trigger_id, payload, dispatch_status, matched FROM trigger_events WHERE id=?",
             (eid,),
         ).fetchone()
     assert row["trigger_id"] == "trig-1"

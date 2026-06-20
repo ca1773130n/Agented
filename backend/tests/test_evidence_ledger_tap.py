@@ -10,7 +10,9 @@ from app.services.streaming_helper import _record_tool_use_evidence
 
 def _make_session(session_id="sess-1", super_agent_id="sa-1"):
     with get_connection() as conn:
-        conn.execute("INSERT INTO super_agents (id, name) VALUES (?, ?)", (super_agent_id, "Test SA"))
+        conn.execute(
+            "INSERT INTO super_agents (id, name) VALUES (?, ?)", (super_agent_id, "Test SA")
+        )
         conn.execute(
             "INSERT INTO super_agent_sessions (id, super_agent_id) VALUES (?, ?)",
             (session_id, super_agent_id),

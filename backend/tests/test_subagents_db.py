@@ -62,8 +62,7 @@ def test_legacy_agents_table_distinct():
     sid = create_subagent(name="distinct", content="x")["id"]
     with get_connection() as conn:
         tables = {
-            r["name"]
-            for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         assert "subagents" in tables
         assert "agents" in tables

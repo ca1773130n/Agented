@@ -90,9 +90,7 @@ def _make_conversation_stream(name: str, service: Any) -> Router:
     )
     def stream_conversation(conv_id: str, caller: Caller) -> Stream:
         user_id = getattr(caller, "user_id", None) if caller else None
-        if hasattr(service, "can_subscribe") and not service.can_subscribe(
-            conv_id, user_id
-        ):
+        if hasattr(service, "can_subscribe") and not service.can_subscribe(conv_id, user_id):
             raise NotFoundException(detail="Conversation not found")
 
         def generate():
@@ -288,9 +286,7 @@ def _ensure_chat_session_registered(session_id: str) -> bool:
     media_type="text/event-stream",
     sync_to_thread=False,
 )
-def stream_super_agent_chat(
-    super_agent_id: str, session_id: str, request: Request
-) -> Stream:
+def stream_super_agent_chat(super_agent_id: str, session_id: str, request: Request) -> Stream:
     del super_agent_id
     last_event_id = request.headers.get("Last-Event-ID", "0")
     try:
@@ -321,9 +317,7 @@ async def stream_team_generation(data: dict) -> Stream:
     body = data or {}
     description = body.get("description", "")
     if not description or len(description) < 10:
-        raise ClientException(
-            detail="description is required and must be at least 10 characters"
-        )
+        raise ClientException(detail="description is required and must be at least 10 characters")
 
     def generate():
         yield from TeamGenerationService.generate_streaming(description)

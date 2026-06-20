@@ -50,16 +50,12 @@ def test_rejects_non_string_content():
         {"role": "user", "content": [{"type": "text", "text": "hi"}]},
         {"role": "user", "content": "real string"},
     ]
-    assert drop_empty_content_messages(msgs) == [
-        {"role": "user", "content": "real string"}
-    ]
+    assert drop_empty_content_messages(msgs) == [{"role": "user", "content": "real string"}]
 
 
 def test_default_role_is_user_when_missing():
     msgs = [{"content": "no role here"}]
-    assert drop_empty_content_messages(msgs) == [
-        {"role": "user", "content": "no role here"}
-    ]
+    assert drop_empty_content_messages(msgs) == [{"role": "user", "content": "no role here"}]
 
 
 def test_empty_input_returns_empty_list():

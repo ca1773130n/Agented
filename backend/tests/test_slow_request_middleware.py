@@ -1,4 +1,5 @@
 """v0.6.2: SlowRequestMiddleware tests."""
+
 import asyncio
 import logging
 
@@ -21,6 +22,7 @@ class _StubSend:
 class TestSlowRequestMiddleware:
     async def test_fast_request_does_not_log(self, monkeypatch, caplog):
         from app_litestar.middleware import SlowRequestMiddleware
+
         monkeypatch.setenv("SLOW_REQUEST_THRESHOLD_MS", "5000")  # high
         mw = SlowRequestMiddleware()
 
@@ -34,6 +36,7 @@ class TestSlowRequestMiddleware:
 
     async def test_slow_request_logs_warning(self, monkeypatch, caplog):
         from app_litestar.middleware import SlowRequestMiddleware
+
         monkeypatch.setenv("SLOW_REQUEST_THRESHOLD_MS", "10")  # low — easy trigger
         mw = SlowRequestMiddleware()
 
@@ -51,6 +54,7 @@ class TestSlowRequestMiddleware:
 
     async def test_non_http_scope_is_no_op(self):
         from app_litestar.middleware import SlowRequestMiddleware
+
         mw = SlowRequestMiddleware()
         sender = _StubSend()
 

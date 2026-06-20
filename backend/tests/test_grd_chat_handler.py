@@ -40,12 +40,8 @@ def spy_psm(monkeypatch):
     monkeypatch.setattr(
         eth.ProjectSessionManager, "create_session", staticmethod(fake_create_session)
     )
-    monkeypatch.setattr(
-        eth.ProjectSessionManager, "get_session_info", staticmethod(fake_info)
-    )
-    monkeypatch.setattr(
-        eth.ProjectSessionManager, "stop_session", staticmethod(fake_stop)
-    )
+    monkeypatch.setattr(eth.ProjectSessionManager, "get_session_info", staticmethod(fake_info))
+    monkeypatch.setattr(eth.ProjectSessionManager, "stop_session", staticmethod(fake_stop))
     from app.services import project_workspace_service as pws
 
     monkeypatch.setattr(
@@ -90,9 +86,7 @@ def test_start_default_quick_command(spy_psm):
 
 def test_start_maps_intent_to_command(spy_psm):
     handler = GrdChatSessionHandler()
-    handler.start(
-        {"project_id": "p", "task": "study X", "intent": "research"}
-    )
+    handler.start({"project_id": "p", "task": "study X", "intent": "research"})
     assert spy_psm["create"]["cmd"][-1] == '/grd:research "study X"'
 
     handler.start({"project_id": "p", "task": "lay it out", "intent": "plan"})
@@ -113,7 +107,7 @@ def test_task_quotes_and_newlines_are_escaped(spy_psm):
     assert len(cmd) == 6
     # Raw closing-quote-then-content breakout sequence is neutralized:
     # the embedded `"` is backslash-escaped and the newline is `\n`.
-    assert prompt == '/grd:quick ' + json.dumps(malicious)
+    assert prompt == "/grd:quick " + json.dumps(malicious)
     assert '\\"' in prompt  # embedded quote escaped
     assert "\n" not in prompt  # literal newline replaced by \n escape
 
@@ -124,9 +118,7 @@ def test_explicit_grd_command_normalized(spy_psm):
     handler.start({"project_id": "p", "task": "go", "grd_command": "quick"})
     assert spy_psm["create"]["cmd"][-1] == '/grd:quick "go"'
     # An already-prefixed value must not double-prefix.
-    handler.start(
-        {"project_id": "p", "task": "go", "grd_command": "/grd:research"}
-    )
+    handler.start({"project_id": "p", "task": "go", "grd_command": "/grd:research"})
     assert spy_psm["create"]["cmd"][-1] == '/grd:research "go"'
 
 

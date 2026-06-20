@@ -49,16 +49,12 @@ class TestForgotPasswordEndpoint:
     def test_returns_204_for_existing_email(self, isolated_db):
         create_user("forgot@example.com")
         with _client(isolated_db) as ls:
-            resp = ls.post(
-                "/api/auth/forgot-password", json={"email": "forgot@example.com"}
-            )
+            resp = ls.post("/api/auth/forgot-password", json={"email": "forgot@example.com"})
         assert resp.status_code == 204
 
     def test_returns_204_for_unknown_email_no_enumeration(self, isolated_db):
         with _client(isolated_db) as ls:
-            resp = ls.post(
-                "/api/auth/forgot-password", json={"email": "nobody@example.com"}
-            )
+            resp = ls.post("/api/auth/forgot-password", json={"email": "nobody@example.com"})
         assert resp.status_code == 204
 
 

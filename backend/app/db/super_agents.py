@@ -5,7 +5,7 @@ import sqlite3
 from typing import List, Optional
 
 from .connection import get_connection
-from .ids import _get_unique_session_id, _get_unique_super_agent_id
+from .ids import _get_unique_super_agent_id, _get_unique_super_agent_session_id
 
 logger = logging.getLogger(__name__)
 
@@ -248,7 +248,7 @@ def add_super_agent_session(
     """Add a new session for a super agent. Returns session ID on success, None on failure."""
     with get_connection() as conn:
         try:
-            sess_id = _get_unique_session_id(conn)
+            sess_id = _get_unique_super_agent_session_id(conn)
             conn.execute(
                 """
                 INSERT INTO super_agent_sessions

@@ -2,8 +2,6 @@
 
 import os
 
-import pytest
-
 from app.services.skill_discovery_service import SkillDiscoveryService, get_playground_working_dir
 
 

@@ -188,9 +188,7 @@ def test_create_session_non_yolo_requires_account(isolated_db, patch_direct_star
     assert resp.status_code == 403
 
 
-def test_create_session_non_yolo_with_account_not_in_whitelist(
-    isolated_db, patch_direct_start
-):
+def test_create_session_non_yolo_with_account_not_in_whitelist(isolated_db, patch_direct_start):
     _seed_project()
     add_allowed_account("proj-w", "bkd-aaa")
     with _client() as c:
@@ -206,9 +204,7 @@ def test_create_session_non_yolo_with_account_not_in_whitelist(
     assert resp.status_code == 403
 
 
-def test_create_session_non_yolo_with_whitelisted_account_succeeds(
-    isolated_db, patch_direct_start
-):
+def test_create_session_non_yolo_with_whitelisted_account_succeeds(isolated_db, patch_direct_start):
     _seed_project()
     add_allowed_account("proj-w", "bkd-aaa")
     with _client() as c:
@@ -226,9 +222,7 @@ def test_create_session_non_yolo_with_whitelisted_account_succeeds(
     assert "--dangerously-skip-permissions" not in patch_direct_start["cmd"]
 
 
-def test_create_session_yolo_bypasses_whitelist(
-    isolated_db, patch_direct_start
-):
+def test_create_session_yolo_bypasses_whitelist(isolated_db, patch_direct_start):
     """Yolo sessions skip the whitelist check entirely, even with no
     accounts whitelisted on the project."""
     _seed_project()

@@ -30,7 +30,6 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Optional
 
-
 _DEFAULT_TIMEOUT_SEC = 300  # 5 minutes
 
 
@@ -51,9 +50,7 @@ class PermissionPromptRegistry:
     _lock = threading.Lock()
 
     @classmethod
-    def register(
-        cls, session_id: str, tool_name: str, tool_input: dict
-    ) -> _PendingRequest:
+    def register(cls, session_id: str, tool_name: str, tool_input: dict) -> _PendingRequest:
         """Create a new pending request and return its handle.
 
         Caller (the hook endpoint) then ``wait()``s on the event and

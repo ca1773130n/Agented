@@ -112,9 +112,7 @@ def instance_id() -> dict[str, Any]:
     from app.database import get_connection
 
     with get_connection() as conn:
-        row = conn.execute(
-            "SELECT value FROM app_meta WHERE key = 'instance_id'"
-        ).fetchone()
+        row = conn.execute("SELECT value FROM app_meta WHERE key = 'instance_id'").fetchone()
     return {"instance_id": row[0] if row else None}
 
 
@@ -143,15 +141,11 @@ def setup_status() -> dict[str, Any]:
 
     try:
         with get_connection() as conn:
-            row = conn.execute(
-                "SELECT value FROM app_meta WHERE key = 'instance_id'"
-            ).fetchone()
+            row = conn.execute("SELECT value FROM app_meta WHERE key = 'instance_id'").fetchone()
             if row:
                 result["instance_id"] = row[0]
 
-            row = conn.execute(
-                "SELECT value FROM settings WHERE key = 'workspace_root'"
-            ).fetchone()
+            row = conn.execute("SELECT value FROM settings WHERE key = 'workspace_root'").fetchone()
             result["has_workspace"] = bool(row and (row[0] or "").strip())
 
             row = conn.execute(
@@ -229,11 +223,7 @@ class SetupBody(Struct):
 def setup(data: SetupBody, request: Request) -> dict[str, Any]:
     """Generate the first admin API key. Bootstrap-only (rejects when
     any user_roles row already exists). Rate-limited per source IP."""
-    ip = (
-        request.client.host
-        if request.client and request.client.host
-        else "unknown"
-    )
+    ip = request.client.host if request.client and request.client.host else "unknown"
     now = time.monotonic()
     hits = _setup_rate_limit.setdefault(ip, [])
     hits[:] = [t for t in hits if now - t < _SETUP_RATE_WINDOW]

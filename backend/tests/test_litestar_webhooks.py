@@ -18,15 +18,12 @@ from app_litestar.routes.webhooks import (
     webhook_router,
 )
 
-
 _TEST_SECRET = "test-secret-shhh"
 
 
 def _client(monkeypatch=None):
     if monkeypatch is not None:
-        monkeypatch.setattr(
-            "app_litestar.routes.webhooks.GITHUB_WEBHOOK_SECRET", _TEST_SECRET
-        )
+        monkeypatch.setattr("app_litestar.routes.webhooks.GITHUB_WEBHOOK_SECRET", _TEST_SECRET)
     return create_test_client(
         route_handlers=[github_webhook_router, oauth_callback_router, webhook_router],
         dependencies={"caller": provide_caller},
@@ -35,10 +32,7 @@ def _client(monkeypatch=None):
 
 def _signed_request(payload: dict, event: str, monkeypatch):
     body = json.dumps(payload).encode()
-    sig = (
-        "sha256="
-        + hmac.new(_TEST_SECRET.encode(), body, hashlib.sha256).hexdigest()
-    )
+    sig = "sha256=" + hmac.new(_TEST_SECRET.encode(), body, hashlib.sha256).hexdigest()
     headers = {
         "X-Hub-Signature-256": sig,
         "X-GitHub-Event": event,

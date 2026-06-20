@@ -24,12 +24,12 @@ def _make_active_goal_session(session_id="gls-reset", project_id="proj-reset"):
     set_goal_loop_config(session_id, {"goal": "make tests pass", "max_iterations": 10})
 
 
-def test_advance_iteration_spawns_a_fresh_process(monkeypatch, isolated_db):
-    """``context_policy=reset`` must START A NEW claude OS process (clean context
-    window) — NOT write a prompt into the same long-lived process. Assert the
-    fresh-spawn recipe (``create_session`` with a new session) is what runs, and
-    that no continue-prompt is squirted into the origin process via ``send_input``.
-    """
+def test_advance_iteration_spawns_fresh_process_reads_stable_id_subscribes_before_seed(
+    monkeypatch, isolated_db
+):
+    """``context_policy=reset`` must START A NEW claude process (clean context),
+    reading resume-context + the origin row from the STABLE id, and SUBSCRIBE to
+    the fresh child BEFORE seeding it (so a fast first turn can't be missed)."""
     _make_active_goal_session()
     created = {}
     monkeypatch.setattr(
@@ -37,36 +37,79 @@ def test_advance_iteration_spawns_a_fresh_process(monkeypatch, isolated_db):
         "create_session",
         lambda **kw: created.update(kw) or "gls-reset-child",
     )
-    sent_to = []
+    order = []
+    monkeypatch.setattr(
+        glr.ProjectSessionManager,
+        "subscribe_raw",
+        lambda sid: order.append(("subscribe", sid)) or ["queue-obj"],
+    )
     monkeypatch.setattr(
         glr.ProjectSessionManager,
         "send_input",
-        lambda session_id, payload: sent_to.append(session_id) or True,
+        lambda sid, payload: order.append(("send", sid)) or True,
     )
     stopped = []
     monkeypatch.setattr(
         glr.ProjectSessionManager, "stop_session", lambda sid, *a, **k: stopped.append(sid) or True
     )
 
-    new_sid = glr._advance_iteration(session_id="gls-reset", cwd="/tmp", goal="make tests pass")
+    new_sid, new_queue = glr._advance_iteration(
+        live_id="gls-reset", stable_id="gls-reset", cwd="/tmp", goal="make tests pass"
+    )
 
-    # A genuinely fresh, no-PTY, stream-json claude process was created.
     assert new_sid == "gls-reset-child"
-    assert created, "create_session must be called to spawn a fresh context window"
-    assert created.get("use_pty") is False
-    assert created.get("stream_json") is True
+    assert new_queue == ["queue-obj"]
+    assert created.get("use_pty") is False and created.get("stream_json") is True
     assert created.get("execution_type") == "goal_loop"
-    assert created["cmd"][0] == "claude"
-    # The carried-context process is torn down (its conversation history is what
-    # we discard), and the kickoff prompt is delivered ONLY to the fresh child —
-    # never re-injected into the origin's retained context window.
-    assert "gls-reset" in stopped, "the carried-context origin process must be stopped"
-    assert sent_to == ["gls-reset-child"], "seed prompt must go to the fresh child only"
+    # subscribe to the fresh child happens BEFORE the seed prompt is sent to it.
+    sub_idx = order.index(("subscribe", "gls-reset-child"))
+    send_idx = order.index(("send", "gls-reset-child"))
+    assert sub_idx < send_idx, "must subscribe to the fresh child before seeding it"
+    assert "gls-reset" in stopped, "the carried-context live process must be stopped"
+
+
+def test_advance_iteration_reads_stable_id_not_live_id(monkeypatch, isolated_db):
+    """On the 2nd+ reset, live_id is a previous (empty) child; resume-context and
+    the origin row must be read from the STABLE id, not the live child."""
+    _make_active_goal_session(session_id="origin-x")
+    seen = {}
+    monkeypatch.setattr(glr, "_build_resume_context", lambda sid: seen.update(resume=sid) or "CTX")
+    monkeypatch.setattr(glr.ProjectSessionManager, "create_session", lambda **kw: "child-2")
+    monkeypatch.setattr(glr.ProjectSessionManager, "subscribe_raw", lambda sid: ["q"])
+    monkeypatch.setattr(glr.ProjectSessionManager, "send_input", lambda sid, p: True)
+    monkeypatch.setattr(glr.ProjectSessionManager, "stop_session", lambda sid, *a, **k: True)
+
+    glr._advance_iteration(live_id="child-1", stable_id="origin-x", cwd="/tmp", goal="g")
+    assert seen["resume"] == "origin-x", "resume-context must come from the stable id"
+
+
+def test_advance_iteration_forwards_operator_note_into_seed(monkeypatch, isolated_db):
+    """An operator note (carried on ``reason``) must reach the fresh child's seed —
+    it would otherwise be lost on reset."""
+    _make_active_goal_session(session_id="origin-n")
+    monkeypatch.setattr(glr, "_build_resume_context", lambda sid: "")
+    monkeypatch.setattr(glr.ProjectSessionManager, "create_session", lambda **kw: "child-n")
+    monkeypatch.setattr(glr.ProjectSessionManager, "subscribe_raw", lambda sid: ["q"])
+    monkeypatch.setattr(glr.ProjectSessionManager, "stop_session", lambda sid, *a, **k: True)
+    seeded = {}
+    monkeypatch.setattr(
+        glr,
+        "_send_initial",
+        lambda sid, goal, **kw: seeded.update(resume_context=kw.get("resume_context")),
+    )
+    glr._advance_iteration(
+        live_id="origin-n",
+        stable_id="origin-n",
+        cwd="/tmp",
+        goal="g",
+        reason="Operator note: focus on the parser",
+    )
+    assert "focus on the parser" in (seeded.get("resume_context") or "")
 
 
 def test_advance_iteration_falls_back_to_continue_when_row_missing(monkeypatch, isolated_db):
-    """If the origin session row is gone we cannot spawn a faithful fresh child;
-    degrade to a continue prompt rather than crashing the loop."""
+    """If the origin (stable) session row is gone we cannot spawn a faithful fresh
+    child; degrade to a continue prompt rather than crashing the loop."""
     monkeypatch.setattr(
         glr.ProjectSessionManager,
         "create_session",
@@ -76,8 +119,10 @@ def test_advance_iteration_falls_back_to_continue_when_row_missing(monkeypatch, 
     monkeypatch.setattr(
         glr, "_send_continue", lambda *a, **k: calls.__setitem__("continue", calls["continue"] + 1)
     )
-    new_sid = glr._advance_iteration(session_id="missing-sess", cwd="/tmp", goal="g")
-    assert new_sid is None
+    new_sid, new_queue = glr._advance_iteration(
+        live_id="missing-sess", stable_id="missing-sess", cwd="/tmp", goal="g"
+    )
+    assert new_sid is None and new_queue is None
     assert calls["continue"] == 1
 
 
@@ -89,11 +134,12 @@ def test_carry_uses_send_continue(monkeypatch):
     monkeypatch.setattr(
         glr,
         "_advance_iteration",
-        lambda *a, **k: calls.__setitem__("reset", calls["reset"] + 1),
+        lambda *a, **k: calls.__setitem__("reset", calls["reset"] + 1) or (None, None),
         raising=False,
     )
-    glr._next_iteration(policy="carry", session_id="s", cwd="/tmp", goal="g")
+    out = glr._next_iteration(policy="carry", live_id="s", stable_id="s", cwd="/tmp", goal="g")
     assert calls["continue"] == 1 and calls["reset"] == 0
+    assert out == (None, None)
 
 
 def test_reset_spawns_fresh_session(monkeypatch):
@@ -102,7 +148,10 @@ def test_reset_spawns_fresh_session(monkeypatch):
         glr, "_send_continue", lambda *a, **k: calls.__setitem__("continue", calls["continue"] + 1)
     )
     monkeypatch.setattr(
-        glr, "_advance_iteration", lambda *a, **k: calls.__setitem__("reset", calls["reset"] + 1)
+        glr,
+        "_advance_iteration",
+        lambda *a, **k: calls.__setitem__("reset", calls["reset"] + 1) or ("child", ["q"]),
     )
-    glr._next_iteration(policy="reset", session_id="s", cwd="/tmp", goal="g")
+    out = glr._next_iteration(policy="reset", live_id="s", stable_id="s", cwd="/tmp", goal="g")
     assert calls["reset"] == 1 and calls["continue"] == 0
+    assert out == ("child", ["q"])

@@ -24,8 +24,7 @@ def test_indices_exist(isolated_db):
         idx = {
             r["name"]
             for r in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='index' "
-                "AND tbl_name='trigger_events'"
+                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='trigger_events'"
             )
         }
     assert "idx_trigger_events_trigger_id" in idx

@@ -11,13 +11,14 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from app.services import tesserae_integration as ti
 
 
 def _seed_project_with_tesserae(
-    project_id: str, *, root: Path | None = None, name: str = "Test",
+    project_id: str,
+    *,
+    root: Path | None = None,
+    name: str = "Test",
 ) -> str:
     from app.db.connection import get_connection
 
@@ -25,25 +26,23 @@ def _seed_project_with_tesserae(
         conn.execute(
             "INSERT OR IGNORE INTO projects (id, name, local_path, "
             "tesserae_project_root) VALUES (?, ?, ?, ?)",
-            (project_id, name, str(root) if root else None,
-             str(root) if root else None),
+            (project_id, name, str(root) if root else None, str(root) if root else None),
         )
         conn.commit()
     return project_id
 
 
 def _seed_super_agent_session(
-    session_id: str, *, project_id: str | None = None,
+    session_id: str,
+    *,
+    project_id: str | None = None,
     status: str = "completed",
     conversation_log: str = "[]",
 ) -> None:
     from app.db.connection import get_connection
 
     with get_connection() as conn:
-        conn.execute(
-            "INSERT OR IGNORE INTO super_agents (id, name) "
-            "VALUES ('sa-tess', 'SA')"
-        )
+        conn.execute("INSERT OR IGNORE INTO super_agents (id, name) VALUES ('sa-tess', 'SA')")
         conn.execute(
             "INSERT INTO super_agent_sessions (id, super_agent_id, "
             "status, project_id, conversation_log, started_at) "
@@ -54,6 +53,7 @@ def _seed_super_agent_session(
 
 
 # ---------- project linkage --------------------------------------------------
+
 
 def test_get_tesserae_root_returns_none_when_unset(isolated_db):
     _seed_project_with_tesserae("proj-no-tess", root=None)
@@ -76,23 +76,29 @@ def test_set_tesserae_root_is_idempotent(isolated_db, tmp_path):
 
 # ---------- session normalization -------------------------------------------
 
+
 def test_normalize_super_agent_extracts_message_count_and_preview():
-    log = json.dumps([
-        {"role": "user", "content": "hello"},
-        {"role": "assistant", "content": "world this is the assistant"},
-        {"role": "user", "content": "ok"},
-    ])
-    out = ti._normalize_super_agent_session({
-        "conversation_log": log,
-        "started_at": "2026-01-01",
-        "ended_at": "2026-01-02",
-        "super_agent_id": "sa-1",
-    })
+    log = json.dumps(
+        [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "world this is the assistant"},
+            {"role": "user", "content": "ok"},
+        ]
+    )
+    out = ti._normalize_super_agent_session(
+        {
+            "conversation_log": log,
+            "started_at": "2026-01-01",
+            "ended_at": "2026-01-02",
+            "super_agent_id": "sa-1",
+        }
+    )
     assert out["message_count"] == 3
     assert "world this is the assistant" in out["redacted_preview"]
 
 
 # ---------- on_session_complete handler -------------------------------------
+
 
 def test_handler_noop_for_project_without_tesserae(isolated_db):
     """Tesserae unset → handler must NOT call the CLI."""
@@ -100,8 +106,11 @@ def test_handler_noop_for_project_without_tesserae(isolated_db):
     _seed_super_agent_session("sess-1", project_id="proj-noop")
     with patch.object(ti, "subprocess") as mock_sp:
         ti.on_session_complete(
-            "super_agent", "sess-1", "proj-noop",
-            "completed", None,
+            "super_agent",
+            "sess-1",
+            "proj-noop",
+            "completed",
+            None,
         )
     mock_sp.run.assert_not_called()
 
@@ -112,11 +121,14 @@ def test_handler_skips_failed_outcomes(isolated_db, tmp_path):
     Tesserae."""
     (tmp_path / ".tesserae").mkdir()
     _seed_project_with_tesserae("proj-fail", root=tmp_path)
-    _seed_super_agent_session("sess-fail", project_id="proj-fail",
-                              status="terminated")
+    _seed_super_agent_session("sess-fail", project_id="proj-fail", status="terminated")
     with patch.object(ti, "subprocess") as mock_sp:
         ti.on_session_complete(
-            "super_agent", "sess-fail", "proj-fail", "terminated", None,
+            "super_agent",
+            "sess-fail",
+            "proj-fail",
+            "terminated",
+            None,
         )
     mock_sp.run.assert_not_called()
 
@@ -127,11 +139,12 @@ def test_handler_invokes_cli_with_normalized_batch(isolated_db, tmp_path):
     batch."""
     (tmp_path / ".tesserae").mkdir()
     _seed_project_with_tesserae("proj-go", root=tmp_path, name="GoProject")
-    log = json.dumps([
-        {"role": "assistant", "content": "I learned the layout"},
-    ])
-    _seed_super_agent_session("sess-go", project_id="proj-go",
-                              conversation_log=log)
+    log = json.dumps(
+        [
+            {"role": "assistant", "content": "I learned the layout"},
+        ]
+    )
+    _seed_super_agent_session("sess-go", project_id="proj-go", conversation_log=log)
 
     class _FakeResult:
         returncode = 0
@@ -150,7 +163,11 @@ def test_handler_invokes_cli_with_normalized_batch(isolated_db, tmp_path):
 
     with patch.object(ti.subprocess, "run", side_effect=_fake_run):
         ti.on_session_complete(
-            "super_agent", "sess-go", "proj-go", "completed", None,
+            "super_agent",
+            "sess-go",
+            "proj-go",
+            "completed",
+            None,
         )
 
     # Modern top-level form (0.9.0 retired `tesserae project sessions import`).
@@ -176,8 +193,11 @@ def test_handler_swallows_cli_missing(isolated_db, tmp_path):
     with patch.object(ti.subprocess, "run", side_effect=FileNotFoundError("no tesserae")):
         # Must not raise.
         ti.on_session_complete(
-            "super_agent", "sess-no-cli", "proj-no-cli",
-            "completed", None,
+            "super_agent",
+            "sess-no-cli",
+            "proj-no-cli",
+            "completed",
+            None,
         )
 
 
@@ -195,8 +215,8 @@ def test_set_tesserae_root_auto_binds_mcp_server(isolated_db, tmp_path):
     with get_connection() as conn:
         # mcp_servers row exists with the expected name + command
         srv = conn.execute(
-            "SELECT id, name, command, args FROM mcp_servers "
-            "WHERE name = ?", ("tesserae-proj-bind",),
+            "SELECT id, name, command, args FROM mcp_servers WHERE name = ?",
+            ("tesserae-proj-bind",),
         ).fetchone()
         assert srv is not None
         assert srv["command"] == ti._TESSERAE_MCP_COMMAND
@@ -275,6 +295,7 @@ def test_export_skips_when_tesserae_root_uninitialized(isolated_db, tmp_path):
 # ── 0.9.0 migration: init / ingest / build-site use MODERN top-level argv ──
 # (Tesserae 0.9.0 retired the `tesserae project <cmd>` group; these regress to
 #  exit-2 stubs if the `project` prefix ever creeps back in.)
+
 
 def _capture_argv(monkeypatch):
     cap: dict = {}

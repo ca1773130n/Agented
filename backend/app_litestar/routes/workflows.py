@@ -41,7 +41,6 @@ from app.db.owned_entities import get_for_user
 
 from ..auth import Caller
 
-
 # ---------------------------------------------------------------------------
 # CRUD
 # ---------------------------------------------------------------------------
@@ -100,9 +99,7 @@ def validate_workflow_endpoint(data: dict, caller: Caller) -> dict[str, Any]:
         raise ClientException(detail="JSON body required")
     is_valid, errors = validate_workflow_dag(data.get("graph", {}))
     if not is_valid:
-        raise HTTPException(
-            status_code=400, detail={"valid": False, "errors": errors}
-        )
+        raise HTTPException(status_code=400, detail={"valid": False, "errors": errors})
     return {"valid": True, "errors": errors}
 
 
@@ -116,9 +113,7 @@ def get_workflow_endpoint(workflow_id: str, caller: Caller) -> dict[str, Any]:
 
 
 @put("/{workflow_id:str}", sync_to_thread=False)
-def update_workflow_endpoint(
-    workflow_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def update_workflow_endpoint(workflow_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     if not data:
         raise ClientException(detail="JSON body required")
@@ -160,9 +155,7 @@ def delete_workflow_endpoint(workflow_id: str, caller: Caller) -> dict[str, Any]
 
 
 @post("/{workflow_id:str}/versions", sync_to_thread=False)
-def create_version(
-    workflow_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def create_version(workflow_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     if not data:
         raise ClientException(detail="JSON body required")
@@ -184,9 +177,7 @@ def list_versions(workflow_id: str, caller: Caller) -> dict[str, Any]:
 
 
 @get("/{workflow_id:str}/versions/latest", sync_to_thread=False)
-def get_latest_version_endpoint(
-    workflow_id: str, caller: Caller
-) -> dict[str, Any]:
+def get_latest_version_endpoint(workflow_id: str, caller: Caller) -> dict[str, Any]:
     del caller
     version = get_latest_workflow_version(workflow_id)
     if not version:
@@ -200,9 +191,7 @@ def get_latest_version_endpoint(
 
 
 @post("/{workflow_id:str}/run", status_code=202, sync_to_thread=False)
-def run_workflow(
-    workflow_id: str, data: dict, caller: Caller
-) -> dict[str, Any]:
+def run_workflow(workflow_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     del caller
     from app.services.workflow_execution_service import WorkflowExecutionService
 
@@ -211,9 +200,7 @@ def run_workflow(
         try:
             timeout_seconds = int(timeout_seconds)
             if timeout_seconds <= 0:
-                raise ClientException(
-                    detail="timeout_seconds must be a positive integer"
-                )
+                raise ClientException(detail="timeout_seconds must be a positive integer")
         except (TypeError, ValueError):
             raise ClientException(detail="timeout_seconds must be an integer") from None
 
@@ -240,9 +227,7 @@ def list_executions(workflow_id: str, caller: Caller) -> dict[str, Any]:
 
 
 @get("/executions/{execution_id:str}", sync_to_thread=False)
-def get_execution_detail(
-    execution_id: str, caller: Caller
-) -> dict[str, Any]:
+def get_execution_detail(execution_id: str, caller: Caller) -> dict[str, Any]:
     del caller
     execution = get_workflow_execution(execution_id)
     if not execution:
@@ -257,9 +242,7 @@ def get_execution_detail(
     "/{workflow_id:str}/executions/{execution_id:str}/cancel",
     sync_to_thread=False,
 )
-def cancel_execution(
-    workflow_id: str, execution_id: str, caller: Caller
-) -> dict[str, Any]:
+def cancel_execution(workflow_id: str, execution_id: str, caller: Caller) -> dict[str, Any]:
     del caller, workflow_id
     from app.services.workflow_execution_service import WorkflowExecutionService
 
@@ -273,18 +256,14 @@ def cancel_execution(
     media_type=MediaType.TEXT,
     sync_to_thread=False,
 )
-def stream_execution(
-    workflow_id: str, execution_id: str, caller: Caller
-) -> Stream:
+def stream_execution(workflow_id: str, execution_id: str, caller: Caller) -> Stream:
     del caller, workflow_id
     from app.services.workflow_execution_service import WorkflowExecutionService
 
     def generate():
         status = WorkflowExecutionService.get_execution_status(execution_id)
         if status is None:
-            yield (
-                f"data: {json.dumps({'type': 'error', 'message': 'Execution not found'})}\n\n"
-            )
+            yield (f"data: {json.dumps({'type': 'error', 'message': 'Execution not found'})}\n\n")
             return
 
         yield (
@@ -303,9 +282,7 @@ def stream_execution(
         if status["status"] in ("completed", "failed", "cancelled"):
             yield (
                 "data: "
-                + json.dumps(
-                    {"type": "execution_complete", "status": status["status"]}
-                )
+                + json.dumps({"type": "execution_complete", "status": status["status"]})
                 + "\n\n"
             )
             return
@@ -316,9 +293,7 @@ def stream_execution(
             current = WorkflowExecutionService.get_execution_status(execution_id)
             if current is None:
                 yield (
-                    "data: "
-                    + json.dumps({"type": "error", "message": "Execution lost"})
-                    + "\n\n"
+                    "data: " + json.dumps({"type": "error", "message": "Execution lost"}) + "\n\n"
                 )
                 return
             current_states = current.get("node_states", {})
@@ -347,9 +322,7 @@ def stream_execution(
             if current["status"] in ("completed", "failed", "cancelled"):
                 yield (
                     "data: "
-                    + json.dumps(
-                        {"type": "execution_complete", "status": current["status"]}
-                    )
+                    + json.dumps({"type": "execution_complete", "status": current["status"]})
                     + "\n\n"
                 )
                 return
@@ -367,9 +340,7 @@ def stream_execution(
 
 
 @get("/{workflow_id:str}/analytics", sync_to_thread=False)
-def workflow_analytics(
-    workflow_id: str, caller: Caller, days: int = 30
-) -> dict[str, Any]:
+def workflow_analytics(workflow_id: str, caller: Caller, days: int = 30) -> dict[str, Any]:
     del caller
     if not get_workflow(workflow_id):
         raise NotFoundException(detail="Workflow not found")
@@ -380,9 +351,7 @@ def workflow_analytics(
 
 
 @get("/executions/{execution_id:str}/timeline", sync_to_thread=False)
-def execution_timeline(
-    execution_id: str, caller: Caller
-) -> dict[str, Any]:
+def execution_timeline(execution_id: str, caller: Caller) -> dict[str, Any]:
     del caller
     execution = get_workflow_execution(execution_id)
     if not execution:
@@ -410,12 +379,8 @@ def approve_node(
     from app.services.workflow_execution_service import WorkflowExecutionService
 
     resolved_by = (data or {}).get("resolved_by") if data else None
-    if not WorkflowExecutionService.approve_node(
-        execution_id, node_id, resolved_by=resolved_by
-    ):
-        raise NotFoundException(
-            detail="Approval not found or node is not pending approval"
-        )
+    if not WorkflowExecutionService.approve_node(execution_id, node_id, resolved_by=resolved_by):
+        raise NotFoundException(detail="Approval not found or node is not pending approval")
     return {"message": "Node approved", "execution_id": execution_id}
 
 
@@ -430,12 +395,8 @@ def reject_node(
     from app.services.workflow_execution_service import WorkflowExecutionService
 
     resolved_by = (data or {}).get("resolved_by") if data else None
-    if not WorkflowExecutionService.reject_node(
-        execution_id, node_id, resolved_by=resolved_by
-    ):
-        raise NotFoundException(
-            detail="Approval not found or node is not pending approval"
-        )
+    if not WorkflowExecutionService.reject_node(execution_id, node_id, resolved_by=resolved_by):
+        raise NotFoundException(detail="Approval not found or node is not pending approval")
     return {"message": "Node rejected", "execution_id": execution_id}
 
 
@@ -454,9 +415,7 @@ def register_trigger(workflow_id: str, caller: Caller) -> dict[str, Any]:
         raise NotFoundException(detail="Workflow not found")
     trigger_type = workflow.get("trigger_type", "manual")
     if trigger_type == "manual":
-        raise ClientException(
-            detail="Manual workflows do not have registerable triggers"
-        )
+        raise ClientException(detail="Manual workflows do not have registerable triggers")
     config_str = workflow.get("trigger_config")
     if not config_str:
         raise ClientException(detail="Workflow has no trigger_config")
@@ -485,9 +444,7 @@ def unregister_trigger(workflow_id: str, caller: Caller) -> dict[str, Any]:
         raise NotFoundException(detail="Workflow not found")
     trigger_type = workflow.get("trigger_type", "manual")
     if trigger_type == "manual":
-        raise ClientException(
-            detail="Manual workflows do not have registerable triggers"
-        )
+        raise ClientException(detail="Manual workflows do not have registerable triggers")
     try:
         WorkflowTriggerService.unregister_trigger(workflow_id, trigger_type)
     except ValueError as exc:

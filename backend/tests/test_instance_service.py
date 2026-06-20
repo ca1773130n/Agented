@@ -10,20 +10,16 @@ from app.db.project_sa_instances import (
     create_project_sa_instance,
     get_project_sa_instance,
     get_project_sa_instance_by_project_and_sa,
-    update_project_sa_instance,
 )
 from app.db.project_team_instances import get_project_team_instance
 from app.db.projects import create_project, update_project
 from app.db.super_agents import (
-    add_super_agent_session,
     create_super_agent,
-    get_sessions_for_instance,
     get_super_agent_session,
 )
 from app.db.teams import add_team_member, create_team
 from app.services.instance_service import InstanceService
 from app.services.super_agent_session_service import SuperAgentSessionService
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -371,7 +367,7 @@ class TestEnsureWorktrees:
         """ensure_worktrees returns 0 when all instances have worktrees."""
         proj_id = _create_project_with_path()
         sa_id = _create_sa()
-        psa_id = create_project_sa_instance(proj_id, sa_id, worktree_path="/already/set")
+        create_project_sa_instance(proj_id, sa_id, worktree_path="/already/set")
 
         created = InstanceService.ensure_worktrees()
         assert created == 0

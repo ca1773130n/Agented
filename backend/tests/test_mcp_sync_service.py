@@ -1,14 +1,12 @@
 """Unit tests for McpSyncService -- focused on sync logic, error handling, and edge cases."""
 
 import json
-import os
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from app.services.mcp_sync_service import McpSyncService
-
 
 # ---------------------------------------------------------------------------
 # transform_to_claude
@@ -280,7 +278,7 @@ class TestSyncProject:
         new_agented = {"new-srv": {"_agented_managed": True, "command": "new"}}
 
         with patch.object(McpSyncService, "build_merged_config", return_value=new_agented):
-            result = McpSyncService.sync_project("proj-1", str(tmp_path), dry_run=False)
+            McpSyncService.sync_project("proj-1", str(tmp_path), dry_run=False)
 
         content = json.loads((tmp_path / ".mcp.json").read_text())
         assert "user-custom" in content

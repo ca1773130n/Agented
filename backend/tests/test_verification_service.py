@@ -21,7 +21,9 @@ def _make_execution(execution_id: str = "exec-1") -> None:
 
 def test_record_writes_a_verification_row():
     _make_execution()
-    rid = VerificationService.record("exec-1", "no secrets", status="passed", evidence_ref="scan.json")
+    rid = VerificationService.record(
+        "exec-1", "no secrets", status="passed", evidence_ref="scan.json"
+    )
     assert rid > 0
     rows = vr.list_verifications("exec-1")
     assert rows[0]["claim"] == "no secrets"

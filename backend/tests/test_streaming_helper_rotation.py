@@ -246,7 +246,10 @@ def test_no_registered_account_surfaces_error_not_queue(monkeypatch, isolated_db
     monkeypatch.setattr(runner, "resolve_account_config_dir", lambda aid, backend: None)
 
     sh.run_streaming_response(
-        session_id="sess-nv", super_agent_id="psa-nv", backend="claude", account_id=None,
+        session_id="sess-nv",
+        super_agent_id="psa-nv",
+        backend="claude",
+        account_id=None,
     )
 
     kinds = [k for k, _ in deltas]

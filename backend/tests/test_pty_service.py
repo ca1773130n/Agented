@@ -10,10 +10,7 @@ Covers:
 - Error handling (OSError, fork failure, process crashes)
 """
 
-import re
-from unittest.mock import MagicMock, call, patch
-
-import pytest
+from unittest.mock import patch
 
 from app.services.pty_service import (
     PtyRunner,
@@ -22,7 +19,6 @@ from app.services.pty_service import (
     _read_until_done,
     strip_ansi,
 )
-
 
 # =============================================================================
 # strip_ansi

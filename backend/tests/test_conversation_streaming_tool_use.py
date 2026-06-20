@@ -8,16 +8,13 @@ Covers:
 
 from __future__ import annotations
 
-import json
-from unittest.mock import MagicMock, patch
-
 from app.services.conversation_streaming import (
     ToolUseEvent,
     _extract_tool_uses_from_event,
 )
 
-
 # ---------- _extract_tool_uses_from_event ----------------------------------
+
 
 def test_extract_tool_uses_from_assistant_event():
     """Claude CLI emits ``type=assistant`` events with mixed content;
@@ -100,6 +97,7 @@ def test_extract_tool_uses_skips_blocks_with_missing_name():
 
 # ---------- ToolUseEvent.to_dict --------------------------------------------
 
+
 def test_tool_use_event_to_dict_round_trips_fields():
     evt = ToolUseEvent(
         name="tesserae_ask",
@@ -118,6 +116,7 @@ def test_tool_use_event_to_dict_round_trips_fields():
 
 # ---------- Skill/Plugin filter — text-only callers don't accumulate
 #            ToolUseEvent objects into their response string -----------------
+
 
 def test_isinstance_filter_drops_tool_use_events():
     """SkillConversationService + PluginConversationService both

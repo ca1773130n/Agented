@@ -8,20 +8,27 @@ from typing import Any, Optional
 from .connection import get_connection
 from .ids import generate_id
 
+VALID_KINDS = frozenset(
+    {
+        "user_preference",
+        "discovered_procedure",
+        "tool_pattern",
+        "constraint",
+        "domain_fact",
+        "failure_root_cause",
+        "success_pattern",
+    }
+)
 
-VALID_KINDS = frozenset({
-    "user_preference",
-    "discovered_procedure",
-    "tool_pattern",
-    "constraint",
-    "domain_fact",
-    "failure_root_cause",
-    "success_pattern",
-})
-
-VALID_TARGETS = frozenset({
-    "memory", "rule", "skill", "knowledge_graph", "claude_md",
-})
+VALID_TARGETS = frozenset(
+    {
+        "memory",
+        "rule",
+        "skill",
+        "knowledge_graph",
+        "claude_md",
+    }
+)
 
 
 def insert_many(takeaways: list[dict[str, Any]]) -> list[str]:
@@ -38,19 +45,21 @@ def insert_many(takeaways: list[dict[str, Any]]) -> list[str]:
             raise ValueError(f"unknown suggested_target: {target!r}")
         tk_id = generate_id("tk")
         ids.append(tk_id)
-        rows.append((
-            tk_id,
-            tk["session_kind"],
-            tk["session_id"],
-            tk.get("project_id"),
-            tk["kind"],
-            tk["content"],
-            float(tk.get("confidence", 0.5)),
-            json.dumps(tk.get("evidence", {}), default=str),
-            target,
-            json.dumps(tk.get("suggested_payload", {}), default=str),
-            tk["extractor_version"],
-        ))
+        rows.append(
+            (
+                tk_id,
+                tk["session_kind"],
+                tk["session_id"],
+                tk.get("project_id"),
+                tk["kind"],
+                tk["content"],
+                float(tk.get("confidence", 0.5)),
+                json.dumps(tk.get("evidence", {}), default=str),
+                target,
+                json.dumps(tk.get("suggested_payload", {}), default=str),
+                tk["extractor_version"],
+            )
+        )
     with get_connection() as conn:
         conn.executemany(
             """INSERT INTO session_takeaways
@@ -67,7 +76,8 @@ def insert_many(takeaways: list[dict[str, Any]]) -> list[str]:
 def get(takeaway_id: str) -> Optional[dict]:
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT * FROM session_takeaways WHERE id = ?", (takeaway_id,),
+            "SELECT * FROM session_takeaways WHERE id = ?",
+            (takeaway_id,),
         ).fetchone()
     return _row_to_dict(row) if row else None
 
@@ -124,7 +134,10 @@ def list_recent(
 
 
 def mark_applied(
-    takeaway_id: str, *, target: str, asset_id: Optional[str] = None,
+    takeaway_id: str,
+    *,
+    target: str,
+    asset_id: Optional[str] = None,
 ) -> None:
     with get_connection() as conn:
         conn.execute(

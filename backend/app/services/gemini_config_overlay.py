@@ -34,9 +34,7 @@ _PASSTHROUGH = (
 _OVERLAY_PREFIX = "agented-gemini-overlay"
 
 
-def prepare_session_overlay(
-    session_id: str, user_config_dir: str
-) -> Optional[str]:
+def prepare_session_overlay(session_id: str, user_config_dir: str) -> Optional[str]:
     return prepare_cli_overlay(
         session_id=session_id,
         user_config_dir=user_config_dir,
@@ -54,9 +52,7 @@ def apply_forge_bundle(overlay_dir: str, bundle: dict) -> None:
         return
     base = Path(overlay_dir)
     if not base.exists():
-        logger.warning(
-            "gemini_overlay: dir %s missing, skipping apply", overlay_dir
-        )
+        logger.warning("gemini_overlay: dir %s missing, skipping apply", overlay_dir)
         return
     _merge_settings_mcp(base, bundle.get("mcp_servers") or {})
     _write_commands(base, bundle.get("overlay_files") or {})
@@ -71,9 +67,7 @@ def _merge_settings_mcp(base: Path, mcp_servers: dict) -> None:
         try:
             settings = json.loads(settings_path.read_text())
         except (json.JSONDecodeError, OSError):
-            logger.warning(
-                "gemini_overlay: existing settings.json invalid, overwriting"
-            )
+            logger.warning("gemini_overlay: existing settings.json invalid, overwriting")
             settings = {}
     servers = settings.setdefault("mcpServers", {})
     if not isinstance(servers, dict):

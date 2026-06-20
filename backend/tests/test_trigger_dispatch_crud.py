@@ -1,4 +1,3 @@
-import pytest
 from app.db import triggers as trigger_db
 
 

@@ -119,6 +119,7 @@ from .routes.payload_transformers import payload_transformers_router
 from .routes.plugin_discovery import plugin_discovery_router
 from .routes.product_owner import product_owner_router
 from .routes.project_forge_bindings import forge_bindings_router
+from .routes.project_subagents import subagents_router
 from .routes.projects import projects_router
 from .routes.quality_ratings import quality_ratings_router
 from .routes.rbac import rbac_router
@@ -129,7 +130,6 @@ from .routes.rules_plugins_hooks_commands import (
     plugins_router,
     rules_router,
 )
-from .routes.project_subagents import subagents_router
 from .routes.scheduler import scheduler_router
 from .routes.skills import (
     skill_composer_router,

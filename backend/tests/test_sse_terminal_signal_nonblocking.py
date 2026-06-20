@@ -5,8 +5,8 @@ lock would hang finalization forever.
 
 from queue import Queue
 
-from app.services.execution_log_service import ExecutionLogService as ELS
 from app.services.backend_cli_service import BackendCLIService as BCS
+from app.services.execution_log_service import ExecutionLogService as ELS
 
 
 def test_execution_log_signal_end_does_not_block_on_full_queue():

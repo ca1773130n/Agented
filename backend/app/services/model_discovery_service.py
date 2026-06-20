@@ -24,9 +24,7 @@ class ModelDiscoveryService:
     """Discovers model lists from CLI tools and local config files."""
 
     @classmethod
-    def _discover_raw(
-        cls, backend_type: str, auth_method: str = "unknown"
-    ) -> list[str]:
+    def _discover_raw(cls, backend_type: str, auth_method: str = "unknown") -> list[str]:
         """Discover raw model IDs (before normalization) for a backend.
 
         v0.7.9: the ai-accounts sidecar is the authoritative source —
@@ -149,6 +147,7 @@ class ModelDiscoveryService:
         if not api_key:
             try:
                 from ..db.connection import get_connection
+
                 with get_connection() as conn:
                     row = conn.execute(
                         # Oldest admin key, deterministically (see sidecar sync).
@@ -170,7 +169,8 @@ class ModelDiscoveryService:
                 list_resp = client.get(f"{base_url}/api/v1/backends/?limit=200", headers=headers)
             if list_resp.status_code != 200:
                 logger.warning(
-                    "Sidecar list-backends returned %d", list_resp.status_code,
+                    "Sidecar list-backends returned %d",
+                    list_resp.status_code,
                 )
                 return None
             list_body = list_resp.json()
@@ -182,15 +182,13 @@ class ModelDiscoveryService:
             return None
 
         kind_accounts = [
-            a for a in sidecar_accounts
-            if isinstance(a, dict) and (a.get("kind") == backend_kind)
+            a for a in sidecar_accounts if isinstance(a, dict) and (a.get("kind") == backend_kind)
         ]
         # Prefer a ready account; prefer one with the requested auth_method.
         candidate = None
         if auth_method != "unknown":
             candidate = next(
-                (a for a in kind_accounts
-                 if (a.get("auth_method") or "unknown") == auth_method),
+                (a for a in kind_accounts if (a.get("auth_method") or "unknown") == auth_method),
                 None,
             )
         if candidate is None:

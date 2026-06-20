@@ -88,8 +88,7 @@ def test_index_count_parity():
     """Every CREATE INDEX produces exactly one runtime index."""
     conn = _fresh_in_memory()
     count = conn.execute(
-        "SELECT COUNT(*) AS c FROM sqlite_master WHERE type='index' "
-        "AND name NOT LIKE 'sqlite_%'"
+        "SELECT COUNT(*) AS c FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'"
     ).fetchone()["c"]
     assert count == EXPECTED_INDEX_COUNT, (
         f"Index count drift: got {count}, expected {EXPECTED_INDEX_COUNT}. "

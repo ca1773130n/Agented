@@ -4,13 +4,13 @@ Stores and retrieves secrets with encrypted values. The encrypted_value column
 contains Fernet-encrypted ciphertext -- plaintext is NEVER stored in the database.
 """
 
-import datetime
 import logging
 from typing import Optional
 
+from app.utils.timezone import utcnow as _utcnow
+
 from .connection import get_connection
 from .ids import _get_unique_secret_id
-from app.utils.timezone import utcnow as _utcnow
 
 logger = logging.getLogger(__name__)
 

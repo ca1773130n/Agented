@@ -52,6 +52,7 @@ class TestRevokeSession:
     def test_revoke_soft_deletes_session(self, isolated_db):
         """revoke_session now soft-deletes (sets revoked_at) instead of hard DELETE."""
         from app.database import get_connection
+
         uid = create_user("revoke@example.com")
         sess = create_session(uid)
         assert revoke_session(sess["token"]) is True
@@ -87,8 +88,9 @@ class TestPurgeExpired:
         """v0.6.1: expire_sessions soft-deletes (sets revoked_at) rather
         than hard-deleting, so the session_events audit log can still
         reference the row and operators can see expiry history."""
-        from app.db.sessions import expire_sessions
         from app.database import get_connection
+        from app.db.sessions import expire_sessions
+
         uid = create_user("expire@example.com")
         dead = create_session(uid, lifetime=dt.timedelta(seconds=-1))
         n = expire_sessions()
@@ -107,4 +109,5 @@ class TestPurgeExpired:
     def test_v061_alias_to_purge_expired_sessions(self, isolated_db):
         """The old name still resolves for backwards compat."""
         from app.db.sessions import expire_sessions, purge_expired_sessions
+
         assert expire_sessions is purge_expired_sessions

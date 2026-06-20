@@ -31,9 +31,16 @@ from app.services.harness_failure_annotator import _fetch_team_session
 
 def _make_assistant_stream(*texts: str) -> str:
     return "\n".join(
-        json.dumps({"type": "assistant", "message": {"content": [
-            {"type": "text", "text": t},
-        ]}})
+        json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {"type": "text", "text": t},
+                    ]
+                },
+            }
+        )
         for t in texts
     )
 
@@ -54,8 +61,7 @@ def _seed_team(team_id: str = "team-obs", *, project_id: str | None = None) -> N
                 (project_id,),
             )
             conn.execute(
-                "INSERT OR IGNORE INTO project_teams (project_id, team_id) "
-                "VALUES (?, ?)",
+                "INSERT OR IGNORE INTO project_teams (project_id, team_id) VALUES (?, ?)",
                 (project_id, team_id),
             )
         conn.commit()
@@ -102,10 +108,15 @@ def _seed_component_execution(
 
 # ---------- DB helpers ------------------------------------------------------
 
+
 def test_insert_and_get_team_execution(isolated_db):
     _seed_team("team-a")
     insert_team_execution(
-        "team-exec-a", "team-a", "sequential", "manual", message="hi",
+        "team-exec-a",
+        "team-a",
+        "sequential",
+        "manual",
+        message="hi",
     )
     row = get_team_execution("team-exec-a")
     assert row is not None
@@ -128,7 +139,8 @@ def test_update_team_execution_status_records_terminal(isolated_db):
     _seed_team("team-c")
     insert_team_execution("team-exec-c", "team-c", "parallel", "manual")
     update_team_execution_status(
-        "team-exec-c", "completed",
+        "team-exec-c",
+        "completed",
         execution_ids=["exec-1", "exec-2"],
     )
     row = get_team_execution("team-exec-c")
@@ -140,12 +152,17 @@ def test_update_team_execution_status_records_terminal(isolated_db):
 def test_update_does_not_clobber_existing_project_id(isolated_db):
     _seed_team("team-d", project_id="proj-team-d")
     insert_team_execution(
-        "team-exec-d", "team-d", "sequential", "manual",
+        "team-exec-d",
+        "team-d",
+        "sequential",
+        "manual",
         project_id="proj-team-d",
     )
     # Try to overwrite with a different project_id — COALESCE keeps original.
     update_team_execution_status(
-        "team-exec-d", "completed", project_id="proj-team-other",
+        "team-exec-d",
+        "completed",
+        project_id="proj-team-other",
     )
     row = get_team_execution("team-exec-d")
     assert row["project_id"] == "proj-team-d"
@@ -156,12 +173,15 @@ def test_backfill_project_id_from_components(isolated_db):
     the backfill copies the component's project_id onto the team row."""
     _seed_team("team-e")
     _seed_component_execution(
-        "exec-comp-e", _make_assistant_stream("hello"),
+        "exec-comp-e",
+        _make_assistant_stream("hello"),
         project_id="proj-from-component",
     )
     insert_team_execution("team-exec-e", "team-e", "sequential", "manual")
     update_team_execution_status(
-        "team-exec-e", "completed", execution_ids=["exec-comp-e"],
+        "team-exec-e",
+        "completed",
+        execution_ids=["exec-comp-e"],
     )
     resolved = backfill_project_id_from_components("team-exec-e")
     assert resolved == "proj-from-component"
@@ -171,22 +191,29 @@ def test_backfill_project_id_from_components(isolated_db):
 
 # ---------- fetcher ---------------------------------------------------------
 
+
 def test_fetch_team_session_aggregates_component_streams(isolated_db):
     _seed_team("team-f", project_id="proj-team-f")
     _seed_component_execution(
-        "exec-f-1", _make_assistant_stream("First agent's takeaway content."),
+        "exec-f-1",
+        _make_assistant_stream("First agent's takeaway content."),
         project_id="proj-team-f",
     )
     _seed_component_execution(
-        "exec-f-2", _make_assistant_stream("Second agent's takeaway content."),
+        "exec-f-2",
+        _make_assistant_stream("Second agent's takeaway content."),
         project_id="proj-team-f",
     )
     insert_team_execution(
-        "team-exec-f", "team-f", "sequential", "manual",
+        "team-exec-f",
+        "team-f",
+        "sequential",
+        "manual",
         project_id="proj-team-f",
     )
     update_team_execution_status(
-        "team-exec-f", "completed",
+        "team-exec-f",
+        "completed",
         execution_ids=["exec-f-1", "exec-f-2"],
     )
     payload = _fetch_team_session("team-exec-f")
@@ -212,6 +239,7 @@ def test_fetch_team_session_empty_when_no_components(isolated_db):
 
 # ---------- end-to-end extraction ------------------------------------------
 
+
 def test_extract_for_session_produces_team_session_takeaways(isolated_db):
     """The full happy path: seed a finished team execution whose
     component stream contains a 'remember' phrase → extract_for_session
@@ -221,21 +249,27 @@ def test_extract_for_session_produces_team_session_takeaways(isolated_db):
     _seed_component_execution(
         "exec-h-1",
         _make_assistant_stream(
-            "Got it, I'll remember that you prefer pytest over unittest "
-            "for all new test files.",
+            "Got it, I'll remember that you prefer pytest over unittest for all new test files.",
         ),
         project_id="proj-team-h",
     )
     insert_team_execution(
-        "team-exec-h", "team-h", "sequential", "manual",
+        "team-exec-h",
+        "team-h",
+        "sequential",
+        "manual",
         project_id="proj-team-h",
     )
     update_team_execution_status(
-        "team-exec-h", "completed", execution_ids=["exec-h-1"],
+        "team-exec-h",
+        "completed",
+        execution_ids=["exec-h-1"],
     )
 
     ids = extractor.extract_for_session(
-        "team_session", "team-exec-h", project_id="proj-team-h",
+        "team_session",
+        "team-exec-h",
+        project_id="proj-team-h",
     )
     assert ids, "expected at least one takeaway from the team session"
     rows = [repo.get(i) for i in ids]
@@ -255,27 +289,25 @@ def test_role_content_array_converted_to_claude_jsonl(isolated_db):
     the Claude JSONL stream format the parser expects. Before the
     fetcher converted it, ``parse_claude_stream`` returned 0 events and
     the extractor produced 0 takeaways from real super-agent sessions."""
+    from app.db.connection import get_connection
     from app.services.harness_failure_annotator import (
         _fetch_super_agent_session,
         parse_claude_stream,
     )
-    from app.db.connection import get_connection
 
-    role_content_log = json.dumps([
-        {"role": "user", "content": "what's the deploy procedure?"},
-        {
-            "role": "assistant",
-            "content": (
-                "Got it, I'll remember that you prefer "
-                "deploying via `just deploy` over `make`."
-            ),
-        },
-    ])
+    role_content_log = json.dumps(
+        [
+            {"role": "user", "content": "what's the deploy procedure?"},
+            {
+                "role": "assistant",
+                "content": (
+                    "Got it, I'll remember that you prefer deploying via `just deploy` over `make`."
+                ),
+            },
+        ]
+    )
     with get_connection() as conn:
-        conn.execute(
-            "INSERT OR IGNORE INTO super_agents (id, name) "
-            "VALUES ('sa-conv-fmt', 'SA')"
-        )
+        conn.execute("INSERT OR IGNORE INTO super_agents (id, name) VALUES ('sa-conv-fmt', 'SA')")
         conn.execute(
             "INSERT INTO super_agent_sessions (id, super_agent_id, status, "
             "conversation_log) VALUES (?, 'sa-conv-fmt', 'completed', ?)",
@@ -298,6 +330,8 @@ def test_extract_team_session_missing_row_is_noop(isolated_db):
     """extract_for_session on a missing team_session id is a clean no-op
     (the fetcher returns None and the extractor records nothing)."""
     ids = extractor.extract_for_session(
-        "team_session", "team-exec-ghost", project_id="proj-x",
+        "team_session",
+        "team-exec-ghost",
+        project_id="proj-x",
     )
     assert ids == []

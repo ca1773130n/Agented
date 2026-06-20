@@ -86,7 +86,7 @@ class TestRender:
     @patch("app.services.prompt_renderer.SnippetService.resolve_snippets", return_value="resolved")
     def test_snippets_resolved_before_placeholders(self, mock_resolve):
         trigger = self._trigger("{{my_snippet}} {trigger_id}")
-        result = PromptRenderer.render(trigger, "trg-012", "", "")
+        PromptRenderer.render(trigger, "trg-012", "", "")
         mock_resolve.assert_called_once()
 
     def test_message_with_braces(self):
@@ -162,9 +162,7 @@ class TestSubagentRendererProjection:
     def test_subagent_projection_is_deterministic(self, renderer_path, cmd):
         import importlib
 
-        mod = importlib.import_module(
-            f"app.services.context_renderers.{renderer_path}"
-        )
+        mod = importlib.import_module(f"app.services.context_renderers.{renderer_path}")
         cls = getattr(mod, f"{renderer_path.capitalize()}Renderer")
         out1, _ = cls().apply(list(cmd), {}, self._bundle(), "sess-1")
         out2, _ = cls().apply(list(cmd), {}, self._bundle(), "sess-1")

@@ -2,13 +2,11 @@
 
 import json
 import subprocess
-import threading
-from unittest.mock import MagicMock, patch, ANY
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.services.execution_service import ExecutionService, ExecutionState
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

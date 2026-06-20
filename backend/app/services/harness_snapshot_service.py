@@ -53,7 +53,8 @@ def capture_snapshot_for_session(
             except Exception:
                 logger.debug(
                     "harness_snapshot: bindings lookup failed for project %s",
-                    project_id, exc_info=True,
+                    project_id,
+                    exc_info=True,
                 )
 
         snapshots_repo.upsert_snapshot(
@@ -68,7 +69,9 @@ def capture_snapshot_for_session(
     except Exception:  # noqa: BLE001 — must never raise into the spawn path
         logger.warning(
             "harness_snapshot: capture failed for %s/%s",
-            session_kind, session_id, exc_info=True,
+            session_kind,
+            session_id,
+            exc_info=True,
         )
         return None
 
@@ -76,6 +79,7 @@ def capture_snapshot_for_session(
 # ---------------------------------------------------------------------------
 # Compat shim for the existing trigger-execution spawn site.
 # ---------------------------------------------------------------------------
+
 
 def capture_snapshot_for_execution(
     *,

@@ -19,10 +19,6 @@ from ..db.project_sa_instances import (
     get_project_sa_instances_without_worktree,
     update_project_sa_instance,
 )
-from ..db.project_team_instances import (
-    create_project_team_instance,
-    delete_project_team_instance,
-)
 from ..db.projects import get_project
 from ..db.super_agents import (
     get_sessions_for_instance,
