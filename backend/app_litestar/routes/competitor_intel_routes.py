@@ -36,11 +36,24 @@ from litestar.response import Stream
 from app.database import get_connection
 from app.db.owned_entities import can_access
 from app.db.projects import get_project
-from app.services.competitor_source_service import CompetitorSourceService
+from app.services.competitor_source_service import (
+    KIND_HN_QUERY,
+    CompetitorSourceService,
+)
 
 from ..auth import Caller
 
 logger = logging.getLogger(__name__)
+
+# Explicit ``kind`` values the add-source route accepts. The PRIMARY use is
+# ``hn_query`` — a NON-URL identifier (a search query) that ``detect_kind`` can't
+# host-route. Any other kind is auto-detected from the URL, so an explicit kind
+# outside this allowlist is rejected rather than stored as a free-text typo.
+# Only hn_query legitimately needs an explicit kind — its identifier is a search
+# query, not a URL that detect_kind can classify. URL-based kinds MUST be
+# host-detected; accepting them here would let a caller mislabel a source and
+# point the wrong adapter at a bogus identifier.
+_ALLOWED_EXPLICIT_KINDS = frozenset({KIND_HN_QUERY})
 
 # Columns returned for a ranked signal row (detected_signal, migration 171).
 # kind/url/label come from the joined competitor_source so the dashboard can
@@ -109,12 +122,17 @@ def _ranked_signals(project_id: str) -> list[dict[str, Any]]:
 
 @post("/{project_id:str}/competitor-intel/sources", status_code=201, sync_to_thread=False)
 def add_competitor_source(project_id: str, data: dict | None, caller: Caller) -> dict[str, Any]:
-    """Add a watched competitor source by URL; return the persisted row.
+    """Add a watched competitor source by URL (or query); return the persisted row.
 
-    Body: ``{"url": str, "label"?: str}``. ``url`` is required (a source must
-    point somewhere). ``label`` is OPTIONAL — a missing/blank label is fine and
-    NEVER blocks the insert (REQ-27 / wizard-defaults rule); the service
-    normalizes whitespace-only to NULL. ``kind`` is auto-detected from the URL.
+    Body: ``{"url": str, "label"?: str, "kind"?: str}``. ``url`` is required (a
+    source must point somewhere) — for an ``hn_query`` source the operator sends
+    the SEARCH QUERY (a company / product name) in the ``url`` field (the
+    identifier column), NOT a URL. ``label`` is OPTIONAL — a missing/blank label
+    is fine and NEVER blocks the insert (REQ-27 / wizard-defaults rule); the
+    service normalizes whitespace-only to NULL. ``kind`` is OPTIONAL: when omitted
+    it is auto-detected from the URL host; when provided it MUST be one of the
+    known kinds (``_ALLOWED_EXPLICIT_KINDS``) and is used verbatim — this is the
+    path that lets a non-URL ``hn_query`` identifier through without host routing.
     """
     _assert_project_access(project_id, caller)
     body = data or {}
@@ -122,7 +140,11 @@ def add_competitor_source(project_id: str, data: dict | None, caller: Caller) ->
     if not url or not isinstance(url, str) or not url.strip():
         raise ClientException(detail="url is required")
     label = body.get("label")
-    source = CompetitorSourceService.add_source(project_id, url.strip(), label=label)
+    kind = body.get("kind")
+    if kind is not None:
+        if not isinstance(kind, str) or kind not in _ALLOWED_EXPLICIT_KINDS:
+            raise ClientException(detail="unknown source kind")
+    source = CompetitorSourceService.add_source(project_id, url.strip(), label=label, kind=kind)
     return {"source": source}
 
 

@@ -13,8 +13,12 @@ import type { AuthenticatedEventSource, AuthenticatedEventSourceOptions } from '
 export interface CompetitorSource {
   id: string;
   project_id: string;
-  /** Auto-detected from the URL host. */
-  kind: 'github_repo' | 'arxiv' | 'product_url' | string;
+  /**
+   * Source kind. Auto-detected from the URL host for URL sources; for an
+   * `hn_query` source it is supplied EXPLICITLY (the identifier is a search
+   * query, not a URL, so there is no host to detect from).
+   */
+  kind: 'github_repo' | 'arxiv' | 'product_url' | 'job_board' | 'hn_query' | string;
   url: string;
   origin: string;
   etag: string | null;
@@ -75,19 +79,23 @@ export interface SuggestedCompetitor {
 
 export const competitorIntelApi = {
   /**
-   * Add a source by URL. `label` is optional — omit it freely; the backend
-   * auto-detects `kind` and never rejects a missing/blank label (REQ-27).
+   * Add a source by URL (or, for `hn_query`, a search query in the `url` field).
+   * `label` is optional — omit it freely; the backend never rejects a
+   * missing/blank label (REQ-27). `kind` is optional: omit it for URL sources
+   * (the backend auto-detects from the host) and pass `'hn_query'` to register a
+   * non-URL search query (a company/product name) the backend can't host-detect.
    */
   addSource: (
     projectId: string,
     url: string,
     label?: string,
+    kind?: string,
   ): Promise<{ source: CompetitorSource }> =>
     apiFetch<{ source: CompetitorSource }>(
       `/api/projects/${projectId}/competitor-intel/sources`,
       {
         method: 'POST',
-        body: JSON.stringify({ url, label }),
+        body: JSON.stringify({ url, label, kind }),
       },
     ),
 

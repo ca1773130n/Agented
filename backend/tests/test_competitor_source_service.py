@@ -27,10 +27,49 @@ from app.services.competitor_source_service import CompetitorSourceService as S
         ("https://example.com", "product_url"),
         ("", "product_url"),
         ("not-a-url", "product_url"),
+        # HN is query-only (added via an explicit kind=hn_query); HN URLs are
+        # NOT auto-detected — a pasted HN URL is just a generic product_url.
+        ("https://news.ycombinator.com/item?id=1", "product_url"),
+        ("https://hn.algolia.com/?query=acme", "product_url"),
     ],
 )
 def test_detect_kind(url, expected):
     assert S.detect_kind(url) == expected
+
+
+def test_add_source_explicit_kind_stores_non_url_query_as_hn_query(isolated_db):
+    """An explicit kind='hn_query' lets a NON-URL search query through verbatim.
+
+    The identifier column stores a free-text company name (no host); detect_kind
+    is SKIPPED, so the row is hn_query — not the product_url it would mis-detect
+    to. Optional-fields-never-block: a non-URL identifier is not rejected.
+    """
+    from app.services.competitor_source_service import KIND_HN_QUERY
+
+    project_id = create_project(name="CI hn explicit")
+    row = S.add_source(project_id, "Acme Corp", kind=KIND_HN_QUERY)
+    assert row["kind"] == KIND_HN_QUERY
+    # The bare company name is persisted in the identifier column unchanged.
+    assert row["url"] == "Acme Corp"
+    assert row["status"] == "active"
+    assert row["watermark"] is None
+
+
+def test_add_source_explicit_kind_overrides_url_detection(isolated_db):
+    """An explicit kind wins over the URL host (used verbatim, detect_kind skipped)."""
+    from app.services.competitor_source_service import KIND_HN_QUERY
+
+    project_id = create_project(name="CI hn override")
+    # A github URL would auto-detect to github_repo; the explicit kind overrides.
+    row = S.add_source(project_id, "https://github.com/o/r", kind=KIND_HN_QUERY)
+    assert row["kind"] == KIND_HN_QUERY
+
+
+def test_add_source_no_explicit_kind_still_autodetects(isolated_db):
+    """Omitting kind keeps the existing URL-host autodetect path unchanged."""
+    project_id = create_project(name="CI autodetect")
+    assert S.add_source(project_id, "https://github.com/o/r")["kind"] == "github_repo"
+    assert S.add_source(project_id, "https://arxiv.org/abs/1")["kind"] == "arxiv"
 
 
 def test_add_source_without_label_never_blocks(isolated_db):

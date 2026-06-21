@@ -23,9 +23,14 @@ const projectId = computed(() => props.projectId ?? '');
 const url = ref('');
 const label = ref('');
 const adding = ref(false);
+// Source-kind selector. Empty string = auto-detect from the URL host (backend
+// default — no `kind` sent). `'hn_query'` switches the identifier field to a
+// free-text Hacker News search query (no host to detect, so kind is explicit).
+const kind = ref('');
+const isQuery = computed(() => kind.value === 'hn_query');
 
-// Submit is gated ONLY on a non-empty URL — an empty optional label must NEVER
-// block the add (REQ-27 / wizard-defaults rule).
+// Submit is gated ONLY on a non-empty identifier (URL or query) — an empty
+// optional label must NEVER block the add (REQ-27 / wizard-defaults rule).
 const canSubmit = computed(() => url.value.trim().length > 0 && !adding.value);
 
 // --- Data ------------------------------------------------------------------
@@ -50,6 +55,8 @@ function kindLabel(kind: string | null | undefined): string {
       return t('competitorIntel.kindArxiv');
     case 'product_url':
       return t('competitorIntel.kindProduct');
+    case 'hn_query':
+      return t('competitorIntel.kindHnQuery');
     default:
       return kind ?? t('competitorIntel.kindUnknown');
   }
@@ -142,10 +149,13 @@ async function submitSource() {
       projectId.value,
       url.value.trim(),
       trimmedLabel || undefined,
+      // Empty kind = auto-detect; pass undefined so the backend host-detects.
+      kind.value || undefined,
     );
     sources.value = [res.source, ...sources.value];
     url.value = '';
     label.value = '';
+    kind.value = '';
     showToast(t('competitorIntel.addedToast', { kind: kindLabel(res.source.kind) }), 'success');
   } catch (err) {
     showToast(err instanceof ApiError ? err.message : t('competitorIntel.addError'), 'error');
@@ -219,13 +229,24 @@ onUnmounted(() => {
     <!-- Add a source -->
     <form class="ci-add-form" @submit.prevent="submitSource">
       <label class="ci-field">
-        <span class="ci-field-label">{{ t('competitorIntel.urlLabel') }}</span>
+        <span class="ci-field-label">{{ t('competitorIntel.kindLabel') }}</span>
+        <select v-model="kind" class="ci-input" :aria-label="t('competitorIntel.kindLabel')">
+          <option value="">{{ t('competitorIntel.kindAuto') }}</option>
+          <option value="hn_query">{{ t('competitorIntel.kindHnQuery') }}</option>
+        </select>
+      </label>
+      <label class="ci-field">
+        <span class="ci-field-label">{{
+          isQuery ? t('competitorIntel.queryLabel') : t('competitorIntel.urlLabel')
+        }}</span>
         <input
           v-model="url"
-          type="url"
+          :type="isQuery ? 'text' : 'url'"
           class="ci-input"
-          :placeholder="t('competitorIntel.urlPlaceholder')"
-          :aria-label="t('competitorIntel.urlLabel')"
+          :placeholder="
+            isQuery ? t('competitorIntel.queryPlaceholder') : t('competitorIntel.urlPlaceholder')
+          "
+          :aria-label="isQuery ? t('competitorIntel.queryLabel') : t('competitorIntel.urlLabel')"
         />
       </label>
       <label class="ci-field">
