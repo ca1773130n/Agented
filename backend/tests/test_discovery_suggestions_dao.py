@@ -213,17 +213,47 @@ def test_evidence_list_round_trips(project):
 
 
 def test_claim_for_promotion_wins_once_then_loses(project):
-    """The first claim flips 'suggested'→'added' and returns True; a second claim
-    of the now-'added' row changes zero rows and returns False — the predicate
-    that stops a concurrent double-add."""
+    """The first claim flips 'suggested'→'claiming' and returns True; a second claim
+    of the now-'claiming' row changes zero rows and returns False — the predicate
+    that stops a concurrent double-add. The 'claiming' intermediate keeps 'added'
+    an invariant that always implies a stamped source_id (round-3 race fix)."""
     row = dao.upsert_suggestion(project, "acme", "claimone", "https://github.com/acme/claimone")
     assert row["status"] == "suggested"
 
     assert dao.claim_for_promotion(row["id"], project) is True
-    # The row is now 'added' (the atomic flip landed).
-    assert dao.get_suggestion(row["id"])["status"] == "added"
+    # The row is now 'claiming' (the atomic flip landed) — NOT yet 'added', and
+    # source_id is still NULL until complete_promotion stamps it.
+    claimed = dao.get_suggestion(row["id"])
+    assert claimed["status"] == "claiming"
+    assert claimed["source_id"] is None
     # A second claim cannot re-win — status is no longer 'suggested'.
     assert dao.claim_for_promotion(row["id"], project) is False
+
+
+def test_complete_promotion_stamps_added_and_source_id_atomically(project):
+    """complete_promotion flips 'claiming'→'added' AND stamps source_id in one
+    UPDATE — the other half of the 'added implies source_id' invariant."""
+    row = dao.upsert_suggestion(project, "acme", "claimdone", "https://github.com/acme/claimdone")
+    assert dao.claim_for_promotion(row["id"], project) is True
+    assert dao.get_suggestion(row["id"])["status"] == "claiming"
+
+    updated = dao.complete_promotion(row["id"], project, "cmps-done01")
+    assert updated["status"] == "added"
+    assert updated["source_id"] == "cmps-done01"
+    # Persisted: 'added' now always carries the source_id.
+    reloaded = dao.get_suggestion(row["id"])
+    assert reloaded["status"] == "added"
+    assert reloaded["source_id"] == "cmps-done01"
+
+
+def test_complete_promotion_no_op_when_not_claiming(project):
+    """complete_promotion is scoped to status='claiming'; a row that never claimed
+    (still 'suggested') is left untouched and keeps a NULL source_id."""
+    row = dao.upsert_suggestion(project, "acme", "noclaim", "https://github.com/acme/noclaim")
+    # Not in 'claiming' state → the scoped UPDATE matches nothing.
+    result = dao.complete_promotion(row["id"], project, "cmps-nope01")
+    assert result["status"] == "suggested"
+    assert result["source_id"] is None
 
 
 def test_claim_for_promotion_foreign_project_returns_false(project, isolated_db):
@@ -247,14 +277,15 @@ def test_claim_for_promotion_dismissed_row_returns_false(project):
     assert dao.get_suggestion(row["id"])["status"] == "dismissed"
 
 
-def test_revert_promotion_claim_restores_suggested_and_clears_source(project):
-    """revert undoes a won claim: 'added'→'suggested' and clears source_id — the
-    compensating action when add_source raises after the claim."""
+def test_revert_promotion_claim_restores_suggested_from_claiming(project):
+    """revert undoes a won-but-not-completed claim: 'claiming'→'suggested' and
+    clears source_id — the compensating action when add_source raises AFTER the
+    claim but BEFORE complete_promotion. Without it a stuck 'claiming' row would
+    409 every future promote attempt."""
     row = dao.upsert_suggestion(project, "acme", "claimrev", "https://github.com/acme/claimrev")
     assert dao.claim_for_promotion(row["id"], project) is True
-    # Simulate a stamped source id (as set_status would after a successful add).
-    dao.set_status(row["id"], "added", project_id=project, source_id="cmps-tmp123")
-    assert dao.get_suggestion(row["id"])["source_id"] == "cmps-tmp123"
+    # The won claim is mid-flight ('claiming'), source_id not yet stamped.
+    assert dao.get_suggestion(row["id"])["status"] == "claiming"
 
     dao.revert_promotion_claim(row["id"], project)
     reverted = dao.get_suggestion(row["id"])
@@ -262,3 +293,18 @@ def test_revert_promotion_claim_restores_suggested_and_clears_source(project):
     assert reverted["source_id"] is None
     # And it is claimable again.
     assert dao.claim_for_promotion(row["id"], project) is True
+
+
+def test_revert_promotion_claim_does_not_touch_added_row(project):
+    """revert is scoped to status='claiming' — a row already completed to 'added'
+    (with a real source_id) is NOT reverted, preserving the invariant."""
+    row = dao.upsert_suggestion(project, "acme", "claimkeep", "https://github.com/acme/claimkeep")
+    assert dao.claim_for_promotion(row["id"], project) is True
+    dao.complete_promotion(row["id"], project, "cmps-keep01")
+    assert dao.get_suggestion(row["id"])["status"] == "added"
+
+    # A late/spurious revert must NOT clobber the completed 'added' row.
+    dao.revert_promotion_claim(row["id"], project)
+    kept = dao.get_suggestion(row["id"])
+    assert kept["status"] == "added"
+    assert kept["source_id"] == "cmps-keep01"

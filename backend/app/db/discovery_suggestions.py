@@ -151,7 +151,7 @@ def list_suggestions(project_id: str, *, statuses: Optional[list] = None) -> lis
 def claim_for_promotion(suggestion_id: str, project_id: str) -> bool:
     """Atomically claim a ``suggested`` row for promotion (the concurrent-accept guard).
 
-    Flips ``status`` ``suggested`` → ``added`` in a SINGLE conditional UPDATE
+    Flips ``status`` ``suggested`` → ``claiming`` in a SINGLE conditional UPDATE
     (``WHERE id = ? AND project_id = ? AND status = 'suggested'``) and returns
     whether THIS caller won the claim (exactly one row changed). Two concurrent
     accepts both read ``status == 'suggested'``, but only the first UPDATE matches
@@ -159,16 +159,22 @@ def claim_for_promotion(suggestion_id: str, project_id: str) -> bool:
     ``False`` — so ``add_source`` (which has no ``UNIQUE(project_id, url)``) never
     runs twice and the ``competitor_source`` row is never duplicated.
 
+    The intermediate ``'claiming'`` state is the round-3 fix for the corrupt-loser
+    race: it keeps ``status == 'added'`` an INVARIANT that ALWAYS implies a stamped
+    ``source_id``. The winner only flips ``claiming`` → ``added`` AFTER ``add_source``
+    has minted the id, stamping both in the single atomic UPDATE of
+    :func:`complete_promotion`; a loser that re-reads in the window sees
+    ``'claiming'`` (promotion in progress → 409, retry) instead of an ``'added'``
+    row with a NULL ``source_id``.
+
     Project-scoped: a foreign-project id matches nothing and returns ``False``
-    (the caller's not-found / 404 path handles it). ``source_id`` is stamped by a
-    follow-up scoped UPDATE once ``add_source`` has minted the id (see
-    :func:`set_status`); a failed add reverts the claim via
-    :func:`revert_promotion_claim`.
+    (the caller's not-found / 404 path handles it). A failed add reverts the claim
+    via :func:`revert_promotion_claim`.
     """
     with get_connection() as conn:
         cur = conn.execute(
             "UPDATE discovery_suggestion "
-            "SET status = 'added', updated_at = CURRENT_TIMESTAMP "
+            "SET status = 'claiming', updated_at = CURRENT_TIMESTAMP "
             "WHERE id = ? AND project_id = ? AND status = 'suggested'",
             (suggestion_id, project_id),
         )
@@ -177,21 +183,48 @@ def claim_for_promotion(suggestion_id: str, project_id: str) -> bool:
     return claimed
 
 
+def complete_promotion(suggestion_id: str, project_id: str, source_id: str) -> Optional[dict]:
+    """Finalize a won claim: ``claiming`` → ``added`` AND stamp ``source_id`` atomically.
+
+    The other half of the round-3 invariant (``status == 'added'`` ALWAYS implies a
+    stamped ``source_id``): only after ``add_source`` mints the competitor_source id
+    does the winner flip the claimed row out of ``'claiming'``, setting ``status`` and
+    ``source_id`` in ONE conditional UPDATE scoped to ``status = 'claiming'``. A
+    concurrent loser therefore never observes ``'added'`` with a NULL ``source_id`` —
+    it sees ``'claiming'`` (→ 409) until this atomic stamp lands. Returns the updated
+    row, or None if the row was no longer ``'claiming'`` (defensive; the winner owns it).
+    """
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE discovery_suggestion "
+            "SET status = 'added', source_id = ?, updated_at = CURRENT_TIMESTAMP "
+            "WHERE id = ? AND project_id = ? AND status = 'claiming'",
+            (source_id, suggestion_id, project_id),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM discovery_suggestion WHERE id = ? AND project_id = ?",
+            (suggestion_id, project_id),
+        ).fetchone()
+    return _row_to_dict(row)
+
+
 def revert_promotion_claim(suggestion_id: str, project_id: str) -> None:
-    """Undo a promotion claim — restore ``added`` → ``suggested`` and clear ``source_id``.
+    """Undo a promotion claim — restore ``claiming`` → ``suggested`` and clear ``source_id``.
 
     The compensating action when :func:`claim_for_promotion` won but the
-    subsequent ``add_source`` raised: without this a failed add would leave a
-    phantom ``added`` row with no backing ``competitor_source``. Scoped to
-    ``(id, project_id, status = 'added')`` so it only reverts a row this flow
-    actually claimed (a concurrent winner that already stamped a real source is
-    not in the ``added``-with-the-same-context window we revert).
+    subsequent ``add_source`` raised (BEFORE :func:`complete_promotion` could flip
+    the row to ``'added'``): without this a failed add would leave a phantom
+    ``'claiming'`` row that no loser could ever promote (it would 409 forever).
+    Scoped to ``(id, project_id, status = 'claiming')`` so it only reverts a row
+    still mid-claim — a winner that already stamped a real source (now ``'added'``)
+    is out of the ``'claiming'`` window and is never reverted.
     """
     with get_connection() as conn:
         conn.execute(
             "UPDATE discovery_suggestion "
             "SET status = 'suggested', source_id = NULL, updated_at = CURRENT_TIMESTAMP "
-            "WHERE id = ? AND project_id = ? AND status = 'added'",
+            "WHERE id = ? AND project_id = ? AND status = 'claiming'",
             (suggestion_id, project_id),
         )
         conn.commit()

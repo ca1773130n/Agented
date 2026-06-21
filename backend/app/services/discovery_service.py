@@ -534,10 +534,11 @@ class DiscoveryService:
 
         IDEMPOTENT on the suggestion's current status:
 
-          * ``'suggested'`` → calls
+          * ``'suggested'`` → atomically claims ('suggested'→'claiming'), calls
             ``add_source(project_id, url, origin='discovery')`` (the discovery
-            hook — NO signature change) and stamps ``set_status('added',
-            source_id=<new id>)``; returns the NEW source.
+            hook — NO signature change), then ``complete_promotion`` flips
+            'claiming'→'added' AND stamps ``source_id`` in ONE UPDATE; returns the
+            NEW source.
           * ``'added'`` → already promoted: returns the EXISTING
             ``competitor_source`` (by the stamped ``source_id``) WITHOUT calling
             ``add_source`` again, so a double-accept never duplicates rows.
@@ -548,12 +549,20 @@ class DiscoveryService:
         Returns ``{"source": <source row>, "suggestion": <row>}``. Raises
         ``ValueError`` on an unknown / foreign-project ``suggestion_id``.
 
-        Concurrency-safe: the ``suggested`` → ``added`` flip is an ATOMIC
-        conditional UPDATE (``claim_for_promotion``), so two concurrent accepts
-        cannot both pass the status check and both call ``add_source`` — only the
-        single claim winner adds the source (``competitor_source`` carries no
-        ``UNIQUE(project_id, url)``, so a double-add would otherwise duplicate the
-        row). The loser re-reads and returns the existing source.
+        Concurrency-safe via an intermediate ``'claiming'`` state, so that
+        ``status == 'added'`` ALWAYS implies a stamped ``source_id`` (the round-3
+        race fix). The ``suggested`` → ``claiming`` flip is an ATOMIC conditional
+        UPDATE (``claim_for_promotion``); only the single claim winner runs
+        ``add_source`` (``competitor_source`` carries no ``UNIQUE(project_id, url)``,
+        so a double-add would otherwise duplicate the row) and then flips
+        ``claiming`` → ``added`` while stamping ``source_id`` in ONE UPDATE
+        (``complete_promotion``). A concurrent LOSER that re-reads in the window:
+
+          * ``'claiming'`` → raises ``PromotionConflict`` (route → 409 — "promotion
+            in progress, retry"); it can NEVER observe an ``'added'`` row whose
+            ``source_id`` is still NULL.
+          * ``'added'`` → the winner already stamped — return the existing source by
+            the (now guaranteed) ``source_id``, do NOT add a second one.
         """
         # Project-scoped read up front: a foreign-project / unknown id is a 404
         # (and gives us the immutable candidate_url for the add).
@@ -561,7 +570,7 @@ class DiscoveryService:
         if suggestion is None:
             raise ValueError(f"Unknown discovery suggestion: {suggestion_id}")
 
-        # Atomic claim: only one concurrent caller flips 'suggested'→'added'.
+        # Atomic claim: only one concurrent caller flips 'suggested'→'claiming'.
         if discovery_suggestions.claim_for_promotion(suggestion_id, project_id):
             try:
                 source = CompetitorSourceService.add_source(
@@ -570,13 +579,16 @@ class DiscoveryService:
                     origin="discovery",
                 )
             except Exception:
-                # The add failed AFTER we claimed — revert so we never leave a
-                # phantom 'added' row with no backing competitor_source.
+                # The add failed AFTER we claimed — revert 'claiming'→'suggested'
+                # (clear source_id) so we never leave a phantom row no loser could
+                # ever promote (a stuck 'claiming' would 409 forever).
                 discovery_suggestions.revert_promotion_claim(suggestion_id, project_id)
                 raise
-            # Stamp the new source id onto the (already 'added') row.
-            updated = discovery_suggestions.set_status(
-                suggestion_id, "added", project_id=project_id, source_id=source["id"]
+            # Flip 'claiming'→'added' AND stamp the new source id in ONE atomic
+            # UPDATE — only now can a loser ever observe 'added', and it is
+            # guaranteed to carry the source_id.
+            updated = discovery_suggestions.complete_promotion(
+                suggestion_id, project_id, source["id"]
             )
             return {"source": source, "suggestion": updated}
 
@@ -587,9 +599,14 @@ class DiscoveryService:
             raise ValueError(f"Unknown discovery suggestion: {suggestion_id}")
 
         status = suggestion.get("status")
+        if status == "claiming":
+            # The winner has claimed but not yet stamped the source — promotion is
+            # in progress. 409 (retry) rather than returning a half-formed row.
+            raise PromotionConflict(f"Suggestion {suggestion_id} is being promoted; retry shortly")
         if status == "added":
-            # Already promoted (by us earlier, or a concurrent winner) — return the
-            # existing source, do NOT add a second one.
+            # Already promoted (by us earlier, or a concurrent winner that already
+            # completed) — the 'added' invariant guarantees a stamped source_id, so
+            # return the existing source; do NOT add a second one.
             source_id = suggestion.get("source_id")
             source = CompetitorSourceService.get_source(source_id) if source_id else None
             return {"source": source, "suggestion": suggestion}
@@ -597,8 +614,8 @@ class DiscoveryService:
             raise PromotionConflict(
                 f"Suggestion {suggestion_id} was dismissed; re-suggest before promoting"
             )
-        # Claim failed but the row is neither 'added' nor 'dismissed' → it does not
-        # exist under this project (foreign-project / unknown id) → not-found.
+        # Claim failed but the row is in no recognized state under this project
+        # (foreign-project / unknown id) → not-found.
         raise ValueError(f"Unknown discovery suggestion: {suggestion_id}")
 
     @staticmethod

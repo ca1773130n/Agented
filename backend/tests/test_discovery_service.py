@@ -570,7 +570,11 @@ def test_promote_concurrent_loser_returns_existing_source_no_second_row(
 
     # The loser added nothing and returned the winner's source.
     assert add_calls == []
+    assert loser["source"] is not None
     assert loser["source"]["id"] == winner["source"]["id"]
+    # The 'added' invariant: the loser's source_id is present (never NULL).
+    assert loser["suggestion"]["status"] == "added"
+    assert loser["suggestion"]["source_id"] == winner["source"]["id"]
 
     # Still exactly ONE competitor_source row for that candidate url.
     sources = [
@@ -579,6 +583,53 @@ def test_promote_concurrent_loser_returns_existing_source_no_second_row(
         if s["url"] == "https://github.com/acme/rival"
     ]
     assert len(sources) == 1
+
+
+def test_promote_concurrent_loser_observing_claiming_raises_conflict(
+    _seeded_project, _no_embeddings, monkeypatch
+):
+    """Round-3 fix (corrupt-loser race): a loser that re-reads in the window AFTER
+    the winner claimed ('claiming') but BEFORE the winner stamped the source must
+    raise PromotionConflict (route → 409 "promotion in progress, retry") — it must
+    NEVER receive an 'added' row with a NULL source_id (the old corrupt response).
+
+    Collapsed deterministically: leave the row in 'claiming' (a real won claim that
+    hasn't completed) and force this caller onto the loser branch by patching
+    claim_for_promotion → False. add_source must NOT run."""
+    project_id = _seeded_project
+    _stub_client(monkeypatch, topics=_STRONG_TOPICS, stars=_STRONG_STARS)
+    DiscoveryService.scan_project(project_id)
+    rival = next(
+        r
+        for r in discovery_suggestions.list_suggestions(project_id)
+        if r["candidate_repo"] == "rival"
+    )
+
+    # Winner claims for real → the row is now 'claiming' (source NOT yet stamped).
+    assert discovery_suggestions.claim_for_promotion(rival["id"], project_id) is True
+    assert discovery_suggestions.get_suggestion(rival["id"])["status"] == "claiming"
+
+    # Force the loser branch: the claim never wins, and add_source must NOT run.
+    monkeypatch.setattr(discovery_suggestions, "claim_for_promotion", lambda sid, pid: False)
+    add_calls: list = []
+
+    def _spy_add(pid, url, label=None, origin="manual"):
+        add_calls.append(url)
+        raise AssertionError("add_source must not run on the claiming-loser path")
+
+    monkeypatch.setattr(CompetitorSourceService, "add_source", staticmethod(_spy_add))
+
+    with pytest.raises(ds_module.PromotionConflict):
+        DiscoveryService.promote_suggestion(project_id, rival["id"])
+
+    # No add attempted, and no competitor_source landed for the candidate.
+    assert add_calls == []
+    assert not any(
+        s["url"] == "https://github.com/acme/rival"
+        for s in CompetitorSourceService.list_sources(project_id)
+    )
+    # The row is still 'claiming' (the loser observed it, did not mutate it).
+    assert discovery_suggestions.get_suggestion(rival["id"])["status"] == "claiming"
 
 
 def test_promote_reverts_claim_when_add_source_fails(_seeded_project, _no_embeddings, monkeypatch):
