@@ -213,7 +213,7 @@ onUnmounted(() => {
         <div class="modal">
           <div class="modal-header">
             <h2 id="modal-title-add-marketplace-settings">{{ t('settings.addMarketplaceModal.title') }}</h2>
-            <button class="modal-close" @click="showAddModal = false">&times;</button>
+            <button class="modal-close" :aria-label="t('common.close')" @click="showAddModal = false">&times;</button>
           </div>
           <div class="modal-body">
             <div class="form-group">

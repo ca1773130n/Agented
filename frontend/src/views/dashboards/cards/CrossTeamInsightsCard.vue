@@ -85,6 +85,21 @@ function changeColor(pct: number): string {
 }
 
 function exportReport() {
+  const report = {
+    generated_at: new Date().toISOString(),
+    teams: teams.value,
+    org_findings: orgFindings.value,
+    top_risky_repos: topRiskyRepos.value,
+  };
+  const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `cross-team-insights-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
   showToast(t('crossTeamInsightsCard.toast.exported'), 'success');
 }
 </script>

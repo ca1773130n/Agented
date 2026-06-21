@@ -172,7 +172,7 @@ onMounted(() => {
               <h2 id="modal-title-superagent-detail">{{ selectedItem.name }}</h2>
               <span v-if="selectedItem.version" class="version-badge">v{{ selectedItem.version }}</span>
             </div>
-            <button class="close-btn" @click="closeDetail">&times;</button>
+            <button class="close-btn" :aria-label="t('common.close')" @click="closeDetail">&times;</button>
           </div>
           <div class="detail-body">
             <p class="detail-description">{{ selectedItem.description || t('marketplaceSuperAgents.noDescriptionAvailable') }}</p>

@@ -251,7 +251,7 @@ onMounted(async () => {
               <h2 id="modal-title-mcp-detail">{{ selectedServer.name }}</h2>
               <span v-if="selectedServer.version" class="version-badge">v{{ selectedServer.version }}</span>
             </div>
-            <button class="close-btn" @click="closeDetail">&times;</button>
+            <button class="close-btn" :aria-label="t('common.close')" @click="closeDetail">&times;</button>
           </div>
           <div class="detail-body">
             <p class="detail-description">{{ selectedServer.description || t('marketplaceMcpServers.noDescriptionAvailable') }}</p>

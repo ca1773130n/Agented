@@ -24,6 +24,57 @@
     "notInstalled": "Not Installed",
     "dismiss": "Dismiss"
   },
+  "header": {
+    "search": "Search",
+    "searchHint": "Search (Cmd+K)",
+    "notifications": "Notifications",
+    "notificationsEmpty": "No notifications",
+    "notificationsEmptySubtitle": "You're all caught up",
+    "profileMenu": "Profile menu",
+    "user": "User",
+    "signOut": "Sign Out",
+    "home": "Home",
+    "seg": {
+      "products": "Products",
+      "projects": "Projects",
+      "teams": "Teams",
+      "agents": "Agents",
+      "superAgents": "Super Agents",
+      "workflows": "Workflows",
+      "skills": "Skills",
+      "plugins": "Plugins",
+      "mcpServers": "MCP Servers",
+      "triggers": "Triggers",
+      "dashboards": "Dashboards",
+      "settings": "Settings",
+      "executions": "Executions",
+      "history": "History",
+      "playground": "Playground",
+      "builder": "Builder",
+      "design": "Design",
+      "create": "Create",
+      "explore": "Explore",
+      "instances": "Instances",
+      "sessions": "Sessions",
+      "management": "Management",
+      "planning": "Planning",
+      "sketchChat": "Sketch",
+      "auditHistory": "Audit History",
+      "reports": "Reports",
+      "budgets": "Budgets",
+      "admin": "Admin",
+      "tokens": "Token Usage",
+      "security": "Security",
+      "analytics": "Analytics",
+      "health": "Health",
+      "rotation": "Rotation"
+    }
+  },
+  "projectStatus": {
+    "active": "Active",
+    "archived": "Archived",
+    "planning": "Planning"
+  },
   "nav": {
     "mainNavigation": "Main navigation",
     "toggleSidebar": "Toggle sidebar",
@@ -80,6 +131,8 @@
     "allSuperAgents": "All SuperAgents",
     "allWorkflows": "All Workflows",
     "playground": "Playground",
+    "workflowPlayground": "Workflow Playground",
+    "skillsPlayground": "Skills Playground",
     "blockCore": "Core",
     "blockConfiguration": "Configuration",
     "blockPrReview": "PR-Review",
@@ -439,7 +492,50 @@
     "emptyAccounts": "No accounts configured. Add an account to use this backend.",
     "deleteAccount": "Delete Account",
     "confirmDeleteAccount": "Are you sure you want to delete this account?",
-    "movingToNext": "Moving to the next backend…"
+    "movingToNext": "Moving to the next backend…",
+    "editForm": {
+      "title": "Edit Account",
+      "accountNameLabel": "Account Name *",
+      "accountNamePlaceholder": "e.g., Personal, Work",
+      "emailLabel": "Email",
+      "emailPlaceholder": "e.g., user{'@'}example.com",
+      "emailHint": "Login email for this account",
+      "configPathLabel": "Config Path",
+      "configPathPlaceholder": "e.g., ~/.claude-work",
+      "configPathHint": "Path to the backend's config directory for this account",
+      "apiKeyEnvLabel": "API Key Environment Variable",
+      "apiKeyEnvPlaceholder": "e.g., ANTHROPIC_API_KEY_WORK",
+      "apiKeyEnvHint": "Name of the environment variable containing the API key",
+      "planLabel": "Plan",
+      "selectPlan": "Select plan...",
+      "reasoningLabel": "Reasoning Level",
+      "reasoningHint": "Controls how much reasoning the model performs",
+      "summaryLabel": "Summary Level",
+      "summaryHint": "Controls output verbosity",
+      "levelDefault": "Default",
+      "levelLow": "Low",
+      "levelMedium": "Medium",
+      "levelHigh": "High",
+      "summaryConcise": "Concise",
+      "summaryDetailed": "Detailed",
+      "setDefault": "Set as default account",
+      "saving": "Saving...",
+      "update": "Update"
+    },
+    "toast": {
+      "installing": "Installing {name} CLI...",
+      "installed": "CLI installed",
+      "installFailed": "Failed to install CLI",
+      "loadFailed": "Failed to load backend",
+      "saved": "Account saved successfully",
+      "skipped": "Backend skipped",
+      "updated": "Account updated",
+      "saveFailed": "Failed to save account",
+      "deleteFailed": "Failed to delete account",
+      "rateLimitCleared": "Rate limit cleared",
+      "rateLimitClearFailed": "Failed to clear rate limit",
+      "loginSuccess": "Login completed successfully"
+    }
   },
   "directoryBrowser": {
     "title": "Browse Directory",
@@ -7200,6 +7296,10 @@
     }
   },
   "superAgentPlayground": {
+    "badge": {
+      "leader": "leader",
+      "worktree": "worktree"
+    },
     "fallbackTitle": "SuperAgent Playground",
     "yourSuperAgent": "your SuperAgent",
     "chatPlaceholder": "Send a message to {name}...",
@@ -7237,6 +7337,7 @@
     "disable": "Disable",
     "enable": "Enable",
     "inspector": "Inspector",
+    "ouroboros": "Ouroboros",
     "creating": "Creating…",
     "empty": {
       "title": "No super agents yet",
@@ -7943,6 +8044,10 @@
     "preview": {
       "title": "Canvas Preview",
       "description": "Describe your workflow in the chat and I'll generate it for you. The visual graph will appear here."
+    },
+    "generated": {
+      "name": "AI-Generated Workflow {time}",
+      "description": "Generated by AI Workflow Playground"
     }
   },
   "workflows": {
@@ -8063,7 +8168,8 @@
       "detail": "This card will populate once anomaly baselines are wired up server-side."
     },
     "toast": {
-      "acknowledged": "Anomaly acknowledged"
+      "acknowledged": "Anomaly acknowledged",
+      "acknowledgeFailed": "Failed to acknowledge anomaly"
     },
     "timeAgo": {
       "seconds": "{n}s ago",
@@ -9510,6 +9616,12 @@
       "acceptError": "Failed to accept lookalike",
       "dismissError": "Failed to dismiss lookalike",
       "whyChip": "Why"
-    }
+    },
+    "kindCompany": "Company",
+    "statusProposed": "Proposed",
+    "statusApproved": "Approved",
+    "statusRejected": "Rejected",
+    "statusImplementing": "Implementing",
+    "statusDone": "Done"
   }
 }

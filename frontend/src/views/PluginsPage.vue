@@ -370,7 +370,7 @@ onMounted(() => {
         <div class="modal">
           <div class="modal-header">
             <h2 id="modal-title-create-plugin">{{ t('plugins.createPlugin') }}</h2>
-            <button class="modal-close" @click="showCreateModal = false">&times;</button>
+            <button class="modal-close" :aria-label="t('common.close')" @click="showCreateModal = false">&times;</button>
           </div>
           <div class="modal-body">
             <div class="form-group">
@@ -425,7 +425,7 @@ onMounted(() => {
         <div class="modal generate-modal">
           <div class="modal-header">
             <h2 id="modal-title-generate-plugin">{{ t('plugins.generateTitle') }}</h2>
-            <button class="modal-close" @click="showGenerateModal = false">&times;</button>
+            <button class="modal-close" :aria-label="t('common.close')" @click="showGenerateModal = false">&times;</button>
           </div>
           <div class="modal-body">
             <p>{{ t('plugins.generateDesc') }}</p>

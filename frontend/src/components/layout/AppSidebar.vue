@@ -655,7 +655,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           {{ t('nav.allWorkflows') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('workflow-playground') }" :aria-current="sidebarActive('workflow-playground') ? 'page' : undefined" @click="navTo('workflow-playground')">
-          {{ t('nav.playground') }}
+          {{ t('nav.workflowPlayground') }}
         </button>
       </div>
 
@@ -782,7 +782,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
       </SidebarGroupToggle>
       <div v-show="expandedSections.skills" class="nav-submenu" role="region" :aria-label="t('nav.skills')">
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('skills-playground') }" :aria-current="sidebarActive('skills-playground') ? 'page' : undefined" @click="navTo('skills-playground')">
-          {{ t('nav.playground') }}
+          {{ t('nav.skillsPlayground') }}
         </button>
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('skill-create') }" :aria-current="sidebarActive('skill-create') ? 'page' : undefined" @click="navTo('skill-create')">
           {{ t('nav.designASkill') }}
@@ -894,7 +894,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
       <div class="nav-section-label">{{ t('nav.sectionObservability') }}</div>
       <!-- Triggers History (expandable) -->
       <SidebarGroupToggle
-        :label="t('nav.triggers')"
+        :label="t('nav.triggerHistory')"
         :expanded="expandedSections.history"
         :active="isHistorySectionActive()"
         :collapsed-desktop="isCollapsedDesktop()"
@@ -988,7 +988,7 @@ function handleSidebarKeydown(e: KeyboardEvent) {
           </svg>
         </template>
       </SidebarFlatLink>
-      <a href="/docs" target="_blank" class="external-link">
+      <a href="/docs" target="_blank" rel="noopener noreferrer" class="external-link">
         <span class="nav-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>

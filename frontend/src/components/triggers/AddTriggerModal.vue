@@ -244,7 +244,7 @@ async function createTrigger() {
           <h3 id="modal-title-add-trigger">{{ t('addTriggerModal.title') }}</h3>
           <p class="modal-subtitle">{{ t('addTriggerModal.subtitle') }}</p>
         </div>
-        <button class="close-btn" @click="emit('close')">
+        <button class="close-btn" :aria-label="t('common.close')" @click="emit('close')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M18 6L6 18M6 6l12 12"/>
           </svg>

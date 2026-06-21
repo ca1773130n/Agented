@@ -65,6 +65,9 @@ onMounted(loadSettings);
                 <span class="toggle-description">{{ t('settings.grd.autoInitDesc') }}</span>
               </span>
               <button
+                role="switch"
+                :aria-checked="autoInitEnabled"
+                :aria-label="t('settings.grd.autoInitTitle')"
                 :class="['toggle-switch', { active: autoInitEnabled }]"
                 @click="autoInitEnabled = !autoInitEnabled"
               >
@@ -87,6 +90,9 @@ onMounted(loadSettings);
                 <span class="toggle-description">{{ t('settings.grd.syncOnCompleteDesc') }}</span>
               </span>
               <button
+                role="switch"
+                :aria-checked="syncOnSessionComplete"
+                :aria-label="t('settings.grd.syncOnCompleteTitle')"
                 :class="['toggle-switch', { active: syncOnSessionComplete }]"
                 @click="syncOnSessionComplete = !syncOnSessionComplete"
               >

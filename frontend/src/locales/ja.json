@@ -24,6 +24,57 @@
     "notInstalled": "未インストール",
     "dismiss": "閉じる"
   },
+  "header": {
+    "search": "検索",
+    "searchHint": "検索 (Cmd+K)",
+    "notifications": "通知",
+    "notificationsEmpty": "通知はありません",
+    "notificationsEmptySubtitle": "すべて確認済みです",
+    "profileMenu": "プロフィールメニュー",
+    "user": "ユーザー",
+    "signOut": "サインアウト",
+    "home": "ホーム",
+    "seg": {
+      "products": "製品",
+      "projects": "プロジェクト",
+      "teams": "チーム",
+      "agents": "エージェント",
+      "superAgents": "スーパーエージェント",
+      "workflows": "ワークフロー",
+      "skills": "スキル",
+      "plugins": "プラグイン",
+      "mcpServers": "MCPサーバー",
+      "triggers": "トリガー",
+      "dashboards": "ダッシュボード",
+      "settings": "設定",
+      "executions": "実行",
+      "history": "履歴",
+      "playground": "プレイグラウンド",
+      "builder": "ビルダー",
+      "design": "デザイン",
+      "create": "作成",
+      "explore": "探索",
+      "instances": "インスタンス",
+      "sessions": "セッション",
+      "management": "管理",
+      "planning": "計画",
+      "sketchChat": "スケッチ",
+      "auditHistory": "監査履歴",
+      "reports": "レポート",
+      "budgets": "予算",
+      "admin": "管理",
+      "tokens": "トークン使用量",
+      "security": "セキュリティ",
+      "analytics": "分析",
+      "health": "ヘルス",
+      "rotation": "ローテーション"
+    }
+  },
+  "projectStatus": {
+    "active": "アクティブ",
+    "archived": "アーカイブ済み",
+    "planning": "計画中"
+  },
   "nav": {
     "mainNavigation": "メインナビゲーション",
     "toggleSidebar": "サイドバーの切り替え",
@@ -80,6 +131,8 @@
     "allSuperAgents": "すべての SuperAgents",
     "allWorkflows": "すべてのワークフロー",
     "playground": "プレイグラウンド",
+    "workflowPlayground": "ワークフロープレイグラウンド",
+    "skillsPlayground": "スキルプレイグラウンド",
     "blockCore": "コア",
     "blockConfiguration": "構成",
     "blockPrReview": "PR レビュー",
@@ -439,7 +492,50 @@
     "emptyAccounts": "アカウントが設定されていません。このバックエンドを使用するにはアカウントを追加してください。",
     "deleteAccount": "アカウントを削除",
     "confirmDeleteAccount": "このアカウントを削除してもよろしいですか？",
-    "movingToNext": "次の backend に移動中…"
+    "movingToNext": "次の backend に移動中…",
+    "editForm": {
+      "title": "アカウントを編集",
+      "accountNameLabel": "アカウント名 *",
+      "accountNamePlaceholder": "例: 個人、仕事",
+      "emailLabel": "メール",
+      "emailPlaceholder": "例: user{'@'}example.com",
+      "emailHint": "このアカウントのログイン用メール",
+      "configPathLabel": "設定パス",
+      "configPathPlaceholder": "例: ~/.claude-work",
+      "configPathHint": "このアカウントのバックエンド設定ディレクトリへのパス",
+      "apiKeyEnvLabel": "APIキー環境変数",
+      "apiKeyEnvPlaceholder": "例: ANTHROPIC_API_KEY_WORK",
+      "apiKeyEnvHint": "APIキーを含む環境変数の名前",
+      "planLabel": "プラン",
+      "selectPlan": "プランを選択...",
+      "reasoningLabel": "推論レベル",
+      "reasoningHint": "モデルが行う推論の量を制御します",
+      "summaryLabel": "要約レベル",
+      "summaryHint": "出力の詳細度を制御します",
+      "levelDefault": "デフォルト",
+      "levelLow": "低",
+      "levelMedium": "中",
+      "levelHigh": "高",
+      "summaryConcise": "簡潔",
+      "summaryDetailed": "詳細",
+      "setDefault": "デフォルトアカウントに設定",
+      "saving": "保存中...",
+      "update": "更新"
+    },
+    "toast": {
+      "installing": "{name} CLIをインストール中...",
+      "installed": "CLIをインストールしました",
+      "installFailed": "CLIのインストールに失敗しました",
+      "loadFailed": "バックエンドの読み込みに失敗しました",
+      "saved": "アカウントを保存しました",
+      "skipped": "バックエンドをスキップしました",
+      "updated": "アカウントを更新しました",
+      "saveFailed": "アカウントの保存に失敗しました",
+      "deleteFailed": "アカウントの削除に失敗しました",
+      "rateLimitCleared": "レート制限を解除しました",
+      "rateLimitClearFailed": "レート制限の解除に失敗しました",
+      "loginSuccess": "ログインが完了しました"
+    }
   },
   "directoryBrowser": {
     "title": "ディレクトリを選択",
@@ -7200,6 +7296,10 @@
     }
   },
   "superAgentPlayground": {
+    "badge": {
+      "leader": "リーダー",
+      "worktree": "ワークツリー"
+    },
     "fallbackTitle": "SuperAgentプレイグラウンド",
     "yourSuperAgent": "SuperAgent",
     "chatPlaceholder": "{name}にメッセージを送信...",
@@ -7237,6 +7337,7 @@
     "disable": "無効化",
     "enable": "有効化",
     "inspector": "インスペクター",
+    "ouroboros": "Ouroboros",
     "creating": "作成中…",
     "empty": {
       "title": "まだスーパーエージェントがありません",
@@ -7943,6 +8044,10 @@
     "preview": {
       "title": "キャンバスプレビュー",
       "description": "チャットでワークフローを説明すると生成します。ビジュアルグラフがここに表示されます。"
+    },
+    "generated": {
+      "name": "AI生成ワークフロー {time}",
+      "description": "AIワークフロープレイグラウンドで生成"
     }
   },
   "workflows": {
@@ -8063,7 +8168,8 @@
       "detail": "このカードは異常ベースラインがサーバー側で接続されると入力されます。"
     },
     "toast": {
-      "acknowledged": "異常を確認しました"
+      "acknowledged": "異常を確認しました",
+      "acknowledgeFailed": "異常の確認に失敗しました"
     },
     "timeAgo": {
       "seconds": "{n}秒前",
@@ -9510,6 +9616,12 @@
       "acceptError": "類似企業の承認に失敗しました",
       "dismissError": "類似企業の却下に失敗しました",
       "whyChip": "理由"
-    }
+    },
+    "kindCompany": "企業",
+    "statusProposed": "提案済み",
+    "statusApproved": "承認済み",
+    "statusRejected": "却下",
+    "statusImplementing": "実装中",
+    "statusDone": "完了"
   }
 }

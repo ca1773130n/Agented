@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
 import { productApi, projectApi, teamApi, agentApi, superAgentApi } from '../../services/api';
+import { useAuth } from '../../composables/useAuth';
 import CommandPalette from './CommandPalette.vue';
 
 const { t } = useI18n();
@@ -50,9 +51,14 @@ function navigateToSettings() {
   showProfileDropdown.value = false;
 }
 
-function handleSignOut() {
-  // No-op
+async function handleSignOut() {
   showProfileDropdown.value = false;
+  try {
+    await useAuth().logout();
+  } catch {
+    // best-effort: the session token is cleared locally even if the server call fails
+  }
+  router.push('/login');
 }
 
 // --- Command Palette keyboard shortcut ---
@@ -130,19 +136,19 @@ interface BreadcrumbSegment {
   to?: RouteLocationRaw;
 }
 
-// Map URL path segments to human-readable labels
-const segmentLabels: Record<string, string> = {
-  'products': 'Products', 'projects': 'Projects', 'teams': 'Teams',
-  'agents': 'Agents', 'super-agents': 'Super Agents', 'workflows': 'Workflows',
-  'skills': 'Skills', 'plugins': 'Plugins', 'mcp-servers': 'MCP Servers',
-  'triggers': 'Triggers', 'dashboards': 'Dashboards', 'settings': 'Settings',
-  'executions': 'Executions', 'history': 'History', 'playground': 'Playground',
-  'builder': 'Builder', 'design': 'Design', 'create': 'Create', 'explore': 'Explore',
-  'instances': 'Instances', 'sessions': 'Sessions', 'management': 'Management',
-  'planning': 'Planning', 'sketch-chat': 'Sketch', 'audit-history': 'Audit History',
-  'reports': 'Reports', 'budgets': 'Budgets', 'admin': 'Admin',
-  'tokens': 'Token Usage', 'security': 'Security', 'analytics': 'Analytics',
-  'health': 'Health', 'rotation': 'Rotation',
+// Map URL path segments to header.seg.* i18n keys
+const segmentLabelKeys: Record<string, string> = {
+  'products': 'products', 'projects': 'projects', 'teams': 'teams',
+  'agents': 'agents', 'super-agents': 'superAgents', 'workflows': 'workflows',
+  'skills': 'skills', 'plugins': 'plugins', 'mcp-servers': 'mcpServers',
+  'triggers': 'triggers', 'dashboards': 'dashboards', 'settings': 'settings',
+  'executions': 'executions', 'history': 'history', 'playground': 'playground',
+  'builder': 'builder', 'design': 'design', 'create': 'create', 'explore': 'explore',
+  'instances': 'instances', 'sessions': 'sessions', 'management': 'management',
+  'planning': 'planning', 'sketch-chat': 'sketchChat', 'audit-history': 'auditHistory',
+  'reports': 'reports', 'budgets': 'budgets', 'admin': 'admin',
+  'tokens': 'tokens', 'security': 'security', 'analytics': 'analytics',
+  'health': 'health', 'rotation': 'rotation',
 };
 
 // Map path segments to route names for navigation
@@ -168,7 +174,7 @@ const idPrefixToParam: Record<string, string> = {
 
 function resolveSegmentLabel(segment: string): string {
   // Known label
-  if (segmentLabels[segment]) return segmentLabels[segment];
+  if (segmentLabelKeys[segment]) return t(`header.seg.${segmentLabelKeys[segment]}`);
   // Entity ID → resolve display name
   for (const [prefix, paramName] of Object.entries(idPrefixToParam)) {
     if (segment.startsWith(prefix)) return getEntityDisplayName(paramName, segment);
@@ -182,9 +188,9 @@ function resolveSegmentLabel(segment: string): string {
 
 const breadcrumbSegments = computed<BreadcrumbSegment[]>(() => {
   const pathSegments = route.path.split('/').filter(Boolean);
-  if (pathSegments.length === 0) return [{ label: 'Home' }];
+  if (pathSegments.length === 0) return [{ label: t('header.home') }];
 
-  const segments: BreadcrumbSegment[] = [{ label: 'Home', to: { name: 'dashboards' } }];
+  const segments: BreadcrumbSegment[] = [{ label: t('header.home'), to: { name: 'dashboards' } }];
   let accumulated = '';
 
   for (let i = 0; i < pathSegments.length; i++) {
@@ -308,7 +314,7 @@ const mobileSegments = computed<BreadcrumbSegment[]>(() => {
     <!-- Action icons -->
     <div class="header-actions">
       <!-- Search -->
-      <button class="header-action-btn" @click="showCommandPalette = true" aria-label="Search" title="Search (Cmd+K)">
+      <button class="header-action-btn" @click="showCommandPalette = true" :aria-label="t('header.search')" :title="t('header.searchHint')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="11" cy="11" r="8" />
           <path d="m21 21-4.35-4.35" />
@@ -321,7 +327,7 @@ const mobileSegments = computed<BreadcrumbSegment[]>(() => {
 
       <!-- Notification bell -->
       <div ref="notificationDropdownRef" style="position: relative;">
-        <button class="header-action-btn" @click.stop="toggleNotificationDropdown" aria-label="Notifications" title="Notifications">
+        <button class="header-action-btn" @click.stop="toggleNotificationDropdown" :aria-label="t('header.notifications')" :title="t('header.notifications')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
             <path d="M13.73 21a2 2 0 0 1-3.46 0" />
@@ -333,22 +339,22 @@ const mobileSegments = computed<BreadcrumbSegment[]>(() => {
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
               <path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </svg>
-            <p>No notifications</p>
-            <p class="subtitle">You're all caught up</p>
+            <p>{{ t('header.notificationsEmpty') }}</p>
+            <p class="subtitle">{{ t('header.notificationsEmptySubtitle') }}</p>
           </div>
         </div>
       </div>
 
       <!-- Profile avatar -->
       <div ref="profileDropdownRef" style="position: relative;">
-        <div class="profile-avatar" @click.stop="toggleProfileDropdown" role="button" tabindex="0" aria-label="Profile menu">
+        <div class="profile-avatar" @click.stop="toggleProfileDropdown" role="button" tabindex="0" :aria-label="t('header.profileMenu')">
           U
         </div>
         <div v-show="showProfileDropdown" class="header-dropdown">
-          <div class="dropdown-label">User</div>
+          <div class="dropdown-label">{{ t('header.user') }}</div>
           <div class="dropdown-divider" />
-          <button class="dropdown-item" @click="navigateToSettings">Settings</button>
-          <button class="dropdown-item" @click="handleSignOut">Sign Out</button>
+          <button class="dropdown-item" @click="navigateToSettings">{{ t('nav.settings') }}</button>
+          <button class="dropdown-item" @click="handleSignOut">{{ t('header.signOut') }}</button>
         </div>
       </div>
     </div>

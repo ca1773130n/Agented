@@ -304,10 +304,10 @@ const lastTestForChannel = (id: string) => testResults.value.find((r) => r.chann
                   {{ testingChannelId === ch.id ? t('teamsNotificationChannels.sending') : t('teamsNotificationChannels.test') }}
                 </button>
                 <label class="toggle">
-                  <input type="checkbox" :checked="ch.enabled" @change="toggleChannel(ch)" />
+                  <input type="checkbox" :checked="ch.enabled" :aria-label="ch.enabled ? t('teamsNotificationChannels.toast.channelEnabled') : t('teamsNotificationChannels.toast.channelDisabled')" @change="toggleChannel(ch)" />
                   <span class="toggle-track"></span>
                 </label>
-                <button class="btn-delete" @click="deleteChannel(ch.id)">✕</button>
+                <button class="btn-delete" :aria-label="t('teamsNotificationChannels.toast.channelRemoved')" @click="deleteChannel(ch.id)">✕</button>
               </div>
             </div>
 
@@ -351,7 +351,7 @@ const lastTestForChannel = (id: string) => testResults.value.find((r) => r.chann
       <div class="modal">
         <div class="modal-header">
           <h3>{{ t('teamsNotificationChannels.addModalTitle') }}</h3>
-          <button class="btn-close" @click="showAddModal = false">✕</button>
+          <button class="btn-close" :aria-label="t('common.cancel')" @click="showAddModal = false">✕</button>
         </div>
 
         <div class="form-row">

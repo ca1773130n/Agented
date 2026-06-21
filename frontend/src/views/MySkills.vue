@@ -255,7 +255,7 @@ onMounted(() => {
         <div class="modal add-skill-modal">
           <div class="modal-header">
             <h2 id="modal-title-add-skill-library">{{ t('mySkills.addSkill') }}</h2>
-            <button class="btn-close" @click="showAddModal = false">
+            <button class="btn-close" :aria-label="t('common.close')" @click="showAddModal = false">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M18 6L6 18M6 6l12 12"/>
               </svg>

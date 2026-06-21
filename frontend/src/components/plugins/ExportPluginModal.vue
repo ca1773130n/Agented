@@ -91,7 +91,7 @@ async function copyPath() {
       <div class="modal export-modal">
         <div class="modal-header">
           <h2 id="modal-title-export-plugin">{{ t('exportPluginModal.title') }}</h2>
-          <button class="modal-close" @click="handleClose">&times;</button>
+          <button class="modal-close" :aria-label="t('common.close')" @click="handleClose">&times;</button>
         </div>
 
         <div class="modal-body">

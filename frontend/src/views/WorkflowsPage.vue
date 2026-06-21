@@ -170,6 +170,11 @@ function getTriggerBadgeClass(triggerType: string): string {
   }
 }
 
+function getTriggerTypeLabel(triggerType: string): string {
+  const k = ({ manual: 'manual', cron: 'cron', poll: 'poll', file_watch: 'fileWatch', completion: 'completion' } as Record<string, string>)[triggerType];
+  return k ? t(`workflows.triggerType.${k}`) : triggerType;
+}
+
 function formatDate(dateStr?: string): string {
   if (!dateStr) return '';
   return new Date(dateStr).toLocaleDateString();
@@ -244,7 +249,7 @@ onMounted(loadWorkflows);
           <div class="wf-info">
             <h3>{{ wf.name }}</h3>
             <div class="wf-badges">
-              <span :class="['badge-trigger', getTriggerBadgeClass(wf.trigger_type)]">{{ wf.trigger_type }}</span>
+              <span :class="['badge-trigger', getTriggerBadgeClass(wf.trigger_type)]">{{ getTriggerTypeLabel(wf.trigger_type) }}</span>
               <StatusBadge :label="wf.enabled ? t('workflows.status.enabled') : t('workflows.status.disabled')" :variant="wf.enabled ? 'success' : 'neutral'" />
             </div>
           </div>

@@ -115,8 +115,29 @@ function kindLabel(kind: string | null | undefined): string {
       return t('competitorIntel.kindProduct');
     case 'hn_query':
       return t('competitorIntel.kindHnQuery');
+    case 'company':
+      return t('competitorIntel.kindCompany');
+    case 'product':
+      return t('competitorIntel.kindProduct');
     default:
       return kind ?? t('competitorIntel.kindUnknown');
+  }
+}
+
+function statusLabel(status: string | null | undefined): string {
+  switch (status) {
+    case 'proposed':
+      return t('competitorIntel.statusProposed');
+    case 'approved':
+      return t('competitorIntel.statusApproved');
+    case 'rejected':
+      return t('competitorIntel.statusRejected');
+    case 'implementing':
+      return t('competitorIntel.statusImplementing');
+    case 'done':
+      return t('competitorIntel.statusDone');
+    default:
+      return status ?? '';
   }
 }
 
@@ -560,7 +581,7 @@ onUnmounted(() => {
       <ul v-else class="ci-strategy-list">
         <li v-for="st in strategies" :key="st.id" class="ci-strategy">
           <div class="ci-strategy-head">
-            <span class="ci-kind" :data-kind="st.status">{{ st.status }}</span>
+            <span class="ci-kind" :data-kind="st.status">{{ statusLabel(st.status) }}</span>
             <span class="ci-strategy-title">{{ st.title || t('competitorIntel.noSummary') }}</span>
           </div>
           <textarea

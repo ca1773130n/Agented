@@ -337,7 +337,7 @@ async function deleteTriggerBudget() {
             {{ t('triggerDetailPanel.schedule.runs') }} <strong>{{ selectedTrigger.schedule_type }}</strong>
             <span v-if="selectedTrigger.schedule_type === 'weekly'"> {{ t('triggerDetailPanel.schedule.on') }} {{ getWeekdayName(selectedTrigger.schedule_day || 0) }}</span>
             <span v-if="selectedTrigger.schedule_type === 'monthly'"> {{ t('triggerDetailPanel.schedule.onDay', { day: selectedTrigger.schedule_day || 1 }) }}</span>
-            {{ t('triggerDetailPanel.schedule.at') }} <strong>{{ selectedTrigger.schedule_time || '00:00' }}</strong> KST
+            {{ t('triggerDetailPanel.schedule.at') }} <strong>{{ selectedTrigger.schedule_time || '00:00' }}</strong> {{ selectedTrigger.schedule_timezone || '' }}
           </span>
           <span v-else>{{ t('triggerDetailPanel.schedule.unconfigured') }}</span>
           <div v-if="selectedTrigger.next_run_at" class="schedule-next">{{ t('triggerDetailPanel.schedule.nextRun') }} {{ formatDate(selectedTrigger.next_run_at) }}</div>
@@ -513,7 +513,7 @@ async function deleteTriggerBudget() {
             <template v-else-if="path.path_type === 'github'">{{ path.github_repo_url }}</template>
             <template v-else>{{ path.local_project_path }}</template>
           </span>
-          <button class="btn-icon btn-delete" @click="removePath(path)">
+          <button class="btn-icon btn-delete" :title="t('common.remove')" :aria-label="t('common.remove')" @click="removePath(path)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
           </button>
         </div>
