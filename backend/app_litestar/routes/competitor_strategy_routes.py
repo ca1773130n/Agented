@@ -266,6 +266,7 @@ _AUTOIMPLEMENT_STATUS_CODES = {
     "legal_gate_not_cleared": 409,  # §5B not 7/7
     "confirmation_required": 400,  # missing confirm token
     "not_materialized": 409,  # no plan_id — materialize first
+    "not_eligible": 409,  # atomic claim failed (gate invalidated / already started)
 }
 
 

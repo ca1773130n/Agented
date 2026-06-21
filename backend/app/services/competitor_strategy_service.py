@@ -410,66 +410,107 @@ class CompetitorStrategyService:
                 "reason": f"materialized plan {plan_id} not found",
             }
 
+        # Build the goal BEFORE any claim / side effect. _build_autoimplement_goal
+        # fails CLOSED (raises) on missing/unparseable/empty tasks_json — so an
+        # un-materialized-looking plan creates NO claim, NO worktree, NO session.
         goal = cls._build_autoimplement_goal(plan)
 
-        # Resolve the project working dir, then carve an ISOLATED worktree off it.
-        # The loop's cwd is the worktree — never the operator's checkout / main.
+        # ATOMIC CLAIM — close the TOCTOU window. The cheap gates above are best-
+        # effort reads; this single conditional UPDATE re-checks status='implementing'
+        # + legal_cleared_at + plan_id + session_id IS NULL AT WRITE TIME and stamps
+        # a claim sentinel. If a concurrent update_body / legal-reset invalidated the
+        # gate between the reads and here, the claim matches nothing → fail CLOSED
+        # (no worktree, no session). It also prevents a double-launch (second claim
+        # returns None).
+        claimed = competitor_strategies.claim_for_autoimplement(strategy_id, project_id)
+        if claimed is None:
+            return {
+                "status": "not_eligible",
+                "reason": (
+                    "strategy is not claimable for auto-implement — gate invalidated, "
+                    "already started, or not in 'implementing' state with a cleared "
+                    "§5B gate + plan_id"
+                ),
+            }
+
+        # Past the claim: ANY failure below must (a) tear down the worktree/branch,
+        # (b) revert the claim (session_id → NULL so it is re-claimable), (c) re-raise.
         from .project_workspace_service import ProjectWorkspaceService
 
         base_dir = ProjectWorkspaceService.resolve_working_directory(project_id)
-        worktree_path = cls._create_strategy_worktree(base_dir, strategy_id)
-        if not worktree_path:
-            raise ValueError(
-                f"failed to create isolated worktree for strategy {strategy_id} under {base_dir}"
-            )
+        worktree_created = False
+        try:
+            worktree_path = cls._create_strategy_worktree(base_dir, strategy_id)
+            if not worktree_path:
+                raise ValueError(
+                    f"failed to create isolated worktree for strategy {strategy_id} "
+                    f"under {base_dir}"
+                )
+            worktree_created = True
 
-        goal_loop_config = {
-            "goal": goal,
-            # human_gate present → the runner pauses for operator approval. Mode
-            # 'on_exit' blocks the loop before it finishes so a human signs off the
-            # auto-generated change (continue|modify|abort) before it lands.
-            "human_gate": {"mode": "on_exit", "n": 1},
-            # Bounded llm_judge quality gate + hard caps — autonomous code-mod must
-            # never run unbounded.
-            "quality_gate": {
-                "kind": "llm_judge",
-                "rubric": (
-                    "The change correctly and completely implements the strategy tasks "
-                    "without unrelated edits."
-                ),
-                "threshold": 0.8,
-                "min_confidence": 0.6,
-            },
-            "max_iterations": 20,
-            "max_wall_seconds": 1800,
-            "context_policy": "carry",
-            "sandbox": "isolated",
-        }
+            goal_loop_config = {
+                "goal": goal,
+                # human_gate present → the runner pauses for operator approval. Mode
+                # 'on_exit' blocks the loop before it finishes so a human signs off the
+                # auto-generated change (continue|modify|abort) before it lands.
+                "human_gate": {"mode": "on_exit", "n": 1},
+                # Bounded llm_judge quality gate + hard caps — autonomous code-mod must
+                # never run unbounded.
+                "quality_gate": {
+                    "kind": "llm_judge",
+                    "rubric": (
+                        "The change correctly and completely implements the strategy tasks "
+                        "without unrelated edits."
+                    ),
+                    "threshold": 0.8,
+                    "min_confidence": 0.6,
+                },
+                "max_iterations": 20,
+                "max_wall_seconds": 1800,
+                "context_policy": "carry",
+                "sandbox": "isolated",
+            }
 
-        session_config = {
-            "project_id": project_id,
-            "cwd": worktree_path,
-            "worktree_path": worktree_path,
-            "plan_id": plan_id,
-            "execution_type": "goal_loop",
-            "execution_mode": "autonomous",
-            # Autonomous in-worktree code-mod needs claude's skip-permissions.
-            "yolo_mode": True,
-            "goal_loop_config": goal_loop_config,
-        }
+            session_config = {
+                "project_id": project_id,
+                "cwd": worktree_path,
+                "worktree_path": worktree_path,
+                "plan_id": plan_id,
+                "execution_type": "goal_loop",
+                "execution_mode": "autonomous",
+                # Autonomous in-worktree code-mod needs claude's skip-permissions.
+                # The GoalLoopSessionHandler / manager do NOT inject the flag when
+                # yolo_mode is set (the HTTP route does, but this path bypasses it),
+                # so we pass an EXPLICIT cmd carrying --dangerously-skip-permissions
+                # to guarantee the launched subprocess actually gets it. yolo_mode is
+                # still set for the manager's bookkeeping. Safety during the run rides
+                # the loop's human_gate + the isolated worktree (unchanged).
+                "yolo_mode": True,
+                "cmd": cls._autoimplement_cmd(),
+                "goal_loop_config": goal_loop_config,
+            }
 
-        from .execution_type_handler import get_handler
+            from .execution_type_handler import get_handler
 
-        handler = get_handler("goal_loop")
-        if handler is None:  # pragma: no cover — registry always has goal_loop
-            raise ValueError("goal_loop execution handler is not registered")
-        result = handler.start(session_config)
-        if isinstance(result, dict) and result.get("error"):
-            raise ValueError(f"goal_loop launch failed: {result['error']}")
+            handler = get_handler("goal_loop")
+            if handler is None:  # pragma: no cover — registry always has goal_loop
+                raise ValueError("goal_loop execution handler is not registered")
+            result = handler.start(session_config)
+            if isinstance(result, dict) and result.get("error"):
+                raise ValueError(f"goal_loop launch failed: {result['error']}")
 
-        session_id = result.get("session_id") if isinstance(result, dict) else None
-        if session_id:
+            session_id = result.get("session_id") if isinstance(result, dict) else None
+            if not session_id:
+                raise ValueError("goal_loop launch returned no session_id")
+            # Replace the claim sentinel with the REAL session id.
             competitor_strategies.set_session_id(strategy_id, session_id, project_id=project_id)
+        except Exception:
+            # Fail CLOSED: undo every side effect so a launch failure leaves no
+            # dangling worktree/branch and the strategy un-claimed (re-claimable).
+            if worktree_created:
+                cls._remove_strategy_worktree(base_dir, strategy_id)
+            competitor_strategies.release_autoimplement_claim(strategy_id, project_id)
+            raise
 
         logger.info(
             "start_autoimplement launched goal-loop (project=%s strategy=%s plan=%s "
@@ -489,23 +530,63 @@ class CompetitorStrategyService:
         }
 
     @staticmethod
-    def _build_autoimplement_goal(plan: dict) -> str:
-        """Derive the goal-loop instruction from a materialized ProjectPlan.
+    def _autoimplement_cmd() -> list[str]:
+        """The EXPLICIT claude stream-json command for an auto-implement goal-loop.
 
-        Joins the plan's ``tasks_json`` tasks into a single "implement these
-        tasks" prompt. Falls back to the plan title/description when ``tasks_json``
-        is missing or unparseable so the goal is never empty (the handler rejects
-        an empty goal).
+        Identical to the GoalLoopSessionHandler default shape PLUS
+        ``--dangerously-skip-permissions`` — the autonomous in-worktree code-mod
+        needs it, and neither the handler nor the manager inject it for this path
+        (the manager skips the permission-hook overlay when ``yolo_mode`` is set,
+        and the only flag-injection site is the HTTP goal-loop route this service
+        bypasses). Passing the flag in an explicit ``cmd`` guarantees the launched
+        subprocess actually receives it (contract == intent). Safety during the run
+        is the loop's ``human_gate`` + the isolated worktree, NOT a permission
+        prompt — that model is unchanged.
         """
-        tasks: list = []
+        return [
+            "claude",
+            "--print",
+            "--input-format",
+            "stream-json",
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--include-hook-events",
+            "--include-partial-messages",
+            "--dangerously-skip-permissions",
+        ]
+
+    @staticmethod
+    def _build_autoimplement_goal(plan: dict) -> str:
+        """Derive the goal-loop instruction from a materialized ProjectPlan — fail CLOSED.
+
+        The goal MUST be built ONLY from the plan's materialized ``tasks_json``
+        tasks. There is deliberately NO fallback to the raw plan title/description:
+        a missing, unparseable, or empty ``tasks_json`` means the plan was not
+        properly materialized through the §5B/HITL path, so launching an
+        autonomous agent off raw plan text (a quality/injection risk) is refused.
+        Raises ``ValueError`` — the caller has not yet created any worktree or
+        session, so the failure leaves nothing behind.
+        """
         raw = plan.get("tasks_json")
-        if raw:
-            try:
-                parsed = json.loads(raw)
-                if isinstance(parsed, dict):
-                    tasks = parsed.get("tasks") or []
-            except (json.JSONDecodeError, ValueError, TypeError):
-                tasks = []
+        if not raw:
+            raise ValueError(
+                "materialized plan has no tasks_json — refusing to build an "
+                "auto-implement goal (fail closed)"
+            )
+        try:
+            parsed = json.loads(raw)
+        except (json.JSONDecodeError, ValueError, TypeError) as exc:
+            raise ValueError(
+                f"materialized plan tasks_json is unparseable — refusing to "
+                f"auto-implement (fail closed): {exc}"
+            ) from None
+        tasks = parsed.get("tasks") if isinstance(parsed, dict) else None
+        if not isinstance(tasks, list) or not tasks:
+            raise ValueError(
+                "materialized plan tasks_json has no tasks — refusing to "
+                "auto-implement (fail closed)"
+            )
         lines = []
         for t in tasks:
             if not isinstance(t, dict):
@@ -519,22 +600,85 @@ class CompetitorStrategyService:
             elif desc:
                 lines.append(f"- {desc}")
         if not lines:
-            fallback = (plan.get("title") or "").strip() or (plan.get("description") or "").strip()
-            lines = (
-                [f"- {fallback}"] if fallback else ["- Implement the materialized strategy plan."]
+            raise ValueError(
+                "materialized plan tasks_json has no usable task title/description "
+                "— refusing to auto-implement (fail closed)"
             )
         return "Implement these tasks:\n" + "\n".join(lines)
 
     @staticmethod
-    def _create_strategy_worktree(base_dir: str, strategy_id: str) -> Optional[str]:
+    def _is_registered_worktree(base_dir: str, worktree_abs: str) -> bool:
+        """True iff ``worktree_abs`` is a git-registered worktree of ``base_dir``.
+
+        Parses ``git -C {base_dir} worktree list --porcelain`` and matches the
+        real (symlink-resolved) path of each registered worktree against the real
+        path of ``worktree_abs``. Used to validate a reused worktree dir is a
+        genuine isolated worktree — not a stale plain dir or a symlink that could
+        resolve cwd back to main.
+        """
+        import subprocess
+
+        target = os.path.realpath(worktree_abs)
+        try:
+            result = subprocess.run(
+                ["git", "-C", base_dir, "worktree", "list", "--porcelain"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            logger.error("_is_registered_worktree: git worktree list failed")
+            return False
+        if result.returncode != 0:
+            return False
+        for line in result.stdout.splitlines():
+            if line.startswith("worktree "):
+                registered = os.path.realpath(line[len("worktree ") :].strip())
+                if registered == target:
+                    return True
+        return False
+
+    @staticmethod
+    def _remove_strategy_worktree(base_dir: str, strategy_id: str) -> None:
+        """Best-effort teardown of the strategy worktree + its branch.
+
+        ``git worktree remove --force`` the ``.worktrees/strategy-{sid}`` dir and
+        ``git branch -D strategy/{sid}``. Never raises — used on the launch-failure
+        cleanup path (so a launch exception leaves no dangling worktree/branch) and
+        when a stale/invalid reuse dir must be torn down before recreation.
+        """
+        import subprocess
+
+        worktree_rel = os.path.join(".worktrees", f"strategy-{strategy_id}")
+        branch_name = f"strategy/{strategy_id}"
+        for argv in (
+            ["git", "-C", base_dir, "worktree", "remove", "--force", worktree_rel],
+            ["git", "-C", base_dir, "worktree", "prune"],
+            ["git", "-C", base_dir, "branch", "-D", branch_name],
+        ):
+            try:
+                subprocess.run(argv, capture_output=True, text=True, timeout=30)
+            except Exception:
+                logger.warning(
+                    "_remove_strategy_worktree: %s failed (continuing)", argv, exc_info=True
+                )
+
+    @classmethod
+    def _create_strategy_worktree(cls, base_dir: str, strategy_id: str) -> Optional[str]:
         """Create an ISOLATED git worktree off ``base_dir`` for an auto-implement run.
 
         Runs ``git -C {base_dir} worktree add .worktrees/strategy-{sid} -b
         strategy/{sid}`` so the goal-loop never mutates the operator's main
         checkout. Returns the absolute worktree path on success, None on failure
         (caller raises). Mirrors ``InstanceService._create_worktree`` — reuse, not
-        reinvention. Idempotent: reuses an existing worktree dir; retries without
-        ``-b`` when the branch already exists.
+        reinvention.
+
+        REUSE is VALIDATED, not trusted: an existing ``.worktrees/strategy-{sid}``
+        dir is reused only when it is (a) NOT a symlink, (b) its real path is under
+        ``{base_dir}/.worktrees`` (never escaping to main), and (c) it is a
+        git-REGISTERED worktree. A stale plain dir, a symlink, or an out-of-tree
+        path is torn down and recreated — cwd must NEVER resolve to the main
+        checkout.
         """
         import subprocess
 
@@ -545,12 +689,46 @@ class CompetitorStrategyService:
             logger.error("_create_strategy_worktree: %s is not a git repository", base_dir)
             return None
 
+        worktrees_root = os.path.realpath(os.path.join(base_dir, ".worktrees"))
         worktree_rel = os.path.join(".worktrees", f"strategy-{strategy_id}")
         worktree_abs = os.path.join(base_dir, worktree_rel)
         branch_name = f"strategy/{strategy_id}"
-        if os.path.isdir(worktree_abs):
-            logger.info("_create_strategy_worktree: reusing existing worktree %s", worktree_abs)
-            return worktree_abs
+
+        if os.path.lexists(worktree_abs):
+            real = os.path.realpath(worktree_abs)
+            is_symlink = os.path.islink(worktree_abs)
+            under_worktrees = real == worktrees_root or real.startswith(worktrees_root + os.sep)
+            registered = cls._is_registered_worktree(base_dir, worktree_abs)
+            if (not is_symlink) and under_worktrees and registered:
+                logger.info("_create_strategy_worktree: reusing valid worktree %s", worktree_abs)
+                return worktree_abs
+            # Invalid: symlink, escaped path, or unregistered/stale dir. Tear it
+            # down (and the branch) before recreating — NEVER run cwd in it.
+            logger.warning(
+                "_create_strategy_worktree: rejecting invalid existing path %s "
+                "(symlink=%s under_worktrees=%s registered=%s) — removing + recreating",
+                worktree_abs,
+                is_symlink,
+                under_worktrees,
+                registered,
+            )
+            cls._remove_strategy_worktree(base_dir, strategy_id)
+            if os.path.lexists(worktree_abs):
+                # Removal left something behind (e.g. a bare symlink git won't
+                # touch) — refuse rather than risk cwd escaping to main.
+                try:
+                    if os.path.islink(worktree_abs) or os.path.isfile(worktree_abs):
+                        os.unlink(worktree_abs)
+                except OSError:
+                    logger.error(
+                        "_create_strategy_worktree: could not clear stale path %s", worktree_abs
+                    )
+                    return None
+            if os.path.lexists(worktree_abs):
+                logger.error(
+                    "_create_strategy_worktree: stale path %s persists — refusing", worktree_abs
+                )
+                return None
 
         try:
             result = subprocess.run(
