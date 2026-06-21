@@ -30,6 +30,13 @@ KIND_PRODUCT_URL = "product_url"
 # ``kind_override`` land in the leaf plans that own each kind (this root stays
 # minimal). ``kind`` is free TEXT (no CHECK) — a new kind needs NO migration.
 KIND_JOB_BOARD = "job_board"
+# Hacker News query source (25-05): the source's ``url`` column holds a free-text
+# SEARCH QUERY (a company / product name), NOT a URL. The HNAdapter polls the
+# keyless HN Algolia ``search_by_date`` endpoint with that query. Because the
+# identifier is a non-URL query, ``add_source`` must accept an EXPLICIT ``kind``
+# (the URL-host ``detect_kind`` would otherwise mis-route a bare name to
+# ``product_url``). ``kind`` is free TEXT (no CHECK) — no migration.
+KIND_HN_QUERY = "hn_query"
 
 # Columns selected/returned, in declaration order (see migration 171).
 _SOURCE_COLUMNS = (
@@ -70,6 +77,8 @@ class CompetitorSourceService:
             return KIND_GITHUB_REPO
         if host in ("arxiv.org", "export.arxiv.org"):
             return KIND_ARXIV
+        if host in ("news.ycombinator.com", "hn.algolia.com"):
+            return KIND_HN_QUERY
         if host in (
             "boards.greenhouse.io",
             "job-boards.greenhouse.io",
@@ -86,16 +95,23 @@ class CompetitorSourceService:
         url: str,
         label: Optional[str] = None,
         origin: str = "manual",
+        kind: Optional[str] = None,
     ) -> dict:
         """Insert a competitor source and return the persisted row.
 
-        ``kind`` is auto-detected from ``url``. ``etag``/``watermark`` start
-        NULL (the poller fills them later) and ``status`` defaults to
-        ``'active'``. ``label`` is OPTIONAL and is normalized: an empty or
-        whitespace-only string is stored as NULL. Never raises on a
-        missing/blank ``label`` (REQ-27 / wizard-defaults rule).
+        ``kind`` is auto-detected from ``url`` UNLESS an explicit ``kind`` is
+        supplied — when provided (e.g. ``hn_query``) it is used VERBATIM and
+        ``detect_kind`` is skipped. This is the path for a NON-URL identifier: an
+        ``hn_query`` source stores a free-text search query in the ``url`` column,
+        which has no host and would otherwise mis-route to ``product_url``. The
+        ``url``/identifier column is arbitrary TEXT (no URL validation here), so a
+        query string persists without rejection (optional-fields-never-block).
+        ``etag``/``watermark`` start NULL (the poller fills them later) and
+        ``status`` defaults to ``'active'``. ``label`` is OPTIONAL and is
+        normalized: an empty or whitespace-only string is stored as NULL. Never
+        raises on a missing/blank ``label`` (REQ-27 / wizard-defaults rule).
         """
-        kind = CompetitorSourceService.detect_kind(url)
+        kind = kind or CompetitorSourceService.detect_kind(url)
         normalized_label = label.strip() if isinstance(label, str) else None
         if not normalized_label:
             normalized_label = None

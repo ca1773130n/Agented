@@ -116,6 +116,33 @@ def test_add_source_returns_source_with_detected_kind(isolated_db):
     assert src["id"].startswith("cmps-")
 
 
+def test_add_source_explicit_hn_query_kind_accepts_non_url(isolated_db):
+    """An explicit kind=hn_query lets a NON-URL search query through; the query is
+    stored verbatim in the identifier column and the row is hn_query (not the
+    product_url a host-less name would auto-detect to)."""
+    project_id = create_project(name="ci-hn")
+    with _client() as c:
+        resp = c.post(
+            f"/api/projects/{project_id}/competitor-intel/sources",
+            json={"url": "Acme Corp", "kind": "hn_query"},
+        )
+    assert resp.status_code == 201
+    src = resp.json()["source"]
+    assert src["kind"] == "hn_query"
+    assert src["url"] == "Acme Corp"
+
+
+def test_add_source_rejects_unknown_kind(isolated_db):
+    """An explicit kind outside the allowlist is a 400 (not silently stored)."""
+    project_id = create_project(name="ci-badkind")
+    with _client() as c:
+        resp = c.post(
+            f"/api/projects/{project_id}/competitor-intel/sources",
+            json={"url": "Acme Corp", "kind": "totally_made_up"},
+        )
+    assert resp.status_code == 400
+
+
 def test_add_source_succeeds_with_no_label(isolated_db):
     """REQ-27 / wizard-defaults: an empty/absent label NEVER blocks the add."""
     project_id = create_project(name="ci-proj")
