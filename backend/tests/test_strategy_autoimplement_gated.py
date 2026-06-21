@@ -563,3 +563,158 @@ def test_build_goal_rejects_unparseable_tasks_json(isolated_db):
     for bad in (None, "", "not json", '{"tasks": []}', "{}", '{"tasks": [1, 2]}'):
         with pytest.raises(ValueError):
             CompetitorStrategyService._build_autoimplement_goal({"tasks_json": bad})
+
+
+# ---------------------------------------------------------------------------
+# Finding #6 — post-spawn failure STOPS the already-launched autonomous agent
+# ---------------------------------------------------------------------------
+
+
+def test_autoimplement_post_spawn_failure_stops_session(isolated_db, monkeypatch):
+    """handler.start SPAWNS the agent, then set_session_id raises → the spawned
+    --dangerously-skip-permissions goal-loop MUST be stopped (never orphaned).
+
+    This pins the orphaned-process hazard: once handler.start returns a real
+    session id the subprocess is live. If ANY later step raises (here:
+    set_session_id), the cleanup must STOP that session by id FIRST, then remove
+    the worktree, then release the claim, then re-raise. Otherwise a detached
+    skip-permissions agent keeps running while the claim is freed for re-launch.
+    """
+    import pytest
+
+    monkeypatch.setenv(AGENTED_STRATEGY_AUTOIMPLEMENT, "1")
+    project_id = create_project(name="ai-post-spawn-proj")
+    sid = _seed_strategy(project_id, cleared=True)
+    _materialize_plan(project_id, sid)
+    _drive_to_implementing(project_id, sid)
+
+    from app.services import project_workspace_service as pws
+
+    monkeypatch.setattr(
+        pws.ProjectWorkspaceService,
+        "resolve_working_directory",
+        staticmethod(lambda pid: "/tmp/ai-post-spawn-proj"),
+    )
+    monkeypatch.setattr(
+        CompetitorStrategyService,
+        "_create_strategy_worktree",
+        staticmethod(lambda base_dir, strategy_id: "/tmp/ai-post-spawn-proj/.worktrees/strategy-x"),
+    )
+
+    # handler.start SUCCEEDS — the agent is now spawned and live.
+    from app.services import execution_type_handler as eth
+
+    class _FakeHandler:
+        def start(self, cfg):
+            return {"session_id": "psess-spawned-1"}
+
+    monkeypatch.setattr(eth, "get_handler", lambda kind: _FakeHandler())
+
+    # The NEXT step (stamping the real session id) raises — post-spawn failure.
+    import app.services.competitor_strategy_service as svc
+
+    def _boom_set_session_id(*a, **k):
+        raise RuntimeError("set_session_id exploded after spawn")
+
+    monkeypatch.setattr(svc.competitor_strategies, "set_session_id", _boom_set_session_id)
+
+    # Spy the session STOP api — it MUST be called with the spawned session id.
+    stopped = []
+    from app.services import project_session_manager as psm
+
+    monkeypatch.setattr(
+        psm.ProjectSessionManager,
+        "stop_session",
+        classmethod(lambda cls, session_id, wait=True: stopped.append((session_id, wait)) or True),
+    )
+
+    # Spy worktree teardown so we can assert ordering of cleanup steps.
+    removed = {}
+    monkeypatch.setattr(
+        CompetitorStrategyService,
+        "_remove_strategy_worktree",
+        staticmethod(
+            lambda base_dir, strategy_id: removed.__setitem__("called", (base_dir, strategy_id))
+        ),
+    )
+
+    with pytest.raises(RuntimeError):
+        CompetitorStrategyService.start_autoimplement(
+            project_id, sid, confirm_token="confirm-please"
+        )
+
+    # The spawned session was STOPPED by id (fire-and-forget) — agent not orphaned.
+    assert stopped, "post-spawn failure must STOP the already-launched session"
+    assert stopped[0][0] == "psess-spawned-1"
+    # Worktree torn down and claim released → strategy re-claimable.
+    assert removed.get("called") is not None
+    row = dao.get_strategy(sid, project_id=project_id)
+    assert row["session_id"] is None
+    assert dao.claim_for_autoimplement(sid, project_id) is not None
+
+
+def test_autoimplement_pre_spawn_failure_no_stop(isolated_db, monkeypatch):
+    """create_session raising BEFORE returning a session id → no stop needed.
+
+    The complement of the post-spawn case: if the launch fails before any
+    subprocess id comes back (started_session_id stays None), there is nothing to
+    stop — stop_session must NOT be called — but the worktree teardown + claim
+    release still run.
+    """
+    import pytest
+
+    monkeypatch.setenv(AGENTED_STRATEGY_AUTOIMPLEMENT, "1")
+    project_id = create_project(name="ai-pre-spawn-proj")
+    sid = _seed_strategy(project_id, cleared=True)
+    _materialize_plan(project_id, sid)
+    _drive_to_implementing(project_id, sid)
+
+    from app.services import project_workspace_service as pws
+
+    monkeypatch.setattr(
+        pws.ProjectWorkspaceService,
+        "resolve_working_directory",
+        staticmethod(lambda pid: "/tmp/ai-pre-spawn-proj"),
+    )
+    monkeypatch.setattr(
+        CompetitorStrategyService,
+        "_create_strategy_worktree",
+        staticmethod(lambda base_dir, strategy_id: "/tmp/ai-pre-spawn-proj/.worktrees/strategy-x"),
+    )
+
+    from app.services import execution_type_handler as eth
+
+    class _BoomHandler:
+        def start(self, cfg):
+            raise RuntimeError("create_session exploded before spawn")
+
+    monkeypatch.setattr(eth, "get_handler", lambda kind: _BoomHandler())
+
+    stopped = []
+    from app.services import project_session_manager as psm
+
+    monkeypatch.setattr(
+        psm.ProjectSessionManager,
+        "stop_session",
+        classmethod(lambda cls, session_id, wait=True: stopped.append(session_id) or True),
+    )
+    removed = {}
+    monkeypatch.setattr(
+        CompetitorStrategyService,
+        "_remove_strategy_worktree",
+        staticmethod(
+            lambda base_dir, strategy_id: removed.__setitem__("called", (base_dir, strategy_id))
+        ),
+    )
+
+    with pytest.raises(RuntimeError):
+        CompetitorStrategyService.start_autoimplement(
+            project_id, sid, confirm_token="confirm-please"
+        )
+
+    # Nothing spawned → stop_session NOT called, but worktree + claim still cleaned.
+    assert stopped == [], "pre-spawn failure must NOT call stop_session (nothing to stop)"
+    assert removed.get("called") is not None
+    row = dao.get_strategy(sid, project_id=project_id)
+    assert row["session_id"] is None
+    assert dao.claim_for_autoimplement(sid, project_id) is not None

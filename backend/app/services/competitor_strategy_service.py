@@ -238,15 +238,27 @@ class CompetitorStrategyService:
             description=strategy["body"],
             tasks_json=tasks_json,
         )
-        plan_id = grd_db.add_project_plan(
-            phase_id=plan_req.phase_id,
-            plan_number=plan_req.plan_number,
-            title=plan_req.title,
-            description=plan_req.description,
-            tasks_json=plan_req.tasks_json,
-        )
-        if plan_id is None:
-            raise ValueError("failed to persist ProjectPlan for materialized strategy")
+        # mark_implementing already flipped the strategy to 'implementing'. If plan
+        # creation now fails (returns None, or raises e.g. IntegrityError), the
+        # strategy would be WEDGED in 'implementing' with no plan_id — un-editable
+        # (update_body/record_legal_item refuse in-flight) and un-re-materializable.
+        # Revert it to 'approved' (legal_cleared_at preserved) so it stays retryable
+        # BEFORE re-raising the failure.
+        try:
+            plan_id = grd_db.add_project_plan(
+                phase_id=plan_req.phase_id,
+                plan_number=plan_req.plan_number,
+                title=plan_req.title,
+                description=plan_req.description,
+                tasks_json=plan_req.tasks_json,
+            )
+            if plan_id is None:
+                raise ValueError("failed to persist ProjectPlan for materialized strategy")
+        except Exception:
+            competitor_strategies.revert_implementing_to_approved(
+                strategy_id, project_id=project_id
+            )
+            raise
 
         # Stamp plan_id back onto the strategy (raw SQLite, project-scoped).
         with get_connection() as conn:
@@ -440,6 +452,12 @@ class CompetitorStrategyService:
         # else the 'claiming' sentinel leaks and the strategy is permanently locked.
         base_dir = None
         worktree_created = False
+        # The MOMENT handler.start returns a real session id we record it here,
+        # BEFORE any further step (set_session_id, logging) that could raise. If
+        # the launch spawned the autonomous --dangerously-skip-permissions
+        # subprocess but a later step throws, the except below STOPS this session
+        # first — the spawned agent must NEVER outlive a failed launch.
+        started_session_id = None
         try:
             from .project_workspace_service import ProjectWorkspaceService
 
@@ -504,6 +522,9 @@ class CompetitorStrategyService:
                 raise ValueError(f"goal_loop launch failed: {result['error']}")
 
             session_id = result.get("session_id") if isinstance(result, dict) else None
+            # Record the spawned session id IMMEDIATELY — the subprocess is now
+            # live, and any step below that raises must tear it down first.
+            started_session_id = session_id
             if not session_id:
                 raise ValueError("goal_loop launch returned no session_id")
             # Replace the claim sentinel with the REAL session id.
@@ -511,6 +532,26 @@ class CompetitorStrategyService:
         except Exception:
             # Fail CLOSED: undo every side effect so a launch failure leaves no
             # dangling worktree/branch and the strategy un-claimed (re-claimable).
+            #
+            # STOP THE SPAWNED AGENT FIRST. If handler.start already launched the
+            # autonomous goal-loop subprocess (started_session_id set) but a later
+            # step raised, that --dangerously-skip-permissions process is live and
+            # untracked the instant we release the claim. Kill its process group
+            # (close stdin → SIGTERM → watchdog SIGKILL) by session id BEFORE we
+            # remove the worktree or free the claim, so it can never outlive the
+            # failed launch.
+            if started_session_id:
+                try:
+                    from .project_session_manager import ProjectSessionManager
+
+                    ProjectSessionManager.stop_session(started_session_id, wait=False)
+                except Exception:
+                    logger.exception(
+                        "start_autoimplement: failed to stop spawned session %s during "
+                        "launch-failure cleanup (strategy=%s)",
+                        started_session_id,
+                        strategy_id,
+                    )
             if worktree_created:
                 cls._remove_strategy_worktree(base_dir, strategy_id)
             competitor_strategies.release_autoimplement_claim(strategy_id, project_id)

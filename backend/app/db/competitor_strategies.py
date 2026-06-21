@@ -488,3 +488,44 @@ def mark_implementing(strategy_id: str, *, project_id: Optional[str] = None) -> 
     # Status is 'approved' and cleared yet 0 rows matched — only possible if the
     # row was concurrently mutated out from under us; treat as not-found.
     raise ValueError(f"strategy not found: {strategy_id!r}")
+
+
+def revert_implementing_to_approved(
+    strategy_id: str, *, project_id: Optional[str] = None
+) -> Optional[dict]:
+    """Roll an ``implementing`` strategy back to ``approved`` — materialize undo.
+
+    The materialize path (26-04) flips ``approved`` → ``implementing`` via
+    :func:`mark_implementing` BEFORE it creates the ``ProjectPlan``. If plan
+    creation then fails, the strategy would be wedged in ``implementing`` with NO
+    ``plan_id`` — un-editable (``update_body``/``record_legal_item`` refuse
+    in-flight strategies) and un-re-materializable. This is the inverse: it puts
+    the strategy back to ``approved`` so the operator can retry.
+
+    ``legal_cleared_at`` is deliberately PRESERVED (the §5B clearance was already
+    earned), so the reverted strategy is approved + cleared = immediately
+    re-materializable.
+
+    Fail-safe by construction (atomic conditional UPDATE):
+
+    - reverts ONLY when the row is still ``status = 'implementing'`` AND
+      ``plan_id IS NULL`` (a successful materialize stamps ``plan_id``, so this
+      can never undo a completed one) AND ``session_id IS NULL`` (never disturb a
+      strategy an auto-implement launch has claimed/started);
+    - matches nothing otherwise → returns the current row unchanged (idempotent,
+      never raises).
+    """
+    scope = " AND project_id = ?" if project_id is not None else ""
+    params: list = [strategy_id]
+    if project_id is not None:
+        params.append(project_id)
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE competitor_strategy "
+            "SET status = 'approved', updated_at = CURRENT_TIMESTAMP "
+            "WHERE id = ? AND status = 'implementing' "
+            f"AND plan_id IS NULL AND session_id IS NULL{scope}",
+            params,
+        )
+        conn.commit()
+    return get_strategy(strategy_id, project_id=project_id)
