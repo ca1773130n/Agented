@@ -437,9 +437,13 @@ class CompetitorStrategyService:
         # (b) revert the claim (session_id → NULL so it is re-claimable), (c) re-raise.
         from .project_workspace_service import ProjectWorkspaceService
 
-        base_dir = ProjectWorkspaceService.resolve_working_directory(project_id)
+        # resolve_working_directory runs INSIDE the cleanup try: ANY failure between
+        # the claim and the launch must release the claim, else the 'claiming'
+        # sentinel leaks and the strategy is permanently non-re-claimable.
+        base_dir = None
         worktree_created = False
         try:
+            base_dir = ProjectWorkspaceService.resolve_working_directory(project_id)
             worktree_path = cls._create_strategy_worktree(base_dir, strategy_id)
             if not worktree_path:
                 raise ValueError(

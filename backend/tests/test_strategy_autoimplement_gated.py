@@ -429,6 +429,37 @@ def test_autoimplement_launch_failure_cleans_up(isolated_db, monkeypatch):
     assert dao.claim_for_autoimplement(sid, project_id) is not None
 
 
+def test_autoimplement_resolve_workdir_failure_releases_claim(isolated_db, monkeypatch):
+    """resolve_working_directory raising AFTER the claim must release the claim
+    sentinel (no permanent lock) — covers the gap between claim and cleanup try."""
+    monkeypatch.setenv(AGENTED_STRATEGY_AUTOIMPLEMENT, "1")
+    project_id = create_project(name="ai-resolve-fail-proj")
+    sid = _seed_strategy(project_id, cleared=True)
+    _materialize_plan(project_id, sid)
+    _drive_to_implementing(project_id, sid)
+
+    from app.services import project_workspace_service as pws
+
+    def _boom(pid):
+        raise RuntimeError("workspace resolve exploded")
+
+    monkeypatch.setattr(
+        pws.ProjectWorkspaceService, "resolve_working_directory", staticmethod(_boom)
+    )
+
+    import pytest
+
+    with pytest.raises(RuntimeError):
+        CompetitorStrategyService.start_autoimplement(
+            project_id, sid, confirm_token="confirm-please"
+        )
+
+    # The claim sentinel was released → re-claimable, not permanently locked.
+    row = dao.get_strategy(sid, project_id=project_id)
+    assert row["session_id"] is None
+    assert dao.claim_for_autoimplement(sid, project_id) is not None
+
+
 # ---------------------------------------------------------------------------
 # Finding #3 — worktree reuse rejects symlinks / stale dirs (cwd never escapes)
 # ---------------------------------------------------------------------------
