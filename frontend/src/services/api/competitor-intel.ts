@@ -77,6 +77,34 @@ export interface SuggestedCompetitor {
   created_at: string;
 }
 
+/**
+ * A competitor strategy (phase-26 `competitor_strategy` row, migration 174): a
+ * behavior-only proposal synthesized from selected `detected_signal`s, awaiting
+ * the operator's review → approve/reject/edit and the §5B legal checklist. The
+ * `legal_checklist` records each of the 7 canonical items; `legal_cleared_at` is
+ * non-null ONLY when all 7 are affirmed (the non-bypassable implement gate — the
+ * UI keeps the implement affordance disabled until it is set).
+ */
+export interface Strategy {
+  id: string;
+  project_id: string;
+  /** The `detected_signal` ids this strategy synthesizes. */
+  signal_ids: string[] | null;
+  title: string | null;
+  body: string | null;
+  /** LLM provenance (multi-backend). */
+  backend_kind: string | null;
+  model: string | null;
+  status: 'proposed' | 'approved' | 'rejected' | 'implementing' | 'done';
+  /** Map of the 7 canonical §5B item keys → affirmed bool; null until first affirmed. */
+  legal_checklist: Record<string, boolean> | null;
+  /** Non-null ONLY when all 7 legal items are affirmed — the visible implement gate. */
+  legal_cleared_at: string | null;
+  /** Stamped by the 26-04 materialize path; null in this MVP. */
+  plan_id: string | null;
+  created_at: string;
+}
+
 export const competitorIntelApi = {
   /**
    * Add a source by URL (or, for `hn_query`, a search query in the `url` field).
@@ -153,6 +181,80 @@ export const competitorIntelApi = {
     apiFetch<{ suggestion: SuggestedCompetitor }>(
       `/api/projects/${projectId}/discovery/suggestions/${id}/dismiss`,
       { method: 'POST' },
+    ),
+
+  /**
+   * Generate a behavior-only strategy proposal from the selected signal ids
+   * (phase-26 P4). The backend runs the multi-backend, taint-wrapped LLM call
+   * off the event loop and persists a `'proposed'` strategy. `backendKind` /
+   * `modelOverride` are optional (multi-backend, never claude-only); CSRF is
+   * auto-injected for POST.
+   */
+  generateStrategy: (
+    projectId: string,
+    signalIds: string[],
+    opts?: { backendKind?: string; modelOverride?: string },
+  ): Promise<{ strategy: Strategy }> =>
+    apiFetch<{ strategy: Strategy }>(
+      `/api/projects/${projectId}/strategies/generate`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          signal_ids: signalIds,
+          backend_kind: opts?.backendKind,
+          model_override: opts?.modelOverride,
+        }),
+      },
+    ),
+
+  /** List the project's strategies, newest first. */
+  listStrategies: (projectId: string): Promise<{ strategies: Strategy[] }> =>
+    apiFetch<{ strategies: Strategy[] }>(
+      `/api/projects/${projectId}/strategies`,
+    ),
+
+  /** Approve a strategy (`proposed` → `approved`). */
+  approveStrategy: (projectId: string, id: string): Promise<{ strategy: Strategy }> =>
+    apiFetch<{ strategy: Strategy }>(
+      `/api/projects/${projectId}/strategies/${id}/approve`,
+      { method: 'POST' },
+    ),
+
+  /** Reject a strategy (→ `rejected`). */
+  rejectStrategy: (projectId: string, id: string): Promise<{ strategy: Strategy }> =>
+    apiFetch<{ strategy: Strategy }>(
+      `/api/projects/${projectId}/strategies/${id}/reject`,
+      { method: 'POST' },
+    ),
+
+  /**
+   * Edit a strategy's title/body. RESETS the §5B legal clearance (the backend
+   * flips `independent_authorship` + `no_copied_code` back to false and NULLs
+   * `legal_cleared_at`), forcing re-affirmation.
+   */
+  editStrategy: (
+    projectId: string,
+    id: string,
+    patch: { title?: string; body?: string },
+  ): Promise<{ strategy: Strategy }> =>
+    apiFetch<{ strategy: Strategy }>(
+      `/api/projects/${projectId}/strategies/${id}/edit`,
+      { method: 'POST', body: JSON.stringify(patch) },
+    ),
+
+  /**
+   * Affirm/deny ONE §5B legal-checklist item. Returns the updated strategy so
+   * the caller can observe `legal_cleared_at` flip when all 7 are affirmed.
+   */
+  recordLegalItem: (
+    projectId: string,
+    id: string,
+    itemKey: string,
+    value: boolean,
+  ): Promise<{ strategy: Strategy }> =>
+    apiFetch<{ strategy: Strategy }>(
+      `/api/projects/${projectId}/strategies/${id}/legal`,
+      { method: 'POST', body: JSON.stringify({ item_key: itemKey, value }) },
     ),
 
   /** Relative URL of the signals SSE stream (for diagnostics / native consumers). */

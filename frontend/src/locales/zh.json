@@ -9470,6 +9470,25 @@
     "acceptedToast": "已添加到关注源",
     "dismissedToast": "已忽略该推荐",
     "acceptError": "添加推荐失败",
-    "dismissError": "忽略推荐失败"
+    "dismissError": "忽略推荐失败",
+    "strategiesTitle": "策略提案",
+    "strategiesEmpty": "暂无策略。请基于上方排序的信号生成一个。",
+    "generateStrategy": "生成策略",
+    "approve": "批准",
+    "reject": "拒绝",
+    "editStrategy": "策略正文",
+    "implement": "实施",
+    "legalChecklistTitle": "法律审查（实施前全部必填）",
+    "legalCleanRoom": "洁净室：在不参考竞争对手源代码/代码的情况下设计。",
+    "legalNoCopiedCode": "未复用竞争对手的代码、资产、架构或受版权保护的文本。",
+    "legalIndependentAuthorship": "该实现为独立创作（基于行为而非表达）。",
+    "legalLicenseReview": "已审查竞争对手的许可证/服务条款，且允许此响应。",
+    "legalPatentFto": "自由实施：该方法不存在已知的阻断性专利。",
+    "legalTrademarkClear": "未复用竞争对手的商标、品牌或商业外观。",
+    "legalNoConfidentialSource": "信号仅来源于公开信息——无机密/泄露/保密协议材料。",
+    "approvedToast": "策略已批准",
+    "rejectedToast": "策略已拒绝",
+    "legalClearedToast": "法律审查已通过——实施已解锁",
+    "strategyError": "策略操作失败"
   }
 }

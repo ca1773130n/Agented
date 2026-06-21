@@ -9470,6 +9470,25 @@
     "acceptedToast": "Added to watched sources",
     "dismissedToast": "Suggestion dismissed",
     "acceptError": "Failed to accept suggestion",
-    "dismissError": "Failed to dismiss suggestion"
+    "dismissError": "Failed to dismiss suggestion",
+    "strategiesTitle": "Strategy proposals",
+    "strategiesEmpty": "No strategies yet. Generate one from the ranked signals above.",
+    "generateStrategy": "Generate strategy",
+    "approve": "Approve",
+    "reject": "Reject",
+    "editStrategy": "Strategy body",
+    "implement": "Implement",
+    "legalChecklistTitle": "Legal clearance (all required before implementing)",
+    "legalCleanRoom": "Clean-room: designed without reference to the competitor's source/code.",
+    "legalNoCopiedCode": "No competitor code, assets, schemas, or copyrighted text is reused.",
+    "legalIndependentAuthorship": "The implementation is independently authored (behavior, not expression).",
+    "legalLicenseReview": "The competitor's license / ToS has been reviewed and permits this response.",
+    "legalPatentFto": "Freedom-to-operate: no known blocking patent on the approach.",
+    "legalTrademarkClear": "No competitor trademark, brand, or trade dress is reused.",
+    "legalNoConfidentialSource": "The signal derives from public information only — no confidential/leaked/NDA material.",
+    "approvedToast": "Strategy approved",
+    "rejectedToast": "Strategy rejected",
+    "legalClearedToast": "Legal checklist cleared — implement unlocked",
+    "strategyError": "Strategy action failed"
   }
 }

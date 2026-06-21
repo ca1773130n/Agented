@@ -6,6 +6,7 @@ import type {
   CompetitorSource,
   DetectedSignal,
   SuggestedCompetitor,
+  Strategy,
   AuthenticatedEventSource,
 } from '../services/api';
 import { useToast } from '../composables/useToast';
@@ -44,6 +45,48 @@ const loadingSuggestions = ref(false);
 const scanning = ref(false);
 // Per-suggestion in-flight accept guard (drives the "Accepting…" label).
 const acceptingId = ref<string | null>(null);
+
+// --- Strategy review-queue state (phase 26 — the P4 HITL loop) -------------
+const strategies = ref<Strategy[]>([]);
+const loadingStrategies = ref(false);
+const generatingStrategy = ref(false);
+// Per-strategy in-flight verdict guard (drives the "…" labels on approve/reject).
+const strategyInFlight = ref<string | null>(null);
+
+// The 7 canonical §5B legal-checklist items — MUST match the backend
+// LEGAL_CHECKLIST_ITEMS (app/db/competitor_strategies.py). Each renders as a
+// toggle whose affirmation contributes to clearing the implement gate.
+const LEGAL_ITEMS = [
+  'clean_room',
+  'no_copied_code',
+  'independent_authorship',
+  'license_review',
+  'patent_fto',
+  'trademark_clear',
+  'no_confidential_source',
+] as const;
+
+// i18n key for each legal item's operator-facing label.
+function legalItemLabel(key: string): string {
+  switch (key) {
+    case 'clean_room':
+      return t('competitorIntel.legalCleanRoom');
+    case 'no_copied_code':
+      return t('competitorIntel.legalNoCopiedCode');
+    case 'independent_authorship':
+      return t('competitorIntel.legalIndependentAuthorship');
+    case 'license_review':
+      return t('competitorIntel.legalLicenseReview');
+    case 'patent_fto':
+      return t('competitorIntel.legalPatentFto');
+    case 'trademark_clear':
+      return t('competitorIntel.legalTrademarkClear');
+    case 'no_confidential_source':
+      return t('competitorIntel.legalNoConfidentialSource');
+    default:
+      return key;
+  }
+}
 
 let signalStream: AuthenticatedEventSource | null = null;
 
@@ -139,6 +182,100 @@ async function dismissSuggestion(id: string) {
   }
 }
 
+// --- Strategy handlers (clone the discovery mutate pattern) ----------------
+async function loadStrategies() {
+  if (!projectId.value) return;
+  loadingStrategies.value = true;
+  try {
+    const res = await competitorIntelApi.listStrategies(projectId.value);
+    strategies.value = res.strategies;
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : t('competitorIntel.loadError'), 'error');
+  } finally {
+    loadingStrategies.value = false;
+  }
+}
+
+// Replace a strategy in the list with its updated row (optimistic merge).
+function patchStrategy(updated: Strategy) {
+  strategies.value = strategies.value.map((s) => (s.id === updated.id ? updated : s));
+}
+
+// Generate a strategy from the currently-listed signals, then refresh the queue.
+async function generateStrategy() {
+  if (!projectId.value || generatingStrategy.value) return;
+  const signalIds = signals.value.map((s) => s.id);
+  if (signalIds.length === 0) {
+    showToast(t('competitorIntel.signalsEmpty'), 'error');
+    return;
+  }
+  generatingStrategy.value = true;
+  try {
+    await competitorIntelApi.generateStrategy(projectId.value, signalIds);
+    await loadStrategies();
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : t('competitorIntel.strategyError'), 'error');
+  } finally {
+    generatingStrategy.value = false;
+  }
+}
+
+async function approveStrategy(id: string) {
+  if (!projectId.value || strategyInFlight.value) return;
+  strategyInFlight.value = id;
+  try {
+    const res = await competitorIntelApi.approveStrategy(projectId.value, id);
+    patchStrategy(res.strategy);
+    showToast(t('competitorIntel.approvedToast'), 'success');
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : t('competitorIntel.strategyError'), 'error');
+  } finally {
+    strategyInFlight.value = null;
+  }
+}
+
+async function rejectStrategy(id: string) {
+  if (!projectId.value || strategyInFlight.value) return;
+  strategyInFlight.value = id;
+  try {
+    const res = await competitorIntelApi.rejectStrategy(projectId.value, id);
+    patchStrategy(res.strategy);
+    showToast(t('competitorIntel.rejectedToast'), 'success');
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : t('competitorIntel.strategyError'), 'error');
+  } finally {
+    strategyInFlight.value = null;
+  }
+}
+
+// Save an edited body (called on textarea blur). Resets the legal clearance
+// server-side (§5B edit-resets-clearance) — the implement gate re-locks.
+async function saveStrategyBody(id: string, body: string) {
+  if (!projectId.value) return;
+  try {
+    const res = await competitorIntelApi.editStrategy(projectId.value, id, { body });
+    patchStrategy(res.strategy);
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : t('competitorIntel.strategyError'), 'error');
+  }
+}
+
+// Toggle one §5B legal item; the returned row carries the (possibly flipped)
+// legal_cleared_at so the implement affordance enables exactly at 7/7.
+async function toggleLegalItem(id: string, itemKey: string, value: boolean) {
+  if (!projectId.value) return;
+  try {
+    const res = await competitorIntelApi.recordLegalItem(projectId.value, id, itemKey, value);
+    const wasCleared = strategies.value.find((s) => s.id === id)?.legal_cleared_at;
+    patchStrategy(res.strategy);
+    if (!wasCleared && res.strategy.legal_cleared_at) {
+      showToast(t('competitorIntel.legalClearedToast'), 'success');
+    }
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : t('competitorIntel.strategyError'), 'error');
+  }
+}
+
 async function submitSource() {
   if (!canSubmit.value || !projectId.value) return;
   adding.value = true;
@@ -202,6 +339,7 @@ async function refreshAll() {
   closeStream();
   void loadSources();
   void loadSuggestions();
+  void loadStrategies();
   // Await the signal backlog BEFORE opening the stream: an SSE frame arriving
   // mid-load would otherwise be overwritten by loadSignals' array replacement.
   await loadSignals();
@@ -310,6 +448,84 @@ onUnmounted(() => {
             </button>
             <button type="button" class="ci-dismiss" @click="dismissSuggestion(sug.id)">
               {{ t('competitorIntel.dismiss') }}
+            </button>
+          </div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Strategy review queue: generate → review → approve/reject/edit → §5B legal -->
+    <div class="ci-strategies">
+      <div class="ci-suggestions-head">
+        <h2 class="ci-section-title">{{ t('competitorIntel.strategiesTitle') }}</h2>
+        <button
+          type="button"
+          class="ci-submit ci-discover"
+          :disabled="generatingStrategy"
+          @click="generateStrategy"
+        >
+          {{ generatingStrategy ? t('competitorIntel.adding') : t('competitorIntel.generateStrategy') }}
+        </button>
+      </div>
+      <p v-if="loadingStrategies && strategies.length === 0" class="ci-empty">
+        {{ t('competitorIntel.loading') }}
+      </p>
+      <p v-else-if="strategies.length === 0" class="ci-empty">
+        {{ t('competitorIntel.strategiesEmpty') }}
+      </p>
+      <ul v-else class="ci-strategy-list">
+        <li v-for="st in strategies" :key="st.id" class="ci-strategy">
+          <div class="ci-strategy-head">
+            <span class="ci-kind" :data-kind="st.status">{{ st.status }}</span>
+            <span class="ci-strategy-title">{{ st.title || t('competitorIntel.noSummary') }}</span>
+          </div>
+          <textarea
+            class="ci-input ci-strategy-body"
+            :value="st.body || ''"
+            :aria-label="t('competitorIntel.editStrategy')"
+            @blur="saveStrategyBody(st.id, ($event.target as HTMLTextAreaElement).value)"
+          ></textarea>
+          <div class="ci-strategy-actions">
+            <button
+              type="button"
+              class="ci-submit ci-accept"
+              :disabled="strategyInFlight === st.id || st.status !== 'proposed'"
+              @click="approveStrategy(st.id)"
+            >
+              {{ t('competitorIntel.approve') }}
+            </button>
+            <button
+              type="button"
+              class="ci-dismiss"
+              :disabled="strategyInFlight === st.id"
+              @click="rejectStrategy(st.id)"
+            >
+              {{ t('competitorIntel.reject') }}
+            </button>
+          </div>
+
+          <!-- §5B legal checklist — the VISIBLE non-bypassable implement gate -->
+          <div class="ci-legal">
+            <h3 class="ci-legal-title">{{ t('competitorIntel.legalChecklistTitle') }}</h3>
+            <ul class="ci-legal-list">
+              <li v-for="item in LEGAL_ITEMS" :key="item" class="ci-legal-item">
+                <label class="ci-legal-label">
+                  <input
+                    type="checkbox"
+                    :checked="!!(st.legal_checklist && st.legal_checklist[item])"
+                    @change="toggleLegalItem(st.id, item, ($event.target as HTMLInputElement).checked)"
+                  />
+                  <span>{{ legalItemLabel(item) }}</span>
+                </label>
+              </li>
+            </ul>
+            <button
+              type="button"
+              class="ci-submit ci-implement"
+              :disabled="!st.legal_cleared_at"
+              :title="!st.legal_cleared_at ? t('competitorIntel.legalChecklistTitle') : ''"
+            >
+              {{ t('competitorIntel.implement') }}
             </button>
           </div>
         </li>
@@ -536,5 +752,76 @@ onUnmounted(() => {
 }
 .ci-dismiss:hover {
   color: var(--text-primary, #eee);
+}
+.ci-dismiss:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+/* --- Strategy review queue + §5B legal gate --- */
+.ci-strategy-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.ci-strategy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color, #2a2a2a);
+  border-radius: 8px;
+  background: var(--surface-1, #1a1a1a);
+}
+.ci-strategy-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.ci-strategy-title {
+  color: var(--text-primary, #eee);
+  font-weight: 600;
+}
+.ci-strategy-body {
+  width: 100%;
+  min-height: 4rem;
+  resize: vertical;
+  font: inherit;
+}
+.ci-strategy-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.ci-legal {
+  border-top: 1px solid var(--border-color, #2a2a2a);
+  padding-top: 0.5rem;
+}
+.ci-legal-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 0 0 0.4rem;
+}
+.ci-legal-list {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.ci-legal-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #9aa0a6);
+  cursor: pointer;
+}
+.ci-implement {
+  padding: 0.4rem 0.9rem;
+  font-size: 0.85rem;
+  align-self: flex-start;
 }
 </style>
