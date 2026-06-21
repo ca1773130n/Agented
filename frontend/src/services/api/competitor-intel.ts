@@ -43,6 +43,36 @@ export interface DetectedSignal {
   label: string | null;
 }
 
+/**
+ * A ranked discovery suggestion (phase-24 `discovery_suggestion` row): a repo
+ * the discovery scan found *similar* to the project's watched github seeds,
+ * awaiting an operator verdict. Carries a human-readable `reason` ("why") and a
+ * `score`; the operator can `accept` it (→ a watched `competitor_source`,
+ * `origin='discovery'`) or `dismiss` it.
+ */
+export interface SuggestedCompetitor {
+  id: string;
+  project_id: string;
+  /** Candidate kind (defaults to `'github_repo'`). */
+  kind: string;
+  /** GitHub owner/org of the candidate. */
+  candidate_owner: string;
+  /** Candidate repo name. */
+  candidate_repo: string;
+  /** Canonical candidate URL (rendered as the suggestion's link). */
+  candidate_url: string;
+  /** Deterministic human "why" string, rendered from `evidence`. */
+  reason: string | null;
+  /** Relevance score; ranking key. May be null (a null score never blocks). */
+  score: number | null;
+  /** Parsed `evidence` blob (shared_topics, shared_stargazers, …). */
+  evidence: Record<string, unknown> | unknown[] | string | null;
+  status: 'suggested' | 'added' | 'dismissed';
+  /** Stamped with the promoted `competitor_source` id once accepted. */
+  source_id: string | null;
+  created_at: string;
+}
+
 export const competitorIntelApi = {
   /**
    * Add a source by URL. `label` is optional — omit it freely; the backend
@@ -71,6 +101,50 @@ export const competitorIntelApi = {
   listSignals: (projectId: string): Promise<{ signals: DetectedSignal[] }> =>
     apiFetch<{ signals: DetectedSignal[] }>(
       `/api/projects/${projectId}/competitor-intel/signals`,
+    ),
+
+  /**
+   * Run the discovery scan over the project's watched github seeds (heavy,
+   * read-only GitHub fan-out — the backend runs it off the event loop). Returns
+   * how many seeds were scanned, how many suggestions were written, and the
+   * resolved README lens.
+   */
+  runDiscovery: (
+    projectId: string,
+  ): Promise<{ scanned: number; suggestions: number; readme_mode: string }> =>
+    apiFetch<{ scanned: number; suggestions: number; readme_mode: string }>(
+      `/api/projects/${projectId}/discovery/scan`,
+      { method: 'POST' },
+    ),
+
+  /** The active discovery review queue (`status='suggested'`, highest score first). */
+  listSuggestions: (projectId: string): Promise<{ suggestions: SuggestedCompetitor[] }> =>
+    apiFetch<{ suggestions: SuggestedCompetitor[] }>(
+      `/api/projects/${projectId}/discovery/suggestions`,
+    ),
+
+  /**
+   * Accept a suggestion → promote it into a watched competitor source
+   * (`origin='discovery'`). Returns the newly minted source (+ the updated
+   * suggestion). CSRF is auto-injected by the client for POST.
+   */
+  acceptSuggestion: (
+    projectId: string,
+    id: string,
+  ): Promise<{ source: CompetitorSource; suggestion: SuggestedCompetitor }> =>
+    apiFetch<{ source: CompetitorSource; suggestion: SuggestedCompetitor }>(
+      `/api/projects/${projectId}/discovery/suggestions/${id}/accept`,
+      { method: 'POST' },
+    ),
+
+  /** Dismiss a suggestion (flip its status to `dismissed`; sticky on re-scan). */
+  dismissSuggestion: (
+    projectId: string,
+    id: string,
+  ): Promise<{ suggestion: SuggestedCompetitor }> =>
+    apiFetch<{ suggestion: SuggestedCompetitor }>(
+      `/api/projects/${projectId}/discovery/suggestions/${id}/dismiss`,
+      { method: 'POST' },
     ),
 
   /** Relative URL of the signals SSE stream (for diagnostics / native consumers). */

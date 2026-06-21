@@ -118,3 +118,20 @@ class CompetitorSourceService:
                 (source_id,),
             ).fetchone()
         return dict(row) if row is not None else None
+
+    @staticmethod
+    def delete_source(source_id: str) -> bool:
+        """Delete a competitor source by id; return whether a row was removed.
+
+        The compensating action for a failed discovery promotion: if
+        ``DiscoveryService.promote_suggestion`` adds a source but then loses its
+        ``'claiming'`` claim (``complete_promotion`` matched zero rows), the source it
+        just inserted is orphaned — no suggestion links to it — so the promoter rolls
+        it back with this. Idempotent: deleting a non-existent id is a harmless no-op
+        (returns ``False``).
+        """
+        with get_connection() as conn:
+            cur = conn.execute("DELETE FROM competitor_source WHERE id = ?", (source_id,))
+            deleted = cur.rowcount > 0
+            conn.commit()
+        return deleted

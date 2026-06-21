@@ -2,7 +2,12 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { competitorIntelApi, ApiError } from '../services/api';
-import type { CompetitorSource, DetectedSignal, AuthenticatedEventSource } from '../services/api';
+import type {
+  CompetitorSource,
+  DetectedSignal,
+  SuggestedCompetitor,
+  AuthenticatedEventSource,
+} from '../services/api';
 import { useToast } from '../composables/useToast';
 
 const { t } = useI18n();
@@ -27,6 +32,13 @@ const canSubmit = computed(() => url.value.trim().length > 0 && !adding.value);
 const sources = ref<CompetitorSource[]>([]);
 const signals = ref<DetectedSignal[]>([]);
 const loadingSignals = ref(false);
+
+// --- Discovery review-queue state ------------------------------------------
+const suggestions = ref<SuggestedCompetitor[]>([]);
+const loadingSuggestions = ref(false);
+const scanning = ref(false);
+// Per-suggestion in-flight accept guard (drives the "Accepting…" label).
+const acceptingId = ref<string | null>(null);
 
 let signalStream: AuthenticatedEventSource | null = null;
 
@@ -63,6 +75,60 @@ async function loadSignals() {
     showToast(err instanceof ApiError ? err.message : t('competitorIntel.loadError'), 'error');
   } finally {
     loadingSignals.value = false;
+  }
+}
+
+async function loadSuggestions() {
+  if (!projectId.value) return;
+  loadingSuggestions.value = true;
+  try {
+    const res = await competitorIntelApi.listSuggestions(projectId.value);
+    suggestions.value = res.suggestions;
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : t('competitorIntel.loadError'), 'error');
+  } finally {
+    loadingSuggestions.value = false;
+  }
+}
+
+// Run the heavy discovery scan, then refresh the review queue.
+async function runDiscovery() {
+  if (!projectId.value || scanning.value) return;
+  scanning.value = true;
+  try {
+    await competitorIntelApi.runDiscovery(projectId.value);
+    await loadSuggestions();
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : t('competitorIntel.loadError'), 'error');
+  } finally {
+    scanning.value = false;
+  }
+}
+
+async function acceptSuggestion(id: string) {
+  if (!projectId.value || acceptingId.value) return;
+  acceptingId.value = id;
+  try {
+    const res = await competitorIntelApi.acceptSuggestion(projectId.value, id);
+    // Optimistic: drop from the queue and surface as a watched source.
+    suggestions.value = suggestions.value.filter((s) => s.id !== id);
+    sources.value = [res.source, ...sources.value];
+    showToast(t('competitorIntel.acceptedToast'), 'success');
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : t('competitorIntel.acceptError'), 'error');
+  } finally {
+    acceptingId.value = null;
+  }
+}
+
+async function dismissSuggestion(id: string) {
+  if (!projectId.value) return;
+  try {
+    await competitorIntelApi.dismissSuggestion(projectId.value, id);
+    suggestions.value = suggestions.value.filter((s) => s.id !== id);
+    showToast(t('competitorIntel.dismissedToast'), 'success');
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : t('competitorIntel.dismissError'), 'error');
   }
 }
 
@@ -125,6 +191,7 @@ function openStream() {
 async function refreshAll() {
   closeStream();
   void loadSources();
+  void loadSuggestions();
   // Await the signal backlog BEFORE opening the stream: an SSE frame arriving
   // mid-load would otherwise be overwritten by loadSignals' array replacement.
   await loadSignals();
@@ -184,6 +251,46 @@ onUnmounted(() => {
         <li v-for="s in sources" :key="s.id" class="ci-source">
           <span class="ci-kind" :data-kind="s.kind">{{ kindLabel(s.kind) }}</span>
           <span class="ci-source-url">{{ s.label || s.url }}</span>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Discovery review queue: suggested competitors awaiting accept/dismiss -->
+    <div class="ci-suggestions">
+      <div class="ci-suggestions-head">
+        <h2 class="ci-section-title">{{ t('competitorIntel.suggestionsTitle') }}</h2>
+        <button type="button" class="ci-submit ci-discover" :disabled="scanning" @click="runDiscovery">
+          {{ scanning ? t('competitorIntel.adding') : t('competitorIntel.runDiscovery') }}
+        </button>
+      </div>
+      <p v-if="loadingSuggestions && suggestions.length === 0" class="ci-empty">
+        {{ t('competitorIntel.loading') }}
+      </p>
+      <p v-else-if="suggestions.length === 0" class="ci-empty">
+        {{ t('competitorIntel.suggestionsEmpty') }}
+      </p>
+      <ul v-else class="ci-suggestion-list">
+        <li v-for="sug in suggestions" :key="sug.id" class="ci-suggestion">
+          <div class="ci-suggestion-main">
+            <span class="ci-kind" :data-kind="sug.kind">{{ kindLabel(sug.kind) }}</span>
+            <span class="ci-suggestion-url">{{ sug.candidate_url }}</span>
+            <span v-if="sug.reason" class="ci-reason" :title="sug.reason">
+              {{ t('competitorIntel.suggestionReason') }}: {{ sug.reason }}
+            </span>
+          </div>
+          <div class="ci-suggestion-actions">
+            <button
+              type="button"
+              class="ci-submit ci-accept"
+              :disabled="acceptingId === sug.id"
+              @click="acceptSuggestion(sug.id)"
+            >
+              {{ acceptingId === sug.id ? t('competitorIntel.accepting') : t('competitorIntel.accept') }}
+            </button>
+            <button type="button" class="ci-dismiss" @click="dismissSuggestion(sug.id)">
+              {{ t('competitorIntel.dismiss') }}
+            </button>
+          </div>
         </li>
       </ul>
     </div>
@@ -329,5 +436,84 @@ onUnmounted(() => {
 .ci-signal-source {
   font-size: 0.8rem;
   color: var(--text-secondary, #9aa0a6);
+}
+/* --- Discovery review queue --- */
+.ci-suggestions-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+.ci-suggestions-head .ci-section-title {
+  margin: 0;
+}
+.ci-discover {
+  padding: 0.4rem 0.9rem;
+  font-size: 0.85rem;
+}
+.ci-suggestion-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.ci-suggestion {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border-color, #2a2a2a);
+  border-radius: 8px;
+  background: var(--surface-1, #1a1a1a);
+}
+.ci-suggestion-main {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.ci-suggestion-url {
+  color: var(--text-primary, #eee);
+  font-size: 0.9rem;
+  word-break: break-all;
+}
+/* The "why" chip — styled off .ci-kind but accented to read as an explanation. */
+.ci-reason {
+  font-size: 0.75rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+  background: var(--surface-2, #222);
+  color: var(--accent, #4f8cff);
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ci-suggestion-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+.ci-accept {
+  padding: 0.35rem 0.8rem;
+  font-size: 0.85rem;
+}
+.ci-dismiss {
+  padding: 0.35rem 0.8rem;
+  font-size: 0.85rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color, #2a2a2a);
+  background: transparent;
+  color: var(--text-secondary, #9aa0a6);
+  cursor: pointer;
+}
+.ci-dismiss:hover {
+  color: var(--text-primary, #eee);
 }
 </style>

@@ -9454,6 +9454,17 @@
     "kindGithub": "GitHub 仓库",
     "kindArxiv": "arXiv",
     "kindProduct": "产品页面",
-    "kindUnknown": "未知"
+    "kindUnknown": "未知",
+    "suggestionsTitle": "推荐竞品",
+    "suggestionsEmpty": "暂无推荐。运行发现以查找与你关注的仓库相似的竞品。",
+    "suggestionReason": "原因",
+    "runDiscovery": "运行发现",
+    "accept": "添加",
+    "accepting": "添加中…",
+    "dismiss": "忽略",
+    "acceptedToast": "已添加到关注源",
+    "dismissedToast": "已忽略该推荐",
+    "acceptError": "添加推荐失败",
+    "dismissError": "忽略推荐失败"
   }
 }

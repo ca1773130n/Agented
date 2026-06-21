@@ -9454,6 +9454,17 @@
     "kindGithub": "GitHub repo",
     "kindArxiv": "arXiv",
     "kindProduct": "Product page",
-    "kindUnknown": "Unknown"
+    "kindUnknown": "Unknown",
+    "suggestionsTitle": "Suggested competitors",
+    "suggestionsEmpty": "No suggestions yet. Run discovery to find competitors similar to your watched repos.",
+    "suggestionReason": "Why",
+    "runDiscovery": "Run discovery",
+    "accept": "Accept",
+    "accepting": "Accepting…",
+    "dismiss": "Dismiss",
+    "acceptedToast": "Added to watched sources",
+    "dismissedToast": "Suggestion dismissed",
+    "acceptError": "Failed to accept suggestion",
+    "dismissError": "Failed to dismiss suggestion"
   }
 }
