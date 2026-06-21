@@ -139,7 +139,9 @@ def test_scan_configured_provider_writes_company_rows(isolated_db, _fake_provide
     rows = dao.list_suggestions(project_id, statuses=["suggested"])
     assert len(rows) == 2
     assert {r["kind"] for r in rows} == {"company"}
-    assert {r["candidate_owner"] for r in rows} == {"fake"}
+    # Owner is namespaced (``lookalike:<provider>``) so it never collides with a
+    # P2 github_repo suggestion in the shared discovery_suggestion unique key.
+    assert {r["candidate_owner"] for r in rows} == {"lookalike:fake"}
     # www.-stripped, lowercased domain is the dedupe key.
     assert {r["candidate_repo"] for r in rows} == {"acme.example.com", "beta.example.org"}
 

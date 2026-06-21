@@ -23,9 +23,12 @@ whose ``is_configured()`` is True -> else ``None``.
 
 from __future__ import annotations
 
+import logging
 import os
 
 from app.services.lookalike_providers.base import LookalikeProvider
+
+logger = logging.getLogger(__name__)
 
 # name -> provider. Populated at import time by each provider module's
 # bottom-line ``register(...)`` call (e.g. ``apistemic`` registers ``apistemic``).
@@ -63,6 +66,14 @@ def _is_configured(provider: LookalikeProvider) -> bool:
     try:
         return bool(provider.is_configured())
     except Exception:
+        # ``is_configured`` is contractually never-raise; if a provider violates that
+        # we must NOT silently swallow it — log (with the provider name + traceback)
+        # so the misbehaving provider is diagnosable, then keep the BUY-gate intact.
+        logger.warning(
+            "lookalike provider %r raised in is_configured() — treating as unconfigured",
+            getattr(provider, "name", provider),
+            exc_info=True,
+        )
         return False
 
 

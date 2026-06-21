@@ -55,6 +55,9 @@ const lookalikes = ref<MarketLookalike[]>([]);
 const lookalikeProvider = ref<string | null>(null);
 const loadingLookalikes = ref(false);
 const scanningLookalikes = ref(false);
+// `true` once a scan returns `outcome: 'no_seed'` — the project has no product_url
+// competitor_source to derive a seed from. Drives the "add a product source" hint.
+const lookalikeNoSeed = ref(false);
 // Per-lookalike in-flight accept guard (drives the "Accepting…" label).
 const acceptingLookalikeId = ref<string | null>(null);
 
@@ -216,7 +219,11 @@ async function runLookalikeScan() {
   if (!projectId.value || scanningLookalikes.value) return;
   scanningLookalikes.value = true;
   try {
-    await lookalikeApi.scan(projectId.value);
+    // Seedless: the server derives seed(s) from the project's product_url sources.
+    const res = await lookalikeApi.scan(projectId.value);
+    // `no_seed` is a graceful 200 (no product source to seed from) — surface the hint
+    // instead of a toast; any other outcome clears it.
+    lookalikeNoSeed.value = res.outcome === 'no_seed';
     await loadLookalikes();
   } catch (err) {
     showToast(err instanceof ApiError ? err.message : t('competitorIntel.loadError'), 'error');
@@ -648,6 +655,11 @@ onUnmounted(() => {
         class="ci-empty"
       >
         {{ t('competitorIntel.loading') }}
+      </p>
+      <!-- State 2b: a scan ran but the project has no product_url source to seed
+           from — surface the hint so the operator knows the next step. -->
+      <p v-else-if="lookalikeNoSeed && lookalikes.length === 0" class="ci-empty">
+        {{ t('competitorIntel.lookalikes.noSeedHint') }}
       </p>
       <p v-else-if="lookalikes.length === 0" class="ci-empty">
         {{ t('competitorIntel.lookalikes.empty') }}

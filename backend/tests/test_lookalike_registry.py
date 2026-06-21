@@ -130,3 +130,29 @@ def test_not_configured_result_carries_no_candidates():
     result = LookalikeResult(outcome="not_configured")
     assert result.candidates == []
     assert result.detail is None
+
+
+def test_provider_raising_in_is_configured_logs_and_yields_none(monkeypatch):
+    """A provider that violates the never-raise contract for ``is_configured`` is
+    treated as unconfigured (BUY-gate stays intact) AND a warning is logged with
+    the provider name + traceback (NOT silently swallowed)."""
+
+    class _Exploding:
+        name = "boom"
+
+        def is_configured(self) -> bool:
+            raise RuntimeError("kaboom")
+
+        def find_lookalikes(self, seed, *, limit=20):  # pragma: no cover
+            raise AssertionError("never called")
+
+    registry.register(_Exploding())
+
+    warnings: list = []
+    monkeypatch.setattr(registry.logger, "warning", lambda *a, **k: warnings.append((a, k)))
+
+    assert registry.active_provider() is None
+    assert len(warnings) == 1
+    args, kwargs = warnings[0]
+    assert "boom" in args  # provider name passed to the log record
+    assert kwargs.get("exc_info") is True

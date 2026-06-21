@@ -135,7 +135,8 @@ def test_scan_configured_upserts_company_suggestions(_clean_registry, _project, 
     assert set(by_repo) == {"rival-one.com", "rival-two.io"}
     top = by_repo["rival-one.com"]
     assert top["kind"] == "company"
-    assert top["candidate_owner"] == "fake"
+    # Owner is NAMESPACED so it can never collide with a P2 github_repo row.
+    assert top["candidate_owner"] == "lookalike:fake"
     assert top["candidate_url"] == "https://www.rival-one.com/product"
     assert top["status"] == "suggested"
     # evidence round-trips as a parsed dict; reason mirrors evidence.reason.
@@ -257,16 +258,57 @@ def test_non_ok_outcome_passes_through_and_writes_no_rows(
     assert discovery_suggestions.list_suggestions(project_id) == []
 
 
-def test_configured_provider_no_seed_returns_error(_clean_registry, _project, monkeypatch):
+def test_configured_provider_no_derivable_seed_returns_no_seed(
+    _clean_registry, _project, monkeypatch
+):
+    """No explicit seed AND no product_url source → graceful ``no_seed`` (NOT 500)."""
+
+    class _ExplodingProvider(_FakeProvider):
+        def find_lookalikes(self, seed: str, *, limit: int = 20):  # pragma: no cover
+            raise AssertionError("provider must NOT be called when there is no seed")
+
+    provider = _ExplodingProvider(_two_candidate_result())
+    monkeypatch.setattr(registry, "_PROVIDERS", {provider.name: provider})
+
     project_id = _project
-    _register(monkeypatch, _two_candidate_result())
-    result = MarketLookalikeService.scan_project(project_id)  # no seed
+    result = MarketLookalikeService.scan_project(project_id)  # no seed, no product source
     assert result["provider"] == "fake"
-    assert result["outcome"] == "error"
-    assert result["detail"] == "no seed"
+    assert result["outcome"] == "no_seed"
+    assert "product" in result["detail"]
     assert result["scanned"] == 0
     assert result["suggestions"] == []
     assert discovery_suggestions.list_suggestions(project_id) == []
+
+
+def test_scan_derives_seeds_from_product_url_sources(_clean_registry, _project, monkeypatch):
+    """Seedless scan derives seed domain(s) from the project's product_url sources."""
+    from app.services.competitor_source_service import CompetitorSourceService
+
+    project_id = _project
+    # A product_url source (derivable seed) + a github_repo source (NOT a seed).
+    CompetitorSourceService.add_source(project_id, url="https://www.acme-corp.com/app")
+    CompetitorSourceService.add_source(
+        project_id, url="https://github.com/acme/widget", kind="github_repo"
+    )
+
+    seen_seeds: list[str] = []
+
+    class _RecordingProvider(_FakeProvider):
+        def find_lookalikes(self, seed: str, *, limit: int = 20):
+            seen_seeds.append(seed)
+            return self._result
+
+    provider = _RecordingProvider(_two_candidate_result())
+    monkeypatch.setattr(registry, "_PROVIDERS", {provider.name: provider})
+
+    result = MarketLookalikeService.scan_project(project_id)  # seedless UI call
+    # The provider was called with the derived domain (host of the product_url),
+    # NOT the github_repo source.
+    assert seen_seeds == ["acme-corp.com"]
+    assert result["outcome"] == "ok"
+    assert result["scanned"] == 2
+    repos = {r["candidate_repo"] for r in discovery_suggestions.list_suggestions(project_id)}
+    assert {"rival-one.com", "rival-two.io"} <= repos
 
 
 # --------------------------------------------------------------------------- #
@@ -327,6 +369,52 @@ def test_list_suggestions_excludes_github_repo_rows(_clean_registry, _project, m
     assert kinds == {"company"}  # github_repo excluded from the market queue
     repos = {r["candidate_repo"] for r in queue}
     assert "somerepo" not in repos
+
+
+# --------------------------------------------------------------------------- #
+# discovery_suggestion key namespace — github + company rows must COEXIST
+# --------------------------------------------------------------------------- #
+
+
+def test_github_and_company_rows_coexist_no_clobber(_clean_registry, _project, monkeypatch):
+    """A github_repo row and a company row at the OLD (project, owner, repo) key
+    now coexist — the namespaced company owner prevents the clobber, and promote
+    still lands the right product_url competitor_source."""
+    from app.services.competitor_source_service import KIND_PRODUCT_URL
+
+    project_id = _project
+
+    # A P2 github_repo suggestion at the key the OLD un-namespaced company code
+    # would have used: owner="fake" (the provider name), repo="rival-one.com".
+    discovery_suggestions.upsert_suggestion(
+        project_id,
+        owner="fake",
+        repo="rival-one.com",
+        url="https://github.com/fake/rival-one.com",
+        kind="github_repo",
+        score=0.7,
+    )
+
+    # Now the company scan writes owner="lookalike:fake", repo="rival-one.com" —
+    # a DISJOINT key, so the github row is NOT clobbered.
+    _register(monkeypatch, _two_candidate_result())
+    MarketLookalikeService.scan_project(project_id, seed="acme.com")
+
+    rows = discovery_suggestions.list_suggestions(project_id)
+    by_key = {(r["candidate_owner"], r["candidate_repo"]): r for r in rows}
+    # Both rows exist side by side.
+    github_row = by_key[("fake", "rival-one.com")]
+    company_row = by_key[("lookalike:fake", "rival-one.com")]
+    assert github_row["kind"] == "github_repo"
+    assert github_row["candidate_url"] == "https://github.com/fake/rival-one.com"
+    assert company_row["kind"] == "company"
+    assert company_row["candidate_url"] == "https://www.rival-one.com/product"
+
+    # Promote the company row → product_url source keyed off candidate_url
+    # (unaffected by the namespaced owner).
+    out = MarketLookalikeService.promote_suggestion(project_id, company_row["id"])
+    assert out["source"]["kind"] == KIND_PRODUCT_URL
+    assert out["source"]["url"] == "https://www.rival-one.com/product"
 
 
 def test_module_exposes_service(_clean_registry):

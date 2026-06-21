@@ -35,12 +35,24 @@ from typing import Optional
 from urllib.parse import urlparse
 
 from app.db import discovery_suggestions
+from app.services.competitor_source_service import KIND_PRODUCT_URL, CompetitorSourceService
 from app.services.discovery_service import DiscoveryService
 
 # The suggestion kinds this service surfaces in the market-lookalike queue. A scan
 # writes ``"company"``; ``"product"`` is reserved for the same lane (both excluded
 # github_repo discovery rows from the market queue).
 _MARKET_KINDS = ("company", "product")
+
+# Namespace prefix stamped onto a company suggestion's ``candidate_owner`` so it can
+# NEVER collide with a P2 github_repo row in the SHARED ``discovery_suggestion`` table
+# (UNIQUE(project_id, candidate_owner, candidate_repo)). A github row keys off the bare
+# repo owner (e.g. ``("acme", "widget")``); a company row keys off
+# ``("lookalike:<provider>", "<domain>")`` — the two key spaces are disjoint, so a
+# github suggestion and a company suggestion that would otherwise share (project, owner,
+# repo) now coexist instead of clobbering each other. The promote path keys off
+# ``candidate_url`` (unaffected by the owner namespace), and the UI renders the
+# company/domain from ``candidate_repo`` / ``candidate_url`` (never the namespaced owner).
+_OWNER_NS = "lookalike:"
 
 
 def _domain_of(url: str) -> Optional[str]:
@@ -69,6 +81,27 @@ class MarketLookalikeService:
     """
 
     @staticmethod
+    def _derive_seeds(project_id: str) -> list[str]:
+        """Derive lookalike seed domains from the project's watched product sources.
+
+        Mirrors the P2 discovery seed-derivation (``DiscoveryService.scan_project``
+        turns ``kind=='github_repo'`` competitor_sources into github seeds): here we
+        turn the project's ``kind=='product_url'`` competitor_sources into seed
+        DOMAINS via the same URL→host parsing (``_domain_of``). De-duplicated,
+        order-preserving. Empty list → the project has nothing to seed from.
+        """
+        seeds: list[str] = []
+        seen: set[str] = set()
+        for source in CompetitorSourceService.list_sources(project_id):
+            if source.get("kind") != KIND_PRODUCT_URL:
+                continue
+            domain = _domain_of(source.get("url") or "")
+            if domain and domain not in seen:
+                seen.add(domain)
+                seeds.append(domain)
+        return seeds
+
+    @staticmethod
     def scan_project(project_id: str, seed: Optional[str] = None) -> dict:
         """Resolve the provider, scan, and upsert lookalikes into the P2 surface.
 
@@ -79,16 +112,23 @@ class MarketLookalikeService:
             "not_configured", "scanned": 0, "suggestions": []}`` — the BUY-gate
             short-circuit: NO scan, NO error, NO paid call (the surface renders the
             "configure a provider" CTA).
-          * no ``seed`` → ``outcome="error"``, ``detail="no seed"`` (MVP: the route
-            passes the operator's seed; auto-deriving a seed from the project's own
-            product domain / watched ``product_url`` source is a later refinement).
+          * no derivable seed (no ``product_url`` competitor_source to seed from, and
+            no explicit ``seed`` passed) → ``{"outcome": "no_seed", "scanned": 0,
+            "suggestions": []}`` — a GRACEFUL 200 (NOT an error/500): the surface
+            renders the "add a product/company competitor source" hint.
           * provider returns a non-ok outcome (``not_configured`` / ``throttled`` /
             ``error``) → that tagged outcome is passed straight up with
             ``suggestions: []`` and NO rows written (no fake data).
-          * ``outcome="ok"`` → each ``Candidate`` is upserted via the EXISTING
-            ``discovery_suggestions.upsert_suggestion`` (``kind="company"``,
-            ``owner=provider.name``, ``repo=<normalized domain>``), and the
-            ``suggested`` market queue is returned.
+          * ``outcome="ok"`` → each ``Candidate`` (across every derived seed) is
+            upserted via the EXISTING ``discovery_suggestions.upsert_suggestion``
+            (``kind="company"``, ``owner="lookalike:<provider>"``,
+            ``repo=<normalized domain>``), and the ``suggested`` market queue is
+            returned.
+
+        ``seed`` (optional) overrides the derivation — when passed, it is used
+        verbatim as the single seed; otherwise seeds are derived SERVER-SIDE from the
+        project's ``product_url`` competitor_sources (mirroring P2 discovery). This
+        lets the seedless UI call (``scan(projectId)``) work end-to-end.
         """
         # Import the subpackage first so every provider module self-registers
         # before resolution (the CompetitorPollService-imports-source_adapters
@@ -106,53 +146,63 @@ class MarketLookalikeService:
                 "suggestions": [],
             }
 
-        if not seed:
-            # MVP: the route supplies the operator's seed; we never invent one.
+        # An explicit seed overrides; otherwise derive seed domain(s) from the
+        # project's watched product_url competitor_sources (mirror P2 discovery).
+        seeds = [seed] if seed else MarketLookalikeService._derive_seeds(project_id)
+        if not seeds:
+            # No product_url source to seed from — graceful no-op, NOT an error.
             return {
                 "provider": provider.name,
-                "outcome": "error",
-                "detail": "no seed",
+                "outcome": "no_seed",
+                "detail": "add a product/company competitor source to seed lookalikes",
                 "scanned": 0,
                 "suggestions": [],
             }
 
-        result = provider.find_lookalikes(seed)
-        if result.outcome != "ok":
-            # Pass the tagged outcome straight up — not_configured / throttled /
-            # error all render gracefully; write NO rows, return NO fake data.
-            return {
-                "provider": provider.name,
-                "outcome": result.outcome,
-                "detail": result.detail,
-                "scanned": 0,
-                "suggestions": [],
-            }
+        scanned = 0
+        for one_seed in seeds:
+            result = provider.find_lookalikes(one_seed)
+            if result.outcome != "ok":
+                # Pass the tagged outcome straight up — not_configured / throttled /
+                # error all render gracefully; write NO rows, return NO fake data.
+                # One bad seed aborts the scan (consistent with the MVP single-seed
+                # contract); the operator retries once the provider recovers.
+                return {
+                    "provider": provider.name,
+                    "outcome": result.outcome,
+                    "detail": result.detail,
+                    "scanned": 0,
+                    "suggestions": [],
+                }
 
-        for cand in result.candidates:
-            domain = _domain_of(cand.url)
-            if not domain:
-                # No dedupe key — skip a candidate that carries no domain.
-                continue
-            evidence = cand.evidence or {}
-            # The EXISTING P2 DAO — kind="company", owner=provider, repo=domain.
-            # Repurposes UNIQUE(project_id, candidate_owner, candidate_repo) as
-            # "one per (project, provider, domain)": zero migration, inherits the
-            # idempotency + sticky verdict for free. ``score`` is NULL-accepting.
-            discovery_suggestions.upsert_suggestion(
-                project_id,
-                owner=provider.name,
-                repo=domain,
-                url=cand.url,
-                kind="company",
-                score=cand.score,
-                reason=evidence.get("reason"),
-                evidence=cand.evidence,
-            )
+            scanned += len(result.candidates)
+            for cand in result.candidates:
+                domain = _domain_of(cand.url)
+                if not domain:
+                    # No dedupe key — skip a candidate that carries no domain.
+                    continue
+                evidence = cand.evidence or {}
+                # The EXISTING P2 DAO — kind="company", owner="lookalike:<provider>",
+                # repo=domain. The NAMESPACED owner keeps the company key space
+                # disjoint from P2 github_repo rows in the SHARED unique key
+                # UNIQUE(project_id, candidate_owner, candidate_repo): zero migration,
+                # inherits the idempotency + sticky verdict for free. ``score`` is
+                # NULL-accepting.
+                discovery_suggestions.upsert_suggestion(
+                    project_id,
+                    owner=f"{_OWNER_NS}{provider.name}",
+                    repo=domain,
+                    url=cand.url,
+                    kind="company",
+                    score=cand.score,
+                    reason=evidence.get("reason"),
+                    evidence=cand.evidence,
+                )
 
         return {
             "provider": provider.name,
             "outcome": "ok",
-            "scanned": len(result.candidates),
+            "scanned": scanned,
             "suggestions": MarketLookalikeService.list_suggestions(project_id),
         }
 
