@@ -36,8 +36,12 @@ access-guard + scope-guard, both required (the IDOR + cross-project lessons).
 The implement step is the 26-04 ``POST /{project_id}/strategies/{sid}/materialize``
 route, which re-enforces the non-bypassable ``mark_implementing`` gate
 (``LegalGateNotCleared`` → 409, no plan on uncleared) and writes a ``ProjectPlan``
-artifact ONLY (zero repo mutation). The DEFERRED auto-code-execution seam
-(``start_autoimplement``) is intentionally exposed by NO HTTP route in this MVP.
+artifact ONLY (zero repo mutation). The auto-code-execution seam
+(``start_autoimplement``) is exposed by the TRIPLE-GATED 26-05 route
+``POST /{project_id}/strategies/{sid}/autoimplement`` — the ONLY operator-reachable
+auto-code path, itself behind the ``AGENTED_STRATEGY_AUTOIMPLEMENT`` flag + the §5B
+legal gate + an explicit confirm token, launching an isolated-worktree goal-loop
+with a ``human_gate``.
 
 Persistence is the 26-01 raw-SQLite DAO + the 26-02 service — no DB code here.
 DAO ``ValueError`` (unknown legal item / illegal transition) → 400.
@@ -250,6 +254,70 @@ def materialize_strategy(project_id: str, sid: str, caller: Caller) -> dict[str,
         raise ClientException(detail=detail) from None
 
 
+# ---------------------------------------------------------------------------
+# Auto-implement — the ONLY operator-reachable auto-code path (TRIPLE-GATED)
+# ---------------------------------------------------------------------------
+
+# Gate-failure markers from ``start_autoimplement`` → HTTP status. Each is itself
+# behind the env flag + §5B legal gate + confirm token; this map only translates a
+# failed precondition into the right 4xx so the UI can explain WHY nothing ran.
+_AUTOIMPLEMENT_STATUS_CODES = {
+    "disabled": 403,  # AGENTED_STRATEGY_AUTOIMPLEMENT flag off
+    "legal_gate_not_cleared": 409,  # §5B not 7/7
+    "confirmation_required": 400,  # missing confirm token
+    "not_materialized": 409,  # no plan_id — materialize first
+    "not_eligible": 409,  # atomic claim failed (gate invalidated / already started)
+}
+
+
+@post("/{project_id:str}/strategies/{sid:str}/autoimplement", sync_to_thread=True)
+def autoimplement_strategy(
+    project_id: str, sid: str, data: dict | None, caller: Caller
+) -> dict[str, Any]:
+    """Launch the TRIPLE-GATED auto-implement goal-loop for a materialized strategy.
+
+    This is the ONLY operator-reachable auto-code path, and it is itself behind ALL
+    THREE safety gates enforced in ``CompetitorStrategyService.start_autoimplement``:
+    the ``AGENTED_STRATEGY_AUTOIMPLEMENT`` env flag (default OFF → 403), the §5B
+    legal gate (``legal_cleared_at`` non-null at 7/7 → else 409), and an explicit
+    ``confirm_token`` in the body (→ else 400). With all three passed AND the
+    strategy materialized (``plan_id`` present, else 409), it spawns a goal-loop in
+    an ISOLATED git worktree behind a ``human_gate`` (operator approval pauses the
+    loop before it lands) and returns the session id.
+
+    Body ``{"confirm_token": str}``. ``sync_to_thread=True`` — the service resolves
+    the working dir + creates a worktree + spawns the runner (blocking I/O), so it
+    runs on the worker thread pool, never the event loop.
+
+    ``_assert_project_access`` runs FIRST (404, not 403 — the P1 IDOR lesson); the
+    service additionally scopes the strategy read to ``project_id`` so a
+    cross-project ``sid`` raises (surfaced as 404 here).
+
+    * unknown / foreign-project ``sid`` → 404.
+    * flag off → 403; §5B not cleared / not materialized → 409; no confirm → 400.
+    * launched → 200 ``{"status": "started", "session_id", "plan_id",
+      "worktree_path"}``.
+    """
+    _assert_project_access(project_id, caller)
+    body = data or {}
+    confirm_token = body.get("confirm_token")
+    try:
+        result = CompetitorStrategyService.start_autoimplement(
+            project_id, sid, confirm_token=confirm_token
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        if "not found" in detail:
+            raise NotFoundException(detail="Strategy not found") from None
+        raise ClientException(detail=detail) from None
+
+    status = result.get("status")
+    if status == "started":
+        return result
+    code = _AUTOIMPLEMENT_STATUS_CODES.get(status, 400)
+    raise ClientException(detail=result.get("reason") or status, status_code=code)
+
+
 def _set_status_or_404(sid: str, status: str, project_id: str) -> dict[str, Any]:
     """Shared approve/reject helper: DAO ``set_status`` → 404 on miss, 400 on illegal.
 
@@ -275,5 +343,6 @@ strategy_router = Router(
         edit_strategy,
         record_legal_item,
         materialize_strategy,
+        autoimplement_strategy,
     ],
 )

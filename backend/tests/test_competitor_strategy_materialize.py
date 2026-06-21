@@ -157,3 +157,66 @@ def test_materialize_foreign_strategy_raises(isolated_db):
     sid_b = _seed_strategy(proj_b, status="approved", cleared=True)
     with pytest.raises(ValueError):
         CompetitorStrategyService.materialize(proj_a, sid_b)
+
+
+def test_materialize_plan_creation_failure_reverts_to_approved(isolated_db, monkeypatch):
+    """add_project_plan failing AFTER mark_implementing must NOT wedge the strategy.
+
+    mark_implementing flips 'approved' -> 'implementing' BEFORE the plan is
+    created. If plan creation then fails, the strategy must NOT be left stuck in
+    'implementing' with no plan_id (an un-editable, un-re-materializable wedge):
+    materialize reverts it back to 'approved', PRESERVES legal_cleared_at, and
+    re-raises — so the operator can simply retry.
+    """
+    import app.services.competitor_strategy_service as svc
+
+    project_id, milestone_id, phase_id = _seed_project_with_phase(name="materialize-revert-proj")
+    sid = _seed_strategy(project_id, status="approved", cleared=True)
+    cleared_before = dao.get_strategy(sid, project_id=project_id)["legal_cleared_at"]
+    assert cleared_before is not None
+
+    # Plan creation explodes (e.g. an IntegrityError) AFTER mark_implementing ran.
+    def _boom(*a, **k):
+        raise RuntimeError("plan insert exploded")
+
+    monkeypatch.setattr(svc.grd_db, "add_project_plan", _boom)
+
+    before = len(grd_db.get_plans_by_phase(phase_id))
+    with pytest.raises(RuntimeError):
+        CompetitorStrategyService.materialize(project_id, sid)
+
+    # No plan persisted, no plan_id stamped.
+    assert len(grd_db.get_plans_by_phase(phase_id)) == before
+    strat = dao.get_strategy(sid, project_id=project_id)
+    assert strat["plan_id"] is None
+    # Reverted to 'approved' (not wedged in 'implementing') with clearance intact:
+    # the strategy is immediately re-materializable.
+    assert strat["status"] == "approved"
+    assert strat["legal_cleared_at"] is not None
+
+
+def test_materialize_plan_returns_none_reverts_to_approved(isolated_db, monkeypatch):
+    """add_project_plan returning None (not raising) also reverts the strategy."""
+    import app.services.competitor_strategy_service as svc
+
+    project_id, milestone_id, phase_id = _seed_project_with_phase(name="materialize-none-proj")
+    sid = _seed_strategy(project_id, status="approved", cleared=True)
+
+    real_add_project_plan = svc.grd_db.add_project_plan
+    monkeypatch.setattr(svc.grd_db, "add_project_plan", lambda *a, **k: None)
+
+    with pytest.raises(ValueError):
+        CompetitorStrategyService.materialize(project_id, sid)
+
+    strat = dao.get_strategy(sid, project_id=project_id)
+    assert strat["plan_id"] is None
+    assert strat["status"] == "approved"
+    assert strat["legal_cleared_at"] is not None
+
+    # And it is genuinely re-materializable: restoring the REAL add_project_plan
+    # (without unwinding the isolated_db patch) lets the operator retry, which now
+    # succeeds and lands the plan + flips back to 'implementing'.
+    monkeypatch.setattr(svc.grd_db, "add_project_plan", real_add_project_plan)
+    out = CompetitorStrategyService.materialize(project_id, sid)
+    assert out["plan"] is not None
+    assert dao.get_strategy(sid, project_id=project_id)["status"] == "implementing"

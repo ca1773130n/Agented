@@ -61,6 +61,15 @@ LEGAL_CHECKLIST_ITEMS: tuple = (
 # The subset reset to false on any body edit (re-affirmation after a plan change).
 _EDIT_RESET_ITEMS: tuple = ("independent_authorship", "no_copied_code")
 
+# Sentinel stamped into ``session_id`` by :func:`claim_for_autoimplement` to mark
+# a strategy as CLAIMED for an in-flight auto-implement launch BEFORE any side
+# effect (worktree / session) is created. The atomic claim flips a NULL
+# ``session_id`` to this sentinel under a single conditional UPDATE; the caller
+# replaces it with the real session id once the launch succeeds, or reverts it to
+# NULL on failure. It is never a valid real session id (psess-…), so it is
+# unambiguous as a claim marker.
+AUTOIMPLEMENT_CLAIM_SENTINEL = "claiming"
+
 # Allowed status transitions for the HITL state machine. ``approved`` →
 # ``implementing`` is listed here, but the move is additionally gated by the
 # legal clearance check in :func:`mark_implementing` — :func:`set_status` must
@@ -188,6 +197,95 @@ def get_strategy(strategy_id: str, *, project_id: Optional[str] = None) -> Optio
     return _row_to_dict(row)
 
 
+def set_session_id(
+    strategy_id: str, session_id: str, *, project_id: Optional[str] = None
+) -> Optional[dict]:
+    """Stamp the goal-loop ``session_id`` the auto-implement seam launched.
+
+    Project-SCOPED when ``project_id`` is supplied (``WHERE id = ? AND
+    project_id = ?``) so a foreign strategy is never mutated — the IDOR guard.
+    This is the ONLY writer of ``session_id``, and 26-05 only reaches it behind
+    the triple gate (flag + cleared §5B legal gate + confirm token). Returns the
+    updated row, or None if no such (scoped) strategy exists.
+    """
+    current = get_strategy(strategy_id, project_id=project_id)
+    if current is None:
+        return None
+    scope = " AND project_id = ?" if project_id is not None else ""
+    params: list = [session_id, strategy_id]
+    if project_id is not None:
+        params.append(project_id)
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE competitor_strategy "
+            "SET session_id = ?, updated_at = CURRENT_TIMESTAMP "
+            f"WHERE id = ?{scope}",
+            params,
+        )
+        conn.commit()
+    return get_strategy(strategy_id, project_id=project_id)
+
+
+def claim_for_autoimplement(strategy_id: str, project_id: str) -> Optional[dict]:
+    """ATOMICALLY claim a strategy for an auto-implement launch — fail CLOSED.
+
+    The §5B / materialization gate and the side-effecting launch (worktree +
+    session) happen at two different instants; a concurrent ``update_body`` /
+    legal-reset between a naive read and the launch could start an agent past an
+    invalidated gate (TOCTOU). This is the single ATOMIC chokepoint that closes
+    that window: a single conditional UPDATE stamps the
+    :data:`AUTOIMPLEMENT_CLAIM_SENTINEL` into ``session_id`` ONLY when the strategy
+    is, AT WRITE TIME, still fully eligible —
+
+    - belongs to ``project_id``;
+    - ``status == 'implementing'`` (materialize already promoted it through the
+      non-bypassable ``mark_implementing`` legal gate);
+    - ``legal_cleared_at IS NOT NULL`` (§5B cleared);
+    - ``plan_id IS NOT NULL`` (materialized into a ProjectPlan);
+    - ``session_id IS NULL`` (not already claimed / launched).
+
+    Returns the claimed row when exactly one row matched (the caller may now
+    create the worktree + session, then call :func:`set_session_id` to replace the
+    sentinel with the real id); returns ``None`` when the claim matched nothing —
+    the gate was invalidated, the strategy was already claimed, or it is not in a
+    launchable state. The caller MUST create NO side effect on ``None``.
+    """
+    with get_connection() as conn:
+        cur = conn.execute(
+            "UPDATE competitor_strategy "
+            "SET session_id = ?, updated_at = CURRENT_TIMESTAMP "
+            "WHERE id = ? AND project_id = ? AND status = 'implementing' "
+            "AND legal_cleared_at IS NOT NULL AND plan_id IS NOT NULL "
+            "AND session_id IS NULL",
+            (AUTOIMPLEMENT_CLAIM_SENTINEL, strategy_id, project_id),
+        )
+        rowcount = cur.rowcount
+        conn.commit()
+    if rowcount == 1:
+        return get_strategy(strategy_id, project_id=project_id)
+    return None
+
+
+def release_autoimplement_claim(strategy_id: str, project_id: str) -> Optional[dict]:
+    """Revert an auto-implement claim — clear the sentinel back to NULL.
+
+    Called when the post-claim launch (worktree create / create_session / start)
+    fails: it un-claims the strategy so it is re-claimable, but ONLY when the
+    ``session_id`` still holds the :data:`AUTOIMPLEMENT_CLAIM_SENTINEL` (never
+    clears a real, successfully-stamped session id). Returns the updated row, or
+    None if no such (scoped) strategy exists.
+    """
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE competitor_strategy "
+            "SET session_id = NULL, updated_at = CURRENT_TIMESTAMP "
+            "WHERE id = ? AND project_id = ? AND session_id = ?",
+            (strategy_id, project_id, AUTOIMPLEMENT_CLAIM_SENTINEL),
+        )
+        conn.commit()
+    return get_strategy(strategy_id, project_id=project_id)
+
+
 def set_status(
     strategy_id: str, status: str, *, project_id: Optional[str] = None
 ) -> Optional[dict]:
@@ -208,6 +306,15 @@ def set_status(
         return None
     if status == "implementing":
         raise ValueError("approved->implementing must go through mark_implementing (legal gate)")
+    # In-flight guard (fail CLOSED): never mutate the status of a strategy that is
+    # mid-claim (session_id == the claim sentinel). The legitimate
+    # ``implementing`` -> ``done`` completion happens only AFTER the real
+    # session_id is stamped (sentinel replaced), so a sentinel here means a launch
+    # is in progress and the status must not move under it.
+    if current.get("session_id") == AUTOIMPLEMENT_CLAIM_SENTINEL:
+        raise ValueError(
+            "cannot change status while an auto-implement launch is in flight (strategy is claimed)"
+        )
     allowed = _ALLOWED_TRANSITIONS.get(current["status"], set())
     if status not in allowed:
         raise ValueError(f"illegal status transition {current['status']!r} -> {status!r}")
@@ -245,6 +352,15 @@ def update_body(
     current = get_strategy(strategy_id, project_id=project_id)
     if current is None:
         return None
+    # In-flight guard (fail CLOSED): an auto-implement loop may already be running
+    # against this strategy (status 'implementing', or session_id claimed/stamped).
+    # A body edit NULLs ``legal_cleared_at`` — letting it run here would reset the
+    # §5B clearance OUT FROM UNDER a live agent (TOCTOU on the launch gate). Refuse.
+    if current["status"] == "implementing" or current.get("session_id"):
+        raise ValueError(
+            "cannot edit a strategy that is implementing or has an auto-implement "
+            "session — clearance reset under a running loop is forbidden"
+        )
     checklist = current.get("legal_checklist")
     if not isinstance(checklist, dict):
         checklist = {}
@@ -288,6 +404,15 @@ def record_legal_item(
     current = get_strategy(strategy_id, project_id=project_id)
     if current is None:
         return None
+    # In-flight guard (fail CLOSED): denying an item NULLs ``legal_cleared_at``,
+    # which would reset the §5B gate under a running auto-implement loop. Refuse
+    # any legal-checklist write once the strategy is implementing / claimed.
+    if current["status"] == "implementing" or current.get("session_id"):
+        raise ValueError(
+            "cannot change the legal checklist of a strategy that is implementing "
+            "or has an auto-implement session — clearance reset under a running "
+            "loop is forbidden"
+        )
     checklist = current.get("legal_checklist")
     if not isinstance(checklist, dict):
         checklist = {}
@@ -363,3 +488,44 @@ def mark_implementing(strategy_id: str, *, project_id: Optional[str] = None) -> 
     # Status is 'approved' and cleared yet 0 rows matched — only possible if the
     # row was concurrently mutated out from under us; treat as not-found.
     raise ValueError(f"strategy not found: {strategy_id!r}")
+
+
+def revert_implementing_to_approved(
+    strategy_id: str, *, project_id: Optional[str] = None
+) -> Optional[dict]:
+    """Roll an ``implementing`` strategy back to ``approved`` — materialize undo.
+
+    The materialize path (26-04) flips ``approved`` → ``implementing`` via
+    :func:`mark_implementing` BEFORE it creates the ``ProjectPlan``. If plan
+    creation then fails, the strategy would be wedged in ``implementing`` with NO
+    ``plan_id`` — un-editable (``update_body``/``record_legal_item`` refuse
+    in-flight strategies) and un-re-materializable. This is the inverse: it puts
+    the strategy back to ``approved`` so the operator can retry.
+
+    ``legal_cleared_at`` is deliberately PRESERVED (the §5B clearance was already
+    earned), so the reverted strategy is approved + cleared = immediately
+    re-materializable.
+
+    Fail-safe by construction (atomic conditional UPDATE):
+
+    - reverts ONLY when the row is still ``status = 'implementing'`` AND
+      ``plan_id IS NULL`` (a successful materialize stamps ``plan_id``, so this
+      can never undo a completed one) AND ``session_id IS NULL`` (never disturb a
+      strategy an auto-implement launch has claimed/started);
+    - matches nothing otherwise → returns the current row unchanged (idempotent,
+      never raises).
+    """
+    scope = " AND project_id = ?" if project_id is not None else ""
+    params: list = [strategy_id]
+    if project_id is not None:
+        params.append(project_id)
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE competitor_strategy "
+            "SET status = 'approved', updated_at = CURRENT_TIMESTAMP "
+            "WHERE id = ? AND status = 'implementing' "
+            f"AND plan_id IS NULL AND session_id IS NULL{scope}",
+            params,
+        )
+        conn.commit()
+    return get_strategy(strategy_id, project_id=project_id)

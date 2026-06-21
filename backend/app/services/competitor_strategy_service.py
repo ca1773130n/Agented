@@ -238,15 +238,27 @@ class CompetitorStrategyService:
             description=strategy["body"],
             tasks_json=tasks_json,
         )
-        plan_id = grd_db.add_project_plan(
-            phase_id=plan_req.phase_id,
-            plan_number=plan_req.plan_number,
-            title=plan_req.title,
-            description=plan_req.description,
-            tasks_json=plan_req.tasks_json,
-        )
-        if plan_id is None:
-            raise ValueError("failed to persist ProjectPlan for materialized strategy")
+        # mark_implementing already flipped the strategy to 'implementing'. If plan
+        # creation now fails (returns None, or raises e.g. IntegrityError), the
+        # strategy would be WEDGED in 'implementing' with no plan_id — un-editable
+        # (update_body/record_legal_item refuse in-flight) and un-re-materializable.
+        # Revert it to 'approved' (legal_cleared_at preserved) so it stays retryable
+        # BEFORE re-raising the failure.
+        try:
+            plan_id = grd_db.add_project_plan(
+                phase_id=plan_req.phase_id,
+                plan_number=plan_req.plan_number,
+                title=plan_req.title,
+                description=plan_req.description,
+                tasks_json=plan_req.tasks_json,
+            )
+            if plan_id is None:
+                raise ValueError("failed to persist ProjectPlan for materialized strategy")
+        except Exception:
+            competitor_strategies.revert_implementing_to_approved(
+                strategy_id, project_id=project_id
+            )
+            raise
 
         # Stamp plan_id back onto the strategy (raw SQLite, project-scoped).
         with get_connection() as conn:
@@ -327,37 +339,54 @@ class CompetitorStrategyService:
         *,
         confirm_token: Optional[str] = None,
     ) -> dict:
-        """DEFERRED auto-code-execution seam — an INERT stub in this MVP.
+        """TRIPLE-GATED auto-code-execution seam — launches a worktree goal-loop.
 
-        This is the would-be entry point that hands a materialized strategy to the
-        autonomy stack. It is triple-gated AND, even with all three gates passed,
-        spawns NO session and mutates NO repo in this MVP — it returns a
-        ``not_implemented`` marker. There is deliberately NO HTTP route exposing
-        it (no operator-reachable auto-code path yet); it is a code seam with tests
-        only. The headline safety invariant: NEVER auto-modify the user's repo
-        without flag + legal gate + confirm.
+        This is the entry point that hands a *materialized* strategy to the
+        autonomy stack. It is the headline-safety seam: it spawns a session and
+        touches the repo ONLY when ALL THREE gates pass, and even then the work
+        runs in an ISOLATED git worktree (never the operator's checkout / main)
+        behind a goal-loop ``human_gate`` that pauses for operator approval.
 
-        Gate order:
+        Gate order (each failing gate returns INERT — no session, no repo touch):
 
         1. ``AGENTED_STRATEGY_AUTOIMPLEMENT`` env flag truthy (DEFAULT unset → off)
            → else ``{"status": "disabled", ...}``.
         2. strategy ``legal_cleared_at`` non-null → else
            ``{"status": "legal_gate_not_cleared", ...}``.
         3. non-empty ``confirm_token`` → else ``{"status": "confirmation_required"}``.
-        4. all three hold → ``{"status": "not_implemented", "deferred": True}`` and
-           NOTHING is spawned.
 
-        WIRED-WHEN-ENABLED (documented, NOT coded here): create a goal-loop session
-        via ``POST /api/projects/{project_id}/sessions`` with
-        ``execution_type='goal_loop'``, ``execution_mode='autonomous'``, a
-        ``goal_loop_config`` carrying ``human_gate`` (``{mode: 'on_exit' | 'every_n',
-        n}``) + a ``quality_gate``, ``cwd = Project.worktree_base_path`` (the
-        isolated worktree, never the operator's checkout). The goal would seed from
-        the materialized ``ProjectPlan`` (``strategy.plan_id``). HITL approval would
-        ride ``POST /api/projects/{project_id}/sessions/{sid}/loop/gate-decision``
-        with ``continue | modify | abort``. The runner is
-        ``goal_loop_runner.start_runner`` → ``ProjectSessionManager.create_session``.
-        NONE of those are imported or called here.
+        When all three hold the strategy MUST already be materialized — it needs a
+        ``plan_id`` (the operator ran ``materialize`` first, which also flips it to
+        ``'implementing'`` through the non-bypassable §5B DAO gate). A strategy
+        without ``plan_id`` returns ``{"status": "not_materialized", ...}`` and
+        spawns nothing (we never reach into the repo from an un-reviewed plan).
+
+        The wired path then:
+
+        * reads the materialized ``ProjectPlan`` (``get_project_plan(plan_id)``) and
+          derives a clear "implement these tasks" goal from its ``tasks_json``;
+        * resolves the project working dir
+          (``ProjectWorkspaceService.resolve_working_directory``) and creates a
+          dedicated git WORKTREE off it (branch ``strategy/{strategy_id}``) — the
+          ``cwd`` AND ``worktree_path`` the loop runs in, so it NEVER mutates main;
+        * builds a ``goal_loop_config`` carrying a ``human_gate`` (mode
+          ``on_exit`` — the loop pauses for operator approval before it exits) plus
+          a bounded ``quality_gate`` (llm_judge) + iteration/wall caps;
+        * launches it via the goal-loop handler
+          (``get_handler('goal_loop').start({...})`` →
+          ``ProjectSessionManager.create_session(execution_type='goal_loop', ...)``
+          → ``goal_loop_runner.start_runner``) — the existing execution infra, NOT
+          a re-implementation;
+        * stamps ``competitor_strategy.session_id`` with the new session id.
+
+        HITL approval during execution rides ``POST
+        /api/projects/{project_id}/sessions/{sid}/loop/gate-decision`` with
+        ``continue | modify | abort``.
+
+        Returns ``{"status": "started", "session_id", "plan_id", "worktree_path",
+        "cwd"}`` on success; one of the gate/precondition markers otherwise.
+        Raises ``ValueError`` only for an unknown strategy or an unresolvable
+        working directory / worktree-creation failure.
         """
         if not os.environ.get(AGENTED_STRATEGY_AUTOIMPLEMENT):
             return {"status": "disabled", "reason": "auto-implement feature flag off"}
@@ -376,15 +405,404 @@ class CompetitorStrategyService:
                 "reason": "explicit per-action confirm token required",
             }
 
-        # All three gates pass — but the MVP stub is INERT: it spawns NO session
-        # and mutates NO repo. See the docstring for the wired-when-enabled call.
+        # GATE 4 (precondition, not a safety gate): the strategy must have been
+        # materialized into a ProjectPlan first. No plan_id → nothing to implement;
+        # return INERT (no session) and let the operator materialize.
+        plan_id = strategy.get("plan_id")
+        if not plan_id:
+            return {
+                "status": "not_materialized",
+                "reason": "strategy has no plan_id — materialize it before auto-implement",
+            }
+
+        plan = grd_db.get_project_plan(plan_id)
+        if plan is None:
+            return {
+                "status": "not_materialized",
+                "reason": f"materialized plan {plan_id} not found",
+            }
+
+        # Build the goal BEFORE any claim / side effect. _build_autoimplement_goal
+        # fails CLOSED (raises) on missing/unparseable/empty tasks_json — so an
+        # un-materialized-looking plan creates NO claim, NO worktree, NO session.
+        goal = cls._build_autoimplement_goal(plan)
+
+        # ATOMIC CLAIM — close the TOCTOU window. The cheap gates above are best-
+        # effort reads; this single conditional UPDATE re-checks status='implementing'
+        # + legal_cleared_at + plan_id + session_id IS NULL AT WRITE TIME and stamps
+        # a claim sentinel. If a concurrent update_body / legal-reset invalidated the
+        # gate between the reads and here, the claim matches nothing → fail CLOSED
+        # (no worktree, no session). It also prevents a double-launch (second claim
+        # returns None).
+        claimed = competitor_strategies.claim_for_autoimplement(strategy_id, project_id)
+        if claimed is None:
+            return {
+                "status": "not_eligible",
+                "reason": (
+                    "strategy is not claimable for auto-implement — gate invalidated, "
+                    "already started, or not in 'implementing' state with a cleared "
+                    "§5B gate + plan_id"
+                ),
+            }
+
+        # Past the claim: ANY failure below must (a) tear down the worktree/branch,
+        # (b) revert the claim (session_id → NULL so it is re-claimable), (c) re-raise.
+        # The local import AND resolve_working_directory run INSIDE the cleanup try:
+        # NOTHING between the claim and the try may raise without releasing the claim,
+        # else the 'claiming' sentinel leaks and the strategy is permanently locked.
+        base_dir = None
+        worktree_created = False
+        # The MOMENT handler.start returns a real session id we record it here,
+        # BEFORE any further step (set_session_id, logging) that could raise. If
+        # the launch spawned the autonomous --dangerously-skip-permissions
+        # subprocess but a later step throws, the except below STOPS this session
+        # first — the spawned agent must NEVER outlive a failed launch.
+        started_session_id = None
+        try:
+            from .project_workspace_service import ProjectWorkspaceService
+
+            base_dir = ProjectWorkspaceService.resolve_working_directory(project_id)
+            worktree_path = cls._create_strategy_worktree(base_dir, strategy_id)
+            if not worktree_path:
+                raise ValueError(
+                    f"failed to create isolated worktree for strategy {strategy_id} "
+                    f"under {base_dir}"
+                )
+            worktree_created = True
+
+            goal_loop_config = {
+                "goal": goal,
+                # human_gate present → the runner pauses for operator approval. Mode
+                # 'on_exit' blocks the loop before it finishes so a human signs off the
+                # auto-generated change (continue|modify|abort) before it lands.
+                "human_gate": {"mode": "on_exit", "n": 1},
+                # Bounded llm_judge quality gate + hard caps — autonomous code-mod must
+                # never run unbounded.
+                "quality_gate": {
+                    "kind": "llm_judge",
+                    "rubric": (
+                        "The change correctly and completely implements the strategy tasks "
+                        "without unrelated edits."
+                    ),
+                    "threshold": 0.8,
+                    "min_confidence": 0.6,
+                },
+                "max_iterations": 20,
+                "max_wall_seconds": 1800,
+                "context_policy": "carry",
+                "sandbox": "isolated",
+            }
+
+            session_config = {
+                "project_id": project_id,
+                "cwd": worktree_path,
+                "worktree_path": worktree_path,
+                "plan_id": plan_id,
+                "execution_type": "goal_loop",
+                "execution_mode": "autonomous",
+                # Autonomous in-worktree code-mod needs claude's skip-permissions.
+                # The GoalLoopSessionHandler / manager do NOT inject the flag when
+                # yolo_mode is set (the HTTP route does, but this path bypasses it),
+                # so we pass an EXPLICIT cmd carrying --dangerously-skip-permissions
+                # to guarantee the launched subprocess actually gets it. yolo_mode is
+                # still set for the manager's bookkeeping. Safety during the run rides
+                # the loop's human_gate + the isolated worktree (unchanged).
+                "yolo_mode": True,
+                "cmd": cls._autoimplement_cmd(),
+                "goal_loop_config": goal_loop_config,
+            }
+
+            from .execution_type_handler import get_handler
+
+            handler = get_handler("goal_loop")
+            if handler is None:  # pragma: no cover — registry always has goal_loop
+                raise ValueError("goal_loop execution handler is not registered")
+            result = handler.start(session_config)
+            if isinstance(result, dict) and result.get("error"):
+                raise ValueError(f"goal_loop launch failed: {result['error']}")
+
+            session_id = result.get("session_id") if isinstance(result, dict) else None
+            # Record the spawned session id IMMEDIATELY — the subprocess is now
+            # live, and any step below that raises must tear it down first.
+            started_session_id = session_id
+            if not session_id:
+                raise ValueError("goal_loop launch returned no session_id")
+            # Replace the claim sentinel with the REAL session id.
+            competitor_strategies.set_session_id(strategy_id, session_id, project_id=project_id)
+        except Exception:
+            # Fail CLOSED: undo every side effect so a launch failure leaves no
+            # dangling worktree/branch and the strategy un-claimed (re-claimable).
+            #
+            # STOP THE SPAWNED AGENT FIRST. If handler.start already launched the
+            # autonomous goal-loop subprocess (started_session_id set) but a later
+            # step raised, that --dangerously-skip-permissions process is live and
+            # untracked the instant we release the claim. Kill its process group
+            # (close stdin → SIGTERM → watchdog SIGKILL) by session id BEFORE we
+            # remove the worktree or free the claim, so it can never outlive the
+            # failed launch.
+            if started_session_id:
+                try:
+                    from .project_session_manager import ProjectSessionManager
+
+                    ProjectSessionManager.stop_session(started_session_id, wait=False)
+                except Exception:
+                    logger.exception(
+                        "start_autoimplement: failed to stop spawned session %s during "
+                        "launch-failure cleanup (strategy=%s)",
+                        started_session_id,
+                        strategy_id,
+                    )
+            if worktree_created:
+                cls._remove_strategy_worktree(base_dir, strategy_id)
+            competitor_strategies.release_autoimplement_claim(strategy_id, project_id)
+            raise
+
         logger.info(
-            "start_autoimplement reached the deferred seam (project=%s strategy=%s) — "
-            "inert in this MVP; no session spawned",
+            "start_autoimplement launched goal-loop (project=%s strategy=%s plan=%s "
+            "session=%s worktree=%s)",
             project_id,
             strategy_id,
+            plan_id,
+            session_id,
+            worktree_path,
         )
-        return {"status": "not_implemented", "deferred": True}
+        return {
+            "status": "started",
+            "session_id": session_id,
+            "plan_id": plan_id,
+            "worktree_path": worktree_path,
+            "cwd": worktree_path,
+        }
+
+    @staticmethod
+    def _autoimplement_cmd() -> list[str]:
+        """The EXPLICIT claude stream-json command for an auto-implement goal-loop.
+
+        Identical to the GoalLoopSessionHandler default shape PLUS
+        ``--dangerously-skip-permissions`` — the autonomous in-worktree code-mod
+        needs it, and neither the handler nor the manager inject it for this path
+        (the manager skips the permission-hook overlay when ``yolo_mode`` is set,
+        and the only flag-injection site is the HTTP goal-loop route this service
+        bypasses). Passing the flag in an explicit ``cmd`` guarantees the launched
+        subprocess actually receives it (contract == intent). Safety during the run
+        is the loop's ``human_gate`` + the isolated worktree, NOT a permission
+        prompt — that model is unchanged.
+        """
+        return [
+            "claude",
+            "--print",
+            "--input-format",
+            "stream-json",
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--include-hook-events",
+            "--include-partial-messages",
+            "--dangerously-skip-permissions",
+        ]
+
+    @staticmethod
+    def _build_autoimplement_goal(plan: dict) -> str:
+        """Derive the goal-loop instruction from a materialized ProjectPlan — fail CLOSED.
+
+        The goal MUST be built ONLY from the plan's materialized ``tasks_json``
+        tasks. There is deliberately NO fallback to the raw plan title/description:
+        a missing, unparseable, or empty ``tasks_json`` means the plan was not
+        properly materialized through the §5B/HITL path, so launching an
+        autonomous agent off raw plan text (a quality/injection risk) is refused.
+        Raises ``ValueError`` — the caller has not yet created any worktree or
+        session, so the failure leaves nothing behind.
+        """
+        raw = plan.get("tasks_json")
+        if not raw:
+            raise ValueError(
+                "materialized plan has no tasks_json — refusing to build an "
+                "auto-implement goal (fail closed)"
+            )
+        try:
+            parsed = json.loads(raw)
+        except (json.JSONDecodeError, ValueError, TypeError) as exc:
+            raise ValueError(
+                f"materialized plan tasks_json is unparseable — refusing to "
+                f"auto-implement (fail closed): {exc}"
+            ) from None
+        tasks = parsed.get("tasks") if isinstance(parsed, dict) else None
+        if not isinstance(tasks, list) or not tasks:
+            raise ValueError(
+                "materialized plan tasks_json has no tasks — refusing to "
+                "auto-implement (fail closed)"
+            )
+        lines = []
+        for t in tasks:
+            if not isinstance(t, dict):
+                continue
+            title = str(t.get("title") or "").strip()
+            desc = str(t.get("description") or "").strip()
+            if title and desc:
+                lines.append(f"- {title}: {desc}")
+            elif title:
+                lines.append(f"- {title}")
+            elif desc:
+                lines.append(f"- {desc}")
+        if not lines:
+            raise ValueError(
+                "materialized plan tasks_json has no usable task title/description "
+                "— refusing to auto-implement (fail closed)"
+            )
+        return "Implement these tasks:\n" + "\n".join(lines)
+
+    @staticmethod
+    def _is_registered_worktree(base_dir: str, worktree_abs: str) -> bool:
+        """True iff ``worktree_abs`` is a git-registered worktree of ``base_dir``.
+
+        Parses ``git -C {base_dir} worktree list --porcelain`` and matches the
+        real (symlink-resolved) path of each registered worktree against the real
+        path of ``worktree_abs``. Used to validate a reused worktree dir is a
+        genuine isolated worktree — not a stale plain dir or a symlink that could
+        resolve cwd back to main.
+        """
+        import subprocess
+
+        target = os.path.realpath(worktree_abs)
+        try:
+            result = subprocess.run(
+                ["git", "-C", base_dir, "worktree", "list", "--porcelain"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            logger.error("_is_registered_worktree: git worktree list failed")
+            return False
+        if result.returncode != 0:
+            return False
+        for line in result.stdout.splitlines():
+            if line.startswith("worktree "):
+                registered = os.path.realpath(line[len("worktree ") :].strip())
+                if registered == target:
+                    return True
+        return False
+
+    @staticmethod
+    def _remove_strategy_worktree(base_dir: str, strategy_id: str) -> None:
+        """Best-effort teardown of the strategy worktree + its branch.
+
+        ``git worktree remove --force`` the ``.worktrees/strategy-{sid}`` dir and
+        ``git branch -D strategy/{sid}``. Never raises — used on the launch-failure
+        cleanup path (so a launch exception leaves no dangling worktree/branch) and
+        when a stale/invalid reuse dir must be torn down before recreation.
+        """
+        import subprocess
+
+        worktree_rel = os.path.join(".worktrees", f"strategy-{strategy_id}")
+        branch_name = f"strategy/{strategy_id}"
+        for argv in (
+            ["git", "-C", base_dir, "worktree", "remove", "--force", worktree_rel],
+            ["git", "-C", base_dir, "worktree", "prune"],
+            ["git", "-C", base_dir, "branch", "-D", branch_name],
+        ):
+            try:
+                subprocess.run(argv, capture_output=True, text=True, timeout=30)
+            except Exception:
+                logger.warning(
+                    "_remove_strategy_worktree: %s failed (continuing)", argv, exc_info=True
+                )
+
+    @classmethod
+    def _create_strategy_worktree(cls, base_dir: str, strategy_id: str) -> Optional[str]:
+        """Create an ISOLATED git worktree off ``base_dir`` for an auto-implement run.
+
+        Runs ``git -C {base_dir} worktree add .worktrees/strategy-{sid} -b
+        strategy/{sid}`` so the goal-loop never mutates the operator's main
+        checkout. Returns the absolute worktree path on success, None on failure
+        (caller raises). Mirrors ``InstanceService._create_worktree`` — reuse, not
+        reinvention.
+
+        REUSE is VALIDATED, not trusted: an existing ``.worktrees/strategy-{sid}``
+        dir is reused only when it is (a) NOT a symlink, (b) its real path is under
+        ``{base_dir}/.worktrees`` (never escaping to main), and (c) it is a
+        git-REGISTERED worktree. A stale plain dir, a symlink, or an out-of-tree
+        path is torn down and recreated — cwd must NEVER resolve to the main
+        checkout.
+        """
+        import subprocess
+
+        if not base_dir or not os.path.isdir(base_dir):
+            logger.error("_create_strategy_worktree: base_dir %s missing", base_dir)
+            return None
+        if not os.path.exists(os.path.join(base_dir, ".git")):
+            logger.error("_create_strategy_worktree: %s is not a git repository", base_dir)
+            return None
+
+        worktrees_root = os.path.realpath(os.path.join(base_dir, ".worktrees"))
+        worktree_rel = os.path.join(".worktrees", f"strategy-{strategy_id}")
+        worktree_abs = os.path.join(base_dir, worktree_rel)
+        branch_name = f"strategy/{strategy_id}"
+
+        if os.path.lexists(worktree_abs):
+            real = os.path.realpath(worktree_abs)
+            is_symlink = os.path.islink(worktree_abs)
+            under_worktrees = real == worktrees_root or real.startswith(worktrees_root + os.sep)
+            registered = cls._is_registered_worktree(base_dir, worktree_abs)
+            if (not is_symlink) and under_worktrees and registered:
+                logger.info("_create_strategy_worktree: reusing valid worktree %s", worktree_abs)
+                return worktree_abs
+            # Invalid: symlink, escaped path, or unregistered/stale dir. Tear it
+            # down (and the branch) before recreating — NEVER run cwd in it.
+            logger.warning(
+                "_create_strategy_worktree: rejecting invalid existing path %s "
+                "(symlink=%s under_worktrees=%s registered=%s) — removing + recreating",
+                worktree_abs,
+                is_symlink,
+                under_worktrees,
+                registered,
+            )
+            cls._remove_strategy_worktree(base_dir, strategy_id)
+            if os.path.lexists(worktree_abs):
+                # Removal left something behind (e.g. a bare symlink git won't
+                # touch) — refuse rather than risk cwd escaping to main.
+                try:
+                    if os.path.islink(worktree_abs) or os.path.isfile(worktree_abs):
+                        os.unlink(worktree_abs)
+                except OSError:
+                    logger.error(
+                        "_create_strategy_worktree: could not clear stale path %s", worktree_abs
+                    )
+                    return None
+            if os.path.lexists(worktree_abs):
+                logger.error(
+                    "_create_strategy_worktree: stale path %s persists — refusing", worktree_abs
+                )
+                return None
+
+        try:
+            result = subprocess.run(
+                ["git", "-C", base_dir, "worktree", "add", worktree_rel, "-b", branch_name],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode != 0 and "already exists" in result.stderr:
+                result = subprocess.run(
+                    ["git", "-C", base_dir, "worktree", "add", worktree_rel, branch_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+            if result.returncode != 0:
+                logger.error(
+                    "_create_strategy_worktree: git worktree add failed: %s",
+                    result.stderr.strip(),
+                )
+                return None
+            logger.info("_create_strategy_worktree: created worktree %s", worktree_abs)
+            return worktree_abs
+        except subprocess.TimeoutExpired:
+            logger.error("_create_strategy_worktree: git worktree add timed out")
+            return None
+        except Exception:
+            logger.exception("_create_strategy_worktree: unexpected error")
+            return None
 
     # ------------------------------------------------------------------
     # Project-scoped signal load (no cross-project synthesis)

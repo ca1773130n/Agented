@@ -9,12 +9,12 @@ versions ran).
 """
 
 
-def test_schema_version_is_174(isolated_db):
+def test_schema_version_is_at_least_174(isolated_db):
     from app.db.connection import get_connection
 
     with get_connection() as conn:
         max_version = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
-    assert max_version == 174
+    assert max_version >= 174
 
 
 def test_migration_174_registered_after_173():
@@ -49,9 +49,7 @@ def test_competitor_strategy_table_exists(isolated_db):
             r[0]
             for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         }
-    assert "competitor_strategy" in names, (
-        "competitor_strategy should exist after migration 174"
-    )
+    assert "competitor_strategy" in names, "competitor_strategy should exist after migration 174"
 
 
 def test_competitor_strategy_columns(isolated_db):
