@@ -9489,6 +9489,25 @@
     "approvedToast": "전략이 승인되었습니다",
     "rejectedToast": "전략이 거부되었습니다",
     "legalClearedToast": "법적 검토 완료 — 구현이 잠금 해제되었습니다",
-    "strategyError": "전략 작업에 실패했습니다"
+    "strategyError": "전략 작업에 실패했습니다",
+    "lookalikes": {
+      "title": "마켓 유사 기업",
+      "notConfigured": {
+        "title": "유사 기업 공급자가 설정되지 않았습니다",
+        "hint": "APISTEMIC_API_KEY(또는 다른 공급자)를 설정하면 내 제품과 유사한 기업·제품을 찾을 수 있습니다. 그 전까지는 스캔하지 않으며 외부 호출도 하지 않습니다.",
+        "docsLink": "공급자 설정 방법"
+      },
+      "empty": "아직 유사 기업이 없습니다 — 스캔을 실행해 유사 기업을 찾아보세요.",
+      "scan": "스캔",
+      "scanning": "스캔 중…",
+      "accept": "수락",
+      "accepting": "수락 중…",
+      "dismiss": "무시",
+      "acceptedToast": "유사 기업을 모니터링 소스에 추가했습니다",
+      "dismissedToast": "유사 기업을 무시했습니다",
+      "acceptError": "유사 기업 수락에 실패했습니다",
+      "dismissError": "유사 기업 무시에 실패했습니다",
+      "whyChip": "근거"
+    }
   }
 }

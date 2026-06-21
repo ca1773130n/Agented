@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { competitorIntelApi, ApiError } from '../services/api';
+import { competitorIntelApi, lookalikeApi, ApiError } from '../services/api';
 import type {
   CompetitorSource,
   DetectedSignal,
   SuggestedCompetitor,
+  MarketLookalike,
   Strategy,
   AuthenticatedEventSource,
 } from '../services/api';
@@ -45,6 +46,17 @@ const loadingSuggestions = ref(false);
 const scanning = ref(false);
 // Per-suggestion in-flight accept guard (drives the "Accepting…" label).
 const acceptingId = ref<string | null>(null);
+
+// --- Market-lookalike review-queue state (phase 27 — the P5 loop) ----------
+// `lookalikeProvider === null` is the BUY-gate signal: no provider keyed → the
+// "configure a provider" CTA (the headline graceful-degradation state). A
+// non-null name → the scan/review queue is live.
+const lookalikes = ref<MarketLookalike[]>([]);
+const lookalikeProvider = ref<string | null>(null);
+const loadingLookalikes = ref(false);
+const scanningLookalikes = ref(false);
+// Per-lookalike in-flight accept guard (drives the "Accepting…" label).
+const acceptingLookalikeId = ref<string | null>(null);
 
 // --- Strategy review-queue state (phase 26 — the P4 HITL loop) -------------
 const strategies = ref<Strategy[]>([]);
@@ -179,6 +191,70 @@ async function dismissSuggestion(id: string) {
     showToast(t('competitorIntel.dismissedToast'), 'success');
   } catch (err) {
     showToast(err instanceof ApiError ? err.message : t('competitorIntel.dismissError'), 'error');
+  }
+}
+
+// --- Market-lookalike handlers (clone the discovery review-queue pattern) ---
+async function loadLookalikes() {
+  if (!projectId.value) return;
+  loadingLookalikes.value = true;
+  try {
+    const res = await lookalikeApi.listSuggestions(projectId.value);
+    lookalikeProvider.value = res.provider;
+    lookalikes.value = res.suggestions;
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : t('competitorIntel.loadError'), 'error');
+  } finally {
+    loadingLookalikes.value = false;
+  }
+}
+
+// Run the provider-aware lookalike scan, then refresh the review queue. The scan
+// is BUY-gated server-side: with no provider keyed it returns a 200 the UI never
+// even reaches (the Scan button only renders when a provider IS configured).
+async function runLookalikeScan() {
+  if (!projectId.value || scanningLookalikes.value) return;
+  scanningLookalikes.value = true;
+  try {
+    await lookalikeApi.scan(projectId.value);
+    await loadLookalikes();
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : t('competitorIntel.loadError'), 'error');
+  } finally {
+    scanningLookalikes.value = false;
+  }
+}
+
+async function acceptLookalike(id: string) {
+  if (!projectId.value || acceptingLookalikeId.value) return;
+  acceptingLookalikeId.value = id;
+  try {
+    const res = await lookalikeApi.accept(projectId.value, id);
+    // Optimistic: drop from the queue and surface as a watched source.
+    lookalikes.value = lookalikes.value.filter((s) => s.id !== id);
+    sources.value = [res.source, ...sources.value];
+    showToast(t('competitorIntel.lookalikes.acceptedToast'), 'success');
+  } catch (err) {
+    showToast(
+      err instanceof ApiError ? err.message : t('competitorIntel.lookalikes.acceptError'),
+      'error',
+    );
+  } finally {
+    acceptingLookalikeId.value = null;
+  }
+}
+
+async function dismissLookalike(id: string) {
+  if (!projectId.value) return;
+  try {
+    await lookalikeApi.dismiss(projectId.value, id);
+    lookalikes.value = lookalikes.value.filter((s) => s.id !== id);
+    showToast(t('competitorIntel.lookalikes.dismissedToast'), 'success');
+  } catch (err) {
+    showToast(
+      err instanceof ApiError ? err.message : t('competitorIntel.lookalikes.dismissError'),
+      'error',
+    );
   }
 }
 
@@ -339,6 +415,7 @@ async function refreshAll() {
   closeStream();
   void loadSources();
   void loadSuggestions();
+  void loadLookalikes();
   void loadStrategies();
   // Await the signal backlog BEFORE opening the stream: an SSE frame arriving
   // mid-load would otherwise be overwritten by loadSignals' array replacement.
@@ -526,6 +603,80 @@ onUnmounted(() => {
               :title="!st.legal_cleared_at ? t('competitorIntel.legalChecklistTitle') : ''"
             >
               {{ t('competitorIntel.implement') }}
+            </button>
+          </div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Market lookalikes (phase 27 P5): provider-pluggable scan→review→accept.
+         THREE states: (1) provider===null → "configure a provider" CTA (the
+         dominant default-install state — no scan button, no fake rows); (2)
+         provider set + empty → empty line + Scan button; (3) provider set +
+         populated → the review queue. -->
+    <div class="ci-lookalikes">
+      <div class="ci-suggestions-head">
+        <h2 class="ci-section-title">{{ t('competitorIntel.lookalikes.title') }}</h2>
+        <button
+          v-if="lookalikeProvider !== null"
+          type="button"
+          class="ci-submit ci-discover"
+          :disabled="scanningLookalikes"
+          @click="runLookalikeScan"
+        >
+          {{ scanningLookalikes ? t('competitorIntel.lookalikes.scanning') : t('competitorIntel.lookalikes.scan') }}
+        </button>
+      </div>
+
+      <!-- State 1: no provider keyed — the graceful-degradation CTA card -->
+      <div v-if="lookalikeProvider === null" class="ci-lookalike-cta">
+        <p class="ci-lookalike-cta-title">{{ t('competitorIntel.lookalikes.notConfigured.title') }}</p>
+        <p class="ci-lookalike-cta-hint">{{ t('competitorIntel.lookalikes.notConfigured.hint') }}</p>
+        <a
+          class="ci-lookalike-cta-link"
+          href="https://docs.apistemic.com"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {{ t('competitorIntel.lookalikes.notConfigured.docsLink') }}
+        </a>
+      </div>
+
+      <!-- State 2: provider keyed, queue empty -->
+      <p
+        v-else-if="loadingLookalikes && lookalikes.length === 0"
+        class="ci-empty"
+      >
+        {{ t('competitorIntel.loading') }}
+      </p>
+      <p v-else-if="lookalikes.length === 0" class="ci-empty">
+        {{ t('competitorIntel.lookalikes.empty') }}
+      </p>
+
+      <!-- State 3: provider keyed, populated review queue -->
+      <ul v-else class="ci-suggestion-list">
+        <li v-for="la in lookalikes" :key="la.id" class="ci-suggestion">
+          <div class="ci-suggestion-main">
+            <span class="ci-kind" :data-kind="la.kind">{{ kindLabel(la.kind) }}</span>
+            <span class="ci-suggestion-url">{{ la.candidate_repo || la.candidate_url }}</span>
+            <a class="ci-suggestion-url" :href="la.candidate_url" target="_blank" rel="noopener noreferrer">
+              {{ la.candidate_url }}
+            </a>
+            <span v-if="la.reason" class="ci-reason" :title="la.reason">
+              {{ t('competitorIntel.lookalikes.whyChip') }}: {{ la.reason }}
+            </span>
+          </div>
+          <div class="ci-suggestion-actions">
+            <button
+              type="button"
+              class="ci-submit ci-accept"
+              :disabled="acceptingLookalikeId === la.id"
+              @click="acceptLookalike(la.id)"
+            >
+              {{ acceptingLookalikeId === la.id ? t('competitorIntel.lookalikes.accepting') : t('competitorIntel.lookalikes.accept') }}
+            </button>
+            <button type="button" class="ci-dismiss" @click="dismissLookalike(la.id)">
+              {{ t('competitorIntel.lookalikes.dismiss') }}
             </button>
           </div>
         </li>
@@ -823,5 +974,34 @@ onUnmounted(() => {
   padding: 0.4rem 0.9rem;
   font-size: 0.85rem;
   align-self: flex-start;
+}
+/* Market-lookalikes "configure a provider" CTA — the graceful default state.
+   Styled off the empty-state, NOT an error toast: it must read as intentional. */
+.ci-lookalike-cta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1rem;
+  border: 1px dashed var(--border-color, #2a2a2a);
+  border-radius: 8px;
+  background: var(--surface-2, #111);
+}
+.ci-lookalike-cta-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text-primary, #eee);
+}
+.ci-lookalike-cta-hint {
+  margin: 0;
+  color: var(--text-secondary, #9aa0a6);
+}
+.ci-lookalike-cta-link {
+  align-self: flex-start;
+  color: var(--accent, #4f8cff);
+  text-decoration: none;
+  font-weight: 600;
+}
+.ci-lookalike-cta-link:hover {
+  text-decoration: underline;
 }
 </style>

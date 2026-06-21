@@ -64,12 +64,13 @@ export type { SuperAgentActivityStatus } from './super-agents';
 export { workflowApi, workflowExecutionApi } from './workflows';
 export { sketchApi } from './sketches';
 export { grdApi } from './grd';
-export { competitorIntelApi } from './competitor-intel';
+export { competitorIntelApi, lookalikeApi } from './competitor-intel';
 export type {
   CompetitorSource,
   DetectedSignal,
   SuggestedCompetitor,
   Strategy,
+  MarketLookalike,
 } from './competitor-intel';
 export { researchApi } from './research';
 export type {

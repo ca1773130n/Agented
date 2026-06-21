@@ -105,6 +105,38 @@ export interface Strategy {
   created_at: string;
 }
 
+/**
+ * A market-lookalike suggestion (phase-27 `discovery_suggestion` row,
+ * `kind='company'`): a competitor company/product a provider-pluggable lookalike
+ * scan found *similar* to the project, awaiting an operator verdict. Reuses the
+ * P2 `discovery_suggestion` surface (zero migrations) — same shape as
+ * `SuggestedCompetitor`, but the candidate is a company/product domain rather
+ * than a github repo. The operator can `accept` it (→ a watched `product_url`
+ * `competitor_source`) or `dismiss` it.
+ */
+export interface MarketLookalike {
+  id: string;
+  project_id: string;
+  /** Suggestion kind — `'company'` (a scan writes this) or `'product'`. */
+  kind: string;
+  /** The resolving provider's name (stored in the `candidate_owner` column). */
+  candidate_owner: string;
+  /** The candidate's normalized domain (stored in the `candidate_repo` column). */
+  candidate_repo: string;
+  /** Canonical candidate URL (rendered as the lookalike's link). */
+  candidate_url: string;
+  /** Deterministic human "why" string, rendered from `evidence.reason`. */
+  reason: string | null;
+  /** Relevance score; ranking key. May be null (a null score never blocks). */
+  score: number | null;
+  /** Parsed `evidence` blob (the provider's "why" payload). */
+  evidence: Record<string, unknown> | unknown[] | string | null;
+  status: 'suggested' | 'added' | 'dismissed';
+  /** Stamped with the promoted `competitor_source` id once accepted. */
+  source_id: string | null;
+  created_at: string;
+}
+
 export const competitorIntelApi = {
   /**
    * Add a source by URL (or, for `hn_query`, a search query in the `url` field).
@@ -274,5 +306,75 @@ export const competitorIntelApi = {
     createAuthenticatedEventSource(
       `/api/projects/${projectId}/competitor-intel/signals/stream`,
       options,
+    ),
+};
+
+/**
+ * Market-lookalike API (phase-27 P5): a provider-pluggable scan→review→accept
+ * loop over the P2 `discovery_suggestion` surface (`kind='company'`). Every call
+ * is project-scoped and IDOR-guarded server-side. The `scan` route is BUY-gated:
+ * with NO provider keyed it returns a NORMAL 200 with `{provider: null,
+ * outcome: 'not_configured', ...}` — the UI renders the "configure a provider"
+ * CTA (no crash, no fake data). CSRF is auto-injected by the client for POST.
+ */
+export const lookalikeApi = {
+  /**
+   * Run a provider-aware market-lookalike scan. With no provider keyed this
+   * resolves to `{provider: null, outcome: 'not_configured', scanned: 0,
+   * suggestions: []}` (a 200, NOT an error). `seed` is the operator's seed term.
+   */
+  scan: (
+    projectId: string,
+    seed?: string,
+  ): Promise<{
+    provider: string | null;
+    outcome: string;
+    scanned: number;
+    suggestions: MarketLookalike[];
+  }> =>
+    apiFetch<{
+      provider: string | null;
+      outcome: string;
+      scanned: number;
+      suggestions: MarketLookalike[];
+    }>(`/api/projects/${projectId}/lookalikes/scan`, {
+      method: 'POST',
+      body: JSON.stringify({ seed }),
+    }),
+
+  /**
+   * The market-lookalike review queue. `provider` is the active provider name
+   * (or `null` — the CTA-vs-queue signal); `suggestions` are the market-kind
+   * (`company`/`product`) `suggested` rows only.
+   */
+  listSuggestions: (
+    projectId: string,
+  ): Promise<{ provider: string | null; suggestions: MarketLookalike[] }> =>
+    apiFetch<{ provider: string | null; suggestions: MarketLookalike[] }>(
+      `/api/projects/${projectId}/lookalikes/suggestions`,
+    ),
+
+  /**
+   * Accept a lookalike → promote it into a watched competitor source on the
+   * `product_url` lane (`origin='discovery'`). Returns the newly minted source
+   * (+ the updated suggestion).
+   */
+  accept: (
+    projectId: string,
+    id: string,
+  ): Promise<{ source: CompetitorSource; suggestion: MarketLookalike }> =>
+    apiFetch<{ source: CompetitorSource; suggestion: MarketLookalike }>(
+      `/api/projects/${projectId}/lookalikes/suggestions/${id}/accept`,
+      { method: 'POST' },
+    ),
+
+  /** Dismiss a lookalike (flip its status to `dismissed`; sticky on re-scan). */
+  dismiss: (
+    projectId: string,
+    id: string,
+  ): Promise<{ suggestion: MarketLookalike }> =>
+    apiFetch<{ suggestion: MarketLookalike }>(
+      `/api/projects/${projectId}/lookalikes/suggestions/${id}/dismiss`,
+      { method: 'POST' },
     ),
 };

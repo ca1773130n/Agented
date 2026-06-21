@@ -9489,6 +9489,25 @@
     "approvedToast": "Strategy approved",
     "rejectedToast": "Strategy rejected",
     "legalClearedToast": "Legal checklist cleared — implement unlocked",
-    "strategyError": "Strategy action failed"
+    "strategyError": "Strategy action failed",
+    "lookalikes": {
+      "title": "Market lookalikes",
+      "notConfigured": {
+        "title": "No lookalike provider configured",
+        "hint": "Set APISTEMIC_API_KEY (or another provider) to find companies and products similar to yours. Until then, nothing is scanned and no external call is made.",
+        "docsLink": "How to configure a provider"
+      },
+      "empty": "No lookalikes yet — run a scan to find similar companies.",
+      "scan": "Scan",
+      "scanning": "Scanning…",
+      "accept": "Accept",
+      "accepting": "Accepting…",
+      "dismiss": "Dismiss",
+      "acceptedToast": "Lookalike added to watched sources",
+      "dismissedToast": "Lookalike dismissed",
+      "acceptError": "Failed to accept lookalike",
+      "dismissError": "Failed to dismiss lookalike",
+      "whyChip": "Why"
+    }
   }
 }
