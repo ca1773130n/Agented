@@ -432,6 +432,8 @@ class GitHubSimilarityClient:
                         "url": entry["url"],
                         "shared_stargazers": entry["count"],
                         "shared_stargazer_logins": entry["logins"][:10],
+                        "archived": entry.get("archived", False),
+                        "fork": entry.get("fork", False),
                     }
                 )
         results.sort(key=lambda c: c["shared_stargazers"], reverse=True)
@@ -505,5 +507,7 @@ class GitHubSimilarityClient:
             "owner": owner_login,
             "repo": name,
             "url": item.get("html_url") or f"https://github.com/{owner_login}/{name}",
+            "archived": bool(item.get("archived")),
+            "fork": bool(item.get("fork")),
         }
         return (owner_login.lower(), name.lower()), meta
