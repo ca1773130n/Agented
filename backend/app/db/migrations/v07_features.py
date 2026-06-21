@@ -1543,6 +1543,29 @@ def _migrate_174_competitor_strategy(conn) -> None:
     )
 
 
+def _migrate_175_competitor_strategy_session(conn) -> None:
+    """v0.9.0 phase 26 (26-05, auto-implement wire): link a strategy to its loop.
+
+    Adds a nullable ``session_id TEXT`` to ``competitor_strategy`` — the
+    project-session id of the goal-loop the DEFERRED auto-implement seam
+    (``CompetitorStrategyService.start_autoimplement``) launches once ALL THREE
+    safety gates pass (``AGENTED_STRATEGY_AUTOIMPLEMENT`` flag + cleared §5B legal
+    gate + explicit confirm token). It is NULL for every strategy that never
+    reaches the wired path (the default — the flag is off), so the column is a
+    pure forward-link: ``materialize`` writes a PLAN ARTIFACT (``plan_id``) with
+    zero repo mutation; ``start_autoimplement`` is the only writer of
+    ``session_id`` and only behind the triple gate.
+
+    Idempotent: SQLite ``ALTER TABLE ADD COLUMN`` is not ``IF NOT EXISTS``, so we
+    introspect ``PRAGMA table_info`` and only add the column when absent — re-run
+    safe. Mirrors the introspect-then-ALTER shape of
+    ``_migrate_173_competitor_last_polled``.
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(competitor_strategy)")}
+    if "session_id" not in cols:
+        conn.execute("ALTER TABLE competitor_strategy ADD COLUMN session_id TEXT")
+
+
 def _migrate_168_grd_genome_suggestions(conn) -> None:
     """GRD 0.4.1 pattern mining: mirror ``gd patterns`` (→ GENOME-SUGGESTIONS).
 
@@ -1767,4 +1790,9 @@ V07_MIGRATIONS: list = [
     # competitor_strategy table — the HITL strategy queue + the DAO-enforced
     # §5B legal gate (mark_implementing raises until all 7 items affirmed).
     (174, "competitor_strategy", _migrate_174_competitor_strategy),
+    # v0.9.0 phase 26 (26-05, auto-implement wire): nullable competitor_strategy
+    # .session_id — the forward-link to the goal-loop the triple-gated
+    # start_autoimplement seam launches (NULL unless the flag+legal+confirm gates
+    # all pass).
+    (175, "competitor_strategy_session", _migrate_175_competitor_strategy_session),
 ]

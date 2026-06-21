@@ -188,6 +188,35 @@ def get_strategy(strategy_id: str, *, project_id: Optional[str] = None) -> Optio
     return _row_to_dict(row)
 
 
+def set_session_id(
+    strategy_id: str, session_id: str, *, project_id: Optional[str] = None
+) -> Optional[dict]:
+    """Stamp the goal-loop ``session_id`` the auto-implement seam launched.
+
+    Project-SCOPED when ``project_id`` is supplied (``WHERE id = ? AND
+    project_id = ?``) so a foreign strategy is never mutated — the IDOR guard.
+    This is the ONLY writer of ``session_id``, and 26-05 only reaches it behind
+    the triple gate (flag + cleared §5B legal gate + confirm token). Returns the
+    updated row, or None if no such (scoped) strategy exists.
+    """
+    current = get_strategy(strategy_id, project_id=project_id)
+    if current is None:
+        return None
+    scope = " AND project_id = ?" if project_id is not None else ""
+    params: list = [session_id, strategy_id]
+    if project_id is not None:
+        params.append(project_id)
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE competitor_strategy "
+            "SET session_id = ?, updated_at = CURRENT_TIMESTAMP "
+            f"WHERE id = ?{scope}",
+            params,
+        )
+        conn.commit()
+    return get_strategy(strategy_id, project_id=project_id)
+
+
 def set_status(
     strategy_id: str, status: str, *, project_id: Optional[str] = None
 ) -> Optional[dict]:

@@ -420,3 +420,122 @@ def test_every_route_404s_for_inaccessible_project(isolated_db, monkeypatch):
     # The guard short-circuited BEFORE any mutation.
     assert dao.get_strategy(st["id"])["status"] == "proposed"
     assert dao.get_strategy(st["id"])["legal_cleared_at"] is None
+
+
+# ---------------------------------------------------------------------------
+# POST /strategies/{sid}/autoimplement — the TRIPLE-GATED auto-code route
+# ---------------------------------------------------------------------------
+
+
+def _seed_cleared_strategy(project_id, *, name_prefix=""):
+    """Seed an approved + 7/7 §5B-cleared strategy. Returns sid."""
+    st = dao.create_strategy(project_id, title=f"{name_prefix}strategy", body="behavior-only")
+    sid = st["id"]
+    for item in LEGAL_CHECKLIST_ITEMS:
+        dao.record_legal_item(sid, item, True, project_id=project_id)
+    dao.set_status(sid, "approved", project_id=project_id)
+    return sid
+
+
+def test_autoimplement_flag_off_403(isolated_db, monkeypatch):
+    """Flag off (default) → 403, NO session."""
+    monkeypatch.delenv("AGENTED_STRATEGY_AUTOIMPLEMENT", raising=False)
+    project_id = create_project(name="ai-route-off")
+    sid = _seed_cleared_strategy(project_id)
+    with _client() as c:
+        resp = c.post(
+            f"/api/projects/{project_id}/strategies/{sid}/autoimplement",
+            json={"confirm_token": "yes"},
+        )
+    assert resp.status_code == 403
+
+
+def test_autoimplement_no_confirm_400(isolated_db, monkeypatch):
+    """Flag on + cleared but no confirm_token → 400."""
+    monkeypatch.setenv("AGENTED_STRATEGY_AUTOIMPLEMENT", "1")
+    project_id = create_project(name="ai-route-noconfirm")
+    sid = _seed_cleared_strategy(project_id)
+    with _client() as c:
+        resp = c.post(
+            f"/api/projects/{project_id}/strategies/{sid}/autoimplement",
+            json={},
+        )
+    assert resp.status_code == 400
+
+
+def test_autoimplement_not_materialized_409(isolated_db, monkeypatch):
+    """Flag on + cleared + confirm but no plan_id → 409 not_materialized."""
+    monkeypatch.setenv("AGENTED_STRATEGY_AUTOIMPLEMENT", "1")
+    project_id = create_project(name="ai-route-unmat")
+    sid = _seed_cleared_strategy(project_id)
+    with _client() as c:
+        resp = c.post(
+            f"/api/projects/{project_id}/strategies/{sid}/autoimplement",
+            json={"confirm_token": "yes"},
+        )
+    assert resp.status_code == 409
+
+
+def test_autoimplement_started_returns_session_id(isolated_db, monkeypatch):
+    """All gates pass + materialized → 200 {session_id} from the goal-loop launch."""
+    monkeypatch.setenv("AGENTED_STRATEGY_AUTOIMPLEMENT", "1")
+    project_id = create_project(name="ai-route-started")
+    sid = _seed_cleared_strategy(project_id)
+    # Stamp a plan_id so the strategy is materialized.
+    with get_connection() as conn:
+        conn.execute("UPDATE competitor_strategy SET plan_id = 'plan-fake1' WHERE id = ?", (sid,))
+        conn.commit()
+
+    # Stub the service launch to a started result (the wired-path mechanics are
+    # covered by the service-level test; here we assert the route maps it to 200).
+    from app.services.competitor_strategy_service import CompetitorStrategyService
+
+    monkeypatch.setattr(
+        CompetitorStrategyService,
+        "start_autoimplement",
+        classmethod(
+            lambda cls, pid, s, *, confirm_token=None: {
+                "status": "started",
+                "session_id": "psess-route1",
+                "plan_id": "plan-fake1",
+                "worktree_path": "/tmp/wt",
+            }
+        ),
+    )
+    with _client() as c:
+        resp = c.post(
+            f"/api/projects/{project_id}/strategies/{sid}/autoimplement",
+            json={"confirm_token": "yes"},
+        )
+    assert resp.status_code in (200, 201)
+    assert resp.json()["session_id"] == "psess-route1"
+
+
+def test_autoimplement_cross_project_sid_404(isolated_db, monkeypatch):
+    """A strategy from A reached via B's path → 404 (scope guard)."""
+    monkeypatch.setenv("AGENTED_STRATEGY_AUTOIMPLEMENT", "1")
+    project_a = create_project(name="ai-route-a")
+    project_b = create_project(name="ai-route-b")
+    sid = _seed_cleared_strategy(project_a)
+    with _client() as c:
+        resp = c.post(
+            f"/api/projects/{project_b}/strategies/{sid}/autoimplement",
+            json={"confirm_token": "yes"},
+        )
+    assert resp.status_code == 404
+
+
+def test_autoimplement_idor_404(isolated_db, monkeypatch):
+    """Caller without project access → 404 (NOT 403), even with the flag on."""
+    monkeypatch.setenv("AGENTED_STRATEGY_AUTOIMPLEMENT", "1")
+    import app_litestar.routes.competitor_strategy_routes as routes
+
+    project_id = create_project(name="ai-route-idor")
+    sid = _seed_cleared_strategy(project_id)
+    monkeypatch.setattr(routes, "can_access", lambda *a, **k: False)
+    with _client() as c:
+        resp = c.post(
+            f"/api/projects/{project_id}/strategies/{sid}/autoimplement",
+            json={"confirm_token": "yes"},
+        )
+    assert resp.status_code == 404
