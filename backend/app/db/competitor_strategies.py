@@ -106,8 +106,13 @@ def _row_to_dict(row) -> Optional[dict]:
 
 
 def _all_items_affirmed(checklist: dict) -> bool:
-    """True when every one of the 7 canonical items is present and truthy."""
-    return all(bool(checklist.get(item)) for item in LEGAL_CHECKLIST_ITEMS)
+    """True only when every one of the 7 canonical items is stored as ``True``.
+
+    Uses ``is True`` (never truthiness): a stored ``"true"``/``"1"``/``1`` must
+    NOT count as an affirmation, so ``legal_cleared_at`` can never be set unless
+    all 7 items are literally Python ``True``.
+    """
+    return all(checklist.get(item) is True for item in LEGAL_CHECKLIST_ITEMS)
 
 
 def create_strategy(
@@ -286,7 +291,10 @@ def record_legal_item(
     checklist = current.get("legal_checklist")
     if not isinstance(checklist, dict):
         checklist = {}
-    checklist[item_key] = bool(value)
+    # §5B gate: store ONLY a real bool. A truthy non-bool ("false", "0", 1, …)
+    # must never be coerced to True — affirmation counts ``is True`` downstream,
+    # and an item is affirmed only when the caller passes Python ``True``.
+    checklist[item_key] = value is True
     cleared = _all_items_affirmed(checklist)
     cleared_clause = "CURRENT_TIMESTAMP" if cleared else "NULL"
     scope = " AND project_id = ?" if project_id is not None else ""
@@ -320,6 +328,28 @@ def mark_implementing(strategy_id: str, *, project_id: Optional[str] = None) -> 
     (26-04) calls it before creating a ProjectPlan, so an uncleared strategy can
     never produce a plan.
     """
+    scope = " AND project_id = ?" if project_id is not None else ""
+    params: list = [strategy_id]
+    if project_id is not None:
+        params.append(project_id)
+    # Single ATOMIC conditional UPDATE — the gate check and the write happen in
+    # one statement, so a concurrent update_body/record_legal_item cannot slip
+    # between a TOCTOU check and the write to violate the §5B gate. The row only
+    # flips to 'implementing' when it is still 'approved' AND legal_cleared_at is
+    # set at write time.
+    with get_connection() as conn:
+        cur = conn.execute(
+            "UPDATE competitor_strategy "
+            "SET status = 'implementing', updated_at = CURRENT_TIMESTAMP "
+            f"WHERE id = ? AND status = 'approved' AND legal_cleared_at IS NOT NULL{scope}",
+            params,
+        )
+        rowcount = cur.rowcount
+        conn.commit()
+    if rowcount == 1:
+        return get_strategy(strategy_id, project_id=project_id)
+    # The atomic UPDATE matched nothing — re-READ (no mutation) to raise the
+    # precise existing exception for the operator.
     current = get_strategy(strategy_id, project_id=project_id)
     if current is None:
         raise ValueError(f"strategy not found: {strategy_id!r}")
@@ -330,16 +360,6 @@ def mark_implementing(strategy_id: str, *, project_id: Optional[str] = None) -> 
             f"strategy {strategy_id} cannot be implemented: §5B legal gate not cleared "
             "(all 7 checklist items must be affirmed)"
         )
-    scope = " AND project_id = ?" if project_id is not None else ""
-    params: list = [strategy_id]
-    if project_id is not None:
-        params.append(project_id)
-    with get_connection() as conn:
-        conn.execute(
-            "UPDATE competitor_strategy "
-            "SET status = 'implementing', updated_at = CURRENT_TIMESTAMP "
-            f"WHERE id = ?{scope}",
-            params,
-        )
-        conn.commit()
-    return get_strategy(strategy_id, project_id=project_id)
+    # Status is 'approved' and cleared yet 0 rows matched — only possible if the
+    # row was concurrently mutated out from under us; treat as not-found.
+    raise ValueError(f"strategy not found: {strategy_id!r}")

@@ -172,3 +172,83 @@ def test_get_strategy_project_scoped_idor(isolated_db):
     # foreign project scope returns None (IDOR guard)
     assert dao.get_strategy(a["id"], project_id=project_b) is None
     assert dao.get_strategy(a["id"], project_id=project_a)["id"] == a["id"]
+
+
+# ---------------------------------------------------------------------------
+# §5B gate-bypass regression: only Python True affirms — truthy junk must NOT.
+# A caller must not be able to "affirm" all 7 items with "false"/"0"/0/1/"true"
+# and slip past the legal gate (legal_cleared_at must stay NULL).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("junk", ["false", "0", "no", "true", 0, 1, "yes", [], {}, None])
+def test_record_legal_item_truthy_junk_does_not_affirm(isolated_db, junk):
+    """Non-``True`` values (even truthy ones like ``1``/``"true"``) never affirm."""
+    project_id = _seed_project("CS junk")
+    row = dao.create_strategy(project_id, signal_ids=["csig-1"])
+    # affirm 6 of 7 with real True, then pass junk for the 7th
+    for item in LEGAL_CHECKLIST_ITEMS[:-1]:
+        dao.record_legal_item(row["id"], item, True, project_id=project_id)
+    out = dao.record_legal_item(row["id"], LEGAL_CHECKLIST_ITEMS[-1], junk, project_id=project_id)
+    # the 7th item is NOT affirmed → stored as False, gate stays NULL
+    assert out["legal_checklist"][LEGAL_CHECKLIST_ITEMS[-1]] is False
+    assert out["legal_cleared_at"] is None
+    # and the hard gate still blocks
+    dao.set_status(row["id"], "approved", project_id=project_id)
+    with pytest.raises(LegalGateNotCleared):
+        dao.mark_implementing(row["id"], project_id=project_id)
+
+
+def test_record_legal_item_only_true_affirms_and_clears_at_seven(isolated_db):
+    """Exactly Python ``True`` x7 is the ONLY thing that sets legal_cleared_at."""
+    project_id = _seed_project("CS true7")
+    row = dao.create_strategy(project_id, signal_ids=["csig-1"])
+    last = None
+    for item in LEGAL_CHECKLIST_ITEMS:
+        last = dao.record_legal_item(row["id"], item, True, project_id=project_id)
+        assert last["legal_checklist"][item] is True
+    assert last["legal_cleared_at"] is not None
+
+
+def test_record_legal_item_string_true_does_not_clear_full_checklist(isolated_db):
+    """All 7 items set to the STRING ``"true"`` must NOT clear the gate."""
+    project_id = _seed_project("CS strtrue")
+    row = dao.create_strategy(project_id, signal_ids=["csig-1"])
+    last = None
+    for item in LEGAL_CHECKLIST_ITEMS:
+        last = dao.record_legal_item(row["id"], item, "true", project_id=project_id)
+    assert last["legal_cleared_at"] is None
+    dao.set_status(row["id"], "approved", project_id=project_id)
+    with pytest.raises(LegalGateNotCleared):
+        dao.mark_implementing(row["id"], project_id=project_id)
+
+
+def test_mark_implementing_atomic_gate_is_only_path(isolated_db):
+    """The atomic UPDATE: approved+cleared → implementing; uncleared/not-approved
+    raise the precise exception with NO status mutation."""
+    project_id = _seed_project("CS atomic")
+
+    # not-approved → ValueError, status unchanged
+    r1 = dao.create_strategy(project_id, signal_ids=["csig-1"])
+    with pytest.raises(ValueError):
+        dao.mark_implementing(r1["id"], project_id=project_id)
+    assert dao.get_strategy(r1["id"], project_id=project_id)["status"] == "proposed"
+
+    # approved + uncleared → LegalGateNotCleared, status stays 'approved'
+    dao.set_status(r1["id"], "approved", project_id=project_id)
+    with pytest.raises(LegalGateNotCleared):
+        dao.mark_implementing(r1["id"], project_id=project_id)
+    assert dao.get_strategy(r1["id"], project_id=project_id)["status"] == "approved"
+    assert dao.get_strategy(r1["id"], project_id=project_id)["legal_cleared_at"] is None
+
+    # approved + cleared → implementing (the only path)
+    _affirm_all(r1["id"], project_id=project_id)
+    impl = dao.mark_implementing(r1["id"], project_id=project_id)
+    assert impl["status"] == "implementing"
+
+
+def test_mark_implementing_not_found_raises(isolated_db):
+    """Missing strategy → ValueError 'not found' (no row mutated)."""
+    project_id = _seed_project("CS missing")
+    with pytest.raises(ValueError, match="not found"):
+        dao.mark_implementing("cstr-doesnotexist", project_id=project_id)

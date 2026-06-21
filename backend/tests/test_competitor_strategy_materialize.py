@@ -82,7 +82,7 @@ def _spy_no_repo_mutation(monkeypatch):
             "create_session",
             lambda *a, **k: calls.append(("create_session", a, k)),
         )
-    except Exception:  # pragma: no cover - manager optional in some test builds
+    except (ImportError, AttributeError):  # pragma: no cover - manager optional in some test builds
         pass
     try:
         from app.services import execution_service as es
@@ -92,7 +92,7 @@ def _spy_no_repo_mutation(monkeypatch):
             "run_trigger",
             lambda *a, **k: calls.append(("run_trigger", a, k)),
         )
-    except Exception:  # pragma: no cover
+    except (ImportError, AttributeError):  # pragma: no cover
         pass
     return calls
 

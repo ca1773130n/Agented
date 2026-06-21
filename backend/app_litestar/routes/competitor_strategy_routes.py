@@ -195,7 +195,12 @@ def record_legal_item(
     item_key = body.get("item_key")
     if not item_key or not isinstance(item_key, str):
         raise ClientException(detail="item_key is required")
-    value = bool(body.get("value"))
+    value = body.get("value")
+    # §5B gate: only a real JSON boolean may affirm/deny an item. A truthy
+    # non-bool ("false", "0", "no", 1, …) must NOT be coerced — that would let
+    # a caller "affirm" all 7 with junk and bypass the legal gate.
+    if not isinstance(value, bool):
+        raise ClientException(detail="value must be a boolean")
     try:
         updated = competitor_strategies.record_legal_item(
             sid, item_key, value, project_id=project_id

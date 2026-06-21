@@ -16,6 +16,7 @@ legal gate lives in the DAO; here we assert the route RECORDS items and surfaces
 ``legal_cleared_at`` at 7/7 — it never bypasses the gate.
 """
 
+import pytest
 from litestar.testing import create_test_client
 
 from app.database import get_connection
@@ -314,6 +315,23 @@ def test_legal_missing_item_key_400(isolated_db):
             json={"value": True},
         )
     assert resp.status_code == 400
+
+
+@pytest.mark.parametrize("junk", ["false", "0", "no", "true", 0, 1, "yes", None])
+def test_legal_non_boolean_value_400_and_gate_uncleared(isolated_db, junk):
+    """§5B gate-bypass guard: a non-boolean ``value`` is rejected (400), so a
+    caller cannot 'affirm' all 7 items with truthy junk. The item is never
+    recorded and ``legal_cleared_at`` stays NULL."""
+    project_id = create_project(name="p")
+    st = dao.create_strategy(project_id, title="t")
+    with _client() as c:
+        resp = c.post(
+            f"/api/projects/{project_id}/strategies/{st['id']}/legal",
+            json={"item_key": LEGAL_CHECKLIST_ITEMS[0], "value": junk},
+        )
+        assert resp.status_code == 400
+    # nothing was affirmed; the gate is still uncleared
+    assert dao.get_strategy(st["id"])["legal_cleared_at"] is None
 
 
 def test_legal_unknown_strategy_404(isolated_db):
