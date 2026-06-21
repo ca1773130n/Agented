@@ -435,14 +435,14 @@ class CompetitorStrategyService:
 
         # Past the claim: ANY failure below must (a) tear down the worktree/branch,
         # (b) revert the claim (session_id → NULL so it is re-claimable), (c) re-raise.
-        from .project_workspace_service import ProjectWorkspaceService
-
-        # resolve_working_directory runs INSIDE the cleanup try: ANY failure between
-        # the claim and the launch must release the claim, else the 'claiming'
-        # sentinel leaks and the strategy is permanently non-re-claimable.
+        # The local import AND resolve_working_directory run INSIDE the cleanup try:
+        # NOTHING between the claim and the try may raise without releasing the claim,
+        # else the 'claiming' sentinel leaks and the strategy is permanently locked.
         base_dir = None
         worktree_created = False
         try:
+            from .project_workspace_service import ProjectWorkspaceService
+
             base_dir = ProjectWorkspaceService.resolve_working_directory(project_id)
             worktree_path = cls._create_strategy_worktree(base_dir, strategy_id)
             if not worktree_path:
