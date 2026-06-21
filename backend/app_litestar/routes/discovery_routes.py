@@ -134,13 +134,19 @@ def dismiss_discovery_suggestion(project_id: str, sid: str, caller: Caller) -> d
     """Dismiss a suggestion — flip its status to ``dismissed`` (sticky on re-scan).
 
     Delegates to ``DiscoveryService.dismiss_suggestion(project_id, sid)``, which is
-    project-SCOPED (a suggestion owned by another project 404s — the IDOR fix).
-    Returns ``{suggestion}``. An unknown / foreign-project ``sid`` (``ValueError``)
-    → 404.
+    project-SCOPED (a suggestion owned by another project 404s — the IDOR fix) and
+    CONDITIONAL (it refuses to clobber a row a concurrent promotion is mid-claim on).
+    Returns ``{suggestion}``.
+
+    * unknown / foreign-project ``sid`` (``ValueError``) → 404.
+    * dismissing a row mid-promotion (``'claiming'`` — ``PromotionConflict``) → 409,
+      so the dismiss can never orphan the promoter's just-added source.
     """
     _assert_project_access(project_id, caller)
     try:
         return DiscoveryService.dismiss_suggestion(project_id, sid)
+    except PromotionConflict as exc:
+        raise ClientException(detail=str(exc), status_code=HTTP_409_CONFLICT) from None
     except ValueError:
         raise NotFoundException(detail="Discovery suggestion not found") from None
 

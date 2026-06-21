@@ -46,6 +46,7 @@ from typing import Optional
 import httpx
 
 from app.db import discovery_suggestions
+from app.db.discovery_suggestions import PromotionInProgress
 from app.services import discovery_ranker, embedding_service
 from app.services.competitor_source_service import CompetitorSourceService
 from app.services.github_similarity_client import GitHubSimilarityClient
@@ -590,6 +591,17 @@ class DiscoveryService:
             updated = discovery_suggestions.complete_promotion(
                 suggestion_id, project_id, source["id"]
             )
+            if updated is None:
+                # complete_promotion matched ZERO rows: the 'claiming' claim was
+                # stolen/lost out from under us (e.g. a concurrent dismiss before its
+                # conditional guard, or a re-scan reset). add_source already committed,
+                # so COMPENSATE — delete the orphaned competitor_source and 409 — rather
+                # than leave a source no suggestion links to. (With the conditional
+                # dismiss this is unreachable in practice; it's the safety net.)
+                CompetitorSourceService.delete_source(source["id"])
+                raise PromotionConflict(
+                    f"Suggestion {suggestion_id} promotion lost its claim; retry shortly"
+                )
             return {"source": source, "suggestion": updated}
 
         # We did NOT win the claim. Re-read the (project-scoped) row and resolve.
@@ -620,16 +632,29 @@ class DiscoveryService:
 
     @staticmethod
     def dismiss_suggestion(project_id: str, suggestion_id: str) -> dict:
-        """Dismiss a suggestion — ``set_status(id, 'dismissed')`` (sticky on re-scan).
+        """Dismiss a suggestion — CONDITIONAL dismiss (sticky on re-scan, claim-safe).
 
         Project-SCOPED (the IDOR fix): the suggestion is looked up and mutated
-        under ``project_id``; a foreign-project id raises ``ValueError`` (the route
-        404s). Returns ``{"suggestion": <updated row>}``.
+        under ``project_id``; a foreign-project / unknown id raises ``ValueError``
+        (the route 404s). Returns ``{"suggestion": <updated row>}``.
+
+        Concurrency-safe: the dismiss is a CONDITIONAL UPDATE
+        (``discovery_suggestions.dismiss_suggestion``) scoped to
+        ``status IN ('suggested', 'added')`` so it can NEVER clobber a row that a
+        concurrent promotion has flipped to ``'claiming'``. Were it unconditional,
+        a dismiss racing a promotion could flip ``'claiming'`` → ``'dismissed'``,
+        making the promoter's ``complete_promotion`` (``WHERE status='claiming'``)
+        match zero rows AFTER ``add_source`` already committed — orphaning a source.
+        A dismiss that lands on a ``'claiming'`` row therefore raises
+        ``PromotionConflict`` (route → 409 "promotion in progress, retry") instead.
         """
-        suggestion = discovery_suggestions.get_suggestion(suggestion_id, project_id=project_id)
-        if suggestion is None:
+        try:
+            updated = discovery_suggestions.dismiss_suggestion(suggestion_id, project_id)
+        except PromotionInProgress as exc:
+            # The row is mid-promotion ('claiming'); dismissing it would orphan the
+            # promoter's just-added source — refuse with a 409 (retry shortly).
+            raise PromotionConflict(str(exc)) from None
+        if updated is None:
+            # No matching (id, project) row — missing / foreign-project (404 path).
             raise ValueError(f"Unknown discovery suggestion: {suggestion_id}")
-        updated = discovery_suggestions.set_status(
-            suggestion_id, "dismissed", project_id=project_id
-        )
         return {"suggestion": updated}

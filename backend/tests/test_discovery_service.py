@@ -714,6 +714,78 @@ def test_dismiss_unknown_suggestion_raises(isolated_db, _no_embeddings):
         DiscoveryService.dismiss_suggestion(project_id, "dsug-nope0000")
 
 
+def test_dismiss_of_claiming_row_raises_conflict_no_clobber(
+    _seeded_project, _no_embeddings, monkeypatch
+):
+    """The MAJOR fix: a dismiss racing an in-flight promotion must NOT flip the
+    'claiming' row to 'dismissed' (which would orphan the promoter's just-added
+    source). It raises PromotionConflict (route → 409) and leaves the row 'claiming'
+    so the promoter's complete_promotion still matches it."""
+    project_id = _seeded_project
+    _stub_client(monkeypatch, topics=_STRONG_TOPICS, stars=_STRONG_STARS)
+    DiscoveryService.scan_project(project_id)
+    rival = next(
+        r
+        for r in discovery_suggestions.list_suggestions(project_id)
+        if r["candidate_repo"] == "rival"
+    )
+
+    # Simulate a promotion in flight: a real won claim leaves the row 'claiming'.
+    assert discovery_suggestions.claim_for_promotion(rival["id"], project_id) is True
+    assert discovery_suggestions.get_suggestion(rival["id"])["status"] == "claiming"
+
+    with pytest.raises(ds_module.PromotionConflict):
+        DiscoveryService.dismiss_suggestion(project_id, rival["id"])
+
+    # NOT clobbered — still 'claiming', so the promoter can still complete it.
+    assert discovery_suggestions.get_suggestion(rival["id"])["status"] == "claiming"
+
+
+def test_promote_compensates_orphan_source_when_claim_lost(
+    _seeded_project, _no_embeddings, monkeypatch
+):
+    """The MAJOR safety net: if add_source commits but complete_promotion then matches
+    ZERO rows (the 'claiming' claim was stolen/lost), the service deletes the orphaned
+    competitor_source and raises PromotionConflict — never leaving a source with no
+    suggestion link. complete_promotion is forced to return None (rowcount==0)."""
+    project_id = _seeded_project
+    _stub_client(monkeypatch, topics=_STRONG_TOPICS, stars=_STRONG_STARS)
+    DiscoveryService.scan_project(project_id)
+    rival = next(
+        r
+        for r in discovery_suggestions.list_suggestions(project_id)
+        if r["candidate_repo"] == "rival"
+    )
+    sources_before = len(CompetitorSourceService.list_sources(project_id))
+
+    # add_source runs for real (the claim wins) and returns the new source...
+    real_add = CompetitorSourceService.add_source
+    added_ids: list[str] = []
+
+    def _tracking_add(pid, url, label=None, origin="manual"):
+        src = real_add(pid, url, label=label, origin=origin)
+        added_ids.append(src["id"])
+        return src
+
+    monkeypatch.setattr(CompetitorSourceService, "add_source", staticmethod(_tracking_add))
+    # ...but complete_promotion loses the claim (zero rows matched → None).
+    monkeypatch.setattr(
+        discovery_suggestions, "complete_promotion", lambda sid, pid, source_id: None
+    )
+
+    with pytest.raises(ds_module.PromotionConflict):
+        DiscoveryService.promote_suggestion(project_id, rival["id"])
+
+    # The orphaned source was COMPENSATED (deleted) — net source count is unchanged.
+    assert len(added_ids) == 1, "add_source must have run (claim won) before the loss"
+    assert CompetitorSourceService.get_source(added_ids[0]) is None, "orphan must be rolled back"
+    assert len(CompetitorSourceService.list_sources(project_id)) == sources_before
+    assert not any(
+        s["url"] == "https://github.com/acme/rival"
+        for s in CompetitorSourceService.list_sources(project_id)
+    )
+
+
 # --------------------------------------------------------------------------- #
 # README similarity helpers (deterministic, no network)
 # --------------------------------------------------------------------------- #

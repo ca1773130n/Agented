@@ -19,9 +19,12 @@ Conventions (per ``app/db/connection.py`` + repo rules):
   the raw string rather than raising).
 
 Idempotent-upsert invariant: :func:`upsert_suggestion` refreshes ranking data
-(score / reason / evidence / url + ``updated_at``) on conflict but NEVER touches
-``status`` or ``source_id`` — a re-scan must not resurrect a ``dismissed`` /
-``added`` candidate back to ``suggested``.
+(score / reason / evidence / url + ``updated_at``) on conflict and NEVER touches
+``source_id`` or an operator VERDICT (``dismissed`` / ``added``) — a re-scan must
+not resurrect a ``dismissed`` / ``added`` candidate back to ``suggested``. The ONE
+exception is the TRANSIENT ``claiming`` state (a promotion mid-flight, not a
+verdict): a conflicting re-scan resets ``claiming`` → ``suggested`` so an abandoned
+claim (process died between claim and complete/revert) is automatically un-stuck.
 
 This module is deliberately thin: NO GitHub calls and NO ranking live here
 (that is 24-02 / 24-03).
@@ -32,6 +35,18 @@ from typing import Optional
 
 from .connection import get_connection
 from .ids import generate_id
+
+
+class PromotionInProgress(Exception):
+    """A ``'claiming'`` row was hit by a mutation that must not clobber an in-flight claim.
+
+    DAO-local signal (the DAO never imports the service, so it raises its OWN type):
+    :func:`dismiss_suggestion` raises this when the conditional dismiss matches zero
+    rows BECAUSE the row is mid-promotion (``status == 'claiming'``) rather than
+    missing. The service catches it and re-raises ``PromotionConflict`` (route → 409
+    "promotion in progress, retry"). Keeps the dismiss from flipping a ``'claiming'``
+    row to ``'dismissed'`` and silently orphaning the promoter's just-added source.
+    """
 
 
 def _serialize_evidence(evidence) -> Optional[str]:
@@ -104,6 +119,15 @@ def upsert_suggestion(
                 score         = excluded.score,
                 reason        = excluded.reason,
                 evidence      = excluded.evidence,
+                -- 'claiming' is a TRANSIENT promotion state, not an operator verdict:
+                -- reset it to 'suggested' on a re-scan so an abandoned claim (a process
+                -- that died between claim and complete/revert, otherwise stuck 'claiming'
+                -- and 409-ing every future accept) is automatically un-stuck. 'added' and
+                -- 'dismissed' are real verdicts and stay sticky.
+                status        = CASE
+                                    WHEN status = 'claiming' THEN 'suggested'
+                                    ELSE status
+                                END,
                 updated_at    = CURRENT_TIMESTAMP
             """,
             (
@@ -191,17 +215,29 @@ def complete_promotion(suggestion_id: str, project_id: str, source_id: str) -> O
     does the winner flip the claimed row out of ``'claiming'``, setting ``status`` and
     ``source_id`` in ONE conditional UPDATE scoped to ``status = 'claiming'``. A
     concurrent loser therefore never observes ``'added'`` with a NULL ``source_id`` —
-    it sees ``'claiming'`` (→ 409) until this atomic stamp lands. Returns the updated
-    row, or None if the row was no longer ``'claiming'`` (defensive; the winner owns it).
+    it sees ``'claiming'`` (→ 409) until this atomic stamp lands.
+
+    Returns the updated row when the stamp LANDED (``rowcount == 1`` — the winner
+    still owned the ``'claiming'`` row). Returns ``None`` when the stamp matched ZERO
+    rows — the claim was stolen/lost out from under the promoter (the row is no longer
+    ``'claiming'``, e.g. it was reset by a re-scan or otherwise mutated). ``None`` is
+    the COMPENSATE signal: the caller has already committed ``add_source``, so it MUST
+    delete that orphaned ``competitor_source`` (the ``source_id`` it just passed) and
+    raise — never leave a source with no suggestion link. With the conditional dismiss
+    in place a stolen claim is unreachable in practice, but this is the safety net.
     """
     with get_connection() as conn:
-        conn.execute(
+        cur = conn.execute(
             "UPDATE discovery_suggestion "
             "SET status = 'added', source_id = ?, updated_at = CURRENT_TIMESTAMP "
             "WHERE id = ? AND project_id = ? AND status = 'claiming'",
             (source_id, suggestion_id, project_id),
         )
+        stamped = cur.rowcount == 1
         conn.commit()
+        if not stamped:
+            # Claim lost/stolen — signal the caller to roll back the orphaned source.
+            return None
         row = conn.execute(
             "SELECT * FROM discovery_suggestion WHERE id = ? AND project_id = ?",
             (suggestion_id, project_id),
@@ -298,4 +334,51 @@ def set_status(
             sel_sql += " AND project_id = ?"
             sel_params.append(project_id)
         row = conn.execute(sel_sql, sel_params).fetchone()
+    return _row_to_dict(row)
+
+
+def dismiss_suggestion(suggestion_id: str, project_id: str) -> Optional[dict]:
+    """Dismiss a suggestion CONDITIONALLY so it can never clobber an in-flight claim.
+
+    The concurrency fix for the dismiss-vs-promote race: ``set_status('dismissed')``
+    did an UNCONDITIONAL UPDATE, so a dismiss racing a promotion could flip a
+    ``'claiming'`` row to ``'dismissed'``; the promoter's :func:`complete_promotion`
+    (``WHERE status='claiming'``) then matched ZERO rows silently while ``add_source``
+    had already committed — leaving an orphaned ``competitor_source`` with no link.
+
+    So the UPDATE is scoped to ``status IN ('suggested', 'added')`` — never
+    ``'claiming'`` — and the outcome is disambiguated:
+
+      * one row changed → return the updated row (dismissed; idempotent on ``'added'``
+        and on an already-``'dismissed'`` row, both of which match the predicate);
+      * zero rows changed AND the row exists under this project as ``'claiming'`` →
+        raise :class:`PromotionInProgress` (the service maps it to a 409 — promotion
+        in progress, retry) rather than silently clobbering the claim;
+      * zero rows changed AND no such (id, project) row → return ``None`` (the
+        existing project-scoped 404 path for a missing / foreign row).
+    """
+    with get_connection() as conn:
+        cur = conn.execute(
+            "UPDATE discovery_suggestion "
+            "SET status = 'dismissed', updated_at = CURRENT_TIMESTAMP "
+            "WHERE id = ? AND project_id = ? AND status IN ('suggested', 'added')",
+            (suggestion_id, project_id),
+        )
+        changed = cur.rowcount
+        conn.commit()
+        if changed == 0:
+            # Distinguish "row is mid-claim" (409) from "row is missing/foreign" (404).
+            existing = conn.execute(
+                "SELECT status FROM discovery_suggestion WHERE id = ? AND project_id = ?",
+                (suggestion_id, project_id),
+            ).fetchone()
+            if existing is not None and existing["status"] == "claiming":
+                raise PromotionInProgress(
+                    f"Suggestion {suggestion_id} is being promoted; cannot dismiss — retry shortly"
+                )
+            return None
+        row = conn.execute(
+            "SELECT * FROM discovery_suggestion WHERE id = ? AND project_id = ?",
+            (suggestion_id, project_id),
+        ).fetchone()
     return _row_to_dict(row)

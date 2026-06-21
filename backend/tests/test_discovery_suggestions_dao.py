@@ -246,14 +246,18 @@ def test_complete_promotion_stamps_added_and_source_id_atomically(project):
     assert reloaded["source_id"] == "cmps-done01"
 
 
-def test_complete_promotion_no_op_when_not_claiming(project):
-    """complete_promotion is scoped to status='claiming'; a row that never claimed
-    (still 'suggested') is left untouched and keeps a NULL source_id."""
+def test_complete_promotion_returns_none_when_not_claiming(project):
+    """complete_promotion is scoped to status='claiming'; on ZERO matched rows it
+    returns None (the COMPENSATE signal: the caller must roll back the source it
+    already added) and leaves the un-claimed row untouched with a NULL source_id."""
     row = dao.upsert_suggestion(project, "acme", "noclaim", "https://github.com/acme/noclaim")
-    # Not in 'claiming' state → the scoped UPDATE matches nothing.
+    # Not in 'claiming' state → the scoped UPDATE matches nothing → None.
     result = dao.complete_promotion(row["id"], project, "cmps-nope01")
-    assert result["status"] == "suggested"
-    assert result["source_id"] is None
+    assert result is None
+    # The row is untouched (no spurious stamp on a non-claiming row).
+    reloaded = dao.get_suggestion(row["id"])
+    assert reloaded["status"] == "suggested"
+    assert reloaded["source_id"] is None
 
 
 def test_claim_for_promotion_foreign_project_returns_false(project, isolated_db):
@@ -308,3 +312,108 @@ def test_revert_promotion_claim_does_not_touch_added_row(project):
     kept = dao.get_suggestion(row["id"])
     assert kept["status"] == "added"
     assert kept["source_id"] == "cmps-keep01"
+
+
+# --------------------------------------------------------------------------- #
+# dismiss_suggestion — CONDITIONAL dismiss that cannot clobber an in-flight claim
+# --------------------------------------------------------------------------- #
+
+
+def test_dismiss_suggestion_flips_suggested_to_dismissed(project):
+    """The happy path: a 'suggested' row is dismissed and the updated row returned."""
+    row = dao.upsert_suggestion(project, "acme", "dis1", "https://github.com/acme/dis1")
+    updated = dao.dismiss_suggestion(row["id"], project)
+    assert updated["status"] == "dismissed"
+    assert dao.get_suggestion(row["id"])["status"] == "dismissed"
+
+
+def test_dismiss_suggestion_on_claiming_raises_and_does_not_clobber(project):
+    """The MAJOR fix: a dismiss landing on a 'claiming' row raises PromotionInProgress
+    and leaves the row 'claiming' — it can NEVER flip an in-flight claim to
+    'dismissed' (which would orphan the promoter's just-added source)."""
+    row = dao.upsert_suggestion(project, "acme", "disclaim", "https://github.com/acme/disclaim")
+    assert dao.claim_for_promotion(row["id"], project) is True
+    assert dao.get_suggestion(row["id"])["status"] == "claiming"
+
+    with pytest.raises(dao.PromotionInProgress):
+        dao.dismiss_suggestion(row["id"], project)
+
+    # NOT clobbered — still 'claiming', so complete_promotion will still match it.
+    assert dao.get_suggestion(row["id"])["status"] == "claiming"
+
+
+def test_dismiss_suggestion_missing_or_foreign_returns_none(project, isolated_db):
+    """A missing id, or a row owned by ANOTHER project, returns None (404 path) and
+    does not raise the in-progress conflict (that is reserved for a real 'claiming')."""
+    assert dao.dismiss_suggestion("dsug-missing0", project) is None
+
+    other = create_project(name="dismiss-foreign")
+    row = dao.upsert_suggestion(other, "acme", "disforeign", "https://github.com/acme/disforeign")
+    # Project A dismissing project B's row → no matching (id, project) → None, untouched.
+    assert dao.dismiss_suggestion(row["id"], project) is None
+    assert dao.get_suggestion(row["id"])["status"] == "suggested"
+
+
+def test_dismiss_suggestion_on_added_flips_to_dismissed(project):
+    """'added' is in the conditional predicate, so dismissing an already-promoted
+    suggestion is allowed (it flips 'added' → 'dismissed') — only 'claiming' is
+    refused, since 'claiming' is the sole state a dismiss could orphan."""
+    added = dao.upsert_suggestion(project, "acme", "disadd", "https://github.com/acme/disadd")
+    dao.set_status(added["id"], "added", source_id="cmps-keep99", project_id=project)
+    out_added = dao.dismiss_suggestion(added["id"], project)
+    assert out_added["status"] == "dismissed"
+
+
+def test_dismiss_suggestion_on_already_dismissed_is_noop_none(project):
+    """Re-dismissing an already-'dismissed' row matches zero rows ('dismissed' is not
+    in the 'suggested'/'added' predicate) and the row is NOT 'claiming', so it returns
+    None (a benign terminal no-op) and never raises the in-progress conflict."""
+    row = dao.upsert_suggestion(project, "acme", "disagain", "https://github.com/acme/disagain")
+    first = dao.dismiss_suggestion(row["id"], project)
+    assert first["status"] == "dismissed"
+    # Second dismiss: terminal no-op (None), still dismissed, no PromotionInProgress.
+    assert dao.dismiss_suggestion(row["id"], project) is None
+    assert dao.get_suggestion(row["id"])["status"] == "dismissed"
+
+
+# --------------------------------------------------------------------------- #
+# upsert resets a TRANSIENT 'claiming' (abandoned claim recovery), keeps verdicts
+# --------------------------------------------------------------------------- #
+
+
+def test_upsert_resets_claiming_back_to_suggested(project):
+    """The MAJOR fix for a stuck claim: a re-scan (upsert conflict) on a 'claiming'
+    row resets it to 'suggested' so an abandoned claim (process died between claim
+    and complete/revert) is auto-recovered — no claimed_at column, no repair job."""
+    row = dao.upsert_suggestion(project, "acme", "stuck", "https://github.com/acme/stuck")
+    assert dao.claim_for_promotion(row["id"], project) is True
+    assert dao.get_suggestion(row["id"])["status"] == "claiming"
+
+    # A re-scan upserts the same (project, owner, repo) and un-sticks the claim.
+    rescanned = dao.upsert_suggestion(
+        project, "acme", "stuck", "https://github.com/acme/stuck", score=0.42
+    )
+    assert rescanned["id"] == row["id"]
+    assert rescanned["status"] == "suggested", "transient 'claiming' must reset on re-scan"
+    assert rescanned["score"] == 0.42
+    # And it is claimable again (fully recovered).
+    assert dao.claim_for_promotion(row["id"], project) is True
+
+
+def test_upsert_does_not_reset_added_or_dismissed_verdict(project):
+    """The reset is scoped to the TRANSIENT 'claiming' only — real operator verdicts
+    ('added' with its source_id, 'dismissed') stay sticky across a re-scan."""
+    added = dao.upsert_suggestion(project, "acme", "keepadd", "https://github.com/acme/keepadd")
+    dao.set_status(added["id"], "added", source_id="cmps-stay01", project_id=project)
+    re_added = dao.upsert_suggestion(
+        project, "acme", "keepadd", "https://github.com/acme/keepadd", score=0.7
+    )
+    assert re_added["status"] == "added"
+    assert re_added["source_id"] == "cmps-stay01"
+
+    dismissed = dao.upsert_suggestion(project, "acme", "keepdis", "https://github.com/acme/keepdis")
+    dao.set_status(dismissed["id"], "dismissed", project_id=project)
+    re_dismissed = dao.upsert_suggestion(
+        project, "acme", "keepdis", "https://github.com/acme/keepdis", score=0.7
+    )
+    assert re_dismissed["status"] == "dismissed"

@@ -203,6 +203,22 @@ def test_dismiss_unknown_suggestion_404(isolated_db):
     assert resp.status_code == 404
 
 
+def test_dismiss_in_flight_claim_409_no_clobber(isolated_db):
+    """The MAJOR fix at the route: dismissing a suggestion a promotion has mid-claim
+    ('claiming') → 409 (PromotionConflict), and the row stays 'claiming' — the dismiss
+    can never clobber the claim and orphan the promoter's just-added source."""
+    project_id = create_project(name="disc-proj")
+    sug = _seed_suggestion(project_id, "noise", "repo", score=0.2)
+    # Simulate a promotion in flight: the row is 'claiming'.
+    assert dao.claim_for_promotion(sug["id"], project_id) is True
+
+    with _client() as c:
+        resp = c.post(f"/api/projects/{project_id}/discovery/suggestions/{sug['id']}/dismiss")
+    assert resp.status_code == 409
+    # Untouched — still claimable-by-its-promoter, never flipped to 'dismissed'.
+    assert dao.get_suggestion(sug["id"])["status"] == "claiming"
+
+
 # ---------------------------------------------------------------------------
 # IDOR — accept/dismiss must be scoped to the URL's project (Fix 1)
 # ---------------------------------------------------------------------------
