@@ -25,6 +25,11 @@ from app.db.ids import generate_id
 KIND_GITHUB_REPO = "github_repo"
 KIND_ARXIV = "arxiv"
 KIND_PRODUCT_URL = "product_url"
+# Phase-25 kinds the leaf adapter plans (25-02/03/04) wire up. The constant lives
+# here so all leaves import it from one place; ``detect_kind`` branches + any
+# ``kind_override`` land in the leaf plans that own each kind (this root stays
+# minimal). ``kind`` is free TEXT (no CHECK) — a new kind needs NO migration.
+KIND_JOB_BOARD = "job_board"
 
 # Columns selected/returned, in declaration order (see migration 171).
 _SOURCE_COLUMNS = (
@@ -48,18 +53,31 @@ class CompetitorSourceService:
     def detect_kind(url: str) -> str:
         """Map a URL to its source ``kind`` from the host.
 
-        ``github.com`` (or ``www.github.com``) -> ``github_repo``;
-        ``arxiv.org`` (or ``www.arxiv.org``) -> ``arxiv``; everything else
-        (including blank/garbage input) -> ``product_url``. Pure function —
-        no I/O, trivially unit-testable.
+        ``github.com`` (or ``www.github.com``) -> ``github_repo``; ``arxiv.org``
+        (or ``www.arxiv.org``) AND ``export.arxiv.org`` -> ``arxiv`` (the
+        ArxivAdapter's ``_build_search_query`` honors a pasted export-API URL, so
+        an operator-supplied export host must route to the adapter rather than
+        fall through to ``product_url``); the public Greenhouse / Lever board
+        hosts -> ``job_board`` (the board token / company slug in the path is a
+        PUBLIC identifier, not a credential); everything else (including
+        blank/garbage input) -> ``product_url``. Pure function — no I/O,
+        trivially unit-testable.
         """
         host = (urlparse(url or "").hostname or "").lower()
         if host.startswith("www."):
             host = host[4:]
         if host == "github.com":
             return KIND_GITHUB_REPO
-        if host == "arxiv.org":
+        if host in ("arxiv.org", "export.arxiv.org"):
             return KIND_ARXIV
+        if host in (
+            "boards.greenhouse.io",
+            "job-boards.greenhouse.io",
+            "api.greenhouse.io",
+            "jobs.lever.co",
+            "api.lever.co",
+        ):
+            return KIND_JOB_BOARD
         return KIND_PRODUCT_URL
 
     @staticmethod
