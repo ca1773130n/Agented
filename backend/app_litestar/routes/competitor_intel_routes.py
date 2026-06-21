@@ -37,11 +37,7 @@ from app.database import get_connection
 from app.db.owned_entities import can_access
 from app.db.projects import get_project
 from app.services.competitor_source_service import (
-    KIND_ARXIV,
-    KIND_GITHUB_REPO,
     KIND_HN_QUERY,
-    KIND_JOB_BOARD,
-    KIND_PRODUCT_URL,
     CompetitorSourceService,
 )
 
@@ -53,9 +49,11 @@ logger = logging.getLogger(__name__)
 # ``hn_query`` — a NON-URL identifier (a search query) that ``detect_kind`` can't
 # host-route. Any other kind is auto-detected from the URL, so an explicit kind
 # outside this allowlist is rejected rather than stored as a free-text typo.
-_ALLOWED_EXPLICIT_KINDS = frozenset(
-    {KIND_GITHUB_REPO, KIND_ARXIV, KIND_PRODUCT_URL, KIND_JOB_BOARD, KIND_HN_QUERY}
-)
+# Only hn_query legitimately needs an explicit kind — its identifier is a search
+# query, not a URL that detect_kind can classify. URL-based kinds MUST be
+# host-detected; accepting them here would let a caller mislabel a source and
+# point the wrong adapter at a bogus identifier.
+_ALLOWED_EXPLICIT_KINDS = frozenset({KIND_HN_QUERY})
 
 # Columns returned for a ranked signal row (detected_signal, migration 171).
 # kind/url/label come from the joined competitor_source so the dashboard can

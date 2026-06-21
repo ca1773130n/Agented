@@ -77,8 +77,6 @@ class CompetitorSourceService:
             return KIND_GITHUB_REPO
         if host in ("arxiv.org", "export.arxiv.org"):
             return KIND_ARXIV
-        if host in ("news.ycombinator.com", "hn.algolia.com"):
-            return KIND_HN_QUERY
         if host in (
             "boards.greenhouse.io",
             "job-boards.greenhouse.io",

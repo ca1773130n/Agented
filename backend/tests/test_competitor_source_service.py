@@ -27,10 +27,10 @@ from app.services.competitor_source_service import CompetitorSourceService as S
         ("https://example.com", "product_url"),
         ("", "product_url"),
         ("not-a-url", "product_url"),
-        # HN hosts route to hn_query (convenience; the primary hn path is an
-        # explicit kind because the identifier is a query, not a URL).
-        ("https://news.ycombinator.com/item?id=1", "hn_query"),
-        ("https://hn.algolia.com/?query=acme", "hn_query"),
+        # HN is query-only (added via an explicit kind=hn_query); HN URLs are
+        # NOT auto-detected — a pasted HN URL is just a generic product_url.
+        ("https://news.ycombinator.com/item?id=1", "product_url"),
+        ("https://hn.algolia.com/?query=acme", "product_url"),
     ],
 )
 def test_detect_kind(url, expected):
