@@ -120,6 +120,13 @@ def _snapshot_count(source_id: str) -> int:
         )
 
 
+def _last_polled_at(source_id: str) -> str | None:
+    with get_connection() as conn:
+        return conn.execute(
+            "SELECT last_polled_at FROM competitor_source WHERE id = ?", (source_id,)
+        ).fetchone()["last_polled_at"]
+
+
 # ---------------------------------------------------------------------------
 # Dispatch + unknown-kind skip.
 # ---------------------------------------------------------------------------
@@ -302,6 +309,101 @@ def test_floor_zero_always_polls(monkeypatch):
     CompetitorPollService.poll_due_sources()
 
     assert sid in adapter.fetched  # floor 0 ignores last_polled_at.
+
+
+def test_unchanged_outcome_advances_last_polled_at_then_floor_skips(monkeypatch):
+    """BLOCKER regression: an 'unchanged' fetch must advance ``last_polled_at`` so
+    the per-kind floor is honored on the next tick.
+
+    ``commit`` only stamps on 'changed', so before the fix an 'unchanged' source
+    never moved its clock and was re-fetched every tick. The dispatcher now stamps
+    every FETCHED source regardless of outcome: tick 1 fetches (clock was NULL) and
+    advances it; tick 2, within the floor, must SKIP (no second fetch)."""
+    _spy_record_signal(monkeypatch)
+    _spy_warnings(monkeypatch)
+    adapter = _RecordingAdapter(
+        "kfloorunchanged", floor_s=3600, result=FetchResult(outcome="unchanged")
+    )
+    registry.register(adapter)
+    sid = _seed("kfloorunchanged", url="https://unchanged-floor.example.com")
+
+    # Tick 1: never polled (last_polled_at NULL) -> fetched, returns 'unchanged'.
+    CompetitorPollService.poll_due_sources()
+    assert adapter.fetched == [sid]  # fetched exactly once
+    assert _last_polled_at(sid) is not None  # clock advanced despite 'unchanged'
+
+    # Tick 2: within the 1h floor now -> must be skipped (NOT re-fetched).
+    CompetitorPollService.poll_due_sources()
+    assert adapter.fetched == [sid]  # still only the one tick-1 fetch
+
+
+def test_throttled_and_error_also_advance_last_polled_at(monkeypatch):
+    """Throttled and error outcomes are 'actually fetched' too -> stamp the clock.
+
+    Only the PRE-fetch skips (unknown kind / no credential / too-recent) are
+    exempt; any outcome that reached the network advances ``last_polled_at``."""
+    _spy_record_signal(monkeypatch)
+    _spy_warnings(monkeypatch)
+    err = _RecordingAdapter("kerr", result=FetchResult(outcome="error"))
+    thr = _RecordingAdapter("kthr", result=FetchResult(outcome="throttled"))
+    registry.register(err)
+    registry.register(thr)
+    s_err = _seed("kerr", url="https://err.example.com")
+    s_thr = _seed("kthr", url="https://thr.example.com")
+
+    CompetitorPollService.poll_due_sources()
+
+    assert _last_polled_at(s_err) is not None  # 'error' still stamped
+    assert _last_polled_at(s_thr) is not None  # 'throttled' still stamped
+
+
+def test_prefetch_skips_do_not_stamp_last_polled_at(monkeypatch):
+    """A source skipped BEFORE fetch (no credential) must NOT advance its clock —
+    it never touched the network, so the floor clock stays NULL."""
+    _spy_record_signal(monkeypatch)
+    _spy_warnings(monkeypatch)
+    adapter = _RecordingAdapter("knocred2", has_cred=False)
+    registry.register(adapter)
+    sid = _seed("knocred2", url="https://nocred2.example.com")
+
+    CompetitorPollService.poll_due_sources()
+
+    assert adapter.fetched == []  # never fetched
+    assert _last_polled_at(sid) is None  # pre-fetch skip -> clock untouched
+
+
+def test_raising_commit_is_isolated_and_loop_continues(monkeypatch):
+    """MAJOR regression: a raise in ``commit`` (not just ``fetch``) must be isolated.
+
+    Before the fix the per-source try/except wrapped only ``fetch``; a commit raise
+    aborted the whole batch. The bad source logs a warning and the loop proceeds to
+    the next source (which still gets fetched + recorded)."""
+    calls = _spy_record_signal(monkeypatch)
+    warnings = _spy_warnings(monkeypatch)
+
+    class _CommitRaisingAdapter(_RecordingAdapter):
+        def commit(self, source_id, result):  # type: ignore[override]
+            raise RuntimeError("commit boom")
+
+    bad = _CommitRaisingAdapter(
+        "kcommitboom", result=FetchResult(outcome="changed", raw_ref="x", watermark="w1")
+    )
+    good = _RecordingAdapter(
+        "kgood", result=FetchResult(outcome="changed", raw_ref="ok notes", watermark="w2")
+    )
+    registry.register(bad)
+    registry.register(good)
+    s_bad = _seed("kcommitboom", url="https://commitboom.example.com")
+    s_good = _seed("kgood", url="https://good-after-boom.example.com")
+
+    # Must not raise even though the bad source's commit blows up.
+    changed = CompetitorPollService.poll_due_sources()
+
+    assert s_bad in bad.fetched  # the bad source WAS fetched
+    assert s_good in good.fetched  # the loop continued to the next source
+    assert changed == 1  # only the good source counted as changed
+    assert calls == [s_good]  # record_signal ran for the good source only
+    assert any("competitor poll raised for source" in m for m in warnings)
 
 
 def test_polled_too_recently_helper_floor_zero_is_false():

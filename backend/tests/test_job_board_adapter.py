@@ -366,6 +366,91 @@ def test_empty_board_is_skipped(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# Slug injection hardening (MAJOR): a bad first path segment can't steer the URL
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    "bad_path",
+    [
+        "..",  # path traversal token
+        ".",  # current-dir token
+        "a%2Fb",  # pre-encoded slash (urlparse leaves %2F in the segment)
+        "a@b",  # userinfo delimiter
+        "a:b",  # scheme/port delimiter
+    ],
+)
+def test_injection_slug_in_single_segment_is_skipped_no_fetch(monkeypatch, bad_path):
+    """A single path segment that is a traversal token or carries a URL delimiter
+    fails the strict slug gate -> skipped, NO httpx call (can't be interpolated)."""
+    source = _seed_source("https://boards.greenhouse.io/acme")
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE competitor_source SET url = ? WHERE id = ?",
+            (f"https://boards.greenhouse.io/{bad_path}", source["id"]),
+        )
+        conn.commit()
+    source = CompetitorSourceService.get_source(source["id"])
+
+    def _boom(url, **kwargs):
+        raise AssertionError(f"httpx.get called for an injection slug: {url}")
+
+    monkeypatch.setattr(jb.httpx, "get", _boom)
+    monkeypatch.setattr(jb.logger, "warning", lambda *a, **k: None)
+
+    result = JobBoardAdapter().fetch(source)
+    assert result.outcome == "skipped"
+
+
+@pytest.mark.parametrize(
+    "url,expected_slug",
+    [
+        # A multi-segment path (e.g. "a/b") takes only the FIRST segment, and that
+        # segment must itself be a clean slug — here "a" is fine, "b" is ignored.
+        ("https://boards.greenhouse.io/a/b", "a"),
+        # A query/fragment never bleeds into the slug: urlparse splits them off, so
+        # the first path segment is the clean board id.
+        ("https://boards.greenhouse.io/acme?x=1", "acme"),
+        ("https://boards.greenhouse.io/acme#frag", "acme"),
+    ],
+)
+def test_provider_and_slug_takes_clean_first_segment(url, expected_slug):
+    """Multi-segment / query / fragment URLs resolve to the clean first segment;
+    the slug never carries an injection payload."""
+    provider, slug = jb._provider_and_slug(url)
+    assert provider == jb._PROVIDER_GREENHOUSE
+    assert slug == expected_slug
+
+
+@pytest.mark.parametrize(
+    "bad_segment",
+    ["..", ".", "a/b", "a?x=1", "a@b", "a#f", "a%2Fb", "a b", "-leading-dash-ok-? no"],
+)
+def test_provider_and_slug_rejects_injection_payloads(bad_segment):
+    """A first path segment that is a traversal token OR contains a delimiter
+    yields (None, None) so the adapter skips instead of building a tainted URL."""
+    # Build a URL whose first path segment is exactly ``bad_segment`` (quoting it
+    # so urlparse keeps it as a single segment where possible).
+    from urllib.parse import quote
+
+    url = f"https://boards.greenhouse.io/{quote(bad_segment, safe='')}"
+    provider, slug = jb._provider_and_slug(url)
+    assert (provider, slug) == (None, None)
+
+
+def test_endpoint_percent_escapes_slug_defense_in_depth():
+    """``_endpoint`` percent-escapes the slug even if an unvalidated one reaches it
+    (defense-in-depth) — no raw delimiter survives into the provider URL."""
+    gh = jb._endpoint(jb._PROVIDER_GREENHOUSE, "ev/il?x=1")
+    lv = jb._endpoint(jb._PROVIDER_LEVER, "ev/il?x=1")
+    # The injected '/', '?', '=' are escaped, so the path/query can't be steered.
+    assert "ev%2Fil%3Fx%3D1" in gh
+    assert "ev%2Fil%3Fx%3D1" in lv
+    # A normal slug is unchanged (escape is a no-op for the validated charset).
+    assert jb._endpoint(jb._PROVIDER_GREENHOUSE, "acme").endswith("/boards/acme/jobs?content=true")
+
+
+# --------------------------------------------------------------------------- #
 # commit integration: a changed fetch writes exactly one snapshot + advances cursor
 # --------------------------------------------------------------------------- #
 

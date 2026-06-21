@@ -18,6 +18,11 @@ from app.services.competitor_source_service import CompetitorSourceService as S
         ("https://www.github.com/o/r", "github_repo"),
         ("https://arxiv.org/abs/2401.00001", "arxiv"),
         ("https://www.arxiv.org/abs/2401.00001", "arxiv"),
+        # The export API host must also route to arxiv — the ArxivAdapter honors a
+        # pasted export-API URL, so an operator-supplied export host must reach the
+        # adapter rather than fall through to product_url.
+        ("https://export.arxiv.org/api/query?search_query=cat:cs.LG", "arxiv"),
+        ("https://www.export.arxiv.org/api/query?search_query=all:agents", "arxiv"),
         ("https://acme.com/product", "product_url"),
         ("https://example.com", "product_url"),
         ("", "product_url"),

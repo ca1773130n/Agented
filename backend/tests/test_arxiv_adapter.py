@@ -202,6 +202,30 @@ def test_detect_kind_routes_arxiv_host_to_arxiv():
     assert CompetitorSourceService.detect_kind("https://arxiv.org/abs/2406.00001") == KIND_ARXIV
     assert CompetitorSourceService.detect_kind("https://arxiv.org/list/cs.LG/recent") == KIND_ARXIV
     assert CompetitorSourceService.detect_kind("https://www.arxiv.org/a/lecun_y_1") == KIND_ARXIV
+    # The export API host routes to arxiv too — _build_search_query honors a pasted
+    # export-API URL's stored search_query, so it must reach this adapter.
+    assert (
+        CompetitorSourceService.detect_kind(
+            "https://export.arxiv.org/api/query?search_query=cat:cs.LG"
+        )
+        == KIND_ARXIV
+    )
+
+
+def test_export_arxiv_url_routes_through_adapter_and_honors_search_query(monkeypatch):
+    """An operator-pasted export-API URL is stored as arxiv and its stored
+    ``search_query`` is used verbatim by the adapter (closes the unreachable-host
+    gap: detect_kind now maps export.arxiv.org -> arxiv)."""
+    _bypass_rate_gate(monkeypatch)
+    source = _seed_source("https://export.arxiv.org/api/query?search_query=au:hinton_g")
+    assert source["kind"] == KIND_ARXIV  # routed to the adapter, not product_url
+    captured = _install_capture(monkeypatch, _FakeResponse(200, text=_atom_feed(_P_NEWER)))
+
+    result = ArxivAdapter().fetch(source)
+
+    assert result.outcome == "changed"
+    # The pasted export URL's own search_query is honored verbatim.
+    assert "search_query=au%3Ahinton_g" in captured["url"]
 
 
 # --------------------------------------------------------------------------- #

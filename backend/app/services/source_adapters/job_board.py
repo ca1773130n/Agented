@@ -43,8 +43,9 @@ client (matching ``github_monitor_service``) — no new dependency.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import httpx
 
@@ -68,6 +69,14 @@ _GREENHOUSE_HOSTS = frozenset(
 )
 _LEVER_HOSTS = frozenset({"jobs.lever.co", "api.lever.co"})
 
+# A board token / company slug is interpolated into a provider API path, so it is
+# locked to a STRICT shape: it must start with an alphanumeric and contain only
+# ``A-Z a-z 0-9 _ . -``. This rejects any slug carrying a path/query injection
+# delimiter — ``/`` ``%`` ``?`` ``#`` ``&`` ``@`` ``:`` whitespace — because such
+# a character can't match. ``.``/``..`` (path traversal) are additionally rejected
+# below: they pass the charset but are never a real board id.
+_SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+
 
 def _provider_and_slug(url: str) -> tuple[Optional[str], Optional[str]]:
     """Parse ``(provider, public_slug)`` from a board URL, or ``(None, None)``.
@@ -77,6 +86,13 @@ def _provider_and_slug(url: str) -> tuple[Optional[str], Optional[str]]:
     only as a path segment downstream and NEVER as auth. A blank/garbage URL,
     an unknown host, or a missing path segment yields ``(None, None)`` so the
     caller returns ``skipped`` rather than raising.
+
+    The slug is VALIDATED against ``_SLUG_RE`` (and ``.``/``..`` rejected) before
+    it is returned: a segment carrying a path/query injection char (``/`` ``?``
+    ``#`` ``&`` ``@`` ``%``) or a traversal token fails the match and yields
+    ``(None, None)`` (skip), so the interpolated provider URL can never be
+    steered to another path or host. ``_endpoint`` additionally percent-escapes
+    it (defense-in-depth).
     """
     parsed = urlparse(url or "")
     host = (parsed.hostname or "").lower()
@@ -94,18 +110,30 @@ def _provider_and_slug(url: str) -> tuple[Optional[str], Optional[str]]:
     segments = [seg for seg in (parsed.path or "").split("/") if seg]
     if not segments:
         return None, None
-    return provider, segments[0]
+    slug = segments[0]
+
+    # Reject anything that isn't a plain board id: traversal tokens, or a segment
+    # with a delimiter that could inject into the provider path/query. A bad slug
+    # is a skip (None, None), not a raise.
+    if slug in (".", "..") or not _SLUG_RE.match(slug):
+        return None, None
+    return provider, slug
 
 
 def _endpoint(provider: str, slug: str) -> str:
     """Build the keyless read-only API URL for ``provider`` + ``slug``.
 
     The slug is interpolated ONLY into the path — it names a public board, it is
-    not a credential and is never placed in a header.
+    not a credential and is never placed in a header. It is percent-escaped with
+    ``quote(..., safe="")`` so even if a future caller passed an unvalidated slug
+    no path/query delimiter could survive into the URL (defense-in-depth on top of
+    ``_provider_and_slug``'s strict ``_SLUG_RE`` gate; for an already-validated
+    slug the escape is a no-op).
     """
+    safe_slug = quote(slug, safe="")
     if provider == _PROVIDER_GREENHOUSE:
-        return f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true"
-    return f"https://api.lever.co/v0/postings/{slug}?mode=json"
+        return f"https://boards-api.greenhouse.io/v1/boards/{safe_slug}/jobs?content=true"
+    return f"https://api.lever.co/v0/postings/{safe_slug}?mode=json"
 
 
 def _normalize_postings(provider: str, payload: object) -> list[dict]:

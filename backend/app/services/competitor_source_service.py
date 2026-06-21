@@ -53,10 +53,13 @@ class CompetitorSourceService:
     def detect_kind(url: str) -> str:
         """Map a URL to its source ``kind`` from the host.
 
-        ``github.com`` (or ``www.github.com``) -> ``github_repo``;
-        ``arxiv.org`` (or ``www.arxiv.org``) -> ``arxiv``; the public Greenhouse /
-        Lever board hosts -> ``job_board`` (the board token / company slug in the
-        path is a PUBLIC identifier, not a credential); everything else (including
+        ``github.com`` (or ``www.github.com``) -> ``github_repo``; ``arxiv.org``
+        (or ``www.arxiv.org``) AND ``export.arxiv.org`` -> ``arxiv`` (the
+        ArxivAdapter's ``_build_search_query`` honors a pasted export-API URL, so
+        an operator-supplied export host must route to the adapter rather than
+        fall through to ``product_url``); the public Greenhouse / Lever board
+        hosts -> ``job_board`` (the board token / company slug in the path is a
+        PUBLIC identifier, not a credential); everything else (including
         blank/garbage input) -> ``product_url``. Pure function — no I/O,
         trivially unit-testable.
         """
@@ -65,7 +68,7 @@ class CompetitorSourceService:
             host = host[4:]
         if host == "github.com":
             return KIND_GITHUB_REPO
-        if host == "arxiv.org":
+        if host in ("arxiv.org", "export.arxiv.org"):
             return KIND_ARXIV
         if host in (
             "boards.greenhouse.io",

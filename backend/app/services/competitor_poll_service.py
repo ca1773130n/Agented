@@ -62,6 +62,27 @@ class CompetitorPollService:
     """Kind-dispatching poll loop over ALL active competitor sources."""
 
     @staticmethod
+    def _stamp_polled(source_id: str) -> None:
+        """Advance ``last_polled_at`` to now for a source that was actually fetched.
+
+        The per-kind poll floor (``_polled_too_recently``) reads ``last_polled_at``;
+        ``AdapterBase.commit`` only stamps it on a ``changed`` outcome, so an
+        ``unchanged``/``throttled``/``error`` fetch would never move the clock and
+        the source would be re-fetched EVERY tick, hammering the API past its
+        floor. The dispatcher therefore stamps the clock for ANY source it
+        fetched, regardless of outcome — a small scoped UPDATE right after
+        ``fetch`` returns. (Re-stamping in ``commit`` for ``changed`` is
+        idempotent.) Only the PRE-fetch skips (unknown kind / no credential /
+        polled-too-recently) must NOT stamp — they never hit the network.
+        """
+        with get_connection() as conn:
+            conn.execute(
+                "UPDATE competitor_source SET last_polled_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (source_id,),
+            )
+            conn.commit()
+
+    @staticmethod
     def _polled_too_recently(row: dict, floor_s: int) -> bool:
         """True when ``row`` was polled less than ``floor_s`` seconds ago.
 
@@ -131,21 +152,33 @@ class CompetitorPollService:
             if CompetitorPollService._polled_too_recently(src, adapter.poll_interval_floor_s):
                 continue
 
+            # Per-source isolation spans the WHOLE network-touching body — fetch,
+            # the poll-floor stamp, AND commit/outcome handling — so a raise in
+            # commit (not just fetch) logs a warning and the loop moves to the
+            # next source instead of aborting the batch.
             try:
                 result = adapter.fetch(src)
-            except Exception:  # noqa: BLE001 — isolate one bad source
+
+                # Stamp the poll-floor clock for EVERY fetched source regardless of
+                # outcome (changed/unchanged/throttled/error). Without this an
+                # 'unchanged' source never advances last_polled_at and is re-fetched
+                # every tick, ignoring the per-kind floor. Only the pre-fetch skips
+                # above (which never reach the network) are exempt.
+                CompetitorPollService._stamp_polled(src["id"])
+
+                if result.outcome == "throttled":
+                    logger.warning(
+                        "competitor poll: kind %r throttled — backing off its remaining sources",
+                        kind,
+                    )
+                    throttled_kinds.add(kind)
+                    continue
+
+                if result.outcome == "changed" and adapter.commit(src["id"], result):
+                    changed_ids.append(src["id"])
+            except Exception:  # noqa: BLE001 — isolate one bad source (fetch or commit)
                 logger.warning("competitor poll raised for source %s", src.get("id"), exc_info=True)
                 continue
-
-            if result.outcome == "throttled":
-                logger.warning(
-                    "competitor poll: kind %r throttled — backing off its remaining sources", kind
-                )
-                throttled_kinds.add(kind)
-                continue
-
-            if result.outcome == "changed" and adapter.commit(src["id"], result):
-                changed_ids.append(src["id"])
 
         # Phase 2 — summarize changed sources AFTER polling, so a slow LLM call
         # never stalls the poll loop. UNCHANGED from P1 (:340-346): the same

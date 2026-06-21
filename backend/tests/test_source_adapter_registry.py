@@ -154,3 +154,33 @@ def test_commit_writes_second_snapshot_when_content_changes():
     AdapterBase().commit(source["id"], FetchResult(outcome="changed", raw_ref="v1", watermark="w1"))
     AdapterBase().commit(source["id"], FetchResult(outcome="changed", raw_ref="v2", watermark="w2"))
     assert len(_snapshot_rows(source["id"])) == 2
+
+
+def test_commit_snapshot_and_cursor_land_atomically():
+    """MAJOR: the dedup read + snapshot INSERT + cursor UPDATE are ONE transaction.
+
+    A single commit must leave a consistent pair — exactly one snapshot AND the
+    cursor advanced — with no half-written state (the snapshot inserted but the
+    cursor not, or vice versa). This is the faithful single-transaction lift of
+    P1's ``_persist_snapshot_and_cursor``; the read and the writes share one
+    connection so a re-fetch can't slip between the dedup read and the insert."""
+    source = _seed_source()
+    raw = "Release v2.0\n\nAtomic notes."
+    snapshot_id = AdapterBase().commit(
+        source["id"],
+        FetchResult(outcome="changed", raw_ref=raw, watermark="2026-06-09T00:00:00Z", etag='W/"z"'),
+    )
+
+    rows = _snapshot_rows(source["id"])
+    row = _source_row(source["id"])
+    # Snapshot written AND cursor advanced in the same commit — both, not one.
+    assert snapshot_id is not None
+    assert len(rows) == 1
+    assert rows[0]["content_hash"] == hashlib.sha256(raw.encode()).hexdigest()
+    assert row["etag"] == 'W/"z"'
+    assert row["watermark"] == "2026-06-09T00:00:00Z"
+    with get_connection() as conn:
+        lp = conn.execute(
+            "SELECT last_polled_at FROM competitor_source WHERE id = ?", (source["id"],)
+        ).fetchone()["last_polled_at"]
+    assert lp is not None  # cursor + clock advanced alongside the snapshot

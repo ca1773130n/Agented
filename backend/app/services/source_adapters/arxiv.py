@@ -114,9 +114,12 @@ def _arxiv_rate_gate() -> None:
     referenced via the module ``time`` so a test can fake the clock without ever
     sleeping a real 3 seconds.
 
-    The timestamp is stamped to ``now + slept`` (i.e. the moment this request is
-    released) so back-to-back calls each wait the full interval from the previous
-    RELEASE, not from a fixed origin.
+    After sleeping, the stored timestamp is RE-READ from a fresh
+    ``time.monotonic()`` (not computed as ``now + remaining``): a sleep can
+    overshoot the requested delta, and trusting the requested amount would stamp
+    the release slightly EARLY, letting the next request fire under 3s after the
+    actual wake. Reading the real clock keeps the spacing a true ``>= 3s`` from
+    the moment this request was actually released.
     """
     global _last_request_monotonic
     with _rate_gate_lock:
@@ -126,7 +129,9 @@ def _arxiv_rate_gate() -> None:
             remaining = _MIN_REQUEST_INTERVAL_S - elapsed
             if remaining > 0:
                 time.sleep(remaining)
-                now = now + remaining
+                # Re-read the clock — the sleep may have overshot ``remaining``;
+                # stamping the ACTUAL wake time prevents an early next release.
+                now = time.monotonic()
         _last_request_monotonic = now
 
 

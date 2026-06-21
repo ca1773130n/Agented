@@ -111,31 +111,42 @@ class AdapterBase:
            ``competitor_snapshot.content_hash`` (newest first); if it equals the
            new hash, return ``None`` and write nothing (a re-fetch of identical
            content is not a change).
-        3. In ONE ``get_connection()`` transaction: INSERT one
+        3. In ONE ``get_connection()`` transaction (single commit, matching P1's
+           ``_persist_snapshot_and_cursor``): the dedup read, the conditional
+           snapshot INSERT, and the cursor UPDATE all share one connection so a
+           re-fetch can't race between the read and the write. INSERT one
            ``competitor_snapshot`` (``raw_ref`` = the content the summarizer
            reads) then UPDATE the parent ``competitor_source`` SET
            ``etag``/``watermark``/``last_polled_at``. ``raw_ref`` (content) and
            ``watermark`` (cursor) stay DISTINCT.
+
+        ``last_polled_at`` is ALSO stamped by the dispatcher for every fetched
+        source regardless of outcome; re-stamping it here on the ``changed`` path
+        is idempotent (the poll-floor clock only moves forward).
 
         Returns the new ``cmsn-`` snapshot id, or ``None`` when deduped.
         """
         raw_ref = result.raw_ref
         content_hash = result.content_hash or hashlib.sha256((raw_ref or "").encode()).hexdigest()
 
-        # Defense-in-depth dedup: don't write a second snapshot for content the
-        # source already holds (the adapter's own change check is the first line;
-        # this is the backstop, mirroring P1's content-hash equality guard).
+        snapshot_id = generate_id("cmsn-", 6)
+        # ONE transaction for the dedup read + INSERT + cursor UPDATE (P1's
+        # _persist_snapshot_and_cursor lift): reading the latest hash on the SAME
+        # connection that writes closes the dedup->insert race a two-block version
+        # left open.
         with get_connection() as conn:
+            # Defense-in-depth dedup: don't write a second snapshot for content the
+            # source already holds (the adapter's own change check is the first
+            # line; this is the backstop, mirroring P1's content-hash equality
+            # guard).
             prev = conn.execute(
                 "SELECT content_hash FROM competitor_snapshot WHERE source_id = ? "
                 "ORDER BY fetched_at DESC, rowid DESC LIMIT 1",
                 (source_id,),
             ).fetchone()
-        if prev is not None and prev["content_hash"] == content_hash:
-            return None
+            if prev is not None and prev["content_hash"] == content_hash:
+                return None
 
-        snapshot_id = generate_id("cmsn-", 6)
-        with get_connection() as conn:
             conn.execute(
                 """
                 INSERT INTO competitor_snapshot
