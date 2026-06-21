@@ -205,3 +205,60 @@ def test_evidence_list_round_trips(project):
     )
     assert row["evidence"] == ["topic:cli", "topic:agents"]
     assert dao.get_suggestion(row["id"])["evidence"] == ["topic:cli", "topic:agents"]
+
+
+# --------------------------------------------------------------------------- #
+# claim_for_promotion — atomic concurrent-accept guard (round-2 fix)
+# --------------------------------------------------------------------------- #
+
+
+def test_claim_for_promotion_wins_once_then_loses(project):
+    """The first claim flips 'suggested'→'added' and returns True; a second claim
+    of the now-'added' row changes zero rows and returns False — the predicate
+    that stops a concurrent double-add."""
+    row = dao.upsert_suggestion(project, "acme", "claimone", "https://github.com/acme/claimone")
+    assert row["status"] == "suggested"
+
+    assert dao.claim_for_promotion(row["id"], project) is True
+    # The row is now 'added' (the atomic flip landed).
+    assert dao.get_suggestion(row["id"])["status"] == "added"
+    # A second claim cannot re-win — status is no longer 'suggested'.
+    assert dao.claim_for_promotion(row["id"], project) is False
+
+
+def test_claim_for_promotion_foreign_project_returns_false(project, isolated_db):
+    """A claim scoped to the WRONG project matches no row (returns False) and does
+    NOT mutate the real row — the IDOR guard on the atomic path."""
+    other = create_project(name="other-claim-project")
+    row = dao.upsert_suggestion(project, "acme", "claimscope", "https://github.com/acme/claimscope")
+
+    assert dao.claim_for_promotion(row["id"], other) is False
+    # Untouched: still 'suggested' under its real project.
+    assert dao.get_suggestion(row["id"])["status"] == "suggested"
+
+
+def test_claim_for_promotion_dismissed_row_returns_false(project):
+    """A dismissed row is not 'suggested', so the claim cannot win it (False) and
+    leaves it dismissed — the route maps that to a 409, never a silent resurrect."""
+    row = dao.upsert_suggestion(project, "acme", "claimdis", "https://github.com/acme/claimdis")
+    dao.set_status(row["id"], "dismissed", project_id=project)
+
+    assert dao.claim_for_promotion(row["id"], project) is False
+    assert dao.get_suggestion(row["id"])["status"] == "dismissed"
+
+
+def test_revert_promotion_claim_restores_suggested_and_clears_source(project):
+    """revert undoes a won claim: 'added'→'suggested' and clears source_id — the
+    compensating action when add_source raises after the claim."""
+    row = dao.upsert_suggestion(project, "acme", "claimrev", "https://github.com/acme/claimrev")
+    assert dao.claim_for_promotion(row["id"], project) is True
+    # Simulate a stamped source id (as set_status would after a successful add).
+    dao.set_status(row["id"], "added", project_id=project, source_id="cmps-tmp123")
+    assert dao.get_suggestion(row["id"])["source_id"] == "cmps-tmp123"
+
+    dao.revert_promotion_claim(row["id"], project)
+    reverted = dao.get_suggestion(row["id"])
+    assert reverted["status"] == "suggested"
+    assert reverted["source_id"] is None
+    # And it is claimable again.
+    assert dao.claim_for_promotion(row["id"], project) is True

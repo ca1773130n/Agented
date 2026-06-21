@@ -547,14 +547,49 @@ class DiscoveryService:
 
         Returns ``{"source": <source row>, "suggestion": <row>}``. Raises
         ``ValueError`` on an unknown / foreign-project ``suggestion_id``.
+
+        Concurrency-safe: the ``suggested`` → ``added`` flip is an ATOMIC
+        conditional UPDATE (``claim_for_promotion``), so two concurrent accepts
+        cannot both pass the status check and both call ``add_source`` — only the
+        single claim winner adds the source (``competitor_source`` carries no
+        ``UNIQUE(project_id, url)``, so a double-add would otherwise duplicate the
+        row). The loser re-reads and returns the existing source.
         """
+        # Project-scoped read up front: a foreign-project / unknown id is a 404
+        # (and gives us the immutable candidate_url for the add).
         suggestion = discovery_suggestions.get_suggestion(suggestion_id, project_id=project_id)
         if suggestion is None:
             raise ValueError(f"Unknown discovery suggestion: {suggestion_id}")
 
+        # Atomic claim: only one concurrent caller flips 'suggested'→'added'.
+        if discovery_suggestions.claim_for_promotion(suggestion_id, project_id):
+            try:
+                source = CompetitorSourceService.add_source(
+                    project_id,
+                    suggestion["candidate_url"],
+                    origin="discovery",
+                )
+            except Exception:
+                # The add failed AFTER we claimed — revert so we never leave a
+                # phantom 'added' row with no backing competitor_source.
+                discovery_suggestions.revert_promotion_claim(suggestion_id, project_id)
+                raise
+            # Stamp the new source id onto the (already 'added') row.
+            updated = discovery_suggestions.set_status(
+                suggestion_id, "added", project_id=project_id, source_id=source["id"]
+            )
+            return {"source": source, "suggestion": updated}
+
+        # We did NOT win the claim. Re-read the (project-scoped) row and resolve.
+        suggestion = discovery_suggestions.get_suggestion(suggestion_id, project_id=project_id)
+        if suggestion is None:
+            # Raced into deletion between the two reads — treat as not-found.
+            raise ValueError(f"Unknown discovery suggestion: {suggestion_id}")
+
         status = suggestion.get("status")
         if status == "added":
-            # Already promoted — return the existing source, do NOT re-add.
+            # Already promoted (by us earlier, or a concurrent winner) — return the
+            # existing source, do NOT add a second one.
             source_id = suggestion.get("source_id")
             source = CompetitorSourceService.get_source(source_id) if source_id else None
             return {"source": source, "suggestion": suggestion}
@@ -562,16 +597,9 @@ class DiscoveryService:
             raise PromotionConflict(
                 f"Suggestion {suggestion_id} was dismissed; re-suggest before promoting"
             )
-
-        source = CompetitorSourceService.add_source(
-            suggestion["project_id"],
-            suggestion["candidate_url"],
-            origin="discovery",
-        )
-        updated = discovery_suggestions.set_status(
-            suggestion_id, "added", project_id=project_id, source_id=source["id"]
-        )
-        return {"source": source, "suggestion": updated}
+        # Claim failed but the row is neither 'added' nor 'dismissed' → it does not
+        # exist under this project (foreign-project / unknown id) → not-found.
+        raise ValueError(f"Unknown discovery suggestion: {suggestion_id}")
 
     @staticmethod
     def dismiss_suggestion(project_id: str, suggestion_id: str) -> dict:

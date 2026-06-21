@@ -148,6 +148,55 @@ def list_suggestions(project_id: str, *, statuses: Optional[list] = None) -> lis
     return [_row_to_dict(r) for r in rows]
 
 
+def claim_for_promotion(suggestion_id: str, project_id: str) -> bool:
+    """Atomically claim a ``suggested`` row for promotion (the concurrent-accept guard).
+
+    Flips ``status`` ``suggested`` → ``added`` in a SINGLE conditional UPDATE
+    (``WHERE id = ? AND project_id = ? AND status = 'suggested'``) and returns
+    whether THIS caller won the claim (exactly one row changed). Two concurrent
+    accepts both read ``status == 'suggested'``, but only the first UPDATE matches
+    the ``status = 'suggested'`` predicate — the loser changes zero rows and gets
+    ``False`` — so ``add_source`` (which has no ``UNIQUE(project_id, url)``) never
+    runs twice and the ``competitor_source`` row is never duplicated.
+
+    Project-scoped: a foreign-project id matches nothing and returns ``False``
+    (the caller's not-found / 404 path handles it). ``source_id`` is stamped by a
+    follow-up scoped UPDATE once ``add_source`` has minted the id (see
+    :func:`set_status`); a failed add reverts the claim via
+    :func:`revert_promotion_claim`.
+    """
+    with get_connection() as conn:
+        cur = conn.execute(
+            "UPDATE discovery_suggestion "
+            "SET status = 'added', updated_at = CURRENT_TIMESTAMP "
+            "WHERE id = ? AND project_id = ? AND status = 'suggested'",
+            (suggestion_id, project_id),
+        )
+        claimed = cur.rowcount == 1
+        conn.commit()
+    return claimed
+
+
+def revert_promotion_claim(suggestion_id: str, project_id: str) -> None:
+    """Undo a promotion claim — restore ``added`` → ``suggested`` and clear ``source_id``.
+
+    The compensating action when :func:`claim_for_promotion` won but the
+    subsequent ``add_source`` raised: without this a failed add would leave a
+    phantom ``added`` row with no backing ``competitor_source``. Scoped to
+    ``(id, project_id, status = 'added')`` so it only reverts a row this flow
+    actually claimed (a concurrent winner that already stamped a real source is
+    not in the ``added``-with-the-same-context window we revert).
+    """
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE discovery_suggestion "
+            "SET status = 'suggested', source_id = NULL, updated_at = CURRENT_TIMESTAMP "
+            "WHERE id = ? AND project_id = ? AND status = 'added'",
+            (suggestion_id, project_id),
+        )
+        conn.commit()
+
+
 def get_suggestion(suggestion_id: str, *, project_id: Optional[str] = None) -> Optional[dict]:
     """Return a single suggestion row as a dict, or None if it does not exist.
 

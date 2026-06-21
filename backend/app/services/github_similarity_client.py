@@ -276,8 +276,27 @@ class GitHubSimilarityClient:
                 key = (cand["owner"].lower(), cand["repo"].lower())
                 if key == seed_key:
                     continue  # exclude the seed itself
-                if key not in merged:
+                existing = merged.get(key)
+                if existing is None:
                     merged[key] = cand
+                else:
+                    # Same repo surfaced via another topic search: UNION its
+                    # shared_topics (a stable-ordered set — preserve first-seen
+                    # order, append the new) so a repo matching N of the searched
+                    # topics records ALL N, not just the first search's. Take the
+                    # max of scalar signals (stargazers can lag between searches);
+                    # backfill language if the first hit lacked it.
+                    seen = {t.lower() for t in existing["shared_topics"]}
+                    for t in cand.get("shared_topics") or []:
+                        if t.lower() not in seen:
+                            existing["shared_topics"].append(t)
+                            seen.add(t.lower())
+                    existing["stargazers_count"] = max(
+                        existing.get("stargazers_count") or 0,
+                        cand.get("stargazers_count") or 0,
+                    )
+                    if not existing.get("language") and cand.get("language"):
+                        existing["language"] = cand["language"]
 
         # Highest-starred first across the merged set, then cap.
         candidates = sorted(

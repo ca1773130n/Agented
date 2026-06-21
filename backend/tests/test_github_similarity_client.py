@@ -276,6 +276,48 @@ def test_find_by_shared_topics_ors_topics_with_per_topic_search(monkeypatch):
     assert ("b", "llmrepo") in keys
 
 
+def test_find_by_shared_topics_unions_shared_topics_across_searches(monkeypatch):
+    """Round-2 fix: a candidate that recurs across per-topic searches UNIONS its
+    ``shared_topics`` and takes the MAX of scalar signals — it no longer keeps
+    only the first hit's data.
+
+    The same repo ``dup/repo`` surfaces in BOTH the ``topic:agents`` and
+    ``topic:llm`` searches, each carrying only that one topic and a different
+    stargazer count. The merged candidate must report BOTH topics (stable order:
+    first-seen 'agents', then 'llm') and the higher star count."""
+    _patch_auth(monkeypatch)
+
+    # Same repo from the agents search (only 'agents', 700 stars) and from the
+    # llm search (only 'llm', 950 stars — the max).
+    from_agents = _search_item("dup", "repo", stars=700, topics=["agents"])
+    from_llm = _search_item("dup", "repo", stars=950, topics=["llm"])
+
+    def _get(url, **kwargs):
+        params = kwargs.get("params") or {}
+        if "/repos/acme/widget" in url:
+            return _seed_repo_response()
+        if "/search/repositories" in url:
+            q = params.get("q", "")
+            if "topic:agents" in q:
+                return _FakeResponse(200, body={"items": [from_agents]})
+            if "topic:llm" in q:
+                return _FakeResponse(200, body={"items": [from_llm]})
+            return _FakeResponse(200, body={"items": []})
+        return _FakeResponse(200, body=[])
+
+    monkeypatch.setattr(gsc.httpx, "get", _get)
+
+    out = GitHubSimilarityClient.find_by_shared_topics("acme", "widget")
+
+    # Exactly one merged row for the recurring repo (deduped, not two).
+    dup = [c for c in out if (c["owner"], c["repo"]) == ("dup", "repo")]
+    assert len(dup) == 1
+    # shared_topics is the UNION across both searches, stable-ordered.
+    assert dup[0]["shared_topics"] == ["agents", "llm"]
+    # Scalar signal is the MAX across searches (950 > 700), not the first hit's.
+    assert dup[0]["stargazers_count"] == 950
+
+
 def test_find_by_shared_topics_caps_total_searches(monkeypatch):
     """The topic fan-out is bounded by ``topic_search_cap`` — a seed with many
     topics never issues one search per topic unbounded."""

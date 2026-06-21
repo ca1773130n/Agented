@@ -532,6 +532,87 @@ def test_promote_is_idempotent_single_source_on_double_accept(
     assert len(sources) == 1
 
 
+def test_promote_concurrent_loser_returns_existing_source_no_second_row(
+    _seeded_project, _no_embeddings, monkeypatch
+):
+    """Round-2 fix (concurrent-accept race): the caller that LOSES the atomic claim
+    (``claim_for_promotion`` → False, the row already 'added' by the winner) returns
+    the EXISTING source and adds NO second competitor_source row.
+
+    The race is collapsed deterministically: the winner promotes first (creating the
+    one source), then ``claim_for_promotion`` is patched to always return False so the
+    second promote takes the loser branch — which must NOT call add_source again."""
+    project_id = _seeded_project
+    _stub_client(monkeypatch, topics=_STRONG_TOPICS, stars=_STRONG_STARS)
+    DiscoveryService.scan_project(project_id)
+    rival = next(
+        r
+        for r in discovery_suggestions.list_suggestions(project_id)
+        if r["candidate_repo"] == "rival"
+    )
+
+    # Winner promotes for real → exactly one source exists and the row is 'added'.
+    winner = DiscoveryService.promote_suggestion(project_id, rival["id"])
+    assert winner["suggestion"]["status"] == "added"
+
+    # Now force the loser branch: the claim never wins, and add_source must NOT run.
+    monkeypatch.setattr(discovery_suggestions, "claim_for_promotion", lambda sid, pid: False)
+    add_calls: list = []
+    real_add = CompetitorSourceService.add_source
+
+    def _spy_add(pid, url, label=None, origin="manual"):
+        add_calls.append(url)
+        return real_add(pid, url, label=label, origin=origin)
+
+    monkeypatch.setattr(CompetitorSourceService, "add_source", staticmethod(_spy_add))
+
+    loser = DiscoveryService.promote_suggestion(project_id, rival["id"])
+
+    # The loser added nothing and returned the winner's source.
+    assert add_calls == []
+    assert loser["source"]["id"] == winner["source"]["id"]
+
+    # Still exactly ONE competitor_source row for that candidate url.
+    sources = [
+        s
+        for s in CompetitorSourceService.list_sources(project_id)
+        if s["url"] == "https://github.com/acme/rival"
+    ]
+    assert len(sources) == 1
+
+
+def test_promote_reverts_claim_when_add_source_fails(_seeded_project, _no_embeddings, monkeypatch):
+    """Round-2 fix: if add_source raises AFTER the claim won, the claim is REVERTED
+    (status back to 'suggested', source_id cleared) and the error re-raised — never
+    a phantom 'added' row with no backing competitor_source."""
+    project_id = _seeded_project
+    _stub_client(monkeypatch, topics=_STRONG_TOPICS, stars=_STRONG_STARS)
+    DiscoveryService.scan_project(project_id)
+    rival = next(
+        r
+        for r in discovery_suggestions.list_suggestions(project_id)
+        if r["candidate_repo"] == "rival"
+    )
+
+    def _boom(pid, url, label=None, origin="manual"):
+        raise RuntimeError("add_source blew up after the claim")
+
+    monkeypatch.setattr(CompetitorSourceService, "add_source", staticmethod(_boom))
+
+    with pytest.raises(RuntimeError):
+        DiscoveryService.promote_suggestion(project_id, rival["id"])
+
+    # Reverted: the row is claimable again (not stuck 'added'), source_id cleared.
+    reloaded = discovery_suggestions.get_suggestion(rival["id"])
+    assert reloaded["status"] == "suggested"
+    assert reloaded["source_id"] is None
+    # No discovery source landed for the candidate.
+    assert not any(
+        s["url"] == "https://github.com/acme/rival"
+        for s in CompetitorSourceService.list_sources(project_id)
+    )
+
+
 def test_promote_dismissed_raises_promotion_conflict(_seeded_project, _no_embeddings, monkeypatch):
     """Fix 5: accepting a DISMISSED suggestion raises PromotionConflict (route → 409)
     rather than resurrecting it; no source is added."""
