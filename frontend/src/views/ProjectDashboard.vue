@@ -235,27 +235,13 @@ async function loadData() {
   projectSkills.value = skillsData.skills || [];
   installations.value = installationsData.installations || [];
 
-  // Fetch team members for OrgCanvas display
-  const teamIds: string[] = [];
-  if (projectData.owner_team_id) teamIds.push(projectData.owner_team_id);
-  if (projectData.teams) {
-    for (const t of projectData.teams) {
-      if (!teamIds.includes(t.id)) teamIds.push(t.id);
-    }
-  }
-  if (teamIds.length > 0) {
-    const teamDetails = await Promise.all(
-      teamIds.map(id => teamApi.get(id).catch(() => null))
-    );
-    const membersMap: Record<string, TeamMember[]> = {};
-    for (const td of teamDetails) {
-      if (td) membersMap[td.id] = td.members || [];
-    }
-    teamMembersMap.value = membersMap;
-  }
-
-  if (project.value?.github_repo) await checkHarnessStatus();
-  // Fire and forget library items load (non-critical)
+  // First paint waits ONLY on the project itself (skills + installations are
+  // parallel — no extra round-trip). Everything below is non-blocking: each section
+  // owns its loading state and fills in AFTER the page renders. Previously the
+  // team-member avatars AND harness status (getHarnessStatus can hit git) were
+  // awaited here, adding two sequential round-trips before EntityLayout could paint.
+  loadTeamMembers();
+  if (projectData.github_repo) checkHarnessStatus();
   loadLibraryItems();
   loadGrdStatus();
   loadHarnessSetupStatus();
@@ -264,6 +250,28 @@ async function loadData() {
   activityPollInterval = setInterval(loadSaActivityStatus, 7000);
   loadProjectInstances();
   return project.value;
+}
+
+// Team-member avatars for the OrgCanvas — non-critical, loaded after first paint.
+async function loadTeamMembers() {
+  const p = project.value;
+  if (!p) return;
+  const teamIds: string[] = [];
+  if (p.owner_team_id) teamIds.push(p.owner_team_id);
+  if (p.teams) {
+    for (const t of p.teams) {
+      if (!teamIds.includes(t.id)) teamIds.push(t.id);
+    }
+  }
+  if (teamIds.length === 0) return;
+  const teamDetails = await Promise.all(
+    teamIds.map(id => teamApi.get(id).catch(() => null))
+  );
+  const membersMap: Record<string, TeamMember[]> = {};
+  for (const td of teamDetails) {
+    if (td) membersMap[td.id] = td.members || [];
+  }
+  teamMembersMap.value = membersMap;
 }
 
 async function loadActiveSessions() {
