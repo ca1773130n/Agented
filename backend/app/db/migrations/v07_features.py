@@ -1414,6 +1414,56 @@ def _migrate_171_competitor_intel(conn) -> None:
     )
 
 
+def _migrate_172_discovery_suggestion(conn) -> None:
+    """v0.9.0 phase 24 (agent-assisted discovery): suggestion-queue persistence.
+
+    ONE project-scoped entity — ``discovery_suggestion`` — the Wave-1 root the
+    rest of phase 24 builds on (DiscoveryService fan-out, scan routes, the
+    suggestion-queue UI all read/write this table). A row is a *candidate*
+    competitor repo the discovery engine surfaced for an operator to triage:
+
+    - ``score`` (REAL, NULLable) — never block a suggestion on a missing score.
+    - ``reason`` (TEXT) — a human-readable "why", rendered deterministically
+      from ``evidence``.
+    - ``evidence`` (TEXT) — a JSON blob (shared_stargazers, shared_topics[],
+      readme_similarity, …) the DAO ``json.dumps``/``json.loads`` round-trips.
+    - ``status`` (suggested | added | dismissed) — the operator's verdict. The
+      DAO's UPSERT refreshes ranking data on re-scan but MUST NOT reset this,
+      so a dismissed/added candidate is not resurrected to ``suggested``.
+    - ``source_id`` — stamped with the promoted ``competitor_source`` id when a
+      suggestion is added (plan 24-04); NULLable until then.
+
+    ``UNIQUE(project_id, candidate_owner, candidate_repo)`` makes a re-scan an
+    idempotent UPSERT instead of a duplicate. Idempotent migration
+    (CREATE TABLE/INDEX IF NOT EXISTS); no destructive ops. Mirrors the
+    project-scoped FK + index shape of ``_migrate_167_grd_plan_selections``.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS discovery_suggestion (
+            id              TEXT PRIMARY KEY,
+            project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            candidate_owner TEXT NOT NULL,
+            candidate_repo  TEXT NOT NULL,
+            candidate_url   TEXT NOT NULL,
+            kind            TEXT NOT NULL DEFAULT 'github_repo',
+            score           REAL,
+            reason          TEXT,
+            evidence        TEXT,
+            status          TEXT NOT NULL DEFAULT 'suggested',
+            source_id       TEXT,
+            created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (project_id, candidate_owner, candidate_repo)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_discovery_suggestion_project "
+        "ON discovery_suggestion(project_id, created_at DESC)"
+    )
+
+
 def _migrate_168_grd_genome_suggestions(conn) -> None:
     """GRD 0.4.1 pattern mining: mirror ``gd patterns`` (→ GENOME-SUGGESTIONS).
 
@@ -1628,4 +1678,7 @@ V07_MIGRATIONS: list = [
     # v0.9.0 phase 23 (REQ-27): competitive-intelligence MVP — project-scoped
     # competitor_source / competitor_snapshot / detected_signal tables.
     (171, "competitor_intel", _migrate_171_competitor_intel),
+    # v0.9.0 phase 24 (agent-assisted discovery): project-scoped
+    # discovery_suggestion queue (idempotent-upsert, operator verdict sticky).
+    (172, "discovery_suggestion", _migrate_172_discovery_suggestion),
 ]

@@ -13,7 +13,11 @@ def test_schema_version_is_171(isolated_db):
 
     with get_connection() as conn:
         max_version = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
-    assert max_version == 171
+    # >= rather than == so appending a later migration (e.g. 172
+    # discovery_suggestion) does not break this baseline: the assertion's intent
+    # is "migration 171 has been applied", which the structural tests below
+    # (tables/columns/indexes) further confirm.
+    assert max_version >= 171
 
 
 def test_migration_171_registered_after_170():

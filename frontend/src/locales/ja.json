@@ -9454,6 +9454,17 @@
     "kindGithub": "GitHub リポジトリ",
     "kindArxiv": "arXiv",
     "kindProduct": "製品ページ",
-    "kindUnknown": "不明"
+    "kindUnknown": "不明",
+    "suggestionsTitle": "競合候補",
+    "suggestionsEmpty": "まだ候補がありません。ディスカバリーを実行して、監視中のリポジトリに類似した競合を探しましょう。",
+    "suggestionReason": "理由",
+    "runDiscovery": "ディスカバリーを実行",
+    "accept": "追加",
+    "accepting": "追加中…",
+    "dismiss": "却下",
+    "acceptedToast": "監視ソースに追加しました",
+    "dismissedToast": "候補を却下しました",
+    "acceptError": "候補の追加に失敗しました",
+    "dismissError": "候補の却下に失敗しました"
   }
 }

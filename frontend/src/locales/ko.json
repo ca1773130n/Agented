@@ -9454,6 +9454,17 @@
     "kindGithub": "GitHub 저장소",
     "kindArxiv": "arXiv",
     "kindProduct": "제품 페이지",
-    "kindUnknown": "알 수 없음"
+    "kindUnknown": "알 수 없음",
+    "suggestionsTitle": "추천 경쟁자",
+    "suggestionsEmpty": "아직 추천이 없습니다. 디스커버리를 실행해 모니터링 중인 저장소와 유사한 경쟁자를 찾아보세요.",
+    "suggestionReason": "이유",
+    "runDiscovery": "디스커버리 실행",
+    "accept": "추가",
+    "accepting": "추가 중…",
+    "dismiss": "무시",
+    "acceptedToast": "모니터링 소스에 추가되었습니다",
+    "dismissedToast": "추천을 무시했습니다",
+    "acceptError": "추천 추가에 실패했습니다",
+    "dismissError": "추천 무시에 실패했습니다"
   }
 }
