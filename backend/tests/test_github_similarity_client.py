@@ -496,3 +496,38 @@ def test_stargazer_overlap_isolates_one_bad_user(monkeypatch):
     )
     cobalt = next(c for c in out if c["repo"] == "x")
     assert cobalt["shared_stargazers"] == 2  # u1 + u3, u2 isolated
+
+
+def test_stargazer_overlap_candidates_carry_archived_fork(monkeypatch):
+    # S2 candidates must carry archived/fork so DiscoveryService can drop dead repos.
+    _patch_auth(monkeypatch)
+    archived_item = {
+        "full_name": "cobalt/x",
+        "owner": {"login": "cobalt"},
+        "name": "x",
+        "html_url": "https://github.com/cobalt/x",
+        "archived": True,
+        "fork": False,
+    }
+    fork_item = {
+        "full_name": "dead/y",
+        "owner": {"login": "dead"},
+        "name": "y",
+        "html_url": "https://github.com/dead/y",
+        "archived": False,
+        "fork": True,
+    }
+    routes = {
+        "/repos/acme/widget/stargazers": [_stargazers_page(["u1", "u2"]), _stargazers_page([])],
+        "/users/u1/starred": [_FakeResponse(200, body=[archived_item, fork_item])],
+        "/users/u2/starred": [_FakeResponse(200, body=[archived_item, fork_item])],
+    }
+    _install(monkeypatch, _Router(routes))
+    out = GitHubSimilarityClient.find_by_stargazer_overlap(
+        "acme", "widget", sample_stargazers=10, per_user_repos=10, min_shared=2
+    )
+    by_repo = {c["repo"]: c for c in out}
+    assert by_repo["x"]["archived"] is True
+    assert by_repo["x"]["fork"] is False
+    assert by_repo["y"]["fork"] is True
+    assert by_repo["y"]["archived"] is False
