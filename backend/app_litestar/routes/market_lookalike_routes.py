@@ -74,7 +74,7 @@ def _assert_project_access(project_id: str, caller: Caller) -> None:
 # ---------------------------------------------------------------------------
 
 
-@post("/{project_id:str}/lookalikes/scan", sync_to_thread=True)
+@post("/{project_id:str}/lookalikes/scan", status_code=200, sync_to_thread=True)
 def run_lookalike_scan(
     project_id: str, caller: Caller, data: dict[str, Any] | None = None
 ) -> dict[str, Any]:

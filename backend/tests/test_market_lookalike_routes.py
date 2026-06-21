@@ -112,7 +112,7 @@ def test_scan_not_configured_is_200_not_error(isolated_db, _no_provider):
     project_id = create_project(name="la-proj")
     with _client() as c:
         resp = c.post(f"/api/projects/{project_id}/lookalikes/scan", json={"seed": "anything"})
-    assert resp.status_code == 201  # Litestar @post success
+    assert resp.status_code == 200  # scan is not a create
     body = resp.json()
     assert body == {
         "provider": None,
@@ -130,7 +130,7 @@ def test_scan_configured_provider_writes_company_rows(isolated_db, _fake_provide
     project_id = create_project(name="la-proj")
     with _client() as c:
         resp = c.post(f"/api/projects/{project_id}/lookalikes/scan", json={"seed": "my product"})
-    assert resp.status_code == 201
+    assert resp.status_code == 200
     body = resp.json()
     assert body["provider"] == "fake"
     assert body["outcome"] == "ok"

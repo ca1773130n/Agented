@@ -70,7 +70,8 @@ def _domain_of(url: str) -> Optional[str]:
         host = host[4:]
     # Drop any userinfo / port that slipped into netloc.
     host = host.split("@")[-1].split(":")[0]
-    return host or None
+    # A real domain carries a dot; bare junk ("localhost", a path) yields no seed.
+    return host if host and "." in host else None
 
 
 class MarketLookalikeService:
