@@ -65,7 +65,12 @@ export { workflowApi, workflowExecutionApi } from './workflows';
 export { sketchApi } from './sketches';
 export { grdApi } from './grd';
 export { competitorIntelApi } from './competitor-intel';
-export type { CompetitorSource, DetectedSignal, SuggestedCompetitor } from './competitor-intel';
+export type {
+  CompetitorSource,
+  DetectedSignal,
+  SuggestedCompetitor,
+  Strategy,
+} from './competitor-intel';
 export { researchApi } from './research';
 export type {
   ResearchThread,

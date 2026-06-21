@@ -1486,6 +1486,63 @@ def _migrate_173_competitor_last_polled(conn) -> None:
         conn.execute("ALTER TABLE competitor_source ADD COLUMN last_polled_at TIMESTAMP")
 
 
+def _migrate_174_competitor_strategy(conn) -> None:
+    """v0.9.0 phase 26 (competitor-strategy loop, P4): strategy/plan persistence.
+
+    ONE project-scoped entity — ``competitor_strategy`` — the Wave-1 root the
+    rest of phase 26 builds on (the generation service, HITL routes, the
+    ``.ci-strategies`` queue UI, and the materialize path all read/write this
+    table). A row turns one or more monitored ``detected_signal`` rows into a
+    reviewed, legally-gated strategy proposal an operator triages before any
+    implementation step:
+
+    - ``signal_ids`` (TEXT) — a JSON array of the ``detected_signal`` ids this
+      strategy synthesizes (multi-signal synthesis; NOT a join table). The DAO
+      ``json.dumps``/``json.loads`` round-trips it.
+    - ``title`` / ``body`` (TEXT) — the structured proposal from the generation
+      service.
+    - ``backend_kind`` / ``model`` (TEXT) — which LLM produced it, the
+      ``{backend_kind, model_override?}`` provenance (never claude-only).
+    - ``status`` (proposed | approved | rejected | implementing | done) — the
+      HITL state machine. The DAO validates transitions.
+    - ``legal_checklist`` (TEXT) — a JSON map of the 7 §5B clean-room / FTO items
+      → bool; NULL/empty until the operator affirms them.
+    - ``legal_cleared_at`` (TIMESTAMP) — NULL until ALL 7 items are affirmed.
+      The DAO's hard legal gate reads this: ``mark_implementing`` raises
+      ``LegalGateNotCleared`` while it is NULL, so no route or service can reach
+      ``implementing`` without clearance.
+    - ``plan_id`` (TEXT) — NULLable; stamped by 26-04 ``materialize`` when an
+      approved+cleared strategy becomes a ``ProjectPlan``.
+
+    Idempotent migration (CREATE TABLE/INDEX IF NOT EXISTS); no destructive ops.
+    Mirrors the project-scoped FK + index shape of
+    ``_migrate_172_discovery_suggestion``.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS competitor_strategy (
+            id               TEXT PRIMARY KEY,
+            project_id       TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            signal_ids       TEXT,
+            title            TEXT,
+            body             TEXT,
+            backend_kind     TEXT,
+            model            TEXT,
+            status           TEXT NOT NULL DEFAULT 'proposed',
+            legal_checklist  TEXT,
+            legal_cleared_at TIMESTAMP,
+            plan_id          TEXT,
+            created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_competitor_strategy_project "
+        "ON competitor_strategy(project_id, created_at DESC)"
+    )
+
+
 def _migrate_168_grd_genome_suggestions(conn) -> None:
     """GRD 0.4.1 pattern mining: mirror ``gd patterns`` (→ GENOME-SUGGESTIONS).
 
@@ -1706,4 +1763,8 @@ V07_MIGRATIONS: list = [
     # v0.9.0 phase 25 (multi-kind source adapters): nullable competitor_source
     # .last_polled_at — the per-kind poll-floor clock (kind stays free TEXT).
     (173, "competitor_last_polled", _migrate_173_competitor_last_polled),
+    # v0.9.0 phase 26 (competitor-strategy loop, P4): project-scoped
+    # competitor_strategy table — the HITL strategy queue + the DAO-enforced
+    # §5B legal gate (mark_implementing raises until all 7 items affirmed).
+    (174, "competitor_strategy", _migrate_174_competitor_strategy),
 ]

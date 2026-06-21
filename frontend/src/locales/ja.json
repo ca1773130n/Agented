@@ -9470,6 +9470,25 @@
     "acceptedToast": "監視ソースに追加しました",
     "dismissedToast": "候補を却下しました",
     "acceptError": "候補の追加に失敗しました",
-    "dismissError": "候補の却下に失敗しました"
+    "dismissError": "候補の却下に失敗しました",
+    "strategiesTitle": "戦略提案",
+    "strategiesEmpty": "戦略はまだありません。上のランク付けされたシグナルから生成してください。",
+    "generateStrategy": "戦略を生成",
+    "approve": "承認",
+    "reject": "却下",
+    "editStrategy": "戦略本文",
+    "implement": "実装",
+    "legalChecklistTitle": "法的クリアランス（実装前にすべて必須）",
+    "legalCleanRoom": "クリーンルーム: 競合のソース/コードを参照せずに設計されています。",
+    "legalNoCopiedCode": "競合のコード、アセット、スキーマ、著作物を再利用していません。",
+    "legalIndependentAuthorship": "実装は独立して作成されています（表現ではなく動作ベース）。",
+    "legalLicenseReview": "競合のライセンス/利用規約を確認し、この対応を許可しています。",
+    "legalPatentFto": "実施の自由: このアプローチに既知の阻害特許はありません。",
+    "legalTrademarkClear": "競合の商標、ブランド、トレードドレスを再利用していません。",
+    "legalNoConfidentialSource": "シグナルは公開情報のみに由来します — 機密/漏洩/NDA資料なし。",
+    "approvedToast": "戦略を承認しました",
+    "rejectedToast": "戦略を却下しました",
+    "legalClearedToast": "法的チェックリスト完了 — 実装がアンロックされました",
+    "strategyError": "戦略操作に失敗しました"
   }
 }
