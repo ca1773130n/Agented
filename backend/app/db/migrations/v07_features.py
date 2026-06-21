@@ -1464,6 +1464,28 @@ def _migrate_172_discovery_suggestion(conn) -> None:
     )
 
 
+def _migrate_173_competitor_last_polled(conn) -> None:
+    """v0.9.0 phase 25 (multi-kind source adapters): per-kind poll-floor clock.
+
+    Adds a nullable ``last_polled_at TIMESTAMP`` to ``competitor_source`` — the
+    *clock* the dispatcher (``CompetitorPollService``) reads to enforce a
+    per-kind poll floor (``now - last_polled_at`` vs the adapter's
+    ``poll_interval_floor_s``). It is kept DISTINCT from ``watermark`` (a content
+    cursor): the floor is rate-limit hygiene, the watermark is change detection.
+    ``github_repo`` ignores it (its ETag/304 path is already free, floor 0); a
+    slow-API kind (arXiv / job board) uses it to avoid hammering its source.
+
+    Idempotent: SQLite ``ALTER TABLE ADD COLUMN`` is not ``IF NOT EXISTS``, so we
+    introspect ``PRAGMA table_info`` and only add the column when absent — re-run
+    safe. ``kind`` stays free TEXT (no CHECK), so registering a NEW source kind
+    needs NO migration. Mirrors the introspect-then-ALTER shape of
+    ``_migrate_169_loop_iteration_cols`` / ``_migrate_166_projects_tesserae_distill``.
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(competitor_source)")}
+    if "last_polled_at" not in cols:
+        conn.execute("ALTER TABLE competitor_source ADD COLUMN last_polled_at TIMESTAMP")
+
+
 def _migrate_168_grd_genome_suggestions(conn) -> None:
     """GRD 0.4.1 pattern mining: mirror ``gd patterns`` (→ GENOME-SUGGESTIONS).
 
@@ -1681,4 +1703,7 @@ V07_MIGRATIONS: list = [
     # v0.9.0 phase 24 (agent-assisted discovery): project-scoped
     # discovery_suggestion queue (idempotent-upsert, operator verdict sticky).
     (172, "discovery_suggestion", _migrate_172_discovery_suggestion),
+    # v0.9.0 phase 25 (multi-kind source adapters): nullable competitor_source
+    # .last_polled_at — the per-kind poll-floor clock (kind stays free TEXT).
+    (173, "competitor_last_polled", _migrate_173_competitor_last_polled),
 ]
