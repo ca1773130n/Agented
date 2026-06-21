@@ -9489,6 +9489,26 @@
     "approvedToast": "戦略を承認しました",
     "rejectedToast": "戦略を却下しました",
     "legalClearedToast": "法的チェックリスト完了 — 実装がアンロックされました",
-    "strategyError": "戦略操作に失敗しました"
+    "strategyError": "戦略操作に失敗しました",
+    "lookalikes": {
+      "title": "市場類似企業",
+      "notConfigured": {
+        "title": "類似企業プロバイダーが設定されていません",
+        "hint": "APISTEMIC_API_KEY（または他のプロバイダー）を設定すると、自社に類似する企業や製品を検索できます。それまではスキャンも外部呼び出しも行いません。",
+        "docsLink": "プロバイダーの設定方法"
+      },
+      "empty": "類似企業はまだありません — スキャンを実行して類似企業を見つけましょう。",
+      "noSeedHint": "類似企業のシードを作成するには、製品または企業の競合ソースを追加してからスキャンを実行してください。",
+      "scan": "スキャン",
+      "scanning": "スキャン中…",
+      "accept": "承認",
+      "accepting": "承認中…",
+      "dismiss": "却下",
+      "acceptedToast": "類似企業を監視ソースに追加しました",
+      "dismissedToast": "類似企業を却下しました",
+      "acceptError": "類似企業の承認に失敗しました",
+      "dismissError": "類似企業の却下に失敗しました",
+      "whyChip": "理由"
+    }
   }
 }

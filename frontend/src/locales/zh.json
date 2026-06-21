@@ -9489,6 +9489,26 @@
     "approvedToast": "策略已批准",
     "rejectedToast": "策略已拒绝",
     "legalClearedToast": "法律审查已通过——实施已解锁",
-    "strategyError": "策略操作失败"
+    "strategyError": "策略操作失败",
+    "lookalikes": {
+      "title": "市场相似企业",
+      "notConfigured": {
+        "title": "未配置相似企业提供方",
+        "hint": "设置 APISTEMIC_API_KEY（或其他提供方）即可查找与您类似的公司和产品。在此之前不会进行扫描，也不会发起外部调用。",
+        "docsLink": "如何配置提供方"
+      },
+      "empty": "暂无相似企业 — 运行扫描以查找相似公司。",
+      "noSeedHint": "请先添加产品或公司竞争对手来源作为种子，然后再运行扫描。",
+      "scan": "扫描",
+      "scanning": "扫描中…",
+      "accept": "接受",
+      "accepting": "接受中…",
+      "dismiss": "忽略",
+      "acceptedToast": "已将相似企业加入监控来源",
+      "dismissedToast": "已忽略相似企业",
+      "acceptError": "接受相似企业失败",
+      "dismissError": "忽略相似企业失败",
+      "whyChip": "原因"
+    }
   }
 }

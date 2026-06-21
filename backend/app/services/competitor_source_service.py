@@ -37,6 +37,13 @@ KIND_JOB_BOARD = "job_board"
 # (the URL-host ``detect_kind`` would otherwise mis-route a bare name to
 # ``product_url``). ``kind`` is free TEXT (no CHECK) — no migration.
 KIND_HN_QUERY = "hn_query"
+# Phase-27 market-lookalike SUGGESTION kind: a ``discovery_suggestion.kind`` value
+# (``"company"`` / ``"product"``) the MarketLookalikeService writes for a lookalike
+# company candidate. This is the SUGGESTION-side tag only — when a market lookalike
+# is PROMOTED, the resulting ``competitor_source`` stays ``KIND_PRODUCT_URL`` (a
+# company/product URL is watched on the product-URL lane via ``detect_kind``'s
+# fallback). ``kind`` is free TEXT (no CHECK) — a new kind needs NO migration.
+KIND_PRODUCT = "product"
 
 # Columns selected/returned, in declaration order (see migration 171).
 _SOURCE_COLUMNS = (
