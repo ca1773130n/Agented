@@ -24,6 +24,57 @@
     "notInstalled": "未安装",
     "dismiss": "关闭"
   },
+  "header": {
+    "search": "搜索",
+    "searchHint": "搜索 (Cmd+K)",
+    "notifications": "通知",
+    "notificationsEmpty": "暂无通知",
+    "notificationsEmptySubtitle": "您已全部处理完毕",
+    "profileMenu": "个人资料菜单",
+    "user": "用户",
+    "signOut": "退出登录",
+    "home": "首页",
+    "seg": {
+      "products": "产品",
+      "projects": "项目",
+      "teams": "团队",
+      "agents": "代理",
+      "superAgents": "超级代理",
+      "workflows": "工作流",
+      "skills": "技能",
+      "plugins": "插件",
+      "mcpServers": "MCP 服务器",
+      "triggers": "触发器",
+      "dashboards": "仪表板",
+      "settings": "设置",
+      "executions": "执行",
+      "history": "历史",
+      "playground": "演练场",
+      "builder": "构建器",
+      "design": "设计",
+      "create": "创建",
+      "explore": "探索",
+      "instances": "实例",
+      "sessions": "会话",
+      "management": "管理",
+      "planning": "规划",
+      "sketchChat": "草图",
+      "auditHistory": "审计历史",
+      "reports": "报告",
+      "budgets": "预算",
+      "admin": "管理员",
+      "tokens": "令牌用量",
+      "security": "安全",
+      "analytics": "分析",
+      "health": "健康",
+      "rotation": "轮换"
+    }
+  },
+  "projectStatus": {
+    "active": "活跃",
+    "archived": "已归档",
+    "planning": "规划中"
+  },
   "nav": {
     "mainNavigation": "主导航",
     "toggleSidebar": "切换侧边栏",
@@ -80,6 +131,8 @@
     "allSuperAgents": "所有 SuperAgents",
     "allWorkflows": "所有工作流",
     "playground": "演练场",
+    "workflowPlayground": "工作流演练场",
+    "skillsPlayground": "技能演练场",
     "blockCore": "核心",
     "blockConfiguration": "配置",
     "blockPrReview": "PR 审查",
@@ -439,7 +492,50 @@
     "emptyAccounts": "尚未配置账号。请添加账号以使用此后端。",
     "deleteAccount": "删除账号",
     "confirmDeleteAccount": "确定要删除此账号吗？",
-    "movingToNext": "正在切换到下一个 backend…"
+    "movingToNext": "正在切换到下一个 backend…",
+    "editForm": {
+      "title": "编辑账户",
+      "accountNameLabel": "账户名称 *",
+      "accountNamePlaceholder": "例如：个人、工作",
+      "emailLabel": "邮箱",
+      "emailPlaceholder": "例如：user{'@'}example.com",
+      "emailHint": "此账户的登录邮箱",
+      "configPathLabel": "配置路径",
+      "configPathPlaceholder": "例如：~/.claude-work",
+      "configPathHint": "此账户的后端配置目录路径",
+      "apiKeyEnvLabel": "API 密钥环境变量",
+      "apiKeyEnvPlaceholder": "例如：ANTHROPIC_API_KEY_WORK",
+      "apiKeyEnvHint": "包含 API 密钥的环境变量名称",
+      "planLabel": "套餐",
+      "selectPlan": "选择套餐...",
+      "reasoningLabel": "推理级别",
+      "reasoningHint": "控制模型执行的推理量",
+      "summaryLabel": "摘要级别",
+      "summaryHint": "控制输出详细程度",
+      "levelDefault": "默认",
+      "levelLow": "低",
+      "levelMedium": "中",
+      "levelHigh": "高",
+      "summaryConcise": "简洁",
+      "summaryDetailed": "详细",
+      "setDefault": "设为默认账户",
+      "saving": "保存中...",
+      "update": "更新"
+    },
+    "toast": {
+      "installing": "正在安装 {name} CLI...",
+      "installed": "CLI 已安装",
+      "installFailed": "安装 CLI 失败",
+      "loadFailed": "加载后端失败",
+      "saved": "账户保存成功",
+      "skipped": "已跳过后端",
+      "updated": "账户已更新",
+      "saveFailed": "保存账户失败",
+      "deleteFailed": "删除账户失败",
+      "rateLimitCleared": "速率限制已清除",
+      "rateLimitClearFailed": "清除速率限制失败",
+      "loginSuccess": "登录成功"
+    }
   },
   "directoryBrowser": {
     "title": "选择目录",
@@ -7200,6 +7296,10 @@
     }
   },
   "superAgentPlayground": {
+    "badge": {
+      "leader": "领导者",
+      "worktree": "工作树"
+    },
     "fallbackTitle": "SuperAgent 实验场",
     "yourSuperAgent": "您的 SuperAgent",
     "chatPlaceholder": "向 {name} 发送消息...",
@@ -7237,6 +7337,7 @@
     "disable": "禁用",
     "enable": "启用",
     "inspector": "检查器",
+    "ouroboros": "Ouroboros",
     "creating": "创建中…",
     "empty": {
       "title": "尚无超级智能体",
@@ -7943,6 +8044,10 @@
     "preview": {
       "title": "画布预览",
       "description": "在聊天中描述您的工作流，我将为您生成。可视化图将显示在此处。"
+    },
+    "generated": {
+      "name": "AI 生成的工作流 {time}",
+      "description": "由 AI 工作流演练场生成"
     }
   },
   "workflows": {
@@ -8063,7 +8168,8 @@
       "detail": "在服务器端接入异常基线后，此卡片将填充数据。"
     },
     "toast": {
-      "acknowledged": "异常已确认"
+      "acknowledged": "异常已确认",
+      "acknowledgeFailed": "确认异常失败"
     },
     "timeAgo": {
       "seconds": "{n} 秒前",
@@ -9510,6 +9616,12 @@
       "acceptError": "接受相似企业失败",
       "dismissError": "忽略相似企业失败",
       "whyChip": "原因"
-    }
+    },
+    "kindCompany": "公司",
+    "statusProposed": "已提议",
+    "statusApproved": "已批准",
+    "statusRejected": "已拒绝",
+    "statusImplementing": "实施中",
+    "statusDone": "已完成"
   }
 }

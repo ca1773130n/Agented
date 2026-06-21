@@ -283,7 +283,7 @@ onMounted(() => {
         <div class="modal">
           <div class="modal-header">
             <h2 id="modal-title-create-product">{{ t('products.createProduct') }}</h2>
-            <button class="modal-close" @click="showCreateModal = false">&times;</button>
+            <button class="modal-close" :aria-label="t('common.close')" @click="showCreateModal = false">&times;</button>
           </div>
           <div class="modal-body">
             <div class="form-group">

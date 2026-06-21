@@ -97,88 +97,88 @@
         <!-- Inline Edit Account Form (editing existing accounts) -->
         <div v-if="editingAccount" class="inline-account-form">
           <div class="inline-form-header">
-            <h3>Edit Account</h3>
-            <button class="btn-close" @click="closeModal">&times;</button>
+            <h3>{{ t('backendDetail.editForm.title') }}</h3>
+            <button class="btn-close" :aria-label="t('common.close')" @click="closeModal">&times;</button>
           </div>
           <form @submit.prevent="saveAccount">
             <div class="form-group">
-              <label for="edit_account_name">Account Name *</label>
+              <label for="edit_account_name">{{ t('backendDetail.editForm.accountNameLabel') }}</label>
               <input
                 id="edit_account_name"
                 v-model="accountForm.account_name"
                 type="text"
                 required
-                placeholder="e.g., Personal, Work"
+                :placeholder="t('backendDetail.editForm.accountNamePlaceholder')"
               />
             </div>
             <div class="form-group">
-              <label for="edit_email">Email</label>
+              <label for="edit_email">{{ t('backendDetail.editForm.emailLabel') }}</label>
               <input
                 id="edit_email"
                 v-model="accountForm.email"
                 type="email"
-                placeholder="e.g., user@example.com"
+                :placeholder="t('backendDetail.editForm.emailPlaceholder')"
               />
-              <small>Login email for this account</small>
+              <small>{{ t('backendDetail.editForm.emailHint') }}</small>
             </div>
             <div class="form-group">
-              <label for="edit_config_path">Config Path</label>
+              <label for="edit_config_path">{{ t('backendDetail.editForm.configPathLabel') }}</label>
               <input
                 id="edit_config_path"
                 v-model="accountForm.config_path"
                 type="text"
-                placeholder="e.g., ~/.claude-work"
+                :placeholder="t('backendDetail.editForm.configPathPlaceholder')"
               />
-              <small>Path to the backend's config directory for this account</small>
+              <small>{{ t('backendDetail.editForm.configPathHint') }}</small>
             </div>
             <div class="form-group">
-              <label for="edit_api_key_env">API Key Environment Variable</label>
+              <label for="edit_api_key_env">{{ t('backendDetail.editForm.apiKeyEnvLabel') }}</label>
               <input
                 id="edit_api_key_env"
                 v-model="accountForm.api_key_env"
                 type="text"
-                placeholder="e.g., ANTHROPIC_API_KEY_WORK"
+                :placeholder="t('backendDetail.editForm.apiKeyEnvPlaceholder')"
               />
-              <small>Name of the environment variable containing the API key</small>
+              <small>{{ t('backendDetail.editForm.apiKeyEnvHint') }}</small>
             </div>
             <div v-if="planOptions.length > 0" class="form-group">
-              <label for="edit_plan">Plan</label>
+              <label for="edit_plan">{{ t('backendDetail.editForm.planLabel') }}</label>
               <select id="edit_plan" v-model="accountForm.plan">
-                <option value="">Select plan...</option>
+                <option value="">{{ t('backendDetail.editForm.selectPlan') }}</option>
                 <option v-for="opt in planOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
               </select>
             </div>
             <template v-if="backend?.type === 'codex'">
               <div class="form-group">
-                <label for="edit_reasoning_level">Reasoning Level</label>
+                <label for="edit_reasoning_level">{{ t('backendDetail.editForm.reasoningLabel') }}</label>
                 <select id="edit_reasoning_level" v-model="codexSettings.reasoning_level">
-                  <option value="">Default</option>
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
+                  <option value="">{{ t('backendDetail.editForm.levelDefault') }}</option>
+                  <option value="low">{{ t('backendDetail.editForm.levelLow') }}</option>
+                  <option value="medium">{{ t('backendDetail.editForm.levelMedium') }}</option>
+                  <option value="high">{{ t('backendDetail.editForm.levelHigh') }}</option>
                 </select>
-                <small>Controls how much reasoning the model performs</small>
+                <small>{{ t('backendDetail.editForm.reasoningHint') }}</small>
               </div>
               <div class="form-group">
-                <label for="edit_summary_level">Summary Level</label>
+                <label for="edit_summary_level">{{ t('backendDetail.editForm.summaryLabel') }}</label>
                 <select id="edit_summary_level" v-model="codexSettings.summary_level">
-                  <option value="">Default</option>
-                  <option value="concise">Concise</option>
-                  <option value="detailed">Detailed</option>
+                  <option value="">{{ t('backendDetail.editForm.levelDefault') }}</option>
+                  <option value="concise">{{ t('backendDetail.editForm.summaryConcise') }}</option>
+                  <option value="detailed">{{ t('backendDetail.editForm.summaryDetailed') }}</option>
                 </select>
-                <small>Controls output verbosity</small>
+                <small>{{ t('backendDetail.editForm.summaryHint') }}</small>
               </div>
             </template>
             <div class="form-group checkbox">
               <label>
                 <input type="checkbox" v-model="accountForm.is_default" />
-                Set as default account
+                {{ t('backendDetail.editForm.setDefault') }}
               </label>
             </div>
             <div class="inline-form-actions">
-              <button type="button" class="btn btn-secondary" @click="closeModal">Cancel</button>
+              <button type="button" class="btn btn-secondary" @click="closeModal">{{ t('common.cancel') }}</button>
               <button type="submit" class="btn btn-primary" :disabled="isSaving">
-                {{ isSaving ? 'Saving...' : 'Update' }}
+                {{ isSaving ? t('backendDetail.editForm.saving') : t('backendDetail.editForm.update') }}
               </button>
             </div>
           </form>
@@ -335,13 +335,13 @@ const isInstalling = ref(false);
 async function installCli() {
   if (isInstalling.value || !backend.value) return;
   isInstalling.value = true;
-  showToast?.(`Installing ${backend.value.name} CLI...`, 'info');
+  showToast?.(t('backendDetail.toast.installing', { name: backend.value.name }), 'info');
   try {
     const result = await backendManagementApi.installCli(backendId.value);
-    showToast?.(result.message || 'CLI installed', 'success');
+    showToast?.(result.message || t('backendDetail.toast.installed'), 'success');
     await loadBackend();
   } catch (e: unknown) {
-    showToast?.(e instanceof Error ? e.message : 'Failed to install CLI', 'error');
+    showToast?.(e instanceof Error ? e.message : t('backendDetail.toast.installFailed'), 'error');
   } finally {
     isInstalling.value = false;
   }
@@ -365,10 +365,10 @@ const capabilityList = computed(() => {
   const caps = capabilities.value;
   if (!caps) return [];
   return [
-    { label: 'JSON Output', supported: caps.supports_json_output, flag: caps.json_output_flag || null },
-    { label: 'Token Usage', supported: caps.supports_token_usage, flag: null },
-    { label: 'Streaming', supported: caps.supports_streaming, flag: null },
-    { label: 'Non-Interactive', supported: caps.supports_non_interactive, flag: caps.non_interactive_flag || null },
+    { label: t('aIBackends.capJsonOutput'), supported: caps.supports_json_output, flag: caps.json_output_flag || null },
+    { label: t('aIBackends.capTokenUsage'), supported: caps.supports_token_usage, flag: null },
+    { label: t('aIBackends.capStreaming'), supported: caps.supports_streaming, flag: null },
+    { label: t('aIBackends.capNonInteractive'), supported: caps.supports_non_interactive, flag: caps.non_interactive_flag || null },
   ];
 });
 
@@ -430,7 +430,7 @@ async function loadBackend() {
     }
     return data;
   } catch (err) {
-    handleApiError(err, showToast, 'Failed to load backend');
+    handleApiError(err, showToast, t('backendDetail.toast.loadFailed'));
     throw err;
   }
 }
@@ -468,7 +468,7 @@ function closeModal() {
 }
 
 async function onWizardSaved() {
-  showToast?.('Account saved successfully', 'success');
+  showToast?.(t('backendDetail.toast.saved'), 'success');
   await loadBackend();
 }
 
@@ -497,7 +497,7 @@ function startAdvancingOverlay() {
 
 function onWizardSkip() {
   showAddModal.value = false;
-  showToast?.('Backend skipped', 'info');
+  showToast?.(t('backendDetail.toast.skipped'), 'info');
   startAdvancingOverlay();
   tourMachine.nextStep();
 }
@@ -589,11 +589,11 @@ async function saveAccount() {
       display_name: accountForm.value.account_name,
       config,
     });
-    showToast?.('Account updated', 'success');
+    showToast?.(t('backendDetail.toast.updated'), 'success');
     closeModal();
     await loadBackend();
   } catch (err) {
-    showToast?.(err instanceof Error ? err.message : 'Failed to save account', 'error');
+    showToast?.(err instanceof Error ? err.message : t('backendDetail.toast.saveFailed'), 'error');
   } finally {
     isSaving.value = false;
   }
@@ -613,7 +613,7 @@ async function confirmDeleteAccount() {
     await aiAccountsClient.deleteBackend(accountId);
     await loadBackend();
   } catch (err) {
-    showToast?.('Failed to delete account', 'error');
+    showToast?.(t('backendDetail.toast.deleteFailed'), 'error');
   }
 }
 
@@ -658,10 +658,10 @@ function formatRelativeTime(dateStr: string | null): string {
 async function clearRateLimit(accountId: string) {
   try {
     await orchestrationApi.clearRateLimit(accountId);
-    showToast?.('Rate limit cleared', 'success');
+    showToast?.(t('backendDetail.toast.rateLimitCleared'), 'success');
     await loadHealth();
   } catch {
-    showToast?.('Failed to clear rate limit', 'error');
+    showToast?.(t('backendDetail.toast.rateLimitClearFailed'), 'error');
   }
 }
 
@@ -672,13 +672,13 @@ const supportsConnect = computed(() => {
 
 function onConnected() {
   showConnect.value = false;
-  showToast?.('Login completed successfully', 'success');
+  showToast?.(t('backendDetail.toast.loginSuccess'), 'success');
   loadBackend();
 }
 
 function onLoginModalSuccess() {
   showLoginModal.value = false;
-  showToast?.('Login completed successfully', 'success');
+  showToast?.(t('backendDetail.toast.loginSuccess'), 'success');
   loadBackend();
 }
 

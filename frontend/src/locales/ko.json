@@ -24,6 +24,57 @@
     "notInstalled": "설치되지 않음",
     "dismiss": "닫기"
   },
+  "header": {
+    "search": "검색",
+    "searchHint": "검색 (Cmd+K)",
+    "notifications": "알림",
+    "notificationsEmpty": "알림이 없습니다",
+    "notificationsEmptySubtitle": "모두 확인했습니다",
+    "profileMenu": "프로필 메뉴",
+    "user": "사용자",
+    "signOut": "로그아웃",
+    "home": "홈",
+    "seg": {
+      "products": "제품",
+      "projects": "프로젝트",
+      "teams": "팀",
+      "agents": "에이전트",
+      "superAgents": "슈퍼 에이전트",
+      "workflows": "워크플로우",
+      "skills": "스킬",
+      "plugins": "플러그인",
+      "mcpServers": "MCP 서버",
+      "triggers": "트리거",
+      "dashboards": "대시보드",
+      "settings": "설정",
+      "executions": "실행",
+      "history": "기록",
+      "playground": "플레이그라운드",
+      "builder": "빌더",
+      "design": "디자인",
+      "create": "생성",
+      "explore": "탐색",
+      "instances": "인스턴스",
+      "sessions": "세션",
+      "management": "관리",
+      "planning": "계획",
+      "sketchChat": "스케치",
+      "auditHistory": "감사 기록",
+      "reports": "리포트",
+      "budgets": "예산",
+      "admin": "관리자",
+      "tokens": "토큰 사용량",
+      "security": "보안",
+      "analytics": "분석",
+      "health": "상태",
+      "rotation": "로테이션"
+    }
+  },
+  "projectStatus": {
+    "active": "활성",
+    "archived": "보관됨",
+    "planning": "계획 중"
+  },
   "nav": {
     "mainNavigation": "메인 내비게이션",
     "toggleSidebar": "사이드바 전환",
@@ -80,6 +131,8 @@
     "allSuperAgents": "모든 SuperAgents",
     "allWorkflows": "모든 워크플로우",
     "playground": "플레이그라운드",
+    "workflowPlayground": "워크플로우 플레이그라운드",
+    "skillsPlayground": "스킬 플레이그라운드",
     "blockCore": "핵심",
     "blockConfiguration": "구성",
     "blockPrReview": "PR 리뷰",
@@ -439,7 +492,50 @@
     "emptyAccounts": "등록된 계정이 없습니다. 이 백엔드를 사용하려면 계정을 추가하세요.",
     "deleteAccount": "계정 삭제",
     "confirmDeleteAccount": "이 계정을 정말 삭제하시겠습니까?",
-    "movingToNext": "다음 backend로 이동 중…"
+    "movingToNext": "다음 backend로 이동 중…",
+    "editForm": {
+      "title": "계정 편집",
+      "accountNameLabel": "계정 이름 *",
+      "accountNamePlaceholder": "예: 개인, 업무",
+      "emailLabel": "이메일",
+      "emailPlaceholder": "예: user{'@'}example.com",
+      "emailHint": "이 계정의 로그인 이메일",
+      "configPathLabel": "설정 경로",
+      "configPathPlaceholder": "예: ~/.claude-work",
+      "configPathHint": "이 계정에 대한 백엔드 설정 디렉터리 경로",
+      "apiKeyEnvLabel": "API 키 환경 변수",
+      "apiKeyEnvPlaceholder": "예: ANTHROPIC_API_KEY_WORK",
+      "apiKeyEnvHint": "API 키가 담긴 환경 변수의 이름",
+      "planLabel": "플랜",
+      "selectPlan": "플랜 선택...",
+      "reasoningLabel": "추론 수준",
+      "reasoningHint": "모델이 수행하는 추론의 양을 제어합니다",
+      "summaryLabel": "요약 수준",
+      "summaryHint": "출력 상세도를 제어합니다",
+      "levelDefault": "기본값",
+      "levelLow": "낮음",
+      "levelMedium": "중간",
+      "levelHigh": "높음",
+      "summaryConcise": "간결",
+      "summaryDetailed": "상세",
+      "setDefault": "기본 계정으로 설정",
+      "saving": "저장 중...",
+      "update": "업데이트"
+    },
+    "toast": {
+      "installing": "{name} CLI 설치 중...",
+      "installed": "CLI가 설치되었습니다",
+      "installFailed": "CLI 설치에 실패했습니다",
+      "loadFailed": "백엔드를 불러오지 못했습니다",
+      "saved": "계정이 저장되었습니다",
+      "skipped": "백엔드를 건너뛰었습니다",
+      "updated": "계정이 업데이트되었습니다",
+      "saveFailed": "계정 저장에 실패했습니다",
+      "deleteFailed": "계정 삭제에 실패했습니다",
+      "rateLimitCleared": "속도 제한이 해제되었습니다",
+      "rateLimitClearFailed": "속도 제한 해제에 실패했습니다",
+      "loginSuccess": "로그인이 완료되었습니다"
+    }
   },
   "directoryBrowser": {
     "title": "디렉토리 선택",
@@ -7200,6 +7296,10 @@
     }
   },
   "superAgentPlayground": {
+    "badge": {
+      "leader": "리더",
+      "worktree": "워크트리"
+    },
     "fallbackTitle": "SuperAgent 플레이그라운드",
     "yourSuperAgent": "SuperAgent",
     "chatPlaceholder": "{name}에게 메시지 보내기...",
@@ -7237,6 +7337,7 @@
     "disable": "비활성화",
     "enable": "활성화",
     "inspector": "인스펙터",
+    "ouroboros": "Ouroboros",
     "creating": "생성 중…",
     "empty": {
       "title": "아직 슈퍼 에이전트가 없습니다",
@@ -7943,6 +8044,10 @@
     "preview": {
       "title": "캔버스 미리보기",
       "description": "채팅에서 워크플로를 설명하면 생성해 드립니다. 시각적 그래프가 여기에 표시됩니다."
+    },
+    "generated": {
+      "name": "AI 생성 워크플로우 {time}",
+      "description": "AI 워크플로우 플레이그라운드에서 생성됨"
     }
   },
   "workflows": {
@@ -8063,7 +8168,8 @@
       "detail": "이 카드는 이상 기준선이 서버 측에서 연결되면 채워집니다."
     },
     "toast": {
-      "acknowledged": "이상이 확인되었습니다"
+      "acknowledged": "이상이 확인되었습니다",
+      "acknowledgeFailed": "이상 확인에 실패했습니다"
     },
     "timeAgo": {
       "seconds": "{n}초 전",
@@ -9510,6 +9616,12 @@
       "acceptError": "유사 기업 수락에 실패했습니다",
       "dismissError": "유사 기업 무시에 실패했습니다",
       "whyChip": "근거"
-    }
+    },
+    "kindCompany": "회사",
+    "statusProposed": "제안됨",
+    "statusApproved": "승인됨",
+    "statusRejected": "거부됨",
+    "statusImplementing": "구현 중",
+    "statusDone": "완료"
   }
 }

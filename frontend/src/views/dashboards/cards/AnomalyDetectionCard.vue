@@ -82,17 +82,10 @@ async function loadData() {
       anomalies.value = [];
       baselines.value = [];
     } else {
-      anomalies.value = [
-        { id: 'an-1', bot_id: 'bot-security', bot_name: 'Security Audit', execution_id: 'ex-abc123', anomaly_type: 'duration', detected_at: new Date(Date.now() - 1800000).toISOString(), severity: 'critical', acknowledged: false, description: 'Execution took 4x longer than baseline — possible infinite loop or API hang.', baseline_value: 62, observed_value: 248, unit: 'seconds' },
-        { id: 'an-2', bot_id: 'bot-pr-review', bot_name: 'PR Review', execution_id: 'ex-def456', anomaly_type: 'output_length', detected_at: new Date(Date.now() - 3600000).toISOString(), severity: 'warning', acknowledged: false, description: 'Output was unusually short (47 chars). Bot may have produced empty or truncated response.', baseline_value: 2800, observed_value: 47, unit: 'characters' },
-        { id: 'an-3', bot_id: 'bot-security', bot_name: 'Security Audit', execution_id: 'ex-ghi789', anomaly_type: 'finding_spike', detected_at: new Date(Date.now() - 7200000).toISOString(), severity: 'warning', acknowledged: true, description: 'Found 23 issues vs baseline of 3.2. Spike may indicate new vulnerable code or prompt regression.', baseline_value: 3, observed_value: 23, unit: 'findings' },
-        { id: 'an-4', bot_id: 'bot-dep', bot_name: 'Dep Check', execution_id: 'ex-jkl012', anomaly_type: 'error_rate', detected_at: new Date(Date.now() - 10800000).toISOString(), severity: 'critical', acknowledged: false, description: '8 of the last 10 runs failed. Error: Claude API rate limited. Bot is likely stuck in a loop.', baseline_value: 5, observed_value: 80, unit: '% error rate' },
-      ];
-      baselines.value = [
-        { bot_id: 'bot-security', bot_name: 'Security Audit', avg_duration_s: 62, avg_output_chars: 3400, avg_findings: 3.2, error_rate_pct: 4.1, sample_count: 87 },
-        { bot_id: 'bot-pr-review', bot_name: 'PR Review', avg_duration_s: 45, avg_output_chars: 2800, avg_findings: 1.8, error_rate_pct: 2.3, sample_count: 241 },
-        { bot_id: 'bot-dep', bot_name: 'Dep Check', avg_duration_s: 28, avg_output_chars: 1200, avg_findings: 5.1, error_rate_pct: 5.0, sample_count: 64 },
-      ];
+      // On any other error, never inject fabricated anomalies — show the
+      // truthful empty state instead of demo "Security Audit"/"PR Review" rows.
+      anomalies.value = [];
+      baselines.value = [];
     }
   } finally {
     isLoading.value = false;
@@ -107,8 +100,7 @@ async function acknowledge(anomaly: Anomaly) {
     anomaly.acknowledged = true;
     showToast(t('anomalyDetectionCard.toast.acknowledged'), 'success');
   } catch {
-    anomaly.acknowledged = true;
-    showToast(t('anomalyDetectionCard.toast.acknowledged'), 'success');
+    showToast(t('anomalyDetectionCard.toast.acknowledgeFailed'), 'error');
   }
 }
 

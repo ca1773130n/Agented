@@ -288,8 +288,8 @@ async function loadData() {
                   <span class="session-date">{{ formatSessionDate(sess.started_at) }}</span>
                 </div>
                 <div class="session-badges">
-                  <span v-if="sess.session_type === 'leader'" class="session-type-badge type-leader">leader</span>
-                  <span v-if="sess.worktree_path" class="session-type-badge type-worktree">worktree</span>
+                  <span v-if="sess.session_type === 'leader'" class="session-type-badge type-leader">{{ t('superAgentPlayground.badge.leader') }}</span>
+                  <span v-if="sess.worktree_path" class="session-type-badge type-worktree">{{ t('superAgentPlayground.badge.worktree') }}</span>
                   <span :class="['session-status', `status-${sess.status}`]">
                     {{ sess.status }}
                   </span>

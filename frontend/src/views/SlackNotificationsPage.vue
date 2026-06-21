@@ -201,7 +201,7 @@ function formatDate(ts: string): string {
       <aside class="sidebar card">
         <div class="sidebar-header">
           <span>{{ t('slackNotifications.channels') }}</span>
-          <button class="btn-add" @click="addChannel">+</button>
+          <button class="btn-add" :aria-label="t('slackNotifications.addChannel')" @click="addChannel">+</button>
         </div>
         <div
           v-for="ch in channels"

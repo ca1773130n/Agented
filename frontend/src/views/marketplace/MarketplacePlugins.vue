@@ -239,7 +239,7 @@ onMounted(async () => {
               <h2 id="modal-title-plugin-detail">{{ selectedPlugin.name }}</h2>
               <span v-if="selectedPlugin.version" class="version-badge">v{{ selectedPlugin.version }}</span>
             </div>
-            <button class="close-btn" @click="closeDetail">&times;</button>
+            <button class="close-btn" :aria-label="t('common.close')" @click="closeDetail">&times;</button>
           </div>
           <div class="detail-body">
             <p class="detail-description">{{ selectedPlugin.description || t('marketplacePlugins.noDescriptionAvailable') }}</p>

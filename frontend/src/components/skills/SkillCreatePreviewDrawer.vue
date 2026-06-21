@@ -180,7 +180,7 @@ function onEscape(e: KeyboardEvent) {
             <h3 id="skill-preview-title">{{ t('skillCreatePreviewDrawer.title') }}</h3>
             <p class="preview-subtitle">
               {{ t('skillCreatePreviewDrawer.subtitlePre') }}
-              <code>{{ preview?.skill_md_path?.replace(/\/SKILL\.md$/, '') ?? '.claude/skills/&lt;name&gt;' }}/</code>.
+              <code>{{ preview?.skill_md_path?.replace(/\/SKILL\.md$/, '') ?? '.claude/skills/<name>' }}/</code>.
               {{ t('skillCreatePreviewDrawer.subtitlePost') }}
             </p>
           </div>

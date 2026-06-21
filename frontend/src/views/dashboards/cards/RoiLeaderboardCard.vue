@@ -37,13 +37,8 @@ async function loadData() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     teams.value = (await res.json()).teams ?? [];
   } catch {
-    teams.value = [
-      { rank: 1, team_id: 'team-plat', team_name: 'Platform', active_bots: 8, total_executions: 2341, success_rate: 97.2, issues_caught: 143, cost_saved_hrs: 28, score: 9820, trend: 'up' },
-      { rank: 2, team_id: 'team-sec', team_name: 'Security', active_bots: 5, total_executions: 1891, success_rate: 95.1, issues_caught: 312, cost_saved_hrs: 42, score: 8940, trend: 'up' },
-      { rank: 3, team_id: 'team-data', team_name: 'Data Engineering', active_bots: 6, total_executions: 1456, success_rate: 91.8, issues_caught: 87, cost_saved_hrs: 19, score: 7210, trend: 'same' },
-      { rank: 4, team_id: 'team-qa', team_name: 'QA', active_bots: 4, total_executions: 1102, success_rate: 88.4, issues_caught: 201, cost_saved_hrs: 35, score: 6540, trend: 'down' },
-      { rank: 5, team_id: 'team-backend', team_name: 'Backend', active_bots: 3, total_executions: 834, success_rate: 93.7, issues_caught: 55, cost_saved_hrs: 14, score: 5110, trend: 'up' },
-    ];
+    // Never fabricate a leaderboard — show the truthful empty state on error.
+    teams.value = [];
   } finally {
     isLoading.value = false;
     emit('loaded', 'roi-leaderboard');

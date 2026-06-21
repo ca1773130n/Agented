@@ -487,7 +487,7 @@ onMounted(() => {
             <span v-if="togglingId === command.id" class="btn-spinner"></span>
             {{ togglingId === command.id ? '...' : (command.enabled ? t('commands.disable') : t('commands.enable')) }}
           </button>
-          <button class="btn btn-small btn-danger" @click.stop="confirmDelete(command)" :disabled="deletingId === command.id">
+          <button class="btn btn-small btn-danger" :aria-label="t('common.delete')" @click.stop="confirmDelete(command)" :disabled="deletingId === command.id">
             <span v-if="deletingId === command.id" class="btn-spinner"></span>
             <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
@@ -574,7 +574,7 @@ onMounted(() => {
             </div>
             <div class="form-group">
               <label for="command-content">{{ t('commands.field.contentMarkdown') }}</label>
-              <textarea id="command-content" v-model="formData.content" rows="6" placeholder="# Command Content\n\nDescribe what this command should do..."></textarea>
+              <textarea id="command-content" v-model="formData.content" rows="6" :placeholder="t('commands.field.contentPlaceholder')"></textarea>
             </div>
             <div class="form-group">
               <label for="command-arguments">{{ t('commands.field.argumentsJsonArray') }}</label>

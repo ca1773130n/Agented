@@ -23,7 +23,6 @@ const showToast = useToast();
 const selectedMarketplace = ref<Marketplace | null>(null);
 const marketplacePlugins = ref<MarketplacePlugin[]>([]);
 const loadingPlugins = ref(false);
-const isLoading = ref(false);
 
 // Test connection results per marketplace
 const testResults = ref<Map<string, { connected: boolean; message: string }>>(new Map());
@@ -230,12 +229,7 @@ loadAvailablePlugins();
           </button>
         </div>
 
-        <div v-if="isLoading" class="loading-state">
-          <div class="spinner"></div>
-          <span>{{ t('common.loading') }}</span>
-        </div>
-
-        <div v-else-if="marketplaces.length === 0" class="empty-state">
+        <div v-if="marketplaces.length === 0" class="empty-state">
           <div class="empty-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>

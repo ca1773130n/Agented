@@ -112,7 +112,7 @@ async function importFromMarketplace() {
       <div class="modal import-modal">
         <div class="modal-header">
           <h2 id="modal-title-import-plugin">{{ t('importPluginModal.title') }}</h2>
-          <button class="modal-close" @click="handleClose">&times;</button>
+          <button class="modal-close" :aria-label="t('common.close')" @click="handleClose">&times;</button>
         </div>
 
         <div class="modal-body">

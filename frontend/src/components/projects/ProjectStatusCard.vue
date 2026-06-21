@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import type { Project } from '../../services/api';
 
 defineProps<{
@@ -9,12 +10,23 @@ const emit = defineEmits<{
   (e: 'navigateToProductDashboard', productId: string): void;
 }>();
 
+const { t } = useI18n();
+
 function getStatusClass(status: string): string {
   switch (status) {
     case 'active': return 'status-active';
     case 'archived': return 'status-archived';
     case 'planning': return 'status-planning';
     default: return '';
+  }
+}
+
+function getStatusLabel(status: string): string {
+  switch (status) {
+    case 'active': return t('projectStatus.active');
+    case 'archived': return t('projectStatus.archived');
+    case 'planning': return t('projectStatus.planning');
+    default: return status;
   }
 }
 </script>
@@ -31,7 +43,7 @@ function getStatusClass(status: string): string {
         <h2>{{ project.name }}</h2>
         <div class="status-meta">
           <span class="meta-pill" :class="getStatusClass(project.status)">
-            {{ project.status }}
+            {{ getStatusLabel(project.status) }}
           </span>
           <span
             v-if="project.product_name"
