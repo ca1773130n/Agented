@@ -148,13 +148,23 @@ def list_suggestions(project_id: str, *, statuses: Optional[list] = None) -> lis
     return [_row_to_dict(r) for r in rows]
 
 
-def get_suggestion(suggestion_id: str) -> Optional[dict]:
-    """Return a single suggestion row as a dict, or None if it does not exist."""
+def get_suggestion(suggestion_id: str, *, project_id: Optional[str] = None) -> Optional[dict]:
+    """Return a single suggestion row as a dict, or None if it does not exist.
+
+    When ``project_id`` is supplied the lookup is project-scoped
+    (``WHERE id = ? AND project_id = ?``) so a suggestion belonging to another
+    project returns None — the IDOR guard for the accept/dismiss path (a caller
+    with access to project A must not reach a suggestion seeded under project B
+    by pairing A's URL with B's id). Omitting ``project_id`` keeps the unscoped
+    read for internal callers that already trust the id.
+    """
+    sql = "SELECT * FROM discovery_suggestion WHERE id = ?"
+    params: list = [suggestion_id]
+    if project_id is not None:
+        sql += " AND project_id = ?"
+        params.append(project_id)
     with get_connection() as conn:
-        row = conn.execute(
-            "SELECT * FROM discovery_suggestion WHERE id = ?",
-            (suggestion_id,),
-        ).fetchone()
+        row = conn.execute(sql, params).fetchone()
     return _row_to_dict(row)
 
 
@@ -162,6 +172,7 @@ def set_status(
     suggestion_id: str,
     status: str,
     *,
+    project_id: Optional[str] = None,
     source_id: Optional[str] = None,
 ) -> Optional[dict]:
     """Set a suggestion's ``status`` (and optionally stamp ``source_id``).
@@ -170,25 +181,39 @@ def set_status(
     and stamps the promoted ``competitor_source`` id; ``dismiss`` flips status
     to ``dismissed``. ``updated_at`` is always bumped. Returns the updated row
     as a dict, or None if no such suggestion exists.
+
+    When ``project_id`` is supplied the mutation is project-scoped
+    (``WHERE id = ? AND project_id = ?``) and a foreign-project id is a no-op
+    that returns None — closing the IDOR where a caller authorized for project A
+    flips a suggestion owned by project B.
     """
+    scope = " AND project_id = ?" if project_id is not None else ""
     with get_connection() as conn:
         if source_id is not None:
+            params: list = [status, source_id, suggestion_id]
+            if project_id is not None:
+                params.append(project_id)
             conn.execute(
                 "UPDATE discovery_suggestion "
                 "SET status = ?, source_id = ?, updated_at = CURRENT_TIMESTAMP "
-                "WHERE id = ?",
-                (status, source_id, suggestion_id),
+                f"WHERE id = ?{scope}",
+                params,
             )
         else:
+            params = [status, suggestion_id]
+            if project_id is not None:
+                params.append(project_id)
             conn.execute(
                 "UPDATE discovery_suggestion "
                 "SET status = ?, updated_at = CURRENT_TIMESTAMP "
-                "WHERE id = ?",
-                (status, suggestion_id),
+                f"WHERE id = ?{scope}",
+                params,
             )
         conn.commit()
-        row = conn.execute(
-            "SELECT * FROM discovery_suggestion WHERE id = ?",
-            (suggestion_id,),
-        ).fetchone()
+        sel_sql = "SELECT * FROM discovery_suggestion WHERE id = ?"
+        sel_params: list = [suggestion_id]
+        if project_id is not None:
+            sel_sql += " AND project_id = ?"
+            sel_params.append(project_id)
+        row = conn.execute(sel_sql, sel_params).fetchone()
     return _row_to_dict(row)

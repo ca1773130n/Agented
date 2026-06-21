@@ -236,8 +236,90 @@ def test_find_by_shared_topics_search_403_returns_empty_no_raise(monkeypatch):
         }
     )
     _install(monkeypatch, router)
-    # 403 on the single search → back off, return [], never raise.
+    # 403 on the first topic search → back off the rest, return [], never raise.
     assert GitHubSimilarityClient.find_by_shared_topics("acme", "widget") == []
+
+
+def test_find_by_shared_topics_ors_topics_with_per_topic_search(monkeypatch):
+    """The OR fix: the seed's topics are searched ONE PER topic (not a single AND
+    query), so a repo sharing only ONE of the seed's topics still surfaces.
+
+    Each search responder returns ONLY repos carrying that one topic; a single
+    AND'd ``topic:agents topic:llm`` query would have surfaced neither (they
+    don't share BOTH). The union must include both."""
+    _patch_auth(monkeypatch)
+
+    # The router routes by substring; the client sends q=topic:<t> as a param, so
+    # we key the two searches by inspecting the recorded params instead.
+    agents_only = _search_item("a", "agentsrepo", stars=500, topics=["agents"])
+    llm_only = _search_item("b", "llmrepo", stars=400, topics=["llm"])
+
+    def _get(url, **kwargs):
+        params = kwargs.get("params") or {}
+        if "/repos/acme/widget" in url:
+            return _seed_repo_response()
+        if "/search/repositories" in url:
+            q = params.get("q", "")
+            if "topic:agents" in q:
+                return _FakeResponse(200, body={"items": [agents_only]})
+            if "topic:llm" in q:
+                return _FakeResponse(200, body={"items": [llm_only]})
+            return _FakeResponse(200, body={"items": []})
+        return _FakeResponse(200, body=[])
+
+    monkeypatch.setattr(gsc.httpx, "get", _get)
+
+    out = GitHubSimilarityClient.find_by_shared_topics("acme", "widget")
+    keys = {(c["owner"], c["repo"]) for c in out}
+    # Both single-topic repos surface — the OR semantics the AND query lacked.
+    assert ("a", "agentsrepo") in keys
+    assert ("b", "llmrepo") in keys
+
+
+def test_find_by_shared_topics_caps_total_searches(monkeypatch):
+    """The topic fan-out is bounded by ``topic_search_cap`` — a seed with many
+    topics never issues one search per topic unbounded."""
+    _patch_auth(monkeypatch)
+    many_topics = [f"t{i}" for i in range(20)]
+    router = _Router(
+        {
+            "/repos/acme/widget": _FakeResponse(
+                200, body={"topics": many_topics, "stargazers_count": 1, "language": "Python"}
+            ),
+            "/search/repositories": _FakeResponse(200, body={"items": []}),
+        }
+    )
+    _install(monkeypatch, router)
+
+    GitHubSimilarityClient.find_by_shared_topics("acme", "widget", topic_search_cap=3)
+    search_calls = [u for u, _ in router.calls if "/search/repositories" in u]
+    assert len(search_calls) == 3  # capped, not 20
+
+
+def test_find_by_shared_topics_carries_language(monkeypatch):
+    """The language fix: a search candidate carries ``language`` so the ranker's
+    same-language prior can fire (it was dead at 0.0 before)."""
+    _patch_auth(monkeypatch)
+    item = {
+        "full_name": "rival/agentkit",
+        "owner": {"login": "rival"},
+        "name": "agentkit",
+        "html_url": "https://github.com/rival/agentkit",
+        "stargazers_count": 900,
+        "language": "Python",
+        "topics": ["agents"],
+    }
+    router = _Router(
+        {
+            "/repos/acme/widget": _seed_repo_response(),
+            "/search/repositories": _FakeResponse(200, body={"items": [item]}),
+        }
+    )
+    _install(monkeypatch, router)
+
+    out = GitHubSimilarityClient.find_by_shared_topics("acme", "widget")
+    rival = next(c for c in out if c["repo"] == "agentkit")
+    assert rival["language"] == "Python"
 
 
 # ---------------------------------------------------------------------------

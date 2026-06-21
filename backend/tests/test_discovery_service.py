@@ -193,7 +193,7 @@ def test_dismissed_row_stays_dismissed_across_rescan(_seeded_project, _no_embedd
     rows = discovery_suggestions.list_suggestions(project_id)
     rival = next(r for r in rows if r["candidate_repo"] == "rival")
 
-    DiscoveryService.dismiss_suggestion(rival["id"])
+    DiscoveryService.dismiss_suggestion(project_id, rival["id"])
     assert discovery_suggestions.get_suggestion(rival["id"])["status"] == "dismissed"
 
     # Re-scan: the row must remain 'dismissed' (24-01 upsert invariant).
@@ -223,9 +223,12 @@ def test_scan_no_github_seeds_returns_zero(isolated_db, _no_embeddings):
     CompetitorSourceService.add_source(project_id, "https://acme.com/product")
 
     result = DiscoveryService.scan_project(project_id)
-    assert result == {"scanned": 0, "suggestions": 0, "readme_mode": result["readme_mode"]}
     assert result["scanned"] == 0
     assert result["suggestions"] == 0
+    assert result["seeds_total"] == 0
+    assert result["seeds_scanned"] == 0
+    assert result["truncated"] is False
+    assert result["readme_mode"] in {"text", "off"}
 
 
 def test_scan_one_bad_seed_does_not_abort(_no_embeddings, isolated_db, monkeypatch):
@@ -271,6 +274,136 @@ def test_scan_readme_mode_reported_and_does_not_block(_seeded_project, _no_embed
     assert off_result["suggestions"] >= 1
 
 
+def test_scan_caps_seeds_and_reports_truncation(isolated_db, _no_embeddings, monkeypatch):
+    """Fix 3: scan fans out AT MOST max_seeds seeds and reports the truncation.
+
+    A project with more github_repo seeds than ``max_seeds`` only scans the cap,
+    and the result carries seeds_total > seeds_scanned with truncated=True."""
+    project_id = create_project(name="many-seeds")
+    for i in range(5):
+        CompetitorSourceService.add_source(project_id, f"https://github.com/org{i}/repo{i}")
+
+    scanned_seeds: list = []
+
+    def _topics(cls, owner, repo, **kwargs):
+        scanned_seeds.append((owner, repo))
+        return []
+
+    monkeypatch.setattr(GitHubSimilarityClient, "find_by_shared_topics", classmethod(_topics))
+    monkeypatch.setattr(
+        GitHubSimilarityClient, "find_by_stargazer_overlap", classmethod(lambda cls, o, r, **k: [])
+    )
+    monkeypatch.setattr(
+        GitHubSimilarityClient, "repo_metadata", classmethod(lambda cls, o, r: None)
+    )
+
+    result = DiscoveryService.scan_project(project_id, max_seeds=2)
+    assert result["seeds_total"] == 5
+    assert result["seeds_scanned"] == 2
+    assert result["scanned"] == 2
+    assert result["truncated"] is True
+    # The client was only invoked for the 2 capped seeds.
+    assert len(scanned_seeds) == 2
+
+
+def test_scan_request_budget_circuit_breaker(isolated_db, _no_embeddings, monkeypatch):
+    """Fix 3: the scan-wide request budget stops launching seed fan-outs early.
+
+    A tiny ``max_requests`` budget (below even one seed's estimated cost) trips the
+    circuit-breaker before the first fan-out — truncated=True, 0 seeds scanned."""
+    project_id = create_project(name="budget-breaker")
+    for i in range(3):
+        CompetitorSourceService.add_source(project_id, f"https://github.com/org{i}/repo{i}")
+
+    called: list = []
+    monkeypatch.setattr(
+        GitHubSimilarityClient,
+        "find_by_shared_topics",
+        classmethod(lambda cls, o, r, **k: called.append((o, r)) or []),
+    )
+    monkeypatch.setattr(
+        GitHubSimilarityClient, "find_by_stargazer_overlap", classmethod(lambda cls, o, r, **k: [])
+    )
+    monkeypatch.setattr(
+        GitHubSimilarityClient, "repo_metadata", classmethod(lambda cls, o, r: None)
+    )
+
+    result = DiscoveryService.scan_project(project_id, max_requests=1)
+    assert result["truncated"] is True
+    assert result["seeds_scanned"] == 0
+    assert called == []  # breaker tripped before any fan-out
+
+
+def test_scan_no_truncation_when_under_caps(_seeded_project, _no_embeddings, monkeypatch):
+    """Under both caps, truncated=False and seeds_scanned == seeds_total."""
+    project_id = _seeded_project
+    _stub_client(monkeypatch, topics=_STRONG_TOPICS, stars=_STRONG_STARS)
+
+    result = DiscoveryService.scan_project(project_id)
+    assert result["truncated"] is False
+    assert result["seeds_scanned"] == result["seeds_total"] == 2
+
+
+def test_readme_lens_aborts_on_throttle(_seeded_project, monkeypatch):
+    """Fix 4: a 403/429 README fetch aborts the README lens for the rest of the
+    scan instead of burning a GET per candidate. ``_fetch_readme`` returns the
+    throttle sentinel and only ONE README fetch happens (the seed's)."""
+    project_id = _seeded_project
+    # Force the text README path (no embeddings) but DO exercise _fetch_readme.
+    monkeypatch.setattr(embedding_service, "is_available", lambda: False)
+
+    # Many candidates so we can prove the lens stops after the throttle.
+    topics = [
+        {
+            "owner": f"cand{i}",
+            "repo": f"r{i}",
+            "url": f"https://github.com/cand{i}/r{i}",
+            "stargazers_count": 100,
+            "topics": ["agents", "llm", "orchestration"],
+            "shared_topics": ["agents", "llm", "orchestration"],
+            "archived": False,
+            "fork": False,
+        }
+        for i in range(5)
+    ]
+    # repo_metadata must return a dict so the README lens has a seed to fetch
+    # (seed_meta_by_key is populated only from non-None metadata).
+    seed_meta = {
+        "owner": "me",
+        "repo": "seed",
+        "url": "https://github.com/me/seed",
+        "topics": ["agents"],
+        "language": "Python",
+        "stargazers_count": 10,
+        "archived": False,
+        "fork": False,
+    }
+    _stub_client(monkeypatch, topics=topics, stars=[], metadata=seed_meta)
+
+    fetch_calls: list = []
+
+    def _throttled_fetch(owner, repo):
+        fetch_calls.append((owner, repo))
+        # First call is the seed README (returns text); the very first CANDIDATE
+        # fetch throttles → lens must abort, no further candidate fetches.
+        if len(fetch_calls) == 1:
+            return "seed readme text about agents and orchestration"
+        return ds_module._README_THROTTLED
+
+    monkeypatch.setattr(DiscoveryService, "_fetch_readme", staticmethod(_throttled_fetch))
+
+    result = DiscoveryService.scan_project(project_id)
+    # Seed README (1) + exactly ONE candidate fetch (the throttling one) = 2 total.
+    assert len(fetch_calls) == 2, f"README lens did not abort on throttle: {fetch_calls}"
+    # Scan still completed and wrote rows (README throttle never blocks the scan).
+    assert result["suggestions"] >= 1
+    # No candidate carries a readme_similarity (the lens aborted before any fired).
+    rows = discovery_suggestions.list_suggestions(project_id)
+    assert all(
+        not (isinstance(r["evidence"], dict) and "readme_similarity" in r["evidence"]) for r in rows
+    )
+
+
 # --------------------------------------------------------------------------- #
 # list / promote / dismiss
 # --------------------------------------------------------------------------- #
@@ -313,7 +446,7 @@ def test_promote_calls_add_source_with_discovery_origin(
 
     monkeypatch.setattr(CompetitorSourceService, "add_source", staticmethod(_spy_add_source))
 
-    out = DiscoveryService.promote_suggestion(rival["id"])
+    out = DiscoveryService.promote_suggestion(project_id, rival["id"])
 
     assert len(calls) == 1
     assert calls[0]["origin"] == "discovery"
@@ -333,8 +466,99 @@ def test_promote_calls_add_source_with_discovery_origin(
 
 
 def test_promote_unknown_suggestion_raises(isolated_db, _no_embeddings):
+    project_id = create_project(name="promote-unknown")
     with pytest.raises(ValueError):
-        DiscoveryService.promote_suggestion("dsug-nope0000")
+        DiscoveryService.promote_suggestion(project_id, "dsug-nope0000")
+
+
+def test_promote_foreign_project_suggestion_raises(_seeded_project, _no_embeddings, monkeypatch):
+    """IDOR: promoting via the WRONG project id raises ValueError (route → 404),
+    and does NOT add a source — even though the suggestion id is real."""
+    project_id = _seeded_project
+    _stub_client(monkeypatch, topics=_STRONG_TOPICS, stars=_STRONG_STARS)
+    DiscoveryService.scan_project(project_id)
+    rival = next(
+        r
+        for r in discovery_suggestions.list_suggestions(project_id)
+        if r["candidate_repo"] == "rival"
+    )
+
+    other_project = create_project(name="attacker-project")
+    with pytest.raises(ValueError):
+        DiscoveryService.promote_suggestion(other_project, rival["id"])
+
+    # The suggestion is untouched (still 'suggested') and no source was created.
+    assert discovery_suggestions.get_suggestion(rival["id"])["status"] == "suggested"
+    assert CompetitorSourceService.list_sources(other_project) == []
+
+
+def test_promote_is_idempotent_single_source_on_double_accept(
+    _seeded_project, _no_embeddings, monkeypatch
+):
+    """Fix 5: a SECOND accept of an already-'added' suggestion returns the EXISTING
+    source and does NOT call add_source again — exactly ONE competitor_source row."""
+    project_id = _seeded_project
+    _stub_client(monkeypatch, topics=_STRONG_TOPICS, stars=_STRONG_STARS)
+    DiscoveryService.scan_project(project_id)
+    rival = next(
+        r
+        for r in discovery_suggestions.list_suggestions(project_id)
+        if r["candidate_repo"] == "rival"
+    )
+
+    add_calls: list = []
+    real_add = CompetitorSourceService.add_source
+
+    def _spy_add(pid, url, label=None, origin="manual"):
+        add_calls.append(url)
+        return real_add(pid, url, label=label, origin=origin)
+
+    monkeypatch.setattr(CompetitorSourceService, "add_source", staticmethod(_spy_add))
+
+    first = DiscoveryService.promote_suggestion(project_id, rival["id"])
+    second = DiscoveryService.promote_suggestion(project_id, rival["id"])
+
+    # add_source called exactly ONCE despite two accepts.
+    assert len(add_calls) == 1
+    # Both calls return the SAME source id.
+    assert first["source"]["id"] == second["source"]["id"]
+
+    # Exactly one competitor_source row for that candidate url.
+    sources = [
+        s
+        for s in CompetitorSourceService.list_sources(project_id)
+        if s["url"] == "https://github.com/acme/rival"
+    ]
+    assert len(sources) == 1
+
+
+def test_promote_dismissed_raises_promotion_conflict(_seeded_project, _no_embeddings, monkeypatch):
+    """Fix 5: accepting a DISMISSED suggestion raises PromotionConflict (route → 409)
+    rather than resurrecting it; no source is added."""
+    project_id = _seeded_project
+    _stub_client(monkeypatch, topics=_STRONG_TOPICS, stars=_STRONG_STARS)
+    DiscoveryService.scan_project(project_id)
+    rival = next(
+        r
+        for r in discovery_suggestions.list_suggestions(project_id)
+        if r["candidate_repo"] == "rival"
+    )
+    DiscoveryService.dismiss_suggestion(project_id, rival["id"])
+
+    # The _seeded_project fixture already watches two seed sources; record the
+    # baseline so we can assert NO new (discovery) source was added.
+    sources_before = len(CompetitorSourceService.list_sources(project_id))
+
+    with pytest.raises(ds_module.PromotionConflict):
+        DiscoveryService.promote_suggestion(project_id, rival["id"])
+
+    # Still dismissed; no NEW source created (the rival candidate was not promoted).
+    assert discovery_suggestions.get_suggestion(rival["id"])["status"] == "dismissed"
+    assert len(CompetitorSourceService.list_sources(project_id)) == sources_before
+    assert not any(
+        s["url"] == "https://github.com/acme/rival"
+        for s in CompetitorSourceService.list_sources(project_id)
+    )
 
 
 def test_dismiss_flips_status_and_returns_row(_seeded_project, _no_embeddings, monkeypatch):
@@ -347,14 +571,15 @@ def test_dismiss_flips_status_and_returns_row(_seeded_project, _no_embeddings, m
         if r["candidate_repo"] == "rival"
     )
 
-    out = DiscoveryService.dismiss_suggestion(rival["id"])
+    out = DiscoveryService.dismiss_suggestion(project_id, rival["id"])
     assert out["suggestion"]["status"] == "dismissed"
     assert discovery_suggestions.get_suggestion(rival["id"])["status"] == "dismissed"
 
 
 def test_dismiss_unknown_suggestion_raises(isolated_db, _no_embeddings):
+    project_id = create_project(name="dismiss-unknown")
     with pytest.raises(ValueError):
-        DiscoveryService.dismiss_suggestion("dsug-nope0000")
+        DiscoveryService.dismiss_suggestion(project_id, "dsug-nope0000")
 
 
 # --------------------------------------------------------------------------- #

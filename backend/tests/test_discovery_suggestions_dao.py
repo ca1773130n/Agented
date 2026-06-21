@@ -163,6 +163,38 @@ def test_set_status_unknown_id_returns_none(project):
     assert dao.set_status("dsug-missing0", "dismissed") is None
 
 
+def test_get_suggestion_project_scoped_blocks_foreign(project, isolated_db):
+    """A project-scoped get returns None for a suggestion owned by ANOTHER project
+    (the IDOR guard the accept/dismiss path relies on)."""
+    other = create_project(name="Foreign project")
+    row = dao.upsert_suggestion(other, "acme", "widget", "https://github.com/acme/widget")
+    # Unscoped read still finds it; scoped to the wrong project returns None.
+    assert dao.get_suggestion(row["id"]) is not None
+    assert dao.get_suggestion(row["id"], project_id=other) is not None
+    assert dao.get_suggestion(row["id"], project_id=project) is None
+
+
+def test_set_status_project_scoped_is_noop_for_foreign(project, isolated_db):
+    """``set_status`` scoped to the wrong project does NOT mutate the row and
+    returns None — closing the IDOR where project A flips project B's suggestion."""
+    other = create_project(name="Foreign project")
+    row = dao.upsert_suggestion(
+        other, "acme", "widget", "https://github.com/acme/widget", score=0.5
+    )
+
+    # Project A (``project``) tries to dismiss project B's (``other``) suggestion.
+    result = dao.set_status(row["id"], "dismissed", project_id=project)
+    assert result is None  # scoped mutation found no matching row
+
+    # The suggestion is UNCHANGED — still 'suggested' under its real project.
+    unchanged = dao.get_suggestion(row["id"])
+    assert unchanged["status"] == "suggested"
+
+    # The legitimate owner CAN flip it.
+    owned = dao.set_status(row["id"], "dismissed", project_id=other)
+    assert owned["status"] == "dismissed"
+
+
 def test_evidence_list_round_trips(project):
     row = dao.upsert_suggestion(
         project,

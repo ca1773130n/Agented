@@ -128,6 +128,55 @@ def test_default_active_signals_excludes_absent_readme():
     assert inferred == explicit
 
 
+def test_rank_candidates_per_candidate_active_signals_no_readme_not_penalized():
+    """The README fix (per-candidate active signals): when README fired for SOME
+    candidate this scan (so the caller passes readme in the global active set), a
+    candidate that has NO README must score IDENTICALLY to the same candidate
+    scored without readme in the active set — never a 0.0-README penalty.
+
+    Reproduces the original bug: a global ``active_signals`` containing ``readme``
+    used to drag every README-less candidate down by README's full weight."""
+    seed = {"language": "Python"}
+    # One candidate HAS a README similarity (so the scan's global active set
+    # legitimately includes 'readme'); the other has NONE.
+    cands = [
+        {
+            "owner": "withreadme",
+            "repo": "a",
+            "shared_stargazers": 7,
+            "shared_topics": ["agents", "llm"],
+            "readme_similarity": 0.9,
+        },
+        {
+            "owner": "noreadme",
+            "repo": "b",
+            "shared_stargazers": 7,
+            "shared_topics": ["agents", "llm"],
+        },
+    ]
+    # The scan surfaced a README for >=1 candidate → README is in the active set.
+    global_active = {"star", "topic", "readme", "prior"}
+    ranked = rank_candidates(seed, cands, active_signals=global_active)
+    no_readme = next(c for c in ranked if c["owner"] == "noreadme")
+
+    # The README-less candidate, scored under a global active set that includes
+    # README, must equal its score under the README-OFF active set (renormalized
+    # over its OWN present signals — star/topic/prior only).
+    baseline = rank_candidates(seed, [cands[1]], active_signals={"star", "topic", "prior"})[0]
+    assert no_readme["score"] == baseline["score"]
+
+    # And it must NOT be lower than the same candidate scored with README treated
+    # as active-but-absent under the global set (the exact penalty the bug caused).
+    cand_b_evidence = {
+        "shared_stargazers": 7,
+        "shared_topics": ["agents", "llm"],
+        "same_language": True,
+        "multi_seed_bonus": False,
+    }
+    penalized = score_candidate(cand_b_evidence, active_signals=global_active)
+    assert no_readme["score"] > penalized  # bug would have made them EQUAL (penalty)
+
+
 # ---------------------------------------------------------------------------
 # render_reason — only fired signals appear
 # ---------------------------------------------------------------------------

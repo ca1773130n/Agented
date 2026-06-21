@@ -204,6 +204,94 @@ def test_dismiss_unknown_suggestion_404(isolated_db):
 
 
 # ---------------------------------------------------------------------------
+# IDOR — accept/dismiss must be scoped to the URL's project (Fix 1)
+# ---------------------------------------------------------------------------
+
+
+def test_accept_cross_project_suggestion_404_and_unchanged(isolated_db):
+    """A suggestion seeded under project B, accepted via project A's URL → 404,
+    and the suggestion is UNCHANGED + no source promoted under either project.
+
+    The caller has full access to project A (no can_access patch) but pairs A's
+    URL with B's suggestion id — the per-row project scoping must 404 it."""
+    project_a = create_project(name="proj-a")
+    project_b = create_project(name="proj-b")
+    sug_b = _seed_suggestion(project_b, "victim", "repo", score=0.9, reason="b's row")
+
+    with _client() as c:
+        resp = c.post(f"/api/projects/{project_a}/discovery/suggestions/{sug_b['id']}/accept")
+    assert resp.status_code == 404
+
+    # The suggestion under B is untouched (still 'suggested', no source stamp).
+    after = dao.get_suggestion(sug_b["id"])
+    assert after["status"] == "suggested"
+    assert after["source_id"] is None
+    # No competitor_source promoted under either project.
+    with get_connection() as conn:
+        total = conn.execute("SELECT COUNT(*) AS n FROM competitor_source").fetchone()["n"]
+    assert total == 0
+
+
+def test_dismiss_cross_project_suggestion_404_and_unchanged(isolated_db):
+    """A suggestion seeded under project B, dismissed via project A's URL → 404,
+    and the suggestion stays 'suggested' (the dismiss never landed on B's row)."""
+    project_a = create_project(name="proj-a")
+    project_b = create_project(name="proj-b")
+    sug_b = _seed_suggestion(project_b, "victim", "repo", score=0.5)
+
+    with _client() as c:
+        resp = c.post(f"/api/projects/{project_a}/discovery/suggestions/{sug_b['id']}/dismiss")
+    assert resp.status_code == 404
+    assert dao.get_suggestion(sug_b["id"])["status"] == "suggested"
+
+
+# ---------------------------------------------------------------------------
+# Idempotent promote — re-accept returns one source; dismissed → 409 (Fix 5)
+# ---------------------------------------------------------------------------
+
+
+def test_double_accept_is_idempotent_single_source(isolated_db):
+    """Two accept POSTs create exactly ONE competitor_source row; the second
+    returns the existing source (status stays 'added')."""
+    project_id = create_project(name="disc-proj")
+    sug = _seed_suggestion(project_id, "acme", "widget", score=0.9)
+
+    with _client() as c:
+        first = c.post(f"/api/projects/{project_id}/discovery/suggestions/{sug['id']}/accept")
+        second = c.post(f"/api/projects/{project_id}/discovery/suggestions/{sug['id']}/accept")
+    assert first.status_code == 201
+    assert second.status_code == 201
+    first_source = first.json()["source"]
+    second_source = second.json()["source"]
+    assert first_source["id"] == second_source["id"]
+
+    # Exactly one competitor_source row for the project.
+    with get_connection() as conn:
+        n = conn.execute(
+            "SELECT COUNT(*) AS n FROM competitor_source WHERE project_id = ?", (project_id,)
+        ).fetchone()["n"]
+    assert n == 1
+
+
+def test_accept_dismissed_suggestion_409(isolated_db):
+    """Accepting a DISMISSED suggestion → 409 (PromotionConflict), not a 201/404."""
+    project_id = create_project(name="disc-proj")
+    sug = _seed_suggestion(project_id, "noise", "repo", score=0.2)
+    dao.set_status(sug["id"], "dismissed")
+
+    with _client() as c:
+        resp = c.post(f"/api/projects/{project_id}/discovery/suggestions/{sug['id']}/accept")
+    assert resp.status_code == 409
+    # Still dismissed; no source promoted.
+    assert dao.get_suggestion(sug["id"])["status"] == "dismissed"
+    with get_connection() as conn:
+        n = conn.execute(
+            "SELECT COUNT(*) AS n FROM competitor_source WHERE project_id = ?", (project_id,)
+        ).fetchone()["n"]
+    assert n == 0
+
+
+# ---------------------------------------------------------------------------
 # IDOR — a caller without project access gets 404 (NOT 403) on EVERY route
 # ---------------------------------------------------------------------------
 

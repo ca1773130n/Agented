@@ -68,21 +68,50 @@ def _saturate(value: float, cap: int) -> float:
     return max(0.0, min(float(value), cap)) / cap
 
 
+# The cheap MVP-core signals that are ALWAYS active for every candidate (a zero
+# count just contributes 0, never a penalty). The optional lenses (``readme`` /
+# ``dep``) are active PER-CANDIDATE — only when that candidate's own evidence
+# carries the signal — so a candidate missing a README is renormalized over the
+# core set rather than carrying README's weight as a 0.0 penalty.
+_CORE_SIGNALS = frozenset({"star", "topic", "prior"})
+
+
 def _default_active_signals(evidence: dict) -> set[str]:
-    """Infer which signals are active from the evidence when the caller omits it.
+    """Infer which signals are active from THIS candidate's evidence.
 
     ``star``/``topic``/``prior`` are always considered active (cheap MVP-core
     signals — a zero count just contributes 0). ``readme`` is active only when a
     non-null ``readme_similarity`` is present; ``dep`` only when ``is_dependent``
-    is present. This keeps a no-README run from carrying README's weight in the
-    denominator.
+    is present. This keeps a candidate WITHOUT a README from carrying README's
+    weight in the denominator (an absent optional signal must never lower the
+    score — the design's renormalize-over-active contract).
     """
-    active = {"star", "topic", "prior"}
+    active = set(_CORE_SIGNALS)
     if evidence.get("readme_similarity") is not None:
         active.add("readme")
     if evidence.get("is_dependent") is not None:
         active.add("dep")
     return active
+
+
+def _candidate_active_signals(evidence: dict, active_signals: set[str] | None) -> set[str]:
+    """Resolve the active signal set for ONE candidate (per-candidate, not global).
+
+    The caller's ``active_signals`` (when supplied) constrains which OPTIONAL
+    lenses may ever count this scan (e.g. README was never fetched → don't let
+    any candidate claim it). But within that ceiling each candidate only counts a
+    lens its OWN evidence carries: a scan where README fired for *some*
+    candidates must still renormalize a README-less candidate over only the core
+    signals, never penalizing it with a 0.0 README contribution. Core signals are
+    always active. When ``active_signals`` is None we infer purely from evidence.
+    """
+    present = _default_active_signals(evidence)
+    if active_signals is None:
+        return present
+    allowed = {s for s in active_signals if s in _SIGNAL_WEIGHTS}
+    # Core signals stay on regardless; optional lenses count only when BOTH the
+    # caller allows them AND this candidate's evidence actually carries them.
+    return (present & allowed) | (present & _CORE_SIGNALS)
 
 
 def _signal_contributions(evidence: dict) -> dict[str, float]:
@@ -209,7 +238,12 @@ def rank_candidates(
         evidence = _build_evidence(
             cand, seed_language, (owner.lower(), repo.lower()), multi_seed_keys
         )
-        score = score_candidate(evidence, active_signals=active_signals)
+        # Resolve active signals PER-CANDIDATE: an optional lens (README /
+        # dependents) only counts for a candidate whose own evidence carries it,
+        # so a README-less candidate renormalizes over the core set and is never
+        # penalized for a signal that fired only on its peers.
+        cand_active = _candidate_active_signals(evidence, active_signals)
+        score = score_candidate(evidence, active_signals=cand_active)
         ranked.append(
             {
                 "owner": owner,

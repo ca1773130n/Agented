@@ -40,11 +40,12 @@ from __future__ import annotations
 from typing import Any
 
 from litestar import Router, get, post
-from litestar.exceptions import NotFoundException
+from litestar.exceptions import ClientException, NotFoundException
+from litestar.status_codes import HTTP_409_CONFLICT
 
 from app.db.owned_entities import can_access
 from app.db.projects import get_project
-from app.services.discovery_service import DiscoveryService
+from app.services.discovery_service import DiscoveryService, PromotionConflict
 
 from ..auth import Caller
 
@@ -110,14 +111,20 @@ def list_discovery_suggestions(project_id: str, caller: Caller) -> dict[str, Any
 def accept_discovery_suggestion(project_id: str, sid: str, caller: Caller) -> dict[str, Any]:
     """Promote a suggestion into a watched ``competitor_source`` (origin='discovery').
 
-    Delegates to ``DiscoveryService.promote_suggestion`` which calls
-    ``add_source(..., origin='discovery')`` and stamps the suggestion
-    ``status='added'`` + ``source_id``. Returns ``{source, suggestion}``. An
-    unknown ``sid`` (``ValueError`` out of the service) → 404.
+    Delegates to ``DiscoveryService.promote_suggestion(project_id, sid)`` — which
+    is project-SCOPED (a suggestion owned by another project 404s, not just an
+    unknown id — the IDOR fix) and IDEMPOTENT (a re-accept of an already-added
+    suggestion returns the existing source without duplicating it). Returns
+    ``{source, suggestion}``.
+
+    * unknown / foreign-project ``sid`` (``ValueError``) → 404.
+    * accepting a ``dismissed`` suggestion (``PromotionConflict``) → 409.
     """
     _assert_project_access(project_id, caller)
     try:
-        return DiscoveryService.promote_suggestion(sid)
+        return DiscoveryService.promote_suggestion(project_id, sid)
+    except PromotionConflict as exc:
+        raise ClientException(detail=str(exc), status_code=HTTP_409_CONFLICT) from None
     except ValueError:
         raise NotFoundException(detail="Discovery suggestion not found") from None
 
@@ -126,12 +133,14 @@ def accept_discovery_suggestion(project_id: str, sid: str, caller: Caller) -> di
 def dismiss_discovery_suggestion(project_id: str, sid: str, caller: Caller) -> dict[str, Any]:
     """Dismiss a suggestion — flip its status to ``dismissed`` (sticky on re-scan).
 
-    Delegates to ``DiscoveryService.dismiss_suggestion``. Returns
-    ``{suggestion}``. An unknown ``sid`` (``ValueError``) → 404.
+    Delegates to ``DiscoveryService.dismiss_suggestion(project_id, sid)``, which is
+    project-SCOPED (a suggestion owned by another project 404s — the IDOR fix).
+    Returns ``{suggestion}``. An unknown / foreign-project ``sid`` (``ValueError``)
+    → 404.
     """
     _assert_project_access(project_id, caller)
     try:
-        return DiscoveryService.dismiss_suggestion(sid)
+        return DiscoveryService.dismiss_suggestion(project_id, sid)
     except ValueError:
         raise NotFoundException(detail="Discovery suggestion not found") from None
 

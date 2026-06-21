@@ -67,6 +67,14 @@ _MAX_REQUESTS = 120  # hard cap on total GETs per overlap call
 # S1 default candidate cap.
 _DEFAULT_MAX_RESULTS = 30
 
+# S1 topic fan-out caps. GitHub's code search treats `topic:a topic:b` as AND
+# (a repo must carry EVERY listed topic) — but the intent is "shares >= 1 topic"
+# (OR). So we run one search per top-K topic (most-saturating topics first) and
+# merge/dedupe candidates, tracking which topics each shares. ``_TOPIC_SEARCH_CAP``
+# bounds the number of searches per seed (each is one request against the search
+# bucket) regardless of how many topics the seed declares.
+_TOPIC_SEARCH_CAP = 5
+
 # GitHub's per-page maximum for paginated list endpoints.
 _PER_PAGE = 100
 
@@ -188,18 +196,33 @@ class GitHubSimilarityClient:
 
     @classmethod
     def find_by_shared_topics(
-        cls, owner: str, repo: str, *, max_results: int = _DEFAULT_MAX_RESULTS
+        cls,
+        owner: str,
+        repo: str,
+        *,
+        max_results: int = _DEFAULT_MAX_RESULTS,
+        topic_search_cap: int = _TOPIC_SEARCH_CAP,
     ) -> list[dict]:
-        """S1 — candidates that share ≥1 topic with the seed.
+        """S1 — candidates that share ≥1 topic with the seed (OR, not AND).
 
-        Reads the seed's topics (via :meth:`repo_metadata`), then issues a single
-        ``GET search/repositories?q=topic:T1+topic:T2&sort=stars`` and returns up
-        to ``max_results`` candidate dicts, EXCLUDING the seed itself:
+        Reads the seed's topics (via :meth:`repo_metadata`), then runs ONE
+        ``GET search/repositories?q=topic:T&sort=stars`` PER topic (top
+        ``topic_search_cap`` topics) and merges/dedupes the candidates, EXCLUDING
+        the seed itself:
 
-            {owner, repo, url, stargazers_count, topics, shared_topics: [...]}
+            {owner, repo, url, stargazers_count, language, topics, shared_topics}
 
-        Returns ``[]`` when the token is unset, the seed has no topics, or the
-        search errors / throttles (back off — never raise).
+        GitHub search ANDs space-joined ``topic:`` qualifiers (a repo must have
+        EVERY listed topic), so a single combined query only surfaces repos
+        sharing ALL the seed's topics — too strict for "shares ≥1 topic". Running
+        a search per topic and unioning the results restores the OR semantics;
+        ``shared_topics`` accumulates every seed topic a merged candidate matches.
+
+        Each candidate dict's ``shared_topics`` reflects the full case-insensitive
+        intersection with the seed's topics (recomputed on merge), not just the
+        topic whose search surfaced it. Returns ``[]`` when the token is unset,
+        the seed has no topics, or every search errors / throttles. A throttle on
+        any topic search backs off the remaining topic searches (never raises).
         """
         headers = cls._headers()
         if headers is None:
@@ -212,41 +235,55 @@ class GitHubSimilarityClient:
         if not seed_topics:
             return []
         seed_topic_set = {t.lower() for t in seed_topics}
-
-        # One search query OR-joining the seed's topics, most-starred first.
-        query = " ".join(f"topic:{t}" for t in seed_topics)
-        resp = cls._get(
-            f"{_API_ROOT}/search/repositories",
-            headers,
-            params={"q": query, "sort": "stars", "order": "desc", "per_page": _PER_PAGE},
-        )
-        # A throttle or any non-200 → return nothing (back off, never raise).
-        if resp is None or resp.status_code != 200:
-            if cls._is_throttled(resp):
-                logger.warning(
-                    "topic search throttled (HTTP %s) for %s/%s", resp.status_code, owner, repo
-                )
-            return []
-
-        body = cls._json_or_none(resp)
-        items = (body or {}).get("items") if isinstance(body, dict) else None
-        if not isinstance(items, list):
-            return []
-
         seed_key = (owner.lower(), repo.lower())
-        candidates: list[dict] = []
-        for item in items:
-            if not isinstance(item, dict):
+
+        # One search per top-K topic (OR), most-starred first. Dedupe across
+        # searches keyed by lowercased owner/repo; recompute shared_topics on
+        # merge so a candidate that surfaced via several topic searches reports
+        # the full intersection.
+        merged: dict[tuple[str, str], dict] = {}
+        for topic in seed_topics[: max(1, topic_search_cap)]:
+            resp = cls._get(
+                f"{_API_ROOT}/search/repositories",
+                headers,
+                params={
+                    "q": f"topic:{topic}",
+                    "sort": "stars",
+                    "order": "desc",
+                    "per_page": _PER_PAGE,
+                },
+            )
+            if resp is None or resp.status_code != 200:
+                if cls._is_throttled(resp):
+                    logger.warning(
+                        "topic search throttled (HTTP %s) for %s/%s — backing off remaining topics",
+                        resp.status_code,
+                        owner,
+                        repo,
+                    )
+                    break  # back off the rest of the topic fan-out
+                continue  # a non-throttle miss on one topic: skip it, try the next
+            body = cls._json_or_none(resp)
+            items = (body or {}).get("items") if isinstance(body, dict) else None
+            if not isinstance(items, list):
                 continue
-            cand = cls._candidate_from_search_item(item, seed_topic_set)
-            if cand is None:
-                continue
-            if (cand["owner"].lower(), cand["repo"].lower()) == seed_key:
-                continue  # exclude the seed itself
-            candidates.append(cand)
-            if len(candidates) >= max_results:
-                break
-        return candidates
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                cand = cls._candidate_from_search_item(item, seed_topic_set)
+                if cand is None:
+                    continue
+                key = (cand["owner"].lower(), cand["repo"].lower())
+                if key == seed_key:
+                    continue  # exclude the seed itself
+                if key not in merged:
+                    merged[key] = cand
+
+        # Highest-starred first across the merged set, then cap.
+        candidates = sorted(
+            merged.values(), key=lambda c: c.get("stargazers_count") or 0, reverse=True
+        )
+        return candidates[:max_results]
 
     @staticmethod
     def _candidate_from_search_item(item: dict, seed_topic_set: set[str]) -> Optional[dict]:
@@ -272,6 +309,9 @@ class GitHubSimilarityClient:
             "repo": name,
             "url": item.get("html_url") or f"https://github.com/{owner_login}/{name}",
             "stargazers_count": int(item.get("stargazers_count") or 0),
+            # ``language`` feeds the ranker's same-language prior — omitting it
+            # left that prior dead at 0.0 for every search candidate.
+            "language": item.get("language"),
             "topics": cand_topics,
             "shared_topics": shared,
             "archived": bool(item.get("archived")),
