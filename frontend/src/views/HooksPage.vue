@@ -162,7 +162,10 @@ const HOOK_EVENTS: HookEvent[] = [
   'Notification',
 ];
 
-const filteredHooks = computed(() => {
+// Client-side scope filters (event / project) the server list does not handle.
+// Search + sort are now server-driven (see loadHooks); these only narrow the
+// already-fetched, server-filtered page.
+const displayHooks = computed(() => {
   return hooks.value.filter(h => {
     if (filterEvent.value && h.event !== filterEvent.value) return false;
     if (filterProject.value === 'global' && h.project_id) return false;
@@ -171,8 +174,10 @@ const filteredHooks = computed(() => {
   });
 });
 
-const { searchQuery, sortField, sortOrder, filteredAndSorted, resultCount, totalCount } = useListFilter({
-  items: filteredHooks,
+// useListFilter still owns the search/sort UI state + sessionStorage persistence;
+// we drive the SERVER call with these refs instead of its client-side filteredAndSorted.
+const { searchQuery, sortField, sortOrder } = useListFilter({
+  items: hooks,
   searchFields: ['name', 'description'] as (keyof Hook)[],
   storageKey: 'hooks-list-filter',
 });
@@ -220,7 +225,13 @@ async function loadHooks() {
   isLoading.value = true;
   loadError.value = null;
   try {
-    const data = await hookApi.list(undefined, { limit: pagination.pageSize.value, offset: pagination.offset.value });
+    const data = await hookApi.list(undefined, {
+      limit: pagination.pageSize.value,
+      offset: pagination.offset.value,
+      search: searchQuery.value.trim() || undefined,
+      sort: sortField.value as 'name' | 'created_at' | 'updated_at',
+      order: sortOrder.value,
+    });
     hooks.value = data.hooks || [];
     if (data.total_count != null) pagination.totalCount.value = data.total_count;
   } catch (e) {
@@ -231,8 +242,19 @@ async function loadHooks() {
   }
 }
 
+// Debounce search so we don't fire a request per keystroke (~300ms).
+let searchDebounce: ReturnType<typeof setTimeout> | undefined;
+watch(searchQuery, () => {
+  if (searchDebounce) clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => {
+    pagination.resetToFirstPage();
+    loadHooks();
+  }, 300);
+});
+
 watch([() => pagination.currentPage.value, () => pagination.pageSize.value], () => { loadHooks(); });
-watch([searchQuery, sortField, sortOrder], () => { pagination.resetToFirstPage(); });
+// Sort changes refetch immediately (reset to page 1).
+watch([sortField, sortOrder], () => { pagination.resetToFirstPage(); loadHooks(); });
 watch([filterEvent, filterProject], () => { pagination.resetToFirstPage(); loadHooks(); });
 
 function confirmDelete(hook: Hook) {
@@ -400,8 +422,8 @@ onMounted(() => {
       v-model:sortField="sortField"
       v-model:sortOrder="sortOrder"
       :sort-options="listSortOptions"
-      :result-count="resultCount"
-      :total-count="totalCount"
+      :result-count="displayHooks.length"
+      :total-count="pagination.totalCount.value"
       :placeholder="t('hooks.searchPlaceholder')"
     />
 
@@ -425,14 +447,14 @@ onMounted(() => {
     </EmptyState>
 
     <EmptyState
-      v-else-if="filteredAndSorted.length === 0"
+      v-else-if="displayHooks.length === 0"
       :title="t('hooks.noMatch.title')"
       :description="t('hooks.noMatch.description')"
     />
 
     <div v-else class="hooks-grid">
       <div
-        v-for="hook in filteredAndSorted"
+        v-for="hook in displayHooks"
         :key="hook.id"
         :id="'entity-' + hook.id"
         :data-entity-name="hook.name"

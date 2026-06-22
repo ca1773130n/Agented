@@ -163,7 +163,10 @@ const RULE_TYPE_LABELS = computed<Record<RuleType, string>>(() => ({
   validation: t('rules.ruleTypes.validation'),
 }));
 
-const filteredRules = computed(() => {
+// Client-side scope filters (type / project) the server list does not handle.
+// Search + sort are now server-driven (see loadRules); these only narrow the
+// already-fetched, server-filtered page.
+const displayRules = computed(() => {
   return rules.value.filter(r => {
     if (filterType.value && r.rule_type !== filterType.value) return false;
     if (filterProject.value === 'global' && r.project_id) return false;
@@ -172,8 +175,10 @@ const filteredRules = computed(() => {
   });
 });
 
-const { searchQuery, sortField, sortOrder, filteredAndSorted, resultCount, totalCount } = useListFilter({
-  items: filteredRules,
+// useListFilter still owns the search/sort UI state + sessionStorage persistence;
+// we drive the SERVER call with these refs instead of its client-side filteredAndSorted.
+const { searchQuery, sortField, sortOrder } = useListFilter({
+  items: rules,
   searchFields: ['name', 'description'] as (keyof Rule)[],
   storageKey: 'rules-list-filter',
 });
@@ -220,7 +225,13 @@ async function loadRules() {
   isLoading.value = true;
   loadError.value = null;
   try {
-    const data = await ruleApi.list(undefined, { limit: pagination.pageSize.value, offset: pagination.offset.value });
+    const data = await ruleApi.list(undefined, {
+      limit: pagination.pageSize.value,
+      offset: pagination.offset.value,
+      search: searchQuery.value.trim() || undefined,
+      sort: sortField.value as 'name' | 'created_at' | 'updated_at',
+      order: sortOrder.value,
+    });
     rules.value = data.rules || [];
     if (data.total_count != null) pagination.totalCount.value = data.total_count;
   } catch (e) {
@@ -235,8 +246,20 @@ watch([() => pagination.currentPage.value, () => pagination.pageSize.value], () 
   loadRules();
 });
 
-watch([searchQuery, sortField, sortOrder], () => {
+// Debounce search so we don't fire a request per keystroke (~300ms).
+let searchDebounce: ReturnType<typeof setTimeout> | undefined;
+watch(searchQuery, () => {
+  if (searchDebounce) clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => {
+    pagination.resetToFirstPage();
+    loadRules();
+  }, 300);
+});
+
+// Sort changes refetch immediately (reset to page 1).
+watch([sortField, sortOrder], () => {
   pagination.resetToFirstPage();
+  loadRules();
 });
 
 watch([filterType, filterProject], () => {
@@ -416,8 +439,8 @@ onMounted(() => {
       v-model:sortField="sortField"
       v-model:sortOrder="sortOrder"
       :sort-options="listSortOptions"
-      :result-count="resultCount"
-      :total-count="totalCount"
+      :result-count="displayRules.length"
+      :total-count="pagination.totalCount.value"
       :placeholder="t('rules.searchPlaceholder')"
     />
 
@@ -441,14 +464,14 @@ onMounted(() => {
     </EmptyState>
 
     <EmptyState
-      v-else-if="filteredAndSorted.length === 0"
+      v-else-if="displayRules.length === 0"
       :title="t('rules.noMatch.title')"
       :description="t('rules.noMatch.description')"
     />
 
     <div v-else class="rules-grid">
       <div
-        v-for="rule in filteredAndSorted"
+        v-for="rule in displayRules"
         :key="rule.id"
         :id="'entity-' + rule.id"
         :data-entity-name="rule.name"

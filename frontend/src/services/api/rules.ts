@@ -12,11 +12,23 @@ import type {
 
 // Rule API
 export const ruleApi = {
-  list: (projectId?: string, pagination?: { limit?: number; offset?: number }) => {
+  list: (
+    projectId?: string,
+    pagination?: {
+      limit?: number;
+      offset?: number;
+      search?: string;
+      sort?: 'name' | 'created_at' | 'updated_at';
+      order?: 'asc' | 'desc';
+    },
+  ) => {
     const params = new URLSearchParams();
     if (projectId) params.set('project_id', projectId);
     if (pagination?.limit != null) params.set('limit', String(pagination.limit));
     if (pagination?.offset != null) params.set('offset', String(pagination.offset));
+    if (pagination?.search) params.set('search', pagination.search);
+    if (pagination?.sort) params.set('sort', pagination.sort);
+    if (pagination?.order) params.set('order', pagination.order);
     const query = params.toString();
     return apiFetch<{ rules: Rule[]; total_count?: number }>(`/admin/rules${query ? `?${query}` : ''}`);
   },
