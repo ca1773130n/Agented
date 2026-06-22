@@ -1146,6 +1146,88 @@ class TestHookCRUD:
 
 
 # =============================================================================
+# Hook search + server-side sort tests (server-search-sort feature)
+# =============================================================================
+
+
+class TestHookSearchSort:
+    def test_search_finds_off_page_row(self):
+        """Search must find a row that does NOT appear on the first page."""
+        from app.database import count_hooks
+
+        # Insert 25 'filler' hooks then one needle. Default sort is name ASC,
+        # 'filler-NN' all sort before 'needle' so the needle is on a later page.
+        for i in range(25):
+            create_hook(name=f"filler-{i:02d}", event="pre-commit")
+        create_hook(name="needle-hook", event="pre-commit", description="unique target")
+
+        # Page 1 (limit 10) should NOT contain the needle.
+        page1 = get_all_hooks(limit=10, offset=0)
+        assert "needle-hook" not in [h["name"] for h in page1]
+
+        # Server-side search across all rows finds it regardless of page.
+        found = get_all_hooks(limit=10, offset=0, search="needle")
+        assert "needle-hook" in [h["name"] for h in found]
+
+        # Description match also works.
+        found_desc = get_all_hooks(limit=10, offset=0, search="unique target")
+        assert "needle-hook" in [h["name"] for h in found_desc]
+
+    def test_total_count_reflects_search(self):
+        """count_hooks(search=...) must reflect the filter, not the page size."""
+        from app.database import count_hooks
+
+        for i in range(5):
+            create_hook(name=f"alpha-{i}", event="pre-commit")
+        create_hook(name="zzz-special", event="pre-commit")
+
+        assert count_hooks(search="special") == 1
+        assert count_hooks(search="alpha") == 5
+        # No-search count is unaffected (>= all inserted).
+        assert count_hooks() >= 6
+
+    def test_sort_by_name_asc_desc(self):
+        create_hook(name="charlie", event="e")
+        create_hook(name="alpha", event="e")
+        create_hook(name="bravo", event="e")
+        asc = [h["name"] for h in get_all_hooks(search="a", sort_field="name", sort_order="asc")]
+        desc = [h["name"] for h in get_all_hooks(search="a", sort_field="name", sort_order="desc")]
+        assert asc == sorted(asc)
+        assert desc == sorted(desc, reverse=True)
+        assert asc == list(reversed(desc))
+
+    def test_sort_by_created_at(self):
+        import time
+
+        create_hook(name="srt-first", event="e")
+        time.sleep(1.05)  # CURRENT_TIMESTAMP is second-granular
+        create_hook(name="srt-second", event="e")
+        asc = [
+            h["name"]
+            for h in get_all_hooks(search="srt-", sort_field="created_at", sort_order="asc")
+        ]
+        desc = [
+            h["name"]
+            for h in get_all_hooks(search="srt-", sort_field="created_at", sort_order="desc")
+        ]
+        assert asc.index("srt-first") < asc.index("srt-second")
+        assert desc.index("srt-second") < desc.index("srt-first")
+
+    def test_bogus_sort_and_order_do_not_error_or_inject(self):
+        """A malicious/invalid sort/order must fall back to default, not error."""
+        create_hook(name="safe-hook", event="e")
+        # SQL-injection attempt + bogus order — must not raise, must return rows.
+        rows = get_all_hooks(
+            search="safe",
+            sort_field="name; DROP TABLE hooks;--",
+            sort_order="evil",
+        )
+        assert "safe-hook" in [h["name"] for h in rows]
+        # The hooks table still exists (injection did not execute).
+        assert get_all_hooks(search="safe")
+
+
+# =============================================================================
 # Command CRUD tests
 # =============================================================================
 

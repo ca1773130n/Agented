@@ -5,6 +5,7 @@ import sqlite3
 from typing import List, Optional
 
 from .connection import get_connection
+from .owned_entities import _order_clause
 
 logger = logging.getLogger(__name__)
 
@@ -105,15 +106,23 @@ def get_all_rules(
     project_id: Optional[str] = None,
     limit: Optional[int] = None,
     offset: int = 0,
+    search: Optional[str] = None,
+    sort_field: Optional[str] = None,
+    sort_order: str = "asc",
 ) -> List[dict]:
     """Get all rules, optionally filtered by project, with optional pagination."""
     with get_connection() as conn:
         params: list = []
         if project_id:
-            sql = "SELECT * FROM rules WHERE project_id = ? OR project_id IS NULL ORDER BY name ASC"
+            sql = "SELECT * FROM rules WHERE (project_id = ? OR project_id IS NULL)"
             params.append(project_id)
         else:
-            sql = "SELECT * FROM rules ORDER BY name ASC"
+            sql = "SELECT * FROM rules WHERE 1=1"
+        if search:
+            sql += " AND (name LIKE ? OR description LIKE ?)"
+            like = f"%{search}%"
+            params.extend([like, like])
+        sql += " " + _order_clause(sort_field, sort_order, default="name")
         if limit is not None:
             sql += " LIMIT ? OFFSET ?"
             params.extend([limit, offset])
@@ -121,16 +130,20 @@ def get_all_rules(
         return [dict(row) for row in cursor.fetchall()]
 
 
-def count_rules(project_id: Optional[str] = None) -> int:
+def count_rules(project_id: Optional[str] = None, search: Optional[str] = None) -> int:
     """Count total number of rules, optionally filtered by project."""
     with get_connection() as conn:
         if project_id:
-            cursor = conn.execute(
-                "SELECT COUNT(*) FROM rules WHERE project_id = ? OR project_id IS NULL",
-                (project_id,),
-            )
+            sql = "SELECT COUNT(*) FROM rules WHERE (project_id = ? OR project_id IS NULL)"
+            params: list = [project_id]
         else:
-            cursor = conn.execute("SELECT COUNT(*) FROM rules")
+            sql = "SELECT COUNT(*) FROM rules WHERE 1=1"
+            params = []
+        if search:
+            sql += " AND (name LIKE ? OR description LIKE ?)"
+            like = f"%{search}%"
+            params.extend([like, like])
+        cursor = conn.execute(sql, params)
         return cursor.fetchone()[0]
 
 

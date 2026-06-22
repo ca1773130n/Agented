@@ -35,6 +35,26 @@ _VALID_TABLES = {
     "design_conversations",
 }
 
+# Whitelist of sortable columns. Never interpolate raw user input into a SQL
+# ORDER BY — map it through this set first so injection is structurally
+# impossible.
+_SORT_COLUMNS = {"name", "created_at", "updated_at"}
+_SORT_ORDERS = {"asc", "desc"}
+
+
+def _order_clause(sort_field: Optional[str], sort_order: Optional[str], default: str) -> str:
+    """Build a SAFE ``ORDER BY col dir`` string from whitelisted inputs.
+
+    ``sort_field`` must be in ``_SORT_COLUMNS`` or it falls back to ``default``
+    (the caller-supplied trusted column). ``sort_order`` must be asc/desc or it
+    falls back to asc. Inputs are never interpolated raw.
+    """
+    col = sort_field if sort_field in _SORT_COLUMNS else default
+    order = sort_order.lower() if isinstance(sort_order, str) else "asc"
+    if order not in _SORT_ORDERS:
+        order = "asc"
+    return f"ORDER BY {col} {order.upper()}"
+
 
 def get_for_user(
     table: str,
@@ -43,6 +63,9 @@ def get_for_user(
     offset: int = 0,
     extra_where: str = "",
     extra_params: Optional[list] = None,
+    search: Optional[str] = None,
+    sort_field: Optional[str] = None,
+    sort_order: str = "asc",
 ) -> List[dict]:
     """Generic user-scoped fetch. Allow-listed table names only."""
     if table not in _VALID_TABLES:
@@ -54,7 +77,11 @@ def get_for_user(
         sql += f" AND {extra_where}"
         if extra_params:
             params.extend(extra_params)
-    sql += " ORDER BY id ASC"
+    if search:
+        sql += " AND (name LIKE ? OR description LIKE ?)"
+        like = f"%{search}%"
+        params.extend([like, like])
+    sql += " " + _order_clause(sort_field, sort_order, default="id")
     if limit is not None:
         sql += " LIMIT ? OFFSET ?"
         params.extend([limit, offset])
@@ -64,11 +91,17 @@ def get_for_user(
         return [dict(row) for row in cursor.fetchall()]
 
 
-def count_for_user(table: str, user_id: str) -> int:
+def count_for_user(table: str, user_id: str, search: Optional[str] = None) -> int:
     if table not in _VALID_TABLES:
         raise ValueError(f"unknown owned-entity table: {table!r}")
+    sql = f"SELECT COUNT(*) FROM {table} WHERE user_id = ?"
+    params: list = [user_id]
+    if search:
+        sql += " AND (name LIKE ? OR description LIKE ?)"
+        like = f"%{search}%"
+        params.extend([like, like])
     with get_connection() as conn:
-        row = conn.execute(f"SELECT COUNT(*) FROM {table} WHERE user_id = ?", (user_id,)).fetchone()
+        row = conn.execute(sql, params).fetchone()
         return row[0] if row else 0
 
 

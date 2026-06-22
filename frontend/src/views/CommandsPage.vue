@@ -151,7 +151,10 @@ async function saveDetail() {
   }
 }
 
-const filteredCommands = computed(() => {
+// Client-side scope filter (project) the server list does not handle.
+// Search + sort are now server-driven (see loadCommands); this only narrows the
+// already-fetched, server-filtered page.
+const displayCommands = computed(() => {
   return commands.value.filter(c => {
     if (filterProject.value === 'global' && c.project_id) return false;
     if (filterProject.value && filterProject.value !== 'global' && c.project_id !== filterProject.value) return false;
@@ -159,8 +162,10 @@ const filteredCommands = computed(() => {
   });
 });
 
-const { searchQuery, sortField, sortOrder, filteredAndSorted, resultCount, totalCount } = useListFilter({
-  items: filteredCommands,
+// useListFilter still owns the search/sort UI state + sessionStorage persistence;
+// we drive the SERVER call with these refs instead of its client-side filteredAndSorted.
+const { searchQuery, sortField, sortOrder } = useListFilter({
+  items: commands,
   searchFields: ['name', 'description'] as (keyof Command)[],
   storageKey: 'commands-list-filter',
 });
@@ -206,7 +211,13 @@ async function loadCommands() {
   isLoading.value = true;
   loadError.value = null;
   try {
-    const data = await commandApi.list(undefined, { limit: pagination.pageSize.value, offset: pagination.offset.value });
+    const data = await commandApi.list(undefined, {
+      limit: pagination.pageSize.value,
+      offset: pagination.offset.value,
+      search: searchQuery.value.trim() || undefined,
+      sort: sortField.value as 'name' | 'created_at' | 'updated_at',
+      order: sortOrder.value,
+    });
     commands.value = data.commands || [];
     if (data.total_count != null) pagination.totalCount.value = data.total_count;
   } catch (e) {
@@ -218,7 +229,17 @@ async function loadCommands() {
 }
 
 watch([() => pagination.currentPage.value, () => pagination.pageSize.value], () => { loadCommands(); });
-watch([searchQuery, sortField, sortOrder], () => { pagination.resetToFirstPage(); });
+// Debounce search so we don't fire a request per keystroke (~300ms).
+let searchDebounce: ReturnType<typeof setTimeout> | undefined;
+watch(searchQuery, () => {
+  if (searchDebounce) clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => {
+    pagination.resetToFirstPage();
+    loadCommands();
+  }, 300);
+});
+// Sort changes refetch immediately (reset to page 1).
+watch([sortField, sortOrder], () => { pagination.resetToFirstPage(); loadCommands(); });
 watch(filterProject, () => { pagination.resetToFirstPage(); loadCommands(); });
 
 function confirmDelete(command: Command) {
@@ -407,8 +428,8 @@ onMounted(() => {
       v-model:sortField="sortField"
       v-model:sortOrder="sortOrder"
       :sort-options="listSortOptions"
-      :result-count="resultCount"
-      :total-count="totalCount"
+      :result-count="displayCommands.length"
+      :total-count="pagination.totalCount.value"
       :placeholder="t('commands.searchPlaceholder')"
     />
 
@@ -432,14 +453,14 @@ onMounted(() => {
     </EmptyState>
 
     <EmptyState
-      v-else-if="filteredAndSorted.length === 0"
+      v-else-if="displayCommands.length === 0"
       :title="t('commands.noMatchTitle')"
       :description="t('commands.noMatchDescription')"
     />
 
     <div v-else class="commands-grid">
       <div
-        v-for="command in filteredAndSorted"
+        v-for="command in displayCommands"
         :key="command.id"
         :id="'entity-' + command.id"
         :data-entity-name="command.name"

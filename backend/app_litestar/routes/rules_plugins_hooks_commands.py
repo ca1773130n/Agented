@@ -51,7 +51,7 @@ from app.database import create_command as db_create_command
 from app.database import create_hook as db_create_hook
 from app.database import create_plugin as db_create_plugin
 from app.database import create_rule as db_create_rule
-from app.db.owned_entities import get_for_user
+from app.db.owned_entities import count_for_user, get_for_user
 
 from ..auth import Caller
 
@@ -78,13 +78,34 @@ def list_rules(
     project_id: Optional[str] = None,
     limit: Optional[int] = None,
     offset: Optional[int] = None,
+    search: Optional[str] = None,
+    sort: Optional[str] = None,
+    order: Optional[str] = None,
 ) -> dict[str, Any]:
     if caller.user_id:
-        rows = get_for_user("rules", caller.user_id, limit=limit, offset=offset or 0)
-        return {"rules": rows, "total_count": len(rows)}
+        rows = get_for_user(
+            "rules",
+            caller.user_id,
+            limit=limit,
+            offset=offset or 0,
+            search=search,
+            sort_field=sort,
+            sort_order=order or "asc",
+        )
+        return {
+            "rules": rows,
+            "total_count": count_for_user("rules", caller.user_id, search=search),
+        }
     return {
-        "rules": get_all_rules(project_id, limit=limit, offset=offset or 0),
-        "total_count": count_rules(project_id),
+        "rules": get_all_rules(
+            project_id,
+            limit=limit,
+            offset=offset or 0,
+            search=search,
+            sort_field=sort,
+            sort_order=order or "asc",
+        ),
+        "total_count": count_rules(project_id, search=search),
     }
 
 
@@ -391,13 +412,34 @@ def list_hooks(
     project_id: Optional[str] = None,
     limit: Optional[int] = None,
     offset: Optional[int] = None,
+    search: Optional[str] = None,
+    sort: Optional[str] = None,
+    order: Optional[str] = None,
 ) -> dict[str, Any]:
     if caller.user_id:
-        rows = get_for_user("hooks", caller.user_id, limit=limit, offset=offset or 0)
-        return {"hooks": rows, "total_count": len(rows)}
+        rows = get_for_user(
+            "hooks",
+            caller.user_id,
+            limit=limit,
+            offset=offset or 0,
+            search=search,
+            sort_field=sort,
+            sort_order=order or "asc",
+        )
+        return {
+            "hooks": rows,
+            "total_count": count_for_user("hooks", caller.user_id, search=search),
+        }
     return {
-        "hooks": get_all_hooks(project_id, limit=limit, offset=offset or 0),
-        "total_count": count_hooks(project_id),
+        "hooks": get_all_hooks(
+            project_id,
+            limit=limit,
+            offset=offset or 0,
+            search=search,
+            sort_field=sort,
+            sort_order=order or "asc",
+        ),
+        "total_count": count_hooks(project_id, search=search),
     }
 
 
@@ -509,13 +551,34 @@ def list_commands(
     project_id: Optional[str] = None,
     limit: Optional[int] = None,
     offset: Optional[int] = None,
+    search: Optional[str] = None,
+    sort: Optional[str] = None,
+    order: Optional[str] = None,
 ) -> dict[str, Any]:
     if caller.user_id:
-        rows = get_for_user("commands", caller.user_id, limit=limit, offset=offset or 0)
-        return {"commands": rows, "total_count": len(rows)}
+        rows = get_for_user(
+            "commands",
+            caller.user_id,
+            limit=limit,
+            offset=offset or 0,
+            search=search,
+            sort_field=sort,
+            sort_order=order or "asc",
+        )
+        return {
+            "commands": rows,
+            "total_count": count_for_user("commands", caller.user_id, search=search),
+        }
     return {
-        "commands": get_all_commands(project_id, limit=limit, offset=offset or 0),
-        "total_count": count_commands(project_id),
+        "commands": get_all_commands(
+            project_id,
+            limit=limit,
+            offset=offset or 0,
+            search=search,
+            sort_field=sort,
+            sort_order=order or "asc",
+        ),
+        "total_count": count_commands(project_id, search=search),
     }
 
 
