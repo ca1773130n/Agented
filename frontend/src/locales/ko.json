@@ -9594,6 +9594,7 @@
     "legalTrademarkClear": "경쟁사의 상표, 브랜드 또는 트레이드 드레스를 재사용하지 않았습니다.",
     "legalNoConfidentialSource": "시그널은 공개 정보에서만 도출되었습니다 — 기밀/유출/NDA 자료 없음.",
     "approvedToast": "전략이 승인되었습니다",
+    "implementedToast": "전략이 플랜으로 구체화되었습니다",
     "rejectedToast": "전략이 거부되었습니다",
     "legalClearedToast": "법적 검토 완료 — 구현이 잠금 해제되었습니다",
     "strategyError": "전략 작업에 실패했습니다",

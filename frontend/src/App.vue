@@ -35,7 +35,7 @@ const router = useRouter();
 const { t } = useI18n();
 
 // Layout / route state
-const { isWelcomePage, isFullBleed } = useAppLayout();
+const { isWelcomePage, isAuthPage, isFullBleed } = useAppLayout();
 
 // Tour state machine — owned here so `provide()` chain stays rooted in App.vue
 const tour = useTourMachine();
@@ -44,7 +44,7 @@ const tour = useTourMachine();
 // Tour step metadata — derived from shared TOUR_STEP_DEFINITIONS
 // ---------------------------------------------------------------------------
 
-const tourActive = computed(() => tour.isActive.value && !isWelcomePage.value);
+const tourActive = computed(() => tour.isActive.value && !isWelcomePage.value && !isAuthPage.value);
 
 const tourStep = computed(() => {
   const meta = TOUR_STEP_MAP[tour.currentStep.value];
@@ -210,7 +210,7 @@ const { showApiKeyBanner, appReady, onAuthenticated, handleTourRetry } = useAppB
   <div v-if="appReady" :class="['app-layout', { 'sidebar-collapsed': isCollapsed && !isMobile, 'sidebar-mobile': isMobile }]">
     <a href="#main-content" class="skip-to-content">Skip to content</a>
 
-    <div v-if="isWelcomePage" class="welcome-fullscreen">
+    <div v-if="isWelcomePage || isAuthPage" class="welcome-fullscreen">
       <ErrorBoundary>
         <router-view />
       </ErrorBoundary>

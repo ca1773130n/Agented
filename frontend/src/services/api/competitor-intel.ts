@@ -259,6 +259,13 @@ export const competitorIntelApi = {
       { method: 'POST' },
     ),
 
+  /** Implement step: materialize an approved + §5B-cleared strategy into a ProjectPlan. */
+  materializeStrategy: (projectId: string, id: string): Promise<{ strategy: Strategy; plan: unknown }> =>
+    apiFetch<{ strategy: Strategy; plan: unknown }>(
+      `/api/projects/${projectId}/strategies/${id}/materialize`,
+      { method: 'POST' },
+    ),
+
   /**
    * Edit a strategy's title/body. RESETS the §5B legal clearance (the backend
    * flips `independent_authorship` + `no_copied_code` back to false and NULLs

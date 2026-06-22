@@ -9594,6 +9594,7 @@
     "legalTrademarkClear": "競合の商標、ブランド、トレードドレスを再利用していません。",
     "legalNoConfidentialSource": "シグナルは公開情報のみに由来します — 機密/漏洩/NDA資料なし。",
     "approvedToast": "戦略を承認しました",
+    "implementedToast": "戦略をプランに具体化しました",
     "rejectedToast": "戦略を却下しました",
     "legalClearedToast": "法的チェックリスト完了 — 実装がアンロックされました",
     "strategyError": "戦略操作に失敗しました",

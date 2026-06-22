@@ -352,6 +352,23 @@ async function rejectStrategy(id: string) {
   }
 }
 
+// Implement step: materialize an approved + §5B-cleared strategy into a ProjectPlan.
+// The button is already disabled until legal_cleared_at; the dangerous agent-run
+// (autoimplement) is a separate triple-gated backend route, intentionally NOT here.
+async function materializeStrategy(id: string) {
+  if (!projectId.value || strategyInFlight.value) return;
+  strategyInFlight.value = id;
+  try {
+    const res = await competitorIntelApi.materializeStrategy(projectId.value, id);
+    patchStrategy(res.strategy);
+    showToast(t('competitorIntel.implementedToast'), 'success');
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : t('competitorIntel.strategyError'), 'error');
+  } finally {
+    strategyInFlight.value = null;
+  }
+}
+
 // Save an edited body (called on textarea blur). Resets the legal clearance
 // server-side (§5B edit-resets-clearance) — the implement gate re-locks.
 async function saveStrategyBody(id: string, body: string) {
@@ -627,8 +644,9 @@ onUnmounted(() => {
             <button
               type="button"
               class="ci-submit ci-implement"
-              :disabled="!st.legal_cleared_at"
+              :disabled="!st.legal_cleared_at || strategyInFlight === st.id || st.status !== 'approved'"
               :title="!st.legal_cleared_at ? t('competitorIntel.legalChecklistTitle') : ''"
+              @click="materializeStrategy(st.id)"
             >
               {{ t('competitorIntel.implement') }}
             </button>
