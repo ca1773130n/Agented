@@ -9,6 +9,7 @@ import { useRoute } from 'vue-router';
 
 export interface UseAppLayout {
   isWelcomePage: ComputedRef<boolean>;
+  isAuthPage: ComputedRef<boolean>;
   isFullBleed: ComputedRef<boolean>;
 }
 
@@ -16,5 +17,8 @@ export function useAppLayout(): UseAppLayout {
   const route = useRoute();
   const isFullBleed = computed(() => route.meta.fullBleed === true);
   const isWelcomePage = computed(() => route.name === 'welcome');
-  return { isWelcomePage, isFullBleed };
+  // Public auth pages (login/signup/forgot/reset) render fullscreen, outside the
+  // app shell — they must NOT show the operator sidebar/header.
+  const isAuthPage = computed(() => route.meta.public === true);
+  return { isWelcomePage, isAuthPage, isFullBleed };
 }

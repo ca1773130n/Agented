@@ -9594,6 +9594,7 @@
     "legalTrademarkClear": "No competitor trademark, brand, or trade dress is reused.",
     "legalNoConfidentialSource": "The signal derives from public information only — no confidential/leaked/NDA material.",
     "approvedToast": "Strategy approved",
+    "implementedToast": "Strategy materialized into a plan",
     "rejectedToast": "Strategy rejected",
     "legalClearedToast": "Legal checklist cleared — implement unlocked",
     "strategyError": "Strategy action failed",

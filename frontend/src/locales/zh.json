@@ -9594,6 +9594,7 @@
     "legalTrademarkClear": "未复用竞争对手的商标、品牌或商业外观。",
     "legalNoConfidentialSource": "信号仅来源于公开信息——无机密/泄露/保密协议材料。",
     "approvedToast": "策略已批准",
+    "implementedToast": "策略已具体化为计划",
     "rejectedToast": "策略已拒绝",
     "legalClearedToast": "法律审查已通过——实施已解锁",
     "strategyError": "策略操作失败",
