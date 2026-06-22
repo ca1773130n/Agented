@@ -113,11 +113,20 @@ async function copyPath() {
 
             <div class="form-group">
               <label>{{ t('exportPluginModal.formatLabel') }}</label>
-              <div class="format-cards">
+              <div
+                class="format-cards"
+                role="radiogroup"
+                :aria-label="t('exportPluginModal.formatLabel')"
+              >
                 <div
                   class="format-card"
                   :class="{ active: exportFormat === 'claude' }"
+                  role="radio"
+                  tabindex="0"
+                  :aria-checked="exportFormat === 'claude'"
                   @click="exportFormat = 'claude'"
+                  @keydown.enter.prevent="exportFormat = 'claude'"
+                  @keydown.space.prevent="exportFormat = 'claude'"
                 >
                   <div class="format-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -133,7 +142,12 @@ async function copyPath() {
                 <div
                   class="format-card"
                   :class="{ active: exportFormat === 'agented' }"
+                  role="radio"
+                  tabindex="0"
+                  :aria-checked="exportFormat === 'agented'"
                   @click="exportFormat = 'agented'"
+                  @keydown.enter.prevent="exportFormat = 'agented'"
+                  @keydown.space.prevent="exportFormat = 'agented'"
                 >
                   <div class="format-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">

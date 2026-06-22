@@ -305,36 +305,36 @@ onMounted(() => {
         <div class="modal">
           <div class="modal-header">
             <h2 id="modal-title-create-mcp">{{ t('mcpServers.createModal.title') }}</h2>
-            <button class="modal-close" @click="showCreateModal = false">&times;</button>
+            <button class="modal-close" :aria-label="t('common.close')" @click="showCreateModal = false">&times;</button>
           </div>
           <div class="modal-body">
             <div class="form-group">
-              <label>{{ t('mcpServers.form.serverNameRequired') }}</label>
-              <input v-model="newServer.name" type="text" placeholder="e.g., my-mcp-server" />
+              <label for="mcp-create-name">{{ t('mcpServers.form.serverNameRequired') }}</label>
+              <input id="mcp-create-name" v-model="newServer.name" type="text" placeholder="e.g., my-mcp-server" />
             </div>
             <div class="form-group">
-              <label>{{ t('mcpServers.form.serverType') }}</label>
-              <select v-model="newServer.server_type">
+              <label for="mcp-create-server-type">{{ t('mcpServers.form.serverType') }}</label>
+              <select id="mcp-create-server-type" v-model="newServer.server_type">
                 <option value="stdio">stdio</option>
                 <option value="sse">sse</option>
                 <option value="http">http</option>
               </select>
             </div>
             <div v-if="newServer.server_type === 'stdio'" class="form-group">
-              <label>{{ t('mcpServers.form.command') }}</label>
-              <input v-model="newServer.command" type="text" placeholder="e.g., npx -y @modelcontextprotocol/server-filesystem" />
+              <label for="mcp-create-command">{{ t('mcpServers.form.command') }}</label>
+              <input id="mcp-create-command" v-model="newServer.command" type="text" placeholder="e.g., npx -y @modelcontextprotocol/server-filesystem" />
             </div>
             <div v-if="newServer.server_type === 'stdio'" class="form-group">
-              <label>{{ t('mcpServers.form.args') }}</label>
-              <input v-model="newServer.args" type="text" placeholder="e.g., /path/to/dir" />
+              <label for="mcp-create-args">{{ t('mcpServers.form.args') }}</label>
+              <input id="mcp-create-args" v-model="newServer.args" type="text" placeholder="e.g., /path/to/dir" />
             </div>
             <div v-if="newServer.server_type !== 'stdio'" class="form-group">
-              <label>{{ t('mcpServers.form.url') }}</label>
-              <input v-model="newServer.url" type="text" placeholder="e.g., http://localhost:3001/sse" />
+              <label for="mcp-create-url">{{ t('mcpServers.form.url') }}</label>
+              <input id="mcp-create-url" v-model="newServer.url" type="text" placeholder="e.g., http://localhost:3001/sse" />
             </div>
             <div class="form-group">
-              <label>{{ t('mcpServers.form.description') }}</label>
-              <textarea v-model="newServer.description" :placeholder="t('mcpServers.form.descriptionPlaceholder')"></textarea>
+              <label for="mcp-create-description">{{ t('mcpServers.form.description') }}</label>
+              <textarea id="mcp-create-description" v-model="newServer.description" :placeholder="t('mcpServers.form.descriptionPlaceholder')"></textarea>
             </div>
           </div>
           <div class="modal-footer">

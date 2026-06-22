@@ -426,20 +426,20 @@ onUnmounted(() => {
         <div class="modal">
           <div class="modal-header">
             <h2 id="modal-title-create-superagent">{{ t('superAgents.createSuperAgent') }}</h2>
-            <button class="modal-close" @click="showCreateModal = false">&times;</button>
+            <button class="modal-close" :aria-label="t('common.close')" @click="showCreateModal = false">&times;</button>
           </div>
           <div class="modal-body">
             <div class="form-group">
-              <label>{{ t('superAgents.form.name') }}</label>
-              <input v-model="createForm.name" type="text" :placeholder="t('superAgents.form.namePlaceholder')" />
+              <label for="sa-create-name">{{ t('superAgents.form.name') }}</label>
+              <input id="sa-create-name" v-model="createForm.name" type="text" :placeholder="t('superAgents.form.namePlaceholder')" />
             </div>
             <div class="form-group">
-              <label>{{ t('superAgents.form.description') }}</label>
-              <textarea v-model="createForm.description" :placeholder="t('superAgents.form.descriptionPlaceholder')"></textarea>
+              <label for="sa-create-description">{{ t('superAgents.form.description') }}</label>
+              <textarea id="sa-create-description" v-model="createForm.description" :placeholder="t('superAgents.form.descriptionPlaceholder')"></textarea>
             </div>
             <div class="form-group">
-              <label>{{ t('superAgents.form.backendType') }}</label>
-              <select v-model="createForm.backend_type">
+              <label for="sa-create-backend-type">{{ t('superAgents.form.backendType') }}</label>
+              <select id="sa-create-backend-type" v-model="createForm.backend_type">
                 <option value="claude">Claude</option>
                 <option value="opencode">OpenCode</option>
                 <option value="gemini">Gemini</option>

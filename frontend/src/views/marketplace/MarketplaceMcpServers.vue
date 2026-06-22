@@ -275,32 +275,32 @@ onMounted(async () => {
             <div v-if="showInstallForm && !selectedServer.installed" class="install-config">
               <h3 class="config-title">{{ t('marketplaceMcpServers.form.configuration') }}</h3>
               <div class="form-group">
-                <label>{{ t('marketplaceMcpServers.form.serverType') }}</label>
-                <select v-model="installForm.server_type">
+                <label for="mp-install-server-type">{{ t('marketplaceMcpServers.form.serverType') }}</label>
+                <select id="mp-install-server-type" v-model="installForm.server_type">
                   <option value="stdio">stdio</option>
                   <option value="sse">sse</option>
                   <option value="http">http</option>
                 </select>
               </div>
               <div v-if="installForm.server_type === 'stdio'" class="form-group">
-                <label>{{ t('marketplaceMcpServers.form.command') }}</label>
-                <input v-model="installForm.command" type="text" placeholder="e.g., npx -y @modelcontextprotocol/server-filesystem" />
+                <label for="mp-install-command">{{ t('marketplaceMcpServers.form.command') }}</label>
+                <input id="mp-install-command" v-model="installForm.command" type="text" placeholder="e.g., npx -y @modelcontextprotocol/server-filesystem" />
               </div>
               <div v-if="installForm.server_type === 'stdio'" class="form-group">
-                <label>{{ t('marketplaceMcpServers.form.arguments') }}</label>
-                <input v-model="installForm.args" type="text" placeholder="e.g., /path/to/allowed/dir" />
+                <label for="mp-install-args">{{ t('marketplaceMcpServers.form.arguments') }}</label>
+                <input id="mp-install-args" v-model="installForm.args" type="text" placeholder="e.g., /path/to/allowed/dir" />
               </div>
               <div v-if="installForm.server_type !== 'stdio'" class="form-group">
-                <label>{{ t('marketplaceMcpServers.form.url') }}</label>
-                <input v-model="installForm.url" type="text" placeholder="e.g., http://localhost:3001/sse" />
+                <label for="mp-install-url">{{ t('marketplaceMcpServers.form.url') }}</label>
+                <input id="mp-install-url" v-model="installForm.url" type="text" placeholder="e.g., http://localhost:3001/sse" />
               </div>
               <div class="form-group">
-                <label>{{ t('marketplaceMcpServers.form.envVars') }}</label>
-                <textarea v-model="installForm.env_json" placeholder='{"API_KEY": "your-key"}'></textarea>
+                <label for="mp-install-env-vars">{{ t('marketplaceMcpServers.form.envVars') }}</label>
+                <textarea id="mp-install-env-vars" v-model="installForm.env_json" placeholder='{"API_KEY": "your-key"}'></textarea>
               </div>
               <div class="form-group">
-                <label>{{ t('marketplaceMcpServers.form.timeout') }}</label>
-                <input v-model.number="installForm.timeout_ms" type="number" placeholder="30000" />
+                <label for="mp-install-timeout">{{ t('marketplaceMcpServers.form.timeout') }}</label>
+                <input id="mp-install-timeout" v-model.number="installForm.timeout_ms" type="number" placeholder="30000" />
               </div>
             </div>
           </div>
