@@ -339,6 +339,9 @@ onMounted(() => {
             </span>
             <button
               :class="['toggle-switch', { active: marketplaceAutoUpdate }]"
+              role="switch"
+              :aria-checked="marketplaceAutoUpdate"
+              :aria-label="t('settings.general.autoRefreshTitle')"
               @click="marketplaceAutoUpdate = !marketplaceAutoUpdate; saveAutoUpdateSetting()"
             >
               <span class="toggle-knob"></span>
@@ -367,6 +370,9 @@ onMounted(() => {
             </span>
             <button
               :class="['toggle-switch', { active: yoloMode }]"
+              role="switch"
+              :aria-checked="yoloMode"
+              :aria-label="t('settings.general.yoloTitle')"
               @click="yoloMode = !yoloMode; saveYoloMode()"
             >
               <span class="toggle-knob"></span>
@@ -394,6 +400,9 @@ onMounted(() => {
             </span>
             <button
               :class="['toggle-switch', { active: sessionDefaultYolo }]"
+              role="switch"
+              :aria-checked="sessionDefaultYolo"
+              :aria-label="t('settings.general.sessionYoloTitle')"
               @click="
                 sessionDefaultYolo = !sessionDefaultYolo;
                 saveSessionDefaultYolo()
@@ -427,6 +436,9 @@ onMounted(() => {
               </span>
               <button
                 :class="['toggle-switch', { active: monitoringConfig.enabled }]"
+                role="switch"
+                :aria-checked="monitoringConfig.enabled"
+                :aria-label="t('settings.general.enableMonitoringTitle')"
                 @click="monitoringConfig.enabled = !monitoringConfig.enabled"
               >
                 <span class="toggle-knob"></span>
@@ -470,6 +482,9 @@ onMounted(() => {
                 <button
                   :class="['toggle-switch', 'toggle-switch-sm', { active: isAccountEnabled(account.id) }]"
                   :disabled="!monitoringConfig.enabled"
+                  role="switch"
+                  :aria-checked="isAccountEnabled(account.id)"
+                  :aria-label="`${t('settings.general.monitoredAccountsLabel')}: ${account.account_name}`"
                   @click="toggleAccountMonitoring(account.id)"
                 >
                   <span class="toggle-knob"></span>

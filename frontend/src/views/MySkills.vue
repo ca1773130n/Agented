@@ -223,7 +223,7 @@ onMounted(() => {
         <div class="skill-toggles">
           <label class="toggle-row">
             <span>{{ t('mySkills.enabled') }}</span>
-            <button class="toggle-btn" :class="{ active: skill.enabled }" @click.stop="toggleEnabled(skill)">
+            <button class="toggle-btn" :class="{ active: skill.enabled }" role="switch" :aria-checked="!!skill.enabled" :aria-label="t('mySkills.enabled')" @click.stop="toggleEnabled(skill)">
               <span class="toggle-knob"></span>
             </button>
           </label>
@@ -232,7 +232,7 @@ onMounted(() => {
               <span>{{ t('mySkills.includeToHarness') }}</span>
               <span class="toggle-hint">{{ t('mySkills.includeToHarnessHint') }}</span>
             </div>
-            <button class="toggle-btn" :class="{ active: skill.selected_for_harness }" @click.stop="toggleHarness(skill)">
+            <button class="toggle-btn" :class="{ active: skill.selected_for_harness }" role="switch" :aria-checked="!!skill.selected_for_harness" :aria-label="t('mySkills.includeToHarness')" @click.stop="toggleHarness(skill)">
               <span class="toggle-knob"></span>
             </button>
           </label>

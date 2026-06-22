@@ -176,7 +176,7 @@ async function confirmDeleteSkill() {
         <div class="toggle-section">
           <label class="toggle-row">
             <span>{{ t('skillDetail.toggles.enabled') }}</span>
-            <button class="toggle-btn" :class="{ active: editEnabled }" @click="editEnabled = !editEnabled">
+            <button class="toggle-btn" :class="{ active: editEnabled }" role="switch" :aria-checked="editEnabled" :aria-label="t('skillDetail.toggles.enabled')" @click="editEnabled = !editEnabled">
               <span class="toggle-knob"></span>
             </button>
           </label>
@@ -185,7 +185,7 @@ async function confirmDeleteSkill() {
               <span>{{ t('skillDetail.toggles.includeToHarness') }}</span>
               <span class="toggle-hint">{{ t('skillDetail.toggles.includeToHarnessHint') }}</span>
             </div>
-            <button class="toggle-btn" :class="{ active: editHarness }" @click="editHarness = !editHarness">
+            <button class="toggle-btn" :class="{ active: editHarness }" role="switch" :aria-checked="editHarness" :aria-label="t('skillDetail.toggles.includeToHarness')" @click="editHarness = !editHarness">
               <span class="toggle-knob"></span>
             </button>
           </label>

@@ -553,7 +553,17 @@ onMounted(() => {
         <div class="form-group">
           <label class="toggle-label">
             <span>{{ t('rules.fields.enabled') }}</span>
-            <div class="toggle-switch" :class="{ active: editForm.enabled }" @click="editForm.enabled = !editForm.enabled">
+            <div
+              class="toggle-switch"
+              :class="{ active: editForm.enabled }"
+              role="switch"
+              :aria-checked="editForm.enabled"
+              :aria-label="t('rules.fields.enabled')"
+              tabindex="0"
+              @click="editForm.enabled = !editForm.enabled"
+              @keydown.enter.prevent="editForm.enabled = !editForm.enabled"
+              @keydown.space.prevent="editForm.enabled = !editForm.enabled"
+            >
               <div class="toggle-knob"></div>
             </div>
           </label>
