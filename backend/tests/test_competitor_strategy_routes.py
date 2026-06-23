@@ -112,7 +112,9 @@ def test_generate_returns_proposed_strategy(isolated_db, monkeypatch):
     assert strategy["legal_cleared_at"] is None
     assert captured["pid"] == project_id
     assert captured["sids"] == signal_ids
-    assert captured["backend_kind"] == "claude"
+    # No backend_kind in the request -> the route falls back to the competitor-intel
+    # default (gemini, a general model), NOT claude (Claude Code refuses these prompts).
+    assert captured["backend_kind"] == "gemini"
     # Persisted: the queue read returns it.
     rows = dao.list_strategies(project_id)
     assert len(rows) == 1

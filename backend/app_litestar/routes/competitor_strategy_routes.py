@@ -107,7 +107,11 @@ def generate_strategy(project_id: str, data: dict | None, caller: Caller) -> dic
     signal_ids = body.get("signal_ids")
     if not signal_ids or not isinstance(signal_ids, list):
         raise ClientException(detail="signal_ids is required")
-    backend_kind = body.get("backend_kind") or "claude"
+    # Default to a general chat model (gemini) when the caller doesn't specify —
+    # claude (Claude Code) refuses these strategy prompts and degrades.
+    from app.services.github_monitor_service import competitor_intel_llm_backend
+
+    backend_kind = body.get("backend_kind") or competitor_intel_llm_backend()
     model_override = body.get("model_override")
     try:
         strategy = CompetitorStrategyService.propose(
