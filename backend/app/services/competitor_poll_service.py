@@ -99,12 +99,22 @@ class CompetitorPollService:
         return (time.time() - last) < floor_s
 
     @staticmethod
-    def poll_due_sources() -> int:
+    def poll_due_sources(project_id: str | None = None, force: bool = False) -> int:
         """Poll every active source via its kind's adapter; return the count changed.
 
         Generalizes ``github_monitor_service.py:303-347`` — selects ALL
         ``status='active'`` rows (no ``kind`` filter) and dispatches per-kind.
         Returns the number of sources that produced a snapshot this tick.
+
+        ``project_id`` (optional) scopes the source SELECT to ONE project
+        (``status='active' AND project_id=?``) so an operator can poll their own
+        project on demand without touching everyone else's sources. ``force=True``
+        SKIPS the ``_polled_too_recently`` per-kind floor — an operator-triggered
+        "check now" bypasses the interval throttle (``last_polled_at`` is still
+        stamped after each fetch, so the floor governs the NEXT scheduled tick).
+
+        A no-arg call ``poll_due_sources()`` is byte-for-byte the scheduled job
+        (every active source, floor enforced) — the scheduler relies on that.
         """
         # Import the adapter subpackage so every adapter module runs its
         # bottom-line register(...) — mirrors P1's in-function import at
@@ -113,9 +123,16 @@ class CompetitorPollService:
         from app.services.source_adapters import registry
 
         with get_connection() as conn:
-            rows = conn.execute(
-                f"SELECT {_POLL_COLUMNS} FROM competitor_source WHERE status = 'active'",
-            ).fetchall()
+            if project_id is not None:
+                rows = conn.execute(
+                    f"SELECT {_POLL_COLUMNS} FROM competitor_source "
+                    "WHERE status = 'active' AND project_id = ?",
+                    (project_id,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    f"SELECT {_POLL_COLUMNS} FROM competitor_source WHERE status = 'active'",
+                ).fetchall()
         sources = [dict(r) for r in rows]
 
         # Per-tick state. ``throttled_kinds`` backs off a kind after a 403/429 on
@@ -149,7 +166,9 @@ class CompetitorPollService:
                 # logs its own credential gap when relevant).
                 continue
 
-            if CompetitorPollService._polled_too_recently(src, adapter.poll_interval_floor_s):
+            if not force and CompetitorPollService._polled_too_recently(
+                src, adapter.poll_interval_floor_s
+            ):
                 continue
 
             # Per-source isolation spans the WHOLE network-touching body — fetch,
