@@ -160,6 +160,15 @@ def test_blocks_loopback(monkeypatch):
     assert result.outcome == "skipped"
 
 
+def test_blocks_cgnat_shared_address_space(monkeypatch):
+    # 100.64.0.0/10 (carrier-grade NAT) is not private/loopback/etc. but is not
+    # globally routable — must still be blocked.
+    _patch_get_must_not_be_called(monkeypatch)
+    adapter = ProductUrlAdapter()
+    result = adapter.fetch({"id": "s1", "url": "http://100.64.0.1/", "watermark": None})
+    assert result.outcome == "skipped"
+
+
 def test_blocks_non_http_scheme(monkeypatch):
     _patch_get_must_not_be_called(monkeypatch)
     adapter = ProductUrlAdapter()

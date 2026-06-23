@@ -123,6 +123,9 @@ def _host_is_public(host: str) -> bool:
             or addr.is_reserved
             or addr.is_multicast
             or addr.is_unspecified
+            # Catch-all for any non-globally-routable range the explicit predicates
+            # miss — notably 100.64.0.0/10 (carrier-grade NAT) — and future-proof.
+            or not addr.is_global
         ):
             return False
     return True
