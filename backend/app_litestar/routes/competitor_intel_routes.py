@@ -42,7 +42,7 @@ from app.services.competitor_source_service import (
     CompetitorSourceService,
 )
 
-from ..auth import Caller
+from ..auth import Caller, require_role
 
 logger = logging.getLogger(__name__)
 
@@ -249,16 +249,18 @@ _VALID_POLLING_MINUTES = (5, 15, 30, 60)
 
 
 @get("/config", sync_to_thread=False)
-def get_competitor_intel_config_route(caller: Caller) -> dict[str, Any]:
+def get_competitor_intel_config_route(authorized: Caller) -> dict[str, Any]:
     """Return the GLOBAL competitor-intel scheduled-poll config ({enabled, polling_minutes})."""
+    del authorized  # admin-gated via the router's require_role; not used in the body
     from app.services.github_monitor_service import get_competitor_intel_config
 
     return get_competitor_intel_config()
 
 
 @post("/config", sync_to_thread=False)
-def save_competitor_intel_config_route(data: dict | None, caller: Caller) -> dict[str, Any]:
+def save_competitor_intel_config_route(data: dict | None, authorized: Caller) -> dict[str, Any]:
     """Enable/disable the GLOBAL scheduled poll and set its interval (runtime, no restart)."""
+    del authorized  # admin-gated via the router's require_role
     if not data:
         raise ClientException(detail="JSON body required")
     polling_minutes = data.get("polling_minutes", 15)
@@ -280,4 +282,7 @@ competitor_intel_config_router = Router(
         get_competitor_intel_config_route,
         save_competitor_intel_config_route,
     ],
+    # Instance-wide scheduled polling is an admin setting — gate BOTH read + write
+    # to admin (the frontend hides the toggle when the GET 403s for non-admins).
+    dependencies={"authorized": require_role("admin")},
 )

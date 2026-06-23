@@ -165,3 +165,28 @@ def test_post_config_route_enables(isolated_db, monkeypatch):
     assert body["polling_minutes"] == 30
     assert scheduler.add_job.called
     assert get_competitor_intel_config()["enabled"] is True
+
+
+def test_post_config_route_forbids_non_admin(isolated_db, monkeypatch):
+    # The guard must ENFORCE, not just admit admins: a non-admin POST -> 403, and
+    # the scheduler is NEVER touched.
+    from litestar.di import Provide
+
+    from app_litestar.auth import Caller
+
+    scheduler = _patch_scheduler(monkeypatch)
+
+    def _viewer():
+        return Caller(api_key="k", role="viewer", user_id="u1", auth_method="api_key")
+
+    client = create_test_client(
+        route_handlers=[competitor_intel_config_router],
+        dependencies={"caller": Provide(_viewer, sync_to_thread=False)},
+    )
+    with client as c:
+        resp = c.post(
+            "/api/competitor-intel/config",
+            json={"enabled": True, "polling_minutes": 15},
+        )
+    assert resp.status_code == 403
+    assert not scheduler.add_job.called

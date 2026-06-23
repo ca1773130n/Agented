@@ -48,6 +48,9 @@ const loadingSignals = ref(false);
 // across ALL projects, so enabling it here turns on auto-checking everywhere.
 const autoCheckEnabled = ref(false);
 const autoCheckInterval = ref(15);
+// The scheduled-poll config is admin-only; the toggle is hidden when getConfig
+// 403s for a non-admin (or the backend is unreachable).
+const autoCheckAvailable = ref(true);
 const savingAutoCheck = ref(false);
 const AUTO_CHECK_INTERVALS = [5, 15, 30, 60];
 
@@ -209,7 +212,9 @@ async function loadAutoCheckConfig() {
       autoCheckInterval.value = cfg.polling_minutes;
     }
   } catch {
-    // Non-fatal: leave the toggle at its default-disabled state.
+    // 403 for non-admins (the config is admin-gated), or the backend is down:
+    // hide the toggle rather than show a control the user can't use.
+    autoCheckAvailable.value = false;
   }
 }
 
@@ -637,7 +642,7 @@ onUnmounted(() => {
         <div class="ci-sources-actions">
           <!-- GLOBAL auto-check toggle: one scheduled job polls every active
                source across ALL projects, so this is an instance-wide setting. -->
-          <div class="ci-autocheck">
+          <div v-if="autoCheckAvailable" class="ci-autocheck">
             <button
               type="button"
               class="toggle-switch ci-autocheck-switch"
