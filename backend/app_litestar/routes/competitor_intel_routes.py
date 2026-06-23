@@ -36,6 +36,7 @@ from litestar.response import Stream
 from app.database import get_connection
 from app.db.owned_entities import can_access
 from app.db.projects import get_project
+from app.services.competitor_poll_service import CompetitorPollService
 from app.services.competitor_source_service import (
     KIND_HN_QUERY,
     CompetitorSourceService,
@@ -155,6 +156,25 @@ def list_competitor_sources(project_id: str, caller: Caller) -> dict[str, Any]:
     return {"sources": CompetitorSourceService.list_sources(project_id)}
 
 
+@post("/{project_id:str}/competitor-intel/poll", sync_to_thread=True)
+def poll_competitor_sources_now(project_id: str, caller: Caller) -> dict[str, Any]:
+    """Operator-triggered "check now" — poll this project's active sources immediately.
+
+    The scheduled poller (``lifecycle._setup_scheduler`` → ``poll_due_sources()``)
+    is OFF by default, so an operator needs a manual way to see monitoring work.
+    This force-polls ONLY this project's ``status='active'`` sources, BYPASSING
+    the per-kind interval floor (``force=True``) — ``last_polled_at`` is still
+    stamped, so the next scheduled tick still respects the floor. Runs on a worker
+    thread (``sync_to_thread=True``) because the per-source fetches are blocking
+    network I/O. Returns ``{"polled": True, "changed": <count of new snapshots>}``.
+    IDOR-safe: ``_assert_project_access`` 404s an unknown/forbidden project before
+    any poll, mirroring the sibling routes.
+    """
+    _assert_project_access(project_id, caller)
+    changed = CompetitorPollService.poll_due_sources(project_id=project_id, force=True)
+    return {"polled": True, "changed": changed}
+
+
 # ---------------------------------------------------------------------------
 # Signals (REQ-30) — ranked read + SSE stream
 # ---------------------------------------------------------------------------
@@ -212,6 +232,7 @@ competitor_intel_router = Router(
     route_handlers=[
         add_competitor_source,
         list_competitor_sources,
+        poll_competitor_sources_now,
         list_competitor_signals,
         competitor_signals_stream,
     ],

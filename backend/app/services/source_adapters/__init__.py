@@ -23,6 +23,7 @@ from app.services.source_adapters import (
     github_repo,  # noqa: F401,E402  (register-on-import)
     hn,  # noqa: F401,E402  (register-on-import)
     job_board,  # noqa: F401,E402  (register-on-import)
+    product_url,  # noqa: F401,E402  (register-on-import)
     registry,
 )
 

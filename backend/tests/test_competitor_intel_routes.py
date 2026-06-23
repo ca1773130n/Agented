@@ -266,3 +266,46 @@ def _registered_paths() -> list[str]:
         if path:
             paths.append(path)
     return paths
+
+
+# ---------------------------------------------------------------------------
+# POST /poll — operator "check now" (force-poll this project's active sources)
+# ---------------------------------------------------------------------------
+
+
+def test_poll_unknown_project_404(isolated_db):
+    with _client() as c:
+        resp = c.post("/api/projects/missing/competitor-intel/poll")
+    assert resp.status_code == 404
+
+
+def test_poll_denied_for_inaccessible_project_404(isolated_db, monkeypatch):
+    """IDOR guard: a project the caller can't access → 404 (no existence leak)."""
+    import app_litestar.routes.competitor_intel_routes as routes
+
+    project_id = create_project(name="owned-by-someone-else")
+    monkeypatch.setattr(routes, "can_access", lambda *a, **k: False)
+    with _client() as c:
+        resp = c.post(f"/api/projects/{project_id}/competitor-intel/poll")
+    assert resp.status_code == 404
+
+
+def test_poll_force_polls_scoped_project(isolated_db, monkeypatch):
+    """Happy path: the route force-polls THIS project only and returns the count."""
+    import app_litestar.routes.competitor_intel_routes as routes
+
+    project_id = create_project(name="ci-poll-proj")
+    captured: dict = {}
+
+    def fake_poll(project_id=None, force=False):
+        captured["project_id"] = project_id
+        captured["force"] = force
+        return 2
+
+    monkeypatch.setattr(routes.CompetitorPollService, "poll_due_sources", staticmethod(fake_poll))
+    with _client() as c:
+        resp = c.post(f"/api/projects/{project_id}/competitor-intel/poll")
+    assert resp.status_code == 201  # Litestar @post default created-status
+    body = resp.json()
+    assert body == {"polled": True, "changed": 2}
+    assert captured == {"project_id": project_id, "force": True}

@@ -26,6 +26,8 @@ export interface CompetitorSource {
   status: string;
   /** Optional operator display name (never required to add). */
   label: string | null;
+  /** Last time the poller fetched this source (UTC); null until first polled. */
+  last_polled_at: string | null;
   created_at: string;
 }
 
@@ -163,6 +165,18 @@ export const competitorIntelApi = {
   listSources: (projectId: string): Promise<{ sources: CompetitorSource[] }> =>
     apiFetch<{ sources: CompetitorSource[] }>(
       `/api/projects/${projectId}/competitor-intel/sources`,
+    ),
+
+  /**
+   * Operator-triggered "check now": force-poll this project's active sources
+   * immediately (bypassing the per-kind interval floor). Returns whether the
+   * poll ran and how many sources produced a new snapshot this run. CSRF is
+   * auto-injected by the client for POST.
+   */
+  pollNow: (projectId: string): Promise<{ polled: boolean; changed: number }> =>
+    apiFetch<{ polled: boolean; changed: number }>(
+      `/api/projects/${projectId}/competitor-intel/poll`,
+      { method: 'POST' },
     ),
 
   /** Ranked detected signals for the project (score desc, created_at desc). */

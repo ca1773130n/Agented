@@ -269,8 +269,14 @@ class SignalSummarizerService:
             change.get("source_id"),
             reason,
         )
+        # Surface the actual fetched content (collapsed + trimmed) so a degraded
+        # signal is still USEFUL — the operator sees WHAT changed even when the LLM
+        # path is down/refusing, instead of an empty marker. The content is the
+        # competitor's page text; it is DISPLAYED, never re-fed to an LLM here, so
+        # the taint constraint (LLM-input only) doesn't apply to this field.
+        content = " ".join((change.get("content") or "").split())[:280]
         return {
-            "summary": f"(no LLM summary: {reason})",
+            "summary": content or f"(change detected; summary unavailable: {reason})",
             "signal_type": _infer_type_from_change(change),
             "model": model,
             "degraded": True,

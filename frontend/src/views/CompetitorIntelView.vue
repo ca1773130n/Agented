@@ -37,6 +37,8 @@ const canSubmit = computed(() => url.value.trim().length > 0 && !adding.value);
 
 // --- Data ------------------------------------------------------------------
 const sources = ref<CompetitorSource[]>([]);
+// In-flight guard for the operator "check now" force-poll (disables the button).
+const polling = ref(false);
 const signals = ref<DetectedSignal[]>([]);
 const loadingSignals = ref(false);
 
@@ -148,6 +150,40 @@ async function loadSources() {
     sources.value = res.sources;
   } catch (err) {
     showToast(err instanceof ApiError ? err.message : t('competitorIntel.loadError'), 'error');
+  }
+}
+
+/** Render a `last_polled_at` UTC timestamp as a short localized "checked" time. */
+function formatChecked(value: string): string {
+  // Backend writes a SQLite UTC timestamp ("YYYY-MM-DD HH:MM:SS"); make it an
+  // explicit UTC ISO string so the Date parse isn't browser-local-ambiguous.
+  const iso = value.includes('T') ? value : value.replace(' ', 'T') + 'Z';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString();
+}
+
+/**
+ * Operator "check now": force-poll this project's active sources, then refresh
+ * signals + sources so the operator sees monitoring work. A `changed > 0` run
+ * reports how many sources moved; otherwise a reassuring "baseline captured"
+ * note (monitoring IS live even when nothing changed yet).
+ */
+async function pollNow() {
+  if (!projectId.value || polling.value) return;
+  polling.value = true;
+  try {
+    const res = await competitorIntelApi.pollNow(projectId.value);
+    await Promise.all([loadSignals(), loadSources()]);
+    if (res.changed > 0) {
+      showToast(t('competitorIntel.pollChanged', { count: res.changed }), 'success');
+    } else {
+      showToast(t('competitorIntel.pollNoChange'), 'info');
+    }
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : t('competitorIntel.pollError'), 'error');
+  } finally {
+    polling.value = false;
   }
 }
 
@@ -526,12 +562,29 @@ onUnmounted(() => {
 
     <!-- Watched sources -->
     <div class="ci-sources">
-      <h2 class="ci-section-title">{{ t('competitorIntel.sourcesTitle') }}</h2>
+      <div class="ci-sources-head">
+        <h2 class="ci-section-title">{{ t('competitorIntel.sourcesTitle') }}</h2>
+        <button
+          type="button"
+          class="ci-submit ci-poll-now"
+          :disabled="polling"
+          @click="pollNow"
+        >
+          {{ polling ? t('competitorIntel.polling') : t('competitorIntel.pollNow') }}
+        </button>
+      </div>
       <p v-if="sources.length === 0" class="ci-empty">{{ t('competitorIntel.sourcesEmpty') }}</p>
       <ul v-else class="ci-source-list">
         <li v-for="s in sources" :key="s.id" class="ci-source">
           <span class="ci-kind" :data-kind="s.kind">{{ kindLabel(s.kind) }}</span>
           <span class="ci-source-url">{{ s.label || s.url }}</span>
+          <span
+            v-if="s.last_polled_at"
+            class="ci-source-checked"
+          >{{ t('competitorIntel.lastChecked', { time: formatChecked(s.last_polled_at) }) }}</span>
+          <span v-else class="ci-source-checked ci-source-unchecked">
+            {{ t('competitorIntel.neverChecked') }}
+          </span>
         </li>
       </ul>
     </div>
@@ -835,10 +888,29 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 0.5rem;
 }
+.ci-sources-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+.ci-sources-head .ci-section-title {
+  margin: 0;
+}
 .ci-source {
   display: flex;
   gap: 0.75rem;
   align-items: center;
+}
+.ci-source-checked {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--text-muted, #888);
+  white-space: nowrap;
+}
+.ci-source-unchecked {
+  font-style: italic;
 }
 .ci-kind,
 .ci-signal-type {

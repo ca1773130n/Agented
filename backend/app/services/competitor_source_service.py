@@ -56,6 +56,7 @@ _SOURCE_COLUMNS = (
     "watermark",
     "status",
     "label",
+    "last_polled_at",
     "created_at",
 )
 

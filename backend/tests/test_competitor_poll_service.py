@@ -423,3 +423,80 @@ def test_inactive_sources_are_not_polled(monkeypatch):
     CompetitorPollService.poll_due_sources()
 
     assert adapter.fetched == []  # status != 'active' -> excluded by the SELECT.
+
+
+# ---------------------------------------------------------------------------
+# Operator "check now": project scoping + force-bypass of the per-kind floor.
+# ---------------------------------------------------------------------------
+
+
+def _seed_in_project(project_id: str, kind: str, *, url: str) -> str:
+    """Create one active source in an EXISTING project, forcing its ``kind``."""
+    source = CompetitorSourceService.add_source(project_id, url)
+    with get_connection() as conn:
+        conn.execute("UPDATE competitor_source SET kind = ? WHERE id = ?", (kind, source["id"]))
+        conn.commit()
+    return source["id"]
+
+
+def test_poll_due_sources_project_scope_and_force(monkeypatch):
+    """force-poll ONE project's sources, bypassing the floor; leave the other untouched."""
+    _spy_record_signal(monkeypatch)
+    _spy_warnings(monkeypatch)
+
+    # A floor-gated adapter (3600s): a source polled "just now" is normally skipped.
+    adapter = _RecordingAdapter(
+        "kforce",
+        result=FetchResult(outcome="unchanged"),
+        floor_s=3600,
+    )
+    registry.register(adapter)
+
+    proj_a = create_project(name="poll-force-A")
+    proj_b = create_project(name="poll-force-B")
+    s_a = _seed_in_project(proj_a, "kforce", url="https://a.example.com")
+    s_b = _seed_in_project(proj_b, "kforce", url="https://b.example.com")
+
+    # Stamp BOTH within the floor so an unforced poll would skip them.
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE competitor_source SET last_polled_at = CURRENT_TIMESTAMP WHERE id IN (?, ?)",
+            (s_a, s_b),
+        )
+        conn.commit()
+
+    before_b = _last_polled_at(s_b)
+
+    # Force-poll only project A. force=True bypasses the per-kind floor.
+    CompetitorPollService.poll_due_sources(project_id=proj_a, force=True)
+
+    # Only project A's source was fetched (scope), despite the floor (force).
+    assert adapter.fetched == [s_a]
+    # And only project A's poll clock advanced (B was never touched this call).
+    assert _last_polled_at(s_b) == before_b
+
+
+def test_force_false_still_honors_floor(monkeypatch):
+    """Without force, a project-scoped poll still respects the per-kind floor."""
+    _spy_record_signal(monkeypatch)
+    _spy_warnings(monkeypatch)
+
+    adapter = _RecordingAdapter(
+        "knoforce",
+        result=FetchResult(outcome="unchanged"),
+        floor_s=3600,
+    )
+    registry.register(adapter)
+
+    proj = create_project(name="poll-noforce")
+    sid = _seed_in_project(proj, "knoforce", url="https://nf.example.com")
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE competitor_source SET last_polled_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (sid,),
+        )
+        conn.commit()
+
+    # Scoped but NOT forced -> the recent stamp keeps it under the floor -> skipped.
+    CompetitorPollService.poll_due_sources(project_id=proj, force=False)
+    assert adapter.fetched == []
