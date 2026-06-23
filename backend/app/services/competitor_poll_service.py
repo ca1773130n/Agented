@@ -278,9 +278,12 @@ class CompetitorPollService:
         # Phase 2 — summarize changed sources AFTER polling, so a slow LLM call
         # never stalls the poll loop. UNCHANGED from P1 (:340-346): the same
         # kind-agnostic summarizer, each call isolated.
+        from app.services.github_monitor_service import competitor_intel_llm_backend
+
+        summary_backend = competitor_intel_llm_backend()
         for source_id in changed_ids:
             try:
-                SignalSummarizerService.record_signal(source_id)
+                SignalSummarizerService.record_signal(source_id, backend_kind=summary_backend)
             except Exception:  # noqa: BLE001 — a summarize failure can't stall the rest
                 logger.warning(
                     "competitor signal summarize failed for source %s", source_id, exc_info=True

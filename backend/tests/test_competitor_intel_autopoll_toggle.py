@@ -190,3 +190,25 @@ def test_post_config_route_forbids_non_admin(isolated_db, monkeypatch):
         )
     assert resp.status_code == 403
     assert not scheduler.add_job.called
+
+
+def test_default_llm_backend_is_general_not_claude(isolated_db):
+    # Signal summaries + strategy gen default to a GENERAL chat model (gemini),
+    # NOT claude — Claude Code refuses these non-coding prompts and degrades.
+    from app.services.github_monitor_service import (
+        competitor_intel_llm_backend,
+        get_competitor_intel_config,
+    )
+
+    assert competitor_intel_llm_backend() == "gemini"
+    assert get_competitor_intel_config()["llm_backend"] == "gemini"
+
+
+def test_llm_backend_config_override(isolated_db):
+    from app.services.github_monitor_service import (
+        competitor_intel_llm_backend,
+        save_competitor_intel_config,
+    )
+
+    save_competitor_intel_config({"enabled": False, "polling_minutes": 15, "llm_backend": "codex"})
+    assert competitor_intel_llm_backend() == "codex"

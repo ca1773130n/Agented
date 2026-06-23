@@ -59,7 +59,16 @@ _GH_ACCEPT = "application/vnd.github+json"
 # Mirrors `monitoring_config` (app/db/monitoring.py). Default DISABLED.
 COMPETITOR_INTEL_CONFIG_KEY = "competitor_intel_config"
 _DEFAULT_POLL_MINUTES = 15
-_DEFAULT_CONFIG = {"enabled": False, "polling_minutes": _DEFAULT_POLL_MINUTES}
+# Backend for competitor-intel LLM calls (signal summaries + strategy proposals).
+# Defaults to a GENERAL chat model — NOT claude, whose Claude Code persona refuses
+# these non-coding summarize/strategize prompts (returns unparseable text →
+# degraded signals). gemini-2.5-flash / codex both work; gemini is the default.
+_DEFAULT_LLM_BACKEND = "gemini"
+_DEFAULT_CONFIG = {
+    "enabled": False,
+    "polling_minutes": _DEFAULT_POLL_MINUTES,
+    "llm_backend": _DEFAULT_LLM_BACKEND,
+}
 
 # HTTP timeout for a single poll (seconds). Short — a poll is a cheap GET.
 _POLL_TIMEOUT = 15
@@ -86,6 +95,15 @@ def get_competitor_intel_config() -> dict:
             except (json.JSONDecodeError, TypeError):
                 pass
     return dict(_DEFAULT_CONFIG)
+
+
+def competitor_intel_llm_backend() -> str:
+    """Resolve the backend for competitor-intel LLM calls (signal summaries +
+    strategy proposals). Reads the ``llm_backend`` config key, defaulting to a
+    general chat model (``gemini``) — claude's Claude Code persona refuses these
+    non-coding summarize/strategize prompts.
+    """
+    return str(get_competitor_intel_config().get("llm_backend") or _DEFAULT_LLM_BACKEND)
 
 
 def save_competitor_intel_config(config: dict) -> None:
