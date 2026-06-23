@@ -39,8 +39,11 @@ dependency); persistence is ``AdapterBase.commit``'s job, ``fetch`` is a pure re
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import logging
 import re
+import socket
+from urllib.parse import urlparse
 
 import httpx
 
@@ -87,6 +90,78 @@ def _extract_text(html: str) -> str:
     return _WS_RE.sub(" ", text).strip()
 
 
+# Max redirect hops to follow MANUALLY (each one re-validated for SSRF — httpx's
+# own follow_redirects cannot validate the intermediate hops).
+_MAX_REDIRECTS = 5
+
+
+class _UnsafeUrl(Exception):
+    """A URL that must NOT be fetched server-side: a non-http(s) scheme, or a host
+    resolving to a private/internal address (the SSRF guard)."""
+
+
+def _host_is_public(host: str) -> bool:
+    """True iff EVERY resolved IP for ``host`` is a public address.
+
+    Returns ``False`` on a resolution failure or ANY private / loopback /
+    link-local (incl. cloud metadata ``169.254.169.254``) / reserved / multicast /
+    unspecified IP. This is the SSRF guard for fetching operator-supplied URLs.
+    """
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror:
+        return False
+    for info in infos:
+        try:
+            addr = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            return False
+        if (
+            addr.is_private
+            or addr.is_loopback
+            or addr.is_link_local
+            or addr.is_reserved
+            or addr.is_multicast
+            or addr.is_unspecified
+        ):
+            return False
+    return True
+
+
+def _safe_get(url: str, headers: dict) -> httpx.Response:
+    """SSRF-safe GET: http(s) only; the URL host AND every redirect hop's host
+    must resolve to PUBLIC IPs.
+
+    Redirects are followed MANUALLY (``follow_redirects=False`` per hop) so each
+    target is re-validated — otherwise a public URL could ``30x``-redirect to an
+    internal address (metadata service, localhost, a private API). Raises
+    ``_UnsafeUrl`` for a bad scheme/host; the caller maps that to ``skipped``.
+
+    ponytail: resolve-then-connect leaves a narrow DNS-rebinding window —
+    acceptable for semi-trusted operator URLs; pin the resolved IP if the input
+    ever becomes hostile.
+    """
+    current = url
+    for _ in range(_MAX_REDIRECTS + 1):
+        parsed = urlparse(current)
+        if parsed.scheme not in ("http", "https"):
+            raise _UnsafeUrl(f"scheme {parsed.scheme!r} not allowed")
+        host = parsed.hostname
+        if not host or not _host_is_public(host):
+            raise _UnsafeUrl(f"non-public host {host!r}")
+        resp = httpx.get(
+            current, timeout=_POLL_TIMEOUT, headers=headers, follow_redirects=False
+        )
+        if resp.status_code in (301, 302, 303, 307, 308):
+            location = resp.headers.get("Location")
+            if not location:
+                return resp
+            current = str(httpx.URL(current).join(location))
+            continue
+        return resp
+    raise _UnsafeUrl("too many redirects")
+
+
 class ProductUrlAdapter(AdapterBase):
     """Keyless read-only content-change watcher for ``product_url`` sources."""
 
@@ -123,10 +198,15 @@ class ProductUrlAdapter(AdapterBase):
             headers["If-None-Match"] = etag
 
         try:
-            resp = httpx.get(url, timeout=_POLL_TIMEOUT, follow_redirects=True, headers=headers)
-        except httpx.HTTPError:
+            resp = _safe_get(url, headers)
+        except _UnsafeUrl:
+            # Non-http(s) scheme or an internal/private host (SSRF) — never fetch.
+            logger.warning("competitor product_url blocked unsafe URL for source %s", source_id)
+            return FetchResult(outcome="skipped")
+        except Exception:  # noqa: BLE001 — fetch MUST never raise (per-source isolation)
+            # Transport error, httpx.InvalidURL, or any other fetch failure.
             logger.warning(
-                "competitor product_url HTTP error for source %s", source_id, exc_info=True
+                "competitor product_url fetch failed for source %s", source_id, exc_info=True
             )
             return FetchResult(outcome="error")
 

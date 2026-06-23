@@ -44,6 +44,9 @@ def _patch_get(monkeypatch, response=None, *, raises: bool = False):
         return response
 
     monkeypatch.setattr(product_url.httpx, "get", fake_get)
+    # Treat every host as public so these response-shape tests don't hit real DNS;
+    # the SSRF host validation is covered by the dedicated tests below.
+    monkeypatch.setattr(product_url, "_host_is_public", lambda host: True)
 
 
 _HTML = "<html><head><style>.x{color:red}</style></head><body><h1>Hi</h1> there</body></html>"
@@ -125,3 +128,57 @@ def test_blank_url_is_skipped(monkeypatch):
     adapter = ProductUrlAdapter()
     result = adapter.fetch({"id": "s1", "url": "   ", "watermark": None})
     assert result.outcome == "skipped"
+
+
+# --- SSRF guard ----------------------------------------------------------------
+# A server-side fetch of an operator-supplied URL must refuse internal targets.
+# IP literals resolve without DNS, so these stay hermetic.
+
+
+def _patch_get_must_not_be_called(monkeypatch):
+    """httpx.get that FAILS the test if called — a blocked URL must never fetch."""
+
+    def fake_get(url, **kwargs):
+        raise AssertionError(f"httpx.get must not be called for a blocked URL: {url}")
+
+    monkeypatch.setattr(product_url.httpx, "get", fake_get)
+
+
+def test_blocks_cloud_metadata_link_local(monkeypatch):
+    _patch_get_must_not_be_called(monkeypatch)
+    adapter = ProductUrlAdapter()
+    result = adapter.fetch(
+        {"id": "s1", "url": "http://169.254.169.254/latest/meta-data/", "watermark": None}
+    )
+    assert result.outcome == "skipped"
+
+
+def test_blocks_loopback(monkeypatch):
+    _patch_get_must_not_be_called(monkeypatch)
+    adapter = ProductUrlAdapter()
+    result = adapter.fetch({"id": "s1", "url": "http://127.0.0.1:8080/admin", "watermark": None})
+    assert result.outcome == "skipped"
+
+
+def test_blocks_non_http_scheme(monkeypatch):
+    _patch_get_must_not_be_called(monkeypatch)
+    adapter = ProductUrlAdapter()
+    result = adapter.fetch({"id": "s1", "url": "file:///etc/passwd", "watermark": None})
+    assert result.outcome == "skipped"
+
+
+def test_blocks_redirect_to_internal(monkeypatch):
+    # A public host that 302s to loopback must be blocked AT the hop, not followed.
+    calls = {"n": 0}
+
+    def fake_get(url, **kwargs):
+        calls["n"] += 1
+        return _FakeResponse(302, headers={"Location": "http://127.0.0.1/internal"})
+
+    monkeypatch.setattr(product_url.httpx, "get", fake_get)
+    adapter = ProductUrlAdapter()
+    # 93.184.216.34 (example.com) is public — passes the first check; the redirect
+    # target is loopback and must NOT be followed.
+    result = adapter.fetch({"id": "s1", "url": "http://93.184.216.34/start", "watermark": None})
+    assert result.outcome == "skipped"
+    assert calls["n"] == 1  # only the first hop fetched; redirect re-validated + refused
