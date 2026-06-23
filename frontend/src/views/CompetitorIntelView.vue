@@ -8,6 +8,7 @@ import type {
   SuggestedCompetitor,
   MarketLookalike,
   Strategy,
+  CompetitorIntelConfig,
   AuthenticatedEventSource,
 } from '../services/api';
 import { useToast } from '../composables/useToast';
@@ -41,6 +42,17 @@ const sources = ref<CompetitorSource[]>([]);
 const polling = ref(false);
 const signals = ref<DetectedSignal[]>([]);
 const loadingSignals = ref(false);
+
+// --- GLOBAL scheduled auto-check config ------------------------------------
+// This is an INSTANCE-WIDE setting: one scheduled job polls every active source
+// across ALL projects, so enabling it here turns on auto-checking everywhere.
+const autoCheckEnabled = ref(false);
+const autoCheckInterval = ref(15);
+// The scheduled-poll config is admin-only; the toggle is hidden when getConfig
+// 403s for a non-admin (or the backend is unreachable).
+const autoCheckAvailable = ref(true);
+const savingAutoCheck = ref(false);
+const AUTO_CHECK_INTERVALS = [5, 15, 30, 60];
 
 // --- Discovery review-queue state ------------------------------------------
 const suggestions = ref<SuggestedCompetitor[]>([]);
@@ -185,6 +197,67 @@ async function pollNow() {
   } finally {
     polling.value = false;
   }
+}
+
+/**
+ * Load the GLOBAL scheduled-poll config so the toggle reflects the live
+ * instance-wide setting (not per-project). Failures are non-fatal — the toggle
+ * just stays at its default-disabled state.
+ */
+async function loadAutoCheckConfig() {
+  try {
+    const cfg = await competitorIntelApi.getConfig();
+    autoCheckEnabled.value = !!cfg.enabled;
+    if (AUTO_CHECK_INTERVALS.includes(cfg.polling_minutes)) {
+      autoCheckInterval.value = cfg.polling_minutes;
+    }
+  } catch {
+    // 403 for non-admins (the config is admin-gated), or the backend is down:
+    // hide the toggle rather than show a control the user can't use.
+    autoCheckAvailable.value = false;
+  }
+}
+
+/**
+ * Persist the GLOBAL scheduled-poll config (enable/disable + interval). Takes
+ * effect at runtime (no restart). On failure, revert the optimistic UI to the
+ * server's truth by reloading the config.
+ */
+async function saveAutoCheckConfig() {
+  if (savingAutoCheck.value) return;
+  savingAutoCheck.value = true;
+  const payload: CompetitorIntelConfig = {
+    enabled: autoCheckEnabled.value,
+    polling_minutes: autoCheckInterval.value,
+  };
+  try {
+    const cfg = await competitorIntelApi.saveConfig(payload);
+    autoCheckEnabled.value = !!cfg.enabled;
+    autoCheckInterval.value = cfg.polling_minutes;
+    showToast(
+      cfg.enabled
+        ? t('competitorIntel.autoCheckOn', { minutes: cfg.polling_minutes })
+        : t('competitorIntel.autoCheckOff'),
+      'success',
+    );
+  } catch (err) {
+    showToast(
+      err instanceof ApiError ? err.message : t('competitorIntel.autoCheckError'),
+      'error',
+    );
+    await loadAutoCheckConfig();
+  } finally {
+    savingAutoCheck.value = false;
+  }
+}
+
+function toggleAutoCheck() {
+  autoCheckEnabled.value = !autoCheckEnabled.value;
+  void saveAutoCheckConfig();
+}
+
+function onAutoCheckIntervalChange() {
+  void saveAutoCheckConfig();
 }
 
 async function loadSignals() {
@@ -508,6 +581,8 @@ watch(projectId, () => refreshAll());
 
 onMounted(() => {
   refreshAll();
+  // The auto-check config is GLOBAL (not project-scoped), so load it once.
+  void loadAutoCheckConfig();
 });
 
 onUnmounted(() => {
@@ -564,14 +639,50 @@ onUnmounted(() => {
     <div class="ci-sources">
       <div class="ci-sources-head">
         <h2 class="ci-section-title">{{ t('competitorIntel.sourcesTitle') }}</h2>
-        <button
-          type="button"
-          class="ci-submit ci-poll-now"
-          :disabled="polling"
-          @click="pollNow"
-        >
-          {{ polling ? t('competitorIntel.polling') : t('competitorIntel.pollNow') }}
-        </button>
+        <div class="ci-sources-actions">
+          <!-- GLOBAL auto-check toggle: one scheduled job polls every active
+               source across ALL projects, so this is an instance-wide setting. -->
+          <div v-if="autoCheckAvailable" class="ci-autocheck">
+            <button
+              type="button"
+              class="toggle-switch ci-autocheck-switch"
+              :class="{ active: autoCheckEnabled }"
+              role="switch"
+              :aria-checked="autoCheckEnabled"
+              :aria-label="t('competitorIntel.autoCheckLabel')"
+              :disabled="savingAutoCheck"
+              tabindex="0"
+              @click="toggleAutoCheck"
+              @keydown.enter.prevent="toggleAutoCheck"
+              @keydown.space.prevent="toggleAutoCheck"
+            >
+              <span class="toggle-knob" />
+            </button>
+            <span class="ci-autocheck-text">
+              <span class="ci-autocheck-title">{{ t('competitorIntel.autoCheckLabel') }}</span>
+              <span class="ci-autocheck-hint">{{ t('competitorIntel.autoCheckGlobalHint') }}</span>
+            </span>
+            <select
+              v-model.number="autoCheckInterval"
+              class="ci-input ci-autocheck-interval"
+              :disabled="!autoCheckEnabled || savingAutoCheck"
+              :aria-label="t('competitorIntel.autoCheckIntervalLabel')"
+              @change="onAutoCheckIntervalChange"
+            >
+              <option v-for="m in AUTO_CHECK_INTERVALS" :key="m" :value="m">
+                {{ t('competitorIntel.autoCheckEvery', { minutes: m }) }}
+              </option>
+            </select>
+          </div>
+          <button
+            type="button"
+            class="ci-submit ci-poll-now"
+            :disabled="polling"
+            @click="pollNow"
+          >
+            {{ polling ? t('competitorIntel.polling') : t('competitorIntel.pollNow') }}
+          </button>
+        </div>
       </div>
       <p v-if="sources.length === 0" class="ci-empty">{{ t('competitorIntel.sourcesEmpty') }}</p>
       <ul v-else class="ci-source-list">
@@ -897,6 +1008,71 @@ onUnmounted(() => {
 }
 .ci-sources-head .ci-section-title {
   margin: 0;
+}
+.ci-sources-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.ci-autocheck {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.ci-autocheck-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.ci-autocheck-title {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+.ci-autocheck-hint {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+.ci-autocheck-interval {
+  min-width: auto;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.82rem;
+}
+.ci-autocheck-interval:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.toggle-switch {
+  width: 44px;
+  height: 24px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  padding: 2px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  flex-shrink: 0;
+}
+.toggle-switch.active {
+  background: var(--accent-cyan);
+  border-color: var(--accent-cyan);
+}
+.toggle-switch:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.toggle-knob {
+  display: block;
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+.toggle-switch.active .toggle-knob {
+  transform: translateX(20px);
 }
 .ci-source {
   display: flex;

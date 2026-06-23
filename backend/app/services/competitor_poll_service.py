@@ -61,6 +61,82 @@ def _parse_ts(value: str | None) -> float | None:
 class CompetitorPollService:
     """Kind-dispatching poll loop over ALL active competitor sources."""
 
+    # APScheduler job id for the SCHEDULED (global) competitor-source poll.
+    # Same id the lifecycle scheduler registers so reconfigure can replace it.
+    _JOB_ID = "competitor_intel_poll"
+
+    @classmethod
+    def reconfigure(cls, config: dict) -> None:
+        """Persist config and register/remove the scheduled poll job at RUNTIME.
+
+        Mirrors ``MonitoringService.reconfigure``: saves the config, then either
+        registers the interval job (when enabled) or removes it. The schedule is
+        GLOBAL — one job polls every active source across all projects.
+        """
+        from .github_monitor_service import save_competitor_intel_config
+
+        save_competitor_intel_config(config)
+
+        if config.get("enabled"):
+            cls._register_job(config.get("polling_minutes", 15))
+            logger.info(
+                "Competitor-intel poll reconfigured: every %d min",
+                config.get("polling_minutes", 15),
+            )
+        else:
+            cls._remove_job()
+            logger.info("Competitor-intel poll disabled: job removed")
+
+    @classmethod
+    def apply_stored_config(cls) -> None:
+        """STARTUP path: register/remove the job from the stored config (NO save).
+
+        Called by ``lifecycle._setup_scheduler`` once the scheduler exists.
+        Reads the persisted config and registers the interval job when enabled,
+        otherwise ensures any stale job is removed.
+        """
+        from .github_monitor_service import get_competitor_intel_config
+
+        config = get_competitor_intel_config()
+        if config.get("enabled"):
+            cls._register_job(config.get("polling_minutes", 15))
+            logger.info(
+                "Competitor-intel poll job registered: every %d min",
+                config.get("polling_minutes", 15),
+            )
+        else:
+            cls._remove_job()
+
+    @classmethod
+    def _register_job(cls, interval_minutes: int) -> None:
+        """Register or re-register the scheduled poll interval job."""
+        from .scheduler_service import SchedulerService
+
+        if SchedulerService._scheduler is None:
+            logger.error(
+                "Scheduler not available — competitor-intel poll job not registered; "
+                "scheduled competitor-source polling is DISABLED until the scheduler is running"
+            )
+            return
+
+        SchedulerService._scheduler.add_job(
+            func=cls.poll_due_sources,
+            trigger="interval",
+            minutes=max(1, int(interval_minutes)),
+            id=cls._JOB_ID,
+            replace_existing=True,
+        )
+
+    @classmethod
+    def _remove_job(cls) -> None:
+        """Remove the scheduled poll job if it exists."""
+        from .scheduler_service import SchedulerService
+
+        if SchedulerService._scheduler is None:
+            return
+        if SchedulerService._scheduler.get_job(cls._JOB_ID):
+            SchedulerService._scheduler.remove_job(cls._JOB_ID)
+
     @staticmethod
     def _stamp_polled(source_id: str) -> None:
         """Advance ``last_polled_at`` to now for a source that was actually fetched.

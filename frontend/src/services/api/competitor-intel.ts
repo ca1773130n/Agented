@@ -139,7 +139,31 @@ export interface MarketLookalike {
   created_at: string;
 }
 
+/**
+ * The GLOBAL scheduled-poll config (NOT per-project). One APScheduler job polls
+ * every active competitor source across all projects, so this enable/interval
+ * toggle is a single instance-wide setting.
+ */
+export interface CompetitorIntelConfig {
+  enabled: boolean;
+  polling_minutes: number;
+}
+
 export const competitorIntelApi = {
+  /** Read the GLOBAL scheduled-poll config ({enabled, polling_minutes}). */
+  getConfig: (): Promise<CompetitorIntelConfig> =>
+    apiFetch<CompetitorIntelConfig>(`/api/competitor-intel/config`),
+
+  /**
+   * Enable/disable the GLOBAL scheduled poll + set its interval (runtime, no
+   * restart). `polling_minutes` must be one of 5/15/30/60. CSRF auto-injected.
+   */
+  saveConfig: (config: CompetitorIntelConfig): Promise<CompetitorIntelConfig> =>
+    apiFetch<CompetitorIntelConfig>(`/api/competitor-intel/config`, {
+      method: 'POST',
+      body: JSON.stringify(config),
+    }),
+
   /**
    * Add a source by URL (or, for `hn_query`, a search query in the `url` field).
    * `label` is optional — omit it freely; the backend never rejects a
