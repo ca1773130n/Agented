@@ -88,6 +88,27 @@ def get_competitor_intel_config() -> dict:
     return dict(_DEFAULT_CONFIG)
 
 
+def save_competitor_intel_config(config: dict) -> None:
+    """Upsert the competitor-intel poll config into the settings table as JSON.
+
+    Mirrors ``app.db.monitoring.save_monitoring_config`` — keyed by
+    ``COMPETITOR_INTEL_CONFIG_KEY`` so ``get_competitor_intel_config`` reads it
+    back. Lets an operator flip the SCHEDULED poller on/off at runtime (no
+    restart) instead of editing the DB by hand.
+    """
+    value = json.dumps(config)
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO settings (key, value, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+            """,
+            (COMPETITOR_INTEL_CONFIG_KEY, value),
+        )
+        conn.commit()
+
+
 class GitHubMonitorService:
     """Authenticated conditional poller for ``github_repo`` competitor sources."""
 

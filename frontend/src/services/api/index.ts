@@ -71,6 +71,7 @@ export type {
   SuggestedCompetitor,
   Strategy,
   MarketLookalike,
+  CompetitorIntelConfig,
 } from './competitor-intel';
 export { researchApi } from './research';
 export type {

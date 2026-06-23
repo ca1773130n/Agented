@@ -237,3 +237,47 @@ competitor_intel_router = Router(
         competitor_signals_stream,
     ],
 )
+
+
+# ---------------------------------------------------------------------------
+# GLOBAL scheduled-poll config (NOT per-project). One job polls every active
+# source across all projects, so the enable/interval toggle is a single global
+# setting — mirrors the monitoring /config route (leaf_crud_e.py).
+# ---------------------------------------------------------------------------
+
+_VALID_POLLING_MINUTES = (5, 15, 30, 60)
+
+
+@get("/config", sync_to_thread=False)
+def get_competitor_intel_config_route(caller: Caller) -> dict[str, Any]:
+    """Return the GLOBAL competitor-intel scheduled-poll config ({enabled, polling_minutes})."""
+    from app.services.github_monitor_service import get_competitor_intel_config
+
+    return get_competitor_intel_config()
+
+
+@post("/config", sync_to_thread=False)
+def save_competitor_intel_config_route(data: dict | None, caller: Caller) -> dict[str, Any]:
+    """Enable/disable the GLOBAL scheduled poll and set its interval (runtime, no restart)."""
+    if not data:
+        raise ClientException(detail="JSON body required")
+    polling_minutes = data.get("polling_minutes", 15)
+    if polling_minutes not in _VALID_POLLING_MINUTES:
+        raise ClientException(
+            detail=f"polling_minutes must be one of {list(_VALID_POLLING_MINUTES)}"
+        )
+    config = {
+        "enabled": bool(data.get("enabled", False)),
+        "polling_minutes": int(polling_minutes),
+    }
+    CompetitorPollService.reconfigure(config)
+    return config
+
+
+competitor_intel_config_router = Router(
+    path="/api/competitor-intel",
+    route_handlers=[
+        get_competitor_intel_config_route,
+        save_competitor_intel_config_route,
+    ],
+)

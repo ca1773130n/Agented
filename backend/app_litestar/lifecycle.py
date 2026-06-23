@@ -336,21 +336,12 @@ def _setup_scheduler(app: Any) -> None:
         # touch the periodic_jobs list or the Phase-D autonomy poller.
         try:
             from app.services.competitor_poll_service import CompetitorPollService
-            from app.services.github_monitor_service import get_competitor_intel_config
 
-            _ci_cfg = get_competitor_intel_config()
-            if _ci_cfg.get("enabled"):
-                _ci_interval = max(1, int(_ci_cfg.get("polling_minutes", 15)))
-                SchedulerService._scheduler.add_job(
-                    # Phase 25: the kind-dispatching poller (all active sources,
-                    # not just github_repo). Same config gate, same interval job.
-                    func=CompetitorPollService.poll_due_sources,
-                    trigger="interval",
-                    minutes=_ci_interval,
-                    id="competitor_intel_poll",
-                    replace_existing=True,
-                )
-                logger.info("Competitor-intel poll job registered: every %d min", _ci_interval)
+            # Register/remove the SCHEDULED poll job from the stored config.
+            # Same behavior as the old inline add_job (default DISABLED), but now
+            # the operator toggle (CompetitorPollService.reconfigure via the
+            # /api/competitor-intel/config route) can flip it at RUNTIME.
+            CompetitorPollService.apply_stored_config()
         except Exception:
             logger.warning("competitor-intel poll job registration failed", exc_info=True)
 
