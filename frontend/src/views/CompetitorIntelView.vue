@@ -2,6 +2,9 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { competitorIntelApi, lookalikeApi, ApiError } from '../services/api';
+import PageLayout from '../components/base/PageLayout.vue';
+import PageHeader from '../components/base/PageHeader.vue';
+import EmptyState from '../components/base/EmptyState.vue';
 import type {
   CompetitorSource,
   DetectedSignal,
@@ -591,55 +594,52 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section class="competitor-intel">
-    <header class="ci-header">
-      <h1 class="ci-title">{{ t('competitorIntel.title') }}</h1>
-      <p class="ci-subtitle">{{ t('competitorIntel.subtitle') }}</p>
-    </header>
+  <PageLayout max-width="960px">
+    <PageHeader :title="t('competitorIntel.title')" :subtitle="t('competitorIntel.subtitle')" />
 
-    <!-- Add a source -->
-    <form class="ci-add-form" @submit.prevent="submitSource">
-      <label class="ci-field">
-        <span class="ci-field-label">{{ t('competitorIntel.kindLabel') }}</span>
-        <select v-model="kind" class="ci-input" :aria-label="t('competitorIntel.kindLabel')">
+    <!-- Add a source — shared toolbar/form card -->
+    <form class="ci-toolbar" @submit.prevent="submitSource">
+      <div class="form-group">
+        <label for="ci-kind">{{ t('competitorIntel.kindLabel') }}</label>
+        <select id="ci-kind" v-model="kind" :aria-label="t('competitorIntel.kindLabel')">
           <option value="">{{ t('competitorIntel.kindAuto') }}</option>
           <option value="hn_query">{{ t('competitorIntel.kindHnQuery') }}</option>
         </select>
-      </label>
-      <label class="ci-field">
-        <span class="ci-field-label">{{
+      </div>
+      <div class="form-group">
+        <label for="ci-url">{{
           isQuery ? t('competitorIntel.queryLabel') : t('competitorIntel.urlLabel')
-        }}</span>
+        }}</label>
         <input
+          id="ci-url"
           v-model="url"
           :type="isQuery ? 'text' : 'url'"
-          class="ci-input"
           :placeholder="
             isQuery ? t('competitorIntel.queryPlaceholder') : t('competitorIntel.urlPlaceholder')
           "
           :aria-label="isQuery ? t('competitorIntel.queryLabel') : t('competitorIntel.urlLabel')"
         />
-      </label>
-      <label class="ci-field">
-        <span class="ci-field-label">{{ t('competitorIntel.labelOptional') }}</span>
+      </div>
+      <div class="form-group">
+        <label for="ci-label">{{ t('competitorIntel.labelOptional') }}</label>
         <input
+          id="ci-label"
           v-model="label"
           type="text"
-          class="ci-input"
           :placeholder="t('competitorIntel.labelPlaceholder')"
           :aria-label="t('competitorIntel.labelOptional')"
         />
-      </label>
-      <button type="submit" class="ci-submit" :disabled="!canSubmit">
+      </div>
+      <button type="submit" class="btn btn-primary" :disabled="!canSubmit">
         {{ adding ? t('competitorIntel.adding') : t('competitorIntel.submit') }}
       </button>
     </form>
 
     <!-- Watched sources -->
-    <div class="ci-sources">
-      <div class="ci-sources-head">
-        <h2 class="ci-section-title">{{ t('competitorIntel.sourcesTitle') }}</h2>
-        <div class="ci-sources-actions">
+    <section class="ci-card">
+      <div class="ci-card-head">
+        <h2 class="ci-card-title">{{ t('competitorIntel.sourcesTitle') }}</h2>
+        <div class="ci-card-actions">
           <!-- GLOBAL auto-check toggle: one scheduled job polls every active
                source across ALL projects, so this is an instance-wide setting. -->
           <div v-if="autoCheckAvailable" class="ci-autocheck">
@@ -664,7 +664,7 @@ onUnmounted(() => {
             </span>
             <select
               v-model.number="autoCheckInterval"
-              class="ci-input ci-autocheck-interval"
+              class="ci-autocheck-interval"
               :disabled="!autoCheckEnabled || savingAutoCheck"
               :aria-label="t('competitorIntel.autoCheckIntervalLabel')"
               @change="onAutoCheckIntervalChange"
@@ -676,7 +676,7 @@ onUnmounted(() => {
           </div>
           <button
             type="button"
-            class="ci-submit ci-poll-now"
+            class="btn btn-secondary btn-sm"
             :disabled="polling"
             @click="pollNow"
           >
@@ -684,7 +684,10 @@ onUnmounted(() => {
           </button>
         </div>
       </div>
-      <p v-if="sources.length === 0" class="ci-empty">{{ t('competitorIntel.sourcesEmpty') }}</p>
+      <EmptyState
+        v-if="sources.length === 0"
+        :title="t('competitorIntel.sourcesEmpty')"
+      />
       <ul v-else class="ci-source-list">
         <li v-for="s in sources" :key="s.id" class="ci-source">
           <span class="ci-kind" :data-kind="s.kind">{{ kindLabel(s.kind) }}</span>
@@ -698,22 +701,24 @@ onUnmounted(() => {
           </span>
         </li>
       </ul>
-    </div>
+    </section>
 
     <!-- Discovery review queue: suggested competitors awaiting accept/dismiss -->
-    <div class="ci-suggestions">
-      <div class="ci-suggestions-head">
-        <h2 class="ci-section-title">{{ t('competitorIntel.suggestionsTitle') }}</h2>
-        <button type="button" class="ci-submit ci-discover" :disabled="scanning" @click="runDiscovery">
+    <section class="ci-card">
+      <div class="ci-card-head">
+        <h2 class="ci-card-title">{{ t('competitorIntel.suggestionsTitle') }}</h2>
+        <button type="button" class="btn btn-secondary btn-sm" :disabled="scanning" @click="runDiscovery">
           {{ scanning ? t('competitorIntel.adding') : t('competitorIntel.runDiscovery') }}
         </button>
       </div>
-      <p v-if="loadingSuggestions && suggestions.length === 0" class="ci-empty">
-        {{ t('competitorIntel.loading') }}
-      </p>
-      <p v-else-if="suggestions.length === 0" class="ci-empty">
-        {{ t('competitorIntel.suggestionsEmpty') }}
-      </p>
+      <EmptyState
+        v-if="loadingSuggestions && suggestions.length === 0"
+        :title="t('competitorIntel.loading')"
+      />
+      <EmptyState
+        v-else-if="suggestions.length === 0"
+        :title="t('competitorIntel.suggestionsEmpty')"
+      />
       <ul v-else class="ci-suggestion-list">
         <li v-for="sug in suggestions" :key="sug.id" class="ci-suggestion">
           <div class="ci-suggestion-main">
@@ -726,39 +731,41 @@ onUnmounted(() => {
           <div class="ci-suggestion-actions">
             <button
               type="button"
-              class="ci-submit ci-accept"
+              class="btn btn-primary btn-sm"
               :disabled="acceptingId === sug.id"
               @click="acceptSuggestion(sug.id)"
             >
               {{ acceptingId === sug.id ? t('competitorIntel.accepting') : t('competitorIntel.accept') }}
             </button>
-            <button type="button" class="ci-dismiss" @click="dismissSuggestion(sug.id)">
+            <button type="button" class="btn btn-sm" @click="dismissSuggestion(sug.id)">
               {{ t('competitorIntel.dismiss') }}
             </button>
           </div>
         </li>
       </ul>
-    </div>
+    </section>
 
     <!-- Strategy review queue: generate → review → approve/reject/edit → §5B legal -->
-    <div class="ci-strategies">
-      <div class="ci-suggestions-head">
-        <h2 class="ci-section-title">{{ t('competitorIntel.strategiesTitle') }}</h2>
+    <section class="ci-card">
+      <div class="ci-card-head">
+        <h2 class="ci-card-title">{{ t('competitorIntel.strategiesTitle') }}</h2>
         <button
           type="button"
-          class="ci-submit ci-discover"
+          class="btn btn-secondary btn-sm"
           :disabled="generatingStrategy"
           @click="generateStrategy"
         >
           {{ generatingStrategy ? t('competitorIntel.adding') : t('competitorIntel.generateStrategy') }}
         </button>
       </div>
-      <p v-if="loadingStrategies && strategies.length === 0" class="ci-empty">
-        {{ t('competitorIntel.loading') }}
-      </p>
-      <p v-else-if="strategies.length === 0" class="ci-empty">
-        {{ t('competitorIntel.strategiesEmpty') }}
-      </p>
+      <EmptyState
+        v-if="loadingStrategies && strategies.length === 0"
+        :title="t('competitorIntel.loading')"
+      />
+      <EmptyState
+        v-else-if="strategies.length === 0"
+        :title="t('competitorIntel.strategiesEmpty')"
+      />
       <ul v-else class="ci-strategy-list">
         <li v-for="st in strategies" :key="st.id" class="ci-strategy">
           <div class="ci-strategy-head">
@@ -766,7 +773,7 @@ onUnmounted(() => {
             <span class="ci-strategy-title">{{ st.title || t('competitorIntel.noSummary') }}</span>
           </div>
           <textarea
-            class="ci-input ci-strategy-body"
+            class="ci-strategy-body"
             :value="st.body || ''"
             :aria-label="t('competitorIntel.editStrategy')"
             @blur="saveStrategyBody(st.id, ($event.target as HTMLTextAreaElement).value)"
@@ -774,7 +781,7 @@ onUnmounted(() => {
           <div class="ci-strategy-actions">
             <button
               type="button"
-              class="ci-submit ci-accept"
+              class="btn btn-primary btn-sm"
               :disabled="strategyInFlight === st.id || st.status !== 'proposed'"
               @click="approveStrategy(st.id)"
             >
@@ -782,7 +789,7 @@ onUnmounted(() => {
             </button>
             <button
               type="button"
-              class="ci-dismiss"
+              class="btn btn-sm"
               :disabled="strategyInFlight === st.id"
               @click="rejectStrategy(st.id)"
             >
@@ -807,7 +814,7 @@ onUnmounted(() => {
             </ul>
             <button
               type="button"
-              class="ci-submit ci-implement"
+              class="btn btn-primary btn-sm"
               :disabled="!st.legal_cleared_at || strategyInFlight === st.id || st.status !== 'approved'"
               :title="!st.legal_cleared_at ? t('competitorIntel.legalChecklistTitle') : ''"
               @click="materializeStrategy(st.id)"
@@ -817,20 +824,20 @@ onUnmounted(() => {
           </div>
         </li>
       </ul>
-    </div>
+    </section>
 
     <!-- Market lookalikes (phase 27 P5): provider-pluggable scan→review→accept.
          THREE states: (1) provider===null → "configure a provider" CTA (the
          dominant default-install state — no scan button, no fake rows); (2)
          provider set + empty → empty line + Scan button; (3) provider set +
          populated → the review queue. -->
-    <div class="ci-lookalikes">
-      <div class="ci-suggestions-head">
-        <h2 class="ci-section-title">{{ t('competitorIntel.lookalikes.title') }}</h2>
+    <section class="ci-card">
+      <div class="ci-card-head">
+        <h2 class="ci-card-title">{{ t('competitorIntel.lookalikes.title') }}</h2>
         <button
           v-if="lookalikeProvider !== null"
           type="button"
-          class="ci-submit ci-discover"
+          class="btn btn-secondary btn-sm"
           :disabled="scanningLookalikes"
           @click="runLookalikeScan"
         >
@@ -838,35 +845,39 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <!-- State 1: no provider keyed — the graceful-degradation CTA card -->
-      <div v-if="lookalikeProvider === null" class="ci-lookalike-cta">
-        <p class="ci-lookalike-cta-title">{{ t('competitorIntel.lookalikes.notConfigured.title') }}</p>
-        <p class="ci-lookalike-cta-hint">{{ t('competitorIntel.lookalikes.notConfigured.hint') }}</p>
-        <a
-          class="ci-lookalike-cta-link"
-          href="https://docs.apistemic.com"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          {{ t('competitorIntel.lookalikes.notConfigured.docsLink') }}
-        </a>
-      </div>
+      <!-- State 1: no provider keyed — the graceful-degradation CTA -->
+      <EmptyState
+        v-if="lookalikeProvider === null"
+        :title="t('competitorIntel.lookalikes.notConfigured.title')"
+        :description="t('competitorIntel.lookalikes.notConfigured.hint')"
+      >
+        <template #actions>
+          <a
+            class="btn btn-secondary"
+            href="https://docs.apistemic.com"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {{ t('competitorIntel.lookalikes.notConfigured.docsLink') }}
+          </a>
+        </template>
+      </EmptyState>
 
       <!-- State 2: provider keyed, queue empty -->
-      <p
+      <EmptyState
         v-else-if="loadingLookalikes && lookalikes.length === 0"
-        class="ci-empty"
-      >
-        {{ t('competitorIntel.loading') }}
-      </p>
+        :title="t('competitorIntel.loading')"
+      />
       <!-- State 2b: a scan ran but the project has no product_url source to seed
            from — surface the hint so the operator knows the next step. -->
-      <p v-else-if="lookalikeNoSeed && lookalikes.length === 0" class="ci-empty">
-        {{ t('competitorIntel.lookalikes.noSeedHint') }}
-      </p>
-      <p v-else-if="lookalikes.length === 0" class="ci-empty">
-        {{ t('competitorIntel.lookalikes.empty') }}
-      </p>
+      <EmptyState
+        v-else-if="lookalikeNoSeed && lookalikes.length === 0"
+        :title="t('competitorIntel.lookalikes.noSeedHint')"
+      />
+      <EmptyState
+        v-else-if="lookalikes.length === 0"
+        :title="t('competitorIntel.lookalikes.empty')"
+      />
 
       <!-- State 3: provider keyed, populated review queue -->
       <ul v-else class="ci-suggestion-list">
@@ -884,29 +895,33 @@ onUnmounted(() => {
           <div class="ci-suggestion-actions">
             <button
               type="button"
-              class="ci-submit ci-accept"
+              class="btn btn-primary btn-sm"
               :disabled="acceptingLookalikeId === la.id"
               @click="acceptLookalike(la.id)"
             >
               {{ acceptingLookalikeId === la.id ? t('competitorIntel.lookalikes.accepting') : t('competitorIntel.lookalikes.accept') }}
             </button>
-            <button type="button" class="ci-dismiss" @click="dismissLookalike(la.id)">
+            <button type="button" class="btn btn-sm" @click="dismissLookalike(la.id)">
               {{ t('competitorIntel.lookalikes.dismiss') }}
             </button>
           </div>
         </li>
       </ul>
-    </div>
+    </section>
 
     <!-- Ranked signals -->
-    <div class="ci-signals">
-      <h2 class="ci-section-title">{{ t('competitorIntel.signalsTitle') }}</h2>
-      <p v-if="loadingSignals && signals.length === 0" class="ci-empty">
-        {{ t('competitorIntel.loading') }}
-      </p>
-      <p v-else-if="signals.length === 0" class="ci-empty">
-        {{ t('competitorIntel.signalsEmpty') }}
-      </p>
+    <section class="ci-card">
+      <div class="ci-card-head">
+        <h2 class="ci-card-title">{{ t('competitorIntel.signalsTitle') }}</h2>
+      </div>
+      <EmptyState
+        v-if="loadingSignals && signals.length === 0"
+        :title="t('competitorIntel.loading')"
+      />
+      <EmptyState
+        v-else-if="signals.length === 0"
+        :title="t('competitorIntel.signalsEmpty')"
+      />
       <ul v-else class="ci-signal-list">
         <li v-for="sig in signals" :key="sig.id" class="ci-signal">
           <div class="ci-signal-head">
@@ -919,77 +934,58 @@ onUnmounted(() => {
           <span class="ci-signal-source">{{ sig.label || sig.url }}</span>
         </li>
       </ul>
-    </div>
-  </section>
+    </section>
+  </PageLayout>
 </template>
 
 <style scoped>
-.competitor-intel {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  padding: 1.5rem;
-  max-width: 880px;
-  margin: 0 auto;
-}
-.ci-title {
-  font-size: 1.4rem;
-  font-weight: 600;
-  margin: 0;
-}
-.ci-subtitle {
-  color: var(--text-secondary, #9aa0a6);
-  margin: 0.25rem 0 0;
-}
-.ci-add-form {
+/* --- Add-source toolbar: a clean bordered form card (mirrors .filters-bar) --- */
+.ci-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: 16px;
   align-items: flex-end;
-  padding: 1rem;
-  border: 1px solid var(--border-color, #2a2a2a);
+  margin-bottom: 24px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: var(--surface-1, #1a1a1a);
 }
-.ci-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+.ci-toolbar .form-group {
   flex: 1 1 200px;
+  margin-bottom: 0;
 }
-.ci-field-label {
-  font-size: 0.8rem;
-  color: var(--text-secondary, #9aa0a6);
+
+/* --- Section card: same bordered surface the standard pages use --- */
+.ci-card {
+  margin-bottom: 24px;
+  padding: 20px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
 }
-.ci-input {
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--border-color, #2a2a2a);
-  border-radius: 6px;
-  background: var(--surface-2, #111);
-  color: var(--text-primary, #eee);
+.ci-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
 }
-.ci-submit {
-  padding: 0.55rem 1.1rem;
-  border-radius: 6px;
-  border: none;
-  background: var(--accent, #4f8cff);
-  color: #fff;
+.ci-card-title {
+  font-size: 16px;
   font-weight: 600;
-  cursor: pointer;
+  color: var(--text-primary);
+  margin: 0;
 }
-.ci-submit:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.ci-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
-.ci-section-title {
-  font-size: 1rem;
-  font-weight: 600;
-  margin: 0 0 0.5rem;
-}
-.ci-empty {
-  color: var(--text-secondary, #9aa0a6);
-  font-style: italic;
-}
+
 .ci-source-list,
 .ci-signal-list {
   list-style: none;
@@ -998,23 +994,6 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-}
-.ci-sources-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0.5rem;
-}
-.ci-sources-head .ci-section-title {
-  margin: 0;
-}
-.ci-sources-actions {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  flex-wrap: wrap;
-  justify-content: flex-end;
 }
 .ci-autocheck {
   display: flex;
@@ -1036,8 +1015,12 @@ onUnmounted(() => {
 }
 .ci-autocheck-interval {
   min-width: auto;
-  padding: 0.3rem 0.5rem;
+  padding: 6px 10px;
   font-size: 0.82rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-primary);
 }
 .ci-autocheck-interval:disabled {
   opacity: 0.5;
@@ -1082,7 +1065,7 @@ onUnmounted(() => {
 .ci-source-checked {
   margin-left: auto;
   font-size: 0.75rem;
-  color: var(--text-muted, #888);
+  color: var(--text-tertiary);
   white-space: nowrap;
 }
 .ci-source-unchecked {
@@ -1095,14 +1078,14 @@ onUnmounted(() => {
   letter-spacing: 0.04em;
   padding: 0.1rem 0.45rem;
   border-radius: 4px;
-  background: var(--surface-2, #222);
-  color: var(--text-secondary, #9aa0a6);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
 }
 .ci-signal {
   padding: 0.75rem;
-  border: 1px solid var(--border-color, #2a2a2a);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: var(--surface-1, #1a1a1a);
+  background: var(--bg-tertiary);
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -1114,31 +1097,17 @@ onUnmounted(() => {
 }
 .ci-signal-score {
   font-size: 0.8rem;
-  color: var(--accent, #4f8cff);
+  color: var(--accent-cyan);
 }
 .ci-signal-summary {
   margin: 0;
-  color: var(--text-primary, #eee);
+  color: var(--text-primary);
 }
 .ci-signal-source {
   font-size: 0.8rem;
-  color: var(--text-secondary, #9aa0a6);
+  color: var(--text-secondary);
 }
 /* --- Discovery review queue --- */
-.ci-suggestions-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0.5rem;
-}
-.ci-suggestions-head .ci-section-title {
-  margin: 0;
-}
-.ci-discover {
-  padding: 0.4rem 0.9rem;
-  font-size: 0.85rem;
-}
 .ci-suggestion-list {
   list-style: none;
   margin: 0;
@@ -1154,9 +1123,9 @@ onUnmounted(() => {
   gap: 0.75rem;
   flex-wrap: wrap;
   padding: 0.6rem 0.75rem;
-  border: 1px solid var(--border-color, #2a2a2a);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: var(--surface-1, #1a1a1a);
+  background: var(--bg-tertiary);
 }
 .ci-suggestion-main {
   display: flex;
@@ -1166,7 +1135,7 @@ onUnmounted(() => {
   min-width: 0;
 }
 .ci-suggestion-url {
-  color: var(--text-primary, #eee);
+  color: var(--text-primary);
   font-size: 0.9rem;
   word-break: break-all;
 }
@@ -1175,8 +1144,8 @@ onUnmounted(() => {
   font-size: 0.75rem;
   padding: 0.1rem 0.45rem;
   border-radius: 4px;
-  background: var(--surface-2, #222);
-  color: var(--accent, #4f8cff);
+  background: var(--bg-tertiary);
+  color: var(--accent-cyan);
   max-width: 22rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1186,26 +1155,6 @@ onUnmounted(() => {
   display: flex;
   gap: 0.5rem;
   flex-shrink: 0;
-}
-.ci-accept {
-  padding: 0.35rem 0.8rem;
-  font-size: 0.85rem;
-}
-.ci-dismiss {
-  padding: 0.35rem 0.8rem;
-  font-size: 0.85rem;
-  border-radius: 6px;
-  border: 1px solid var(--border-color, #2a2a2a);
-  background: transparent;
-  color: var(--text-secondary, #9aa0a6);
-  cursor: pointer;
-}
-.ci-dismiss:hover {
-  color: var(--text-primary, #eee);
-}
-.ci-dismiss:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 /* --- Strategy review queue + §5B legal gate --- */
 .ci-strategy-list {
@@ -1221,9 +1170,9 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.75rem;
-  border: 1px solid var(--border-color, #2a2a2a);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: var(--surface-1, #1a1a1a);
+  background: var(--bg-tertiary);
 }
 .ci-strategy-head {
   display: flex;
@@ -1231,21 +1180,31 @@ onUnmounted(() => {
   gap: 0.6rem;
 }
 .ci-strategy-title {
-  color: var(--text-primary, #eee);
+  color: var(--text-primary);
   font-weight: 600;
 }
 .ci-strategy-body {
   width: 100%;
   min-height: 4rem;
   resize: vertical;
-  font: inherit;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  box-sizing: border-box;
+}
+.ci-strategy-body:focus {
+  border-color: var(--accent-cyan);
 }
 .ci-strategy-actions {
   display: flex;
   gap: 0.5rem;
 }
 .ci-legal {
-  border-top: 1px solid var(--border-color, #2a2a2a);
+  border-top: 1px solid var(--border-default);
   padding-top: 0.5rem;
 }
 .ci-legal-title {
@@ -1266,41 +1225,10 @@ onUnmounted(() => {
   align-items: flex-start;
   gap: 0.5rem;
   font-size: 0.85rem;
-  color: var(--text-secondary, #9aa0a6);
+  color: var(--text-secondary);
   cursor: pointer;
 }
-.ci-implement {
-  padding: 0.4rem 0.9rem;
-  font-size: 0.85rem;
+.ci-legal .btn {
   align-self: flex-start;
-}
-/* Market-lookalikes "configure a provider" CTA — the graceful default state.
-   Styled off the empty-state, NOT an error toast: it must read as intentional. */
-.ci-lookalike-cta {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding: 1rem;
-  border: 1px dashed var(--border-color, #2a2a2a);
-  border-radius: 8px;
-  background: var(--surface-2, #111);
-}
-.ci-lookalike-cta-title {
-  margin: 0;
-  font-weight: 600;
-  color: var(--text-primary, #eee);
-}
-.ci-lookalike-cta-hint {
-  margin: 0;
-  color: var(--text-secondary, #9aa0a6);
-}
-.ci-lookalike-cta-link {
-  align-self: flex-start;
-  color: var(--accent, #4f8cff);
-  text-decoration: none;
-  font-weight: 600;
-}
-.ci-lookalike-cta-link:hover {
-  text-decoration: underline;
 }
 </style>
