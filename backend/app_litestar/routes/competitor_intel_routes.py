@@ -29,7 +29,7 @@ import json
 import logging
 from typing import Any
 
-from litestar import Router, get, post
+from litestar import Router, delete, get, post
 from litestar.exceptions import ClientException, NotFoundException
 from litestar.response import Stream
 
@@ -156,6 +156,28 @@ def list_competitor_sources(project_id: str, caller: Caller) -> dict[str, Any]:
     return {"sources": CompetitorSourceService.list_sources(project_id)}
 
 
+@delete(
+    "/{project_id:str}/competitor-intel/sources/{source_id:str}",
+    status_code=200,
+    sync_to_thread=False,
+)
+def delete_competitor_source(
+    project_id: str, source_id: str, caller: Caller
+) -> dict[str, Any]:
+    """Remove a watched source (cascades its snapshots + detected signals).
+
+    IDOR-safe: ``_assert_project_access`` runs first (404 on a foreign project),
+    and the source is re-scoped to ``project_id`` so a source id belonging to
+    another project 404s rather than being deleted through this URL.
+    """
+    _assert_project_access(project_id, caller)
+    src = CompetitorSourceService.get_source(source_id)
+    if src is None or src.get("project_id") != project_id:
+        raise NotFoundException(detail="Source not found")
+    CompetitorSourceService.delete_source(source_id)
+    return {"deleted": source_id}
+
+
 @post("/{project_id:str}/competitor-intel/poll", sync_to_thread=True)
 def poll_competitor_sources_now(project_id: str, caller: Caller) -> dict[str, Any]:
     """Operator-triggered "check now" — poll this project's active sources immediately.
@@ -232,6 +254,7 @@ competitor_intel_router = Router(
     route_handlers=[
         add_competitor_source,
         list_competitor_sources,
+        delete_competitor_source,
         poll_competitor_sources_now,
         list_competitor_signals,
         competitor_signals_stream,

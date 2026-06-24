@@ -50,6 +50,29 @@ def _seed_signal(source_id: str, signal_type: str, score: float) -> str:
     return signal_id
 
 
+def _seed_snapshot(source_id: str) -> str:
+    """Insert one competitor_snapshot row directly (mirrors what the poller writes)."""
+    snapshot_id = generate_id("csnp-", 6)
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO competitor_snapshot (id, source_id, content_hash, raw_ref)
+            VALUES (?, ?, ?, ?)
+            """,
+            (snapshot_id, source_id, "deadbeef", "ref://snap"),
+        )
+        conn.commit()
+    return snapshot_id
+
+
+def _row_exists(table: str, row_id: str) -> bool:
+    with get_connection() as conn:
+        return (
+            conn.execute(f"SELECT 1 FROM {table} WHERE id = ?", (row_id,)).fetchone()
+            is not None
+        )
+
+
 # ---------------------------------------------------------------------------
 # 404 / validation
 # ---------------------------------------------------------------------------
@@ -183,6 +206,62 @@ def test_list_sources_is_project_scoped(isolated_db):
     sources = resp.json()["sources"]
     assert len(sources) == 2
     assert all(s["project_id"] == project_a for s in sources)
+
+
+# ---------------------------------------------------------------------------
+# DELETE /sources/{id} — cascade + IDOR
+# ---------------------------------------------------------------------------
+
+
+def test_delete_source_cascades_snapshots_and_signals(isolated_db):
+    """A DELETE removes the source AND its snapshots + detected signals (cascade)."""
+    project_id = create_project(name="ci-del")
+    source = CompetitorSourceService.add_source(project_id, "https://github.com/x/y")
+    source_id = source["id"]
+    signal_id = _seed_signal(source_id, "release", 0.9)
+    snapshot_id = _seed_snapshot(source_id)
+
+    # Pre-conditions: all three rows exist.
+    assert _row_exists("competitor_source", source_id)
+    assert _row_exists("detected_signal", signal_id)
+    assert _row_exists("competitor_snapshot", snapshot_id)
+
+    with _client() as c:
+        resp = c.delete(
+            f"/api/projects/{project_id}/competitor-intel/sources/{source_id}"
+        )
+    assert resp.status_code == 200
+    assert resp.json() == {"deleted": source_id}
+
+    # The source AND its cascaded children are gone.
+    assert not _row_exists("competitor_source", source_id)
+    assert not _row_exists("detected_signal", signal_id)
+    assert not _row_exists("competitor_snapshot", snapshot_id)
+
+
+def test_delete_source_foreign_project_404_and_not_deleted(isolated_db):
+    """IDOR: deleting a source through ANOTHER project's URL 404s and is a no-op."""
+    project_a = create_project(name="proj-a")
+    project_b = create_project(name="proj-b")
+    source = CompetitorSourceService.add_source(project_b, "https://github.com/b/only")
+    source_id = source["id"]
+
+    with _client() as c:
+        resp = c.delete(
+            f"/api/projects/{project_a}/competitor-intel/sources/{source_id}"
+        )
+    assert resp.status_code == 404
+    # The source still belongs to project_b — it was NOT deleted.
+    assert _row_exists("competitor_source", source_id)
+
+
+def test_delete_unknown_source_404(isolated_db):
+    project_id = create_project(name="ci-del-unknown")
+    with _client() as c:
+        resp = c.delete(
+            f"/api/projects/{project_id}/competitor-intel/sources/cmps-missing"
+        )
+    assert resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------
