@@ -230,6 +230,17 @@ function getStatusClass(status: string): string {
           </svg>
           {{ t('productDashboard.editProduct') }}
         </button>
+        <button
+          v-if="product.projects && product.projects.length >= 1"
+          class="action-btn secondary"
+          @click="router.push({ name: 'project-competitor-intel', params: { projectId: product.projects[0].id } })"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          {{ t('productDashboard.competitorIntel') }}
+        </button>
       </div>
 
       <!-- Projects -->

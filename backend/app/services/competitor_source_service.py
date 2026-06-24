@@ -171,6 +171,12 @@ class CompetitorSourceService:
         (returns ``False``).
         """
         with get_connection() as conn:
+            # Cascade in one transaction: SQLite FKs aren't enforced by default, so
+            # a bare source delete would orphan its snapshots + signals. Remove the
+            # children first, then the source (a just-added rollback source has no
+            # children, so this stays a harmless no-op for that caller).
+            conn.execute("DELETE FROM detected_signal WHERE source_id = ?", (source_id,))
+            conn.execute("DELETE FROM competitor_snapshot WHERE source_id = ?", (source_id,))
             cur = conn.execute("DELETE FROM competitor_source WHERE id = ?", (source_id,))
             deleted = cur.rowcount > 0
             conn.commit()

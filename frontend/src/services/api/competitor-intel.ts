@@ -192,6 +192,17 @@ export const competitorIntelApi = {
     ),
 
   /**
+   * Delete a watched source. The backend CASCADES — the source's snapshots and
+   * detected signals go with it — and is IDOR-safe (404 if the source isn't this
+   * project's). Returns the deleted id. CSRF is auto-injected by the client.
+   */
+  deleteSource: (projectId: string, sourceId: string): Promise<{ deleted: string }> =>
+    apiFetch<{ deleted: string }>(
+      `/api/projects/${projectId}/competitor-intel/sources/${sourceId}`,
+      { method: 'DELETE' },
+    ),
+
+  /**
    * Operator-triggered "check now": force-poll this project's active sources
    * immediately (bypassing the per-kind interval floor). Returns whether the
    * poll ran and how many sources produced a new snapshot this run. CSRF is

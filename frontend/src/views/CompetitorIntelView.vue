@@ -5,6 +5,7 @@ import { competitorIntelApi, lookalikeApi, ApiError } from '../services/api';
 import PageLayout from '../components/base/PageLayout.vue';
 import PageHeader from '../components/base/PageHeader.vue';
 import EmptyState from '../components/base/EmptyState.vue';
+import ConfirmModal from '../components/base/ConfirmModal.vue';
 import type {
   CompetitorSource,
   DetectedSignal,
@@ -43,6 +44,11 @@ const canSubmit = computed(() => url.value.trim().length > 0 && !adding.value);
 const sources = ref<CompetitorSource[]>([]);
 // In-flight guard for the operator "check now" force-poll (disables the button).
 const polling = ref(false);
+// --- Delete-source confirm state (shared ConfirmModal pattern) -------------
+// `sourceToDelete` holds the row awaiting confirmation (drives the modal copy);
+// `deletingId` guards/labels the in-flight delete on that row's button.
+const sourceToDelete = ref<CompetitorSource | null>(null);
+const deletingId = ref<string | null>(null);
 const signals = ref<DetectedSignal[]>([]);
 const loadingSignals = ref(false);
 
@@ -165,6 +171,42 @@ async function loadSources() {
     sources.value = res.sources;
   } catch (err) {
     showToast(err instanceof ApiError ? err.message : t('competitorIntel.loadError'), 'error');
+  }
+}
+
+/** Open the delete-confirm modal for a source (no mutation until confirmed). */
+function confirmDeleteSource(source: CompetitorSource) {
+  sourceToDelete.value = source;
+}
+
+/**
+ * Delete the confirmed source. Optimistically removes the source AND its
+ * (server-cascaded) signals from the local lists; on error, reverts both and
+ * surfaces an error toast.
+ */
+async function deleteSource() {
+  const target = sourceToDelete.value;
+  if (!target || !projectId.value || deletingId.value) return;
+  deletingId.value = target.id;
+  // Snapshot for revert-on-error (the server cascades snapshots + signals).
+  const prevSources = sources.value;
+  const prevSignals = signals.value;
+  sources.value = sources.value.filter((s) => s.id !== target.id);
+  signals.value = signals.value.filter((sig) => sig.source_id !== target.id);
+  sourceToDelete.value = null;
+  try {
+    await competitorIntelApi.deleteSource(projectId.value, target.id);
+    showToast(t('competitorIntel.sourceDeletedToast'), 'success');
+  } catch (err) {
+    // Revert the optimistic removal.
+    sources.value = prevSources;
+    signals.value = prevSignals;
+    showToast(
+      err instanceof ApiError ? err.message : t('competitorIntel.sourceDeleteError'),
+      'error',
+    );
+  } finally {
+    deletingId.value = null;
   }
 }
 
@@ -638,7 +680,12 @@ onUnmounted(() => {
     <!-- Watched sources -->
     <section class="ci-card">
       <div class="ci-card-head">
-        <h2 class="ci-card-title">{{ t('competitorIntel.sourcesTitle') }}</h2>
+        <h2 class="ci-card-title">
+          {{ t('competitorIntel.sourcesTitle') }}
+          <span v-if="sources.length" class="ci-count">{{
+            t('competitorIntel.sourceCount', { count: sources.length })
+          }}</span>
+        </h2>
         <div class="ci-card-actions">
           <!-- GLOBAL auto-check toggle: one scheduled job polls every active
                source across ALL projects, so this is an instance-wide setting. -->
@@ -691,17 +738,54 @@ onUnmounted(() => {
       <ul v-else class="ci-source-list">
         <li v-for="s in sources" :key="s.id" class="ci-source">
           <span class="ci-kind" :data-kind="s.kind">{{ kindLabel(s.kind) }}</span>
-          <span class="ci-source-url">{{ s.label || s.url }}</span>
           <span
-            v-if="s.last_polled_at"
-            class="ci-source-checked"
-          >{{ t('competitorIntel.lastChecked', { time: formatChecked(s.last_polled_at) }) }}</span>
-          <span v-else class="ci-source-checked ci-source-unchecked">
-            {{ t('competitorIntel.neverChecked') }}
-          </span>
+            class="ci-source-status"
+            :class="{ 'is-active': s.last_polled_at }"
+            :title="s.last_polled_at ? t('competitorIntel.lastChecked', { time: formatChecked(s.last_polled_at) }) : t('competitorIntel.neverChecked')"
+            aria-hidden="true"
+          ></span>
+          <div class="ci-source-body">
+            <span class="ci-source-name">{{ s.label || s.url }}</span>
+            <span v-if="s.label" class="ci-source-sub">{{ s.url }}</span>
+            <span
+              v-if="s.last_polled_at"
+              class="ci-source-checked"
+            >{{ t('competitorIntel.lastChecked', { time: formatChecked(s.last_polled_at) }) }}</span>
+            <span v-else class="ci-source-checked ci-source-unchecked">
+              {{ t('competitorIntel.neverChecked') }}
+            </span>
+          </div>
+          <button
+            type="button"
+            class="btn btn-icon btn-danger ci-source-delete"
+            :aria-label="t('competitorIntel.deleteSource')"
+            :title="t('competitorIntel.deleteSource')"
+            :disabled="deletingId === s.id"
+            @click="confirmDeleteSource(s)"
+          >
+            <span v-if="deletingId === s.id" class="ci-btn-spinner"></span>
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+            </svg>
+          </button>
         </li>
       </ul>
     </section>
+
+    <!-- Delete-source confirmation (shared ConfirmModal, danger variant) -->
+    <ConfirmModal
+      :open="sourceToDelete !== null"
+      :title="t('competitorIntel.deleteSourceTitle')"
+      :message="
+        t('competitorIntel.deleteSourceConfirm', {
+          name: sourceToDelete?.label || sourceToDelete?.url || '',
+        })
+      "
+      :confirm-label="t('competitorIntel.deleteSource')"
+      variant="danger"
+      @confirm="deleteSource"
+      @cancel="sourceToDelete = null"
+    />
 
     <!-- Discovery review queue: suggested competitors awaiting accept/dismiss -->
     <section class="ci-card">
@@ -1057,19 +1141,86 @@ onUnmounted(() => {
 .toggle-switch.active .toggle-knob {
   transform: translateX(20px);
 }
+.ci-count {
+  margin-left: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
 .ci-source {
   display: flex;
   gap: 0.75rem;
   align-items: center;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+}
+.ci-source-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-tertiary);
+  opacity: 0.5;
+}
+.ci-source-status.is-active {
+  background: var(--accent-cyan);
+  opacity: 1;
+}
+.ci-source-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.ci-source-name {
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  word-break: break-all;
+}
+.ci-source-sub {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  word-break: break-all;
 }
 .ci-source-checked {
-  margin-left: auto;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: var(--text-tertiary);
   white-space: nowrap;
 }
 .ci-source-unchecked {
   font-style: italic;
+}
+.ci-source-delete {
+  flex-shrink: 0;
+}
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+.btn-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.ci-btn-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: ci-spin 0.7s linear infinite;
+}
+@keyframes ci-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .ci-kind,
 .ci-signal-type {
