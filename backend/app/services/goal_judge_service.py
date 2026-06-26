@@ -270,6 +270,13 @@ class GoalJudgeService:
             r = run_check_inplace(check_cmd, cwd or ".", timeout=_CHECK_TIMEOUT_SECONDS)
         returncode = r.returncode
         stdout = (r.stdout or "")[-4096:]  # tail-cap for storage
+        # Fold stderr into the captured trace on failure so tracebacks / compiler
+        # errors (which land on stderr, not stdout) survive into the self-debug
+        # feedback loop — the next turn fixes THIS error instead of re-deriving it.
+        err_tail = (r.stderr or "").strip()
+        fail_trace = stdout
+        if err_tail:
+            fail_trace = (f"{stdout}\n[stderr]\n{err_tail}" if stdout else err_tail)[-4096:]
         if returncode == 124:
             return JudgeVerdict(
                 met=False,
@@ -296,7 +303,7 @@ class GoalJudgeService:
             met=False,
             source="deterministic",
             reason=f"check exited {returncode}",
-            stdout=stdout,
+            stdout=fail_trace,
             confidence=0.0,
         )
 

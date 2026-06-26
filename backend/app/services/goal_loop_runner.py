@@ -195,6 +195,71 @@ def _result_instruction(metric_spec) -> str:
     )
 
 
+def _rollback_to(cwd: str, anchor: Optional[str]) -> bool:
+    """Discard a failed iteration's diff in a LINKED WORKTREE only — hard-reset to
+    the pre-iteration HEAD and clean untracked files. Refuses to touch a primary
+    checkout (its ``.git`` is a directory; a worktree's is a file) so a
+    misconfigured loop can never nuke the operator's main tree.
+
+    # ponytail: worktree-guard via .git-is-file — no extra config plumbing. Returns
+    # False (no-op) when disabled-by-guard so the caller keeps the diff.
+    """
+    import os
+    import subprocess
+
+    if not anchor or not os.path.isfile(os.path.join(cwd, ".git")):
+        return False
+    try:
+        subprocess.run(
+            ["git", "-C", cwd, "reset", "--hard", anchor],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", cwd, "clean", "-fd"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=True,
+        )
+        return True
+    except (OSError, subprocess.SubprocessError):
+        logger.warning("iteration_rollback: git reset/clean failed in %s", cwd, exc_info=True)
+        return False
+
+
+def _relevant_skills_block(goal: str, k: int = 3) -> str:
+    """Top-k harness skills relevant to this goal, surfaced in the seed so the
+    agent reaches for the right capability first (Voyager compose-step). Empty
+    when no harness skills are selected or selection fails — never blocks the run."""
+    try:
+        from .skill_harness_service import SkillHarnessService
+
+        skills = SkillHarnessService.select_skills_for_task(goal, k=k)
+    except Exception:
+        return ""
+    if not skills:
+        return ""
+    lines = ["Relevant skills for this goal:"]
+    for s in skills:
+        desc = (s.get("description") or "").strip()
+        lines.append(f"- {s.get('skill_name')}" + (f": {desc}" if desc else ""))
+    return "\n".join(lines)
+
+
+def _trace_block(verdict) -> str:
+    """Render the failing check's captured output (stdout+stderr) so the next
+    turn fixes THAT error rather than re-deriving it — the core code-as-harness
+    self-debug feedback channel. Empty on a met verdict or when no trace exists.
+    """
+    trace = (getattr(verdict, "stdout", None) or "").strip()
+    if getattr(verdict, "met", False) or not trace:
+        return ""
+    return f"Last check output (fix THIS):\n{trace[-2000:]}"
+
+
 def _continue_prompt(
     goal: str,
     reason: str,
@@ -202,6 +267,7 @@ def _continue_prompt(
     ouroboros: bool = True,
     dead_ends_block: str = "",
     result_block: str = "",
+    trace_block: str = "",
 ) -> str:
     """Synthesize the user message that drives the next turn.
 
@@ -214,8 +280,13 @@ def _continue_prompt(
 
     v0.7.88 — ``result_block`` appends the ``__RESULT__`` reporting
     instruction when the kernel is active (non-empty string).
+
+    ``trace_block`` (when non-empty) injects the failing check's
+    captured output so the next turn can debug the actual error.
     """
     base = f"Goal: {goal}\n\nLast check: {reason}\n\n"
+    if trace_block:
+        base = f"{base}{trace_block}\n\n"
     if not ouroboros:
         return f"{base}Address the gap and continue.{result_block}"
     if dead_ends_block:
@@ -265,6 +336,8 @@ class _RunnerState:
     total_tokens: int = 0
     no_progress_streak: int = 0
     last_commit: Optional[str] = None
+    # Pre-iteration HEAD for opt-in rollback-on-gate-fail; re-anchored each turn.
+    rollback_anchor: Optional[str] = None
     # Separate cadence counter for the stale-check sanity layer so it no longer
     # resets ``not_met_streak`` (which the eval_refine stagnation breaker reads —
     # resetting it made stagnation unreachable when a check_cmd was configured).
@@ -484,6 +557,9 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
     # rubric/version; ``gate.min_confidence`` then gates termination.
     gate = state.spec.exit.quality_gate
     sandbox = state.spec.state.sandbox
+    # Opt-in: discard a not-met iteration's diff before the next turn (worktree
+    # only — see _rollback_to). Each iteration's work is provisional until met.
+    iteration_rollback = state.spec.state.iteration_rollback
     if metric_spec is not None and not AUTORESEARCH_KERNEL_ENABLED:
         # Operator configured a metric_spec but the kernel flag is off — it's
         # silently ignored. Log once so this isn't a confusing no-op.
@@ -505,12 +581,24 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
         # respond to until something hits its stdin. The reply
         # will trigger the first ``turn_done`` and the normal
         # judge-then-continue loop takes over from there.
+        # Surface task-relevant harness skills in the seed (Voyager compose-step),
+        # reusing the resume_context channel so it threads through both fresh and
+        # resumed starts.
+        resume_context = (state.config or {}).get("resume_context")
+        skills_block = _relevant_skills_block(goal)
+        if skills_block:
+            resume_context = (
+                f"{skills_block}\n\n{resume_context}" if resume_context else skills_block
+            )
+        # Anchor HEAD before the first body so a not-met iteration can be unwound.
+        if iteration_rollback:
+            state.rollback_anchor = loop_progress.head_commit(cwd or ".")
         _send_initial(
             live_id,
             goal,
             ouroboros=ouroboros,
             result_block=result_block,
-            resume_context=(state.config or {}).get("resume_context"),
+            resume_context=resume_context,
         )
         while not state.stop_event.is_set():
             if time.time() - state.started_at > max_wall_seconds:
@@ -791,6 +879,17 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                 if decision == "modify" and message:
                     state.pending_note = message
 
+            # Rollback-on-gate-fail: this iteration was not-met (met breaks above),
+            # so discard its diff and re-anchor before the next body runs.
+            if iteration_rollback:
+                if _rollback_to(cwd or ".", state.rollback_anchor):
+                    ProjectSessionManager._broadcast(
+                        session_id,
+                        "goal_iteration_rolled_back",
+                        {"iteration": iteration_no, "anchor": state.rollback_anchor},
+                    )
+                state.rollback_anchor = loop_progress.head_commit(cwd or ".")
+
             fresh_session_id, new_queue = _next_iteration(
                 policy=state.spec.state.context_policy,
                 live_id=live_id,
@@ -801,6 +900,7 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                 ouroboros=ouroboros,
                 dead_ends_block=_dead_ends_context(session_id) if ouroboros else "",
                 result_block=result_block,
+                trace_block=_trace_block(verdict),
             )
             # context_policy=reset spawned a fresh claude process (clean context
             # window) and already subscribed to it. Re-point the loop's polling to
@@ -847,6 +947,7 @@ def _send_continue(
     ouroboros: bool = True,
     dead_ends_block: str = "",
     result_block: str = "",
+    trace_block: str = "",
 ) -> None:
     """Write the synthetic continue prompt to claude's stdin."""
     _send_user_text(
@@ -857,6 +958,7 @@ def _send_continue(
             ouroboros=ouroboros,
             dead_ends_block=dead_ends_block,
             result_block=result_block,
+            trace_block=trace_block,
         ),
     )
 
@@ -906,7 +1008,7 @@ def _advance_iteration(
         return None, None
 
     origin_session = dict(row)
-    resume_context = _build_resume_context(stable_id)
+    resume_context = _build_resume_context(stable_id, cwd)
     # Forward the operator's intervene/modify note + last-check reason into the
     # fresh seed — it would otherwise be lost on reset (the fresh child is empty).
     if reason:
@@ -1088,15 +1190,16 @@ _resume_lock = threading.Lock()
 _resume_in_flight: set = set()
 
 
-def _build_resume_context(session_id: str) -> str:
+def _build_resume_context(session_id: str, cwd: Optional[str] = None) -> str:
     """Re-entry context block from durable history: iteration count, verdicts,
-    known dead ends. The fresh loop continues from accumulated knowledge —
-    a dead PTY cannot be reattached or replayed (Phase 4, Unit C)."""
+    the last failing check trace, known dead ends, and a changed-files repo map.
+    The fresh loop continues from accumulated knowledge — a dead PTY cannot be
+    reattached or replayed (Phase 4, Unit C)."""
     from ..db.connection import get_connection
 
     with get_connection() as conn:
         rows = conn.execute(
-            "SELECT iteration, verdict, judge_reason FROM goal_loop_iterations "
+            "SELECT iteration, verdict, judge_reason, judge_stdout FROM goal_loop_iterations "
             "WHERE session_id = ? ORDER BY iteration ASC",
             (session_id,),
         ).fetchall()
@@ -1106,14 +1209,88 @@ def _build_resume_context(session_id: str) -> str:
         f"{(' — ' + r['judge_reason']) if r['judge_reason'] else ''}"
         for r in rows
     ]
+    # Surface the last iteration's failing check output so the fresh context
+    # window debugs the actual error instead of rediscovering it.
+    last_trace = ""
+    if rows:
+        t = (rows[-1]["judge_stdout"] or "").strip()
+        if t and rows[-1]["verdict"] != "met":
+            last_trace = f"Last check output (fix THIS):\n{t[-2000:]}"
     dead_ends = _dead_ends_context(session_id)
+    repo_map = _repo_map_context(cwd) if cwd else ""
     parts = [
         f"RESUMING after interruption at iteration {last_iter}.",
         "Prior iteration verdicts:" if verdict_lines else "",
         *verdict_lines,
+        last_trace,
         dead_ends or "",
+        repo_map or "",
     ]
     return "\n".join(p for p in parts if p)
+
+
+def _repo_map_context(cwd: Optional[str], *, max_files: int = 12) -> str:
+    """Compact repo orientation for a reset/resume child: which files changed in
+    the workspace, plus their defined symbols when the CodeGraph index is present.
+    Best-effort — a structured locator so the fresh context window isn't blind to
+    in-flight work.
+
+    # ponytail: the changed-file list (git diff) is the robust core; CodeGraph
+    # symbol enrichment is opportunistic and skipped on ANY error. Upgrade to a
+    # caller/callee graph walk only if file+symbol proves too coarse.
+    """
+    import subprocess
+
+    root = cwd or "."
+    try:
+        out = subprocess.run(
+            ["git", "-C", root, "diff", "--name-only", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        ).stdout
+    except Exception:
+        return ""
+    files = [f for f in out.splitlines() if f.strip()][:max_files]
+    if not files:
+        return ""
+    symbols = _codegraph_symbols(root, files)
+    lines = ["Changed files in the workspace (your in-flight work):"]
+    for f in files:
+        syms = symbols.get(f)
+        lines.append(f"- {f}" + (f" — {syms}" if syms else ""))
+    return "\n".join(lines)
+
+
+def _codegraph_symbols(root: str, files: list[str]) -> dict[str, str]:
+    """Map each changed file -> a few defined symbols from the read-only CodeGraph
+    index. Empty dict when the index is absent or unreadable (best-effort)."""
+    import os
+    import sqlite3
+
+    db = os.path.join(root, ".codegraph", "codegraph.db")
+    if not os.path.exists(db):
+        return {}
+    out: dict[str, str] = {}
+    try:
+        conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=2)
+        try:
+            for f in files:
+                names = [
+                    r[0]
+                    for r in conn.execute(
+                        "SELECT name FROM nodes WHERE file_path LIKE ? "
+                        "AND kind IN ('function','class','method') ORDER BY start_line LIMIT 8",
+                        (f"%{f}",),
+                    ).fetchall()
+                ]
+                if names:
+                    out[f] = ", ".join(names)
+        finally:
+            conn.close()
+    except Exception:
+        return {}
+    return out
 
 
 def _create_fresh_loop_child(origin_session: dict, cwd: Optional[str]) -> str:
