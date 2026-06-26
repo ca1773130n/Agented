@@ -157,10 +157,18 @@ class SkillHarnessService(SkillMarketplaceService):
         except Exception:  # noqa: BLE001 — ranking must never block a run
             logger.warning("skill ranking: embedding path failed, using overlap", exc_info=True)
 
-        qtok = set(task_text.lower().split())
-        ranked = sorted(
-            skills, key=lambda s: len(qtok & set(_doc(s).lower().split())), reverse=True
-        )
+        import re
+
+        def _tok(text: str) -> set:
+            # Split on non-alphanumerics so hyphenated names ("pdf-tools") and
+            # punctuation don't defeat overlap.
+            return set(re.findall(r"[a-z0-9]+", text.lower()))
+
+        qtok = _tok(task_text)
+        scored = [(s, len(qtok & _tok(_doc(s)))) for s in skills]
+        # Drop zero-overlap skills — injecting arbitrary skills the task doesn't
+        # mention is worse than injecting none.
+        ranked = [s for s, score in sorted(scored, key=lambda p: p[1], reverse=True) if score > 0]
         return ranked[:k]
 
     @classmethod

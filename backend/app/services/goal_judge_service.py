@@ -282,6 +282,7 @@ class GoalJudgeService:
                 met=False,
                 source="deterministic",
                 reason=f"check timed out after {_CHECK_TIMEOUT_SECONDS}s",
+                stdout=fail_trace,
                 confidence=0.0,
             )
         if returncode == 127:
@@ -289,6 +290,7 @@ class GoalJudgeService:
                 met=False,
                 source="deterministic",
                 reason=f"check failed to run: {(r.stderr or '').strip()[:200]}",
+                stdout=fail_trace,
                 confidence=0.0,
             )
         if returncode == 0:
