@@ -14,6 +14,11 @@ from typing import Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+# Oracle-check timeout for the generator-critic gate (seconds). The check is a
+# fast pass/fail signal, not a full suite — keep it bounded so a hung command
+# can't stall the loop.
+_GC_CHECK_TIMEOUT = 120
+
 
 def agent_to_trigger(
     agent: dict,
@@ -221,9 +226,16 @@ def execute_generator_critic(
     """Execute generator-critic loop until critic approves or max iterations.
 
     Config expects: {"generator": "agent-id", "critic": "agent-id", "max_iterations": 3}
+
+    When ``check_cmd`` is configured, an objective oracle (the command's exit
+    code over the shared workspace) decides approval instead of the critic's
+    prose, and its failing output is fed back as the next generator input —
+    the code-as-harness feedback channel. The critic still runs (its review is
+    visible in the trace) but no longer gates the loop.
     """
     generator_id = config.get("generator")
     critic_id = config.get("critic")
+    check_cmd = config.get("check_cmd")
     max_iterations = config.get("max_iterations", 3)
     if not generator_id or not critic_id:
         logger.warning(f"Generator-critic topology missing generator/critic for team {team['id']}")
@@ -253,7 +265,37 @@ def execute_generator_critic(
         if critic_eid:
             execution_ids.append(critic_eid)
 
-        # Check if critic approved
+        # Oracle gate: an objective check over the shared workspace decides
+        # approval; its failing output (test/compiler errors) drives the next turn.
+        # A sandbox/setup failure must NOT crash the team run — fall back to the
+        # critic gate below when the check can't be evaluated.
+        if check_cmd and working_directory:
+            from app.services.sandbox_eval import run_isolated_check
+
+            result = None
+            try:
+                result = run_isolated_check(check_cmd, working_directory, timeout=_GC_CHECK_TIMEOUT)
+            except Exception:
+                logger.warning(
+                    "Generator-critic oracle check errored; falling back to critic gate",
+                    exc_info=True,
+                )
+            if result is not None:
+                if result.returncode == 0:
+                    logger.info("Generator-critic oracle check passed (rc 0), stopping loop")
+                    break
+                combined = (result.stdout or "") + "\n" + (result.stderr or "")
+                # Reuse the runner's robust untrusted-output fence (dynamic fence
+                # length so embedded backticks can't break out of the DATA block).
+                from app.services.goal_loop_runner import _fence_untrusted
+
+                current_message = (
+                    f"{message}\n\nThe check `{check_cmd}` failed (exit {result.returncode}).\n\n"
+                    f"{_fence_untrusted(combined)}"
+                )
+                continue
+
+        # Check if critic approved (opinion gate — no oracle configured)
         if critic_output and "APPROVED" in critic_output.upper():
             logger.info("Critic approved generator output, stopping loop")
             break

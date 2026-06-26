@@ -127,6 +127,51 @@ class SkillHarnessService(SkillMarketplaceService):
         return {"skills": skills}, HTTPStatus.OK
 
     @classmethod
+    def select_skills_for_task(cls, task_text: str, k: int = 3) -> list:
+        """Rank harness-selected skills by relevance to a task (Voyager
+        compose-step): surface the few skills a run actually needs instead of
+        dumping the whole shelf. Reuses the embedding seam when available, with
+        a stdlib token-overlap fallback (same graceful degradation as
+        discovery_service). Returns the top-k skill rows; empty list when none
+        are selected."""
+        skills = get_harness_skills()
+        if not skills or not (task_text or "").strip():
+            return skills[:k]
+
+        def _doc(s: dict) -> str:
+            return " ".join(filter(None, [s.get("skill_name"), s.get("description")]))
+
+        try:
+            from . import embedding_service
+
+            if embedding_service.is_available():
+                q = embedding_service.embed_text(task_text)
+                docs = embedding_service.embed_texts([_doc(s) for s in skills])
+                if q and docs:
+                    scored = sorted(
+                        zip(skills, embedding_service.cosine_similarity_batch(q, docs)),
+                        key=lambda p: p[1],
+                        reverse=True,
+                    )
+                    return [s for s, _ in scored[:k]]
+        except Exception:  # noqa: BLE001 — ranking must never block a run
+            logger.warning("skill ranking: embedding path failed, using overlap", exc_info=True)
+
+        import re
+
+        def _tok(text: str) -> set:
+            # Split on non-alphanumerics so hyphenated names ("pdf-tools") and
+            # punctuation don't defeat overlap.
+            return set(re.findall(r"[a-z0-9]+", text.lower()))
+
+        qtok = _tok(task_text)
+        scored = [(s, len(qtok & _tok(_doc(s)))) for s in skills]
+        # Drop zero-overlap skills — injecting arbitrary skills the task doesn't
+        # mention is worse than injecting none.
+        ranked = [s for s, score in sorted(scored, key=lambda p: p[1], reverse=True) if score > 0]
+        return ranked[:k]
+
+    @classmethod
     def toggle_harness_selection(cls, skill_id: int, selected: bool) -> Tuple[dict, HTTPStatus]:
         """Toggle a skill's harness selection."""
         skill = get_user_skill(skill_id)

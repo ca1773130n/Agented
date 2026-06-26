@@ -73,7 +73,9 @@ def test_advance_iteration_reads_stable_id_not_live_id(monkeypatch, isolated_db)
     the origin row must be read from the STABLE id, not the live child."""
     _make_active_goal_session(session_id="origin-x")
     seen = {}
-    monkeypatch.setattr(glr, "_build_resume_context", lambda sid: seen.update(resume=sid) or "CTX")
+    monkeypatch.setattr(
+        glr, "_build_resume_context", lambda sid, cwd=None: seen.update(resume=sid) or "CTX"
+    )
     monkeypatch.setattr(glr.ProjectSessionManager, "create_session", lambda **kw: "child-2")
     monkeypatch.setattr(glr.ProjectSessionManager, "subscribe_raw", lambda sid: ["q"])
     monkeypatch.setattr(glr.ProjectSessionManager, "send_input", lambda sid, p: True)
@@ -87,7 +89,7 @@ def test_advance_iteration_forwards_operator_note_into_seed(monkeypatch, isolate
     """An operator note (carried on ``reason``) must reach the fresh child's seed —
     it would otherwise be lost on reset."""
     _make_active_goal_session(session_id="origin-n")
-    monkeypatch.setattr(glr, "_build_resume_context", lambda sid: "")
+    monkeypatch.setattr(glr, "_build_resume_context", lambda sid, cwd=None: "")
     monkeypatch.setattr(glr.ProjectSessionManager, "create_session", lambda **kw: "child-n")
     monkeypatch.setattr(glr.ProjectSessionManager, "subscribe_raw", lambda sid: ["q"])
     monkeypatch.setattr(glr.ProjectSessionManager, "stop_session", lambda sid, *a, **k: True)

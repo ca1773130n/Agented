@@ -58,6 +58,10 @@ class LoopState(msgspec.Struct, frozen=True):
     checkpoint: bool = True
     sandbox: SandboxMode = "isolated"
     human_gate: Optional[LoopGate] = None
+    # Opt-in: discard a failed iteration's diff (git reset --hard + clean) before
+    # the next one, so each iteration's work is provisional until the gate passes.
+    # Default off — and skip it for Ralph, where carry-forward-on-fail is the point.
+    iteration_rollback: bool = False
 
 
 class LoopSpec(msgspec.Struct, frozen=True):
@@ -117,6 +121,7 @@ class LoopSpec(msgspec.Struct, frozen=True):
             context_policy=c.get("context_policy") or "carry",
             sandbox=c.get("sandbox") or "isolated",
             human_gate=_gate_cfg(c),
+            iteration_rollback=bool(c.get("iteration_rollback")),
         )
         return LoopSpec(body=body, exit=exit_, state=state, meta_execution_type="goal_loop")
 
