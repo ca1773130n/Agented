@@ -358,3 +358,65 @@ def test_subpage_only_change_moves_watermark(monkeypatch):
     assert r2.outcome == "changed"  # sub-page change detected despite an identical home
     assert r2.watermark != r1.watermark
     assert "export, SSO" in r2.raw_ref
+
+
+def test_relative_links_resolve_against_final_url(monkeypatch):
+    # MAJOR#4: a seed that 301s to a deeper path — a RELATIVE link must resolve
+    # against the FINAL url (/real/home), not the original seed (/start).
+    home = '<html><body>landed <a href="features">F</a></body></html>'
+
+    def fake_get(url, **kwargs):
+        if url == "https://ex.com/start":
+            return _FakeResponse(301, headers={"Location": "https://ex.com/real/home"})
+        if url == "https://ex.com/real/home":
+            return _FakeResponse(200, text=home)
+        if url == "https://ex.com/real/features":
+            return _FakeResponse(
+                200, text="<html><body>FEATPAGE sync export</body></html>", headers=_HTML_TYPE
+            )
+        raise AssertionError(f"unexpected fetch (wrong base?): {url}")
+
+    monkeypatch.setattr(product_url.httpx, "get", fake_get)
+    monkeypatch.setattr(product_url, "_host_is_public", lambda host: True)
+    result = ProductUrlAdapter().fetch(
+        {"id": "s1", "url": "https://ex.com/start", "watermark": None}
+    )
+    assert result.outcome == "changed"
+    assert "FEATPAGE sync export" in result.raw_ref  # resolved against /real/home
+    assert "[/real/features]" in result.raw_ref
+
+
+def test_change_beyond_per_page_cap_still_moves_watermark(monkeypatch):
+    # MAJOR#3: a change PAST _PER_PAGE_CHARS (so it's outside raw_ref) must still
+    # move the watermark, because the hash is over the FULL (uncapped) text.
+    pad = "word " * 1500  # ~7500 chars, well past _PER_PAGE_CHARS
+
+    def page(tail):
+        return f"<html><body>HEAD {pad} {tail}</body></html>"
+
+    _patch_get(monkeypatch, _FakeResponse(200, text=page("TAIL_ONE")))
+    r1 = ProductUrlAdapter().fetch({"id": "s1", "url": "https://ex.com/p", "watermark": None})
+    _patch_get(monkeypatch, _FakeResponse(200, text=page("TAIL_TWO")))
+    r2 = ProductUrlAdapter().fetch(
+        {"id": "s1", "url": "https://ex.com/p", "watermark": r1.watermark}
+    )
+    assert r2.outcome == "changed"
+    assert r2.watermark != r1.watermark
+    assert "TAIL_ONE" not in r1.raw_ref  # the tail is past the raw_ref cap (hash != raw_ref)
+
+
+def test_response_char_cap_bounds_processing(monkeypatch):
+    # MAJOR#2: content past _MAX_RESPONSE_CHARS is dropped before extract/hash.
+    monkeypatch.setattr(product_url, "_MAX_RESPONSE_CHARS", 40)
+    body = "<html><body>VISIBLE_HEAD " + ("y" * 500) + " HIDDEN_TAIL</body></html>"
+    _patch_get(monkeypatch, _FakeResponse(200, text=body))
+    result = ProductUrlAdapter().fetch({"id": "s1", "url": "https://ex.com/p", "watermark": None})
+    assert result.outcome == "changed"
+    assert "HIDDEN_TAIL" not in result.raw_ref  # truncated by the response cap
+
+
+def test_select_links_caps_candidate_collection(monkeypatch):
+    # MINOR#5: a link-spam page can't make us collect/sort an unbounded set.
+    monkeypatch.setattr(product_url, "_MAX_CANDIDATE_LINKS", 3)
+    html = "".join(f'<a href="/p{i}">x</a>' for i in range(50))
+    assert len(_select_links(html, "https://ex.com/")) <= 3
