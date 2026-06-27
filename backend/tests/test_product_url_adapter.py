@@ -23,7 +23,12 @@ import httpx
 
 from app.services.competitor_source_service import KIND_PRODUCT_URL
 from app.services.source_adapters import product_url
-from app.services.source_adapters.product_url import ProductUrlAdapter, _extract_text
+from app.services.source_adapters.product_url import (
+    ProductUrlAdapter,
+    _combine_pages,
+    _extract_text,
+    _select_links,
+)
 
 
 class _FakeResponse:
@@ -61,10 +66,12 @@ def test_kind_and_keyless():
 def test_first_poll_no_watermark_is_changed(monkeypatch):
     _patch_get(monkeypatch, _FakeResponse(200, text=_HTML, headers={"ETag": '"v1"'}))
     adapter = ProductUrlAdapter()
-    result = adapter.fetch({"id": "s1", "url": "https://ex.com/p", "watermark": None})
+    url = "https://ex.com/p"
+    result = adapter.fetch({"id": "s1", "url": url, "watermark": None})
 
-    expected_text = _extract_text(_HTML)
-    expected_hash = hashlib.sha256(expected_text.encode("utf-8")).hexdigest()
+    # No links in _HTML -> crawl finds nothing -> combined is just the seed page.
+    expected_combined = _combine_pages([(url, _extract_text(_HTML))])
+    expected_hash = hashlib.sha256(expected_combined.encode("utf-8")).hexdigest()
 
     assert result.outcome == "changed"
     assert result.watermark == expected_hash
@@ -79,8 +86,11 @@ def test_first_poll_no_watermark_is_changed(monkeypatch):
 def test_same_body_with_matching_watermark_is_unchanged(monkeypatch):
     _patch_get(monkeypatch, _FakeResponse(200, text=_HTML))
     adapter = ProductUrlAdapter()
-    preset = hashlib.sha256(_extract_text(_HTML).encode("utf-8")).hexdigest()
-    result = adapter.fetch({"id": "s1", "url": "https://ex.com/p", "watermark": preset})
+    url = "https://ex.com/p"
+    preset = hashlib.sha256(
+        _combine_pages([(url, _extract_text(_HTML))]).encode("utf-8")
+    ).hexdigest()
+    result = adapter.fetch({"id": "s1", "url": url, "watermark": preset})
     assert result.outcome == "unchanged"
 
 
@@ -191,3 +201,106 @@ def test_blocks_redirect_to_internal(monkeypatch):
     result = adapter.fetch({"id": "s1", "url": "http://93.184.216.34/start", "watermark": None})
     assert result.outcome == "skipped"
     assert calls["n"] == 1  # only the first hop fetched; redirect re-validated + refused
+
+
+# --- Crawl: gather feature/pricing/docs pages, not just the landing page -------
+
+
+def _patch_router(monkeypatch, routes, *, public=lambda host: True):
+    """Patch httpx.get to route by URL substring, and _host_is_public to ``public``.
+    Unmatched URLs return 404. ``routes`` is checked longest-key-first so a more
+    specific path wins over a prefix."""
+    ordered = sorted(routes.items(), key=lambda kv: -len(kv[0]))
+
+    def fake_get(url, **kwargs):
+        for frag, resp in ordered:
+            if frag in url:
+                return resp
+        return _FakeResponse(404)
+
+    monkeypatch.setattr(product_url.httpx, "get", fake_get)
+    monkeypatch.setattr(product_url, "_host_is_public", public)
+
+
+_HTML_TYPE = {"Content-Type": "text/html"}
+
+
+def test_crawls_same_site_feature_pages(monkeypatch):
+    home = (
+        "<html><body><h1>Acme</h1>"
+        '<a href="/features">Features</a>'
+        '<a href="https://other.com/x">offsite</a>'
+        "</body></html>"
+    )
+    feat = "<html><body>Acme features: realtime sync, export, SSO</body></html>"
+    _patch_router(
+        monkeypatch,
+        {
+            "https://ex.com/home": _FakeResponse(200, text=home, headers={"ETag": '"v1"'}),
+            "https://ex.com/features": _FakeResponse(200, text=feat, headers=_HTML_TYPE),
+        },
+    )
+    result = ProductUrlAdapter().fetch(
+        {"id": "s1", "url": "https://ex.com/home", "watermark": None}
+    )
+    assert result.outcome == "changed"
+    assert "Acme" in result.raw_ref  # seed page
+    assert "realtime sync, export, SSO" in result.raw_ref  # crawled feature page
+    assert "[/features]" in result.raw_ref  # page is path-tagged
+    # The off-site link was filtered at selection — its content was never fetched.
+    assert "other.com" not in result.raw_ref
+
+
+def test_select_links_filters_and_prioritizes():
+    html = (
+        '<a href="/pricing">P</a>'
+        '<a href="/blog/post">B</a>'
+        '<a href="https://ext.com/y">E</a>'
+        '<a href="mailto:x@y.com">M</a>'
+        '<a href="/pricing#plans">dup</a>'
+        '<a href="https://www.ex.com/about">A</a>'
+    )
+    links = _select_links(html, "https://ex.com/")
+    assert "https://ext.com/y" not in links  # off-site excluded
+    assert all("mailto" not in u for u in links)  # mailto excluded
+    assert links.count("https://ex.com/pricing") == 1  # deduped (fragment dropped)
+    assert "https://www.ex.com/about" in links  # www. treated same-site
+    # feature pages (pricing, about) ordered before a generic /blog/post
+    assert links.index("https://ex.com/pricing") < links.index("https://ex.com/blog/post")
+
+
+def test_crawl_respects_page_cap(monkeypatch):
+    links = "".join(f'<a href="/feature{i}">f</a>' for i in range(20))
+    home = f"<html><body>home {links}</body></html>"
+    fetched = []
+
+    def fake_get(url, **kwargs):
+        fetched.append(url)
+        if url == "https://ex.com/home":
+            return _FakeResponse(200, text=home)
+        return _FakeResponse(200, text="<html><body>sub content</body></html>", headers=_HTML_TYPE)
+
+    monkeypatch.setattr(product_url.httpx, "get", fake_get)
+    monkeypatch.setattr(product_url, "_host_is_public", lambda host: True)
+    ProductUrlAdapter().fetch({"id": "s1", "url": "https://ex.com/home", "watermark": None})
+    sub_calls = [u for u in fetched if "/feature" in u]
+    assert len(sub_calls) == product_url._MAX_CRAWL_PAGES  # capped, not all 20
+
+
+def test_crawl_subpage_failure_is_not_fatal(monkeypatch):
+    # A sub-page that raises (transport error / SSRF redirect) is skipped; the
+    # crawl still returns the seed content rather than failing the whole poll.
+    home = '<html><body>home page text <a href="/features">F</a></body></html>'
+
+    def fake_get(url, **kwargs):
+        if url == "https://ex.com/home":
+            return _FakeResponse(200, text=home)
+        raise httpx.ConnectError("subpage down")
+
+    monkeypatch.setattr(product_url.httpx, "get", fake_get)
+    monkeypatch.setattr(product_url, "_host_is_public", lambda host: True)
+    result = ProductUrlAdapter().fetch(
+        {"id": "s1", "url": "https://ex.com/home", "watermark": None}
+    )
+    assert result.outcome == "changed"
+    assert "home page text" in result.raw_ref
