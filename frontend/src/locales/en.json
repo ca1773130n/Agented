@@ -3317,7 +3317,18 @@
     "toastNoLoginsDetected": "No existing CLI logins detected on this machine.",
     "toastDiscoveryFailed": "Discovery failed",
     "toastImported": "Imported {name}",
-    "toastImportFailed": "Failed to import {name}"
+    "toastImportFailed": "Failed to import {name}",
+    "proxyAuthTitle": "CLIProxy authentication",
+    "proxyReauth": "Re-authenticate",
+    "authState": {
+      "ok": "OK",
+      "expiring": "Expiring soon",
+      "expired": "Expired",
+      "needs_relogin": "Re-login required",
+      "unreachable": "Proxy unreachable",
+      "disabled": "Disabled",
+      "unknown": "Unknown"
+    }
   },
   "agentCapabilityMatrix": {
     "featureName": "Agent capability matrix",
@@ -9644,6 +9655,9 @@
     "statusApproved": "Approved",
     "statusRejected": "Rejected",
     "statusImplementing": "Implementing",
-    "statusDone": "Done"
+    "statusDone": "Done",
+    "degradedWarning": "Strategy LLM backend unavailable — this is a placeholder proposal. Re-authenticate the backend for a real strategy.",
+    "implementHintApprove": "Approve first to enable Implement.",
+    "implementHintLegal": "Complete all 7 legal checklist items to enable Implement."
   }
 }
