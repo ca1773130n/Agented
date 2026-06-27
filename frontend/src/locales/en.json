@@ -9658,6 +9658,7 @@
     "statusDone": "Done",
     "degradedWarning": "Strategy LLM backend unavailable — this is a placeholder proposal. Re-authenticate the backend for a real strategy.",
     "implementHintApprove": "Approve first to enable Implement.",
-    "implementHintLegal": "Complete all 7 legal checklist items to enable Implement."
+    "implementHintLegal": "Complete all 7 legal checklist items to enable Implement.",
+    "addSourceTitle": "Add a source"
   }
 }
