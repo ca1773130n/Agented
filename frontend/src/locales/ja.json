@@ -9666,6 +9666,7 @@
     "autoImplementRunning": "エージェント実行中",
     "autoImplementConfirmTitle": "自動実装を開始しますか？",
     "autoImplementConfirmMsg": "メインのチェックアウトではなく、隔離されたgitワークツリーでコードを書く自律コーディングエージェントを起動し、完了前に承認のため一時停止します。続行しますか？",
-    "autoImplementStarted": "自動実装を開始しました — セッション {id}"
+    "autoImplementStarted": "自動実装を開始しました — セッション {id}",
+    "autoImplementNotEligible": "この戦略は自動実装の対象ではなくなりました（ステータスと§5Bクリアランスを再確認してください）。"
   }
 }

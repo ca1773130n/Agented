@@ -9666,6 +9666,7 @@
     "autoImplementRunning": "智能体运行中",
     "autoImplementConfirmTitle": "启动自动实施？",
     "autoImplementConfirmMsg": "这将启动一个自主编码智能体，在隔离的 git 工作树（绝不是你的主检出）中编写代码，并在完成前暂停等待你的批准。是否继续？",
-    "autoImplementStarted": "自动实施已启动 — 会话 {id}"
+    "autoImplementStarted": "自动实施已启动 — 会话 {id}",
+    "autoImplementNotEligible": "该策略已不再符合自动实施条件（请重新检查其状态与§5B许可）。"
   }
 }

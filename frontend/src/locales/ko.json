@@ -9666,6 +9666,7 @@
     "autoImplementRunning": "에이전트 실행 중",
     "autoImplementConfirmTitle": "자동 구현을 시작할까요?",
     "autoImplementConfirmMsg": "메인 체크아웃이 아닌 격리된 git 워크트리에서 코드를 작성하는 자율 코딩 에이전트를 실행하며, 완료 전 승인을 위해 일시 중지됩니다. 계속할까요?",
-    "autoImplementStarted": "자동 구현 시작됨 — 세션 {id}"
+    "autoImplementStarted": "자동 구현 시작됨 — 세션 {id}",
+    "autoImplementNotEligible": "이 전략은 더 이상 자동 구현 대상이 아닙니다(상태와 §5B 승인을 다시 확인하세요)."
   }
 }

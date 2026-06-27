@@ -176,6 +176,7 @@ async function loadSources() {
 
 /** Open the delete-confirm modal for a source (no mutation until confirmed). */
 function confirmDeleteSource(source: CompetitorSource) {
+  strategyToAutoImplement.value = null; // only one confirm modal open at a time
   sourceToDelete.value = source;
 }
 
@@ -544,10 +545,30 @@ async function materializeStrategy(id: string) {
 // clearance + confirm token).
 const strategyToAutoImplement = ref<Strategy | null>(null);
 
+// Eligibility for the dangerous auto-implement path: materialized (plan exists),
+// §5B-cleared, and not already running an agent. Used for BOTH the button
+// visibility and the confirm-time revalidation.
+function canAutoImplement(st: Strategy): boolean {
+  return st.status === 'implementing' && !!st.plan_id && !!st.legal_cleared_at && !st.session_id;
+}
+
+function confirmAutoImplement(st: Strategy) {
+  sourceToDelete.value = null; // only one confirm modal open at a time
+  strategyToAutoImplement.value = st;
+}
+
 async function autoImplementStrategy() {
-  const st = strategyToAutoImplement.value;
+  const target = strategyToAutoImplement.value;
   strategyToAutoImplement.value = null;
-  if (!st || !projectId.value || strategyInFlight.value) return;
+  if (!target || !projectId.value || strategyInFlight.value) return;
+  // Re-validate against the LIVE row at confirm time — the modal may be stale
+  // (an agent started elsewhere, clearance got revoked, an edit reset §5B). This
+  // is the dangerous path, so never POST on a now-ineligible strategy.
+  const st = strategies.value.find((s) => s.id === target.id);
+  if (!st || !canAutoImplement(st)) {
+    showToast(t('competitorIntel.autoImplementNotEligible'), 'error');
+    return;
+  }
   strategyInFlight.value = st.id;
   try {
     // The backend only requires a NON-EMPTY token (operator-confirmed signal).
@@ -988,11 +1009,11 @@ onUnmounted(() => {
               class="ci-autoimpl"
             >
               <button
-                v-if="!st.session_id"
+                v-if="canAutoImplement(st)"
                 type="button"
                 class="btn btn-danger btn-sm"
                 :disabled="strategyInFlight === st.id"
-                @click="strategyToAutoImplement = st"
+                @click="confirmAutoImplement(st)"
               >
                 {{ t('competitorIntel.autoImplement') }}
               </button>
