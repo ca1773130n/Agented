@@ -1,15 +1,19 @@
 """Tests for ProductUrlAdapter — the keyless content-change watcher for the
 ``product_url`` kind (the default lane for any pasted product/marketing URL).
 
-Covers the adapter contract:
+The adapter CRAWLS the product site (seed + same-site feature/pricing/docs pages)
+and hashes the COMBINED visible text. Covers the contract:
   * First poll (watermark NULL) over a 200 HTML body -> ``changed``; watermark ==
-    sha256 of the STRIPPED visible text; raw_ref is the (non-empty) extracted
-    text the summarizer reads; content_hash == watermark.
+    sha256 of the COMBINED page text (``_combine_pages``); raw_ref is the
+    (non-empty) extracted text the summarizer reads; content_hash == watermark.
   * A second fetch of the SAME body, watermark already preset to that hash ->
     ``unchanged`` (no write).
-  * ``304`` (ETag match) -> ``unchanged`` (the free conditional-GET path).
+  * ``304`` -> ``unchanged`` (defensive; the seed is no longer conditional-GET).
   * ``403`` -> ``throttled``; ``500`` -> ``error`` (no raise).
   * A body that strips to empty text -> ``skipped``.
+  * Crawl: same-site gather, link prioritize/filter/dedup, page cap, sub-page
+    failure non-fatal, a sub-page redirect to an internal IP is skipped, and a
+    sub-page-only content change moves the combined watermark.
 
 HTTP is mocked by monkeypatching ``product_url.httpx.get`` — NO network. No DB is
 needed: ``fetch`` is a pure read over the passed ``source`` dict.
@@ -304,3 +308,53 @@ def test_crawl_subpage_failure_is_not_fatal(monkeypatch):
     )
     assert result.outcome == "changed"
     assert "home page text" in result.raw_ref
+
+
+def test_crawl_subpage_redirect_to_internal_is_skipped(monkeypatch):
+    # A same-site sub-page that 302s to a loopback IP must be refused AT the hop by
+    # _safe_get; the crawl skips it and keeps the seed content (never fetches it).
+    home = '<html><body>home main text <a href="/admin">A</a></body></html>'
+
+    def fake_get(url, **kwargs):
+        if url == "https://ex.com/home":
+            return _FakeResponse(200, text=home)
+        if "ex.com/admin" in url:
+            return _FakeResponse(302, headers={"Location": "http://127.0.0.1/secret"})
+        raise AssertionError(f"internal target must never be fetched: {url}")
+
+    monkeypatch.setattr(product_url.httpx, "get", fake_get)
+    # ex.com public; 127.* is not — so the redirect hop is refused before any GET.
+    monkeypatch.setattr(
+        product_url, "_host_is_public", lambda host: not str(host).startswith("127.")
+    )
+    result = ProductUrlAdapter().fetch(
+        {"id": "s1", "url": "https://ex.com/home", "watermark": None}
+    )
+    assert result.outcome == "changed"
+    assert "home main text" in result.raw_ref
+    assert "secret" not in result.raw_ref  # the internal redirect target never reached
+
+
+def test_subpage_only_change_moves_watermark(monkeypatch):
+    # The seed stays identical; ONLY a crawled feature page changes. The combined
+    # watermark must still move (the hash covers the full crawled text).
+    home = '<html><body>stable home <a href="/features">F</a></body></html>'
+
+    def routes(feat_text):
+        return {
+            "https://ex.com/home": _FakeResponse(200, text=home),
+            "https://ex.com/features": _FakeResponse(200, text=feat_text, headers=_HTML_TYPE),
+        }
+
+    _patch_router(monkeypatch, routes("<html><body>features v1: sync</body></html>"))
+    r1 = ProductUrlAdapter().fetch({"id": "s1", "url": "https://ex.com/home", "watermark": None})
+
+    _patch_router(monkeypatch, routes("<html><body>features v2: sync, export, SSO</body></html>"))
+    r2 = ProductUrlAdapter().fetch(
+        {"id": "s1", "url": "https://ex.com/home", "watermark": r1.watermark}
+    )
+
+    assert r1.outcome == "changed"
+    assert r2.outcome == "changed"  # sub-page change detected despite an identical home
+    assert r2.watermark != r1.watermark
+    assert "export, SSO" in r2.raw_ref

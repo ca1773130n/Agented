@@ -74,10 +74,19 @@ _PER_PAGE_CHARS = 1800
 # ordered FIRST so they survive the cap. The change-detection hash uses the FULL
 # combined text (uncapped) so a change on ANY crawled page is still detected.
 _MAX_RAW_REF = 8000
+# Bound the work a single page can impose: cap the HTML we process per page (the
+# regex strip + hash run over this prefix only) and the number of candidate links
+# we collect before sorting/capping. A hostile/huge page can't blow up memory or
+# CPU. (The raw download isn't streamed — acceptable for semi-trusted operator
+# URLs, same posture as the documented DNS-rebind window; stream if that changes.)
+_MAX_RESPONSE_CHARS = 1_000_000
+_MAX_CANDIDATE_LINKS = 300
 
 # Anchor href extractor (crude, no parser dep) + the path keywords that mark a
 # page as feature/pricing/positioning-relevant (crawled first).
-_HREF_RE = re.compile(r"<a\b[^>]*\bhref\s*=\s*[\"']([^\"'#]+)[\"']", re.IGNORECASE)
+# Capture the full href (fragments included — urlparse drops the #fragment when we
+# rebuild the clean URL; excluding '#' in the pattern would DROP a "/p#x" link).
+_HREF_RE = re.compile(r"<a\b[^>]*\bhref\s*=\s*[\"']([^\"']+)[\"']", re.IGNORECASE)
 _FEATURE_HINTS = (
     "feature",
     "pricing",
@@ -159,6 +168,8 @@ def _select_links(html: str, base_url: str) -> list[str]:
     seen: set[str] = set()
     scored: list[tuple[int, str]] = []
     for m in _HREF_RE.finditer(html or ""):
+        if len(seen) >= _MAX_CANDIDATE_LINKS:
+            break  # bound the candidate set on a link-spam page before sort/cap
         href = m.group(1).strip()
         if not href or href.lower().startswith(("mailto:", "tel:", "javascript:", "data:")):
             continue
@@ -179,12 +190,15 @@ def _select_links(html: str, base_url: str) -> list[str]:
     return [u for _, u in scored]
 
 
-def _combine_pages(pages: list[tuple[str, str]]) -> str:
+def _combine_pages(pages: list[tuple[str, str]], *, cap: int | None = _PER_PAGE_CHARS) -> str:
     """Join ``(url, text)`` pages into one labelled blob (each page path-tagged so
-    the summarizer can attribute features to a page), per-page capped."""
+    the summarizer can attribute features to a page). ``cap`` per-page caps the text
+    (for the display ``raw_ref``); pass ``cap=None`` for the FULL text used by the
+    change-detection hash, so a change anywhere on a page is still seen."""
     parts = []
     for url, text in pages:
-        parts.append(f"[{urlparse(url).path or '/'}]\n{text[:_PER_PAGE_CHARS]}")
+        body = text if cap is None else text[:cap]
+        parts.append(f"[{urlparse(url).path or '/'}]\n{body}")
     return "\n\n".join(parts)
 
 
@@ -229,9 +243,11 @@ def _host_is_public(host: str) -> bool:
     return True
 
 
-def _safe_get(url: str, headers: dict) -> httpx.Response:
+def _safe_get(url: str, headers: dict) -> tuple[httpx.Response, str]:
     """SSRF-safe GET: http(s) only; the URL host AND every redirect hop's host
-    must resolve to PUBLIC IPs.
+    must resolve to PUBLIC IPs. Returns ``(response, final_url)`` — the final URL
+    is the post-redirect location, so the caller resolves relative links against
+    where the page actually lives, not the pre-redirect seed.
 
     Redirects are followed MANUALLY (``follow_redirects=False`` per hop) so each
     target is re-validated — otherwise a public URL could ``30x``-redirect to an
@@ -254,10 +270,10 @@ def _safe_get(url: str, headers: dict) -> httpx.Response:
         if resp.status_code in (301, 302, 303, 307, 308):
             location = resp.headers.get("Location")
             if not location:
-                return resp
+                return resp, current
             current = str(httpx.URL(current).join(location))
             continue
-        return resp
+        return resp, current
     raise _UnsafeUrl("too many redirects")
 
 
@@ -297,7 +313,7 @@ class ProductUrlAdapter(AdapterBase):
             return FetchResult(outcome="skipped")
 
         try:
-            resp = _safe_get(url, dict(_HEADERS))
+            resp, final_url = _safe_get(url, dict(_HEADERS))
         except _UnsafeUrl:
             # Non-http(s) scheme or an internal/private host (SSRF) — never fetch.
             logger.warning("competitor product_url blocked unsafe URL for source %s", source_id)
@@ -325,7 +341,9 @@ class ProductUrlAdapter(AdapterBase):
             )
             return FetchResult(outcome="error")
 
-        home_html = resp.text or ""
+        # Cap the HTML we process per page (regex strip + link scan run over this
+        # prefix only) so a huge page can't blow up CPU/memory.
+        home_html = (resp.text or "")[:_MAX_RESPONSE_CHARS]
         home_text = _extract_text(home_html)
         if not home_text:
             # A text-less page (e.g. a pure-JS shell with no SSR content) — nothing
@@ -333,10 +351,11 @@ class ProductUrlAdapter(AdapterBase):
             return FetchResult(outcome="skipped")
 
         # Crawl the same-site feature/pricing/docs pages (feature pages first).
-        pages: list[tuple[str, str]] = [(url, home_text)]
-        for link in _select_links(home_html, url)[:_MAX_CRAWL_PAGES]:
+        # Links resolve against ``final_url`` (post-redirect), not the seed.
+        pages: list[tuple[str, str]] = [(final_url, home_text)]
+        for link in _select_links(home_html, final_url)[:_MAX_CRAWL_PAGES]:
             try:
-                sub = _safe_get(link, dict(_HEADERS))
+                sub, _ = _safe_get(link, dict(_HEADERS))
             except Exception:  # noqa: BLE001 — per-page best-effort; SSRF/transport just skips
                 continue
             if sub.status_code != 200:
@@ -344,20 +363,19 @@ class ProductUrlAdapter(AdapterBase):
             ctype = sub.headers.get("Content-Type", "")
             if ctype and "html" not in ctype.lower():
                 continue  # only mine HTML pages (skip PDFs/feeds/binaries)
-            sub_text = _extract_text(sub.text or "")
+            sub_text = _extract_text((sub.text or "")[:_MAX_RESPONSE_CHARS])
             if sub_text:
                 pages.append((link, sub_text))
 
-        combined = _combine_pages(pages)
-        # Hash the FULL combined text so a change on any crawled page is detected;
-        # store/summarize only the capped, feature-first prefix.
-        content_hash = hashlib.sha256(combined.encode("utf-8")).hexdigest()
+        # Hash the FULL combined text (cap=None) so a change ANYWHERE on a crawled
+        # page is detected; store/summarize only the capped, feature-first prefix.
+        content_hash = hashlib.sha256(_combine_pages(pages, cap=None).encode("utf-8")).hexdigest()
         if source.get("watermark") == content_hash:
             return FetchResult(outcome="unchanged")
 
         return FetchResult(
             outcome="changed",
-            raw_ref=combined[:_MAX_RAW_REF],
+            raw_ref=_combine_pages(pages, cap=_PER_PAGE_CHARS)[:_MAX_RAW_REF],
             watermark=content_hash,
             etag=resp.headers.get("ETag"),
             content_hash=content_hash,
