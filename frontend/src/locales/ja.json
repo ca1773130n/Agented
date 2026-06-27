@@ -6789,7 +6789,10 @@
     "status": "ステータス",
     "processing": "処理中...",
     "teamCollaboration": "チームコラボレーション",
-    "openInPlayground": "プレイグラウンドで開く →"
+    "openInPlayground": "プレイグラウンドで開く →",
+    "routeConversation": "この会話をルーティング",
+    "routeConversationHint": "このアイデアを実際の作業に変換 — エージェント、チーム、またはプロジェクトに割り当てます。",
+    "groundedIn": "{projects}プロジェクト・{sources}ソースに基づく"
   },
   "skillCreateWizard": {
     "title": "スキルを設計",

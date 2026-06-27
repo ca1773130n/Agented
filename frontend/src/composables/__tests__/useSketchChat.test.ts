@@ -9,6 +9,8 @@ const mockSketchApiGet = vi.fn();
 const mockSketchApiCreate = vi.fn();
 const mockSketchApiClassify = vi.fn();
 const mockSketchApiRoute = vi.fn();
+const mockSketchApiUpdate = vi.fn();
+const mockSketchApiIdeate = vi.fn();
 const mockProjectApiList = vi.fn();
 
 vi.mock('../../services/api', () => ({
@@ -18,6 +20,23 @@ vi.mock('../../services/api', () => ({
     create: (...a: unknown[]) => mockSketchApiCreate(...a),
     classify: (...a: unknown[]) => mockSketchApiClassify(...a),
     route: (...a: unknown[]) => mockSketchApiRoute(...a),
+    update: (...a: unknown[]) => mockSketchApiUpdate(...a),
+    getDelegations: vi.fn().mockResolvedValue({ delegations: [] }),
+    // Ideation stream: invoke the handlers synchronously so the awaited
+    // submitSketch resolves with a streamed assistant reply.
+    ideateStream: async (
+      msgs: unknown,
+      handlers: {
+        onRetrieval?: (p: { projects: string[]; citations: number }) => void;
+        onContent?: (c: string) => void;
+        onDone?: () => void;
+      },
+    ) => {
+      mockSketchApiIdeate(msgs);
+      handlers?.onRetrieval?.({ projects: ['a', 'b'], citations: 3 });
+      handlers?.onContent?.('partner reply');
+      handlers?.onDone?.();
+    },
   },
   projectApi: {
     list: (...a: unknown[]) => mockProjectApiList(...a),
@@ -46,6 +65,7 @@ describe('useSketchChat', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSketchApiUpdate.mockResolvedValue({}); // transcript-persist before routing
     chat = useSketchChat();
   });
 
@@ -139,47 +159,54 @@ describe('useSketchChat', () => {
   // submitSketch
   // -----------------------------------------------------------------------
   describe('submitSketch', () => {
-    it('creates, classifies, and fetches sketch on success', async () => {
+    it('creates + classifies ONCE, then streams a grounded ideation reply (no auto-route)', async () => {
       mockSketchApiCreate.mockResolvedValue({ sketch_id: 'sk-new' });
       mockSketchApiClassify.mockResolvedValue({});
-      mockSketchApiGet.mockResolvedValue({
-        id: 'sk-new',
-        title: 'test',
-        classification_json: JSON.stringify({
-          phase: 'design',
-          domains: ['ui'],
-          complexity: 'low',
-          confidence: 0.95,
-        }),
-      });
+      mockSketchApiGet.mockResolvedValue({ id: 'sk-new', title: 'test', status: 'classified' });
       mockSketchApiList.mockResolvedValue({ sketches: [] });
 
       await chat.submitSketch('Build a button');
 
-      // User message added
+      // User message + a streamed assistant ideation reply.
       expect(chat.messages.value[0].role).toBe('user');
       expect(chat.messages.value[0].content).toBe('Build a button');
-
-      // Assistant message with classification
-      expect(chat.messages.value[1].role).toBe('assistant');
-      expect(chat.messages.value[1].content).toContain('Phase: design');
-      expect(chat.messages.value[1].content).toContain('Domains: ui');
-      expect(chat.messages.value[1].content).toContain('Confidence: 95%');
+      const assistant = chat.messages.value.find((m) => m.role === 'assistant');
+      expect(assistant?.content).toBe('partner reply');
 
       expect(chat.currentSketch.value).toBeTruthy();
+      // Ideation ran; routing did NOT (manual button only).
+      expect(mockSketchApiIdeate).toHaveBeenCalled();
+      expect(mockSketchApiRoute).not.toHaveBeenCalled();
+      // Federated grounding provenance surfaced.
+      expect(chat.grounding.value).toEqual({ projects: ['a', 'b'], citations: 3 });
       expect(chat.isProcessing.value).toBe(false);
     });
 
-    it('uses fallback message when no classification data', async () => {
-      mockSketchApiCreate.mockResolvedValue({ sketch_id: 'sk-2' });
+    it('creates the sketch only ONCE across multiple turns', async () => {
+      mockSketchApiCreate.mockResolvedValue({ sketch_id: 'sk-1' });
       mockSketchApiClassify.mockResolvedValue({});
-      mockSketchApiGet.mockResolvedValue({ id: 'sk-2', title: 'test' });
+      mockSketchApiGet.mockResolvedValue({ id: 'sk-1', title: 't', status: 'classified' });
       mockSketchApiList.mockResolvedValue({ sketches: [] });
 
-      await chat.submitSketch('Hello');
+      await chat.submitSketch('first');
+      await chat.submitSketch('second');
 
-      const assistantMsg = chat.messages.value.find((m) => m.role === 'assistant');
-      expect(assistantMsg?.content).toBe('Sketch created and classified.');
+      expect(mockSketchApiCreate).toHaveBeenCalledTimes(1);
+      expect(mockSketchApiIdeate).toHaveBeenCalledTimes(2);
+    });
+
+    it('continues the chat even if classify fails (best-effort, no duplicate)', async () => {
+      mockSketchApiCreate.mockResolvedValue({ sketch_id: 'sk-x' });
+      mockSketchApiClassify.mockRejectedValue(new Error('classify down'));
+      mockSketchApiGet.mockResolvedValue({ id: 'sk-x', title: 't', status: 'draft' });
+      mockSketchApiList.mockResolvedValue({ sketches: [] });
+
+      await chat.submitSketch('idea');
+
+      expect(mockSketchApiClassify).toHaveBeenCalled(); // classify was attempted...
+      expect(chat.currentSketch.value?.id).toBe('sk-x'); // ...and its failure didn't strand the row
+      expect(mockSketchApiIdeate).toHaveBeenCalled(); // chat still streamed
+      expect(chat.error.value).toBeNull();
     });
 
     it('sets error and adds error message on API failure', async () => {

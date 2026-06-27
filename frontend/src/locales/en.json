@@ -6789,7 +6789,10 @@
     "status": "Status",
     "processing": "Processing...",
     "teamCollaboration": "Team Collaboration",
-    "openInPlayground": "Open in Playground →"
+    "openInPlayground": "Open in Playground →",
+    "routeConversation": "Route this conversation",
+    "routeConversationHint": "Turn this idea into actual work — assign it to an agent, team, or project.",
+    "groundedIn": "Grounded in {projects} projects · {sources} sources"
   },
   "skillCreateWizard": {
     "title": "Design a Skill",

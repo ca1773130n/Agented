@@ -6789,7 +6789,10 @@
     "status": "状态",
     "processing": "正在处理...",
     "teamCollaboration": "团队协作",
-    "openInPlayground": "在 Playground 中打开 →"
+    "openInPlayground": "在 Playground 中打开 →",
+    "routeConversation": "路由此对话",
+    "routeConversationHint": "将此想法转化为实际工作 — 分配给智能体、团队或项目。",
+    "groundedIn": "基于 {projects} 个项目 · {sources} 个来源"
   },
   "skillCreateWizard": {
     "title": "设计技能",
