@@ -1066,7 +1066,9 @@ onUnmounted(() => {
        width and stack on narrow viewports. --- */
 .ci-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  /* min(380px, 100%) so the track can shrink below 380px on narrow viewports and
+     collapse to one column instead of overflowing horizontally. */
+  grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
   gap: 24px;
   margin-bottom: 24px;
   align-items: start;
@@ -1412,7 +1414,7 @@ onUnmounted(() => {
   /* Multi-column at full width so the 7-item gate reads as a compact checklist
      rather than a tall single column; collapses to one column on narrow. */
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
   gap: 0.3rem 1.25rem;
 }
 .ci-legal-label {
