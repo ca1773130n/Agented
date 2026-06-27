@@ -11,8 +11,10 @@ chat (the frontend holds the conversation and sends the history each turn). When
 the idea is concrete the operator clicks Route, which hands it to the existing
 sketch routing/execution path.
 
-Default model is a GENERAL chat model (gemini) — Claude Code / Codex / Antigravity
-are coding agents that refuse open-ended ideation (see the competitor-intel rule).
+Default backend is ``gemini`` = Google **Antigravity**, the operator's general
+chat model (Claude Code / Codex are coding agents that refuse open-ended ideation).
+The model id is resolved from the live CLIProxy catalog default (a current
+Gemini-3 id), never a hardcoded obsolete gemini-2.x.
 """
 
 from __future__ import annotations
@@ -22,7 +24,9 @@ from typing import Generator, Optional
 
 logger = logging.getLogger(__name__)
 
-# General chat backend for ideation (NOT a coding-agent backend).
+# Default ideation backend: the ``gemini`` kind = Google Antigravity, the general
+# chat model. (Claude Code / Codex refuse open-ended ideation.) model=None lets
+# the streamer resolve the CURRENT gemini-3 default from the live catalog.
 _IDEATION_BACKEND_DEFAULT = "gemini"
 
 _IDEATION_SYSTEM = (
