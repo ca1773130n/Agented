@@ -1228,7 +1228,11 @@ body.tour-active .modal-overlay {
   font-weight: 500;
 }
 
-.form-group input[type="text"],
+/* All text-like input types — NOT just type="text". A bare type="url"/"email"/
+   "number"/etc. would otherwise fall through to the raw browser default (white
+   box, inset border) and break the dark theme. checkbox/radio/range/file are
+   intentionally excluded (they need their own treatment). */
+.form-group input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
 .form-group select,
 .form-group textarea {
   width: 100%;

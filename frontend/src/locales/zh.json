@@ -9658,6 +9658,7 @@
     "statusDone": "已完成",
     "degradedWarning": "策略 LLM 后端不可用 — 这是占位提案。请重新认证后端以获取真实策略。",
     "implementHintApprove": "请先批准以启用实施。",
-    "implementHintLegal": "完成全部 7 项法律核对清单以启用实施。"
+    "implementHintLegal": "完成全部 7 项法律核对清单以启用实施。",
+    "addSourceTitle": "添加来源"
   }
 }

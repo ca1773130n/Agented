@@ -650,11 +650,15 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <PageLayout max-width="960px">
+  <PageLayout>
     <PageHeader :title="t('competitorIntel.title')" :subtitle="t('competitorIntel.subtitle')" />
 
-    <!-- Add a source — shared toolbar/form card -->
-    <form class="ci-toolbar" @submit.prevent="submitSource">
+    <!-- Add a source — titled card so it matches the section rhythm -->
+    <section class="ci-card">
+      <div class="ci-card-head">
+        <h2 class="ci-card-title">{{ t('competitorIntel.addSourceTitle') }}</h2>
+      </div>
+      <form class="ci-toolbar" @submit.prevent="submitSource">
       <div class="form-group">
         <label for="ci-kind">{{ t('competitorIntel.kindLabel') }}</label>
         <select id="ci-kind" v-model="kind" :aria-label="t('competitorIntel.kindLabel')">
@@ -689,8 +693,11 @@ onUnmounted(() => {
       <button type="submit" class="btn btn-primary" :disabled="!canSubmit">
         {{ adding ? t('competitorIntel.adding') : t('competitorIntel.submit') }}
       </button>
-    </form>
+      </form>
+    </section>
 
+    <!-- Monitor row: watched sources + the discovery queue they seed -->
+    <div class="ci-grid">
     <!-- Watched sources -->
     <section class="ci-card">
       <div class="ci-card-head">
@@ -786,21 +793,6 @@ onUnmounted(() => {
       </ul>
     </section>
 
-    <!-- Delete-source confirmation (shared ConfirmModal, danger variant) -->
-    <ConfirmModal
-      :open="sourceToDelete !== null"
-      :title="t('competitorIntel.deleteSourceTitle')"
-      :message="
-        t('competitorIntel.deleteSourceConfirm', {
-          name: sourceToDelete?.label || sourceToDelete?.url || '',
-        })
-      "
-      :confirm-label="t('competitorIntel.deleteSource')"
-      variant="danger"
-      @confirm="deleteSource"
-      @cancel="sourceToDelete = null"
-    />
-
     <!-- Discovery review queue: suggested competitors awaiting accept/dismiss -->
     <section class="ci-card">
       <div class="ci-card-head">
@@ -842,9 +834,25 @@ onUnmounted(() => {
         </li>
       </ul>
     </section>
+    </div>
 
-    <!-- Strategy review queue: generate → review → approve/reject/edit → §5B legal -->
-    <section class="ci-card">
+    <!-- Delete-source confirmation (shared ConfirmModal, danger variant) -->
+    <ConfirmModal
+      :open="sourceToDelete !== null"
+      :title="t('competitorIntel.deleteSourceTitle')"
+      :message="
+        t('competitorIntel.deleteSourceConfirm', {
+          name: sourceToDelete?.label || sourceToDelete?.url || '',
+        })
+      "
+      :confirm-label="t('competitorIntel.deleteSource')"
+      variant="danger"
+      @confirm="deleteSource"
+      @cancel="sourceToDelete = null"
+    />
+
+    <!-- Strategy review queue (full width — the complex approve→legal→implement flow) -->
+    <section class="ci-card ci-card-wide">
       <div class="ci-card-head">
         <h2 class="ci-card-title">{{ t('competitorIntel.strategiesTitle') }}</h2>
         <button
@@ -925,6 +933,8 @@ onUnmounted(() => {
       </ul>
     </section>
 
+    <!-- Discovery row: market lookalikes + the live signal feed -->
+    <div class="ci-grid">
     <!-- Market lookalikes (phase 27 P5): provider-pluggable scan→review→accept.
          THREE states: (1) provider===null → "configure a provider" CTA (the
          dominant default-install state — no scan button, no fake rows); (2)
@@ -1034,24 +1044,38 @@ onUnmounted(() => {
         </li>
       </ul>
     </section>
+    </div>
   </PageLayout>
 </template>
 
 <style scoped>
-/* --- Add-source toolbar: a clean bordered form card (mirrors .filters-bar) --- */
+/* --- Add-source form: layout only; the surrounding .ci-card is the surface --- */
 .ci-toolbar {
   display: flex;
   flex-wrap: wrap;
   gap: 16px;
   align-items: flex-end;
-  margin-bottom: 24px;
-  padding: 16px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
 }
 .ci-toolbar .form-group {
   flex: 1 1 200px;
+  margin-bottom: 0;
+}
+
+/* --- Responsive section grid: the standard repeat(auto-fit, minmax) manner the
+       other management pages use, so related sections sit side-by-side at full
+       width and stack on narrow viewports. --- */
+.ci-grid {
+  display: grid;
+  /* min(380px, 100%) so the track can shrink below 380px on narrow viewports and
+     collapse to one column instead of overflowing horizontally. */
+  grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
+  gap: 24px;
+  margin-bottom: 24px;
+  align-items: start;
+}
+/* Cards own their bottom margin in the stacked flow; inside a grid the gap owns
+   the spacing, so neutralize it to keep rows aligned. */
+.ci-grid > .ci-card {
   margin-bottom: 0;
 }
 
@@ -1385,11 +1409,13 @@ onUnmounted(() => {
 }
 .ci-legal-list {
   list-style: none;
-  margin: 0 0 0.5rem;
+  margin: 0 0 0.75rem;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
+  /* Multi-column at full width so the 7-item gate reads as a compact checklist
+     rather than a tall single column; collapses to one column on narrow. */
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  gap: 0.3rem 1.25rem;
 }
 .ci-legal-label {
   display: flex;
