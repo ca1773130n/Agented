@@ -3317,7 +3317,18 @@
     "toastNoLoginsDetected": "このマシンで既存のCLIログインは検出されませんでした。",
     "toastDiscoveryFailed": "検出に失敗しました",
     "toastImported": "{name}をインポートしました",
-    "toastImportFailed": "{name}のインポートに失敗しました"
+    "toastImportFailed": "{name}のインポートに失敗しました",
+    "proxyAuthTitle": "CLIProxy 認証",
+    "proxyReauth": "再認証",
+    "authState": {
+      "ok": "正常",
+      "expiring": "まもなく期限切れ",
+      "expired": "期限切れ",
+      "needs_relogin": "再ログインが必要",
+      "unreachable": "プロキシに接続できません",
+      "disabled": "無効",
+      "unknown": "不明"
+    }
   },
   "agentCapabilityMatrix": {
     "featureName": "エージェント機能マトリックス",
@@ -9644,6 +9655,9 @@
     "statusApproved": "承認済み",
     "statusRejected": "却下",
     "statusImplementing": "実装中",
-    "statusDone": "完了"
+    "statusDone": "完了",
+    "degradedWarning": "戦略LLMバックエンドが利用できません — これはプレースホルダーの提案です。実際の戦略を得るにはバックエンドを再認証してください。",
+    "implementHintApprove": "実装を有効にするには、まず承認してください。",
+    "implementHintLegal": "実装を有効にするには、7つの法的チェックリスト項目をすべて完了してください。"
   }
 }

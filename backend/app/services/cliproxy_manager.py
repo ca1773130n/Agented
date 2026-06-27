@@ -39,6 +39,46 @@ _GLOBAL_AUTH_DIR = Path.home() / ".cli-proxy-api"
 # auto-upgrades anything older on startup.
 MIN_CLIPROXY_VERSION = "7.0.0"
 
+# Auth-state windows. CLIProxyAPI auto-refreshes an access token from its refresh
+# token ON USE and rewrites ``expired``/``last_refresh``; claude's cycle is ~8h.
+# So an access token within _EXPIRING_WINDOW of expiry is "expiring" (a keepalive
+# probe will refresh it), past expiry is "expired" (still refreshable on next use),
+# and past expiry by more than _STALE_RELOGIN is "needs_relogin" — the REFRESH
+# token itself is dead, which only an interactive OAuth login can fix.
+_EXPIRING_WINDOW_SECONDS = 30 * 60
+_STALE_RELOGIN_SECONDS = 24 * 3600
+
+
+def _auth_state(account: dict, *, now: datetime, healthy: bool) -> str:
+    """Derive a coarse auth state from a credential's ``expired`` timestamp.
+
+    Returns one of: ``unreachable`` (proxy down), ``disabled``, ``ok`` (valid or
+    no expiry tracked, e.g. gemini), ``expiring`` (within the window), ``expired``
+    (past, still refreshable on next use), ``needs_relogin`` (long past — dead
+    refresh token), ``unknown`` (unparseable timestamp).
+    """
+    if not healthy:
+        return "unreachable"
+    if account.get("disabled"):
+        return "disabled"
+    raw = account.get("expired")
+    if not raw:
+        return "ok"  # gemini & friends track no token expiry
+    try:
+        exp = datetime.fromisoformat(raw)
+    except (ValueError, TypeError):
+        return "unknown"
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    delta = (exp - now).total_seconds()
+    if delta > _EXPIRING_WINDOW_SECONDS:
+        return "ok"
+    if delta > 0:
+        return "expiring"
+    if -delta > _STALE_RELOGIN_SECONDS:
+        return "needs_relogin"
+    return "expired"
+
 
 class CLIProxyManager:
     """Singleton manager for a single global CLIProxyAPI instance."""
@@ -219,6 +259,86 @@ class CLIProxyManager:
                 logger.debug("Account file parse: %s", e)
                 continue
         return accounts
+
+    @classmethod
+    def auth_status(cls) -> dict:
+        """Per-account auth health with a derived ``auth_state`` (see
+        :func:`_auth_state`). Accounts are listed even when the proxy is down so
+        the UI can show ``unreachable`` rather than an empty list. ``summary``
+        rolls up counts + the worst non-ok state so a caller can badge at a glance.
+        """
+        healthy = cls.is_healthy()
+        now = datetime.now(timezone.utc)
+        accounts = []
+        for a in cls.list_accounts():
+            accounts.append({**a, "auth_state": _auth_state(a, now=now, healthy=healthy)})
+        # Worst-first severity for the summary badge.
+        order = ["unreachable", "needs_relogin", "expired", "expiring", "unknown", "disabled", "ok"]
+        states = {a["auth_state"] for a in accounts}
+        worst = (
+            next((s for s in order if s in states), "ok")
+            if accounts
+            else ("unreachable" if not healthy else "ok")
+        )
+        counts: dict = {}
+        for a in accounts:
+            counts[a["auth_state"]] = counts.get(a["auth_state"], 0) + 1
+        return {
+            "available": healthy,
+            "accounts": accounts,
+            "summary": {"worst_state": worst, "counts": counts, "total": len(accounts)},
+        }
+
+    @classmethod
+    def keepalive_probe(cls) -> bool:
+        """Exercise the proxy (cheap ``GET /models``) so CLIProxyAPI refreshes the
+        access tokens it serves from. Best-effort — returns True on a 200."""
+        uk = cls.get_url_and_key()
+        if not uk:
+            return False
+        base_url, api_key = uk
+        try:
+            r = httpx.get(
+                f"{base_url}/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=10,
+            )
+            return r.status_code == 200
+        except httpx.RequestError:
+            return False
+
+    @classmethod
+    def keepalive_job(cls) -> dict:
+        """Periodic auth keepalive (scheduler job).
+
+        CLIProxyAPI refreshes access tokens from the refresh token ON USE, so an
+        idle backend can drift to ``expired``. We probe the proxy to keep
+        refreshable tokens warm, and log any account whose refresh token is dead
+        (``needs_relogin``) so the operator re-authenticates — fully headless
+        OAuth re-login is impossible, so that case is surfaced, not auto-fixed.
+
+        Returns a small dict (probed / relogin emails) for tests + the audit log.
+        """
+        status = cls.auth_status()
+        if not status["available"]:
+            return {"available": False, "probed": False, "needs_relogin": []}
+        states = {a["auth_state"] for a in status["accounts"]}
+        probed = False
+        if states & {"expiring", "expired"}:
+            probed = cls.keepalive_probe()
+        relogin = [
+            {"email": a.get("email"), "type": a.get("type"), "expired": a.get("expired")}
+            for a in status["accounts"]
+            if a["auth_state"] == "needs_relogin"
+        ]
+        for a in relogin:
+            logger.warning(
+                "CLIProxy account %s (%s) needs re-login: token expired %s (refresh token dead)",
+                a["email"],
+                a["type"],
+                a["expired"],
+            )
+        return {"available": True, "probed": probed, "needs_relogin": relogin}
 
     @classmethod
     def _kill_stale_login_processes(cls) -> None:

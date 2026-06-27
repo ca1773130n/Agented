@@ -49,6 +49,35 @@
          hides when there are no missing credentials. -->
     <CredentialStatusBanner />
 
+    <!-- CLIProxy auth health: warm tokens are silent; only surfaces accounts that
+         are expiring/expired/need a re-login (or the proxy being unreachable).
+         Re-auth reuses the OAuth proxy-login flow. -->
+    <div
+      v-if="proxyAuthAttention.length > 0"
+      class="proxy-auth-banner"
+      :class="proxyAuth?.summary.worst_state"
+      role="status"
+    >
+      <div class="proxy-auth-head">
+        <strong>{{ t('aIBackends.proxyAuthTitle') }}</strong>
+        <span class="proxy-auth-worst">{{ t(`aIBackends.authState.${proxyAuth?.summary.worst_state}`) }}</span>
+      </div>
+      <ul class="proxy-auth-list">
+        <li v-for="a in proxyAuthAttention" :key="a.type + a.email">
+          <span class="proxy-auth-acct">{{ a.type }} · {{ a.email || t('aIBackends.none') }}</span>
+          <span class="proxy-auth-state" :class="a.auth_state">{{ t(`aIBackends.authState.${a.auth_state}`) }}</span>
+        </li>
+      </ul>
+      <button
+        type="button"
+        class="btn btn-sm btn-outline"
+        :disabled="isAddingAccount"
+        @click="addProxyAccount"
+      >
+        {{ isAddingAccount ? t('aIBackends.toastOpeningOauth') : t('aIBackends.proxyReauth') }}
+      </button>
+    </div>
+
     <LoadingState v-if="isLoading" :message="t('aIBackends.loadingBackends')" />
 
     <ErrorState v-else-if="error" :message="error" @retry="loadBackends()" />
@@ -267,7 +296,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { backendManagementApi, listGroupedBackends, type AIBackend, type BackendCapabilities } from '../services/api';
 import PageLayout from '../components/base/PageLayout.vue';
@@ -338,6 +367,30 @@ const backendCapabilities = ref<Map<string, BackendCapabilities>>(new Map());
 const isAddingAccount = ref(false);
 const installingBackend = ref<string | null>(null);
 
+// CLIProxy auth health — per-account expiry state + worst-state summary, so the
+// operator sees expired/needs-relogin sessions and can re-authenticate.
+type ProxyAuthAccount = { email: string; type: string; auth_state: string; expired: string };
+const proxyAuth = ref<{
+  available: boolean;
+  accounts: ProxyAuthAccount[];
+  summary: { worst_state: string; counts: Record<string, number>; total: number };
+} | null>(null);
+
+// Accounts that need operator attention (warm tokens are silent).
+const proxyAuthAttention = computed(() =>
+  (proxyAuth.value?.accounts ?? []).filter((a) =>
+    ['expiring', 'expired', 'needs_relogin', 'unreachable'].includes(a.auth_state),
+  ),
+);
+
+async function loadProxyAuth() {
+  try {
+    proxyAuth.value = await backendManagementApi.proxyStatus();
+  } catch {
+    proxyAuth.value = null; // best-effort; the banner just hides
+  }
+}
+
 async function installBackendCli(backend: AIBackend) {
   if (installingBackend.value) return;
   installingBackend.value = backend.id;
@@ -362,6 +415,7 @@ async function addProxyAccount() {
     if (result.status === 'completed') {
       showToast(t('aIBackends.toastAccountAdded'), 'success');
       await loadBackends(true);
+      loadProxyAuth();
     } else {
       showToast(result.message || t('aIBackends.toastLoginFailed'), 'error');
     }
@@ -498,11 +552,74 @@ function getCapabilityTags(backendId: string): string[] {
 
 onMounted(async () => {
   await loadBackends();
+  loadProxyAuth();
   autoCheckBackends();
 });
 </script>
 
 <style scoped>
+/* CLIProxy auth banner */
+.proxy-auth-banner {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border-default);
+  border-left: 3px solid var(--accent-amber, #d9a441);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+.proxy-auth-banner.needs_relogin,
+.proxy-auth-banner.unreachable {
+  border-left-color: var(--accent-crimson);
+}
+.proxy-auth-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.proxy-auth-worst {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+}
+.proxy-auth-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 100%;
+}
+.proxy-auth-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+}
+.proxy-auth-acct {
+  color: var(--text-primary);
+  font-family: var(--font-mono, monospace);
+}
+.proxy-auth-state {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.proxy-auth-state.expired,
+.proxy-auth-state.needs_relogin,
+.proxy-auth-state.unreachable {
+  color: var(--accent-crimson);
+}
+.proxy-auth-state.expiring {
+  color: var(--accent-amber, #d9a441);
+}
+
 .add-account-btn {
   display: inline-flex;
   align-items: center;

@@ -3317,7 +3317,18 @@
     "toastNoLoginsDetected": "在此机器上未检测到现有的 CLI 登录。",
     "toastDiscoveryFailed": "检测失败",
     "toastImported": "已导入 {name}",
-    "toastImportFailed": "导入 {name} 失败"
+    "toastImportFailed": "导入 {name} 失败",
+    "proxyAuthTitle": "CLIProxy 认证",
+    "proxyReauth": "重新认证",
+    "authState": {
+      "ok": "正常",
+      "expiring": "即将过期",
+      "expired": "已过期",
+      "needs_relogin": "需要重新登录",
+      "unreachable": "无法连接代理",
+      "disabled": "已禁用",
+      "unknown": "未知"
+    }
   },
   "agentCapabilityMatrix": {
     "featureName": "代理能力矩阵",
@@ -9644,6 +9655,9 @@
     "statusApproved": "已批准",
     "statusRejected": "已拒绝",
     "statusImplementing": "实施中",
-    "statusDone": "已完成"
+    "statusDone": "已完成",
+    "degradedWarning": "策略 LLM 后端不可用 — 这是占位提案。请重新认证后端以获取真实策略。",
+    "implementHintApprove": "请先批准以启用实施。",
+    "implementHintLegal": "完成全部 7 项法律核对清单以启用实施。"
   }
 }

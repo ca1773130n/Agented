@@ -105,6 +105,9 @@ export interface Strategy {
   /** Stamped by the 26-04 materialize path; null in this MVP. */
   plan_id: string | null;
   created_at: string;
+  /** True when the strategy was synthesized in degraded mode (LLM backend
+   *  unreachable → placeholder body). Present only on the generate response. */
+  degraded?: boolean;
 }
 
 /**

@@ -627,9 +627,15 @@ def gemini_auth_complete(data: dict) -> dict[str, Any]:
 def proxy_status() -> dict[str, Any]:
     from app.services.cliproxy_manager import CLIProxyManager
 
-    healthy = CLIProxyManager.is_healthy()
-    accounts = CLIProxyManager.list_accounts() if healthy else []
-    return {"available": healthy, "account_count": len(accounts), "accounts": accounts}
+    # auth_status carries the per-account ``auth_state`` + a roll-up summary, and
+    # lists accounts even when the proxy is down (state ``unreachable``).
+    status = CLIProxyManager.auth_status()
+    return {
+        "available": status["available"],
+        "account_count": status["summary"]["total"],
+        "accounts": status["accounts"],
+        "summary": status["summary"],
+    }
 
 
 @get("/proxy/accounts", sync_to_thread=False)

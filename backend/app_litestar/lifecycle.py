@@ -246,6 +246,7 @@ def _setup_scheduler(app: Any) -> None:
         from app.db.webhook_dedup import cleanup_expired_keys
         from app.services.agent_conversation_service import AgentConversationService
         from app.services.chat_retry_service import ChatRetryService
+        from app.services.cliproxy_manager import CLIProxyManager
         from app.services.memory_evolution import (
             process_pending_extractions,
             run_consolidation_check,
@@ -295,6 +296,9 @@ def _setup_scheduler(app: Any) -> None:
             # Chat rate-limit rotation Phase 2: re-dispatch parked chat turns
             # once a rate-limited account frees up.
             (ChatRetryService.process_pending, {"seconds": 20}, "chat_retry_queue"),
+            # CLIProxy auth keepalive: probe to keep refreshable tokens warm and
+            # surface dead-refresh-token accounts that need an interactive re-login.
+            (CLIProxyManager.keepalive_job, {"minutes": 30}, "cliproxy_auth_keepalive"),
         ]
         for func, interval_kwargs, job_id in periodic_jobs:
             SchedulerService._scheduler.add_job(

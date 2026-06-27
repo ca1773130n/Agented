@@ -459,6 +459,14 @@ function patchStrategy(updated: Strategy) {
   strategies.value = strategies.value.map((s) => (s.id === updated.id ? updated : s));
 }
 
+// Why is Implement disabled? It needs Approve THEN the 7-item §5B legal checklist.
+// Empty string = no hint (already implementing/done, or fully ready).
+function implementHint(st: Strategy): string {
+  if (st.status === 'proposed') return t('competitorIntel.implementHintApprove');
+  if (st.status === 'approved' && !st.legal_cleared_at) return t('competitorIntel.implementHintLegal');
+  return '';
+}
+
 // Generate a strategy from the currently-listed signals, then refresh the queue.
 async function generateStrategy() {
   if (!projectId.value || generatingStrategy.value) return;
@@ -469,8 +477,14 @@ async function generateStrategy() {
   }
   generatingStrategy.value = true;
   try {
-    await competitorIntelApi.generateStrategy(projectId.value, signalIds);
+    const res = await competitorIntelApi.generateStrategy(projectId.value, signalIds);
     await loadStrategies();
+    // Degraded = the strategy LLM backend (CLIProxyAPI) was unreachable, so the
+    // body is a placeholder. Tell the operator so they don't mistake it for a
+    // real proposal (the row is still created and approvable).
+    if (res?.strategy?.degraded) {
+      showToast(t('competitorIntel.degradedWarning'), 'infrastructure');
+    }
   } catch (err) {
     showToast(err instanceof ApiError ? err.message : t('competitorIntel.strategyError'), 'error');
   } finally {
@@ -900,11 +914,12 @@ onUnmounted(() => {
               type="button"
               class="btn btn-primary btn-sm"
               :disabled="!st.legal_cleared_at || strategyInFlight === st.id || st.status !== 'approved'"
-              :title="!st.legal_cleared_at ? t('competitorIntel.legalChecklistTitle') : ''"
+              :title="implementHint(st) || ''"
               @click="materializeStrategy(st.id)"
             >
               {{ t('competitorIntel.implement') }}
             </button>
+            <p v-if="implementHint(st)" class="ci-implement-hint">{{ implementHint(st) }}</p>
           </div>
         </li>
       </ul>
@@ -1353,6 +1368,11 @@ onUnmounted(() => {
 .ci-strategy-actions {
   display: flex;
   gap: 0.5rem;
+}
+.ci-implement-hint {
+  margin: 0.375rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
 }
 .ci-legal {
   border-top: 1px solid var(--border-default);

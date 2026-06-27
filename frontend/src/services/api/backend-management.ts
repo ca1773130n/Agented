@@ -154,7 +154,19 @@ export const backendManagementApi = {
 
   // CLIProxyAPI status + listing (Agented-local Flask introspection)
   proxyStatus: () =>
-    apiFetch<{ available: boolean; account_count: number; accounts: Array<{ email: string; type: string; disabled: boolean; expired: string }> }>('/admin/backends/proxy/status'),
+    apiFetch<{
+      available: boolean;
+      account_count: number;
+      accounts: Array<{
+        email: string;
+        type: string;
+        disabled: boolean;
+        expired: string;
+        // Derived auth health: ok | expiring | expired | needs_relogin | unreachable | disabled | unknown
+        auth_state: string;
+      }>;
+      summary: { worst_state: string; counts: Record<string, number>; total: number };
+    }>('/admin/backends/proxy/status'),
 
   listProxyAccounts: () =>
     apiFetch<{ accounts: Array<{ email: string; type: string; disabled: boolean; expired: string }> }>('/admin/backends/proxy/accounts'),
