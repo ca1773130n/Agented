@@ -21,6 +21,7 @@ vi.mock('../../services/api', () => ({
     classify: (...a: unknown[]) => mockSketchApiClassify(...a),
     route: (...a: unknown[]) => mockSketchApiRoute(...a),
     update: (...a: unknown[]) => mockSketchApiUpdate(...a),
+    getDelegations: vi.fn().mockResolvedValue({ delegations: [] }),
     // Ideation stream: invoke the handlers synchronously so the awaited
     // submitSketch resolves with a streamed assistant reply.
     ideateStream: async (
@@ -202,7 +203,8 @@ describe('useSketchChat', () => {
 
       await chat.submitSketch('idea');
 
-      expect(chat.currentSketch.value?.id).toBe('sk-x'); // tracked despite classify failure
+      expect(mockSketchApiClassify).toHaveBeenCalled(); // classify was attempted...
+      expect(chat.currentSketch.value?.id).toBe('sk-x'); // ...and its failure didn't strand the row
       expect(mockSketchApiIdeate).toHaveBeenCalled(); // chat still streamed
       expect(chat.error.value).toBeNull();
     });
