@@ -89,15 +89,27 @@ ensure_node() {
 # a missing/old Tesserae degrades the Sketch chat to ungrounded — never blocks
 # setup.
 TESSERAE_MIN="0.11.0"
+# Portable "A >= B" for dotted versions — BSD/macOS `sort` lacks `-V`.
+_version_ge() {
+    local a b IFS=.
+    read -ra a <<<"${1//[!0-9.]/}"
+    read -ra b <<<"${2//[!0-9.]/}"
+    local i x y
+    for i in 0 1 2; do
+        x=$((10#${a[i]:-0}))
+        y=$((10#${b[i]:-0}))
+        ((x > y)) && return 0
+        ((x < y)) && return 1
+    done
+    return 0
+}
 ensure_tesserae() {
     local cur=""
     if command_exists tesserae; then
         # `|| true`: a broken binary must not abort setup under `set -euo pipefail`.
         cur="$(tesserae --version 2>/dev/null | awk '{print $NF}' || true)"
     fi
-    # cur >= TESSERAE_MIN  ⟺  TESSERAE_MIN sorts first under `sort -V`.
-    if [[ -n "$cur" ]] && \
-       [[ "$(printf '%s\n%s\n' "$TESSERAE_MIN" "$cur" | sort -V | head -1)" == "$TESSERAE_MIN" ]]; then
+    if [[ -n "$cur" ]] && _version_ge "$cur" "$TESSERAE_MIN"; then
         info "Tesserae $cur found (>= $TESSERAE_MIN)"
         return
     fi

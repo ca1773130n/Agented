@@ -196,6 +196,18 @@ export function useSketchChat() {
       isProcessing.value = true;
       error.value = null;
 
+      // Ensure the sketch is classified before routing — classify may have
+      // failed/been skipped during ideation, and route requires it. This removes
+      // the dead-end where an unclassified sketch can never be routed.
+      if (!currentSketch.value?.classification_json) {
+        try {
+          await sketchApi.classify(sketchId);
+          currentSketch.value = await sketchApi.get(sketchId);
+        } catch {
+          /* route will surface a clear error if it's still unclassified */
+        }
+      }
+
       // Route the WHOLE conversation, not just the first message: persist the
       // accumulated transcript as the sketch content so the executor sees the
       // full ideation, not the original one-liner.
