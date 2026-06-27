@@ -104,6 +104,9 @@ export interface Strategy {
   legal_cleared_at: string | null;
   /** Stamped by the 26-04 materialize path; null in this MVP. */
   plan_id: string | null;
+  /** The auto-implement goal-loop session (26-05); non-null once an agent run has
+   *  been launched for this materialized strategy. */
+  session_id?: string | null;
   created_at: string;
   /** True when the strategy was synthesized in degraded mode (LLM backend
    *  unreachable → placeholder body). Present only on the generate response. */
@@ -317,6 +320,23 @@ export const competitorIntelApi = {
       `/api/projects/${projectId}/strategies/${id}/materialize`,
       { method: 'POST' },
     ),
+
+  /**
+   * Launch the TRIPLE-GATED auto-implement goal-loop for a MATERIALIZED strategy:
+   * spawns an autonomous coding agent in an ISOLATED git worktree behind a human
+   * gate. Requires the AGENTED_STRATEGY_AUTOIMPLEMENT env flag (else 403), §5B
+   * legal clearance (else 409), a materialized plan_id (else 409), and a non-empty
+   * confirm_token (else 400). Returns the spawned session on success.
+   */
+  autoimplementStrategy: (
+    projectId: string,
+    id: string,
+    confirmToken: string,
+  ): Promise<{ status: string; session_id: string; plan_id: string; worktree_path: string }> =>
+    apiFetch(`/api/projects/${projectId}/strategies/${id}/autoimplement`, {
+      method: 'POST',
+      body: JSON.stringify({ confirm_token: confirmToken }),
+    }),
 
   /**
    * Edit a strategy's title/body. RESETS the §5B legal clearance (the backend

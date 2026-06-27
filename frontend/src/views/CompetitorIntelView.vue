@@ -176,6 +176,7 @@ async function loadSources() {
 
 /** Open the delete-confirm modal for a source (no mutation until confirmed). */
 function confirmDeleteSource(source: CompetitorSource) {
+  strategyToAutoImplement.value = null; // only one confirm modal open at a time
   sourceToDelete.value = source;
 }
 
@@ -537,6 +538,63 @@ async function materializeStrategy(id: string) {
   }
 }
 
+// Auto-implement: hand a MATERIALIZED strategy to the autonomous coding agent.
+// This is the dangerous step — it spawns a goal-loop agent that writes code in an
+// isolated git worktree — so it goes through an explicit confirm modal here, on top
+// of the triple backend gate (AGENTED_STRATEGY_AUTOIMPLEMENT env flag + §5B legal
+// clearance + confirm token).
+const strategyToAutoImplement = ref<Strategy | null>(null);
+
+// Eligibility for the dangerous auto-implement path: materialized (plan exists),
+// §5B-cleared, and not already running an agent. Used for BOTH the button
+// visibility and the confirm-time revalidation.
+function canAutoImplement(st: Strategy): boolean {
+  return st.status === 'implementing' && !!st.plan_id && !!st.legal_cleared_at && !st.session_id;
+}
+
+function confirmAutoImplement(st: Strategy) {
+  sourceToDelete.value = null; // only one confirm modal open at a time
+  strategyToAutoImplement.value = st;
+}
+
+async function autoImplementStrategy() {
+  const target = strategyToAutoImplement.value;
+  strategyToAutoImplement.value = null;
+  if (!target || !projectId.value || strategyInFlight.value) return;
+  // Re-validate against the LIVE row at confirm time — the modal may be stale
+  // (an agent started elsewhere, clearance got revoked, an edit reset §5B). This
+  // is the dangerous path, so never POST on a now-ineligible strategy.
+  const st = strategies.value.find((s) => s.id === target.id);
+  if (!st || !canAutoImplement(st)) {
+    showToast(t('competitorIntel.autoImplementNotEligible'), 'error');
+    return;
+  }
+  strategyInFlight.value = st.id;
+  try {
+    // The backend only requires a NON-EMPTY token (operator-confirmed signal).
+    const token = globalThis.crypto?.randomUUID?.() ?? `confirm-${st.id}`;
+    const res = await competitorIntelApi.autoimplementStrategy(projectId.value, st.id, token);
+    showToast(t('competitorIntel.autoImplementStarted', { id: res.session_id }), 'success');
+    await loadStrategies();
+  } catch (err) {
+    showToast(err instanceof ApiError ? err.message : t('competitorIntel.strategyError'), 'error');
+  } finally {
+    strategyInFlight.value = null;
+  }
+}
+
+// Status badge: 'implementing' means MATERIALIZED (a plan exists). Only once an
+// agent session has actually been launched (session_id) does it read as the agent
+// running — so the badge never implies work that isn't happening.
+function strategyStatusLabel(st: Strategy): string {
+  if (st.status === 'implementing') {
+    return st.session_id
+      ? t('competitorIntel.statusImplementing')
+      : t('competitorIntel.statusMaterialized');
+  }
+  return statusLabel(st.status);
+}
+
 // Save an edited body (called on textarea blur). Resets the legal clearance
 // server-side (§5B edit-resets-clearance) — the implement gate re-locks.
 async function saveStrategyBody(id: string, body: string) {
@@ -851,6 +909,17 @@ onUnmounted(() => {
       @cancel="sourceToDelete = null"
     />
 
+    <!-- Auto-implement confirmation — this launches an autonomous coding agent. -->
+    <ConfirmModal
+      :open="strategyToAutoImplement !== null"
+      :title="t('competitorIntel.autoImplementConfirmTitle')"
+      :message="t('competitorIntel.autoImplementConfirmMsg')"
+      :confirm-label="t('competitorIntel.autoImplement')"
+      variant="danger"
+      @confirm="autoImplementStrategy"
+      @cancel="strategyToAutoImplement = null"
+    />
+
     <!-- Strategy review queue (full width — the complex approve→legal→implement flow) -->
     <section class="ci-card ci-card-wide">
       <div class="ci-card-head">
@@ -875,7 +944,10 @@ onUnmounted(() => {
       <ul v-else class="ci-strategy-list">
         <li v-for="st in strategies" :key="st.id" class="ci-strategy">
           <div class="ci-strategy-head">
-            <span class="ci-kind" :data-kind="st.status">{{ statusLabel(st.status) }}</span>
+            <span
+              class="ci-kind"
+              :data-kind="st.status === 'implementing' && !st.session_id ? 'materialized' : st.status"
+            >{{ strategyStatusLabel(st) }}</span>
             <span class="ci-strategy-title">{{ st.title || t('competitorIntel.noSummary') }}</span>
           </div>
           <textarea
@@ -928,6 +1000,26 @@ onUnmounted(() => {
               {{ t('competitorIntel.implement') }}
             </button>
             <p v-if="implementHint(st)" class="ci-implement-hint">{{ implementHint(st) }}</p>
+
+            <!-- Auto-implement: only for a materialized + cleared strategy that is
+                 not already running an agent. Danger styling — it launches an
+                 autonomous coding agent (behind a confirm modal + backend gates). -->
+            <div
+              v-if="st.status === 'implementing' && st.plan_id && st.legal_cleared_at"
+              class="ci-autoimpl"
+            >
+              <button
+                v-if="canAutoImplement(st)"
+                type="button"
+                class="btn btn-danger btn-sm"
+                :disabled="strategyInFlight === st.id"
+                @click="confirmAutoImplement(st)"
+              >
+                {{ t('competitorIntel.autoImplement') }}
+              </button>
+              <span v-else class="ci-autoimpl-running">{{ t('competitorIntel.autoImplementRunning') }}</span>
+              <p class="ci-implement-hint">{{ t('competitorIntel.autoImplementHint') }}</p>
+            </div>
           </div>
         </li>
       </ul>
@@ -1396,6 +1488,22 @@ onUnmounted(() => {
 .ci-implement-hint {
   margin: 0.375rem 0 0;
   font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+.ci-autoimpl {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--border-default);
+}
+.ci-autoimpl-running {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent-cyan);
+}
+/* 'Materialized' (plan created, nothing running) reads calmer than the active
+   states so it doesn't imply work in progress. */
+.ci-kind[data-kind='materialized'] {
+  background: var(--bg-tertiary);
   color: var(--text-secondary);
 }
 .ci-legal {
