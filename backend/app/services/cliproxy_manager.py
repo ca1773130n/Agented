@@ -49,6 +49,14 @@ _EXPIRING_WINDOW_SECONDS = 30 * 60
 _STALE_RELOGIN_SECONDS = 24 * 3600
 
 
+def _redact_email(email: Optional[str]) -> str:
+    """Mask an email for logs: ``ca1773130n@gmail.com`` -> ``c***@gmail.com``."""
+    if not email or "@" not in email:
+        return "<none>"
+    local, _, domain = email.partition("@")
+    return f"{local[:1]}***@{domain}"
+
+
 def _auth_state(account: dict, *, now: datetime, healthy: bool) -> str:
     """Derive a coarse auth state from a credential's ``expired`` timestamp.
 
@@ -332,9 +340,11 @@ class CLIProxyManager:
             if a["auth_state"] == "needs_relogin"
         ]
         for a in relogin:
+            # Redact the email — this warns every run (30m cadence), so the raw
+            # address must not accumulate in application / centralized logs.
             logger.warning(
                 "CLIProxy account %s (%s) needs re-login: token expired %s (refresh token dead)",
-                a["email"],
+                _redact_email(a["email"]),
                 a["type"],
                 a["expired"],
             )

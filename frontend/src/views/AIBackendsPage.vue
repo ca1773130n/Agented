@@ -379,7 +379,8 @@ const proxyAuth = ref<{
 // Accounts that need operator attention (warm tokens are silent).
 const proxyAuthAttention = computed(() =>
   (proxyAuth.value?.accounts ?? []).filter((a) =>
-    ['expiring', 'expired', 'needs_relogin', 'unreachable'].includes(a.auth_state),
+    // 'unknown' = a malformed expiry we couldn't parse — also worth surfacing.
+    ['expiring', 'expired', 'needs_relogin', 'unreachable', 'unknown'].includes(a.auth_state),
   ),
 );
 

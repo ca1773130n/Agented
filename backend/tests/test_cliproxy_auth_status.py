@@ -8,7 +8,15 @@ needs_relogin (refresh token dead). gemini tracks no expiry → always ok.
 from datetime import datetime, timedelta, timezone
 
 from app.services import cliproxy_manager as cm
-from app.services.cliproxy_manager import CLIProxyManager, _auth_state
+from app.services.cliproxy_manager import CLIProxyManager, _auth_state, _redact_email
+
+
+def test_redact_email():
+    assert _redact_email("ca1773130n@gmail.com") == "c***@gmail.com"
+    assert _redact_email("") == "<none>"
+    assert _redact_email(None) == "<none>"
+    assert _redact_email("nodomain") == "<none>"
+
 
 NOW = datetime(2026, 6, 27, 12, 0, 0, tzinfo=timezone.utc)
 
