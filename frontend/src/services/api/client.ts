@@ -123,6 +123,24 @@ export function getCsrfToken(): string | null {
   return null;
 }
 
+/**
+ * Auth + CSRF headers matching `apiFetch`, for hand-rolled `fetch()` calls that
+ * can't go through apiFetch (e.g. streaming POSTs). Pair with
+ * `credentials: 'include'` so the HttpOnly session + CSRF cookies are sent.
+ */
+export function buildAuthHeaders(method: string = 'GET'): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const apiKey = getApiKey();
+  if (apiKey) headers['X-API-Key'] = apiKey;
+  const sessionToken = getSessionToken();
+  if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase())) {
+    const csrf = getCsrfToken();
+    if (csrf) headers['X-CSRF-Token'] = csrf;
+  }
+  return headers;
+}
+
 const DEFAULT_TIMEOUT_MS = 120000;
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_STATUSES = [429, 502, 503, 504];

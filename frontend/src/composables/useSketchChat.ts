@@ -120,10 +120,19 @@ export function useSketchChat() {
           content: text,
           project_id: selectedProjectId.value ?? undefined,
         });
-        await sketchApi.classify(createResult.sketch_id);
-        if (abortController.signal.aborted) return;
+        // Capture the sketch IMMEDIATELY so a later failure can't strand the row
+        // or make the next submit create a duplicate.
         currentSketch.value = await sketchApi.get(createResult.sketch_id);
         await loadSketches();
+        // Classification is best-effort (drives the badge only) — a failure must
+        // not abort the conversation or duplicate the sketch.
+        try {
+          await sketchApi.classify(createResult.sketch_id);
+          if (abortController.signal.aborted) return;
+          currentSketch.value = await sketchApi.get(createResult.sketch_id);
+        } catch {
+          /* keep going — the chat still works without a classification badge */
+        }
       }
       if (abortController.signal.aborted) return;
 
@@ -186,6 +195,21 @@ export function useSketchChat() {
     try {
       isProcessing.value = true;
       error.value = null;
+
+      // Route the WHOLE conversation, not just the first message: persist the
+      // accumulated transcript as the sketch content so the executor sees the
+      // full ideation, not the original one-liner.
+      const transcript = messages.value
+        .filter((m) => m.role === 'user' || m.role === 'assistant')
+        .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+        .join('\n\n');
+      if (transcript) {
+        try {
+          await sketchApi.update(sketchId, { content: transcript });
+        } catch {
+          /* best-effort — fall back to the stored content */
+        }
+      }
 
       const routeResult = await sketchApi.route(sketchId, opts);
 

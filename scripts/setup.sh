@@ -92,7 +92,8 @@ TESSERAE_MIN="0.11.0"
 ensure_tesserae() {
     local cur=""
     if command_exists tesserae; then
-        cur="$(tesserae --version 2>/dev/null | awk '{print $NF}')"
+        # `|| true`: a broken binary must not abort setup under `set -euo pipefail`.
+        cur="$(tesserae --version 2>/dev/null | awk '{print $NF}' || true)"
     fi
     # cur >= TESSERAE_MIN  ⟺  TESSERAE_MIN sorts first under `sort -V`.
     if [[ -n "$cur" ]] && \

@@ -235,8 +235,25 @@ async def ideate_sketch(data: dict) -> Stream:
     from app.services.sketch_ideation_service import sse_lines
 
     body = data or {}
-    messages = body.get("messages") or []
+    raw = body.get("messages")
+    if not isinstance(raw, list):
+        raise ClientException(detail="messages must be a list")
+    # Normalize + bound: keep the last 40 user/assistant turns, cap each at 20k
+    # chars, drop anything malformed — never forward unbounded/garbage to the
+    # subprocess + LLM.
+    messages: list[dict] = []
+    for m in raw[-40:]:
+        if not isinstance(m, dict):
+            continue
+        role = m.get("role")
+        content = m.get("content")
+        if role in ("user", "assistant") and isinstance(content, str):
+            messages.append({"role": role, "content": content[:20_000]})
+    if not messages:
+        raise ClientException(detail="messages must contain at least one user/assistant turn")
     backend = body.get("backend")
+    if backend not in ("gemini", "claude", "codex", "opencode"):
+        backend = None  # service defaults to the general (gemini) backend
 
     async def event_generator():
         gen = sse_lines(messages, backend=backend)

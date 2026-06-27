@@ -1,7 +1,7 @@
 /**
  * Sketch API module.
  */
-import { apiFetch, API_BASE, getApiKey } from './client';
+import { apiFetch, API_BASE, buildAuthHeaders } from './client';
 import type { Sketch, SketchStatus, Delegation } from './types';
 
 export interface IdeateHandlers {
@@ -73,15 +73,13 @@ export const sketchApi = {
     handlers: IdeateHandlers,
     backend?: string,
   ): Promise<void> => {
-    const apiKey = getApiKey();
     let resp: Response;
     try {
       resp = await fetch(`${API_BASE}/admin/sketches/ideate`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(apiKey ? { 'X-API-Key': apiKey } : {}),
-        },
+        // Same auth as apiFetch: X-API-Key + bearer + X-CSRF-Token + cookies.
+        headers: { 'Content-Type': 'application/json', ...buildAuthHeaders('POST') },
+        credentials: 'include',
         body: JSON.stringify({ messages, backend }),
         signal: handlers.signal,
       });
@@ -125,6 +123,8 @@ export const sketchApi = {
         } else if (event === 'content') {
           handlers.onContent?.((data.content as string) ?? '');
         } else if (event === 'error') {
+          // Terminal: fire exactly one of onError/onDone (suppress the EOF onDone).
+          doneEmitted = true;
           handlers.onError?.((data.message as string) ?? 'stream error');
         } else if (event === 'done') {
           doneEmitted = true;
