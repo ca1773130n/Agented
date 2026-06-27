@@ -72,7 +72,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_SUMMARY_MODEL = {
     "claude": "claude-haiku-4-5-20251001",
     "codex": "gpt-5.4-mini",
-    "gemini": "gemini-2.5-flash-lite",
+    # gemini backend = Google Antigravity; gemini-2.x is obsolete — current cheap id.
+    "gemini": "gemini-3.1-flash-lite-preview",
     "opencode": "auto",
 }
 

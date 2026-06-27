@@ -76,7 +76,10 @@ GRD_COMMAND_MAP: Dict[str, str] = {
 DEFAULT_MODELS: Dict[str, str] = {
     "claude": "openai/claude-sonnet-4-20250514",
     "codex": "openai/gpt-4o-mini",
-    "gemini": "gemini/gemini-1.5-flash",
+    # gemini backend = Google Antigravity; gemini-1.5 is long obsolete. LLM
+    # classification is best-effort (graceful keyword fallback) if litellm can't
+    # resolve the current id.
+    "gemini": "gemini/gemini-3-flash-preview",
     "opencode": "openai/gpt-4o-mini",
 }
 

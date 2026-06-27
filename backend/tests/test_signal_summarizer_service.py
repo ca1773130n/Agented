@@ -141,7 +141,7 @@ def test_default_summary_model_covers_all_four_kinds():
     # the bare "claude-haiku-4-5" alias 502s "unknown provider" (verified live).
     assert DEFAULT_SUMMARY_MODEL["claude"] == "claude-haiku-4-5-20251001"
     assert DEFAULT_SUMMARY_MODEL["codex"] == "gpt-5.4-mini"
-    assert DEFAULT_SUMMARY_MODEL["gemini"] == "gemini-2.5-flash-lite"
+    assert DEFAULT_SUMMARY_MODEL["gemini"] == "gemini-3.1-flash-lite-preview"
     assert DEFAULT_SUMMARY_MODEL["opencode"] == "auto"
 
 

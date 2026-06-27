@@ -30,7 +30,7 @@ def test_fallback_is_backend_aware_when_discovery_none(monkeypatch):
     _patch_discovery(monkeypatch, lambda b: None)
     assert sss._resolve_ranker_model(None, "claude") == "claude-haiku-4-5-20251001"
     assert sss._resolve_ranker_model(None, "codex") == "gpt-5.4-mini"
-    assert sss._resolve_ranker_model(None, "gemini") == "gemini-2.5-flash-lite"
+    assert sss._resolve_ranker_model(None, "gemini") == "gemini-3.1-flash-lite-preview"
     assert sss._resolve_ranker_model(None, "opencode") == "auto"
 
 

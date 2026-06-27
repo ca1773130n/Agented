@@ -62,7 +62,8 @@ _DEFAULT_POLL_MINUTES = 15
 # Backend for competitor-intel LLM calls (signal summaries + strategy proposals).
 # Defaults to a GENERAL chat model — NOT claude, whose Claude Code persona refuses
 # these non-coding summarize/strategize prompts (returns unparseable text →
-# degraded signals). gemini-2.5-flash / codex both work; gemini is the default.
+# degraded signals). The ``gemini`` backend = Google Antigravity (the general
+# chat model); model ids resolve from the live catalog (current Gemini-3).
 _DEFAULT_LLM_BACKEND = "gemini"
 _DEFAULT_CONFIG = {
     "enabled": False,
