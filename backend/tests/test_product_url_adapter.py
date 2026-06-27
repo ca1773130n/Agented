@@ -314,13 +314,15 @@ def test_crawl_subpage_redirect_to_internal_is_skipped(monkeypatch):
     # A same-site sub-page that 302s to a loopback IP must be refused AT the hop by
     # _safe_get; the crawl skips it and keeps the seed content (never fetches it).
     home = '<html><body>home main text <a href="/admin">A</a></body></html>'
+    fetched: list[str] = []
 
     def fake_get(url, **kwargs):
+        fetched.append(url)
         if url == "https://ex.com/home":
             return _FakeResponse(200, text=home)
         if "ex.com/admin" in url:
             return _FakeResponse(302, headers={"Location": "http://127.0.0.1/secret"})
-        raise AssertionError(f"internal target must never be fetched: {url}")
+        return _FakeResponse(404)
 
     monkeypatch.setattr(product_url.httpx, "get", fake_get)
     # ex.com public; 127.* is not — so the redirect hop is refused before any GET.
@@ -332,7 +334,10 @@ def test_crawl_subpage_redirect_to_internal_is_skipped(monkeypatch):
     )
     assert result.outcome == "changed"
     assert "home main text" in result.raw_ref
-    assert "secret" not in result.raw_ref  # the internal redirect target never reached
+    # The internal target was refused at the hop — recorded calls prove it was
+    # never fetched (an in-mock `raise` would be swallowed by the crawl's except).
+    assert not any("127.0.0.1" in u for u in fetched)
+    assert "secret" not in result.raw_ref
 
 
 def test_subpage_only_change_moves_watermark(monkeypatch):
@@ -374,7 +379,9 @@ def test_relative_links_resolve_against_final_url(monkeypatch):
             return _FakeResponse(
                 200, text="<html><body>FEATPAGE sync export</body></html>", headers=_HTML_TYPE
             )
-        raise AssertionError(f"unexpected fetch (wrong base?): {url}")
+        # Wrong-base resolution (e.g. /features instead of /real/features) lands
+        # here -> 404 -> not added -> the positive assertions below fail.
+        return _FakeResponse(404)
 
     monkeypatch.setattr(product_url.httpx, "get", fake_get)
     monkeypatch.setattr(product_url, "_host_is_public", lambda host: True)
@@ -406,17 +413,24 @@ def test_change_beyond_per_page_cap_still_moves_watermark(monkeypatch):
 
 
 def test_response_char_cap_bounds_processing(monkeypatch):
-    # MAJOR#2: content past _MAX_RESPONSE_CHARS is dropped before extract/hash.
-    monkeypatch.setattr(product_url, "_MAX_RESPONSE_CHARS", 40)
-    body = "<html><body>VISIBLE_HEAD " + ("y" * 500) + " HIDDEN_TAIL</body></html>"
-    _patch_get(monkeypatch, _FakeResponse(200, text=body))
-    result = ProductUrlAdapter().fetch({"id": "s1", "url": "https://ex.com/p", "watermark": None})
-    assert result.outcome == "changed"
-    assert "HIDDEN_TAIL" not in result.raw_ref  # truncated by the response cap
+    # MAJOR#2: content past _MAX_RESPONSE_CHARS is dropped before extract AND hash.
+    monkeypatch.setattr(product_url, "_MAX_RESPONSE_CHARS", 50)
+    head = "<html><body>" + "Z" * 60  # first 50 chars identical across both bodies
+
+    _patch_get(monkeypatch, _FakeResponse(200, text=head + " AAA_TAIL</body></html>"))
+    r_a = ProductUrlAdapter().fetch({"id": "s1", "url": "https://ex.com/p", "watermark": None})
+    _patch_get(monkeypatch, _FakeResponse(200, text=head + " BBB_TAIL</body></html>"))
+    r_b = ProductUrlAdapter().fetch({"id": "s1", "url": "https://ex.com/p", "watermark": None})
+
+    assert "AAA_TAIL" not in r_a.raw_ref  # past the cap -> absent from raw_ref
+    # ...and absent from the HASH: bodies differing ONLY past the cap hash the same.
+    assert r_a.watermark == r_b.watermark
 
 
 def test_select_links_caps_candidate_collection(monkeypatch):
     # MINOR#5: a link-spam page can't make us collect/sort an unbounded set.
+    # _select_links does NOT post-slice, so the returned count IS the collected
+    # count -- exactly the cap (not 50) proves collection stopped early.
     monkeypatch.setattr(product_url, "_MAX_CANDIDATE_LINKS", 3)
     html = "".join(f'<a href="/p{i}">x</a>' for i in range(50))
-    assert len(_select_links(html, "https://ex.com/")) <= 3
+    assert len(_select_links(html, "https://ex.com/")) == 3
