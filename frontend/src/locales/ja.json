@@ -9659,6 +9659,13 @@
     "degradedWarning": "戦略LLMバックエンドが利用できません — これはプレースホルダーの提案です。実際の戦略を得るにはバックエンドを再認証してください。",
     "implementHintApprove": "実装を有効にするには、まず承認してください。",
     "implementHintLegal": "実装を有効にするには、7つの法的チェックリスト項目をすべて完了してください。",
-    "addSourceTitle": "ソースを追加"
+    "addSourceTitle": "ソースを追加",
+    "statusMaterialized": "計画化済み",
+    "autoImplement": "自動実装",
+    "autoImplementHint": "隔離されたgitワークツリーで自律コーディングエージェントを起動します（完了前に承認のため一時停止）。",
+    "autoImplementRunning": "エージェント実行中",
+    "autoImplementConfirmTitle": "自動実装を開始しますか？",
+    "autoImplementConfirmMsg": "メインのチェックアウトではなく、隔離されたgitワークツリーでコードを書く自律コーディングエージェントを起動し、完了前に承認のため一時停止します。続行しますか？",
+    "autoImplementStarted": "自動実装を開始しました — セッション {id}"
   }
 }

@@ -9659,6 +9659,13 @@
     "degradedWarning": "Strategy LLM backend unavailable — this is a placeholder proposal. Re-authenticate the backend for a real strategy.",
     "implementHintApprove": "Approve first to enable Implement.",
     "implementHintLegal": "Complete all 7 legal checklist items to enable Implement.",
-    "addSourceTitle": "Add a source"
+    "addSourceTitle": "Add a source",
+    "statusMaterialized": "Materialized",
+    "autoImplement": "Auto-implement",
+    "autoImplementHint": "Launches an autonomous coding agent in an isolated git worktree (pauses for your approval before finishing).",
+    "autoImplementRunning": "Agent running",
+    "autoImplementConfirmTitle": "Launch auto-implement?",
+    "autoImplementConfirmMsg": "This launches an autonomous coding agent that writes code in an ISOLATED git worktree — never your main checkout — and pauses for your approval before it finishes. Continue?",
+    "autoImplementStarted": "Auto-implement started — session {id}"
   }
 }

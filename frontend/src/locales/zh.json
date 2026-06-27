@@ -9659,6 +9659,13 @@
     "degradedWarning": "策略 LLM 后端不可用 — 这是占位提案。请重新认证后端以获取真实策略。",
     "implementHintApprove": "请先批准以启用实施。",
     "implementHintLegal": "完成全部 7 项法律核对清单以启用实施。",
-    "addSourceTitle": "添加来源"
+    "addSourceTitle": "添加来源",
+    "statusMaterialized": "已生成计划",
+    "autoImplement": "自动实施",
+    "autoImplementHint": "在隔离的 git 工作树中启动自主编码智能体（完成前会暂停等待你的批准）。",
+    "autoImplementRunning": "智能体运行中",
+    "autoImplementConfirmTitle": "启动自动实施？",
+    "autoImplementConfirmMsg": "这将启动一个自主编码智能体，在隔离的 git 工作树（绝不是你的主检出）中编写代码，并在完成前暂停等待你的批准。是否继续？",
+    "autoImplementStarted": "自动实施已启动 — 会话 {id}"
   }
 }
