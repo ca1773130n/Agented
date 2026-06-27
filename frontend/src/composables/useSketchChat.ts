@@ -26,6 +26,8 @@ export function useSketchChat() {
   const error: Ref<string | null> = ref(null);
   const streamingContent = ref('');
   const isStreaming = ref(false);
+  // Federated-Tesserae grounding used on the latest ideation turn (provenance).
+  const grounding = ref<{ projects: string[]; citations: number } | null>(null);
   const executionSessionId = ref<string | null>(null);
   const executionSuperAgentId = ref<string | null>(null);
   const delegations = ref<Delegation[]>([]);
@@ -109,49 +111,24 @@ export function useSketchChat() {
     });
 
     try {
-      const createResult = await sketchApi.create({
-        title: text.slice(0, 100),
-        content: text,
-        project_id: selectedProjectId.value ?? undefined,
-      });
-
-      const sketchId = createResult.sketch_id;
-
-      await sketchApi.classify(sketchId);
-      if (abortController.signal.aborted) return;
-
-      const fetched = await sketchApi.get(sketchId);
-      if (abortController.signal.aborted) return;
-
-      let classificationSummary = 'Sketch created and classified.';
-      if (fetched.classification_json) {
-        const cls = parseJsonBlock(fetched.classification_json) as Record<string, unknown> | null;
-        if (cls) {
-          const parts: string[] = [];
-          if (cls.phase) parts.push(`Phase: ${cls.phase}`);
-          if (cls.domains && (cls.domains as unknown[]).length) parts.push(`Domains: ${(cls.domains as string[]).join(', ')}`);
-          if (cls.complexity) parts.push(`Complexity: ${cls.complexity}`);
-          if (cls.confidence != null) parts.push(`Confidence: ${Math.round((cls.confidence as number) * 100)}%`);
-          if (parts.length) classificationSummary = parts.join(' | ');
-        }
+      // Create the sketch ONCE (first message) + classify for the badge.
+      // Subsequent turns accumulate onto the SAME sketch — this is a
+      // conversation, not one-shot. Routing is deferred to a manual button.
+      if (!currentSketch.value) {
+        const createResult = await sketchApi.create({
+          title: text.slice(0, 100),
+          content: text,
+          project_id: selectedProjectId.value ?? undefined,
+        });
+        await sketchApi.classify(createResult.sketch_id);
+        if (abortController.signal.aborted) return;
+        currentSketch.value = await sketchApi.get(createResult.sketch_id);
+        await loadSketches();
       }
+      if (abortController.signal.aborted) return;
 
-      messages.value.push({
-        role: 'assistant',
-        content: classificationSummary,
-        timestamp: new Date().toISOString(),
-      });
-
-      currentSketch.value = fetched;
-      await loadSketches();
-
-      // Auto-route after classification
-      messages.value.push({
-        role: 'system',
-        content: 'Routing...',
-        timestamp: new Date().toISOString(),
-      });
-      await routeSketch(sketchId, opts);
+      // Stream a federated-grounded ideation reply. NO routing/execution.
+      await ideate();
     } catch (e: unknown) {
       if (isAbortError(e) || abortController.signal.aborted) return;
       const errMsg = e instanceof Error ? e.message : 'Failed to create or classify sketch';
@@ -165,6 +142,43 @@ export function useSketchChat() {
       if (!abortController.signal.aborted) {
         isProcessing.value = false;
       }
+    }
+  }
+
+  // One grounded ideation turn: stream a reply from the general-LLM partner,
+  // grounded by federated Tesserae knowledge across all projects. No routing.
+  async function ideate() {
+    const history = messages.value
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .map((m) => ({ role: m.role, content: m.content }));
+
+    const assistantIdx = messages.value.push({
+      role: 'assistant',
+      content: '',
+      timestamp: new Date().toISOString(),
+    }) - 1;
+
+    streamingContent.value = '';
+    isStreaming.value = true;
+    grounding.value = null;
+    try {
+      await sketchApi.ideateStream(history, {
+        onRetrieval: (p) => {
+          grounding.value = p;
+        },
+        onContent: (chunk) => {
+          streamingContent.value += chunk;
+          messages.value[assistantIdx].content = streamingContent.value;
+        },
+        onError: (m) => {
+          messages.value[assistantIdx].content =
+            (messages.value[assistantIdx].content || '') + `\n\n_⚠ ${m}_`;
+        },
+        onDone: () => {},
+        signal: abortController.signal,
+      });
+    } finally {
+      isStreaming.value = false;
     }
   }
 
@@ -452,6 +466,7 @@ export function useSketchChat() {
     error,
     isStreaming,
     streamingContent,
+    grounding,
     executionSessionId,
     executionSuperAgentId,
     delegations,

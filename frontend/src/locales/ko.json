@@ -6789,7 +6789,10 @@
     "status": "상태",
     "processing": "처리 중...",
     "teamCollaboration": "팀 협업",
-    "openInPlayground": "플레이그라운드에서 열기 →"
+    "openInPlayground": "플레이그라운드에서 열기 →",
+    "routeConversation": "이 대화 라우팅",
+    "routeConversationHint": "이 아이디어를 실제 작업으로 전환 — 에이전트, 팀 또는 프로젝트에 할당합니다.",
+    "groundedIn": "{projects}개 프로젝트 · {sources}개 출처 기반"
   },
   "skillCreateWizard": {
     "title": "스킬 설계",

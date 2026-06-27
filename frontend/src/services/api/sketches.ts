@@ -1,8 +1,16 @@
 /**
  * Sketch API module.
  */
-import { apiFetch } from './client';
+import { apiFetch, API_BASE, getApiKey } from './client';
 import type { Sketch, SketchStatus, Delegation } from './types';
+
+export interface IdeateHandlers {
+  onRetrieval?: (p: { projects: string[]; citations: number }) => void;
+  onContent?: (chunk: string) => void;
+  onDone?: () => void;
+  onError?: (message: string) => void;
+  signal?: AbortSignal;
+}
 
 export const sketchApi = {
   list: (params?: { status?: SketchStatus; project_id?: string }) => {
@@ -53,4 +61,77 @@ export const sketchApi = {
   },
   getDelegations: (id: string) =>
     apiFetch<{ delegations: Delegation[] }>(`/admin/sketches/${id}/delegations`),
+
+  /**
+   * Stream one grounded ideation turn (the Sketch 'thinking partner'). POSTs the
+   * full conversation `messages` and consumes the SSE response (federated Tesserae
+   * grounding → content chunks). Does NOT route/execute. POST-SSE, so we use a
+   * fetch stream reader (native EventSource is GET-only) with the X-API-Key.
+   */
+  ideateStream: async (
+    messages: { role: string; content: string }[],
+    handlers: IdeateHandlers,
+    backend?: string,
+  ): Promise<void> => {
+    const apiKey = getApiKey();
+    let resp: Response;
+    try {
+      resp = await fetch(`${API_BASE}/admin/sketches/ideate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(apiKey ? { 'X-API-Key': apiKey } : {}),
+        },
+        body: JSON.stringify({ messages, backend }),
+        signal: handlers.signal,
+      });
+    } catch (e) {
+      handlers.onError?.(e instanceof Error ? e.message : 'ideate request failed');
+      return;
+    }
+    if (!resp.ok || !resp.body) {
+      handlers.onError?.(`ideate failed (${resp.status})`);
+      return;
+    }
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    let doneEmitted = false;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const frames = buf.split('\n\n');
+      buf = frames.pop() ?? ''; // keep the trailing partial frame
+      for (const frame of frames) {
+        let event = 'message';
+        let dataStr = '';
+        for (const line of frame.split('\n')) {
+          if (line.startsWith('event:')) event = line.slice(6).trim();
+          else if (line.startsWith('data:')) dataStr += line.slice(5).trim();
+        }
+        if (!dataStr) continue;
+        let data: Record<string, unknown> = {};
+        try {
+          data = JSON.parse(dataStr);
+        } catch {
+          continue;
+        }
+        if (event === 'retrieval') {
+          handlers.onRetrieval?.({
+            projects: (data.projects as string[]) ?? [],
+            citations: (data.citations as number) ?? 0,
+          });
+        } else if (event === 'content') {
+          handlers.onContent?.((data.content as string) ?? '');
+        } else if (event === 'error') {
+          handlers.onError?.((data.message as string) ?? 'stream error');
+        } else if (event === 'done') {
+          doneEmitted = true;
+          handlers.onDone?.();
+        }
+      }
+    }
+    if (!doneEmitted) handlers.onDone?.();
+  },
 };

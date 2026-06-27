@@ -82,6 +82,37 @@ ensure_node() {
     info "Node.js installed"
 }
 
+# ---------- Tesserae (federated knowledge graph for Sketch ideation) ----------
+# The Sketch ideation chat grounds each turn with FEDERATED Tesserae retrieval
+# across all registered projects. Requires the `tesserae` CLI >= 0.11.0 (the
+# federation release) on PATH, installed with the `semantic` extra. Best-effort:
+# a missing/old Tesserae degrades the Sketch chat to ungrounded — never blocks
+# setup.
+TESSERAE_MIN="0.11.0"
+ensure_tesserae() {
+    local cur=""
+    if command_exists tesserae; then
+        cur="$(tesserae --version 2>/dev/null | awk '{print $NF}')"
+    fi
+    # cur >= TESSERAE_MIN  ⟺  TESSERAE_MIN sorts first under `sort -V`.
+    if [[ -n "$cur" ]] && \
+       [[ "$(printf '%s\n%s\n' "$TESSERAE_MIN" "$cur" | sort -V | head -1)" == "$TESSERAE_MIN" ]]; then
+        info "Tesserae $cur found (>= $TESSERAE_MIN)"
+        return
+    fi
+    local src="$HOME/Developer/Projects/Tesserae"
+    if [[ -d "$src" ]] && command_exists uv; then
+        warn "Tesserae ${cur:-missing} < $TESSERAE_MIN — installing from $src (semantic extra)..."
+        if uv tool install --force "$src" --with model2vec --with numpy >/dev/null 2>&1; then
+            info "Tesserae $(tesserae --version 2>/dev/null | awk '{print $NF}') installed"
+        else
+            warn "Tesserae install failed — Sketch ideation will be ungrounded (optional)"
+        fi
+    else
+        warn "Tesserae >= $TESSERAE_MIN not on PATH and no checkout at $src — Sketch grounding disabled (optional)"
+    fi
+}
+
 # ---------- Python 3.10+ ----------
 check_python() {
     # uv manages Python automatically via uv sync, just verify minimum version is available
@@ -107,6 +138,7 @@ ensure_just
 ensure_uv
 ensure_node
 check_python
+ensure_tesserae
 echo ""
 
 echo "--- Installing project dependencies ---"

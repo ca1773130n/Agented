@@ -40,15 +40,33 @@ const {
   messages: rawMessages,
   error,
   streamingContent,
+  grounding,
+  isStreaming,
   executionSuperAgentId,
   executionSessionId,
   delegations,
   loadProjects,
   loadSketches,
   submitSketch,
+  routeSketch,
   selectSketch,
   clearChat,
 } = useSketchChat();
+
+// The manual route gate: the conversation can be turned into work at any point
+// (per product decision) — shown until it has actually been routed/executed.
+const canRoute = computed(
+  () =>
+    !!currentSketch.value &&
+    !['routed', 'in_progress', 'collaborating', 'completed'].includes(
+      currentSketch.value.status ?? '',
+    ),
+);
+
+async function handleRoute() {
+  if (!currentSketch.value || isProcessing.value) return;
+  await routeSketch(currentSketch.value.id, { useCliAgent: useCliRunner.value });
+}
 
 const playgroundLink = computed(() => {
   // Prefer the execution-time superagent ID, fall back to routing_json
@@ -283,7 +301,25 @@ onMounted(() => {
         </div>
 
         <SketchStatusTracker :status="currentSketch.status" />
+        <p v-if="grounding && grounding.citations" class="grounding-chip">
+          {{ t('sketchChat.groundedIn', { projects: grounding.projects.length, sources: grounding.citations }) }}
+        </p>
         <SketchClassification :classification="parsedClassification" />
+
+        <!-- Manual routing: turn the conversation into actual work, only when the
+             operator decides (no auto-route). -->
+        <div v-if="canRoute" class="route-conversation">
+          <button
+            type="button"
+            class="btn btn-primary route-conversation-btn"
+            :disabled="isProcessing || isStreaming"
+            @click="handleRoute"
+          >
+            {{ t('sketchChat.routeConversation') }}
+          </button>
+          <p class="route-conversation-hint">{{ t('sketchChat.routeConversationHint') }}</p>
+        </div>
+
         <SketchRouting :routing="parsedRouting" @navigateTo="(view: string, id?: string) => handleNavigateTo(view, id)" />
 
         <div v-if="showResults" class="results-panel">
@@ -354,6 +390,29 @@ onMounted(() => {
 }
 
 /* Header bar injected above chat */
+.grounding-chip {
+  margin: 0 0 0.5rem;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 0.2rem 0.55rem;
+  display: inline-block;
+}
+.route-conversation {
+  margin: 0.75rem 0;
+  padding: 0.75rem 0;
+  border-top: 1px dashed var(--border-default);
+}
+.route-conversation-btn {
+  width: 100%;
+}
+.route-conversation-hint {
+  margin: 0.4rem 0 0;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
 .sketch-header-bar {
   display: flex;
   align-items: center;

@@ -22,6 +22,7 @@ from litestar.exceptions import (
     HTTPException,
     NotFoundException,
 )
+from litestar.response import Stream
 
 from app.database import get_plugin_exports_for_plugin
 from app.db.owned_entities import get_for_user
@@ -215,6 +216,39 @@ def route_sketch(sketch_id: str, data: Optional[dict] = None) -> dict[str, Any]:
     return {"routing": routing, "session_id": session_id, "super_agent_id": super_agent_id}
 
 
+@post("/ideate", media_type="text/event-stream")
+async def ideate_sketch(data: dict) -> Stream:
+    """Stream one grounded ideation turn (the Sketch 'thinking partner').
+
+    Body: ``{"messages": [{role, content}...], "backend"?: str}``. The frontend
+    holds the conversation and sends the full history each turn; this replies via
+    a GENERAL model grounded with FEDERATED Tesserae knowledge (all projects) and
+    does NOT route or execute. Emits SSE frames: ``retrieval`` (provenance) →
+    ``content`` chunks → ``done`` (or ``error``).
+
+    The ideation generator is synchronous and does blocking work (the federated
+    subprocess + the LLM stream), so each step is offloaded to a thread — never
+    blocking the event loop.
+    """
+    from anyio.to_thread import run_sync
+
+    from app.services.sketch_ideation_service import sse_lines
+
+    body = data or {}
+    messages = body.get("messages") or []
+    backend = body.get("backend")
+
+    async def event_generator():
+        gen = sse_lines(messages, backend=backend)
+        while True:
+            frame = await run_sync(next, gen, None)
+            if frame is None:
+                return
+            yield frame
+
+    return Stream(event_generator(), media_type="text/event-stream")
+
+
 @get("/{sketch_id:str}/delegations", sync_to_thread=False)
 def sketch_delegations(sketch_id: str) -> dict[str, Any]:
     sketch = get_sketch(sketch_id)
@@ -234,6 +268,7 @@ sketches_router = Router(
         delete_sketch_endpoint,
         classify_sketch,
         route_sketch,
+        ideate_sketch,
         sketch_delegations,
     ],
 )
