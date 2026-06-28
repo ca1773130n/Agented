@@ -328,6 +328,14 @@ export function kindToLegacyId(kind: string): string {
   return `backend-${localKind}`;
 }
 
+// Sidecar kind / legacy id → Agented's INTERNAL local kind. Use this for display,
+// grouping keys, and BACKEND_METADATA lookups (the inverse of legacyIdToKind, which
+// gives the sidecar-facing kind). antigravity → gemini.
+export function toLocalKind(idOrKind: string): string {
+  const kind = idOrKind.startsWith('backend-') ? idOrKind.slice('backend-'.length) : idOrKind;
+  return kind === 'antigravity' ? 'gemini' : kind;
+}
+
 function dtoToAccount(dto: BackendDTO): BackendAccount {
   const config = (dto?.config as Record<string, unknown>) ?? {};
   const pick = (key: string): string | undefined => {
@@ -421,7 +429,9 @@ export async function listGroupedBackends(): Promise<{ backends: AIBackend[] }> 
   const { items } = await aiAccountsClient.listBackends();
   const byKind: Record<string, BackendDTO[]> = {};
   for (const dto of items) {
-    const kind = dto.kind ?? '';
+    // Group by LOCAL kind so the sidecar's "antigravity" rows collapse into
+    // Agented's "gemini" card instead of forming a separate bucket.
+    const kind = toLocalKind(dto.kind ?? '');
     (byKind[kind] ||= []).push(dto);
   }
   const kinds = Array.from(new Set([...KNOWN_KINDS, ...Object.keys(byKind)]));
@@ -438,7 +448,8 @@ export async function listGroupedBackends(): Promise<{ backends: AIBackend[] }> 
  * `backend-claude` or `claude`.
  */
 export async function getGroupedBackend(legacyIdOrKind: string): Promise<AIBackendWithAccounts> {
-  const kind = legacyIdToKind(legacyIdOrKind);
+  const localKind = toLocalKind(legacyIdOrKind); // gemini — display / metadata / KNOWN_KINDS
+  const sidecarKind = legacyIdToKind(legacyIdOrKind); // antigravity — match sidecar dto.kind
   let items: BackendDTO[] = [];
   try {
     ({ items } = await aiAccountsClient.listBackends());
@@ -448,12 +459,12 @@ export async function getGroupedBackend(legacyIdOrKind: string): Promise<AIBacke
     // authed during onboarding), still render the card with no accounts so the
     // operator can register their first one — instead of hard-erroring with
     // "cannot find backend". Unknown kinds are a genuine not-found → rethrow.
-    if (!KNOWN_KINDS.includes(kind)) throw err;
-    console.warn(`[backends] sidecar listBackends failed; showing "${kind}" with no accounts`, err);
+    if (!KNOWN_KINDS.includes(localKind)) throw err;
+    console.warn(`[backends] sidecar listBackends failed; showing "${localKind}" with no accounts`, err);
   }
-  const kindDtos = items.filter((dto) => dto.kind === kind);
-  const detection = await tryDetect(kind, kindDtos);
-  const base = buildGroupedBackend(kind, kindDtos, detection);
+  const kindDtos = items.filter((dto) => dto.kind === sidecarKind);
+  const detection = await tryDetect(localKind, kindDtos);
+  const base = buildGroupedBackend(localKind, kindDtos, detection);
   // Note: discoverModels spawns a CLI subprocess and can take several seconds.
   // We return immediately with an empty `models` list; consumers that need
   // model metadata can call `backendManagementApi.discoverModels` separately.
