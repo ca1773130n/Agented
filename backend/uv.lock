@@ -53,8 +53,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "ai-accounts-core", editable = "../../ai-accounts/packages/core" },
-    { name = "ai-accounts-litestar", editable = "../../ai-accounts/packages/litestar" },
+    { name = "ai-accounts-core", specifier = ">=0.4.0,<0.5" },
+    { name = "ai-accounts-litestar", specifier = ">=0.4.0,<0.5" },
     { name = "apscheduler", specifier = ">=3.10.0" },
     { name = "autoresearch-core", specifier = ">=0.1.1,<0.2" },
     { name = "bcrypt", specifier = ">=5.0.0" },
@@ -96,37 +96,30 @@ dev = [
 
 [[package]]
 name = "ai-accounts-core"
-version = "0.3.16"
-source = { editable = "../../ai-accounts/packages/core" }
+version = "0.4.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiosqlite" },
     { name = "cryptography" },
     { name = "httpx" },
     { name = "msgspec" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "aiosqlite", specifier = ">=0.20" },
-    { name = "cryptography", specifier = ">=43.0" },
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "msgspec", specifier = ">=0.18" },
+sdist = { url = "https://files.pythonhosted.org/packages/92/05/2da09d46516c79a317f1738b12bf40cf641d8b227254da2ec61cdd943a92/ai_accounts_core-0.4.0.tar.gz", hash = "sha256:57332c04c852d423519ea3de374c456ae623f159242addcc66fc27cafe6f6327", size = 170047, upload-time = "2026-06-28T07:19:46.502Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c8/f8/45be882804a87142c8a70a02940c64cd1d93e37d1f5bff044df162e7118d/ai_accounts_core-0.4.0-py3-none-any.whl", hash = "sha256:e62b48498cbe0fbf6c38ced8128f41bc65bd6d5e16c9a338ab202c6b049e23fa", size = 153430, upload-time = "2026-06-28T07:19:47.795Z" },
 ]
-provides-extras = ["testing"]
 
 [[package]]
 name = "ai-accounts-litestar"
-version = "0.3.16"
-source = { editable = "../../ai-accounts/packages/litestar" }
+version = "0.4.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ai-accounts-core" },
     { name = "litestar", extra = ["standard"] },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "ai-accounts-core", editable = "../../ai-accounts/packages/core" },
-    { name = "litestar", extras = ["standard"], specifier = ">=2.12" },
+sdist = { url = "https://files.pythonhosted.org/packages/67/1c/453ab778265898dc9b2c7c753aa918f3c505a1713c4b4a44426c9040ba55/ai_accounts_litestar-0.4.0.tar.gz", hash = "sha256:d24a9176d085f99d91f556d583be78382baf8874e516c8dbf3079ef07e47c8d8", size = 29287, upload-time = "2026-06-28T07:19:45.474Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/48/ee/2a88eb4f92017fd325e67c6ef5a8cd5d78646e8ddfb6fd84092dd90e3d99/ai_accounts_litestar-0.4.0-py3-none-any.whl", hash = "sha256:6117090382849dc789ea3c103d457fbd53c81a3eea4fbf012384dc624f82291c", size = 24417, upload-time = "2026-06-28T07:19:44.443Z" },
 ]
 
 [[package]]
