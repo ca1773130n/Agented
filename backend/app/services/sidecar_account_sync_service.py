@@ -33,7 +33,11 @@ _SIDECAR_DEFAULT_URL = "http://127.0.0.1:20001"
 _BACKEND_KIND_TO_TYPE = {
     "claude": "claude",
     "codex": "codex",
+    # ai-accounts 0.4.0 renamed the gemini backend kind to "antigravity"; both map
+    # to Agented's internal "gemini" backend type (kept per the gemini=Antigravity
+    # convention). "gemini" stays for any pre-migration sidecar rows.
     "gemini": "gemini",
+    "antigravity": "gemini",
     "opencode": "opencode",
 }
 

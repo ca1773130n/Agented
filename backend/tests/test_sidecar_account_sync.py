@@ -115,6 +115,35 @@ def test_sync_inserts_sidecar_accounts(monkeypatch, isolated_db):
     ]
 
 
+def test_sync_maps_antigravity_kind_to_gemini(monkeypatch, isolated_db):
+    """ai-accounts 0.4.0 renamed the gemini backend kind to "antigravity"; the
+    sidecar's antigravity accounts must still sync under Agented's backend-gemini
+    (otherwise they're silently dropped)."""
+    _seed_admin_key(isolated_db)
+    payload = {
+        "items": [
+            {
+                "id": "bkd-cccccccccccc",
+                "kind": "antigravity",
+                "display_name": "AG-Main",
+                "status": "ready",
+                "config": {
+                    "email": "alice@example.com",
+                    "config_path": "~/.antigravity",
+                    "plan": "free",
+                    "is_default": True,
+                },
+            }
+        ]
+    }
+    _patch_httpx(monkeypatch, _FakeResp(200, payload))
+
+    assert svc.sync_sidecar_accounts() == 1
+    conn = sqlite3.connect(isolated_db)
+    row = conn.execute("SELECT backend_id, account_name FROM backend_accounts").fetchone()
+    assert row == ("backend-gemini", "AG-Main")
+
+
 def test_sync_is_idempotent(monkeypatch, isolated_db):
     """Re-running the sync upserts in place — no duplicates."""
     _seed_admin_key(isolated_db)

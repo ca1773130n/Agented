@@ -127,6 +127,11 @@ def _migrate_legacy_backends(legacy_db: str, target_db: str) -> None:
             kind = r["kind"]
             if not kind:
                 continue
+            # ai-accounts 0.4.0 renamed the gemini backend kind to "antigravity";
+            # seed the new kind so account lookups by kind don't miss it (the row
+            # would otherwise stay "gemini" past the one-time schema-v3 migration).
+            if kind == "gemini":
+                kind = "antigravity"
             config = {
                 "email": r["email"],
                 "config_path": r["config_path"],

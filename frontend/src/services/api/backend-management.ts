@@ -237,7 +237,11 @@ export const backendManagementApi = {
     device_code?: string;
     output?: string[];
   }> => {
-    const res = await aiAccountsClient.cliproxyLoginBegin(backendType ?? 'claude', configPath);
+    // legacyIdToKind maps Agented's "gemini" kind → the sidecar's "antigravity".
+    const res = await aiAccountsClient.cliproxyLoginBegin(
+      legacyIdToKind(backendType ?? 'claude'),
+      configPath,
+    );
     return {
       status: res.status,
       message: res.message,
@@ -309,14 +313,27 @@ const BACKEND_METADATA: Record<string, {
 
 const KNOWN_KINDS: ReadonlyArray<string> = Object.keys(BACKEND_METADATA);
 
+// Agented keeps "gemini" as its internal backend kind; the ai-accounts sidecar
+// (0.4.0) renamed it to "antigravity". These two helpers are the single boundary
+// where that translation happens (id/kind → sidecar kind, and back).
 export function legacyIdToKind(legacyIdOrKind: string): string {
-  return legacyIdOrKind.startsWith('backend-')
+  const kind = legacyIdOrKind.startsWith('backend-')
     ? legacyIdOrKind.slice('backend-'.length)
     : legacyIdOrKind;
+  return kind === 'gemini' ? 'antigravity' : kind;
 }
 
 export function kindToLegacyId(kind: string): string {
-  return `backend-${kind}`;
+  const localKind = kind === 'antigravity' ? 'gemini' : kind;
+  return `backend-${localKind}`;
+}
+
+// Sidecar kind / legacy id → Agented's INTERNAL local kind. Use this for display,
+// grouping keys, and BACKEND_METADATA lookups (the inverse of legacyIdToKind, which
+// gives the sidecar-facing kind). antigravity → gemini.
+export function toLocalKind(idOrKind: string): string {
+  const kind = idOrKind.startsWith('backend-') ? idOrKind.slice('backend-'.length) : idOrKind;
+  return kind === 'antigravity' ? 'gemini' : kind;
 }
 
 function dtoToAccount(dto: BackendDTO): BackendAccount {
@@ -412,7 +429,9 @@ export async function listGroupedBackends(): Promise<{ backends: AIBackend[] }> 
   const { items } = await aiAccountsClient.listBackends();
   const byKind: Record<string, BackendDTO[]> = {};
   for (const dto of items) {
-    const kind = dto.kind ?? '';
+    // Group by LOCAL kind so the sidecar's "antigravity" rows collapse into
+    // Agented's "gemini" card instead of forming a separate bucket.
+    const kind = toLocalKind(dto.kind ?? '');
     (byKind[kind] ||= []).push(dto);
   }
   const kinds = Array.from(new Set([...KNOWN_KINDS, ...Object.keys(byKind)]));
@@ -429,7 +448,8 @@ export async function listGroupedBackends(): Promise<{ backends: AIBackend[] }> 
  * `backend-claude` or `claude`.
  */
 export async function getGroupedBackend(legacyIdOrKind: string): Promise<AIBackendWithAccounts> {
-  const kind = legacyIdToKind(legacyIdOrKind);
+  const localKind = toLocalKind(legacyIdOrKind); // gemini — display / metadata / KNOWN_KINDS
+  const sidecarKind = legacyIdToKind(legacyIdOrKind); // antigravity — match sidecar dto.kind
   let items: BackendDTO[] = [];
   try {
     ({ items } = await aiAccountsClient.listBackends());
@@ -439,12 +459,12 @@ export async function getGroupedBackend(legacyIdOrKind: string): Promise<AIBacke
     // authed during onboarding), still render the card with no accounts so the
     // operator can register their first one — instead of hard-erroring with
     // "cannot find backend". Unknown kinds are a genuine not-found → rethrow.
-    if (!KNOWN_KINDS.includes(kind)) throw err;
-    console.warn(`[backends] sidecar listBackends failed; showing "${kind}" with no accounts`, err);
+    if (!KNOWN_KINDS.includes(localKind)) throw err;
+    console.warn(`[backends] sidecar listBackends failed; showing "${localKind}" with no accounts`, err);
   }
-  const kindDtos = items.filter((dto) => dto.kind === kind);
-  const detection = await tryDetect(kind, kindDtos);
-  const base = buildGroupedBackend(kind, kindDtos, detection);
+  const kindDtos = items.filter((dto) => dto.kind === sidecarKind);
+  const detection = await tryDetect(localKind, kindDtos);
+  const base = buildGroupedBackend(localKind, kindDtos, detection);
   // Note: discoverModels spawns a CLI subprocess and can take several seconds.
   // We return immediately with an empty `models` list; consumers that need
   // model metadata can call `backendManagementApi.discoverModels` separately.
