@@ -884,41 +884,16 @@ class CLIProxyManager:
         Spawns ``cliproxyapi --claude-login --no-browser``, captures the OAuth URL,
         and completes the flow with Playwright using the given Chrome profile's cookies.
         """
-        config_path = str(_GLOBAL_CONFIG)
-        cmd = ["cliproxyapi", "--config", config_path, "--claude-login", "--no-browser"]
-
+        # Spawn + OAuth-URL capture goes through the single delegated login path
+        # (ai-accounts owns the flag + capture); Playwright then completes the flow
+        # using the Chrome profile's cookies.
         try:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        except FileNotFoundError:
-            logger.warning("cliproxyapi binary not found")
+            proc, info = cls.start_login(backend_type="claude")
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            logger.warning("cliproxyapi claude login failed: %s", exc)
             return False
 
-        # Read stdout lines until we find the OAuth URL (15s deadline)
-        oauth_url = None
-        deadline = time.monotonic() + 15
-
-        try:
-            while time.monotonic() < deadline:
-                if proc.poll() is not None:
-                    break
-                line = proc.stdout.readline()
-                if not line:
-                    time.sleep(0.1)
-                    continue
-
-                url_match = re.search(r"(https?://\S+)", line)
-                if url_match:
-                    candidate = url_match.group(1)
-                    if (
-                        "claude.ai" in candidate
-                        or "anthropic" in candidate
-                        or "oauth" in candidate.lower()
-                    ):
-                        oauth_url = candidate
-                        break
-        except Exception as exc:
-            logger.warning("Error reading cliproxyapi stdout: %s", exc)
-
+        oauth_url = info.get("url")
         if not oauth_url:
             logger.warning("No OAuth URL found in cliproxyapi output")
             try:
