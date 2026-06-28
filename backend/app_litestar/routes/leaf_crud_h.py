@@ -411,46 +411,21 @@ def proxy_callback_forward(data: dict) -> dict[str, Any]:
     callback_url = body.get("callback_url", "")
     if not callback_url:
         raise ClientException(detail="callback_url is required")
-
-    parsed = urlparse(callback_url)
-    qs = parse_qs(parsed.query)
-    code = qs.get("code", [""])[0]
-    state = qs.get("state", [""])[0]
-    # SSRF hardening (H5): never trust the URL's port/path. The port is pinned to
-    # the value captured when the proxy login started; the path is constrained to
-    # the known OAuth callback path. Otherwise this becomes a loopback
-    # port-scanner / request-forger against any local service (e.g. the sidecar).
-    port = BackendCLIService.get_callback_port()
-    _ALLOWED_CALLBACK_PATHS = ("/callback", "/oauth/callback", "/")
-    path = parsed.path if parsed.path in _ALLOWED_CALLBACK_PATHS else "/callback"
-
-    if not code:
+    # Cheap malformed-input guard (→ 400). ai-accounts re-validates + forwards.
+    if not parse_qs(urlparse(callback_url).query).get("code", [""])[0]:
         raise ClientException(detail="No 'code' parameter found in URL")
 
-    last_exc: Optional[Exception] = None
-    for host in ("[::1]", "127.0.0.1", "localhost"):
-        try:
-            resp = httpx.get(
-                f"http://{host}:{port}{path}",
-                params={"code": code, "state": state},
-                timeout=15,
-                follow_redirects=False,
-            )
-            if resp.status_code < 400:
-                return {"status": "completed", "message": "Callback forwarded successfully"}
-            raise HTTPException(
-                status_code=HTTPStatus.BAD_GATEWAY,
-                detail=f"Callback server returned {resp.status_code}",
-            )
-        except HTTPException:
-            raise
-        except Exception as exc:
-            last_exc = exc
-            logger.debug("Callback forward to %s:%d failed: %s", host, port, exc)
-            continue
+    # Delegate to ai-accounts, which owns the version-coupled SSRF allowlist
+    # (scheme/host/port/path) — including Antigravity's 51121/oauth-callback — so
+    # Agented doesn't maintain a second, stale copy that rejects valid callbacks.
+    from app.services.cliproxy_manager import CLIProxyManager
+
+    result = CLIProxyManager.forward_callback(callback_url)
+    if result.get("status") == "completed":
+        return result
     raise HTTPException(
         status_code=HTTPStatus.BAD_GATEWAY,
-        detail=f"Failed to reach callback server: {last_exc}",
+        detail=result.get("message", "Callback forward failed"),
     )
 
 
