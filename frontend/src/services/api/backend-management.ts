@@ -237,7 +237,11 @@ export const backendManagementApi = {
     device_code?: string;
     output?: string[];
   }> => {
-    const res = await aiAccountsClient.cliproxyLoginBegin(backendType ?? 'claude', configPath);
+    // The ai-accounts sidecar (0.4.0) uses kind "antigravity" — gemini was renamed.
+    // Map Agented's internal "gemini" kind across the boundary so re-auth works.
+    const kind = backendType ?? 'claude';
+    const sidecarKind = kind === 'gemini' ? 'antigravity' : kind;
+    const res = await aiAccountsClient.cliproxyLoginBegin(sidecarKind, configPath);
     return {
       status: res.status,
       message: res.message,
