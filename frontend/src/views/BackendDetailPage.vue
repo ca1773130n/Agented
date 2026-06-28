@@ -84,7 +84,7 @@
         <!-- Sourced from @ai-accounts/vue-styled 0.3.0-alpha.1. -->
         <AccountWizard
           v-if="showAddModal && !editingAccount && backend"
-          :initial-backend-kind="backend.type"
+          :initial-backend-kind="legacyIdToKind(backend.type)"
           :backend-name="backend.name"
           :translate="wizardTranslate"
           @close="closeModal"
@@ -245,7 +245,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, inject } from 'vue';
 import { useRoute } from 'vue-router';
-import { backendManagementApi, listGroupedBackends, getGroupedBackend, orchestrationApi, BACKEND_LOGIN_INFO, BACKEND_PLAN_OPTIONS, type AIBackendWithAccounts, type BackendAccount, type AccountHealth, type BackendCapabilities, type RateLimitWindow } from '../services/api';
+import { backendManagementApi, legacyIdToKind, listGroupedBackends, getGroupedBackend, orchestrationApi, BACKEND_LOGIN_INFO, BACKEND_PLAN_OPTIONS, type AIBackendWithAccounts, type BackendAccount, type AccountHealth, type BackendCapabilities, type RateLimitWindow } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import BackendConnect from '../components/monitoring/BackendConnect.vue';

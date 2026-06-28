@@ -237,11 +237,11 @@ export const backendManagementApi = {
     device_code?: string;
     output?: string[];
   }> => {
-    // The ai-accounts sidecar (0.4.0) uses kind "antigravity" — gemini was renamed.
-    // Map Agented's internal "gemini" kind across the boundary so re-auth works.
-    const kind = backendType ?? 'claude';
-    const sidecarKind = kind === 'gemini' ? 'antigravity' : kind;
-    const res = await aiAccountsClient.cliproxyLoginBegin(sidecarKind, configPath);
+    // legacyIdToKind maps Agented's "gemini" kind → the sidecar's "antigravity".
+    const res = await aiAccountsClient.cliproxyLoginBegin(
+      legacyIdToKind(backendType ?? 'claude'),
+      configPath,
+    );
     return {
       status: res.status,
       message: res.message,
@@ -313,14 +313,19 @@ const BACKEND_METADATA: Record<string, {
 
 const KNOWN_KINDS: ReadonlyArray<string> = Object.keys(BACKEND_METADATA);
 
+// Agented keeps "gemini" as its internal backend kind; the ai-accounts sidecar
+// (0.4.0) renamed it to "antigravity". These two helpers are the single boundary
+// where that translation happens (id/kind → sidecar kind, and back).
 export function legacyIdToKind(legacyIdOrKind: string): string {
-  return legacyIdOrKind.startsWith('backend-')
+  const kind = legacyIdOrKind.startsWith('backend-')
     ? legacyIdOrKind.slice('backend-'.length)
     : legacyIdOrKind;
+  return kind === 'gemini' ? 'antigravity' : kind;
 }
 
 export function kindToLegacyId(kind: string): string {
-  return `backend-${kind}`;
+  const localKind = kind === 'antigravity' ? 'gemini' : kind;
+  return `backend-${localKind}`;
 }
 
 function dtoToAccount(dto: BackendDTO): BackendAccount {

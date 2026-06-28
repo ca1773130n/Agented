@@ -194,8 +194,11 @@ class ModelDiscoveryService:
             logger.warning("Sidecar list-backends failed: %s", exc)
             return None
 
+        # The sidecar (ai-accounts 0.4.0) lists the gemini backend as kind
+        # "antigravity"; map Agented's internal "gemini" kind before matching.
+        sidecar_kind = "antigravity" if backend_kind == "gemini" else backend_kind
         kind_accounts = [
-            a for a in sidecar_accounts if isinstance(a, dict) and (a.get("kind") == backend_kind)
+            a for a in sidecar_accounts if isinstance(a, dict) and (a.get("kind") == sidecar_kind)
         ]
         # Prefer a ready account; prefer one with the requested auth_method.
         candidate = None
