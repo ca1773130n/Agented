@@ -417,8 +417,11 @@ class CLIProxyManager:
         try:
             import signal
 
+            # Match ANY cliproxyapi login subcommand (they all end in ``-login``:
+            # --claude-login, --codex-device-login, -antigravity-login, -kimi-login)
+            # so a stale session never holds the callback port.
             result = subprocess.run(
-                ["pgrep", "-f", "cliproxyapi.*(-claude-login|-codex-login|-login)"],
+                ["pgrep", "-f", "cliproxyapi.*-login"],
                 capture_output=True,
                 text=True,
             )
