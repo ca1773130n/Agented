@@ -100,7 +100,7 @@ export function useSketchChat() {
     }, 3000);
   }
 
-  async function submitSketch(text: string, opts?: { useCliAgent?: boolean }) {
+  async function submitSketch(text: string) {
     isProcessing.value = true;
     error.value = null;
 

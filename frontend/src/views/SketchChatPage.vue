@@ -146,7 +146,8 @@ function handleSubmit() {
   const text = inputText.value.trim();
   if (!text || isProcessing.value) return;
   inputText.value = '';
-  submitSketch(text, { useCliAgent: useCliRunner.value });
+  // useCliRunner is applied at route time (handleRoute → routeSketch), not here.
+  submitSketch(text);
 }
 
 function handleKeyDown(e: KeyboardEvent) {
