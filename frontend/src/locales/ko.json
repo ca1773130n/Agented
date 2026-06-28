@@ -3267,6 +3267,8 @@
     "upgradeCliproxy": "CLIProxy 업그레이드",
     "detecting": "감지 중…",
     "detectExisting": "기존 항목 감지",
+    "connectBackend": "백엔드 연결",
+    "connectBackendTitle": "AI 백엔드 연결",
     "loggingIn": "로그인 중...",
     "addAccount": "계정 추가",
     "loadingBackends": "백엔드 로드 중...",
