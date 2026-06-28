@@ -3267,6 +3267,8 @@
     "upgradeCliproxy": "升级 CLIProxy",
     "detecting": "正在检测…",
     "detectExisting": "检测现有",
+    "connectBackend": "连接后端",
+    "connectBackendTitle": "连接 AI 后端",
     "loggingIn": "正在登录...",
     "addAccount": "添加账户",
     "loadingBackends": "正在加载后端...",

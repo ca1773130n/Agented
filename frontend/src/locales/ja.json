@@ -3267,6 +3267,8 @@
     "upgradeCliproxy": "CLIProxyをアップグレード",
     "detecting": "検出中…",
     "detectExisting": "既存を検出",
+    "connectBackend": "バックエンドを接続",
+    "connectBackendTitle": "AIバックエンドを接続",
     "loggingIn": "ログイン中...",
     "addAccount": "アカウントを追加",
     "loadingBackends": "バックエンドを読み込み中...",

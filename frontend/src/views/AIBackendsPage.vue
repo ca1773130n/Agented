@@ -16,6 +16,16 @@
           {{ isUpgradingCliproxy ? t('aIBackends.upgrading') : t('aIBackends.upgradeCliproxy') }}
         </button>
         <button
+          class="btn btn-secondary connect-backend-btn"
+          data-testid="connect-backend-btn"
+          @click="showOnboardModal = true"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <path d="M5 12h14M12 5l7 7-7 7"/>
+          </svg>
+          {{ t('aIBackends.connectBackend') }}
+        </button>
+        <button
           class="btn btn-secondary detect-btn"
           :disabled="isDetecting"
           data-testid="detect-existing-btn"
@@ -279,6 +289,43 @@
       </div>
     </Teleport>
 
+    <!-- Multi-backend onboarding (ai-accounts OnboardingFlow) — the entry point to
+         add an account for ANY backend, including the ones without an Agented card
+         (deepseek, goose, aider, crush, openrouter, openai_compat/local-LLM, kimi). -->
+    <Teleport to="body">
+      <div
+        v-if="showOnboardModal"
+        class="modal-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="onboard-modal-title"
+        tabindex="-1"
+        data-testid="onboard-modal"
+        @click.self="showOnboardModal = false"
+        @keydown.escape="showOnboardModal = false"
+      >
+        <div class="modal onboard-modal">
+          <div class="modal-header">
+            <h2 id="onboard-modal-title">{{ t('aIBackends.connectBackendTitle') }}</h2>
+            <button
+              type="button"
+              class="modal-close-btn"
+              :aria-label="t('common.close')"
+              data-testid="onboard-modal-close"
+              @click="showOnboardModal = false"
+            >×</button>
+          </div>
+          <div class="modal-body">
+            <OnboardingFlow
+              :client="aiAccountsClient"
+              @done="onOnboardDone"
+              @cancel="showOnboardModal = false"
+            />
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <div class="test-panel-section">
       <div class="section-header">
         <h2>{{ t('aIBackends.testBackend') }}</h2>
@@ -305,7 +352,7 @@ import LoadingState from '../components/base/LoadingState.vue';
 import ErrorState from '../components/base/ErrorState.vue';
 import EmptyState from '../components/base/EmptyState.vue';
 import CredentialStatusBanner from '../components/credentials/CredentialStatusBanner.vue';
-import { AiChatPanel } from '@ai-accounts/vue-styled';
+import { AiChatPanel, OnboardingFlow } from '@ai-accounts/vue-styled';
 import { useAiAccounts } from '@ai-accounts/vue-headless';
 import { useToast } from '../composables/useToast';
 import { useI18n } from 'vue-i18n';
@@ -405,6 +452,15 @@ async function installBackendCli(backend: AIBackend) {
   } finally {
     installingBackend.value = null;
   }
+}
+
+const showOnboardModal = ref(false);
+
+async function onOnboardDone(_backendId: string) {
+  showOnboardModal.value = false;
+  showToast(t('aIBackends.toastAccountAdded'), 'success');
+  await loadBackends(true);
+  loadProxyAuth();
 }
 
 async function addProxyAccount() {

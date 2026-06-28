@@ -3267,6 +3267,8 @@
     "upgradeCliproxy": "Upgrade CLIProxy",
     "detecting": "Detecting…",
     "detectExisting": "Detect Existing",
+    "connectBackend": "Connect Backend",
+    "connectBackendTitle": "Connect an AI Backend",
     "loggingIn": "Logging in...",
     "addAccount": "Add Account",
     "loadingBackends": "Loading backends...",
