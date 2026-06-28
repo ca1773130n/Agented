@@ -24,10 +24,10 @@ from typing import Generator, Optional
 
 logger = logging.getLogger(__name__)
 
-# Default ideation backend: the ``gemini`` kind = Google Antigravity, the general
-# chat model. (Claude Code / Codex refuse open-ended ideation.) model=None lets
-# the streamer resolve the CURRENT gemini-3 default from the live catalog.
-_IDEATION_BACKEND_DEFAULT = "gemini"
+# Ideation needs a GENERAL-chat backend resolved from the operator's CONFIGURED
+# accounts (shared with competitor-intel) — never hard-requiring one they haven't
+# added. model=None lets the streamer resolve each kind's current catalog default.
+from .general_backend import resolve_general_chat_backend as _resolve_ideation_backend
 
 _IDEATION_SYSTEM = (
     "You are a product-ideation partner for an operator who builds software with "
@@ -61,7 +61,7 @@ def stream_ideation(
     from .conversation_streaming import stream_llm_response
     from .tesserae_integration import federated_context_message
 
-    backend = backend or _IDEATION_BACKEND_DEFAULT
+    backend = backend or _resolve_ideation_backend()
     llm_messages: list[dict] = [{"role": "system", "content": _IDEATION_SYSTEM}, *messages]
 
     last_user = next((m.get("content") for m in reversed(messages) if m.get("role") == "user"), "")
