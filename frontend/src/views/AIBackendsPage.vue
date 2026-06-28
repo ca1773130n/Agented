@@ -299,6 +299,7 @@
         role="dialog"
         aria-modal="true"
         aria-labelledby="onboard-modal-title"
+        tabindex="-1"
         data-testid="onboard-modal"
         @click.self="showOnboardModal = false"
         @keydown.escape="showOnboardModal = false"
