@@ -172,6 +172,11 @@ describe('useSketchChat', () => {
       expect(chat.messages.value[0].content).toBe('Build a button');
       const assistant = chat.messages.value.find((m) => m.role === 'assistant');
       expect(assistant?.content).toBe('partner reply');
+      // The streamed turn lives in EXACTLY one place: committed to messages, and
+      // the live streaming buffer is cleared — otherwise the panel (which renders
+      // both) shows the reply in two duplicate bubbles.
+      expect(chat.messages.value.filter((m) => m.role === 'assistant')).toHaveLength(1);
+      expect(chat.streamingContent.value).toBe('');
 
       expect(chat.currentSketch.value).toBeTruthy();
       // Ideation ran; routing did NOT (manual button only).

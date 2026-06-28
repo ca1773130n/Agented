@@ -161,15 +161,15 @@ export function useSketchChat() {
       .filter((m) => m.role === 'user' || m.role === 'assistant')
       .map((m) => ({ role: m.role, content: m.content }));
 
-    const assistantIdx = messages.value.push({
-      role: 'assistant',
-      content: '',
-      timestamp: new Date().toISOString(),
-    }) - 1;
-
+    // The panel renders BOTH `messages` and the live `streamingContent` bubble,
+    // so the assistant turn must live in exactly one of them at a time: stream
+    // into `streamingContent` only, then commit it to `messages` on completion.
+    // (Pushing an assistant message up front + updating streamingContent showed
+    // the same text in two duplicate bubbles.)
     streamingContent.value = '';
     isStreaming.value = true;
     grounding.value = null;
+    let errorNote = '';
     try {
       await sketchApi.ideateStream(history, {
         onRetrieval: (p) => {
@@ -177,17 +177,26 @@ export function useSketchChat() {
         },
         onContent: (chunk) => {
           streamingContent.value += chunk;
-          messages.value[assistantIdx].content = streamingContent.value;
         },
         onError: (m) => {
-          messages.value[assistantIdx].content =
-            (messages.value[assistantIdx].content || '') + `\n\n_⚠ ${m}_`;
+          errorNote = `\n\n_⚠ ${m}_`;
         },
         onDone: () => {},
         signal: abortController.signal,
       });
     } finally {
       isStreaming.value = false;
+      // Commit the streamed turn as ONE message, then clear the live buffer
+      // (same tick → Vue batches into a single render, no duplicate/flash).
+      const finalContent = streamingContent.value + errorNote;
+      if (finalContent) {
+        messages.value.push({
+          role: 'assistant',
+          content: finalContent,
+          timestamp: new Date().toISOString(),
+        });
+      }
+      streamingContent.value = '';
     }
   }
 
