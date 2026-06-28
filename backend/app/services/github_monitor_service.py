@@ -100,11 +100,15 @@ def get_competitor_intel_config() -> dict:
 
 def competitor_intel_llm_backend() -> str:
     """Resolve the backend for competitor-intel LLM calls (signal summaries +
-    strategy proposals). Reads the ``llm_backend`` config key, defaulting to a
-    general chat model (``gemini``) — claude's Claude Code persona refuses these
-    non-coding summarize/strategize prompts.
+    strategy proposals). An explicit ``llm_backend`` config key wins; otherwise
+    resolve from the operator's CONFIGURED backends (general-chat first) so it
+    uses a backend they actually added instead of hard-requiring ``gemini`` —
+    claude's Claude Code persona refuses these non-coding prompts.
     """
-    return str(get_competitor_intel_config().get("llm_backend") or _DEFAULT_LLM_BACKEND)
+    from .general_backend import resolve_general_chat_backend
+
+    configured = get_competitor_intel_config().get("llm_backend")
+    return resolve_general_chat_backend(_DEFAULT_LLM_BACKEND, preferred=configured)
 
 
 def save_competitor_intel_config(config: dict) -> None:

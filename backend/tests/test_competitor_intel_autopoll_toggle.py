@@ -204,11 +204,34 @@ def test_default_llm_backend_is_general_not_claude(isolated_db):
     assert get_competitor_intel_config()["llm_backend"] == "gemini"
 
 
-def test_llm_backend_config_override(isolated_db):
+def test_llm_backend_config_override(isolated_db, monkeypatch):
+    import app.db.backends as backends_db
     from app.services.github_monitor_service import (
         competitor_intel_llm_backend,
         save_competitor_intel_config,
     )
 
+    # An explicit override is honored — but only for a backend the operator has
+    # actually configured (else it would 401 on an unadded backend).
+    monkeypatch.setattr(
+        backends_db,
+        "get_backend_accounts",
+        lambda bid: [{"id": "acct"}] if bid == "backend-codex" else [],
+    )
     save_competitor_intel_config({"enabled": False, "polling_minutes": 15, "llm_backend": "codex"})
+    assert competitor_intel_llm_backend() == "codex"
+
+
+def test_llm_backend_falls_back_when_default_not_configured(isolated_db, monkeypatch):
+    """The bug this fixes: the seeded default is ``gemini`` but the operator never
+    added it — resolve to a configured general-chat backend instead of 401-ing."""
+    import app.db.backends as backends_db
+    from app.services.github_monitor_service import competitor_intel_llm_backend
+
+    # Operator has Codex but NOT gemini (the seeded default).
+    monkeypatch.setattr(
+        backends_db,
+        "get_backend_accounts",
+        lambda bid: [{"id": "acct"}] if bid == "backend-codex" else [],
+    )
     assert competitor_intel_llm_backend() == "codex"
