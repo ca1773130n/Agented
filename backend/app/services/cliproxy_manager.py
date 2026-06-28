@@ -8,6 +8,7 @@ and exposes an OpenAI-compatible /v1/chat/completions endpoint. New accounts
 are added via ``cliproxyapi --claude-login`` which opens a browser for OAuth.
 """
 
+import asyncio
 import atexit
 import hashlib
 import json
@@ -47,6 +48,66 @@ MIN_CLIPROXY_VERSION = "7.0.0"
 # token itself is dead, which only an interactive OAuth login can fix.
 _EXPIRING_WINDOW_SECONDS = 30 * 60
 _STALE_RELOGIN_SECONDS = 24 * 3600
+
+
+# --- ai-accounts login bridge --------------------------------------------------
+# Account login is OWNED by the ai-accounts package (it has the canonical,
+# Antigravity-aware cliproxy login flows). This manager no longer duplicates the
+# per-backend login commands; it delegates to ai-accounts and bridges that async
+# API to its existing sync callers via one persistent background event loop.
+# ponytail: a single daemon loop, not a pool — login is low-frequency.
+_login_loop_lock = threading.Lock()
+_login_loop_ref: Optional[asyncio.AbstractEventLoop] = None
+
+
+def _login_loop() -> asyncio.AbstractEventLoop:
+    global _login_loop_ref
+    with _login_loop_lock:
+        if _login_loop_ref is None or _login_loop_ref.is_closed():
+            loop = asyncio.new_event_loop()
+            threading.Thread(
+                target=loop.run_forever, name="cliproxy-login-loop", daemon=True
+            ).start()
+            _login_loop_ref = loop
+        return _login_loop_ref
+
+
+class _AsyncProcAdapter:
+    """Sync ``Popen``-ish facade over ai-accounts' asyncio login subprocess, so the
+    existing sync callers keep using ``.wait(timeout=…)`` / ``.kill()`` / ``.pid``
+    unchanged while the process lives on the background login loop."""
+
+    def __init__(self, aproc: "asyncio.subprocess.Process", loop: asyncio.AbstractEventLoop):
+        self._p = aproc
+        self._loop = loop
+
+    @property
+    def pid(self) -> Optional[int]:
+        return getattr(self._p, "pid", None)
+
+    def kill(self) -> None:
+        self._loop.call_soon_threadsafe(lambda: self._p.kill())
+
+    def wait(self, timeout: Optional[float] = None) -> int:
+        fut = asyncio.run_coroutine_threadsafe(
+            asyncio.wait_for(self._p.wait(), timeout), self._loop
+        )
+        try:
+            return fut.result()
+        except (asyncio.TimeoutError, TimeoutError) as exc:
+            raise subprocess.TimeoutExpired(cmd="cliproxyapi-login", timeout=timeout or 0) from exc
+
+
+class _NoopProc:
+    """Stand-in when no login subprocess remains (e.g. credentials already imported)."""
+
+    pid = None
+
+    def kill(self) -> None:  # noqa: D401 - no-op
+        pass
+
+    def wait(self, timeout: Optional[float] = None) -> int:
+        return 0
 
 
 def _redact_email(email: Optional[str]) -> str:
@@ -356,8 +417,11 @@ class CLIProxyManager:
         try:
             import signal
 
+            # Match ANY cliproxyapi login subcommand (they all end in ``-login``:
+            # --claude-login, --codex-device-login, -antigravity-login, -kimi-login)
+            # so a stale session never holds the callback port.
             result = subprocess.run(
-                ["pgrep", "-f", "cliproxyapi.*(-claude-login|-codex-login|-login)"],
+                ["pgrep", "-f", "cliproxyapi.*-login"],
                 capture_output=True,
                 text=True,
             )
@@ -372,153 +436,80 @@ class CLIProxyManager:
         except Exception:
             pass
 
+    # Agented backend kind → ai-accounts cliproxy login kind. The "gemini" backend
+    # IS Google Antigravity, so it logs in via cliproxyapi's native
+    # ``-antigravity-login`` (NOT the retired ``-login`` Google OAuth).
+    _LOGIN_KIND_MAP = {
+        "claude": "claude",
+        "codex": "codex",
+        "gemini": "antigravity",
+        "antigravity": "antigravity",
+        "kimi": "kimi",
+    }
+
     @classmethod
     def start_login(
         cls,
         backend_type: str = "claude",
         config_dir: Optional[str] = None,
     ) -> tuple[subprocess.Popen, dict]:
-        """Start a cliproxyapi login session, capturing the auth URL.
+        """Start a cliproxyapi login session, delegating to ai-accounts.
 
-        For Claude: intercepts ``open`` via a fake script (Go binary opens a
-        browser), keeps the callback server alive, returns the OAuth URL.
+        ai-accounts owns the canonical, Antigravity-aware login flows (the
+        per-backend ``--<kind>-login`` flag + OAuth-URL capture); this manager just
+        maps the Agented backend kind and bridges the async result to a sync
+        ``Popen``-compatible proc so existing callers are unchanged.
 
-        For Codex: runs ``-codex-device-login`` which prints a device URL
-        and code to stdout (no callback needed).
-
-        Returns (proc, auth_info) where auth_info is a dict with keys:
-          - url: The auth/OAuth URL to open in the browser
-          - device_code: (codex only) The device code to enter
-          - output: Initial output lines from the process
+        Returns (proc, auth_info) where auth_info has keys: ``url``,
+        ``device_code`` (codex device flow), ``imported`` (creds already present),
+        ``output``.
         """
+        from ai_accounts_core.cliproxy.manager import start_cliproxy_login
 
-        config_path = str(_GLOBAL_CONFIG)
-        env = {
-            k: v for k, v in os.environ.items() if k not in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT")
-        }
-
-        # Set config dir so cliproxyapi uses the right account credentials
-        if config_dir:
-            expanded = os.path.expanduser(config_dir)
-            os.makedirs(expanded, exist_ok=True)
-            if backend_type == "claude":
-                env["CLAUDE_CONFIG_DIR"] = expanded
-            elif backend_type == "codex":
-                env["CODEX_HOME"] = expanded
-
-        if backend_type == "codex":
-            return cls._start_codex_login(config_path, env)
-        elif backend_type == "claude":
-            return cls._start_claude_login(config_path, env)
-        elif backend_type == "gemini":
-            return cls._start_gemini_login(config_path, env)
-        else:
+        kind = cls._LOGIN_KIND_MAP.get(backend_type)
+        if kind is None:
             raise ValueError(f"Proxy login not supported for backend type: {backend_type}")
 
-    @classmethod
-    def _capture_oauth_url(
-        cls,
-        proc: subprocess.Popen,
-        url_keywords: list[str],
-        label: str,
-        timeout: int = 15,
-    ) -> str | None:
-        """Read proc stdout in a background thread and capture the first OAuth URL.
-
-        Using a thread avoids pipe-buffering issues with select() on macOS.
-        """
-        import queue
-
-        lines_q: queue.Queue[str] = queue.Queue()
-        found_url: list[str | None] = [None]
-
-        def _reader() -> None:
-            try:
-                for line in proc.stdout:
-                    stripped = line.rstrip()
-                    logger.info("CLIProxy %s line: %s", label, stripped)
-                    lines_q.put(stripped)
-                    if found_url[0]:
-                        continue
-                    url_match = re.search(r"(https?://\S+)", stripped)
-                    if url_match:
-                        candidate = url_match.group(1)
-                        if any(kw in candidate.lower() for kw in url_keywords):
-                            found_url[0] = candidate
-            except Exception:
-                pass
-
-        reader_thread = threading.Thread(target=_reader, daemon=True)
-        reader_thread.start()
-
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            if found_url[0]:
-                break
-            if proc.poll() is not None:
-                time.sleep(0.5)  # drain remaining output
-                break
-            time.sleep(0.3)
-
-        return found_url[0]
-
-    @classmethod
-    def _start_claude_login(cls, config_path: str, env: dict) -> tuple[subprocess.Popen, dict]:
-        """Start ``cliproxyapi --claude-login -no-browser`` and capture the OAuth URL."""
         cls._kill_stale_login_processes()
+        # The credential must land in the GLOBAL cliproxy auth-dir (~/.cli-proxy-api,
+        # where the single shared proxy reads), regardless of the per-account harness
+        # ``config_dir`` (which is for the claude/codex CLI, not cliproxy's OAuth). The
+        # existing global config.yaml already pins ``auth-dir`` there.
+        _ = config_dir  # accepted for signature compat; cliproxy login is global
+        loop = _login_loop()
+        fut = asyncio.run_coroutine_threadsafe(start_cliproxy_login(kind, _GLOBAL_AUTH_DIR), loop)
+        try:
+            aproc, info = fut.result(timeout=30)
+        except TimeoutError as exc:
+            fut.cancel()  # don't leave the login coroutine running after we bail
+            raise RuntimeError("cliproxy login timed out") from exc
 
-        proc = subprocess.Popen(
-            ["cliproxyapi", "--config", config_path, "--claude-login", "-no-browser"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            env=env,
-        )
-        logger.info("CLIProxy claude login started: pid=%s", proc.pid)
+        if info.error and not info.oauth_url and not info.imported:
+            if "not found" in info.error.lower():
+                raise FileNotFoundError(info.error)
+            raise RuntimeError(info.error)
 
-        oauth_url = cls._capture_oauth_url(
-            proc, ["claude.ai", "anthropic", "oauth", "authorize"], "claude"
-        )
-        logger.info("CLIProxy claude login: oauth_url=%s", oauth_url)
-        return proc, {"url": oauth_url}
-
-    @classmethod
-    def _start_gemini_login(cls, config_path: str, env: dict) -> tuple[subprocess.Popen, dict]:
-        """Start ``cliproxyapi -login -no-browser`` (Google OAuth) and capture the URL."""
-        cls._kill_stale_login_processes()
-
-        proc = subprocess.Popen(
-            ["cliproxyapi", "--config", config_path, "-login", "-no-browser"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            env=env,
-        )
-        logger.info("CLIProxy gemini login started: pid=%s", proc.pid)
-
-        oauth_url = cls._capture_oauth_url(
-            proc, ["google", "accounts.google", "oauth2", "googleapis"], "gemini"
-        )
-        logger.info("CLIProxy gemini login: oauth_url=%s", oauth_url)
-        return proc, {"url": oauth_url}
+        proc = _AsyncProcAdapter(aproc, loop) if aproc is not None else _NoopProc()
+        return proc, {
+            "url": info.oauth_url,
+            "device_code": info.device_code,
+            "imported": info.imported,
+            "output": info.output,
+        }
 
     @classmethod
-    def _start_codex_login(cls, config_path: str, env: dict) -> tuple[subprocess.Popen, dict]:
-        """Start ``cliproxyapi -codex-login -no-browser`` and capture the OAuth URL."""
-        cls._kill_stale_login_processes()
+    def forward_callback(cls, callback_url: str) -> dict:
+        """Forward an OAuth callback URL to cliproxyapi via ai-accounts, which owns
+        the version-coupled SSRF allowlist (incl. Antigravity's port/path)."""
+        from ai_accounts_core.cliproxy.manager import forward_cliproxy_callback
 
-        proc = subprocess.Popen(
-            ["cliproxyapi", "--config", config_path, "-codex-login", "-no-browser"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            env=env,
-        )
-        logger.info("CLIProxy codex login started: pid=%s", proc.pid)
-
-        oauth_url = cls._capture_oauth_url(proc, ["openai", "codex", "auth", "authorize"], "codex")
-        logger.info("CLIProxy codex login: oauth_url=%s", oauth_url)
-        return proc, {"url": oauth_url}
+        loop = _login_loop()
+        fut = asyncio.run_coroutine_threadsafe(forward_cliproxy_callback(callback_url), loop)
+        try:
+            return fut.result(timeout=20)
+        except TimeoutError as exc:
+            fut.cancel()
+            raise RuntimeError("callback forward timed out") from exc
 
     # ------------------------------------------------------------------
     # Install
@@ -896,41 +887,16 @@ class CLIProxyManager:
         Spawns ``cliproxyapi --claude-login --no-browser``, captures the OAuth URL,
         and completes the flow with Playwright using the given Chrome profile's cookies.
         """
-        config_path = str(_GLOBAL_CONFIG)
-        cmd = ["cliproxyapi", "--config", config_path, "--claude-login", "--no-browser"]
-
+        # Spawn + OAuth-URL capture goes through the single delegated login path
+        # (ai-accounts owns the flag + capture); Playwright then completes the flow
+        # using the Chrome profile's cookies.
         try:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        except FileNotFoundError:
-            logger.warning("cliproxyapi binary not found")
+            proc, info = cls.start_login(backend_type="claude")
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            logger.warning("cliproxyapi claude login failed: %s", exc)
             return False
 
-        # Read stdout lines until we find the OAuth URL (15s deadline)
-        oauth_url = None
-        deadline = time.monotonic() + 15
-
-        try:
-            while time.monotonic() < deadline:
-                if proc.poll() is not None:
-                    break
-                line = proc.stdout.readline()
-                if not line:
-                    time.sleep(0.1)
-                    continue
-
-                url_match = re.search(r"(https?://\S+)", line)
-                if url_match:
-                    candidate = url_match.group(1)
-                    if (
-                        "claude.ai" in candidate
-                        or "anthropic" in candidate
-                        or "oauth" in candidate.lower()
-                    ):
-                        oauth_url = candidate
-                        break
-        except Exception as exc:
-            logger.warning("Error reading cliproxyapi stdout: %s", exc)
-
+        oauth_url = info.get("url")
         if not oauth_url:
             logger.warning("No OAuth URL found in cliproxyapi output")
             try:

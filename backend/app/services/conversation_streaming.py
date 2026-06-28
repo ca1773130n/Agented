@@ -639,10 +639,13 @@ def _stream_via_proxy(
 
                 # Detect "unknown provider" and guide the user to register the backend
                 if "unknown provider" in error_detail.lower():
+                    # User-facing "Run: cliproxyapi <flag>" guidance — keep aligned
+                    # with ai-accounts' real flags. "gemini" = Antigravity, so it is
+                    # ``-antigravity-login`` (NOT the retired ``--login``).
                     _LOGIN_FLAGS = {
-                        "codex": "--codex-login",
-                        "gemini": "--login",
-                        "kimi": "--kimi-login",
+                        "codex": "--codex-device-login",
+                        "gemini": "-antigravity-login",
+                        "kimi": "-kimi-login",
                         "qwen": "--qwen-login",
                     }
                     # Extract backend from model name prefix
