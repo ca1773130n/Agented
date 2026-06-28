@@ -475,7 +475,11 @@ class CLIProxyManager:
         _ = config_dir  # accepted for signature compat; cliproxy login is global
         loop = _login_loop()
         fut = asyncio.run_coroutine_threadsafe(start_cliproxy_login(kind, _GLOBAL_AUTH_DIR), loop)
-        aproc, info = fut.result(timeout=30)
+        try:
+            aproc, info = fut.result(timeout=30)
+        except TimeoutError as exc:
+            fut.cancel()  # don't leave the login coroutine running after we bail
+            raise RuntimeError("cliproxy login timed out") from exc
 
         if info.error and not info.oauth_url and not info.imported:
             if "not found" in info.error.lower():
@@ -498,7 +502,11 @@ class CLIProxyManager:
 
         loop = _login_loop()
         fut = asyncio.run_coroutine_threadsafe(forward_cliproxy_callback(callback_url), loop)
-        return fut.result(timeout=20)
+        try:
+            return fut.result(timeout=20)
+        except TimeoutError as exc:
+            fut.cancel()
+            raise RuntimeError("callback forward timed out") from exc
 
     # ------------------------------------------------------------------
     # Install
