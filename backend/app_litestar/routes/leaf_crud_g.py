@@ -25,7 +25,6 @@ from litestar.exceptions import (
 from litestar.response import Stream
 
 from app.database import get_plugin_exports_for_plugin
-from app.db.owned_entities import get_for_user
 from app.db.plugins import count_plugin_exports_for_plugin
 from app.db.sketches import (
     count_sketches,
@@ -35,10 +34,10 @@ from app.db.sketches import (
     update_sketch,
 )
 from app.db.sketches import create_sketch as db_create_sketch
-from app.logging_config import current_user_var
 from app.services.agent_conversation_service import AgentConversationService
 from app.services.sketch_execution_service import execute_sketch, find_team_super_agent
 from app_litestar.auth import Caller
+from app_litestar.list_scope import admin_or_scoped
 
 logger = logging.getLogger(__name__)
 
@@ -95,13 +94,19 @@ def list_sketches(
     status: Optional[str] = None,
     project_id: Optional[str] = None,
 ) -> dict[str, Any]:
-    user_id = caller.user_id or current_user_var.get()
-    if user_id:
-        rows = get_for_user("sketches", user_id, limit=limit, offset=offset)
-        return {"sketches": rows, "total_count": len(rows)}
-    sketches = get_all_sketches(status=status, project_id=project_id, limit=limit, offset=offset)
-    total_count = count_sketches(status=status, project_id=project_id)
-    return {"sketches": sketches, "total_count": total_count}
+    return admin_or_scoped(
+        caller,
+        "sketches",
+        "sketches",
+        limit=limit,
+        offset=offset,
+        all_=lambda: {
+            "sketches": get_all_sketches(
+                status=status, project_id=project_id, limit=limit, offset=offset
+            ),
+            "total_count": count_sketches(status=status, project_id=project_id),
+        },
+    )
 
 
 @post("/", status_code=201, sync_to_thread=False)

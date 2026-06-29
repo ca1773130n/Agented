@@ -37,9 +37,9 @@ from app.database import (
     update_workflow,
 )
 from app.database import create_workflow as db_create_workflow
-from app.db.owned_entities import get_for_user
 
 from ..auth import Caller
+from ..list_scope import admin_or_scoped
 
 # ---------------------------------------------------------------------------
 # CRUD
@@ -48,9 +48,12 @@ from ..auth import Caller
 
 @get("/", sync_to_thread=False)
 def list_workflows(caller: Caller) -> dict[str, Any]:
-    if caller.user_id:
-        return {"workflows": get_for_user("workflows", caller.user_id)}
-    return {"workflows": get_all_workflows()}
+    return admin_or_scoped(
+        caller,
+        "workflows",
+        "workflows",
+        all_=lambda: {"workflows": get_all_workflows()},
+    )
 
 
 @post("/", sync_to_thread=False)
