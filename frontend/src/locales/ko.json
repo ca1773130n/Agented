@@ -6800,7 +6800,9 @@
     "retrievalSemantic": "시맨틱 검색",
     "retrievalFallback": "폴백 (실제 임베딩 미설치)",
     "retrievalGraph": "검색한 그래프",
-    "retrievalGraphSize": "노드 {nodes}개 · 엣지 {edges}개"
+    "retrievalGraphSize": "노드 {nodes}개 · 엣지 {edges}개",
+    "retrievalFederation": "프로젝트별 노드",
+    "retrievalMerges": "신원 병합"
   },
   "skillCreateWizard": {
     "title": "스킬 설계",

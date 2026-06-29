@@ -23,12 +23,19 @@ export interface RetrievalStats {
 }
 
 /** Full provenance of one ideation turn's grounding. */
+/** Tesserae 0.12.0 `federation status` — how the cross-project graph is composed. */
+export interface RetrievalFederation {
+  per_project_nodes: Record<string, number>;
+  identity_merges: number | null;
+}
+
 export interface RetrievalDetails {
   scope: string | null; // "federated" | null (no grounding)
   projects: string[];
   citations: number;
   stats: RetrievalStats;
   sources: RetrievalSource[];
+  federation: RetrievalFederation;
 }
 
 export interface IdeateHandlers {
@@ -149,6 +156,10 @@ export const sketchApi = {
             citations: (data.citations as number) ?? 0,
             stats: (data.stats as RetrievalStats) ?? ({} as RetrievalStats),
             sources: (data.sources as RetrievalSource[]) ?? [],
+            federation: (data.federation as RetrievalFederation) ?? {
+              per_project_nodes: {},
+              identity_merges: null,
+            },
           });
         } else if (event === 'content') {
           handlers.onContent?.((data.content as string) ?? '');

@@ -6800,7 +6800,9 @@
     "retrievalSemantic": "セマンティック検索",
     "retrievalFallback": "フォールバック（実埋め込み未インストール）",
     "retrievalGraph": "検索したグラフ",
-    "retrievalGraphSize": "{nodes}ノード・{edges}エッジ"
+    "retrievalGraphSize": "{nodes}ノード・{edges}エッジ",
+    "retrievalFederation": "プロジェクト別ノード",
+    "retrievalMerges": "同一性マージ"
   },
   "skillCreateWizard": {
     "title": "スキルを設計",

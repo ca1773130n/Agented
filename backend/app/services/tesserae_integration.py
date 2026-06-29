@@ -41,6 +41,7 @@ import secrets
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, Optional
 
@@ -1380,6 +1381,43 @@ def federated_ask_tesserae(
         "citations": data.get("citations", []),
         "stats": data.get("stats", {}),
     }
+
+
+# Federation composition (per-project node counts, identity merges, semantic links)
+# is graph-level and stable between recompiles, so cache it briefly — it's an extra
+# subprocess on top of the per-turn ``ask`` and we don't want to slow ideation.
+_FED_STATUS_CACHE: dict[str, Any] = {"data": None, "ts": 0.0}
+_FED_STATUS_TTL = 300.0  # seconds
+
+
+def federation_status(*, semantic: bool = True, timeout: int = 60) -> Optional[dict[str, Any]]:
+    """0.12.0 ``tesserae federation status`` — cross-project composition:
+    ``{per_project_nodes, nodes, edges, identity_merges, semantic{...}}``. Cached
+    for ``_FED_STATUS_TTL``. Returns ``None`` on any failure (caller degrades)."""
+    now = time.monotonic()
+    if _FED_STATUS_CACHE["data"] is not None and (now - _FED_STATUS_CACHE["ts"]) < _FED_STATUS_TTL:
+        return _FED_STATUS_CACHE["data"]
+    aliases = list_tesserae_project_aliases()
+    if not aliases:
+        return None
+    cmd = [_TESSERAE_CMD, "federation", "status", *aliases, "--json"]
+    cmd.append("--semantic" if semantic else "--no-semantic")
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        logger.warning("tesserae: federation status failed: %s", exc)
+        return None
+    if result.returncode != 0:
+        return None
+    try:
+        data = json.loads(_first_json(result.stdout))
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    _FED_STATUS_CACHE["data"] = data
+    _FED_STATUS_CACHE["ts"] = now
+    return data
 
 
 def federated_context_message(question: str, *, semantic: bool = True) -> Optional[dict[str, Any]]:

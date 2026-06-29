@@ -84,11 +84,11 @@ ensure_node() {
 
 # ---------- Tesserae (federated knowledge graph for Sketch ideation) ----------
 # The Sketch ideation chat grounds each turn with FEDERATED Tesserae retrieval
-# across all registered projects. Requires the `tesserae` CLI >= 0.11.0 (the
-# federation release) on PATH, installed with the `semantic` extra. Best-effort:
-# a missing/old Tesserae degrades the Sketch chat to ungrounded — never blocks
-# setup.
-TESSERAE_MIN="0.11.0"
+# across all registered projects. Requires the `tesserae` CLI >= 0.12.0 (adds
+# `federation status` + real model2vec semantic) on PATH, installed with the
+# `semantic` extra (model2vec) — WITHOUT it, retrieval degrades to the hash-bucket
+# stub. Best-effort: a missing/old Tesserae degrades the Sketch chat to ungrounded.
+TESSERAE_MIN="0.12.0"
 # Portable "A >= B" for dotted versions — BSD/macOS `sort` lacks `-V`.
 _version_ge() {
     local a b IFS=.

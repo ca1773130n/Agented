@@ -95,6 +95,13 @@ def test_federated_context_message_fences_untrusted_body(monkeypatch):
 
 
 def test_stream_ideation_injects_grounding_then_streams(monkeypatch):
+    # 0.12.0 federation composition (cached subprocess) — mock so the test never
+    # shells out to the real `tesserae federation status`.
+    monkeypatch.setattr(
+        ti,
+        "federation_status",
+        lambda **k: {"per_project_nodes": {"a": 18000, "b": 130}, "identity_merges": 3},
+    )
     monkeypatch.setattr(
         ti,
         "federated_context_message",
@@ -158,6 +165,9 @@ def test_stream_ideation_injects_grounding_then_streams(monkeypatch):
     assert [s["name"] for s in retrieval["sources"]] == ["file.py", "sess"]
     assert retrieval["sources"][0]["project"] == "agented"
     assert retrieval["sources"][1]["wiki_kind"] == "page"
+    # 0.12.0 federation composition surfaced
+    assert retrieval["federation"]["per_project_nodes"] == {"a": 18000, "b": 130}
+    assert retrieval["federation"]["identity_merges"] == 3
 
 
 def test_stream_ideation_grounding_failure_is_not_fatal(monkeypatch):

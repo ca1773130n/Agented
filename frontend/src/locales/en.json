@@ -6800,7 +6800,9 @@
     "retrievalSemantic": "Semantic search",
     "retrievalFallback": "fallback (real embeddings not installed)",
     "retrievalGraph": "Graph searched",
-    "retrievalGraphSize": "{nodes} nodes · {edges} edges"
+    "retrievalGraphSize": "{nodes} nodes · {edges} edges",
+    "retrievalFederation": "Per-project nodes",
+    "retrievalMerges": "Identity merges"
   },
   "skillCreateWizard": {
     "title": "Design a Skill",

@@ -45,6 +45,7 @@ vi.mock('../../services/api', () => ({
           semantic_added: 0,
         },
         sources: [{ name: 'file.py', path: 'file.py', wiki_kind: null, project: 'a' }],
+        federation: { per_project_nodes: { a: 100, b: 20 }, identity_merges: 0 },
       });
       handlers?.onContent?.('partner reply');
       handlers?.onDone?.();
