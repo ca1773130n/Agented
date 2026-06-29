@@ -4977,7 +4977,13 @@
     "invalidCredentials": "Invalid email or password",
     "newHere": "New here?",
     "createAccount": "Create an account",
-    "forgotPassword": "Forgot password?"
+    "forgotPassword": "Forgot password?",
+    "or": "or",
+    "apiKeyLabel": "API key",
+    "apiKeyPlaceholder": "Paste your API key",
+    "useApiKey": "Use API key",
+    "verifying": "Verifying…",
+    "invalidApiKey": "Invalid API key"
   },
   "marketplace": {
     "title": "Marketplace",

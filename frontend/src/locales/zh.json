@@ -4977,7 +4977,13 @@
     "invalidCredentials": "邮箱或密码无效",
     "newHere": "新用户？",
     "createAccount": "创建账户",
-    "forgotPassword": "忘记密码？"
+    "forgotPassword": "忘记密码？",
+    "or": "或",
+    "apiKeyLabel": "API 密钥",
+    "apiKeyPlaceholder": "粘贴你的 API 密钥",
+    "useApiKey": "使用 API 密钥",
+    "verifying": "验证中…",
+    "invalidApiKey": "无效的 API 密钥"
   },
   "marketplace": {
     "title": "市场",
