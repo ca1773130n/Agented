@@ -6,6 +6,7 @@ from typing import List, Optional
 
 from .connection import get_connection, safe_set_clause
 from .ids import _get_unique_agent_id, _get_unique_conversation_id
+from .owned_entities import resolve_owner_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,7 @@ def create_agent(
     with get_connection() as conn:
         try:
             agent_id = _get_unique_agent_id(conn)
+            owner_user_id = resolve_owner_user_id(conn, user_id)
             conn.execute(
                 """
                 INSERT INTO agents (id, name, description, role, goals, context, backend_type,
@@ -97,7 +99,7 @@ def create_agent(
                     matched_skills,
                     preferred_model,
                     effort_level,
-                    user_id,
+                    owner_user_id,
                 ),
             )
             conn.commit()

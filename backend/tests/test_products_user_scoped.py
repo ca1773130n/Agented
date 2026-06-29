@@ -85,6 +85,54 @@ class TestUnscopedAdminView:
         assert ids <= all_ids
 
 
+class TestResolveOwnerUserId:
+    """The shared owner resolver: real user kept; None or a bogus/orphaned id
+    (e.g. an admin api-key principal with no user account) → legacy fallback."""
+
+    def test_resolver_keeps_real_user_and_falls_back_otherwise(self, isolated_db):
+        from app.db.connection import get_connection
+        from app.db.owned_entities import resolve_owner_user_id
+
+        legacy = _legacy_user_id()
+        real = create_user("real@example.com", "Real")
+        with get_connection() as conn:
+            assert resolve_owner_user_id(conn, real) == real
+            assert resolve_owner_user_id(conn, None) == legacy
+            assert resolve_owner_user_id(conn, "role-does-not-exist") == legacy
+
+
+class TestCreateFallsBackToLegacyForBogusOwner:
+    """A bogus/orphaned user_id must NOT 500 the create (FK violation) — it falls
+    back to legacy@local. Regression for the admin-api-key 'can't add X' bug."""
+
+    def _owner(self, table, entity_id):
+        from app.db.connection import get_connection
+
+        with get_connection() as conn:
+            return conn.execute(
+                f"SELECT user_id FROM {table} WHERE id = ?", (entity_id,)
+            ).fetchone()[0]
+
+    def test_create_product(self, isolated_db):
+        pid = create_product("P", user_id="role-does-not-exist")
+        assert pid is not None
+        assert self._owner("products", pid) == _legacy_user_id()
+
+    def test_create_project(self, isolated_db):
+        from app.db.projects import create_project
+
+        prid = create_project("Pr", user_id="role-does-not-exist")
+        assert prid is not None
+        assert self._owner("projects", prid) == _legacy_user_id()
+
+    def test_create_agent(self, isolated_db):
+        from app.db.agents import create_agent
+
+        aid = create_agent("A", user_id="role-does-not-exist")
+        assert aid is not None
+        assert self._owner("agents", aid) == _legacy_user_id()
+
+
 class TestListProductsRouteScoping:
     """The /admin/products route handler: admins see ALL (oversight), non-admins
     are scoped to their own — an admin must not be hidden behind a blank/legacy

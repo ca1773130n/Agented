@@ -16,9 +16,17 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_user_id(conn, user_id: Optional[str]) -> Optional[str]:
-    """Default to the legacy user when caller didn't pass one."""
+    """Resolve the owning user, falling back to legacy@local.
+
+    Falls back when the caller passes no user_id OR passes one that isn't a real
+    user — the latter happens for an admin API key whose principal has no user
+    account (user_id is None / the role-row id), which would otherwise violate
+    the products.user_id FK and 500 the create.
+    """
     if user_id:
-        return user_id
+        row = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
+        if row:
+            return user_id
     row = conn.execute("SELECT id FROM users WHERE email = ?", ("legacy@local",)).fetchone()
     return row[0] if row else None
 
