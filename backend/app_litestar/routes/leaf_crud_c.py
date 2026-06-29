@@ -68,17 +68,18 @@ from ..auth import Caller
 
 @get("/", sync_to_thread=False)
 def list_products(caller: Caller, limit: int = 50, offset: int = 0) -> dict[str, Any]:
+    # Admins see ALL products (oversight) — never hidden by a blank/legacy
+    # user_id. Everyone else is scoped to their own; a non-admin with NO user_id
+    # sees NOTHING (never the unscoped list — closes a latent leak for malformed
+    # api-key rows).
+    if caller.role == "admin":
+        return {
+            "products": get_all_products(limit=limit, offset=offset),
+            "total_count": count_products(),
+        }
     user_id = caller.user_id or current_user_var.get()
-    # Admins see ALL products (oversight); per-user scoping only applies to
-    # non-admin accounts. Filtering an admin by a blank/legacy user_id would
-    # hide everything (the API-key admin has a blank user_id, but the context var
-    # can still resolve a non-matching id).
-    if user_id and caller.role != "admin":
-        products = get_products_for_user(user_id, limit=limit, offset=offset)
-        return {"products": products, "total_count": len(products)}
-    total_count = count_products()
-    products = get_all_products(limit=limit, offset=offset)
-    return {"products": products, "total_count": total_count}
+    products = get_products_for_user(user_id, limit=limit, offset=offset) if user_id else []
+    return {"products": products, "total_count": len(products)}
 
 
 @post("/", status_code=201, sync_to_thread=False)

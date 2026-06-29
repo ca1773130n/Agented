@@ -83,15 +83,18 @@ def _assert_project_access(project_id: str, caller: Caller) -> None:
 def list_projects(
     caller: Caller, limit: Optional[int] = None, offset: Optional[int] = None
 ) -> dict[str, Any]:
-    # Admins see ALL projects (oversight); per-user scoping only applies to
-    # non-admin accounts — consistent with list_products.
-    if caller.user_id and caller.role != "admin":
+    # Admins see ALL projects (oversight); everyone else is scoped to their own —
+    # a non-admin with NO user_id sees NOTHING (never the unscoped list).
+    # Consistent with list_products.
+    if caller.role == "admin":
+        return {
+            "projects": get_all_projects(limit=limit, offset=offset or 0),
+            "total_count": count_projects(),
+        }
+    if caller.user_id:
         rows = get_for_user("projects", caller.user_id, limit=limit, offset=offset or 0)
         return {"projects": rows, "total_count": len(rows)}
-    return {
-        "projects": get_all_projects(limit=limit, offset=offset or 0),
-        "total_count": count_projects(),
-    }
+    return {"projects": [], "total_count": 0}
 
 
 @post("/", sync_to_thread=False)
