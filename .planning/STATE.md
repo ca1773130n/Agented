@@ -36,7 +36,19 @@ phase 21 (one-click team harness setup) was in progress at 21-07.
 ## Session Continuity
 
 Last session: 2026-06-30
-Stopped at: Created milestone v0.10.0 from the omnigent competitive analysis —
-PROJECT.md/ROADMAP.md/REQUIREMENTS.md/STATE.md written, v0.8.0 archived. Next is
-`/grd:discuss-phase 23` (policy engine).
+Stopped at: Executed phase 24 plan 24-01 (OS-level sandbox-command-prefix builder)
+on branch grd/v0.10.0/24-24. Created backend/app/services/sandbox_wrap.py +
+test_sandbox_wrap.py (9 tests green, ruff clean). 24-01-SUMMARY.md written.
+Next: 24-02 (local egress proxy) / 24-03 (wire prefix into Popen chokepoint).
 Resume file: None
+
+## Decisions (Phase 24)
+
+- 24-01: Sandbox isolation is an argv-PREFIX builder prepended at the existing
+  Popen chokepoint (bwrap on Linux, sandbox-exec/SBPL on macOS) — NOT a new
+  launcher. Stdlib only, no new deps.
+- 24-01: Detection probe-runs the primitive (not just shutil.which) and degrades
+  to (cmd, False)+warning when missing/unusable (Pitfall 2); never raises so the
+  Phase-23 enforce_sandbox policy (24-03) decides launch-vs-refuse.
+- 24-01: Env-var egress (HTTPS_PROXY) is best-effort; airtight netns+nftables
+  egress is the deferred upgrade (Pitfall 3).
