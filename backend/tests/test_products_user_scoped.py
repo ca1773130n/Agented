@@ -83,3 +83,32 @@ class TestUnscopedAdminView:
         }
         all_ids = {r["id"] for r in get_all_products()}
         assert ids <= all_ids
+
+
+class TestListProductsRouteScoping:
+    """The /admin/products route handler: admins see ALL (oversight), non-admins
+    are scoped to their own — an admin must not be hidden behind a blank/legacy
+    user_id."""
+
+    def test_admin_sees_all_regardless_of_user_id(self, isolated_db):
+        from app_litestar.auth import Caller
+        from app_litestar.routes.leaf_crud_c import list_products
+
+        alice = create_user("alice@example.com", "Alice")
+        create_product("Alice's", user_id=alice)
+        create_product("Legacy")  # different owner
+        # An admin whose user_id matches NONE of the products still sees them all.
+        resp = list_products.fn(Caller(api_key="k", role="admin", user_id="nobody"))
+        assert resp["total_count"] == 2
+        assert len(resp["products"]) == 2
+
+    def test_non_admin_is_scoped_to_own_products(self, isolated_db):
+        from app_litestar.auth import Caller
+        from app_litestar.routes.leaf_crud_c import list_products
+
+        alice = create_user("alice@example.com", "Alice")
+        bob = create_user("bob@example.com", "Bob")
+        create_product("Alice's", user_id=alice)
+        create_product("Bob's", user_id=bob)
+        resp = list_products.fn(Caller(api_key="k", role="editor", user_id=alice))
+        assert {p["name"] for p in resp["products"]} == {"Alice's"}

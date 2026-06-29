@@ -69,7 +69,11 @@ from ..auth import Caller
 @get("/", sync_to_thread=False)
 def list_products(caller: Caller, limit: int = 50, offset: int = 0) -> dict[str, Any]:
     user_id = caller.user_id or current_user_var.get()
-    if user_id:
+    # Admins see ALL products (oversight); per-user scoping only applies to
+    # non-admin accounts. Filtering an admin by a blank/legacy user_id would
+    # hide everything (the API-key admin has a blank user_id, but the context var
+    # can still resolve a non-matching id).
+    if user_id and caller.role != "admin":
         products = get_products_for_user(user_id, limit=limit, offset=offset)
         return {"products": products, "total_count": len(products)}
     total_count = count_products()
