@@ -4977,7 +4977,13 @@
     "invalidCredentials": "メールアドレスまたはパスワードが正しくありません",
     "newHere": "初めてですか？",
     "createAccount": "アカウントを作成",
-    "forgotPassword": "パスワードをお忘れですか？"
+    "forgotPassword": "パスワードをお忘れですか？",
+    "or": "または",
+    "apiKeyLabel": "APIキー",
+    "apiKeyPlaceholder": "APIキーを貼り付け",
+    "useApiKey": "APIキーを使用",
+    "verifying": "確認中…",
+    "invalidApiKey": "無効なAPIキー"
   },
   "marketplace": {
     "title": "マーケットプレイス",

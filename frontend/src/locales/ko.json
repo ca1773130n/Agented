@@ -4977,7 +4977,13 @@
     "invalidCredentials": "잘못된 이메일 또는 비밀번호입니다",
     "newHere": "처음이신가요?",
     "createAccount": "계정 만들기",
-    "forgotPassword": "비밀번호를 잊으셨나요?"
+    "forgotPassword": "비밀번호를 잊으셨나요?",
+    "or": "또는",
+    "apiKeyLabel": "API 키",
+    "apiKeyPlaceholder": "API 키를 붙여넣으세요",
+    "useApiKey": "API 키 사용",
+    "verifying": "확인 중…",
+    "invalidApiKey": "잘못된 API 키"
   },
   "marketplace": {
     "title": "마켓플레이스",

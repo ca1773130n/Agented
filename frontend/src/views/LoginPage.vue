@@ -3,6 +3,8 @@ import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuth } from '../composables/useAuth';
 import { useI18n } from 'vue-i18n';
+import { healthApi } from '../services/api';
+import { setApiKey, clearApiKey } from '../services/api/client';
 
 const { t } = useI18n();
 const route = useRoute();
@@ -18,14 +20,18 @@ const canSubmit = computed(
   () => !submitting.value && email.value.trim().length > 0 && password.value.length > 0,
 );
 
+function goNext() {
+  const next = (route.query.next as string) || '/';
+  router.push(next);
+}
+
 async function onSubmit() {
   if (!canSubmit.value) return;
   submitting.value = true;
   error.value = null;
   try {
     await login(email.value.trim(), password.value);
-    const next = (route.query.next as string) || '/';
-    router.push(next);
+    goNext();
   } catch (err) {
     error.value =
       err instanceof Error && err.message
@@ -33,6 +39,35 @@ async function onSubmit() {
         : t('login.invalidCredentials');
   } finally {
     submitting.value = false;
+  }
+}
+
+// API-key sign-in: operators who authenticate with the admin X-API-Key (no
+// account) need a way back in after sessionStorage clears. Paste → store →
+// validate against /health/auth-status (it checks the key) → in, or clear + error.
+const apiKey = ref('');
+const apiKeySubmitting = ref(false);
+const apiKeyError = ref<string | null>(null);
+
+async function onApiKeySubmit() {
+  const key = apiKey.value.trim();
+  if (!key || apiKeySubmitting.value) return;
+  apiKeySubmitting.value = true;
+  apiKeyError.value = null;
+  setApiKey(key);
+  try {
+    const status = await healthApi.authStatus();
+    if (status.authenticated) {
+      goNext();
+    } else {
+      clearApiKey();
+      apiKeyError.value = t('login.invalidApiKey');
+    }
+  } catch {
+    clearApiKey();
+    apiKeyError.value = t('login.invalidApiKey');
+  } finally {
+    apiKeySubmitting.value = false;
   }
 }
 </script>
@@ -89,6 +124,36 @@ async function onSubmit() {
           ·
           <router-link :to="{ name: 'forgot-password' }" class="login-link">{{ t('login.forgotPassword') }}</router-link>
         </p>
+      </form>
+
+      <div class="login-divider"><span>{{ t('login.or') }}</span></div>
+
+      <form class="login-form" @submit.prevent="onApiKeySubmit">
+        <label class="login-field">
+          <span class="login-label">{{ t('login.apiKeyLabel') }}</span>
+          <input
+            v-model="apiKey"
+            type="password"
+            autocomplete="off"
+            class="login-input"
+            data-test="login-api-key"
+            :placeholder="t('login.apiKeyPlaceholder')"
+            :disabled="apiKeySubmitting"
+          />
+        </label>
+
+        <p v-if="apiKeyError" class="login-error" role="alert" data-test="login-api-key-error">
+          {{ apiKeyError }}
+        </p>
+
+        <button
+          type="submit"
+          class="login-submit login-submit-secondary"
+          data-test="login-api-key-submit"
+          :disabled="apiKeySubmitting || !apiKey.trim()"
+        >
+          {{ apiKeySubmitting ? t('login.verifying') : t('login.useApiKey') }}
+        </button>
       </form>
     </div>
   </div>
@@ -196,6 +261,32 @@ async function onSubmit() {
   font-size: 0.8125rem;
   color: var(--text-secondary);
   text-align: center;
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 20px 0 16px;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--border-default);
+}
+
+.login-divider span {
+  padding: 0 10px;
+}
+
+.login-submit-secondary {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
 }
 
 .login-link {
