@@ -59,7 +59,7 @@ def stream_ideation(
       * ``("error", {message})`` — a fatal streaming error (rare; fail-soft).
     """
     from .conversation_streaming import stream_llm_response
-    from .tesserae_integration import federated_context_message
+    from .tesserae_integration import federated_context_message, federation_status
 
     backend = backend or _resolve_ideation_backend()
     llm_messages: list[dict] = [{"role": "system", "content": _IDEATION_SYSTEM}, *messages]
@@ -68,7 +68,14 @@ def stream_ideation(
     # Rich retrieval provenance for the UI: scope (federated graph vs nothing),
     # the semantic backend actually used (so a hash-bucket fallback is visible vs
     # real embeddings), graph size searched, and the cited sources.
-    retrieval: dict = {"scope": None, "projects": [], "citations": 0, "stats": {}, "sources": []}
+    retrieval: dict = {
+        "scope": None,
+        "projects": [],
+        "citations": 0,
+        "stats": {},
+        "sources": [],
+        "federation": {},
+    }
     if last_user:
         try:
             ctx = federated_context_message(last_user)
@@ -77,6 +84,9 @@ def stream_ideation(
                 llm_messages.insert(-1, {"role": "system", "content": ctx["content"]})
                 cits = ctx.get("_citations", []) or []
                 stats = ctx.get("_stats", {}) or {}
+                # 0.12.0 federation composition (cached): per-project node counts +
+                # cross-project identity merges — shows HOW the federation is built.
+                fed = federation_status() or {}
                 retrieval = {
                     "scope": "federated",
                     "projects": ctx.get("_projects", []),
@@ -98,6 +108,10 @@ def stream_ideation(
                         for c in cits[:12]  # cap for the UI; `citations` carries the true total
                         if isinstance(c, dict)
                     ],
+                    "federation": {
+                        "per_project_nodes": fed.get("per_project_nodes") or {},
+                        "identity_merges": fed.get("identity_merges"),
+                    },
                 }
         except Exception:
             logger.warning("sketch ideation: federated grounding failed", exc_info=True)

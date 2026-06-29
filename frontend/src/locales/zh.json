@@ -6800,7 +6800,9 @@
     "retrievalSemantic": "语义搜索",
     "retrievalFallback": "回退（未安装真实嵌入）",
     "retrievalGraph": "搜索的图谱",
-    "retrievalGraphSize": "{nodes} 个节点 · {edges} 条边"
+    "retrievalGraphSize": "{nodes} 个节点 · {edges} 条边",
+    "retrievalFederation": "各项目节点",
+    "retrievalMerges": "身份合并"
   },
   "skillCreateWizard": {
     "title": "设计技能",

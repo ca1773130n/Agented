@@ -121,6 +121,11 @@ const isSemanticFallback = computed(
     !!grounding.value?.stats?.semantic_skipped,
 );
 
+// Tesserae 0.12.0 federation composition — per-project node contribution.
+const hasFederation = computed(
+  () => Object.keys(grounding.value?.federation?.per_project_nodes ?? {}).length > 0,
+);
+
 // Parse classification_json safely
 const parsedClassification = computed(() => {
   if (!currentSketch.value?.classification_json) return null;
@@ -330,6 +335,20 @@ onMounted(() => {
               <span class="retrieval-key">{{ t('sketchChat.retrievalGraph') }}</span>
               <span class="retrieval-val">{{ t('sketchChat.retrievalGraphSize', { nodes: grounding.stats.nodes, edges: grounding.stats.edges }) }}</span>
             </div>
+            <div v-if="hasFederation" class="retrieval-row">
+              <span class="retrieval-key">{{ t('sketchChat.retrievalFederation') }}</span>
+              <span class="retrieval-fed">
+                <span
+                  v-for="(n, proj) in grounding.federation.per_project_nodes"
+                  :key="proj"
+                  class="retrieval-fed-proj"
+                >{{ proj }} <b>{{ n }}</b></span>
+              </span>
+            </div>
+            <div v-if="grounding.federation.identity_merges != null" class="retrieval-row">
+              <span class="retrieval-key">{{ t('sketchChat.retrievalMerges') }}</span>
+              <span class="retrieval-val">{{ grounding.federation.identity_merges }}</span>
+            </div>
             <ul v-if="grounding.sources.length" class="retrieval-sources">
               <li v-for="(s, i) in grounding.sources" :key="i" class="retrieval-source" :title="s.path || ''">
                 <span class="retrieval-source-name">{{ s.name || s.path || '—' }}</span>
@@ -472,6 +491,22 @@ onMounted(() => {
 }
 .retrieval-warn {
   color: var(--color-warning, #e0a83b);
+}
+.retrieval-fed {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+.retrieval-fed-proj {
+  font-size: 0.66rem;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  padding: 0 0.3rem;
+}
+.retrieval-fed-proj b {
+  color: var(--text-primary);
 }
 .retrieval-sources {
   margin: 0.4rem 0 0;
