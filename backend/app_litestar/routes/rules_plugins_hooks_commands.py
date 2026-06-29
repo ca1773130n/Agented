@@ -54,6 +54,7 @@ from app.database import create_rule as db_create_rule
 from app.db.owned_entities import count_for_user, get_for_user
 
 from ..auth import Caller
+from ..list_scope import admin_or_scoped
 
 VALID_RULE_TYPES = ["pre_check", "post_check", "validation"]
 HOOK_EVENTS = ["PreToolUse", "PostToolUse", "Notification", "Stop", "SubagentStop"]
@@ -82,31 +83,34 @@ def list_rules(
     sort: Optional[str] = None,
     order: Optional[str] = None,
 ) -> dict[str, Any]:
-    if caller.user_id:
-        rows = get_for_user(
-            "rules",
-            caller.user_id,
-            limit=limit,
-            offset=offset or 0,
-            search=search,
-            sort_field=sort,
-            sort_order=order or "asc",
-        )
-        return {
-            "rules": rows,
-            "total_count": count_for_user("rules", caller.user_id, search=search),
-        }
-    return {
-        "rules": get_all_rules(
-            project_id,
-            limit=limit,
-            offset=offset or 0,
-            search=search,
-            sort_field=sort,
-            sort_order=order or "asc",
-        ),
-        "total_count": count_rules(project_id, search=search),
-    }
+    return admin_or_scoped(
+        caller,
+        "rules",
+        "rules",
+        all_=lambda: {
+            "rules": get_all_rules(
+                project_id,
+                limit=limit,
+                offset=offset or 0,
+                search=search,
+                sort_field=sort,
+                sort_order=order or "asc",
+            ),
+            "total_count": count_rules(project_id, search=search),
+        },
+        scoped=lambda uid: {
+            "rules": get_for_user(
+                "rules",
+                uid,
+                limit=limit,
+                offset=offset or 0,
+                search=search,
+                sort_field=sort,
+                sort_order=order or "asc",
+            ),
+            "total_count": count_for_user("rules", uid, search=search),
+        },
+    )
 
 
 @post("/", sync_to_thread=False)
@@ -242,14 +246,18 @@ def list_plugins(
     limit: Optional[int] = None,
     offset: Optional[int] = None,
 ) -> dict[str, Any]:
-    if caller.user_id:
-        rows = get_for_user("plugins", caller.user_id, limit=limit, offset=offset or 0)
-        return {"plugins": rows, "total_count": len(rows)}
     del project_id  # original Flask version didn't filter by it either
-    return {
-        "plugins": get_all_plugins(limit=limit, offset=offset or 0),
-        "total_count": count_plugins(),
-    }
+    return admin_or_scoped(
+        caller,
+        "plugins",
+        "plugins",
+        limit=limit,
+        offset=offset or 0,
+        all_=lambda: {
+            "plugins": get_all_plugins(limit=limit, offset=offset or 0),
+            "total_count": count_plugins(),
+        },
+    )
 
 
 @post("/", sync_to_thread=False)
@@ -416,31 +424,34 @@ def list_hooks(
     sort: Optional[str] = None,
     order: Optional[str] = None,
 ) -> dict[str, Any]:
-    if caller.user_id:
-        rows = get_for_user(
-            "hooks",
-            caller.user_id,
-            limit=limit,
-            offset=offset or 0,
-            search=search,
-            sort_field=sort,
-            sort_order=order or "asc",
-        )
-        return {
-            "hooks": rows,
-            "total_count": count_for_user("hooks", caller.user_id, search=search),
-        }
-    return {
-        "hooks": get_all_hooks(
-            project_id,
-            limit=limit,
-            offset=offset or 0,
-            search=search,
-            sort_field=sort,
-            sort_order=order or "asc",
-        ),
-        "total_count": count_hooks(project_id, search=search),
-    }
+    return admin_or_scoped(
+        caller,
+        "hooks",
+        "hooks",
+        all_=lambda: {
+            "hooks": get_all_hooks(
+                project_id,
+                limit=limit,
+                offset=offset or 0,
+                search=search,
+                sort_field=sort,
+                sort_order=order or "asc",
+            ),
+            "total_count": count_hooks(project_id, search=search),
+        },
+        scoped=lambda uid: {
+            "hooks": get_for_user(
+                "hooks",
+                uid,
+                limit=limit,
+                offset=offset or 0,
+                search=search,
+                sort_field=sort,
+                sort_order=order or "asc",
+            ),
+            "total_count": count_for_user("hooks", uid, search=search),
+        },
+    )
 
 
 @post("/", sync_to_thread=False)
@@ -555,31 +566,34 @@ def list_commands(
     sort: Optional[str] = None,
     order: Optional[str] = None,
 ) -> dict[str, Any]:
-    if caller.user_id:
-        rows = get_for_user(
-            "commands",
-            caller.user_id,
-            limit=limit,
-            offset=offset or 0,
-            search=search,
-            sort_field=sort,
-            sort_order=order or "asc",
-        )
-        return {
-            "commands": rows,
-            "total_count": count_for_user("commands", caller.user_id, search=search),
-        }
-    return {
-        "commands": get_all_commands(
-            project_id,
-            limit=limit,
-            offset=offset or 0,
-            search=search,
-            sort_field=sort,
-            sort_order=order or "asc",
-        ),
-        "total_count": count_commands(project_id, search=search),
-    }
+    return admin_or_scoped(
+        caller,
+        "commands",
+        "commands",
+        all_=lambda: {
+            "commands": get_all_commands(
+                project_id,
+                limit=limit,
+                offset=offset or 0,
+                search=search,
+                sort_field=sort,
+                sort_order=order or "asc",
+            ),
+            "total_count": count_commands(project_id, search=search),
+        },
+        scoped=lambda uid: {
+            "commands": get_for_user(
+                "commands",
+                uid,
+                limit=limit,
+                offset=offset or 0,
+                search=search,
+                sort_field=sort,
+                sort_order=order or "asc",
+            ),
+            "total_count": count_for_user("commands", uid, search=search),
+        },
+    )
 
 
 @post("/", sync_to_thread=False)

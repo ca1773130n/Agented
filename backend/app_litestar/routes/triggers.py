@@ -18,13 +18,13 @@ from litestar.exceptions import (
 from litestar.response import Stream
 from msgspec import Struct
 
-from app.db.owned_entities import get_for_user
 from app.db.triggers import get_trigger
 from app.services.budget_service import BudgetService
 from app.services.execution_service import ExecutionService
 from app.services.trigger_service import TriggerService
 
 from ..auth import Caller, require_role
+from ..list_scope import admin_or_scoped
 
 
 def _result_or_raise(payload: tuple[dict, int]) -> dict:
@@ -49,11 +49,14 @@ def list_triggers(
     authorized: Caller, limit: Optional[int] = None, offset: Optional[int] = None
 ) -> dict[str, Any]:
     """List triggers, scoped by user when authenticated."""
-    if authorized.user_id:
-        rows = get_for_user("triggers", authorized.user_id, limit=limit, offset=offset or 0)
-        return {"triggers": rows, "total_count": len(rows)}
-    body, _ = TriggerService.list_triggers(limit=limit, offset=offset or 0)
-    return body
+    return admin_or_scoped(
+        authorized,
+        "triggers",
+        "triggers",
+        limit=limit,
+        offset=offset or 0,
+        all_=lambda: TriggerService.list_triggers(limit=limit, offset=offset or 0)[0],
+    )
 
 
 @post(

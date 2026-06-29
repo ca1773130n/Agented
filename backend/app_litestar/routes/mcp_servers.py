@@ -25,11 +25,11 @@ from app.database import (
     update_project_mcp_assignment,
 )
 from app.database import create_mcp_server as db_create_mcp_server
-from app.db.owned_entities import get_for_user
 from app.services.mcp_sync_service import McpSyncService
 from app.services.project_workspace_service import ProjectWorkspaceService
 
 from ..auth import Caller
+from ..list_scope import admin_or_scoped
 
 # ---------------------------------------------------------------------------
 # Request bodies
@@ -89,13 +89,17 @@ class UpdateAssignmentBody(Struct):
 def list_mcp_servers(
     caller: Caller, limit: Optional[int] = None, offset: Optional[int] = None
 ) -> dict[str, Any]:
-    if caller.user_id:
-        rows = get_for_user("mcp_servers", caller.user_id, limit=limit, offset=offset or 0)
-        return {"servers": rows, "total_count": len(rows)}
-    return {
-        "servers": get_all_mcp_servers(limit=limit, offset=offset or 0),
-        "total_count": count_mcp_servers(),
-    }
+    return admin_or_scoped(
+        caller,
+        "mcp_servers",
+        "servers",
+        limit=limit,
+        offset=offset or 0,
+        all_=lambda: {
+            "servers": get_all_mcp_servers(limit=limit, offset=offset or 0),
+            "total_count": count_mcp_servers(),
+        },
+    )
 
 
 @get("/{server_id:str}", sync_to_thread=False)

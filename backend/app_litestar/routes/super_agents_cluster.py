@@ -37,9 +37,9 @@ from app.database import (
     update_super_agent_document,
 )
 from app.database import create_super_agent as db_create_super_agent
-from app.db.owned_entities import get_for_user
 
 from ..auth import Caller
+from ..list_scope import admin_or_scoped
 
 logger = logging.getLogger(__name__)
 
@@ -53,15 +53,19 @@ logger = logging.getLogger(__name__)
 def list_super_agents(
     caller: Caller, limit: Optional[int] = None, offset: Optional[int] = None
 ) -> dict[str, Any]:
-    if caller.user_id:
-        rows = get_for_user("super_agents", caller.user_id, limit=limit, offset=offset or 0)
-        return {"super_agents": rows, "total_count": len(rows)}
     from app.db.super_agents import count_all_super_agents
 
-    return {
-        "super_agents": get_all_super_agents(limit=limit, offset=offset or 0),
-        "total_count": count_all_super_agents(),
-    }
+    return admin_or_scoped(
+        caller,
+        "super_agents",
+        "super_agents",
+        limit=limit,
+        offset=offset or 0,
+        all_=lambda: {
+            "super_agents": get_all_super_agents(limit=limit, offset=offset or 0),
+            "total_count": count_all_super_agents(),
+        },
+    )
 
 
 @get("/activity-status", sync_to_thread=False)

@@ -33,11 +33,11 @@ from app.database import (
     get_team_members,
     update_team,
 )
-from app.db.owned_entities import get_for_user
 from app.models.team import VALID_EDGE_TYPES, VALID_TOPOLOGIES
 from app.services.team_service import TeamService
 
 from ..auth import Caller, require_role
+from ..list_scope import admin_or_scoped
 
 logger = logging.getLogger(__name__)
 _MAX_TOPOLOGY_MEMBERS = 50
@@ -84,13 +84,17 @@ def _auto_generate_topology_edges(team_id: str, topology: str, topology_config=N
 def list_teams(
     authorized: Caller, limit: Optional[int] = None, offset: Optional[int] = None
 ) -> dict[str, Any]:
-    if authorized.user_id:
-        rows = get_for_user("teams", authorized.user_id, limit=limit, offset=offset or 0)
-        return {"teams": rows, "total_count": len(rows)}
-    return {
-        "teams": get_all_teams(limit=limit, offset=offset or 0),
-        "total_count": count_teams(),
-    }
+    return admin_or_scoped(
+        authorized,
+        "teams",
+        "teams",
+        limit=limit,
+        offset=offset or 0,
+        all_=lambda: {
+            "teams": get_all_teams(limit=limit, offset=offset or 0),
+            "total_count": count_teams(),
+        },
+    )
 
 
 class CreateTeamBody(Struct, kw_only=True):

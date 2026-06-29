@@ -10,7 +10,7 @@ from litestar import Router, delete, get, post, put
 from litestar.exceptions import HTTPException, NotFoundException
 from litestar.response import Stream
 
-from app.db.owned_entities import can_access, get_for_user
+from app.db.owned_entities import can_access
 from app.db.tracing import (
     count_traces,
     create_span,
@@ -30,6 +30,7 @@ from app.services.skills_service import SkillsService
 from app_litestar.route_helpers import clamp_limit
 
 from ..auth import Caller
+from ..list_scope import admin_or_scoped
 
 
 def _result_or_raise(payload: tuple[dict, int]) -> dict:
@@ -48,10 +49,14 @@ def _result_or_raise(payload: tuple[dict, int]) -> dict:
 def list_agents(
     caller: Caller, limit: Optional[int] = None, offset: Optional[int] = None
 ) -> dict[str, Any]:
-    if caller.user_id:
-        rows = get_for_user("agents", caller.user_id, limit=limit, offset=offset or 0)
-        return {"agents": rows, "total_count": len(rows)}
-    return _result_or_raise(AgentService.list_agents(limit=limit, offset=offset or 0))
+    return admin_or_scoped(
+        caller,
+        "agents",
+        "agents",
+        limit=limit,
+        offset=offset or 0,
+        all_=lambda: _result_or_raise(AgentService.list_agents(limit=limit, offset=offset or 0)),
+    )
 
 
 def _assert_agent_access(agent_id: str, caller: Caller) -> None:
