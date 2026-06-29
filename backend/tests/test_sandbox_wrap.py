@@ -8,16 +8,13 @@ from __future__ import annotations
 
 import app.services.sandbox_wrap as sw
 
-
 # ---------------------------------------------------------------------------
 # Task 1: bwrap prefix composition
 # ---------------------------------------------------------------------------
 
 
 def test_bwrap_prefix_contains_required_tokens():
-    prefix = sw._build_bwrap_prefix(
-        ["claude", "-p"], workspace="/ws", proxy_addr="127.0.0.1:9119"
-    )
+    prefix = sw._build_bwrap_prefix(["claude", "-p"], workspace="/ws", proxy_addr="127.0.0.1:9119")
     joined = " ".join(prefix)
     assert prefix[0] == "bwrap"
     assert "--bind /ws /ws" in joined
@@ -67,10 +64,37 @@ def test_sbpl_profile_no_proxy_is_fs_only():
     assert "allow network" not in profile
 
 
-def test_sbpl_prefix_wraps_command():
-    prefix = sw._build_sbpl_prefix(
-        ["claude", "-p"], workspace="/ws", proxy_addr="127.0.0.1:9119"
+def test_sbpl_profile_has_no_unbound_param_and_concrete_tmp_rule():
+    # `(param "TMPDIR")` needs a `-D TMPDIR=` that the prefix never supplies, so
+    # the profile must inline a concrete temp subpath instead (else sandbox-exec
+    # fails to compile the profile and the launch dies).
+    profile = sw._build_sbpl_profile(workspace="/ws", proxy_addr=None)
+    assert '(param "TMPDIR")' not in profile
+    # two distinct file-write subpath rules: workspace + temp dir
+    assert profile.count("(allow file-write* (subpath ") == 2
+
+
+def test_sbpl_quote_escapes_quotes_and_backslashes():
+    # The escaping primitive that keeps a crafted path from breaking out of an
+    # SBPL string literal and injecting policy directives.
+    assert sw._sbpl_quote('a"b') == 'a\\"b'
+    assert sw._sbpl_quote("a\\b") == "a\\\\b"
+
+
+def test_sbpl_profile_escapes_quote_to_block_policy_injection():
+    # A workspace containing a double-quote must be escaped so it cannot close
+    # the subpath literal early. Every literal quote from the payload becomes
+    # an escaped \" — so no bare (unescaped) closing quote precedes the payload.
+    profile = sw._build_sbpl_profile(
+        workspace='/ws") (allow network*) (subpath "/x',
+        proxy_addr=None,
     )
+    # the injected quote is escaped, not left bare
+    assert '\\") (allow network*)' in profile
+
+
+def test_sbpl_prefix_wraps_command():
+    prefix = sw._build_sbpl_prefix(["claude", "-p"], workspace="/ws", proxy_addr="127.0.0.1:9119")
     assert prefix[0] == "sandbox-exec"
     assert prefix[1] == "-p"
     assert "(deny default)" in prefix[2]
@@ -87,9 +111,7 @@ def test_build_prefix_degrades_when_unavailable(monkeypatch, caplog):
     import logging
 
     with caplog.at_level(logging.WARNING):
-        prefix, sandboxed = sw.build_sandbox_prefix(
-            ["claude", "-p"], workspace="/ws"
-        )
+        prefix, sandboxed = sw.build_sandbox_prefix(["claude", "-p"], workspace="/ws")
     assert sandboxed is False
     assert prefix == ["claude", "-p"]
     assert any("sandbox" in r.message.lower() for r in caplog.records)

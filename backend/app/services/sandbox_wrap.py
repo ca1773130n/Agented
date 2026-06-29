@@ -30,6 +30,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -73,12 +74,29 @@ def _build_bwrap_prefix(cmd: list[str], *, workspace: str, proxy_addr: str | Non
     return prefix
 
 
+def _sbpl_quote(value: str) -> str:
+    """Escape a path/host for embedding in an SBPL double-quoted string literal.
+
+    SBPL strings are ``"``-delimited with backslash escaping. Without this, a
+    value containing ``"`` could break out of the literal and inject policy
+    directives — defeating the deny-default sandbox this module exists to build.
+    """
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def _build_sbpl_profile(*, workspace: str, proxy_addr: str | None) -> str:
     """Build a deny-default seatbelt (SBPL) profile string (macOS).
 
     deny-wins: ``(deny network*)`` is the floor; when a proxy is given we add a
     specific ``(allow network* ...)`` for the local proxy host only.
+
+    Paths are ``realpath``-resolved so the filter matches the kernel's canonical
+    view — on macOS ``TMPDIR`` lives under ``/var/folders`` (``/var`` →
+    ``/private/var``), so an unresolved ``subpath`` rule would never match and
+    every temp write would be denied.
     """
+    ws = _sbpl_quote(os.path.realpath(workspace))
+    tmp = _sbpl_quote(os.path.realpath(os.environ.get("TMPDIR") or tempfile.gettempdir()))
     lines = [
         "(version 1)",
         "(deny default)",
@@ -86,12 +104,12 @@ def _build_sbpl_profile(*, workspace: str, proxy_addr: str | None) -> str:
         "(allow process-exec)",
         "(allow sysctl-read)",
         "(allow file-read*)",
-        f'(allow file-write* (subpath "{workspace}"))',
-        '(allow file-write* (subpath (param "TMPDIR")))',
+        f'(allow file-write* (subpath "{ws}"))',
+        f'(allow file-write* (subpath "{tmp}"))',
         "(deny network*)",
     ]
     if proxy_addr:
-        host = proxy_addr.rsplit(":", 1)[0] if ":" in proxy_addr else proxy_addr
+        host = _sbpl_quote(proxy_addr.rsplit(":", 1)[0])
         lines.append(f'(allow network* (remote ip "{host}:*"))')
     return "\n".join(lines) + "\n"
 
