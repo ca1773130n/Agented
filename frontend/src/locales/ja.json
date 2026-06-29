@@ -6794,7 +6794,13 @@
     "openInPlayground": "プレイグラウンドで開く →",
     "routeConversation": "この会話をルーティング",
     "routeConversationHint": "このアイデアを実際の作業に変換 — エージェント、チーム、またはプロジェクトに割り当てます。",
-    "groundedIn": "{projects}プロジェクト・{sources}ソースに基づく"
+    "groundedIn": "{projects}プロジェクト・{sources}ソースに基づく",
+    "retrievalScope": "範囲",
+    "retrievalFederated": "連合グラフ・{count}プロジェクト",
+    "retrievalSemantic": "セマンティック検索",
+    "retrievalFallback": "フォールバック（実埋め込み未インストール）",
+    "retrievalGraph": "検索したグラフ",
+    "retrievalGraphSize": "{nodes}ノード・{edges}エッジ"
   },
   "skillCreateWizard": {
     "title": "スキルを設計",

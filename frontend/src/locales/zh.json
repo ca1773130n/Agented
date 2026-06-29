@@ -6794,7 +6794,13 @@
     "openInPlayground": "在 Playground 中打开 →",
     "routeConversation": "路由此对话",
     "routeConversationHint": "将此想法转化为实际工作 — 分配给智能体、团队或项目。",
-    "groundedIn": "基于 {projects} 个项目 · {sources} 个来源"
+    "groundedIn": "基于 {projects} 个项目 · {sources} 个来源",
+    "retrievalScope": "范围",
+    "retrievalFederated": "联合图谱 · {count} 个项目",
+    "retrievalSemantic": "语义搜索",
+    "retrievalFallback": "回退（未安装真实嵌入）",
+    "retrievalGraph": "搜索的图谱",
+    "retrievalGraphSize": "{nodes} 个节点 · {edges} 条边"
   },
   "skillCreateWizard": {
     "title": "设计技能",

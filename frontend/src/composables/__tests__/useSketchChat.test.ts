@@ -27,13 +27,25 @@ vi.mock('../../services/api', () => ({
     ideateStream: async (
       msgs: unknown,
       handlers: {
-        onRetrieval?: (p: { projects: string[]; citations: number }) => void;
+        onRetrieval?: (p: import('../../services/api').RetrievalDetails) => void;
         onContent?: (c: string) => void;
         onDone?: () => void;
       },
     ) => {
       mockSketchApiIdeate(msgs);
-      handlers?.onRetrieval?.({ projects: ['a', 'b'], citations: 3 });
+      handlers?.onRetrieval?.({
+        scope: 'federated',
+        projects: ['a', 'b'],
+        citations: 3,
+        stats: {
+          nodes: 100,
+          edges: 200,
+          semantic_backend: 'hash-bucket',
+          semantic_skipped: 'no real embedding backend',
+          semantic_added: 0,
+        },
+        sources: [{ name: 'file.py', path: 'file.py', wiki_kind: null, project: 'a' }],
+      });
       handlers?.onContent?.('partner reply');
       handlers?.onDone?.();
     },
@@ -183,7 +195,12 @@ describe('useSketchChat', () => {
       expect(mockSketchApiIdeate).toHaveBeenCalled();
       expect(mockSketchApiRoute).not.toHaveBeenCalled();
       // Federated grounding provenance surfaced.
-      expect(chat.grounding.value).toEqual({ projects: ['a', 'b'], citations: 3 });
+      // Full retrieval provenance surfaced (scope + semantic backend + sources).
+      expect(chat.grounding.value?.scope).toBe('federated');
+      expect(chat.grounding.value?.projects).toEqual(['a', 'b']);
+      expect(chat.grounding.value?.citations).toBe(3);
+      expect(chat.grounding.value?.stats.semantic_backend).toBe('hash-bucket');
+      expect(chat.grounding.value?.sources.map((s) => s.name)).toEqual(['file.py']);
       expect(chat.isProcessing.value).toBe(false);
     });
 

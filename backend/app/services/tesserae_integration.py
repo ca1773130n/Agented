@@ -1408,4 +1408,5 @@ def federated_context_message(question: str, *, semantic: bool = True) -> Option
         "content": content,
         "_projects": fed.get("projects", []),
         "_citations": fed.get("citations", []),
+        "_stats": fed.get("stats") or {},
     }

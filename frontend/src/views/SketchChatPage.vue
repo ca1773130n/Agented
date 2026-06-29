@@ -113,6 +113,14 @@ useWebMcpTool({
 // Messages from useSketchChat are already ConversationMessage typed
 const chatMessages = computed<ConversationMessage[]>(() => rawMessages.value);
 
+// The federated graph always runs, but semantic search falls back to a hash-bucket
+// when the real embedding backend (tesserae[semantic]) isn't installed — surface it.
+const isSemanticFallback = computed(
+  () =>
+    grounding.value?.stats?.semantic_backend === 'hash-bucket' ||
+    !!grounding.value?.stats?.semantic_skipped,
+);
+
 // Parse classification_json safely
 const parsedClassification = computed(() => {
   if (!currentSketch.value?.classification_json) return null;
@@ -302,9 +310,35 @@ onMounted(() => {
         </div>
 
         <SketchStatusTracker :status="currentSketch.status" />
-        <p v-if="grounding && grounding.citations" class="grounding-chip">
-          {{ t('sketchChat.groundedIn', { projects: grounding.projects.length, sources: grounding.citations }) }}
-        </p>
+        <details v-if="grounding && grounding.scope" class="retrieval">
+          <summary class="grounding-chip">
+            {{ t('sketchChat.groundedIn', { projects: grounding.projects.length, sources: grounding.citations }) }}
+          </summary>
+          <div class="retrieval-body">
+            <div class="retrieval-row">
+              <span class="retrieval-key">{{ t('sketchChat.retrievalScope') }}</span>
+              <span class="retrieval-val">{{ t('sketchChat.retrievalFederated', { count: grounding.projects.length }) }}</span>
+            </div>
+            <div class="retrieval-row">
+              <span class="retrieval-key">{{ t('sketchChat.retrievalSemantic') }}</span>
+              <span class="retrieval-val" :class="{ 'retrieval-warn': isSemanticFallback }">
+                <code>{{ grounding.stats.semantic_backend || '—' }}</code>
+                <template v-if="isSemanticFallback"> · ⚠ {{ t('sketchChat.retrievalFallback') }}</template>
+              </span>
+            </div>
+            <div v-if="grounding.stats.nodes != null" class="retrieval-row">
+              <span class="retrieval-key">{{ t('sketchChat.retrievalGraph') }}</span>
+              <span class="retrieval-val">{{ t('sketchChat.retrievalGraphSize', { nodes: grounding.stats.nodes, edges: grounding.stats.edges }) }}</span>
+            </div>
+            <ul v-if="grounding.sources.length" class="retrieval-sources">
+              <li v-for="(s, i) in grounding.sources" :key="i" class="retrieval-source" :title="s.path || ''">
+                <span class="retrieval-source-name">{{ s.name || s.path || '—' }}</span>
+                <span v-if="s.project" class="retrieval-source-tag">{{ s.project }}</span>
+                <span v-if="s.wiki_kind" class="retrieval-source-tag wiki">{{ s.wiki_kind }}</span>
+              </li>
+            </ul>
+          </div>
+        </details>
         <SketchClassification :classification="parsedClassification" />
 
         <!-- Manual routing: turn the conversation into actual work, only when the
@@ -391,8 +425,11 @@ onMounted(() => {
 }
 
 /* Header bar injected above chat */
-.grounding-chip {
+.retrieval {
   margin: 0 0 0.5rem;
+}
+.grounding-chip {
+  margin: 0;
   font-size: 0.72rem;
   color: var(--text-secondary);
   background: var(--bg-tertiary);
@@ -400,6 +437,75 @@ onMounted(() => {
   border-radius: 10px;
   padding: 0.2rem 0.55rem;
   display: inline-block;
+  cursor: pointer;
+  list-style: none;
+}
+.grounding-chip::-webkit-details-marker {
+  display: none;
+}
+.grounding-chip::before {
+  content: '▸ ';
+  color: var(--text-tertiary, var(--text-secondary));
+}
+.retrieval[open] .grounding-chip::before {
+  content: '▾ ';
+}
+.retrieval-body {
+  margin-top: 0.4rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  font-size: 0.72rem;
+}
+.retrieval-row {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.12rem 0;
+}
+.retrieval-key {
+  flex: 0 0 6.5rem;
+  color: var(--text-tertiary, var(--text-secondary));
+}
+.retrieval-val code {
+  font-size: 0.7rem;
+}
+.retrieval-warn {
+  color: var(--color-warning, #e0a83b);
+}
+.retrieval-sources {
+  margin: 0.4rem 0 0;
+  padding: 0.4rem 0 0;
+  border-top: 1px solid var(--border-default);
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  max-height: 11rem;
+  overflow-y: auto;
+}
+.retrieval-source {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.retrieval-source-name {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.retrieval-source-tag {
+  flex: none;
+  font-size: 0.62rem;
+  color: var(--text-tertiary, var(--text-secondary));
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  padding: 0 0.3rem;
+}
+.retrieval-source-tag.wiki {
+  color: var(--color-accent, var(--text-secondary));
 }
 .route-conversation {
   margin: 0.75rem 0;

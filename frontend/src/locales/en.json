@@ -6794,7 +6794,13 @@
     "openInPlayground": "Open in Playground →",
     "routeConversation": "Route this conversation",
     "routeConversationHint": "Turn this idea into actual work — assign it to an agent, team, or project.",
-    "groundedIn": "Grounded in {projects} projects · {sources} sources"
+    "groundedIn": "Grounded in {projects} projects · {sources} sources",
+    "retrievalScope": "Scope",
+    "retrievalFederated": "Federated graph · {count} projects",
+    "retrievalSemantic": "Semantic search",
+    "retrievalFallback": "fallback (real embeddings not installed)",
+    "retrievalGraph": "Graph searched",
+    "retrievalGraphSize": "{nodes} nodes · {edges} edges"
   },
   "skillCreateWizard": {
     "title": "Design a Skill",

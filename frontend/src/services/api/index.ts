@@ -63,6 +63,7 @@ export { superAgentApi, superAgentDocumentApi, superAgentSessionApi, agentMessag
 export type { SuperAgentActivityStatus } from './super-agents';
 export { workflowApi, workflowExecutionApi } from './workflows';
 export { sketchApi } from './sketches';
+export type { RetrievalDetails, RetrievalSource, RetrievalStats } from './sketches';
 export { grdApi } from './grd';
 export { competitorIntelApi, lookalikeApi } from './competitor-intel';
 export type {
