@@ -1327,6 +1327,16 @@ def list_tesserae_project_aliases() -> list[str]:
     return aliases
 
 
+# Recency weight for the Sketch grounding ask (Tesserae 0.12.2 `--recency-weight`,
+# [0..1]). Tesserae's own federated default is a modest 0.25 — too weak here: the
+# old session-synthesis nodes ("Review ALL improvements just made") are both the
+# strongest semantic match for "current work" queries AND PPR-central, so at 0.25
+# they still dominate the top results. Grounding wants CURRENT project state, so we
+# lean recency-heavy (measured: 0.25→5/10 old, 0.7→3/10, 0.8→0/10 in top-10);
+# 0.8 keeps 20% relevance. ponytail: tune here if grounding feels too recency-biased.
+_FEDERATED_RECENCY_WEIGHT = 0.8
+
+
 def federated_ask_tesserae(
     question: str,
     *,
@@ -1353,6 +1363,8 @@ def federated_ask_tesserae(
         "--scope-aliases",
         *aliases,
         "--json",
+        "--recency-weight",
+        str(_FEDERATED_RECENCY_WEIGHT),
         "--semantic" if semantic else "--no-semantic",
     ]
     try:
