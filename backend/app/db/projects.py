@@ -6,6 +6,7 @@ from typing import List, Optional
 
 from .connection import get_connection
 from .ids import _get_unique_project_id
+from .owned_entities import resolve_owner_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ def create_project(
     with get_connection() as conn:
         try:
             project_id = _get_unique_project_id(conn)
+            owner_user_id = resolve_owner_user_id(conn, user_id)
             conn.execute(
                 """
                 INSERT INTO projects (id, name, description, status, product_id, github_repo, owner_team_id, local_path, github_host, user_id)
@@ -49,7 +51,7 @@ def create_project(
                     owner_team_id,
                     local_path,
                     github_host or "github.com",
-                    user_id,
+                    owner_user_id,
                 ),
             )
             conn.commit()

@@ -111,6 +111,23 @@ def count_for_user(table: str, user_id: str, search: Optional[str] = None) -> in
 LEGACY_OWNER = "legacy@local"
 
 
+def resolve_owner_user_id(conn, user_id: Optional[str]) -> Optional[str]:
+    """Resolve the owning user_id for a create, falling back to the legacy user.
+
+    Falls back to ``legacy@local`` when the caller passes no user_id OR one that
+    isn't a real user — the latter happens for an admin API key whose principal
+    has no user account (its resolved id is None or the role-row id), which would
+    otherwise violate the ``<table>.user_id`` FK and 500 the create. Pass the
+    open connection so the lookup joins the create's transaction.
+    """
+    if user_id:
+        row = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
+        if row:
+            return user_id
+    row = conn.execute("SELECT id FROM users WHERE email = ?", (LEGACY_OWNER,)).fetchone()
+    return row[0] if row else None
+
+
 def get_owner(table: str, entity_id: str) -> Optional[str]:
     """Return the owning user_id for a row, or None if the row doesn't exist
     or has no owner set. Allow-listed table names only."""
