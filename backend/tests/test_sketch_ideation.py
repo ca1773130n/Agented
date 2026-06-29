@@ -102,7 +102,27 @@ def test_stream_ideation_injects_grounding_then_streams(monkeypatch):
             "role": "system",
             "content": "GROUNDING",
             "_projects": ["a", "b"],
-            "_citations": [1, 2],
+            "_citations": [
+                {
+                    "node_id": "agented::CodeFile:x",
+                    "node_name": "file.py",
+                    "source_path": "file.py",
+                    "wiki_kind": None,
+                },
+                {
+                    "node_id": "hypepaper::Session:y",
+                    "node_name": "sess",
+                    "source_path": None,
+                    "wiki_kind": "page",
+                },
+            ],
+            "_stats": {
+                "nodes": 100,
+                "edges": 200,
+                "semantic_backend": "hash-bucket",
+                "semantic_skipped": "no real embedding backend",
+                "semantic_added": 0,
+            },
         },
     )
     import app.services.conversation_streaming as cs
@@ -128,9 +148,16 @@ def test_stream_ideation_injects_grounding_then_streams(monkeypatch):
     msgs = captured["messages"]
     assert any(m.get("content") == "GROUNDING" for m in msgs)
     assert msgs[-1] == {"role": "user", "content": "an idea"}
-    # the retrieval frame carries provenance for the UI
+    # the retrieval frame carries rich provenance for the UI: scope, the semantic
+    # backend actually used (so a hash-bucket fallback is visible), and the sources
     retrieval = next(p for e, p in events if e == "retrieval")
+    assert retrieval["scope"] == "federated"
     assert retrieval["projects"] == ["a", "b"] and retrieval["citations"] == 2
+    assert retrieval["stats"]["semantic_backend"] == "hash-bucket"
+    assert retrieval["stats"]["nodes"] == 100
+    assert [s["name"] for s in retrieval["sources"]] == ["file.py", "sess"]
+    assert retrieval["sources"][0]["project"] == "agented"
+    assert retrieval["sources"][1]["wiki_kind"] == "page"
 
 
 def test_stream_ideation_grounding_failure_is_not_fatal(monkeypatch):
@@ -146,4 +173,6 @@ def test_stream_ideation_grounding_failure_is_not_fatal(monkeypatch):
     assert ("content", {"content": "ok"}) in events
     assert [e for e, _ in events][-1] == "done"
     retrieval = next(p for e, p in events if e == "retrieval")
-    assert retrieval == {"projects": [], "citations": 0}
+    assert retrieval["scope"] is None
+    assert retrieval["projects"] == [] and retrieval["citations"] == 0
+    assert retrieval["sources"] == []

@@ -2,7 +2,7 @@ import { ref, onUnmounted } from 'vue';
 import type { Ref } from 'vue';
 import type { Sketch, Project, ConversationMessage, Delegation } from '../services/api/types';
 import { sketchApi, projectApi, isAbortError, superAgentSessionApi } from '../services/api';
-import type { AuthenticatedEventSource } from '../services/api';
+import type { AuthenticatedEventSource, RetrievalDetails } from '../services/api';
 
 /**
  * Parse a JSON block from a string (e.g. a JSON field value).
@@ -27,7 +27,7 @@ export function useSketchChat() {
   const streamingContent = ref('');
   const isStreaming = ref(false);
   // Federated-Tesserae grounding used on the latest ideation turn (provenance).
-  const grounding = ref<{ projects: string[]; citations: number } | null>(null);
+  const grounding = ref<RetrievalDetails | null>(null);
   const executionSessionId = ref<string | null>(null);
   const executionSuperAgentId = ref<string | null>(null);
   const delegations = ref<Delegation[]>([]);

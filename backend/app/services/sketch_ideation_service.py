@@ -65,20 +65,44 @@ def stream_ideation(
     llm_messages: list[dict] = [{"role": "system", "content": _IDEATION_SYSTEM}, *messages]
 
     last_user = next((m.get("content") for m in reversed(messages) if m.get("role") == "user"), "")
-    projects: list = []
-    citations = 0
+    # Rich retrieval provenance for the UI: scope (federated graph vs nothing),
+    # the semantic backend actually used (so a hash-bucket fallback is visible vs
+    # real embeddings), graph size searched, and the cited sources.
+    retrieval: dict = {"scope": None, "projects": [], "citations": 0, "stats": {}, "sources": []}
     if last_user:
         try:
             ctx = federated_context_message(last_user)
             if ctx:
                 # Insert BEFORE the latest user message (the last entry).
                 llm_messages.insert(-1, {"role": "system", "content": ctx["content"]})
-                projects = ctx.get("_projects", [])
-                citations = len(ctx.get("_citations", []))
+                cits = ctx.get("_citations", []) or []
+                stats = ctx.get("_stats", {}) or {}
+                retrieval = {
+                    "scope": "federated",
+                    "projects": ctx.get("_projects", []),
+                    "citations": len(cits),
+                    "stats": {
+                        "nodes": stats.get("nodes"),
+                        "edges": stats.get("edges"),
+                        "semantic_backend": stats.get("semantic_backend"),
+                        "semantic_skipped": stats.get("semantic_skipped"),
+                        "semantic_added": stats.get("semantic_added"),
+                    },
+                    "sources": [
+                        {
+                            "name": c.get("node_name"),
+                            "path": c.get("source_path"),
+                            "wiki_kind": c.get("wiki_kind"),
+                            "project": (c.get("node_id") or "").split("::", 1)[0] or None,
+                        }
+                        for c in cits[:12]  # cap for the UI; `citations` carries the true total
+                        if isinstance(c, dict)
+                    ],
+                }
         except Exception:
             logger.warning("sketch ideation: federated grounding failed", exc_info=True)
 
-    yield ("retrieval", {"projects": projects, "citations": citations})
+    yield ("retrieval", retrieval)
 
     try:
         for chunk in stream_llm_response(llm_messages, backend=backend, model=model):

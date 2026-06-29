@@ -4,8 +4,35 @@
 import { apiFetch, API_BASE, buildAuthHeaders } from './client';
 import type { Sketch, SketchStatus, Delegation } from './types';
 
+/** A single cited source from the federated retrieval. */
+export interface RetrievalSource {
+  name: string | null;
+  path: string | null;
+  wiki_kind: string | null;
+  project: string | null;
+}
+
+/** Tesserae retrieval stats — surfaces the semantic backend actually used (so a
+ *  hash-bucket fallback is visible vs real embeddings) and the graph size. */
+export interface RetrievalStats {
+  nodes: number | null;
+  edges: number | null;
+  semantic_backend: string | null;
+  semantic_skipped: string | null;
+  semantic_added: number | null;
+}
+
+/** Full provenance of one ideation turn's grounding. */
+export interface RetrievalDetails {
+  scope: string | null; // "federated" | null (no grounding)
+  projects: string[];
+  citations: number;
+  stats: RetrievalStats;
+  sources: RetrievalSource[];
+}
+
 export interface IdeateHandlers {
-  onRetrieval?: (p: { projects: string[]; citations: number }) => void;
+  onRetrieval?: (p: RetrievalDetails) => void;
   onContent?: (chunk: string) => void;
   onDone?: () => void;
   onError?: (message: string) => void;
@@ -117,8 +144,11 @@ export const sketchApi = {
         }
         if (event === 'retrieval') {
           handlers.onRetrieval?.({
+            scope: (data.scope as string) ?? null,
             projects: (data.projects as string[]) ?? [],
             citations: (data.citations as number) ?? 0,
+            stats: (data.stats as RetrievalStats) ?? ({} as RetrievalStats),
+            sources: (data.sources as RetrievalSource[]) ?? [],
           });
         } else if (event === 'content') {
           handlers.onContent?.((data.content as string) ?? '');
