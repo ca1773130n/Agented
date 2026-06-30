@@ -13,11 +13,8 @@ is proven by spying on PolicyService._rows_for and asserting "server" is never
 queried after a session DENY.
 """
 
-import pytest
-
 
 def _seed(scope, scope_id, effect, *, kind="manual", priority=0, enabled=1):
-    from app.db.connection import get_connection
     from app.services.policy_service import PolicyService
 
     return PolicyService.create_policy(
@@ -100,9 +97,7 @@ def test_team_deny_when_no_session_row(isolated_db):
 
     team_row = _seed("team", "team-xyz", "deny")
 
-    verdict = PolicyService.evaluate(
-        session_id="sess-eee", team_id="team-xyz", action={}
-    )
+    verdict = PolicyService.evaluate(session_id="sess-eee", team_id="team-xyz", action={})
 
     assert verdict["decision"] == "deny"
     assert verdict["scope"] == "team"
