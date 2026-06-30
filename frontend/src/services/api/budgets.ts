@@ -76,3 +76,43 @@ export const budgetApi = {
     return apiFetch<HistoryStatsResponse>(`/admin/budgets/usage/history-stats?${query}`);
   },
 };
+
+/**
+ * Cost-cap policy verdict surfacing (phase 23, 23-05).
+ *
+ * Pure client-side mirror of the backend `cost_budget` builtin
+ * (policy_service._eval_cost_budget) so the budgets UI can reflect a policy
+ * decision for a given spend WITHOUT a round-trip:
+ *   - spend >= max_cost_usd (max_cost_usd > 0) -> deny (hard cap)
+ *   - spend >= any ask threshold               -> ask  (soft threshold)
+ *   - else                                      -> allow
+ * Additive: existing budgetApi callers are untouched.
+ */
+export interface CostCapVerdict {
+  decision: 'allow' | 'deny' | 'ask';
+  reason: string;
+}
+
+export function costCapVerdict(
+  spendUsd: number,
+  params: { max_cost_usd?: number; ask_thresholds_usd?: number[] } = {},
+): CostCapVerdict {
+  const spend = spendUsd || 0;
+  const maxCost = params.max_cost_usd || 0;
+  if (maxCost > 0 && spend >= maxCost) {
+    return {
+      decision: 'deny',
+      reason: `hard cost cap reached: $${spend.toFixed(2)} >= $${maxCost.toFixed(2)}`,
+    };
+  }
+  const thresholds = params.ask_thresholds_usd || [];
+  const crossed = thresholds.filter((t) => spend >= t);
+  if (crossed.length > 0) {
+    const hi = Math.max(...crossed);
+    return {
+      decision: 'ask',
+      reason: `soft cost threshold crossed: $${spend.toFixed(2)} >= $${hi.toFixed(2)}`,
+    };
+  }
+  return { decision: 'allow', reason: 'within cost budget' };
+}
