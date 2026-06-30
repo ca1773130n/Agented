@@ -316,9 +316,7 @@ def test_cost_ask_cannot_exceed_hard_cap(isolated_db):
     from app.services.goal_loop_runner import _evaluate_cost_policy
 
     # Soft ASK threshold at $0.5; spend $5 is over the threshold AND the $4 cap.
-    _seed(
-        "session", "sess-cap", "ask", kind="cost_budget", params={"ask_thresholds_usd": [0.5]}
-    )
+    _seed("session", "sess-cap", "ask", kind="cost_budget", params={"ask_thresholds_usd": [0.5]})
     decision, reason = _evaluate_cost_policy(
         session_id="sess-cap",
         team_id=None,
@@ -403,3 +401,105 @@ def test_create_session_routes_through_shared_gate(isolated_db, monkeypatch):
         )
     assert calls.get("cmd") == ["claude", "-p"]
     assert calls.get("backend") == "claude"
+
+
+# ---------------------------------------------------------------------------
+# Launch-ASK deadlock fix: PERSIST the pending policy_ask + REPLAY it to a LATE
+# SSE subscriber (the frontend subscribes only after createSession resolves),
+# and make a decision that races AHEAD of the await not get lost.
+# ---------------------------------------------------------------------------
+
+
+def _wait_pending(session_id, timeout=3.0):
+    """Block until await_decision has registered the pending ask (the deadlock
+    window — the card was broadcast to zero subscribers)."""
+    from app.services.project_session_manager import ProjectSessionManager
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if session_id in ProjectSessionManager._pending_policy_asks:
+            return True
+        time.sleep(0.02)
+    return False
+
+
+def test_launch_ask_replayed_to_late_subscriber_and_approve_proceeds(isolated_db):
+    """The card is broadcast to NOBODY (frontend not yet subscribed), persisted,
+    then REPLAYED to the subscriber that connects late. An approve resolves the
+    blocked launch."""
+    from app.services.policy_service import PolicyService
+    from app.services.project_session_manager import ProjectSessionManager
+
+    sid = "sess-replay-approve"
+    verdict = {
+        "decision": "ask",
+        "policy_id": "pol-replay",
+        "kind": "ask_on_os_tools",
+        "reason": "approve before launch",
+        "scope": "session",
+    }
+    result = {}
+
+    def _waiter():
+        result["decision"] = PolicyService.await_decision(sid, verdict, max_wall_seconds=10)
+
+    t = threading.Thread(target=_waiter)
+    t.start()
+    assert _wait_pending(sid), "await_decision must persist the pending ask for replay"
+
+    # Connect LATE — after the broadcast already went out to zero subscribers.
+    gen = ProjectSessionManager.subscribe(sid)
+    first = next(gen)
+    assert "policy_ask" in first, f"late subscriber must get the replayed card; got {first!r}"
+
+    PolicyService.submit_policy_decision(sid, "approve")
+    t.join(timeout=5)
+    assert result["decision"] == "approve", "approve lets the blocked launch proceed"
+    gen.close()
+    assert sid not in ProjectSessionManager._pending_policy_asks, "pending ask cleared on resolve"
+
+
+def test_launch_ask_deny_blocks_launch(isolated_db):
+    """A deny resolution makes the blocked launch fail closed."""
+    from app.services.policy_service import PolicyService
+
+    sid = "sess-replay-deny"
+    verdict = {
+        "decision": "ask",
+        "policy_id": "pol-replay-d",
+        "kind": "ask_on_os_tools",
+        "reason": "approve before launch",
+        "scope": "session",
+    }
+    result = {}
+
+    def _waiter():
+        result["decision"] = PolicyService.await_decision(sid, verdict, max_wall_seconds=10)
+
+    t = threading.Thread(target=_waiter)
+    t.start()
+    assert _wait_pending(sid)
+    PolicyService.submit_policy_decision(sid, "deny")
+    t.join(timeout=5)
+    assert result["decision"] == "deny"
+
+
+def test_decision_arriving_before_await_is_not_lost(isolated_db, monkeypatch):
+    """RACE: an operator decision submitted BEFORE the launch registers its waiter
+    must still resolve the await (store the resolution, don't clobber it to the
+    pending sentinel). With the pre-fix code, await_decision overwrote the stored
+    tuple with None and timed out → fail-closed deny, losing a real approve."""
+    from app.services.policy_service import PolicyService
+
+    _stub_broadcast(monkeypatch)
+    sid = "sess-race-before-await"
+
+    # Decision arrives FIRST — no waiter registered yet.
+    pending = PolicyService.submit_policy_decision(sid, "approve")
+    assert pending is False, "no waiter was registered when the decision arrived"
+
+    # The launch now awaits: it must pick up the already-stored approve, not
+    # clobber it and time out. Short max_wall makes a regression (timeout→deny)
+    # observable without a long hang.
+    decision = PolicyService.await_decision(sid, {"decision": "ask"}, max_wall_seconds=2)
+    assert decision == "approve", "a decision racing ahead of the await must not be lost"

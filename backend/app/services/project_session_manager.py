@@ -800,6 +800,16 @@ class ProjectSessionManager:
     # two payload shapes on one queue would force every consumer to
     # parse SSE strings, defeating the point.
     _raw_subscribers: Dict[str, List[Queue]] = {}
+    # Phase 23 (launch-ASK deadlock fix): pending policy_ask cards keyed by
+    # session_id. ``_broadcast`` only reaches subscribers connected RIGHT NOW,
+    # but a launch-time ASK fires from inside ``create_session`` /
+    # ``enforce_launch`` BEFORE the frontend subscribes (it subscribes only
+    # after ``createSession()`` resolves). PolicyService.await_decision registers
+    # the pending card here; ``subscribe`` REPLAYS it to a late-connecting client
+    # so the already-wired ``policy_ask`` handler renders it. Cleared when the
+    # operator's decision resolves the awaiting launch. Survives within the
+    # (workers=1) process — mirrors the other class-level in-memory registries.
+    _pending_policy_asks: Dict[str, dict] = {}
     _lock = threading.Lock()
 
     @classmethod
@@ -1817,6 +1827,16 @@ class ProjectSessionManager:
                 current_status = session_info.status
             else:
                 current_status = None
+            # Phase 23: capture any launch-time policy_ask awaiting an operator
+            # decision for this session so we can REPLAY it below (the card was
+            # broadcast before this subscriber connected).
+            pending_ask = cls._pending_policy_asks.get(session_id)
+
+        # Step 2b: Replay a pending policy_ask card to this (possibly late)
+        # subscriber so the frontend's policy_ask handler can render it and the
+        # operator can resolve the blocked launch. Yielded outside the lock.
+        if pending_ask is not None:
+            yield cls._format_sse("policy_ask", pending_ask)
 
         # Step 3: Check if session already completed
         if current_status in ("completed", "failed"):
@@ -1833,7 +1853,7 @@ class ProjectSessionManager:
                         pass  # Intentionally silenced: invalid value handled gracefully
             return
 
-        if current_status is None:
+        if current_status is None and pending_ask is None:
             # Session not found in memory
             yield cls._format_sse(
                 "error",
@@ -1846,6 +1866,11 @@ class ProjectSessionManager:
                     except ValueError:
                         pass  # Intentionally silenced: invalid value handled gracefully
             return
+        # Phase 23: when current_status is None BUT a policy_ask is pending, the
+        # session is being GATED at its launch boundary (create_session hasn't
+        # registered it in _sessions yet). Don't bail with "Session not found" —
+        # stay connected so the operator receives policy_ask_resolved and the
+        # session's first output once the launch proceeds.
 
         # Step 4: Stream live events
         try:
@@ -1887,6 +1912,25 @@ class ProjectSessionManager:
                 q.put(message)
             for q in cls._raw_subscribers.get(session_id, []):
                 q.put((event_type, data))
+
+    @classmethod
+    def register_pending_policy_ask(cls, session_id: str, payload: dict) -> None:
+        """Persist a launch-time policy_ask card so a LATE subscriber can replay it.
+
+        Called by ``PolicyService.await_decision`` right before it broadcasts the
+        card and begins blocking the launching call. ``_broadcast`` only reaches
+        subscribers connected at broadcast time, so without this a card emitted
+        while the frontend is still awaiting ``createSession()`` (and therefore
+        not yet subscribed) is lost → the launch deadlocks until it fails closed.
+        """
+        with cls._lock:
+            cls._pending_policy_asks[session_id] = payload
+
+    @classmethod
+    def clear_pending_policy_ask(cls, session_id: str) -> None:
+        """Drop a pending policy_ask once its awaiting launch has been resolved."""
+        with cls._lock:
+            cls._pending_policy_asks.pop(session_id, None)
 
     @classmethod
     def subscribe_raw(cls, session_id: str) -> Queue:

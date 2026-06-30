@@ -20,6 +20,7 @@ Verdict shape (PolicyVerdict — a plain dict):
 
 import json
 import logging
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -43,6 +44,12 @@ _POLICY_DEFAULT_MAX_WALL_SECONDS = 600
 # This MIRRORS goal_loop_runner's per-session state.gate_decision registry rather
 # than inventing a second SSE transport (23-RESEARCH.md Recommendation 1).
 _POLICY_DECISIONS: dict = {}
+
+# Guards the read-modify-write on _POLICY_DECISIONS so a decision that arrives
+# BEFORE the launching call registers its waiter is not lost to a clobbering
+# write (launch-ASK deadlock fix). value states: absent = no ask in flight;
+# None = ask awaiting a decision; (decision, message) tuple = resolved.
+_POLICY_LOCK = threading.Lock()
 
 
 class PolicyDenied(Exception):
@@ -287,24 +294,35 @@ class PolicyService:
         if not session_id:
             return "deny"
 
-        _POLICY_DECISIONS[session_id] = None
-        ProjectSessionManager._broadcast(
-            session_id,
-            "policy_ask",
-            {
-                "policy_id": verdict.get("policy_id"),
-                "kind": verdict.get("kind"),
-                "reason": verdict.get("reason"),
-                "scope": verdict.get("scope"),
-            },
-        )
+        ask_payload = {
+            "policy_id": verdict.get("policy_id"),
+            "kind": verdict.get("kind"),
+            "reason": verdict.get("reason"),
+            "scope": verdict.get("scope"),
+        }
+
+        # RACE: an operator decision may arrive (submit_policy_decision) BEFORE we
+        # register here — e.g. a fast approve, or a retry. submit stores a
+        # (decision, message) tuple; we must NOT clobber it back to None, or the
+        # resolution is lost and the launch fails closed on timeout. Initialise to
+        # the pending sentinel ONLY when no resolution is already waiting.
+        with _POLICY_LOCK:
+            if not isinstance(_POLICY_DECISIONS.get(session_id), tuple):
+                _POLICY_DECISIONS[session_id] = None
+
+        # PERSIST then broadcast: register the card so a LATE SSE subscriber (the
+        # frontend subscribes only after createSession resolves) can REPLAY it,
+        # then push it to any already-connected subscriber. Registering first
+        # guarantees no window where the card exists for neither path.
+        ProjectSessionManager.register_pending_policy_ask(session_id, ask_payload)
+        ProjectSessionManager._broadcast(session_id, "policy_ask", ask_payload)
 
         entered = time.time()
         decision = "deny"
         try:
             while True:
                 pending = _POLICY_DECISIONS.get(session_id)
-                if pending is not None:
+                if isinstance(pending, tuple):
                     decision = pending[0]
                     break
                 if time.time() - entered > max_wall_seconds:
@@ -312,7 +330,9 @@ class PolicyService:
                     break
                 time.sleep(_POLICY_POLL_SECONDS)
         finally:
-            _POLICY_DECISIONS.pop(session_id, None)
+            with _POLICY_LOCK:
+                _POLICY_DECISIONS.pop(session_id, None)
+            ProjectSessionManager.clear_pending_policy_ask(session_id)
 
         ProjectSessionManager._broadcast(
             session_id,
@@ -325,9 +345,15 @@ class PolicyService:
     def submit_policy_decision(cls, session_id: str, decision: str, message=None) -> bool:
         """Resolve a pending ASK for ``session_id``. Returns True if a wait was
         pending (mirrors goal_loop_runner.submit_gate_decision:452). The HTTP entry
-        point is added in 23-04 (mirroring grd_routes.loop_gate_decision:1441)."""
-        pending = session_id in _POLICY_DECISIONS
-        _POLICY_DECISIONS[session_id] = (decision, message)
+        point is added in 23-04 (mirroring grd_routes.loop_gate_decision:1441).
+
+        STORE the resolution, don't merely signal a waiter: we record the
+        ``(decision, message)`` tuple even when no waiter is registered yet, so a
+        decision that races ahead of ``await_decision`` is replayed to it rather
+        than dropped (the await-side init refuses to overwrite a stored tuple)."""
+        with _POLICY_LOCK:
+            pending = session_id in _POLICY_DECISIONS
+            _POLICY_DECISIONS[session_id] = (decision, message)
         return pending
 
     # -- Shared launch gate (the ONE chokepoint every spawner calls) ------
@@ -382,7 +408,9 @@ class PolicyService:
                 raise PolicyDenied({**verdict, "decision": "deny", "reason": "operator denied"})
             return
         # Unknown verdict — fail closed (evaluate() should never reach here).
-        raise PolicyDenied({**verdict, "decision": "deny", "reason": f"unknown verdict {decision!r}"})
+        raise PolicyDenied(
+            {**verdict, "decision": "deny", "reason": f"unknown verdict {decision!r}"}
+        )
 
     @classmethod
     def _rows_for(cls, scope: str, scope_id) -> list:
