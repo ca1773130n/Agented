@@ -55,10 +55,14 @@ ergonomics (Phase 26, independent of the other three).
   4. `/admin/policies` CRUD + `app_litestar/middleware.py` policy middleware, a frontend policy editor, and `budgets.ts` surfacing cost-cap verdicts ship with en/ko/ja/zh key-identical catalogs (route + middleware + component tests).
   5. **Verification check:** a policy ALLOW/DENY/ASK end-to-end test drives a real session — a configured DENY blocks the action, an ASK pauses for an approval card and resumes on approve, and an ALLOW passes through.
   6. House gates pass: `just build`; backend pytest (watchdog procedure, targeted substitution disclosed if the known hang hits); frontend no-new-failures.
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 23-NN: TBD (set by /grd:plan-phase 23)
+- [ ] 23-01-PLAN.md — policies table (migration 176) + PolicyService.evaluate stacking/short-circuit (TDD, SC1)
+- [ ] 23-02-PLAN.md — four builtin evaluators (cost_budget, max_tool_calls_per_session, ask_on_os_tools, enforce_sandbox) (TDD, SC2)
+- [ ] 23-03-PLAN.md — enforcement: ExecutionService Popen boundary + goal_loop human-gate + ASK-over-SSE reuse + route bot/budget checks through (SC2/SC3)
+- [ ] 23-04-PLAN.md — /admin/policies CRUD + /decision route + PolicyMiddleware (SC4)
+- [ ] 23-05-PLAN.md — frontend editor + ASK card + budgets.ts verdicts + en/ko/ja/zh + e2e ALLOW/DENY/ASK + house gates (SC4/SC5/SC6)
 
 ### Phase 24: OS-level harness sandboxing + egress control
 **Goal**: Each live harness `subprocess.Popen` runs inside an OS sandbox (bwrap on Linux / seatbelt on macOS) behind an L7 egress allowlist — generalizing `sandbox_eval.py` beyond deterministic eval checks to the running harness, deny-by-default egress for autonomous / auto-implement runs, and an optional cloud-sandbox (E2B/Modal) runner for the highest-risk autonomous consumers — gated by the Phase-23 `enforce_sandbox` policy.
