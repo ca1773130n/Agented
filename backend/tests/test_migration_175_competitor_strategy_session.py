@@ -8,12 +8,14 @@ the migration is registered after 174, the column exists, and it defaults NULL
 """
 
 
-def test_schema_version_is_175(isolated_db):
+def test_schema_version_is_at_least_175(isolated_db):
     from app.db.connection import get_connection
 
     with get_connection() as conn:
         max_version = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
-    assert max_version == 175
+    # Migration 175 is no longer the head (176 added the policies table in
+    # phase 23); assert it is at least present rather than the exact head.
+    assert max_version >= 175
 
 
 def test_migration_175_registered_after_174():
