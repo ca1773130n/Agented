@@ -25,14 +25,24 @@ const emit = defineEmits<{
 
 const resolving = ref(false);
 const resolved = ref<PolicyDecision | null>(null);
+// 23 MINOR 8 — the backend reports whether a pending ASK was actually resolved
+// (``ok``). ``ok:false`` means the wait was already resolved or timed out
+// (fail-closed to deny) before our click landed, so we must NOT show a false
+// success — surface the stale state instead.
+const stale = ref(false);
 
 async function decide(decision: PolicyDecision) {
-  if (resolving.value || resolved.value) return;
+  if (resolving.value || resolved.value || stale.value) return;
   resolving.value = true;
   try {
-    await policyApi.decide(props.sessionId, decision);
-    resolved.value = decision;
-    emit('resolved', decision);
+    const res = await policyApi.decide(props.sessionId, decision);
+    if (res && res.ok) {
+      resolved.value = decision;
+      emit('resolved', decision);
+    } else {
+      // No pending ASK was resolved — already resolved/timed out elsewhere.
+      stale.value = true;
+    }
   } finally {
     resolving.value = false;
   }
@@ -55,7 +65,14 @@ async function decide(decision: PolicyDecision) {
       <strong>{{ t('policy.ask.reason') }}:</strong> {{ event.reason }}
     </p>
 
-    <div v-if="resolved === null" class="pac-actions">
+    <div v-if="resolved !== null" class="pac-resolved">
+      {{ t('policy.ask.resolved') }}:
+      {{ resolved === 'approve' ? t('policy.ask.approve') : t('policy.ask.deny') }}
+    </div>
+    <div v-else-if="stale" class="pac-stale">
+      {{ t('policy.ask.alreadyResolved') }}
+    </div>
+    <div v-else class="pac-actions">
       <span class="pac-awaiting">{{ t('policy.ask.awaiting') }}</span>
       <button
         type="button"
@@ -73,10 +90,6 @@ async function decide(decision: PolicyDecision) {
       >
         {{ t('policy.ask.approve') }}
       </button>
-    </div>
-    <div v-else class="pac-resolved">
-      {{ t('policy.ask.resolved') }}:
-      {{ resolved === 'approve' ? t('policy.ask.approve') : t('policy.ask.deny') }}
     </div>
   </div>
 </template>
@@ -156,5 +169,9 @@ async function decide(decision: PolicyDecision) {
 .pac-resolved {
   font-size: 0.85rem;
   color: var(--color-text-muted, #9a9a9a);
+}
+.pac-stale {
+  font-size: 0.85rem;
+  color: var(--color-warning, #d9a441);
 }
 </style>

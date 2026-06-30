@@ -57,4 +57,19 @@ describe('PolicyAskCard', () => {
     expect(wrapper.findAll('button').length).toBe(0);
     expect(decide).toHaveBeenCalledTimes(1);
   });
+
+  it('surfaces a stale state instead of false success on ok:false (MINOR 8)', async () => {
+    // Backend reports no pending ASK was resolved (already resolved / timed out).
+    decide.mockResolvedValueOnce({ ok: false });
+    const wrapper = mount(PolicyAskCard, { props: { event, sessionId: 'sess-stale' } });
+    await btn(wrapper, 'Approve').trigger('click');
+    await flushPromises();
+
+    expect(decide).toHaveBeenCalledWith('sess-stale', 'approve');
+    // No false success: 'resolved' is NOT emitted and the resolved view is hidden.
+    expect(wrapper.emitted('resolved')).toBeFalsy();
+    // The stale notice is shown and the action buttons are gone.
+    expect(wrapper.text().toLowerCase()).toContain('already resolved');
+    expect(wrapper.findAll('button').length).toBe(0);
+  });
 });

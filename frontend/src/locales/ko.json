@@ -9729,7 +9729,8 @@
       "approve": "승인",
       "deny": "거부",
       "awaiting": "결정을 기다리는 중…",
-      "resolved": "처리됨"
+      "resolved": "처리됨",
+      "alreadyResolved": "이 요청은 이미 처리되었거나 시간이 초과되었습니다."
     }
   }
 }

@@ -18,6 +18,8 @@ import LoopTracePanel from '../grd/LoopTracePanel.vue';
 import InteractiveQuestionCard from './InteractiveQuestionCard.vue';
 import PlanModeCard from './PlanModeCard.vue';
 import PermissionPromptCard from './PermissionPromptCard.vue';
+import PolicyAskCard from '../policy/PolicyAskCard.vue';
+import type { PolicyAskEvent } from '../../services/api';
 import type {
   AskUserQuestionItem,
   GoalIterationCompletedPayload,
@@ -99,6 +101,12 @@ const pendingPlan = ref<{ tool_use_id: string; plan: string } | null>(null);
 // up if claude's tool calls are dispatched faster than the user
 // can click, so this is an array, not a single ref.
 const pendingPermissions = ref<PermissionRequestPayload[]>([]);
+
+// Phase 23 — the live policy ASK awaiting an operator decision. Fed by the
+// ``policy_ask`` SSE handler; rendered as a ``PolicyAskCard`` pinned below the
+// chat. Cleared on resolution (our decision, ``policy_ask_resolved``, or a
+// session switch / start).
+const pendingPolicyAsk = ref<PolicyAskEvent | null>(null);
 
 // v0.7.74 — goal-loop live state. Populated by SSE handlers fed
 // from useProjectSession. Reset on session switch / start.
@@ -260,6 +268,17 @@ session.onPermissionRequest((payload) => {
   pendingPermissions.value = [...pendingPermissions.value, payload];
   // Don't ``awaitingResponse = false`` here — claude IS technically
   // still working (its hook is blocked on us). Spinner stays.
+});
+
+// Phase 23 — a policy ASK needs an operator decision. Render the card; it
+// POSTs the decision to /admin/policies/decision and the backend's blocking
+// await_decision poll unblocks. ``policy_ask_resolved`` clears the card when
+// the wait settles (including a fail-closed timeout).
+session.onPolicyAsk((payload) => {
+  pendingPolicyAsk.value = payload;
+});
+session.onPolicyAskResolved(() => {
+  pendingPolicyAsk.value = null;
 });
 
 async function resolvePermission(decision: 'allow' | 'deny') {
@@ -552,6 +571,7 @@ async function onDialogConfirm(payload: {
   pendingQuestion.value = null;
   pendingPlan.value = null;
   pendingPermissions.value = [];
+  pendingPolicyAsk.value = null;
   clearDiagnostic();
 
   // v0.7.73 — first-prompt attachments wait in pendingAttachments
@@ -745,6 +765,7 @@ async function handleSessionClick(sessionId: string) {
   pendingQuestion.value = null;
   pendingPlan.value = null;
   pendingPermissions.value = [];
+  pendingPolicyAsk.value = null;
   session.switchSession(sessionId);
 
   // Hydrate chat history from the backend's persisted ``log_json``
@@ -954,6 +975,18 @@ watch(
             :session-id="session.activeSessionId.value ?? ''"
             :awaiting-human="session.awaitingHuman.value"
             :gate-reason="session.gateReason.value"
+          />
+
+          <!-- Phase 23 — policy ASK card. Rendered in BOTH direct and
+               autonomous (goal_loop / ralph / team) modes because a launch /
+               cost policy ASK can fire on any session. POSTs the operator's
+               decision to /admin/policies/decision, unblocking the backend's
+               await_decision poll. -->
+          <PolicyAskCard
+            v-if="pendingPolicyAsk"
+            :event="pendingPolicyAsk"
+            :session-id="session.activeSessionId.value ?? ''"
+            @resolved="pendingPolicyAsk = null"
           />
 
           <!-- v0.7.63 — interactive ``AskUserQuestion`` widget. Shows

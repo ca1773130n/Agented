@@ -7,6 +7,7 @@ import {
   type TeamConfig,
 } from '../services/api/grd';
 import { useEventSource } from './useEventSource';
+import type { PolicyAskEvent } from '../services/api';
 
 // [08.L1] DEV-only diagnostic logger. Prod must not log raw SSE `event.data`
 // payloads; in development these parse-failure warnings remain visible.
@@ -173,6 +174,13 @@ export function useProjectSession(projectId: Ref<string>) {
   // registers a handler to surface it as a transient toast; loop state is
   // tracked by the ``paused``/``awaitingHuman`` refs above.
   let onIntervenedCb: ((message: string) => void) | undefined;
+  // Phase 23 — the stackable policy engine broadcasts ``policy_ask`` when a
+  // launch / cost ASK needs an operator decision (same SSE primitive as the
+  // human-gate). The panel renders a ``PolicyAskCard`` and POSTs the decision;
+  // ``policy_ask_resolved`` clears the card once the wait is settled (by us,
+  // another tab, or a fail-closed timeout).
+  let onPolicyAskCb: ((payload: PolicyAskEvent) => void) | undefined;
+  let onPolicyAskResolvedCb: (() => void) | undefined;
 
   // SSE lifecycle managed by useEventSource.
   // sourceFactory will be set dynamically via connect() calls.
@@ -331,6 +339,26 @@ export function useProjectSession(projectId: Ref<string>) {
             event.data,
           );
         }
+      },
+      policy_ask: (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          onPolicyAskCb?.({
+            policy_id: data.policy_id ?? null,
+            kind: data.kind ?? null,
+            reason: data.reason ?? '',
+            scope: data.scope ?? null,
+          });
+        } catch (e) {
+          warnParse(
+            '[useProjectSession] Failed to parse policy_ask event:',
+            e,
+            event.data,
+          );
+        }
+      },
+      policy_ask_resolved: () => {
+        onPolicyAskResolvedCb?.();
       },
       hook_decision: (event: MessageEvent) => {
         try {
@@ -743,6 +771,15 @@ export function useProjectSession(projectId: Ref<string>) {
     onIntervenedCb = cb;
   }
 
+  // Phase 23 — policy ASK card handler registration.
+  function onPolicyAsk(cb: (payload: PolicyAskEvent) => void) {
+    onPolicyAskCb = cb;
+  }
+
+  function onPolicyAskResolved(cb: () => void) {
+    onPolicyAskResolvedCb = cb;
+  }
+
   // SSE connection cleanup is handled by useEventSource's onUnmounted.
   // This separate onUnmounted resets streaming/ralph/team state on unmount.
   onUnmounted(() => {
@@ -790,5 +827,7 @@ export function useProjectSession(projectId: Ref<string>) {
     onGoalLoopEnded,
     onGoalCheckDisagreement,
     onIntervened,
+    onPolicyAsk,
+    onPolicyAskResolved,
   };
 }

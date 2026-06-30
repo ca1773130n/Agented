@@ -9729,7 +9729,8 @@
       "approve": "批准",
       "deny": "拒绝",
       "awaiting": "正在等待您的决定…",
-      "resolved": "已处理"
+      "resolved": "已处理",
+      "alreadyResolved": "该请求已被处理或已超时。"
     }
   }
 }

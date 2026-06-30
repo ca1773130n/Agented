@@ -9729,7 +9729,8 @@
       "approve": "Approve",
       "deny": "Deny",
       "awaiting": "Awaiting your decision…",
-      "resolved": "Resolved"
+      "resolved": "Resolved",
+      "alreadyResolved": "This request was already resolved or timed out."
     }
   }
 }
