@@ -20,6 +20,7 @@ Verdict shape (PolicyVerdict — a plain dict):
 
 import json
 import logging
+import time
 from datetime import datetime, timezone
 
 from ..database import get_connection
@@ -29,6 +30,19 @@ logger = logging.getLogger(__name__)
 
 POLICY_ID_PREFIX = "pol-"
 POLICY_ID_LENGTH = 6
+
+# ASK round-trip tuning. Mirrors goal_loop_runner._PAUSE_POLL_SECONDS (0.5) so the
+# policy await poll cadence matches the existing human-gate poll loop.
+_POLICY_POLL_SECONDS = 0.5
+_POLICY_DEFAULT_MAX_WALL_SECONDS = 600
+
+# Session-keyed ASK decision registry. In-process is coherent under gunicorn
+# workers=1 (CLAUDE.md): a single worker shares this dict across the launching
+# call (which polls in await_decision) and the HTTP decision route (which calls
+# submit_policy_decision). value: None = pending; (decision, message) = resolved.
+# This MIRRORS goal_loop_runner's per-session state.gate_decision registry rather
+# than inventing a second SSE transport (23-RESEARCH.md Recommendation 1).
+_POLICY_DECISIONS: dict = {}
 
 
 class PolicyDenied(Exception):
@@ -211,6 +225,79 @@ class PolicyService:
             "reason": "no matching policy (default allow)",
             "scope": None,
         }
+
+    # -- ASK round-trip (reuses the human-gate SSE shape) -----------------
+
+    @classmethod
+    def await_decision(
+        cls,
+        session_id: str,
+        verdict: dict,
+        *,
+        max_wall_seconds: int = _POLICY_DEFAULT_MAX_WALL_SECONDS,
+    ) -> str:
+        """Block the launching call until an operator resolves an ASK verdict.
+
+        MIRRORS goal_loop_runner._await_gate (goal_loop_runner.py:487): broadcast
+        an ASK card over the EXISTING SSE primitive, poll a session-keyed registry
+        every ``_POLICY_POLL_SECONDS``, and bound the wait by ``max_wall_seconds``.
+        It does NOT introduce a new transport — the broadcast goes through
+        ``ProjectSessionManager._broadcast`` (project_session_manager.py:1853), the
+        same primitive the goal-gate and ``ask_user_question`` cards use.
+
+        Returns the decision string ("approve" | "deny"). GOVERNANCE FAIL-SAFE:
+        on timeout (or a missing session id) this returns "deny" — distinct from
+        the goal-gate's "abort" default — because a governance substrate must fail
+        closed (23-RESEARCH.md Pitfall 3 + Production Considerations).
+        """
+        # Import lazily to avoid an import cycle, exactly as goal_loop_runner does.
+        from .project_session_manager import ProjectSessionManager
+
+        if not session_id:
+            return "deny"
+
+        _POLICY_DECISIONS[session_id] = None
+        ProjectSessionManager._broadcast(
+            session_id,
+            "policy_ask",
+            {
+                "policy_id": verdict.get("policy_id"),
+                "kind": verdict.get("kind"),
+                "reason": verdict.get("reason"),
+                "scope": verdict.get("scope"),
+            },
+        )
+
+        entered = time.time()
+        decision = "deny"
+        try:
+            while True:
+                pending = _POLICY_DECISIONS.get(session_id)
+                if pending is not None:
+                    decision = pending[0]
+                    break
+                if time.time() - entered > max_wall_seconds:
+                    decision = "deny"  # timeout → fail closed
+                    break
+                time.sleep(_POLICY_POLL_SECONDS)
+        finally:
+            _POLICY_DECISIONS.pop(session_id, None)
+
+        ProjectSessionManager._broadcast(
+            session_id,
+            "policy_ask_resolved",
+            {"policy_id": verdict.get("policy_id"), "decision": decision},
+        )
+        return decision
+
+    @classmethod
+    def submit_policy_decision(cls, session_id: str, decision: str, message=None) -> bool:
+        """Resolve a pending ASK for ``session_id``. Returns True if a wait was
+        pending (mirrors goal_loop_runner.submit_gate_decision:452). The HTTP entry
+        point is added in 23-04 (mirroring grd_routes.loop_gate_decision:1441)."""
+        pending = session_id in _POLICY_DECISIONS
+        _POLICY_DECISIONS[session_id] = (decision, message)
+        return pending
 
     @classmethod
     def _rows_for(cls, scope: str, scope_id) -> list:
