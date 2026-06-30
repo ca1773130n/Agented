@@ -228,3 +228,41 @@ def test_trimmed_cased_allow_is_still_allow(isolated_db):
     _seed("session", "sess-up2", "  Allow  ", kind="custom")
     verdict = PolicyService.evaluate(session_id="sess-up2", team_id=None, action={})
     assert verdict["decision"] == "allow"
+
+
+# ---------------------------------------------------------------------------
+# MAJOR 5 — _normalize_decision contract, unit-tested at the function boundary.
+# After .strip().lower(): ONLY "allow"/"deny"/"ask" pass through; EVERYTHING
+# else (typos, custom verdicts, empties, non-strings) collapses to "deny".
+# ---------------------------------------------------------------------------
+
+
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("allow", "allow"),
+        ("allow ", "allow"),  # trailing space normalizes to allow (acceptable)
+        ("  allow  ", "allow"),
+        ("ALLOW", "allow"),
+        ("deny", "deny"),
+        ("ask", "ask"),
+        ("ASK", "ask"),  # case-insensitive ask
+        ("Ask ", "ask"),
+        # Everything below must FAIL CLOSED to deny.
+        ("continue", "deny"),
+        ("weird", "deny"),
+        ("", "deny"),
+        ("   ", "deny"),
+        ("allowed", "deny"),  # near-miss must NOT slip through to allow
+        (None, "deny"),
+        (123, "deny"),
+        (object(), "deny"),
+    ],
+)
+def test_normalize_decision_fails_closed(raw, expected):
+    from app.services.policy_service import _normalize_decision
+
+    assert _normalize_decision(raw) == expected
