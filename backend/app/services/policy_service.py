@@ -44,10 +44,95 @@ class PolicyDenied(Exception):
         super().__init__(reason)
 
 
-# Extension seam for 23-02: maps a policy ``kind`` to a builtin evaluator
-# callable ``(row, action) -> (decision, reason)``. Empty in this plan — every
-# row falls back to its stored ``effect`` (see ``_eval_row``).
-_BUILTINS: dict = {}
+def _eval_cost_budget(row: dict, action: dict):
+    """cost_budget builtin (SC2) — hard/soft cost thresholds.
+
+    Mirrors the hard/soft semantics of ``budget_service.check_budget``
+    (budget_service.py:340-398) but stays PURE: the live spend is supplied on
+    the action ctx (``total_cost_usd``, falling back to ``spend``) rather than
+    read from the DB, so the evaluator is trivially unit-testable. The
+    enforcement plan (23-03) is responsible for populating those counters.
+
+    params: {max_cost_usd: float, ask_thresholds_usd: list[float]}
+      - spend >= max_cost_usd (and max_cost_usd > 0) -> deny (hard cap)
+      - any threshold t where spend >= t            -> ask  (soft threshold)
+      - else                                         -> allow
+    """
+    params = row.get("params") or {}
+    spend = action.get("total_cost_usd", action.get("spend", 0.0)) or 0.0
+    max_cost = params.get("max_cost_usd", 0.0) or 0.0
+    if max_cost > 0 and spend >= max_cost:
+        return "deny", f"hard cost cap reached: ${spend:.2f} >= ${max_cost:.2f}"
+    thresholds = params.get("ask_thresholds_usd") or []
+    crossed = [t for t in thresholds if spend >= t]
+    if crossed:
+        return "ask", f"soft cost threshold crossed: ${spend:.2f} >= ${max(crossed):.2f}"
+    return "allow", "within cost budget"
+
+
+def _eval_max_tool_calls(row: dict, action: dict):
+    """max_tool_calls_per_session builtin (SC2) — per-session tool-call cap.
+
+    params: {max_tool_calls: int}
+      - count >= max_tool_calls (and max_tool_calls > 0) -> deny
+      - else                                              -> allow
+    The live count is supplied on the action ctx as ``tool_calls``.
+    """
+    params = row.get("params") or {}
+    count = action.get("tool_calls", 0) or 0
+    max_calls = params.get("max_tool_calls", 0) or 0
+    if max_calls > 0 and count >= max_calls:
+        return "deny", f"tool-call cap reached: {count} >= {max_calls}"
+    return "allow", "within tool-call budget"
+
+
+def _eval_ask_on_os_tools(row: dict, action: dict):
+    """ask_on_os_tools builtin (SC2) — require approval for OS-touching tools.
+
+    params: {} or {kinds: [...]} (defaults to shell/file_write/process_launch)
+      - action.kind in kinds -> ask
+      - else                 -> allow
+    """
+    params = row.get("params") or {}
+    kinds = params.get("kinds") or ["shell", "file_write", "process_launch"]
+    kind = action.get("kind")
+    if kind in kinds:
+        return "ask", f"OS tool requires approval: {kind}"
+    return "allow", "non-OS tool"
+
+
+def _eval_enforce_sandbox(row: dict, action: dict):
+    """enforce_sandbox builtin (SC2) — STORE-NOW / ENFORCE-IN-PHASE-24.
+
+    INERT UNTIL PHASE 24: this evaluator produces a deny/allow VERDICT but
+    invokes NO actual sandbox — no real sandbox runtime exists until Phase 24
+    (OS-level harness sandboxing). The flag is stored now so policies can be
+    authored ahead of the runtime; the verdict only gates a non-sandboxed
+    launch so the inert path (everything else) always allows with an explicit
+    "inert" reason.
+
+    params: {require_sandbox: bool}
+      - require_sandbox set AND action not sandboxed AND kind is a launch
+        ({process_launch, shell}) -> deny (Phase 24 will make this real)
+      - else                       -> allow (inert)
+    """
+    params = row.get("params") or {}
+    require = params.get("require_sandbox", True)
+    launch_kinds = {"process_launch", "shell"}
+    if require and not action.get("sandboxed") and action.get("kind") in launch_kinds:
+        return "deny", "sandbox required for launch (enforced in Phase 24)"
+    return "allow", "sandbox flag stored (inert until Phase 24)"
+
+
+# Extension seam filled by 23-02: maps a policy ``kind`` to a builtin evaluator
+# callable ``(row, action) -> (decision, reason)``. Unknown/custom kinds fall
+# back to the stored ``effect`` (see ``_eval_row``).
+_BUILTINS: dict = {
+    "cost_budget": _eval_cost_budget,
+    "max_tool_calls_per_session": _eval_max_tool_calls,
+    "ask_on_os_tools": _eval_ask_on_os_tools,
+    "enforce_sandbox": _eval_enforce_sandbox,
+}
 
 
 def _now() -> str:
