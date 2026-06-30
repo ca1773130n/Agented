@@ -237,3 +237,71 @@ def test_allow_verdict_returns_cleanly(isolated_db, monkeypatch):
         cmd=["echo", "hi"],
         backend="claude",
     )
+
+
+# ---------------------------------------------------------------------------
+# Task 2: goal_loop exit-ladder cost budget routes THROUGH PolicyService
+# ---------------------------------------------------------------------------
+
+
+def test_cost_policy_implicit_ceiling_denies(isolated_db):
+    """Back-compat: no policy row, but spec max_cost_usd is hit → deny (the old
+    inline exit-ladder gate's behaviour, now via _evaluate_cost_policy)."""
+    from app.services.goal_loop_runner import _evaluate_cost_policy
+
+    decision, reason = _evaluate_cost_policy(
+        session_id="sess-cost",
+        team_id=None,
+        total_cost_usd=5.0,
+        tool_calls=3,
+        max_cost_usd=4.0,
+    )
+    assert decision == "deny"
+    assert "cap" in reason
+
+
+def test_cost_policy_under_ceiling_allows(isolated_db):
+    from app.services.goal_loop_runner import _evaluate_cost_policy
+
+    decision, _ = _evaluate_cost_policy(
+        session_id="sess-cost",
+        team_id=None,
+        total_cost_usd=1.0,
+        tool_calls=3,
+        max_cost_usd=4.0,
+    )
+    assert decision == "allow"
+
+
+def test_cost_policy_session_row_is_source_of_truth(isolated_db):
+    """An authored session-scope cost_budget DENY fires even below the implicit
+    spec ceiling — PolicyService is the source of truth (consolidation)."""
+    from app.services.goal_loop_runner import _evaluate_cost_policy
+
+    _seed("session", "sess-cost-pol", "deny", kind="cost_budget", params={"max_cost_usd": 0.5})
+    decision, reason = _evaluate_cost_policy(
+        session_id="sess-cost-pol",
+        team_id=None,
+        total_cost_usd=1.0,
+        tool_calls=0,
+        max_cost_usd=0.0,  # no implicit ceiling
+    )
+    assert decision == "deny"
+    assert "cost cap" in reason
+
+
+def test_cost_policy_soft_threshold_asks(isolated_db):
+    """A soft cost threshold yields ASK (the goal loop routes it to _await_gate)."""
+    from app.services.goal_loop_runner import _evaluate_cost_policy
+
+    _seed(
+        "session", "sess-cost-ask", "ask", kind="cost_budget", params={"ask_thresholds_usd": [0.5]}
+    )
+    decision, _ = _evaluate_cost_policy(
+        session_id="sess-cost-ask",
+        team_id=None,
+        total_cost_usd=0.6,
+        tool_calls=0,
+        max_cost_usd=0.0,
+    )
+    assert decision == "ask"
