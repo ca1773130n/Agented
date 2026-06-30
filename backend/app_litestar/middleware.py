@@ -5,7 +5,9 @@ from __future__ import annotations
 import hmac
 import logging
 import os
+import re
 import uuid
+from contextvars import ContextVar
 from typing import Any, Optional
 
 from litestar.middleware import ASGIMiddleware
@@ -36,6 +38,15 @@ from app_litestar.cookie_auth import (
 from app_litestar.metrics import registry as _metrics_registry
 
 logger = logging.getLogger("app.request")
+
+# Phase 23 (23-04): the policy/governance scope summary resolved for the current
+# request, observable by routes/logging. ``None`` when the request carries no
+# session id. Mirrors the request_id/current_user contextvar pattern.
+policy_scope_var: ContextVar[Optional[dict]] = ContextVar("policy_scope", default=None)
+
+# Matches a session id embedded in a session/execution route path, e.g.
+# ``/admin/projects/{pid}/sessions/{sid}/...`` → captures ``{sid}``.
+_SESSION_PATH_RE = re.compile(r"/sessions/([^/]+)")
 
 
 def _json_error_body(code: str, message: str) -> bytes:
@@ -678,3 +689,53 @@ class SlowRequestMiddleware(ASGIMiddleware):
                     elapsed_ms,
                     threshold_ms,
                 )
+
+
+class PolicyMiddleware(ASGIMiddleware):
+    """Annotate the request with the active policy/governance scope (23-04).
+
+    LIGHT + NON-BLOCKING: enforcement happens at the action boundaries
+    (ExecutionService Popen / goal_loop, 23-03), never here. This middleware
+    only makes the policy *scope* observable on the request: when the path
+    carries a session id (the session/execution routes) it resolves a small
+    scope summary onto ``scope["state"]["policy"]`` + the ``policy_scope_var``
+    contextvar, and echoes it as an ``X-Policy-Scope`` response header so
+    routes/logging/clients can read which session a request was governed under.
+
+    For any request WITHOUT a session id it is a complete pass-through — no
+    state mutation, no extra header, response untouched. It never performs a
+    blocking await (a blocking ASK would hold the live output pipe — the rule
+    from 23-RESEARCH.md Pitfall 1). Registered AFTER RequestContextMiddleware so
+    the request_id/current_user contextvars are already populated.
+    """
+
+    async def handle(self, scope: Scope, receive: Receive, send: Send, next_app: ASGIApp) -> None:
+        if scope["type"] != "http":
+            await next_app(scope, receive, send)
+            return
+
+        path = scope.get("path", "")
+        match = _SESSION_PATH_RE.search(path)
+        if match is None:
+            # No session in the path → clean pass-through.
+            await next_app(scope, receive, send)
+            return
+
+        session_id = match.group(1)
+        annotation = {"session_id": session_id, "scope": "session"}
+        scope.setdefault("state", {})
+        if isinstance(scope["state"], dict):
+            scope["state"]["policy"] = annotation
+        token = policy_scope_var.set(annotation)
+
+        async def _send_with_policy_header(message: Any) -> None:
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                headers.append((b"x-policy-scope", f"session:{session_id}".encode("latin-1")))
+                message = {**message, "headers": headers}
+            await send(message)
+
+        try:
+            await next_app(scope, receive, _send_with_policy_header)
+        finally:
+            policy_scope_var.reset(token)
