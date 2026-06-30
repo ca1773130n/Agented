@@ -19,13 +19,36 @@ from .workflow_expression_evaluator import evaluate_condition
 logger = logging.getLogger(__name__)
 
 
-def _run_in_process_group(args: list, *, timeout: float, cwd: str = None):
+def _run_in_process_group(
+    args: list,
+    *,
+    timeout: float,
+    cwd: str = None,
+    session_id: str = None,
+    backend: str = "workflow",
+):
     """Run a subprocess in its own process group; on timeout, kill the WHOLE
     group so command/script tool grandchildren don't outlive the node (06 L3).
 
     Returns a CompletedProcess-like object (returncode/stdout/stderr str).
     Raises subprocess.TimeoutExpired on timeout (after killing the group).
+
+    SECURITY (Phase 23 — close the workflow launch bypass): command/script
+    workflow nodes are autonomous subprocess launches, so they MUST clear the
+    SAME shared launch gate every other spawner uses (run_trigger /
+    create_session). ``PolicyService.enforce_launch`` is evaluated HERE, before
+    ``subprocess.Popen``, so a server/session-scope DENY raises ``PolicyDenied``
+    and nothing is ever spawned; an ASK blocks the node until resolved (fail
+    closed on timeout). Server-scope policies (scope_id IS NULL) always apply.
     """
+    from .policy_service import PolicyService
+
+    PolicyService.enforce_launch(
+        session_id=session_id or "",
+        cmd=list(args),
+        backend=backend,
+    )
+
     proc = subprocess.Popen(
         args,
         stdout=subprocess.PIPE,
@@ -186,9 +209,20 @@ class NodeExecutor:
 
         timeout = node_config.get("timeout", 60)
         cwd = node_config.get("cwd")
+        # SESSION-scoped policy key (session-not-bot rule): the workflow execution
+        # id, injected by _run_workflow before dispatch. Server-scope policies
+        # still apply even when it's absent.
+        execution_id = (input_msg.metadata or {}).get("_execution_id")
 
         try:
-            result = _run_in_process_group(shlex.split(command), timeout=timeout, cwd=cwd)
+            args = shlex.split(command)
+            result = _run_in_process_group(
+                args,
+                timeout=timeout,
+                cwd=cwd,
+                session_id=execution_id,
+                backend=(args[0] if args else "workflow"),
+            )
             stdout = result.stdout[:10000] if result.stdout else ""
             stderr = result.stderr[:10000] if result.stderr else ""
 
@@ -326,6 +360,9 @@ class NodeExecutor:
 
         timeout = node_config.get("timeout", 60)
         interpreter = node_config.get("interpreter", "python3")
+        # SESSION-scoped policy key (session-not-bot rule): the workflow execution
+        # id, injected by _run_workflow before dispatch.
+        execution_id = (input_msg.metadata or {}).get("_execution_id")
 
         tmp_file = None
         try:
@@ -336,7 +373,12 @@ class NodeExecutor:
             tmp_file.flush()
             tmp_file.close()
 
-            result = _run_in_process_group([interpreter, tmp_file.name], timeout=timeout)
+            result = _run_in_process_group(
+                [interpreter, tmp_file.name],
+                timeout=timeout,
+                session_id=execution_id,
+                backend=interpreter,
+            )
             stdout = result.stdout[:10000] if result.stdout else ""
             stderr = result.stderr[:10000] if result.stderr else ""
 
