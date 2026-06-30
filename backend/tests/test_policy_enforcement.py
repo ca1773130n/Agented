@@ -305,3 +305,101 @@ def test_cost_policy_soft_threshold_asks(isolated_db):
         max_cost_usd=0.0,
     )
     assert decision == "ask"
+
+
+def test_cost_ask_cannot_exceed_hard_cap(isolated_db):
+    """BLOCKER 1: a soft cost ASK must NOT let spend cross the configured
+    ``max_cost_usd`` ceiling. With a soft ASK policy matched AND spend already
+    over the hard cap, the hard cap wins → DENY. An ASK can pause but cannot
+    raise the ceiling (the early ``return decision`` on "ask" used to skip the
+    cap entirely)."""
+    from app.services.goal_loop_runner import _evaluate_cost_policy
+
+    # Soft ASK threshold at $0.5; spend $5 is over the threshold AND the $4 cap.
+    _seed(
+        "session", "sess-cap", "ask", kind="cost_budget", params={"ask_thresholds_usd": [0.5]}
+    )
+    decision, reason = _evaluate_cost_policy(
+        session_id="sess-cap",
+        team_id=None,
+        total_cost_usd=5.0,
+        tool_calls=0,
+        max_cost_usd=4.0,
+    )
+    assert decision == "deny", "spend over the hard cap must deny even when a soft ASK matched"
+    assert "cap" in (reason or "")
+
+
+def test_cost_ask_continue_proceeds():
+    """MAJOR 6: a cost ASK approved via "continue" (the human-gate card's primary
+    approve) must PROCEED; only "abort"/unknown/timeout fail closed to a stop."""
+    from app.services.goal_loop_runner import _cost_ask_blocks
+
+    assert _cost_ask_blocks("continue") is False, "approve via 'continue' must proceed"
+    assert _cost_ask_blocks("modify") is False
+    # Fail CLOSED on everything else.
+    assert _cost_ask_blocks("abort") is True
+    assert _cost_ask_blocks("weird") is True
+    assert _cost_ask_blocks(None) is True
+
+
+# ---------------------------------------------------------------------------
+# BLOCKER 4: ProjectSessionManager.create_session — the previously-ungated
+# autonomous launch path — now routes through the SAME shared launch gate.
+# ---------------------------------------------------------------------------
+
+
+def test_denied_policy_blocks_create_session_launch(isolated_db, monkeypatch):
+    """A server-scope DENY raises PolicyDenied inside create_session BEFORE any
+    pty.fork / subprocess.Popen — goal_loop / ralph / team / agent / sketch all
+    funnel through this method, so gating it closes the bypass."""
+    from app.services import project_session_manager as psm_mod
+    from app.services.policy_service import PolicyDenied
+
+    _seed("server", None, "deny", kind="manual")
+
+    spawned = {"n": 0}
+
+    def _boom(*a, **k):
+        spawned["n"] += 1
+        raise AssertionError("no process may be spawned when policy denies the launch")
+
+    monkeypatch.setattr(psm_mod.subprocess, "Popen", _boom)
+    monkeypatch.setattr(psm_mod.os, "fork", _boom)
+
+    with pytest.raises(PolicyDenied):
+        psm_mod.ProjectSessionManager.create_session(
+            project_id="proj-x",
+            cmd=["echo", "hi"],
+            cwd=".",
+            use_pty=False,
+        )
+    assert spawned["n"] == 0
+
+
+def test_create_session_routes_through_shared_gate(isolated_db, monkeypatch):
+    """Wiring proof: create_session calls the ONE shared
+    ``PolicyService.enforce_launch`` (kind=process_launch) at its launch
+    boundary, forwarding cmd + backend. We raise from the spy to stop before any
+    real spawn while asserting the gate ran with the right arguments — proving no
+    autonomous launch can slip past the shared gate."""
+    from app.services import project_session_manager as psm_mod
+    from app.services.policy_service import PolicyService
+
+    calls = {}
+
+    def _spy(**kwargs):
+        calls.update(kwargs)
+        raise RuntimeError("stop-after-gate")
+
+    monkeypatch.setattr(PolicyService, "enforce_launch", staticmethod(_spy))
+
+    with pytest.raises(RuntimeError, match="stop-after-gate"):
+        psm_mod.ProjectSessionManager.create_session(
+            project_id="proj-spy",
+            cmd=["claude", "-p"],
+            cwd=".",
+            use_pty=False,
+        )
+    assert calls.get("cmd") == ["claude", "-p"]
+    assert calls.get("backend") == "claude"

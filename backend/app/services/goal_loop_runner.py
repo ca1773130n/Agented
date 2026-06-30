@@ -510,6 +510,19 @@ def _await_gate(
     return (decision, message)
 
 
+def _cost_ask_blocks(gate_decision: Optional[str]) -> bool:
+    """Whether a cost-ASK human gate result should BLOCK (deny) the loop.
+
+    SECURITY (23 MAJOR 6): a cost ASK proceeds ONLY on an explicit approve
+    action — "continue" (the human-gate card's primary approve) or "modify"
+    (proceed with a note). Everything else — "abort", an unknown/typo'd verdict,
+    or a timed-out gate (which returns "abort") — fails CLOSED to a block. The
+    earlier code only treated "modify" as proceed, so an operator approving via
+    "continue" was wrongly denied/stopped.
+    """
+    return gate_decision not in ("continue", "modify")
+
+
 def _evaluate_cost_policy(
     *,
     session_id: str,
@@ -540,11 +553,16 @@ def _evaluate_cost_policy(
     }
     verdict = PolicyService.evaluate(session_id=session_id, team_id=team_id, action=action)
     decision = verdict.get("decision", "allow")
-    if decision in ("deny", "ask"):
-        return decision, verdict.get("reason")
-    # No policy row matched — honour the implicit spec ceiling (back-compat).
+    # SECURITY (23 BLOCKER 1): the spec ``max_cost_usd`` ceiling is a HARD cap and
+    # must be enforced ABSOLUTELY — evaluate it FIRST, before honouring a softer
+    # policy verdict. A soft cost-budget ASK can pause the loop but must NEVER let
+    # spend cross the configured ceiling: an ASK while already over the cap
+    # collapses to a DENY here so an approval cannot raise the ceiling. (A policy
+    # DENY is also a deny, so ordering the cap first never weakens a deny.)
     if max_cost_usd > 0 and total_cost_usd >= max_cost_usd:
         return "deny", f"cost ${total_cost_usd:.4f} reached cap ${max_cost_usd:.4f}"
+    if decision in ("deny", "ask"):
+        return decision, verdict.get("reason")
     return "allow", None
 
 
@@ -832,8 +850,15 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                     gate_reason=f"policy: {cost_reason}",
                     max_wall_seconds=max_wall_seconds,
                 )
-                # An unresolved/timed-out gate ("abort") fails closed to a stop.
-                if gate_decision != "modify":
+                # SECURITY (23 MAJOR 6): align the cost-ASK approval mapping with
+                # the human-gate vocabulary via _cost_ask_blocks. The card's
+                # PRIMARY approve action is "continue"; "modify" also proceeds
+                # (with an optional note). Everything else fails CLOSED. Previously
+                # only "modify" proceeded, so an operator clicking "continue"
+                # wrongly stopped the loop.
+                if gate_decision == "modify" and gate_msg:
+                    state.pending_note = gate_msg
+                if _cost_ask_blocks(gate_decision):
                     cost_decision = "deny"
             if cost_decision == "deny":
                 _broadcast_end(

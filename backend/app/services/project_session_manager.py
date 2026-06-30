@@ -855,6 +855,24 @@ class ProjectSessionManager:
         with get_connection() as conn:
             session_id = _get_unique_project_session_id(conn)
 
+        # Stackable policy gate (23 BLOCKER 4 — close the ungated launch path).
+        # Every autonomous harness launch funnels through create_session (goal-loop
+        # / ralph / team-spawn / agent / sketch sessions), so it must clear the SAME
+        # shared launch gate ExecutionService.run_trigger uses — no spawner may
+        # bypass governance. Evaluated BEFORE any pty.fork / subprocess.Popen so a
+        # DENY raises PolicyDenied and nothing is ever spawned. Server-scope
+        # policies (scope_id IS NULL) always apply for this brand-new session id;
+        # the default (no policy authored) is ALLOW, so existing behaviour is
+        # unchanged until an operator authors a policy.
+        from .policy_service import PolicyService
+
+        PolicyService.enforce_launch(
+            session_id=session_id,
+            team_id=None,
+            cmd=cmd,
+            backend=(cmd[0] if cmd else "unknown"),
+        )
+
         # Auto-inject CLAUDE_CONFIG_DIR for claude CLI sessions so the spawned
         # process inherits the user's auth and plugins (e.g. GRD skill provider).
         user_config_dir: Optional[str] = None

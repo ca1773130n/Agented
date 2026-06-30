@@ -565,24 +565,20 @@ class ExecutionService:
             PolicyDenied (timeout fails closed to deny inside await_decision).
           - decision == "allow" -> return (caller proceeds to Popen unchanged).
         """
-        from .policy_service import PolicyDenied, PolicyService
+        from .policy_service import PolicyService
 
-        action = {
-            "kind": "process_launch",
-            "cmd": cmd,
-            "backend": backend,
-            "sandboxed": False,  # no sandbox runtime until Phase 24
-            "total_cost_usd": total_cost_usd,
-            "tool_calls": tool_calls,
-        }
-        verdict = PolicyService.evaluate(session_id=session_id, team_id=team_id, action=action)
-        decision = verdict.get("decision")
-        if decision == "deny":
-            raise PolicyDenied(verdict)
-        if decision == "ask":
-            if PolicyService.await_decision(session_id, verdict) != "approve":
-                raise PolicyDenied({**verdict, "decision": "deny", "reason": "operator denied"})
-        # allow / unknown -> proceed
+        # Delegate to the ONE shared launch gate (23 BLOCKER 4) so this path and
+        # ProjectSessionManager.create_session enforce identical semantics — there
+        # is no second gate implementation to drift out of sync.
+        PolicyService.enforce_launch(
+            session_id=session_id,
+            team_id=team_id,
+            cmd=cmd,
+            backend=backend,
+            sandboxed=False,  # no sandbox runtime until Phase 24
+            total_cost_usd=total_cost_usd,
+            tool_calls=tool_calls,
+        )
 
     @classmethod
     def run_trigger(
