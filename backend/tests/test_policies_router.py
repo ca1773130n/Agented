@@ -208,3 +208,76 @@ def test_requires_auth(client):
     _setup_admin_user()  # plant a key so has_any_keys() is True
     r = client.get("/admin/policies")
     assert r.status_code in (401, 403)
+
+
+# ---------------------------------------------------------------------------
+# BLOCKER 2: the /admin/policies router is admin-gated (mutations + /decision).
+# ---------------------------------------------------------------------------
+
+
+def _setup_user(role: str, email: str):
+    """Plant a user with an arbitrary role and return its API key."""
+    from app.database import get_connection
+    from app.db.rbac import create_user_role, generate_api_key
+
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO users (id, email, password_hash, created_at) "
+            "VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+            (email, email, "x"),
+        )
+        conn.commit()
+    api_key = generate_api_key()
+    assert create_user_role(api_key, label="t", role=role, user_id=email) is not None
+    return api_key
+
+
+def test_non_admin_forbidden_on_mutations_and_decision(client):
+    """A non-admin (editor — the coarse /admin/ default that COULD previously
+    PUT/POST) is 403'd on PUT, DELETE AND POST /decision. Policies are the
+    governance substrate, so they are admin-only."""
+    editor_key = _setup_user("editor", "ed@test")
+
+    # PUT (create/update) — was editor-allowed by the coarse default.
+    r = client.put(
+        "/admin/policies",
+        json={"scope": "server", "kind": "cost_budget", "effect": "ask"},
+        headers=_hdr(editor_key),
+    )
+    assert r.status_code == 403, r.text
+
+    # POST /decision — resolving a pending ASK is a governance action.
+    r = client.post(
+        "/admin/policies/decision",
+        json={"session_id": "s", "decision": "approve"},
+        headers=_hdr(editor_key),
+    )
+    assert r.status_code == 403, r.text
+
+    # DELETE.
+    r = client.delete("/admin/policies/pol-x", headers=_hdr(editor_key))
+    assert r.status_code == 403, r.text
+
+
+def test_viewer_forbidden_on_list(client):
+    """A viewer cannot even list policies — the whole router is admin-gated."""
+    viewer_key = _setup_user("viewer", "vw@test")
+    r = client.get("/admin/policies", headers=_hdr(viewer_key))
+    assert r.status_code == 403, r.text
+
+
+def test_admin_allowed_on_mutations(client):
+    """Regression guard: the same routes succeed for a real admin principal."""
+    admin_key = _setup_admin_user("ad2@test")
+    r = client.put(
+        "/admin/policies",
+        json={"scope": "server", "kind": "cost_budget", "effect": "ask"},
+        headers=_hdr(admin_key),
+    )
+    assert r.status_code == 200, r.text
+    r = client.post(
+        "/admin/policies/decision",
+        json={"session_id": "s", "decision": "approve"},
+        headers=_hdr(admin_key),
+    )
+    assert r.status_code == 201, r.text

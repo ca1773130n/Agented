@@ -25,6 +25,8 @@ from litestar.params import Parameter
 
 from app.services.policy_service import PolicyService
 
+from ..auth_guards import requires_role
+
 logger = logging.getLogger(__name__)
 
 # Authoring surface validation (mirrors budgets.set_limit's hardcoded enum
@@ -132,5 +134,13 @@ def decide(data: dict) -> dict[str, Any]:
 
 policies_router = Router(
     path="/admin/policies",
+    # SECURITY (23 BLOCKER 2): policies ARE the governance substrate — an
+    # attacker who can mutate them can disable every other control. Gate the
+    # WHOLE router at admin (mirrors secrets_router) so listing, upsert, delete
+    # AND /decision (resolving a pending ASK) all require a real admin principal.
+    # Without this, the coarse /admin/ defaults let an *editor* PUT/POST and a
+    # *viewer* GET. A coarse-table safety net for /admin/policies is also added
+    # in auth_guards.ROLE_REQUIRED (defence in depth).
+    guards=[requires_role("admin")],
     route_handlers=[list_policies, upsert_policy, remove_policy, decide],
 )

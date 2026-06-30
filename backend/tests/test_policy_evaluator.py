@@ -151,3 +151,80 @@ def test_disabled_rows_are_ignored(isolated_db):
 
     verdict = PolicyService.evaluate(session_id="sess-dis", team_id=None, action={})
     assert verdict["decision"] == "allow"
+
+
+# ---------------------------------------------------------------------------
+# Fail-CLOSED regression tests (23 security findings 3 + 5).
+# ---------------------------------------------------------------------------
+
+
+def _seed_raw_params(scope, scope_id, kind, effect, raw_params):
+    """Insert a policy row whose ``params`` column holds RAW text, bypassing
+    ``create_policy``'s ``json.dumps`` so we can simulate a corrupt/malformed
+    params row that would crash JSON parsing."""
+    from app.database import get_connection
+    from app.services.policy_service import PolicyService
+
+    row = PolicyService.create_policy(scope=scope, scope_id=scope_id, kind=kind, effect=effect)
+    with get_connection() as conn:
+        conn.execute("UPDATE policies SET params = ? WHERE id = ?", (raw_params, row["id"]))
+        conn.commit()
+    return row["id"]
+
+
+def test_malformed_cost_budget_params_fails_closed(isolated_db):
+    """BLOCKER 3: malformed params on a cost_budget row used to parse to ``{}``,
+    which DISABLES the cap (max_cost_usd defaults to 0) and falls through to
+    ALLOW. It must now fail CLOSED (deny) — a corrupt policy never weakens
+    governance."""
+    from app.services.policy_service import PolicyService
+
+    _seed_raw_params("session", "sess-bad", "cost_budget", "deny", "{not valid json")
+    verdict = PolicyService.evaluate(
+        session_id="sess-bad",
+        team_id=None,
+        action={"total_cost_usd": 0.0, "tool_calls": 0},
+    )
+    assert verdict["decision"] != "allow"
+    assert verdict["decision"] == "deny"
+
+
+def test_malformed_max_tool_calls_params_fails_closed(isolated_db):
+    """BLOCKER 3 (sibling cap): a max_tool_calls row with garbage params must
+    also fail closed instead of disabling the cap."""
+    from app.services.policy_service import PolicyService
+
+    _seed_raw_params("session", "sess-bad2", "max_tool_calls_per_session", "deny", "garbage[")
+    verdict = PolicyService.evaluate(session_id="sess-bad2", team_id=None, action={})
+    assert verdict["decision"] == "deny"
+
+
+def test_unknown_effect_fails_closed(isolated_db):
+    """MAJOR 5: a custom-kind row with an unrecognized effect ("weird") must NOT
+    be treated as allow — only an exact "allow" is allow."""
+    from app.services.policy_service import PolicyService
+
+    _seed("session", "sess-weird", "weird", kind="custom")
+    verdict = PolicyService.evaluate(session_id="sess-weird", team_id=None, action={})
+    assert verdict["decision"] != "allow"
+    assert verdict["decision"] == "deny"
+
+
+def test_wrong_cased_deny_normalizes_to_deny(isolated_db):
+    """MAJOR 5: an effect stored as "DENY" (wrong case) still denies — it does
+    NOT slip through the (decision in deny/ask) check into the allow default."""
+    from app.services.policy_service import PolicyService
+
+    _seed("session", "sess-up", "DENY", kind="custom")
+    verdict = PolicyService.evaluate(session_id="sess-up", team_id=None, action={})
+    assert verdict["decision"] == "deny"
+
+
+def test_trimmed_cased_allow_is_still_allow(isolated_db):
+    """MAJOR 5 (the allow side): a padded/mixed-case "  Allow  " normalizes to a
+    genuine allow fall-through, so the fail-closed rule doesn't over-deny."""
+    from app.services.policy_service import PolicyService
+
+    _seed("session", "sess-up2", "  Allow  ", kind="custom")
+    verdict = PolicyService.evaluate(session_id="sess-up2", team_id=None, action={})
+    assert verdict["decision"] == "allow"

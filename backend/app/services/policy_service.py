@@ -154,7 +154,15 @@ def _now() -> str:
 
 
 def _row_to_dict(row) -> dict:
-    """Convert a sqlite3.Row to a plain dict, parsing ``params`` JSON."""
+    """Convert a sqlite3.Row to a plain dict, parsing ``params`` JSON.
+
+    SECURITY (23 BLOCKER 3 — fail CLOSED): malformed ``params`` JSON used to be
+    swallowed to ``{}``, which silently DISABLED the cost/tool-call caps (an empty
+    params dict makes ``max_cost_usd``/``max_tool_calls`` default to 0 → no cap →
+    fall through to ALLOW). A corrupt policy row must never weaken governance. We
+    therefore flag the row ``_params_invalid`` so ``_eval_row`` can fail closed
+    (DENY) instead of evaluating against a hollow params dict.
+    """
     d = dict(row)
     raw = d.get("params")
     if isinstance(raw, str):
@@ -162,9 +170,32 @@ def _row_to_dict(row) -> dict:
             d["params"] = json.loads(raw) if raw else {}
         except (json.JSONDecodeError, TypeError):
             d["params"] = {}
+            d["_params_invalid"] = True
     elif raw is None:
         d["params"] = {}
+    elif not isinstance(raw, dict):
+        # Any non-str / non-dict / non-None params value is unexpected and
+        # uninterpretable — treat it as malformed and fail closed downstream.
+        d["params"] = {}
+        d["_params_invalid"] = True
     return d
+
+
+def _normalize_decision(raw) -> str:
+    """Coerce a stored/looked-up effect into a known decision, failing CLOSED.
+
+    SECURITY (23 MAJOR 5): only an exact ``"allow"`` (case-insensitive, trimmed)
+    counts as allow. ``"deny"`` → deny, ``"ask"`` → ask. ANYTHING ELSE — a typo'd
+    or custom effect like ``"weird"``, a wrong-cased ``"ALLOW"`` mismatch, ``None``,
+    or a non-string — collapses to ``"deny"`` so an unrecognized effect can never
+    fall through to allow.
+    """
+    if not isinstance(raw, str):
+        return "deny"
+    norm = raw.strip().lower()
+    if norm in ("allow", "deny", "ask"):
+        return norm
+    return "deny"
 
 
 class PolicyService:
@@ -299,6 +330,60 @@ class PolicyService:
         _POLICY_DECISIONS[session_id] = (decision, message)
         return pending
 
+    # -- Shared launch gate (the ONE chokepoint every spawner calls) ------
+
+    @classmethod
+    def enforce_launch(
+        cls,
+        *,
+        session_id: str,
+        team_id=None,
+        cmd: list,
+        backend: str,
+        sandboxed: bool = False,
+        total_cost_usd: float = 0.0,
+        tool_calls: int = 0,
+    ) -> None:
+        """Evaluate the stackable policy layer at a process-launch boundary.
+
+        SECURITY (23 BLOCKER 4): this is the SINGLE shared launch gate. Every
+        autonomous harness launch path routes through here so no spawner can
+        bypass governance — ``ExecutionService.run_trigger`` (its own Popen) and
+        ``ProjectSessionManager.create_session`` (the PTY/pipe spawn used by goal-
+        loop / ralph / team-spawn / agent / sketch sessions) both call it. Server-
+        scope policies (``scope_id IS NULL``) always apply, so a server DENY blocks
+        every launch regardless of which path reached it.
+
+        Behaviour (all fail CLOSED):
+          - ``deny``    -> raise ``PolicyDenied`` (caller aborts, no spawn).
+          - ``ask``     -> block via ``await_decision`` (reuses the human-gate SSE
+            round-trip); anything but ``"approve"`` raises ``PolicyDenied`` (a
+            timeout fails closed to deny inside ``await_decision``).
+          - ``allow``   -> return (caller proceeds to spawn unchanged).
+          - anything else (should be impossible after ``_normalize_decision``) ->
+            raise ``PolicyDenied`` (defence in depth).
+        """
+        action = {
+            "kind": "process_launch",
+            "cmd": cmd,
+            "backend": backend,
+            "sandboxed": sandboxed,
+            "total_cost_usd": total_cost_usd,
+            "tool_calls": tool_calls,
+        }
+        verdict = cls.evaluate(session_id=session_id, team_id=team_id, action=action)
+        decision = verdict.get("decision")
+        if decision == "allow":
+            return
+        if decision == "deny":
+            raise PolicyDenied(verdict)
+        if decision == "ask":
+            if cls.await_decision(session_id, verdict) != "approve":
+                raise PolicyDenied({**verdict, "decision": "deny", "reason": "operator denied"})
+            return
+        # Unknown verdict — fail closed (evaluate() should never reach here).
+        raise PolicyDenied({**verdict, "decision": "deny", "reason": f"unknown verdict {decision!r}"})
+
     @classmethod
     def _rows_for(cls, scope: str, scope_id) -> list:
         """Read enabled rows for a scope, ordered by priority DESC.
@@ -322,11 +407,26 @@ class PolicyService:
         23-01 primitive: return the stored ``effect`` verbatim. The ``_BUILTINS``
         dispatch (filled in 23-02) lets a ``kind`` override this with a dynamic
         evaluator ``(row, action) -> (decision, reason)``.
+
+        SECURITY: two fail-closed guards wrap the resolution —
+          * BLOCKER 3 — a row whose ``params`` JSON failed to parse
+            (``_params_invalid``) is DENIED outright; we never evaluate a cap
+            against a hollow params dict (which would silently allow).
+          * MAJOR 5 — every decision (builtin OR verbatim effect) is run through
+            ``_normalize_decision`` so an unknown/typo'd effect collapses to DENY
+            rather than falling through to allow.
         """
+        if row.get("_params_invalid"):
+            return (
+                "deny",
+                f"policy {row.get('id')} has malformed params — failing closed (deny)",
+            )
         builtin = _BUILTINS.get(row.get("kind"))
         if builtin is not None:
-            return builtin(row, action)
-        return row["effect"], f"policy {row['id']} effect={row['effect']}"
+            decision, reason = builtin(row, action)
+            return _normalize_decision(decision), reason
+        effect = row["effect"]
+        return _normalize_decision(effect), f"policy {row['id']} effect={effect}"
 
     # -- CRUD -------------------------------------------------------------
 
