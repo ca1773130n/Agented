@@ -154,25 +154,16 @@ def stream_project_chat(project_id: str, request: Request) -> Stream:
 
 
 def _project_session_owner(session_id: str) -> str | None:
-    """Return ``project_sessions.created_by`` for a session, or None if unattributed.
+    """Return ``project_sessions.created_by`` for a session, or None if unknown.
 
-    A NULL owner (all legacy/autonomous sessions) is treated as unowned and stays
-    streamable to any authenticated caller — only a session with an explicit owner
-    is owner-gated. The column is added in migration 178 (25-01).
+    Delegates to the canonical ``get_project_session_owner`` helper. ``None``
+    means the owner is UNKNOWN (absent row / NULL column / lookup error) and the
+    gate MUST fail closed on it — a session with no recorded owner is not public.
+    ``created_by`` is added in migration 178 (25-01) and backfilled on create.
     """
-    from app.db.connection import get_connection
+    from app.db.session_shares import get_project_session_owner
 
-    try:
-        with get_connection() as conn:
-            row = conn.execute(
-                "SELECT created_by FROM project_sessions WHERE id = ?", (session_id,)
-            ).fetchone()
-    except Exception:  # noqa: BLE001 — a missing column/table must not 500 the stream
-        return None
-    if row is None:
-        return None
-    owner = row["created_by"] if not isinstance(row, tuple) else row[0]
-    return owner or None
+    return get_project_session_owner(session_id)
 
 
 @get(
@@ -185,19 +176,29 @@ def stream_project_session(
 ) -> Stream:
     """Stream a running project session (owner/token-gated — 25-01 locked #5).
 
-    Previously ANY authenticated caller could stream ANY session. Now: if the
-    session has an owner (``created_by``), only that owner streams — a non-owner
-    must present a valid scoped share token (``?share_token=``), else 404. A
-    tokenless non-owner gets ``NotFoundException`` (mirrors ``can_subscribe``).
+    SECURITY (25 BLOCKER — fail CLOSED): previously ANY authenticated caller could
+    stream ANY session, and a session with a NULL owner was streamable by anyone
+    (fail OPEN). Now a caller may stream ONLY when they are:
+
+      * an ``admin``, OR
+      * the session's recorded owner (``created_by`` == caller), OR
+      * a holder of a valid scoped share token (``?share_token=``).
+
+    A NULL/unknown owner grants NOTHING to a non-admin, non-token caller — an
+    unattributed session is treated as forbidden, not public. Every denied path
+    raises ``NotFoundException`` (a 404 leaks less than a 403).
     """
     del project_id
     owner = _project_session_owner(session_id)
-    if owner is not None:
-        user_id = getattr(caller, "user_id", None) if caller else None
-        if user_id != owner:
-            share_token = request.query_params.get("share_token")
-            if not (share_token and SessionSharingService.can_attach(share_token, session_id)):
-                raise NotFoundException(detail="Session not found")
+    user_id = getattr(caller, "user_id", None) if caller else None
+    role = getattr(caller, "role", None) if caller else None
+    authorized = role == "admin" or (
+        owner is not None and user_id is not None and user_id == owner
+    )
+    if not authorized:
+        share_token = request.query_params.get("share_token")
+        if not (share_token and SessionSharingService.can_attach(share_token, session_id)):
+            raise NotFoundException(detail="Session not found")
 
     def generate():
         for event in ProjectSessionManager.subscribe(session_id):

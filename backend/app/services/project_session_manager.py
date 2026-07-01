@@ -830,6 +830,7 @@ class ProjectSessionManager:
         yolo_mode: bool = False,
         forge_bundle: Optional[dict] = None,
         super_agent_id: Optional[str] = None,
+        created_by: Optional[str] = None,
     ) -> str:
         """Create a persistent session.
 
@@ -1126,6 +1127,9 @@ class ProjectSessionManager:
                 # spawned via the SA Ouroboros bridge so the SA
                 # detail page can list its own runs.
                 "super_agent_id": super_agent_id,
+                # Phase 25 — the owning principal, so the owner-gated SSE stream
+                # (which fails CLOSED on an unknown owner) admits its creator.
+                "created_by": created_by,
             }
             for col, val in optional_fields.items():
                 if val is not None:

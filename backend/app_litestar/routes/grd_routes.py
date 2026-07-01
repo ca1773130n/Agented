@@ -1036,17 +1036,28 @@ def create_session(project_id: str, data: dict) -> dict[str, Any]:
     # know about dialog fields.
     session_id = result.get("session_id")
     if session_id:
+        # Phase 25 — backfill the owning principal from the request context so the
+        # owner-gated SSE stream (which fails CLOSED on an unknown owner) admits
+        # the operator who started the session. Sourced from the middleware-set
+        # current-user contextvar, so no route-signature change is needed;
+        # COALESCE never clobbers an already-recorded owner. In a direct unit call
+        # (no request context) this is None → created_by stays NULL as before.
+        from app.logging_config import current_user_var
+
+        owner = current_user_var.get()
         try:
             from app.db.connection import get_connection
 
             with get_connection() as conn:
                 conn.execute(
                     "UPDATE project_sessions "
-                    "SET name = ?, auto_title = ?, yolo_mode = ? WHERE id = ?",
+                    "SET name = ?, auto_title = ?, yolo_mode = ?, "
+                    "created_by = COALESCE(created_by, ?) WHERE id = ?",
                     (
                         name if name and name.strip() else None,
                         1 if auto_title else 0,
                         1 if yolo_mode else 0,
+                        owner,
                         session_id,
                     ),
                 )
