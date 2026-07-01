@@ -63,3 +63,17 @@ def test_execution_service_uses_enforce_seam():
     # sandboxed must flow from the wrap result into enforce_launch, not be hardcoded.
     assert "sandboxed=sandboxed" in src
     assert "sandboxed=False,  # no sandbox runtime until Phase 24" not in src
+
+
+def test_psm_wraps_after_config_dir_resolution():
+    """MAJOR 1 (24-fix): create_session must resolve the harness config-dir env
+    (CLAUDE_CONFIG_DIR / CODEX_HOME / GEMINI_HOME) FIRST, then OS-sandbox-wrap, passing
+    those dirs into the sandbox allow-list — so a sandboxed harness can read its config
+    dir. Guard both the threading and the ordering (wrap AFTER the env is resolved)."""
+    src = (_SERVICES / "project_session_manager.py").read_text()
+    assert "config_dirs=_config_dirs" in src
+    for key in ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "GEMINI_HOME"):
+        assert key in src, f"config-dir key {key} not collected"
+    wrap_idx = src.index("config_dirs=_config_dirs")
+    inject_idx = src.index('env["CLAUDE_CONFIG_DIR"] = expanded')
+    assert wrap_idx > inject_idx, "sandbox wrap must run AFTER CLAUDE_CONFIG_DIR is resolved"

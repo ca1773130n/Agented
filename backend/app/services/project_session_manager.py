@@ -882,17 +882,13 @@ class ProjectSessionManager:
         # ``cmd`` is kept UNWRAPPED for the backend / CLAUDE_CONFIG_DIR detection
         # below; ``spawn_cmd`` is the wrapped argv actually exec'd (a no-op copy of
         # ``cmd`` unless AGENTED_SANDBOX is opted in).
-        from .sandbox_wrap import apply_sandbox_and_enforce
-
-        spawn_cmd, _sandboxed = apply_sandbox_and_enforce(
-            list(cmd or []),
-            cwd,
-            session_id=session_id,
-            team_id=None,
-            backend=(cmd[0] if cmd else "unknown"),
-            net=True,
-            interactive=True,
-        )
+        #
+        # MAJOR 1 (24-fix): the OS-sandbox wrap + launch gate are DEFERRED to just
+        # before the spawn (below), AFTER the CLAUDE_CONFIG_DIR / overlay / CODEX_HOME
+        # / GEMINI_HOME env is resolved — so the sandbox allow-list can include the
+        # harness config dir(s). Wrapping here (before that env is known) produced a
+        # sandbox that bound only the workspace/system, leaving a sandboxed claude
+        # unable to read its own CLAUDE_CONFIG_DIR.
 
         # Auto-inject CLAUDE_CONFIG_DIR for claude CLI sessions so the spawned
         # process inherits the user's auth and plugins (e.g. GRD skill provider).
@@ -972,6 +968,42 @@ class ProjectSessionManager:
                         session_id,
                         exc_info=True,
                     )
+
+        # Stackable policy gate (23 BLOCKER 4) + OS sandbox (24-fix, crit 7 + MAJOR 1)
+        # — evaluated HERE, after the harness config-dir env is fully resolved, so the
+        # sandbox allow-list can include the config dir(s) the child must read (a
+        # sandboxed claude reads CLAUDE_CONFIG_DIR; codex/gemini read CODEX_HOME /
+        # GEMINI_HOME). ``cmd`` is OS-sandbox-wrapped and the shared launch gate runs
+        # with the REAL ``sandboxed`` flag BEFORE any pty.fork / subprocess.Popen, so
+        # a DENY (incl. enforce_sandbox on an unsandboxable launch) raises PolicyDenied
+        # and nothing is spawned (fail closed); an ASK blocks here for approval. The
+        # wrap is a no-op copy of ``cmd`` unless AGENTED_SANDBOX is opted in.
+        from .sandbox_wrap import apply_sandbox_and_enforce
+
+        _config_dirs: list[str] = []
+        for _key in ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "GEMINI_HOME"):
+            _val = (env or {}).get(_key)
+            if _val:
+                _config_dirs.append(os.path.expanduser(_val))
+        # Also keep the UNDERLYING claude config dir readable when a session-scoped
+        # overlay replaced CLAUDE_CONFIG_DIR: the overlay symlinks into the real
+        # config dir (plugins/, mcp.json, projects/), so the child follows those
+        # symlinks out of the overlay and must be able to read the target too.
+        if user_config_dir:
+            _real_cfg = os.path.expanduser(user_config_dir)
+            if _real_cfg not in _config_dirs:
+                _config_dirs.append(_real_cfg)
+
+        spawn_cmd, _sandboxed = apply_sandbox_and_enforce(
+            list(cmd or []),
+            cwd,
+            session_id=session_id,
+            team_id=None,
+            backend=(cmd[0] if cmd else "unknown"),
+            net=True,
+            interactive=True,
+            config_dirs=_config_dirs,
+        )
 
         popen: Optional[subprocess.Popen] = None
         if use_pty:
