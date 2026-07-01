@@ -9732,5 +9732,22 @@
       "resolved": "解決済み",
       "alreadyResolved": "このリクエストは既に解決済みか、タイムアウトしました。"
     }
+  },
+  "sharedSession": {
+    "title": "共有セッション",
+    "readOnly": "読み取り専用",
+    "share": "セッションを共有",
+    "shareRead": "共有（読み取り専用）",
+    "shareChat": "共有（共同操作）",
+    "copyLink": "リンクをコピー",
+    "linkCopied": "リンクをコピーしました",
+    "revoke": "取り消す",
+    "revoked": "共有を取り消しました",
+    "expired": "この共有リンクは期限切れか取り消されています。",
+    "connecting": "共有セッションに接続しています…",
+    "disconnected": "共有セッションへの接続が切断されました。",
+    "waiting": "セッション出力を待機しています…",
+    "scope": "スコープ",
+    "attachedReadOnly": "このセッションを読み取り専用で表示しています。"
   }
 }

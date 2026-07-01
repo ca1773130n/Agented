@@ -9732,5 +9732,22 @@
       "resolved": "Resolved",
       "alreadyResolved": "This request was already resolved or timed out."
     }
+  },
+  "sharedSession": {
+    "title": "Shared session",
+    "readOnly": "Read-only",
+    "share": "Share session",
+    "shareRead": "Share (read-only)",
+    "shareChat": "Share (co-drive)",
+    "copyLink": "Copy link",
+    "linkCopied": "Link copied",
+    "revoke": "Revoke",
+    "revoked": "Share revoked",
+    "expired": "This share link has expired or was revoked.",
+    "connecting": "Connecting to shared session…",
+    "disconnected": "Connection to the shared session was lost.",
+    "waiting": "Waiting for session output…",
+    "scope": "Scope",
+    "attachedReadOnly": "You are viewing this session read-only."
   }
 }

@@ -120,6 +120,8 @@ export { mcpServerApi } from './mcp-servers';
 export { replayApi } from './replay';
 export { collaborativeApi } from './collaborative';
 export { branchApi } from './conversation-branches';
+export { sessionShareApi } from './session-shares';
+export type { ShareScope, MintShareResponse, CoDriveResponse } from './session-shares';
 export { chunkApi } from './chunks';
 export { botTemplateApi } from './bot-templates';
 export { promptSnippetApi } from './prompt-snippets';

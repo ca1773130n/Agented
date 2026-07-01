@@ -9732,5 +9732,22 @@
       "resolved": "已处理",
       "alreadyResolved": "该请求已被处理或已超时。"
     }
+  },
+  "sharedSession": {
+    "title": "共享会话",
+    "readOnly": "只读",
+    "share": "共享会话",
+    "shareRead": "共享（只读）",
+    "shareChat": "共享（协同操作）",
+    "copyLink": "复制链接",
+    "linkCopied": "已复制链接",
+    "revoke": "撤销",
+    "revoked": "共享已撤销",
+    "expired": "此共享链接已过期或已被撤销。",
+    "connecting": "正在连接共享会话…",
+    "disconnected": "与共享会话的连接已断开。",
+    "waiting": "正在等待会话输出…",
+    "scope": "范围",
+    "attachedReadOnly": "您正在以只读方式查看此会话。"
   }
 }

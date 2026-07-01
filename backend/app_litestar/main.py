@@ -42,20 +42,18 @@ from .routes.bot_health import bot_health_router
 from .routes.bot_templates import bot_stubs_router, bot_templates_router
 from .routes.budgets import budgets_router
 from .routes.cliproxy_lifecycle import cliproxy_lifecycle_router
-from .routes.policies import policies_router
+from .routes.competitor_intel_routes import (
+    competitor_intel_config_router,
+    competitor_intel_router,
+)
+from .routes.competitor_strategy_routes import strategy_router
 from .routes.conversation_cluster import (
     command_conversations_router,
     hook_conversations_router,
     plugin_conversations_router,
     rule_conversations_router,
 )
-from .routes.competitor_intel_routes import (
-    competitor_intel_config_router,
-    competitor_intel_router,
-)
-from .routes.competitor_strategy_routes import strategy_router
 from .routes.discovery_routes import discovery_router
-from .routes.market_lookalike_routes import market_lookalike_router
 from .routes.executions import executions_router
 from .routes.grd_routes import grd_router
 from .routes.harness_evolution import harness_evolution_router
@@ -119,6 +117,7 @@ from .routes.leaf_crud_i import (
     super_agent_messages_router,
     team_generation_router,
 )
+from .routes.market_lookalike_routes import market_lookalike_router
 from .routes.mcp_servers import mcp_servers_router, project_mcp_router
 from .routes.memory_system import memory_system_router
 from .routes.metrics import metrics_router
@@ -126,6 +125,7 @@ from .routes.misc import misc_router
 from .routes.model_cache import model_cache_router
 from .routes.payload_transformers import payload_transformers_router
 from .routes.plugin_discovery import plugin_discovery_router
+from .routes.policies import policies_router
 from .routes.product_owner import product_owner_router
 from .routes.project_forge_bindings import forge_bindings_router
 from .routes.project_subagents import subagents_router
@@ -140,6 +140,7 @@ from .routes.rules_plugins_hooks_commands import (
     rules_router,
 )
 from .routes.scheduler import scheduler_router
+from .routes.session_shares import session_shares_router
 from .routes.skills import (
     skill_composer_router,
     skill_conversations_router,
@@ -156,6 +157,7 @@ from .routes.streams import (
     project_stream_router,
     rule_conversation_stream_router,
     setup_stream_router,
+    shared_session_stream_router,
     super_agents_stream_router,
     teams_stream_router,
 )
@@ -363,6 +365,8 @@ def create_app() -> Litestar:
             rule_conversation_stream_router,
             agent_conversation_stream_router,
             project_stream_router,
+            shared_session_stream_router,
+            session_shares_router,
             backends_stream_router,
             setup_stream_router,
             super_agents_stream_router,

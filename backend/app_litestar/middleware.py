@@ -74,6 +74,13 @@ _AUTH_BYPASS_PREFIXES = (
     "/openapi",
     "/schema",
     "/api/oauth-callback",
+    # Phase 25: a tokenless teammate attaches/co-drives a shared session by URL
+    # token (the token IS the credential, verified in-handler); and the OIDC
+    # start/callback routes establish a session for a credential-less caller
+    # (same rationale as the /api/auth/login bypass). Both are path-param routes,
+    # so they are prefix-matched here rather than listed in _AUTH_BYPASS_EXACT.
+    "/api/shared-sessions",
+    "/api/auth/oidc",
 )
 # API endpoints that must skip auth, matched EXACTLY so a future handler mounted
 # under one of these prefixes isn't silently made public (02-auth M2). The

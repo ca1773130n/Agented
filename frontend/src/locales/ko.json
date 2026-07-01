@@ -9732,5 +9732,22 @@
       "resolved": "처리됨",
       "alreadyResolved": "이 요청은 이미 처리되었거나 시간이 초과되었습니다."
     }
+  },
+  "sharedSession": {
+    "title": "공유된 세션",
+    "readOnly": "읽기 전용",
+    "share": "세션 공유",
+    "shareRead": "공유 (읽기 전용)",
+    "shareChat": "공유 (공동 조작)",
+    "copyLink": "링크 복사",
+    "linkCopied": "링크가 복사되었습니다",
+    "revoke": "취소",
+    "revoked": "공유가 취소되었습니다",
+    "expired": "이 공유 링크가 만료되었거나 취소되었습니다.",
+    "connecting": "공유 세션에 연결하는 중…",
+    "disconnected": "공유 세션 연결이 끊어졌습니다.",
+    "waiting": "세션 출력을 기다리는 중…",
+    "scope": "범위",
+    "attachedReadOnly": "이 세션을 읽기 전용으로 보고 있습니다."
   }
 }
