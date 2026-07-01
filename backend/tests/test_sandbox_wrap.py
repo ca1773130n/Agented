@@ -260,3 +260,97 @@ def test_bwrap_binds_config_dirs(monkeypatch, tmp_path):
     missing = str(tmp_path / "nope")
     prefix2, _ = sandbox_wrap.build_sandbox_prefix(["claude"], ws, net=False, config_dirs=[missing])
     assert missing not in " ".join(prefix2)
+
+
+# --------------------------------------------------------------------------- #
+# ITEM 4 (24-fix): config dirs are VALIDATED before they are granted — a config
+# dir of $HOME / "/" / a whole credential dir is dropped (fail closed), never a
+# silent broad home/root grant.
+# --------------------------------------------------------------------------- #
+def test_validate_config_dir_rejects_home_root_and_cred(monkeypatch, tmp_path):
+    home = str(tmp_path)
+    monkeypatch.setattr(os.path, "expanduser", lambda p: home if p == "~" else p)
+    # $HOME itself → dropped.
+    assert sandbox_wrap._validate_config_dir(home) is None
+    # An ANCESTOR of $HOME (e.g. /Users) → dropped.
+    assert sandbox_wrap._validate_config_dir(os.path.dirname(home)) is None
+    # Filesystem root → dropped.
+    assert sandbox_wrap._validate_config_dir("/") is None
+    # A whole credential dir → dropped.
+    assert sandbox_wrap._validate_config_dir(os.path.join(home, ".ssh")) is None
+    assert sandbox_wrap._validate_config_dir(os.path.join(home, ".config")) is None
+    assert sandbox_wrap._validate_config_dir("") is None
+    # A PROPER config subdir → allowed (returns the original path).
+    good = os.path.join(home, ".claude")
+    assert sandbox_wrap._validate_config_dir(good) == good
+    # A subdir NESTED under a cred dir is a specific dir, not the whole cred dir → kept.
+    nested = os.path.join(home, ".config", "gemini")
+    assert sandbox_wrap._validate_config_dir(nested) == nested
+
+
+def test_safe_config_dirs_filters_and_dedups(monkeypatch, tmp_path):
+    home = str(tmp_path)
+    monkeypatch.setattr(os.path, "expanduser", lambda p: home if p == "~" else p)
+    good = os.path.join(home, ".codex")
+    out = sandbox_wrap._safe_config_dirs([home, "/", os.path.join(home, ".ssh"), good, good])
+    assert out == [good], out
+
+
+def test_sbpl_config_dir_home_or_root_not_added(monkeypatch, tmp_path):
+    """ITEM 4: a config_dir of $HOME or / is NOT added to the SBPL read/write allows —
+    it would otherwise re-open the whole home/root and undo the credential denies."""
+    _reset(monkeypatch)
+    monkeypatch.setattr(sandbox_wrap, "_platform", lambda: "darwin")
+    monkeypatch.setattr(sandbox_wrap, "sandbox_available", lambda: True)
+    home = str(tmp_path)
+    monkeypatch.setattr(os.path, "expanduser", lambda p: home if p == "~" else p)
+    prefix, _ = sandbox_wrap.build_sandbox_prefix(
+        ["claude"], "/ws", net=False, config_dirs=[home, "/", os.path.join(home, ".ssh")]
+    )
+    profile = prefix[2]
+    assert f'(allow file-read-data (subpath "{home}"))' not in profile
+    assert f'(allow file-write* (subpath "{home}"))' not in profile
+    assert '(allow file-read-data (subpath "/"))' not in profile
+    assert '(allow file-write* (subpath "/"))' not in profile
+    assert f'(allow file-write* (subpath "{home}/.ssh"))' not in profile
+    # The credential deny for ~/.ssh is still the final word.
+    assert f'(deny file-read-data (subpath "{home}/.ssh"))' in profile
+
+
+def test_bwrap_config_dir_home_or_root_not_bound(monkeypatch, tmp_path):
+    """ITEM 4: bwrap does not --bind a config dir of $HOME or / (fail closed)."""
+    _reset(monkeypatch)
+    monkeypatch.setattr(sandbox_wrap, "_platform", lambda: "linux")
+    monkeypatch.setattr(sandbox_wrap, "sandbox_available", lambda: True)
+    home = str(tmp_path)
+    monkeypatch.setattr(os.path, "expanduser", lambda p: home if p == "~" else p)
+    ws = str(tmp_path / "ws")
+    os.makedirs(ws)
+    prefix, _ = sandbox_wrap.build_sandbox_prefix(
+        ["claude"], ws, net=False, config_dirs=[home, "/"]
+    )
+    s = " ".join(prefix)
+    assert f"--bind {home} {home}" not in s
+    assert "--bind / /" not in s
+
+
+# --------------------------------------------------------------------------- #
+# ITEM 1 (24-fix): the home + credential denies are realpath-canonicalized and
+# emitted for BOTH the realpath and the expanduser form (symlinked/aliased $HOME).
+# --------------------------------------------------------------------------- #
+def test_sbpl_home_denies_emitted_for_realpath_and_expanduser(monkeypatch, tmp_path):
+    real_home = tmp_path / "realhome"
+    real_home.mkdir()
+    link_home = tmp_path / "linkhome"
+    os.symlink(real_home, link_home)
+    monkeypatch.setattr(os.path, "expanduser", lambda p: str(link_home) if p == "~" else p)
+    profile = sandbox_wrap._build_sbpl_profile("/ws", net=False, proxy_url=None)
+    rp = os.path.realpath(str(link_home))  # canonical (follows the symlink)
+    assert rp != str(link_home), "test needs realpath($HOME) != expanduser($HOME)"
+    # Both home forms get the home-data deny AND the credential denies.
+    assert f'(deny file-read-data (subpath "{rp}"))' in profile
+    assert f'(deny file-read-data (subpath "{link_home}"))' in profile
+    assert f'(deny file-read* (subpath "{rp}/.ssh"))' in profile
+    assert f'(deny file-read* (subpath "{link_home}/.ssh"))' in profile
+    assert f'(deny file-read-data (subpath "{rp}/.ssh"))' in profile
+    assert f'(deny file-read-data (subpath "{link_home}/.ssh"))' in profile

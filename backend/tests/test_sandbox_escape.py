@@ -141,6 +141,128 @@ def test_sbpl_home_rooted_read_allow_does_not_expose_ssh_live(tmp_path, monkeypa
     assert "TOP-SECRET" not in r.stdout
 
 
+def test_config_dir_home_or_root_dropped_ssh_blocked_live(tmp_path, monkeypatch):
+    """ITEM 4 (24-fix), LIVE seatbelt: a config dir of $HOME or / is REJECTED (never
+    added to the SBPL allows), so a hostile/misconfigured CLAUDE_CONFIG_DIR can't
+    re-open the whole home — reading ~/.ssh/id_rsa stays blocked. A proper config
+    SUBDIR (~/.claude) IS added and readable while ~/.ssh remains blocked.
+
+    macOS-only (SBPL live read-scoping). Uses a FAKE $HOME so no real secret is touched."""
+    if sys.platform != "darwin":
+        pytest.skip("macOS seatbelt (SBPL) live read-scoping only")
+
+    base = os.path.realpath(str(tmp_path))
+    fake_home = os.path.join(base, "home")
+    ssh = os.path.join(fake_home, ".ssh")
+    os.makedirs(ssh)
+    ssh_secret = os.path.join(ssh, "id_rsa")
+    with open(ssh_secret, "w") as fh:
+        fh.write("TOP-SECRET-KEY")
+    claude_cfg = os.path.join(fake_home, ".claude")  # a legit config SUBDIR
+    os.makedirs(claude_cfg)
+    cfg_file = os.path.join(claude_cfg, "settings.json")
+    with open(cfg_file, "w") as fh:
+        fh.write("CONFIG-OK")
+    ws = os.path.join(base, "ws")
+    os.makedirs(ws)
+    monkeypatch.setenv("HOME", fake_home)
+
+    # (a) config_dir == $HOME → dropped: NOT added to the allows, ~/.ssh still blocked.
+    pfx_home, _ = build_sandbox_prefix(
+        ["/bin/cat", ssh_secret], ws, net=False, config_dirs=[fake_home]
+    )
+    profile_home = pfx_home[2]
+    assert f'(allow file-read-data (subpath "{fake_home}"))' not in profile_home, (
+        "config_dir == $HOME must be dropped, not granted a broad home read"
+    )
+    assert f'(allow file-write* (subpath "{fake_home}"))' not in profile_home
+    r_home = subprocess.run(pfx_home, capture_output=True, text=True, timeout=30)
+    assert r_home.returncode != 0 and "TOP-SECRET" not in r_home.stdout, (
+        "config_dir == $HOME must not re-expose ~/.ssh"
+    )
+
+    # (b) config_dir == "/" → dropped (never grants root).
+    pfx_root, _ = build_sandbox_prefix(["/bin/cat", ssh_secret], ws, net=False, config_dirs=["/"])
+    profile_root = pfx_root[2]
+    assert '(allow file-read-data (subpath "/"))' not in profile_root
+    assert '(allow file-write* (subpath "/"))' not in profile_root
+
+    # (c) config_dir == a proper subdir (~/.claude) → added + readable, ~/.ssh blocked.
+    real_cfg = os.path.realpath(claude_cfg)
+    pfx_cfg, _ = build_sandbox_prefix(
+        ["/bin/cat", cfg_file], ws, net=False, config_dirs=[claude_cfg]
+    )
+    assert f'(allow file-read-data (subpath "{real_cfg}"))' in pfx_cfg[2]
+    r_cfg = subprocess.run(pfx_cfg, capture_output=True, text=True, timeout=30)
+    assert r_cfg.returncode == 0 and "CONFIG-OK" in r_cfg.stdout, r_cfg.stderr
+    pfx_ssh, _ = build_sandbox_prefix(
+        ["/bin/cat", ssh_secret], ws, net=False, config_dirs=[claude_cfg]
+    )
+    r_ssh = subprocess.run(pfx_ssh, capture_output=True, text=True, timeout=30)
+    assert r_ssh.returncode != 0 and "TOP-SECRET" not in r_ssh.stdout, (
+        "~/.ssh must stay blocked even with a valid config dir granted"
+    )
+
+
+def test_secret_blocked_when_home_is_symlinked_live(tmp_path, monkeypatch):
+    """ITEM 1 (24-fix), LIVE seatbelt: when $HOME itself is a SYMLINK, ``expanduser``
+    returns the non-canonical link path — a credential deny keyed on THAT raw path would
+    miss the kernel's canonical path, leaving ~/.ssh readable. realpath-canonicalizing
+    $HOME (and emitting BOTH forms) blocks the secret via the canonical AND the aliased
+    path. macOS-only (SBPL canonical-path matching)."""
+    if sys.platform != "darwin":
+        pytest.skip("macOS seatbelt canonical-path matching only")
+
+    base = os.path.realpath(str(tmp_path))
+    real_home = os.path.join(base, "realhome")
+    ssh = os.path.join(real_home, ".ssh")
+    os.makedirs(ssh)
+    secret = os.path.join(ssh, "id_rsa")
+    with open(secret, "w") as fh:
+        fh.write("TOP-SECRET-VIA-ALIASED-HOME")
+    ws = os.path.join(base, "ws")
+    os.makedirs(ws)
+    home_link = os.path.join(base, "homelink")  # $HOME is a symlink → real_home
+    os.symlink(real_home, home_link)
+    monkeypatch.setenv("HOME", home_link)
+
+    # Reach the secret via BOTH the canonical path and the symlinked-home path.
+    for path in (secret, os.path.join(home_link, ".ssh", "id_rsa")):
+        prefix, sandboxed = build_sandbox_prefix(["/bin/cat", path], ws, net=False)
+        assert sandboxed is True, "sandbox_available() was True but the wrap degraded"
+        r = subprocess.run(prefix, capture_output=True, text=True, timeout=30)
+        assert r.returncode != 0, f"reading {path} must be blocked under an aliased $HOME"
+        assert "TOP-SECRET" not in r.stdout
+
+
+def test_secret_via_symlink_into_ssh_blocked_live(tmp_path, monkeypatch):
+    """ITEM 1 (24-fix), LIVE seatbelt: a secret reached via a SYMLINK (outside home)
+    that points into ~/.ssh is still blocked — seatbelt canonicalizes the accessed
+    path and the realpath'd credential deny matches it. macOS-only."""
+    if sys.platform != "darwin":
+        pytest.skip("macOS seatbelt canonical-path matching only")
+
+    base = os.path.realpath(str(tmp_path))
+    fake_home = os.path.join(base, "home")
+    ssh = os.path.join(fake_home, ".ssh")
+    os.makedirs(ssh)
+    secret = os.path.join(ssh, "id_rsa")
+    with open(secret, "w") as fh:
+        fh.write("TOP-SECRET-KEY-MATERIAL")
+    ws = os.path.join(base, "ws")
+    os.makedirs(ws)
+    link = os.path.join(base, "link_to_ssh")  # OUTSIDE home, points into ~/.ssh
+    os.symlink(ssh, link)
+    monkeypatch.setenv("HOME", fake_home)
+
+    linked_secret = os.path.join(link, "id_rsa")  # resolves to ~/.ssh/id_rsa
+    prefix, sandboxed = build_sandbox_prefix(["/bin/cat", linked_secret], ws, net=False)
+    assert sandboxed is True
+    r = subprocess.run(prefix, capture_output=True, text=True, timeout=30)
+    assert r.returncode != 0, "reading ~/.ssh/id_rsa via a symlink must be blocked"
+    assert "TOP-SECRET" not in r.stdout
+
+
 def test_escape_connect_non_allowlisted_blocked(tmp_path, monkeypatch):
     ws = os.path.realpath(str(tmp_path))
     captured: list = []

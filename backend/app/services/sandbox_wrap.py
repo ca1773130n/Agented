@@ -115,6 +115,76 @@ def _is_home_or_cred(path: str) -> bool:
     return False
 
 
+def _validate_config_dir(cd: str) -> str | None:
+    """Return ``cd`` iff it is SAFE to grant the sandbox as a config dir, else ``None``.
+
+    ITEM 4 (24-fix, fail CLOSED): ``config_dirs`` originate from harness env
+    (``CLAUDE_CONFIG_DIR`` / ``CODEX_HOME`` / ``GEMINI_HOME``) — operator- or
+    misconfiguration-controlled — and are granted read+write (SBPL allow / bwrap
+    ``--bind``). A config dir of ``$HOME`` or ``/`` (or any ancestor of home, or a
+    WHOLE credential dir) would re-open broad home/root and UNDO the credential denies.
+    So, after canonicalizing with ``realpath``, this REJECTS (returns ``None`` — the
+    caller then simply drops it, NEVER a silent home grant) any dir that is ``/``,
+    ``$HOME`` itself, an ANCESTOR of ``$HOME`` (e.g. ``/Users`` — also a parent of every
+    credential dir), or a credential dir itself / an ancestor of one. Only a PROPER
+    subdirectory (e.g. ``~/.claude`` / ``~/.codex`` / ``~/.gemini``) is allowed.
+
+    The ORIGINAL ``cd`` is returned (validated via its realpath) so a bwrap ``--bind``
+    still matches the child's config-dir env; the SBPL builder realpaths it separately
+    for the seatbelt allow. Never raises.
+    """
+    if not cd:
+        return None
+    try:
+        rp = os.path.realpath(cd)
+    except OSError:  # pragma: no cover - defensive
+        rp = ""
+    if not rp or rp == "/":
+        logger.warning(
+            "sandbox: dropping config dir %r (resolves to filesystem root) — fail closed", cd
+        )
+        return None
+    home = os.path.realpath(os.path.expanduser("~"))
+    if home and home != "/":
+        rp_pref = rp.rstrip(os.sep) + os.sep
+        # cd IS $HOME, or an ANCESTOR of $HOME (== home, or a strict prefix of it) —
+        # which is also a parent of every credential dir.
+        if rp == home or home.startswith(rp_pref):
+            logger.warning(
+                "sandbox: dropping config dir %r (== $HOME or an ancestor) — would re-open "
+                "home and the credential dirs; fail closed",
+                cd,
+            )
+            return None
+        # cd IS a credential dir, or an ANCESTOR of one — never grant a whole cred dir.
+        for name in _CRED_DIRS:
+            cred = os.path.join(home, name)
+            if rp == cred or cred.startswith(rp_pref):
+                logger.warning(
+                    "sandbox: dropping config dir %r (== a credential dir or its parent) — "
+                    "fail closed",
+                    cd,
+                )
+                return None
+    return cd
+
+
+def _safe_config_dirs(config_dirs: list[str] | None) -> list[str]:
+    """Validate + de-dup config dirs, dropping any unsafe one (ITEM 4, fail CLOSED).
+
+    A dropped (unsafe/missing) config dir is NEVER replaced by a broad home grant — it
+    simply isn't granted, so the launch stays fail-closed. Applied inside BOTH platform
+    builders so every path through :func:`build_sandbox_prefix` is guarded regardless of
+    caller.
+    """
+    out: list[str] = []
+    for cd in config_dirs or []:
+        safe = _validate_config_dir(cd)
+        if safe and safe not in out:
+            out.append(safe)
+    return out
+
+
 def _interpreter_read_paths(cmd: list[str]) -> list[str]:
     """Install roots whose file *contents* the wrapped child must still read.
 
@@ -269,9 +339,11 @@ def _build_bwrap_prefix(
     # Harness config dirs (CLAUDE_CONFIG_DIR / CODEX_HOME / GEMINI_HOME) — bound
     # READ-WRITE so a sandboxed harness can read its auth/plugins AND persist state
     # into its config dir (MAJOR 1: previously bwrap bound only workspace/system, so
-    # a sandboxed claude could not read CLAUDE_CONFIG_DIR). Guarded by existence so a
-    # missing dir doesn't make bwrap fail.
-    for cd in config_dirs or []:
+    # a sandboxed claude could not read CLAUDE_CONFIG_DIR). VALIDATED first (ITEM 4):
+    # a config dir of $HOME / "/" / a whole credential dir is dropped so a hostile or
+    # misconfigured env can't re-bind broad home/root back in. Guarded by existence so
+    # a missing dir doesn't make bwrap fail.
+    for cd in _safe_config_dirs(config_dirs):
         if cd and os.path.exists(cd):
             argv += ["--bind", cd, cd]
     # Isolate EVERY namespace INCLUDING the network: a private, empty netns with no
@@ -331,7 +403,21 @@ def _build_sbpl_profile(
     denied (Pitfall 4 deny-wins quirk). ``net`` without a proxy allows network
     broadly (no egress filtering); ``net`` false + no proxy leaves it fully offline.
     """
-    home = os.path.expanduser("~")
+    # BLOCKER 1 / ITEM 1 (24-fix): canonicalize $HOME with ``realpath`` so the home +
+    # credential DENIES key on the path seatbelt ACTUALLY checks. macOS resolves
+    # symlinks and /private aliases (``/var``→``/private/var``, ``/tmp``→``/private/tmp``)
+    # AND a symlinked ``$HOME`` before matching a subpath rule, so a deny keyed on a
+    # NON-canonical ``expanduser("~")`` would silently miss a secret reached via that
+    # alias/symlink. Emit denies for BOTH the realpath and the expanduser form when they
+    # differ (belt + suspenders). Config dirs are validated (ITEM 4) then realpath'd for
+    # the allow (seatbelt matches the child's RESOLVED access path); the workspace allow
+    # is realpath'd for the same reason.
+    homes: list[str] = []
+    for h in (os.path.realpath(os.path.expanduser("~")), os.path.expanduser("~")):
+        if h and h != "/" and h not in homes:
+            homes.append(h)
+    safe_config_dirs = [os.path.realpath(c) for c in _safe_config_dirs(config_dirs)]
+    ws_real = os.path.realpath(workspace) if workspace else workspace
     lines = [
         "(version 1)",
         "(deny default)",
@@ -341,42 +427,44 @@ def _build_sbpl_profile(
         # Broad read so dyld / system libraries / path traversal work...
         "(allow file-read*)",
     ]
-    if home and home != "/":
+    for home in homes:
         # ...but NOT the CONTENTS of files under the home dir (secrets live here).
         lines.append(f'(deny file-read-data (subpath "{home}"))')
     # Re-allow reading contents of the workspace + interpreter/tool install roots +
-    # harness config dirs (these may sit under home; last-match-wins lets the child
-    # read exactly them). The credential denies below come AFTER, so they still win.
-    for rp in [workspace, *(read_paths or []), *(config_dirs or [])]:
+    # harness config dirs (realpath'd; may sit under home — last-match-wins lets the
+    # child read exactly them). The credential denies below come AFTER, so they win.
+    for rp in [ws_real, *(read_paths or []), *safe_config_dirs]:
         if rp:
             lines.append(f'(allow file-read-data (subpath "{rp}"))')
-    # CREDENTIAL DENIES — emitted LAST among the read rules so they are the FINAL
-    # word (BLOCKER 1). Each credential path gets BOTH a ``file-read*`` deny (metadata)
-    # and an explicit ``file-read-data`` deny (contents): a ``file-read*`` deny alone
-    # does NOT override a preceding ``file-read-data`` re-allow in seatbelt, so the
-    # paired data-deny is what actually keeps ``~/.ssh/id_rsa`` unreadable under a
-    # broad or home-rooted re-allow.
-    if home and home != "/":
+    # CREDENTIAL DENIES — emitted LAST among the read rules, for EVERY home form, so
+    # they are the FINAL word (BLOCKER 1) and hold under both the realpath and the
+    # alias/symlink home path. Each credential path gets BOTH a ``file-read*`` deny
+    # (metadata) and an explicit ``file-read-data`` deny (contents): a ``file-read*``
+    # deny alone does NOT override a preceding ``file-read-data`` re-allow in seatbelt,
+    # so the paired data-deny is what actually keeps ``~/.ssh/id_rsa`` unreadable under
+    # a broad or home-rooted re-allow.
+    for home in homes:
         for name in _CRED_DIRS:
             lines.append(f'(deny file-read* (subpath "{home}/{name}"))')
             lines.append(f'(deny file-read-data (subpath "{home}/{name}"))')
         for name in _CRED_FILES:
             lines.append(f'(deny file-read* (literal "{home}/{name}"))')
             lines.append(f'(deny file-read-data (literal "{home}/{name}"))')
+    lines.append("(deny file-write*)")
+    if ws_real:
+        lines.append(f'(allow file-write* (subpath "{ws_real}"))')
     lines += [
-        "(deny file-write*)",
-        f'(allow file-write* (subpath "{workspace}"))',
         '(allow file-write* (subpath "/private/var/folders"))',
         '(allow file-write* (subpath "/private/tmp"))',
         '(allow file-write* (subpath "/dev"))',
     ]
     # Harness config dirs are read+write — a harness persists state (sessions, todos,
     # projects/) into its config dir (MAJOR 1). None of ``_CRED_DIRS`` overlap the
-    # default config dirs (~/.claude, ~/.codex, ~/.gemini), so this does not re-open
-    # a credential dir.
-    for cd in config_dirs or []:
-        if cd:
-            lines.append(f'(allow file-write* (subpath "{cd}"))')
+    # default config dirs (~/.claude, ~/.codex, ~/.gemini), and ITEM 4's validation
+    # already dropped any config dir that IS home/root/a whole credential dir, so this
+    # cannot re-open a credential dir.
+    for cd in safe_config_dirs:
+        lines.append(f'(allow file-write* (subpath "{cd}"))')
     # Network rules — empirically verified against macOS seatbelt (24-RESEARCH
     # Pitfall 4): a SPECIFIC ``(allow network* (remote ip "localhost:PORT"))`` after
     # ``(deny network*)`` IS honored (the proxy is reachable), but a BROAD
