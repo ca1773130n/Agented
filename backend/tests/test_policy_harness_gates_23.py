@@ -352,3 +352,21 @@ def test_replay_deny_blocks_popen(isolated_db, monkeypatch):
     R._run_replay_subprocess("ex-1", "claude -p hi", "trig-1", "claude")
     assert finished.get("status") == "failed"
     assert "policy" in (finished.get("error_message", "").lower())
+
+
+def test_model_discovery_claude_probe_deny_skips_run(isolated_db, monkeypatch):
+    # round-5: the `claude -p` model-discovery probe must be gated like the gemini one.
+    import shutil
+
+    import app.services.model_discovery_service as md
+    from app.services.model_discovery_service import ModelDiscoveryService as M
+
+    _seed("server", None, "deny", kind="manual")
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/claude")
+
+    def _no_run(*a, **k):
+        raise AssertionError("claude discovery probe must not run subprocess on deny")
+
+    monkeypatch.setattr(md.subprocess, "run", _no_run)
+    # deny short-circuits every _probe before subprocess.run → no probe runs, result None.
+    assert M._discover_claude_models_pty() is None

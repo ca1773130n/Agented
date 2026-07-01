@@ -839,10 +839,23 @@ class ModelDiscoveryService:
         # Env without nesting-detection vars so claude doesn't refuse to start
         env = {**os.environ, "CLAUDECODE": "", "CLAUDE_CODE_ENTRYPOINT": ""}
 
+        from app.services.policy_service import PolicyDenied, PolicyService
+
         def _probe(alias: str) -> Optional[str]:
+            # SECURITY (23): gate this `claude -p` probe like the gemini one above —
+            # a DENY (or ASK, refused here) skips the probe (returns None → discovery
+            # falls back to cached/static lists).
+            probe_cmd = [cli_path, "-p", ".", "--output-format", "json", "--model", alias]
+            try:
+                PolicyService.enforce_launch_noninteractive(
+                    session_id="", cmd=probe_cmd, backend="claude"
+                )
+            except PolicyDenied as exc:
+                logger.debug("claude model-discovery probe blocked by policy: %s", exc)
+                return None
             try:
                 result = subprocess.run(
-                    [cli_path, "-p", ".", "--output-format", "json", "--model", alias],
+                    probe_cmd,
                     capture_output=True,
                     text=True,
                     timeout=30,
