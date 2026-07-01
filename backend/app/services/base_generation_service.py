@@ -49,27 +49,24 @@ class BaseGenerationService(ABC):
             "--include-partial-messages",
         ]
 
-        # SECURITY (23): gate the autonomous `claude -p` generation spawn through
-        # the shared non-interactive policy layer BEFORE launching. There is no
-        # operator turn here (a one-shot generation endpoint), so server-scope
-        # policies govern; a DENY (or ASK, treated as a refusal) aborts before any
+        # SECURITY (23 + 24-fix, MAJOR 8): gate the autonomous `claude -p` generation
+        # spawn through the shared non-interactive policy layer BEFORE launching. The
+        # enforce used to run BEFORE the sandbox wrap, so ``sandboxed`` was always
+        # False at check time and an ``enforce_sandbox`` policy WRONGLY denied a valid
+        # sandboxed launch. Wrap FIRST via the shared seam, then enforce with the REAL
+        # flag. There is no operator turn here (a one-shot generation endpoint), so
+        # server-scope policies govern; a DENY (or ASK, a refusal) aborts before any
         # spawn or AI cost.
-        from .policy_service import PolicyDenied, PolicyService
-
-        try:
-            PolicyService.enforce_launch_noninteractive(
-                session_id="",
-                cmd=cmd,
-                backend="claude",
-            )
-        except PolicyDenied as exc:
-            reason = (getattr(exc, "verdict", None) or {}).get("reason") or "policy denied"
-            yield sse("error", {"error": f"Launch blocked by policy: {reason}"})
-            return
+        from .policy_service import PolicyDenied
 
         try:
             project_root = os.path.dirname(
                 os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            )
+            from .sandbox_wrap import apply_sandbox_and_enforce
+
+            cmd, _sandboxed = apply_sandbox_and_enforce(
+                cmd, project_root, session_id="", backend="claude", net=True
             )
             process = subprocess.Popen(
                 cmd,
@@ -79,6 +76,10 @@ class BaseGenerationService(ABC):
                 text=True,
                 bufsize=1,
             )
+        except PolicyDenied as exc:
+            reason = (getattr(exc, "verdict", None) or {}).get("reason") or "policy denied"
+            yield sse("error", {"error": f"Launch blocked by policy: {reason}"})
+            return
         except FileNotFoundError:
             yield sse("error", {"error": "Claude CLI not found. Please install it first."})
             return

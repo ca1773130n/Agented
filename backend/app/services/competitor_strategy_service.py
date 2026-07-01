@@ -471,6 +471,22 @@ class CompetitorStrategyService:
                 )
             worktree_created = True
 
+            # Phase 24 (24-04): highest-risk autonomous consumer — choose the
+            # execution target. Cloud (E2B/Modal) only when credentialed; otherwise
+            # LocalRunner reproduces today's worktree goal-loop path EXACTLY (no
+            # regression, no hard cloud dependency, graceful without keys).
+            from .cloud_sandbox_runner import select_runner
+
+            runner = select_runner(
+                risk="high",
+                config={"project_id": project_id, "worktree_path": worktree_path},
+            )
+            logger.info(
+                "start_autoimplement: selected %s runner for strategy %s",
+                getattr(runner, "kind", "?"),
+                strategy_id,
+            )
+
             goal_loop_config = {
                 "goal": goal,
                 # human_gate present → the runner pauses for operator approval. Mode
@@ -513,12 +529,14 @@ class CompetitorStrategyService:
                 "goal_loop_config": goal_loop_config,
             }
 
-            from .execution_type_handler import get_handler
-
-            handler = get_handler("goal_loop")
-            if handler is None:  # pragma: no cover — registry always has goal_loop
-                raise ValueError("goal_loop execution handler is not registered")
-            result = handler.start(session_config)
+            # Phase 24 (24-fix, MAJOR 11): actually EXECUTE via the runner selected
+            # above. The selected runner used to be logged and then IGNORED —
+            # execution always went through the local goal_loop handler regardless
+            # (dead routing), so a credentialed high-risk run never reached the cloud
+            # sandbox it selected. ``LocalRunner.execute`` reproduces that exact local
+            # goal_loop path (no regression); an E2B/Modal runner now runs the work
+            # off-box.
+            result = runner.execute(session_config)
             if isinstance(result, dict) and result.get("error"):
                 raise ValueError(f"goal_loop launch failed: {result['error']}")
 

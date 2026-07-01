@@ -149,6 +149,13 @@ def process_project_autonomy(project_id: str) -> list[dict]:
     policy = autonomy_cfg.get_policy(project_id)
     if policy is None or not policy.enabled:
         return []
+    # Phase 24 (24-fix, MAJOR 2): this consumer's "execution" is a local git
+    # patch-apply (``apply_dry_run_round``), NOT a spawnable command — a cloud
+    # E2B/Modal runner (which only runs a ``cmd`` in an ephemeral offbox sandbox)
+    # cannot honor it, and the LocalRunner path expects a goal-loop session_config.
+    # The prior code SELECTED a runner and then IGNORED it (calling apply_dry_run_round
+    # directly regardless), which was misleading dead routing. Removed: patch-apply
+    # is intrinsically local, so there is no runner to select here.
     results: list[dict] = []
     day_cut = _utc_minus(days=1)
     cooldown_cut = _utc_minus(seconds=policy.cooldown_seconds)

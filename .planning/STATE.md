@@ -14,11 +14,19 @@ started 2026-06-30. **Roadmap created 2026-06-30** — 4 phases (23–26),
 `docs/research/omnigent-vs-agented.md` (+ `.ko.md`). PR-per-phase +
 codex-review-until-green cadence.
 
-Phase: 23 of 26 (Stackable policy / governance engine) — **in progress** (23-01, 23-02 done)
-Status: Plan 23-02 executed — four builtin evaluators (cost_budget, max_tool_calls_per_session,
-ask_on_os_tools, enforce_sandbox) wired via _BUILTINS dispatch (TDD, 16 new tests).
+Phase: 23 of 26 (Stackable policy / governance engine) — **✅ COMPLETE & MERGED** (PR #286, main 3cec4976c3, 2026-07-01)
+Status: Full engine shipped — policies store (migration 176), PolicyEvaluator (server→team→session,
+session-first, DENY short-circuit), builtins (cost_budget hard/soft, max_tool_calls, ask_on_os_tools,
+enforce_sandbox), enforcement at ALL 14 autonomous harness/eval/generation launch sites via one shared
+`PolicyService.enforce_launch`, `/admin/policies` CRUD (admin-gated) + decision endpoint, PolicyManagement
+UI + PolicyAskCard (SSE-wired, persist+replay), e2e. FAIL-CLOSED everywhere (malformed params, DB error,
+unknown effects). Hardened over **5 Codex rounds** (fixed 2 fail-opens, 14 ungated launch paths, a
+stale-approval leak, a broken ASK flow, a TTL leak). Accepted follow-ups: create_session-ASK async
+refactor (fail-closed), setup_execution operator-command gate.
 
-Progress: [----------] 0% (0 of 4 phases complete; phase 23 plans 1-2 done)
+Next: **Phase 24** (OS-level harness sandboxing + egress) — plans 24-01..05 ready; depends on 23 (now merged).
+
+Progress: [##--------] 25% (1 of 4 phases complete — Phase 23 merged)
 
 **Decisions (23-01):** PolicyVerdict = `{decision, policy_id, kind, reason, scope}`;
 SESSION-first stacking with first-DENY short-circuit (SC1 proven); default ALLOW has

@@ -377,11 +377,17 @@ def clone_repos(path_entries: list, cloned_dirs: list, github_repo_map: dict) ->
     return effective_paths
 
 
-def build_subprocess_env(env_overrides: dict) -> Optional[dict]:
+def build_subprocess_env(env_overrides: dict, proxy_url: Optional[str] = None) -> Optional[dict]:
     """Build subprocess environment, injecting vault secrets and account overrides.
 
     Returns a merged env dict (os.environ + overrides + vault secrets), or None if no
     overrides or secrets are present.
+
+    Phase 24 (24-03, crit 2): when ``proxy_url`` is provided, the egress-proxy env
+    (``HTTPS_PROXY``/``HTTP_PROXY``/``NO_PROXY`` via ``egress_proxy.proxy_env``) is
+    merged so the child's HTTP(S) clients route through the deny-by-default egress
+    proxy and match the sandbox ``--setenv``. Supplying a proxy always yields a
+    concrete env (never None) so the proxy vars are actually applied.
     """
     # Inject secrets from vault into subprocess environment
     try:
@@ -395,6 +401,14 @@ def build_subprocess_env(env_overrides: dict) -> Optional[dict]:
                 env_overrides.update(vault_secrets)
     except Exception as e:
         logger.warning("Failed to inject vault secrets into execution env: %s", e)
+
+    if proxy_url:
+        from app.services.egress_proxy import proxy_env
+
+        if env_overrides is None:
+            env_overrides = {}
+        # A lightweight handle object carries just the url that proxy_env reads.
+        env_overrides.update(proxy_env(type("_H", (), {"url": proxy_url})()))
 
     return {**os.environ, **env_overrides} if env_overrides else None
 
