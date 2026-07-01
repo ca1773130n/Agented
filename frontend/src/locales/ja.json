@@ -9770,5 +9770,15 @@
     "openNewRun": "新しい実行を開く",
     "diverge": "このセッションを妨げずに別の経路を探索します",
     "error": "この会話をフォークできませんでした"
+  },
+  "sso": {
+    "continueWith": "{provider}で続ける",
+    "signInWith": "SSOでサインイン",
+    "orSso": "または",
+    "error": "シングルサインオンに失敗しました。もう一度お試しください。",
+    "google": "Google",
+    "github": "GitHub",
+    "okta": "Okta",
+    "microsoft": "Microsoft"
   }
 }

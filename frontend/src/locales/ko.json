@@ -9770,5 +9770,15 @@
     "openNewRun": "새 실행 열기",
     "diverge": "이 세션을 방해하지 않고 다른 경로를 탐색합니다",
     "error": "이 대화를 분기할 수 없습니다"
+  },
+  "sso": {
+    "continueWith": "{provider}(으)로 계속하기",
+    "signInWith": "SSO로 로그인",
+    "orSso": "또는",
+    "error": "싱글 사인온에 실패했습니다. 다시 시도해 주세요.",
+    "google": "Google",
+    "github": "GitHub",
+    "okta": "Okta",
+    "microsoft": "Microsoft"
   }
 }

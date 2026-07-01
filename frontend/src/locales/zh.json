@@ -9770,5 +9770,15 @@
     "openNewRun": "打开新运行",
     "diverge": "在不干扰此会话的情况下探索不同的路径",
     "error": "无法分叉此对话"
+  },
+  "sso": {
+    "continueWith": "使用 {provider} 继续",
+    "signInWith": "使用 SSO 登录",
+    "orSso": "或",
+    "error": "单点登录失败，请重试。",
+    "google": "Google",
+    "github": "GitHub",
+    "okta": "Okta",
+    "microsoft": "Microsoft"
   }
 }

@@ -9770,5 +9770,15 @@
     "openNewRun": "Open new run",
     "diverge": "Explore a divergent path without disturbing this session",
     "error": "Could not fork this conversation"
+  },
+  "sso": {
+    "continueWith": "Continue with {provider}",
+    "signInWith": "Sign in with SSO",
+    "orSso": "or",
+    "error": "Single sign-on failed. Please try again.",
+    "google": "Google",
+    "github": "GitHub",
+    "okta": "Okta",
+    "microsoft": "Microsoft"
   }
 }

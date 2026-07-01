@@ -124,6 +124,7 @@ from .routes.memory_system import memory_system_router
 from .routes.metrics import metrics_router
 from .routes.misc import misc_router
 from .routes.model_cache import model_cache_router
+from .routes.oidc import oidc_router
 from .routes.payload_transformers import payload_transformers_router
 from .routes.plugin_discovery import plugin_discovery_router
 from .routes.policies import policies_router
@@ -254,6 +255,7 @@ def create_app() -> Litestar:
             health_router,
             rbac_router,
             auth_router,
+            oidc_router,
             auth_management_router,
             metrics_router,
             plugin_discovery_router,

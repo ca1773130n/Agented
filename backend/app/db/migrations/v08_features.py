@@ -50,7 +50,29 @@ def _migrate_178_project_session_owner(conn):
         conn.execute("ALTER TABLE project_sessions ADD COLUMN created_by TEXT")
 
 
+def _migrate_179_oidc_identities(conn):
+    """OIDC (issuer, subject) → user link table (25-04). Mirrors
+    schema/_oidc_identities.py DDL."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS oidc_identities (
+            provider TEXT NOT NULL,
+            issuer TEXT NOT NULL,
+            subject TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            email TEXT,
+            created_at TIMESTAMP NOT NULL,
+            PRIMARY KEY (issuer, subject)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_oidc_identities_user ON oidc_identities(user_id)"
+    )
+
+
 V08_MIGRATIONS = [
     (177, "session_share_tokens", _migrate_177_session_share_tokens),
     (178, "project_session_owner", _migrate_178_project_session_owner),
+    (179, "oidc_identities", _migrate_179_oidc_identities),
 ]
