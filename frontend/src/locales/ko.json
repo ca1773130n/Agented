@@ -9749,5 +9749,17 @@
     "waiting": "세션 출력을 기다리는 중…",
     "scope": "범위",
     "attachedReadOnly": "이 세션을 읽기 전용으로 보고 있습니다."
+  },
+  "coDrive": {
+    "title": "공동 조작",
+    "inputPlaceholder": "운영자 세션에 보낼 메시지를 입력하세요…",
+    "send": "보내기",
+    "sending": "보내는 중…",
+    "waitingApproval": "운영자의 승인을 기다리는 중…",
+    "denied": "정책에 의해 차단됨",
+    "sent": "메시지를 보냈습니다",
+    "readOnlyNote": "이 공유는 읽기 전용입니다 — 세션을 조작할 수 없습니다.",
+    "drover": "공동 조작함",
+    "driverLabel": "조작한 사람"
   }
 }

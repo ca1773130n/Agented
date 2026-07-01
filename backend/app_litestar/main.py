@@ -140,7 +140,7 @@ from .routes.rules_plugins_hooks_commands import (
     rules_router,
 )
 from .routes.scheduler import scheduler_router
-from .routes.session_shares import session_shares_router
+from .routes.session_shares import co_drive_router, session_shares_router
 from .routes.skills import (
     skill_composer_router,
     skill_conversations_router,
@@ -367,6 +367,7 @@ def create_app() -> Litestar:
             project_stream_router,
             shared_session_stream_router,
             session_shares_router,
+            co_drive_router,
             backends_stream_router,
             setup_stream_router,
             super_agents_stream_router,

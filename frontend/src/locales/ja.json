@@ -9749,5 +9749,17 @@
     "waiting": "セッション出力を待機しています…",
     "scope": "スコープ",
     "attachedReadOnly": "このセッションを読み取り専用で表示しています。"
+  },
+  "coDrive": {
+    "title": "共同操作",
+    "inputPlaceholder": "オペレーターのセッションへのメッセージを入力…",
+    "send": "送信",
+    "sending": "送信中…",
+    "waitingApproval": "オペレーターの承認を待っています…",
+    "denied": "ポリシーによりブロックされました",
+    "sent": "メッセージを送信しました",
+    "readOnlyNote": "この共有は読み取り専用です — セッションを操作できません。",
+    "drover": "共同操作しました",
+    "driverLabel": "操作者"
   }
 }

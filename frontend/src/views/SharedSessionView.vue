@@ -14,7 +14,7 @@
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
-import { createAuthenticatedEventSource } from '../services/api';
+import { createAuthenticatedEventSource, sessionShareApi } from '../services/api';
 import type { AuthenticatedEventSource } from '../services/api';
 
 const route = useRoute();
@@ -28,6 +28,29 @@ const scope = computed(() => (route.query.scope === 'chat' ? 'chat' : 'read'));
 const lines = ref<string[]>([]);
 const status = ref<'connecting' | 'open' | 'error'>('connecting');
 const drivers = ref<string[]>([]);
+
+// Co-drive (25-02) — only offered for a chat-scope share.
+const canCoDrive = computed(() => scope.value === 'chat');
+const draft = ref('');
+// idle | sending (blocks server-side through the policy gate; an ASK holds here)
+const sendState = ref<'idle' | 'sending' | 'denied' | 'sent'>('idle');
+const sendError = ref('');
+
+async function sendCoDrive() {
+  const text = draft.value.trim();
+  if (!text || sendState.value === 'sending') return;
+  sendState.value = 'sending';
+  sendError.value = '';
+  try {
+    await sessionShareApi.coDrive(token.value, text);
+    draft.value = '';
+    sendState.value = 'sent';
+  } catch (err: unknown) {
+    // A DENY / never-approved ASK / read-token surfaces as a 4xx here.
+    sendState.value = 'denied';
+    sendError.value = err instanceof Error ? err.message : String(err);
+  }
+}
 
 let source: AuthenticatedEventSource | null = null;
 
@@ -75,8 +98,14 @@ onBeforeUnmount(() => {
   <div class="shared-session">
     <header class="shared-session__header">
       <h1>{{ t('sharedSession.title') }}</h1>
-      <span class="shared-session__badge">{{ t('sharedSession.readOnly') }}</span>
+      <span class="shared-session__badge">
+        {{ canCoDrive ? t('coDrive.title') : t('sharedSession.readOnly') }}
+      </span>
     </header>
+
+    <p v-if="drivers.length" class="shared-session__drivers">
+      {{ t('coDrive.driverLabel') }}: {{ drivers[drivers.length - 1] }}
+    </p>
 
     <p v-if="status === 'connecting'" class="shared-session__status">
       {{ t('sharedSession.connecting') }}
@@ -90,7 +119,33 @@ onBeforeUnmount(() => {
       {{ t('sharedSession.waiting') }}
     </p>
 
-    <p class="shared-session__note">{{ t('sharedSession.attachedReadOnly') }}</p>
+    <!-- Co-drive input — chat-scope only. A read-scope share cannot drive. -->
+    <div v-if="canCoDrive" class="shared-session__codrive">
+      <textarea
+        v-model="draft"
+        class="shared-session__input"
+        :placeholder="t('coDrive.inputPlaceholder')"
+        :disabled="sendState === 'sending'"
+        @keydown.enter.exact.prevent="sendCoDrive"
+      />
+      <button
+        class="shared-session__send"
+        :disabled="sendState === 'sending' || !draft.trim()"
+        @click="sendCoDrive"
+      >
+        {{ sendState === 'sending' ? t('coDrive.sending') : t('coDrive.send') }}
+      </button>
+      <p v-if="sendState === 'sending'" class="shared-session__status">
+        {{ t('coDrive.waitingApproval') }}
+      </p>
+      <p v-else-if="sendState === 'sent'" class="shared-session__status">
+        {{ t('coDrive.sent') }}
+      </p>
+      <p v-else-if="sendState === 'denied'" class="shared-session__status shared-session__status--error">
+        {{ t('coDrive.denied') }}<span v-if="sendError"> — {{ sendError }}</span>
+      </p>
+    </div>
+    <p v-else class="shared-session__note">{{ t('sharedSession.attachedReadOnly') }}</p>
   </div>
 </template>
 
@@ -135,5 +190,40 @@ onBeforeUnmount(() => {
   margin-top: 1rem;
   font-size: 0.8rem;
   color: var(--text-muted, #999);
+}
+.shared-session__drivers {
+  font-size: 0.8rem;
+  color: var(--text-muted, #999);
+  margin-bottom: 0.5rem;
+}
+.shared-session__codrive {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.shared-session__input {
+  width: 100%;
+  min-height: 3rem;
+  background: var(--surface, #111);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  padding: 0.5rem;
+  color: inherit;
+  font-family: inherit;
+  resize: vertical;
+}
+.shared-session__send {
+  align-self: flex-start;
+  padding: 0.4rem 1rem;
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  background: var(--accent, #3b82f6);
+  color: #fff;
+  cursor: pointer;
+}
+.shared-session__send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

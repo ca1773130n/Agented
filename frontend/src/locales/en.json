@@ -9749,5 +9749,17 @@
     "waiting": "Waiting for session output…",
     "scope": "Scope",
     "attachedReadOnly": "You are viewing this session read-only."
+  },
+  "coDrive": {
+    "title": "Co-drive",
+    "inputPlaceholder": "Type a message to the operator's session…",
+    "send": "Send",
+    "sending": "Sending…",
+    "waitingApproval": "Waiting for the operator to approve…",
+    "denied": "Blocked by policy",
+    "sent": "Message sent",
+    "readOnlyNote": "This share is read-only — you cannot drive the session.",
+    "drover": "co-drove",
+    "driverLabel": "Driven by"
   }
 }

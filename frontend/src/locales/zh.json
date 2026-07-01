@@ -9749,5 +9749,17 @@
     "waiting": "正在等待会话输出…",
     "scope": "范围",
     "attachedReadOnly": "您正在以只读方式查看此会话。"
+  },
+  "coDrive": {
+    "title": "协同操作",
+    "inputPlaceholder": "输入要发送到操作员会话的消息…",
+    "send": "发送",
+    "sending": "发送中…",
+    "waitingApproval": "正在等待操作员批准…",
+    "denied": "已被策略拦截",
+    "sent": "消息已发送",
+    "readOnlyNote": "此共享为只读 — 您无法操作会话。",
+    "drover": "已协同操作",
+    "driverLabel": "操作者"
   }
 }
