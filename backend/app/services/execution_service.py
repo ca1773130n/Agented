@@ -602,6 +602,59 @@ class ExecutionService:
         return {"github.com", "api.github.com", "api.anthropic.com"}
 
     @classmethod
+    def _start_egress_proxy_or_fail_closed(
+        cls,
+        *,
+        execution_id: Optional[str],
+        policy_session_id: str,
+        env_overrides: dict,
+        proc_env: Optional[dict],
+    ) -> tuple:
+        """Start the deny-by-default egress proxy for this run, or FAIL CLOSED.
+
+        SECURITY (24-fix, crit 3): when ``AGENTED_SANDBOX`` is opted in the operator
+        requires deny-by-default egress control, so a proxy that CANNOT start must
+        REFUSE the launch (raise ``PolicyDenied``) — the previous behaviour continued
+        WITHOUT egress filtering (fail OPEN), which silently defeated the control.
+
+        Returns ``(egress_handle, proxy_url, proc_env)``. When sandboxing is disabled
+        the run has no egress proxy and this returns ``(None, None, proc_env)``
+        unchanged. On success ``proc_env`` is rebuilt so ``HTTPS_PROXY``/``HTTP_PROXY``
+        match the sandbox ``--setenv`` and the proxy the child is pointed at.
+        """
+        from .sandbox_wrap import sandbox_enabled
+
+        if not sandbox_enabled():
+            return None, None, proc_env
+        try:
+            from .egress_proxy import ThreadedEgressProxy
+
+            egress_handle = ThreadedEgressProxy(
+                cls._egress_allowlist_from_env(), session_id=policy_session_id
+            ).start()
+            proxy_url = egress_handle.url
+            proc_env = cls._build_subprocess_env(env_overrides, proxy_url=proxy_url)
+            return egress_handle, proxy_url, proc_env
+        except Exception as exc:
+            from .policy_service import PolicyDenied
+
+            logger.error(
+                "egress proxy failed to start for %s; refusing launch "
+                "(sandbox/egress required — fail closed)",
+                execution_id,
+                exc_info=True,
+            )
+            raise PolicyDenied(
+                {
+                    "decision": "deny",
+                    "reason": (
+                        "egress proxy failed to start; refusing launch because egress "
+                        "control is required (AGENTED_SANDBOX)"
+                    ),
+                }
+            ) from exc
+
+    @classmethod
     def _apply_sandbox_and_enforce(
         cls,
         cmd: list,
@@ -876,30 +929,17 @@ class ExecutionService:
             # best-effort from the trigger's _team_id.
             policy_session_id = (proc_env or {}).get("AGENTED_SESSION_ID") or execution_id
 
-            # Phase 24: deny-by-default egress proxy (opt-in via AGENTED_SANDBOX) —
-            # start it for the run, merge its env so HTTPS_PROXY/HTTP_PROXY match the
-            # sandbox --setenv, and pass its url into the sandbox prefix. Best-effort:
-            # a failure here degrades to env-only / no egress, never blocks the spawn.
-            proxy_url = None
-            from .sandbox_wrap import sandbox_enabled
-
-            if sandbox_enabled():
-                try:
-                    from .egress_proxy import ThreadedEgressProxy
-
-                    egress_handle = ThreadedEgressProxy(
-                        cls._egress_allowlist_from_env(), session_id=policy_session_id
-                    ).start()
-                    proxy_url = egress_handle.url
-                    proc_env = cls._build_subprocess_env(env_overrides, proxy_url=proxy_url)
-                except Exception:
-                    logger.warning(
-                        "egress proxy failed to start for %s; continuing without egress filtering",
-                        execution_id,
-                        exc_info=True,
-                    )
-                    egress_handle = None
-                    proxy_url = None
+            # Phase 24 (24-fix, crit 3): deny-by-default egress proxy (opt-in via
+            # AGENTED_SANDBOX). Starting it FAILS CLOSED — a proxy that cannot start
+            # refuses the launch (raises PolicyDenied, caught below → clean FAILED,
+            # Popen never reached) rather than silently running with NO egress
+            # filtering (the fail-OPEN hole this closes).
+            egress_handle, proxy_url, proc_env = cls._start_egress_proxy_or_fail_closed(
+                execution_id=execution_id,
+                policy_session_id=policy_session_id,
+                env_overrides=env_overrides,
+                proc_env=proc_env,
+            )
 
             # Stackable policy gate (23-03) + OS sandbox (24-03): wrap the command in
             # the OS sandbox, set the REAL sandboxed flag, and evaluate the launch gate

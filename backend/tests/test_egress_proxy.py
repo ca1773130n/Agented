@@ -7,6 +7,8 @@ required.
 
 import asyncio
 
+import pytest
+
 from app.services import egress_proxy
 from app.services.egress_proxy import proxy_env, start_egress_proxy
 
@@ -111,3 +113,50 @@ def test_threaded_proxy_start_stop():
         assert proxy.url and proxy.url.startswith("http://127.0.0.1:")
     finally:
         proxy.stop()
+
+
+# --------------------------------------------------------------------------- #
+# crit 3 (24-fix): egress proxy start failure must FAIL CLOSED (refuse the launch)
+# instead of continuing with no egress filtering.
+# --------------------------------------------------------------------------- #
+def test_egress_start_failure_fails_closed(monkeypatch):
+    from app.services import sandbox_wrap
+    from app.services.execution_service import ExecutionService
+    from app.services.policy_service import PolicyDenied
+
+    monkeypatch.setattr(sandbox_wrap, "sandbox_enabled", lambda: True)
+
+    class _BoomProxy:
+        def __init__(self, *a, **k):
+            pass
+
+        def start(self):
+            raise RuntimeError("bind failed")
+
+    monkeypatch.setattr(egress_proxy, "ThreadedEgressProxy", _BoomProxy)
+
+    with pytest.raises(PolicyDenied):
+        ExecutionService._start_egress_proxy_or_fail_closed(
+            execution_id="ex-1",
+            policy_session_id="s1",
+            env_overrides={},
+            proc_env={},
+        )
+
+
+def test_egress_disabled_returns_no_proxy(monkeypatch):
+    """With AGENTED_SANDBOX off there is no egress proxy — proc_env passes through
+    unchanged and nothing fails (the fail-closed rule only bites when opted in)."""
+    from app.services import sandbox_wrap
+    from app.services.execution_service import ExecutionService
+
+    monkeypatch.setattr(sandbox_wrap, "sandbox_enabled", lambda: False)
+    handle, url, env = ExecutionService._start_egress_proxy_or_fail_closed(
+        execution_id="ex",
+        policy_session_id="s",
+        env_overrides={},
+        proc_env={"A": "B"},
+    )
+    assert handle is None
+    assert url is None
+    assert env == {"A": "B"}
