@@ -160,3 +160,62 @@ def test_egress_disabled_returns_no_proxy(monkeypatch):
     assert handle is None
     assert url is None
     assert env == {"A": "B"}
+
+
+# --------------------------------------------------------------------------- #
+# BLOCKER 2 (24-fix): ThreadedEgressProxy.start() must BLOCK until actually
+# listening and FAIL CLOSED (raise) if it never becomes ready — no half-built
+# handle with url=None handed to a caller that then launches unfiltered.
+# --------------------------------------------------------------------------- #
+def test_threaded_proxy_not_ready_raises(monkeypatch):
+    """A proxy whose boot never signals readiness → start() raises after timeout."""
+
+    async def _never_ready(*a, **k):
+        await asyncio.Event().wait()  # hang forever; readiness is never set
+
+    monkeypatch.setattr(egress_proxy, "start_egress_proxy", _never_ready)
+    tp = egress_proxy.ThreadedEgressProxy(allowlist={"x"}, session_id="hang")
+    with pytest.raises(RuntimeError):
+        tp.start(timeout=0.3)
+    assert tp.url is None
+
+
+def test_threaded_proxy_boot_error_raises(monkeypatch):
+    """A proxy whose async boot RAISES → start() surfaces it as a fail-closed error
+    instead of returning a url-less handle."""
+
+    async def _boom(*a, **k):
+        raise OSError("bind failed")
+
+    monkeypatch.setattr(egress_proxy, "start_egress_proxy", _boom)
+    tp = egress_proxy.ThreadedEgressProxy(allowlist={"x"}, session_id="boom")
+    with pytest.raises(RuntimeError):
+        tp.start(timeout=2.0)
+    assert tp.url is None
+
+
+def test_egress_not_ready_url_none_fails_closed(monkeypatch):
+    """A proxy whose start() returns but exposes NO url (never became ready, yet did
+    not raise) is treated as failure → PolicyDenied BEFORE any Popen. The old code
+    trusted the dead ``.url`` and launched without egress filtering (fail open)."""
+    from app.services import sandbox_wrap
+    from app.services.execution_service import ExecutionService
+    from app.services.policy_service import PolicyDenied
+
+    monkeypatch.setattr(sandbox_wrap, "sandbox_enabled", lambda: True)
+
+    class _NotReadyProxy:
+        def __init__(self, *a, **k):
+            self.url = None
+
+        def start(self, *a, **k):
+            return self  # returns but never became ready (url stays None)
+
+    monkeypatch.setattr(egress_proxy, "ThreadedEgressProxy", _NotReadyProxy)
+    with pytest.raises(PolicyDenied):
+        ExecutionService._start_egress_proxy_or_fail_closed(
+            execution_id="ex-nr",
+            policy_session_id="s-nr",
+            env_overrides={},
+            proc_env={},
+        )

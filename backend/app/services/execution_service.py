@@ -633,6 +633,12 @@ class ExecutionService:
                 cls._egress_allowlist_from_env(), session_id=policy_session_id
             ).start()
             proxy_url = egress_handle.url
+            # Defense-in-depth (24-fix, BLOCKER 2): even though ``start()`` now raises
+            # when the proxy never becomes ready, treat a missing/empty url here as a
+            # not-ready failure too — never build the child env (and reach Popen)
+            # trusting a dead proxy url (that would run WITHOUT egress filtering).
+            if not proxy_url:
+                raise RuntimeError("egress proxy started but exposed no url (not ready)")
             proc_env = cls._build_subprocess_env(env_overrides, proxy_url=proxy_url)
             return egress_handle, proxy_url, proc_env
         except Exception as exc:

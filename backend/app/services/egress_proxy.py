@@ -224,21 +224,64 @@ class ThreadedEgressProxy:
         self.url: str | None = None
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._ready = threading.Event()
+        self._boot_error: BaseException | None = None
+        self._boot_task: asyncio.Task | None = None
 
     def _run(self) -> None:
         asyncio.set_event_loop(self._loop)
 
         async def _boot():
-            self._proxy = await start_egress_proxy(self._allowlist, session_id=self._session_id)
-            self.url = self._proxy.url
-            self._ready.set()
+            try:
+                self._proxy = await start_egress_proxy(self._allowlist, session_id=self._session_id)
+                self.url = self._proxy.url
+            except asyncio.CancelledError:  # timed-out boot cancelled by start() — quiet
+                raise
+            except BaseException as exc:  # noqa: BLE001 - surfaced to start() below
+                # Capture the boot failure so ``start()`` can FAIL CLOSED instead of
+                # returning a half-built proxy with ``url=None`` (BLOCKER 2).
+                self._boot_error = exc
+            finally:
+                # Always signal — success OR failure — so ``start()`` never blocks the
+                # full timeout on a boot that already errored.
+                self._ready.set()
 
-        self._loop.create_task(_boot())
+        self._boot_task = self._loop.create_task(_boot())
         self._loop.run_forever()
 
+    def _shutdown_loop(self) -> None:
+        """Cancel a still-pending boot task then stop the loop (fail-closed teardown).
+
+        Cancelling first avoids a dangling ``_boot`` task being destroyed while pending
+        when a never-ready boot is abandoned on timeout.
+        """
+
+        def _cancel_and_stop() -> None:
+            if self._boot_task is not None and not self._boot_task.done():
+                self._boot_task.cancel()
+            self._loop.stop()
+
+        self._loop.call_soon_threadsafe(_cancel_and_stop)
+
     def start(self, timeout: float = 5.0) -> "ThreadedEgressProxy":
+        """Start the proxy thread and BLOCK until it is actually listening.
+
+        SECURITY (24-fix, BLOCKER 2): the previous version returned ``self``
+        unconditionally after ``wait(timeout)`` even when the proxy never became
+        ready (``url`` still ``None``) or boot raised — the caller then trusted a
+        dead ``.url`` and launched WITHOUT egress filtering (fail open). Now a
+        not-ready / errored / url-less start RAISES ``RuntimeError`` so the launch
+        path fails closed. On failure the event loop is stopped to avoid leaking the
+        daemon thread.
+        """
         self._thread.start()
-        self._ready.wait(timeout)
+        if not self._ready.wait(timeout):
+            self._shutdown_loop()
+            raise RuntimeError(f"egress proxy did not become ready within {timeout}s (fail closed)")
+        if self._boot_error is not None or not self.url:
+            self._shutdown_loop()
+            raise RuntimeError(
+                "egress proxy failed to start (no listening url) — fail closed"
+            ) from self._boot_error
         return self
 
     def stop(self) -> None:
