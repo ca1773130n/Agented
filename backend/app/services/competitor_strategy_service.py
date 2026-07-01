@@ -529,12 +529,14 @@ class CompetitorStrategyService:
                 "goal_loop_config": goal_loop_config,
             }
 
-            from .execution_type_handler import get_handler
-
-            handler = get_handler("goal_loop")
-            if handler is None:  # pragma: no cover — registry always has goal_loop
-                raise ValueError("goal_loop execution handler is not registered")
-            result = handler.start(session_config)
+            # Phase 24 (24-fix, MAJOR 11): actually EXECUTE via the runner selected
+            # above. The selected runner used to be logged and then IGNORED —
+            # execution always went through the local goal_loop handler regardless
+            # (dead routing), so a credentialed high-risk run never reached the cloud
+            # sandbox it selected. ``LocalRunner.execute`` reproduces that exact local
+            # goal_loop path (no regression); an E2B/Modal runner now runs the work
+            # off-box.
+            result = runner.execute(session_config)
             if isinstance(result, dict) and result.get("error"):
                 raise ValueError(f"goal_loop launch failed: {result['error']}")
 

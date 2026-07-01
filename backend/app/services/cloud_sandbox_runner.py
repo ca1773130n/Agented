@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import logging
 import os
+import shlex
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,23 @@ class LocalRunner:
 
         return build_sandbox_prefix(cmd, workspace, net=net, proxy_url=proxy_url)
 
+    def execute(self, session_config: dict):
+        """Run the session locally via the ``goal_loop`` execution handler.
+
+        This IS today's path — the caller (competitor auto-implement) used to call
+        the handler inline while only *logging* the selected runner (24-fix, MAJOR
+        11: dead routing). Routing execution through ``runner.execute`` makes the
+        selected runner actually run the work; ``LocalRunner`` reproduces the prior
+        goal-loop launch EXACTLY (worktree + human_gate + DB session), so there is
+        no behaviour change when local is selected.
+        """
+        from .execution_type_handler import get_handler
+
+        handler = get_handler("goal_loop")
+        if handler is None:  # pragma: no cover — registry always has goal_loop
+            raise ValueError("goal_loop execution handler is not registered")
+        return handler.start(session_config)
+
 
 class E2BRunner:
     """E2B cloud sandbox. SDK imported lazily; auth via ``E2B_API_KEY``."""
@@ -66,9 +85,22 @@ class E2BRunner:
 
         sbx = Sandbox.create(timeout=timeout)
         try:
-            return sbx.commands.run(" ".join(cmd))
+            # SECURITY (24-fix, MAJOR 10): E2B ``commands.run`` executes its argument
+            # in a SHELL, so a bare ``" ".join(cmd)`` let a metacharacter in any arg
+            # (``;`` / ``&&`` / ``$()``) inject extra commands. ``shlex.join`` quotes
+            # every token so the argv is passed as literal data, not shell syntax.
+            return sbx.commands.run(shlex.join(cmd))
         finally:
             sbx.kill()
+
+    def execute(self, session_config: dict):  # pragma: no cover - needs live creds (L3)
+        """Run the session's command in an ephemeral E2B cloud sandbox."""
+        result = self.run(list(session_config.get("cmd") or []))
+        return {
+            "session_id": f"{self.kind}-{uuid.uuid4().hex[:8]}",
+            "runner": self.kind,
+            "result": result,
+        }
 
 
 class ModalRunner:
@@ -85,10 +117,23 @@ class ModalRunner:
         app = modal.App.lookup("agented-sandbox", create_if_missing=True)
         sb = modal.Sandbox.create(app=app)
         try:
-            proc = sb.exec("bash", "-lc", " ".join(cmd), timeout=timeout)
+            # SECURITY (24-fix, MAJOR 10): pass argv DIRECTLY to ``exec`` — no shell.
+            # The old ``exec("bash", "-lc", " ".join(cmd))`` ran the joined string
+            # through ``bash -lc``, so a metacharacter in any arg injected commands.
+            # ``exec(*cmd)`` runs the program with its args verbatim, no shell parse.
+            proc = sb.exec(*cmd, timeout=timeout)
             return proc
         finally:
             sb.terminate()
+
+    def execute(self, session_config: dict):  # pragma: no cover - needs live creds (L3)
+        """Run the session's command in an ephemeral Modal cloud sandbox."""
+        result = self.run(list(session_config.get("cmd") or []))
+        return {
+            "session_id": f"{self.kind}-{uuid.uuid4().hex[:8]}",
+            "runner": self.kind,
+            "result": result,
+        }
 
 
 def select_runner(*, risk: str, config: dict | None = None):
