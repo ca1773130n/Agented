@@ -66,10 +66,19 @@ class SetupExecutionService:
         # Split command into list
         cmd_list = shlex.split(command)
 
-        # Phase 24 (24-03 sweep): OS-sandbox wrap (no-op unless AGENTED_SANDBOX opted in).
-        from .sandbox_wrap import wrap_harness_command
+        # Phase 24 (24-fix, crit 4): OS-sandbox wrap AND enforce the launch gate with
+        # the REAL sandboxed flag BEFORE Popen — not a bare wrap that ignores it. A
+        # policy that requires a sandbox (or otherwise denies) raises PolicyDenied and
+        # the setup subprocess never starts (fail closed). No-op unless AGENTED_SANDBOX.
+        from .sandbox_wrap import apply_sandbox_and_enforce
 
-        cmd_list, _sandboxed = wrap_harness_command(cmd_list, working_dir, net=True)
+        cmd_list, _sandboxed = apply_sandbox_and_enforce(
+            cmd_list,
+            working_dir,
+            session_id=execution_id,
+            backend=(cmd_list[0] if cmd_list else "unknown"),
+            net=True,
+        )
 
         # Launch subprocess
         process = subprocess.Popen(

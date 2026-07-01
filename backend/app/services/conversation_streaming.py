@@ -830,11 +830,20 @@ def _stream_via_cli(
 
     cmd = ["claude", "-p", prompt, "--output-format", "stream-json", "--verbose"]
 
-    # Phase 24 (24-03 sweep): route the harness spawn through the OS-sandbox prefix
-    # builder. No-op pass-through unless AGENTED_SANDBOX is opted in.
-    from .sandbox_wrap import wrap_harness_command
+    # Phase 24 (24-fix, crit 6): wrap AND enforce the launch gate with the REAL
+    # sandboxed flag BEFORE Popen (a bare wrap ignored the flag). A require-sandbox
+    # / deny policy refuses the spawn (fail closed). No-op unless AGENTED_SANDBOX.
+    from .policy_service import PolicyDenied
+    from .sandbox_wrap import apply_sandbox_and_enforce
 
-    cmd, _sandboxed = wrap_harness_command(cmd, cwd, net=True)
+    try:
+        cmd, _sandboxed = apply_sandbox_and_enforce(
+            cmd, cwd, session_id="", backend="claude", net=True
+        )
+    except PolicyDenied as exc:
+        reason = (getattr(exc, "verdict", None) or {}).get("reason") or "policy denied"
+        yield f"[Error: launch blocked by policy: {reason}]"
+        return
 
     try:
         proc = subprocess.Popen(
@@ -963,10 +972,20 @@ def _stream_via_opencode_cli(
     # opencode run takes message as positional arg, model in provider/model format
     cmd = ["opencode", "run", prompt, "--model", model]
 
-    # Phase 24 (24-03 sweep): OS-sandbox wrap (no-op unless AGENTED_SANDBOX opted in).
-    from .sandbox_wrap import wrap_harness_command
+    # Phase 24 (24-fix, crit 6): wrap AND enforce the launch gate with the REAL
+    # sandboxed flag BEFORE Popen (a bare wrap ignored the flag). A require-sandbox
+    # / deny policy refuses the spawn (fail closed). No-op unless AGENTED_SANDBOX.
+    from .policy_service import PolicyDenied
+    from .sandbox_wrap import apply_sandbox_and_enforce
 
-    cmd, _sandboxed = wrap_harness_command(cmd, cwd, net=True)
+    try:
+        cmd, _sandboxed = apply_sandbox_and_enforce(
+            cmd, cwd, session_id="", backend="opencode", net=True
+        )
+    except PolicyDenied as exc:
+        reason = (getattr(exc, "verdict", None) or {}).get("reason") or "policy denied"
+        yield f"[Error: launch blocked by policy: {reason}]"
+        return
 
     try:
         proc = subprocess.Popen(

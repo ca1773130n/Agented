@@ -88,10 +88,21 @@ def _run_subprocess(
     inherits the harness's env unchanged.
     """
     logger.info("CLI agent: spawning %s (cwd=%s) cmd=%s", backend_label, cwd, " ".join(cmd))
-    # Phase 24 (24-03 sweep): OS-sandbox wrap (no-op unless AGENTED_SANDBOX opted in).
-    from .sandbox_wrap import wrap_harness_command
+    # Phase 24 (24-fix, crit 5): wrap AND enforce the launch gate with the REAL
+    # sandboxed flag BEFORE Popen — a bare wrap ignored the flag, letting an
+    # enforce_sandbox policy be bypassed. A DENY refuses the spawn (fail closed).
+    from .policy_service import PolicyDenied
+    from .sandbox_wrap import apply_sandbox_and_enforce
 
-    cmd, _sandboxed = wrap_harness_command(cmd, cwd, net=True)
+    try:
+        cmd, _sandboxed = apply_sandbox_and_enforce(
+            cmd, cwd, session_id="", backend=backend_label, net=True
+        )
+    except PolicyDenied as exc:
+        reason = (getattr(exc, "verdict", None) or {}).get("reason") or "policy denied"
+        logger.warning("CLI agent: launch blocked by policy for %s: %s", backend_label, reason)
+        yield f"[Error: launch blocked by policy: {reason}]"
+        return
     try:
         proc = subprocess.Popen(
             cmd,

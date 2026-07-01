@@ -19,13 +19,18 @@ _HARNESS_MODULES = [
     "setup_execution_service.py",
     "base_generation_service.py",
     "replay_service.py",
+    # 24-fix crit 7: the goal-loop/ralph/team/agent/sketch chokepoint (pty.fork +
+    # subprocess.Popen) must sandbox-wrap AND enforce too.
+    "project_session_manager.py",
 ]
 
 # Tokens that prove a module routes its launch through the sandbox layer.
+# ``apply_sandbox_and_enforce`` (the shared wrap+enforce seam) is a substring of
+# ExecutionService's ``_apply_sandbox_and_enforce``, so it matches both.
 _WRAP_TOKENS = (
     "wrap_harness_command",
     "build_sandbox_prefix",
-    "_apply_sandbox_and_enforce",
+    "apply_sandbox_and_enforce",
 )
 
 # Explicit allowlist marker for a Popen that is legitimately NOT a harness launch.

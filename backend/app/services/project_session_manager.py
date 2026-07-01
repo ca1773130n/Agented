@@ -865,22 +865,33 @@ class ProjectSessionManager:
         with get_connection() as conn:
             session_id = _get_unique_project_session_id(conn)
 
-        # Stackable policy gate (23 BLOCKER 4 — close the ungated launch path).
-        # Every autonomous harness launch funnels through create_session (goal-loop
-        # / ralph / team-spawn / agent / sketch sessions), so it must clear the SAME
-        # shared launch gate ExecutionService.run_trigger uses — no spawner may
-        # bypass governance. Evaluated BEFORE any pty.fork / subprocess.Popen so a
-        # DENY raises PolicyDenied and nothing is ever spawned. Server-scope
-        # policies (scope_id IS NULL) always apply for this brand-new session id;
-        # the default (no policy authored) is ALLOW, so existing behaviour is
-        # unchanged until an operator authors a policy.
-        from .policy_service import PolicyService
+        # Stackable policy gate (23 BLOCKER 4) + OS sandbox (24-fix, crit 7 — the
+        # goal-loop / ralph / team-spawn / agent / sketch chokepoint). Every
+        # autonomous harness launch funnels through create_session, so it must clear
+        # the SAME shared launch gate ExecutionService.run_trigger uses — no spawner
+        # may bypass governance. It previously called ONLY the Phase-23 enforce_launch
+        # with no sandbox wrap, so an ``enforce_sandbox`` policy could never see a
+        # sandboxed=True launch here; now we OS-sandbox-wrap the command and enforce
+        # the gate with the REAL sandboxed flag. Evaluated BEFORE any pty.fork /
+        # subprocess.Popen so a DENY (incl. enforce_sandbox on an unsandboxable
+        # launch) raises PolicyDenied and nothing is ever spawned (fail closed); an
+        # ASK blocks here for operator approval, exactly as before. Server-scope
+        # policies (scope_id IS NULL) always apply for this brand-new session id; the
+        # default (no policy authored) is ALLOW, so existing behaviour is unchanged.
+        #
+        # ``cmd`` is kept UNWRAPPED for the backend / CLAUDE_CONFIG_DIR detection
+        # below; ``spawn_cmd`` is the wrapped argv actually exec'd (a no-op copy of
+        # ``cmd`` unless AGENTED_SANDBOX is opted in).
+        from .sandbox_wrap import apply_sandbox_and_enforce
 
-        PolicyService.enforce_launch(
+        spawn_cmd, _sandboxed = apply_sandbox_and_enforce(
+            list(cmd or []),
+            cwd,
             session_id=session_id,
             team_id=None,
-            cmd=cmd,
             backend=(cmd[0] if cmd else "unknown"),
+            net=True,
+            interactive=True,
         )
 
         # Auto-inject CLAUDE_CONFIG_DIR for claude CLI sessions so the spawned
@@ -986,7 +997,7 @@ class ProjectSessionManager:
                 except OSError:
                     os._exit(1)
                 try:
-                    os.execvp(cmd[0], cmd)
+                    os.execvp(spawn_cmd[0], spawn_cmd)
                 except OSError:
                     os._exit(1)
                 os._exit(1)
@@ -1004,7 +1015,7 @@ class ProjectSessionManager:
             popen_env = {**os.environ, **(env or {})}
             try:
                 popen = subprocess.Popen(
-                    cmd,
+                    spawn_cmd,
                     stdin=subprocess.PIPE,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,

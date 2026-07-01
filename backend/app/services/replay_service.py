@@ -115,15 +115,20 @@ class ReplayService:
             if shutil.which("stdbuf"):
                 cmd = ["stdbuf", "-oL", "-eL"] + cmd
 
-            # SECURITY (23): a replay re-launches a PRIOR harness command as a new
-            # unattended spawn — potentially long after a DENY policy was added.
-            # Gate it through the shared non-interactive policy layer BEFORE the
-            # Popen so a deny (or ask, a refusal here) fails the replay closed.
-            from app.services.policy_service import PolicyDenied, PolicyService
+            # SECURITY (23 + 24-fix, MAJOR 9): a replay re-launches a PRIOR harness
+            # command as a new unattended spawn — potentially long after a DENY
+            # policy was added. Gate it through the shared non-interactive policy
+            # layer BEFORE the Popen so a deny (or ask, a refusal here) fails the
+            # replay closed. The enforce used to run BEFORE the sandbox wrap, so
+            # ``sandboxed`` was always False and an ``enforce_sandbox`` policy wrongly
+            # denied a valid sandboxed replay — so wrap FIRST, then enforce with the
+            # REAL flag via the shared seam.
+            from app.services.policy_service import PolicyDenied
+            from app.services.sandbox_wrap import apply_sandbox_and_enforce
 
             try:
-                PolicyService.enforce_launch_noninteractive(
-                    session_id="", cmd=cmd, backend=backend_type
+                cmd, _sandboxed = apply_sandbox_and_enforce(
+                    cmd, PROJECT_ROOT, session_id="", backend=backend_type, net=True
                 )
             except PolicyDenied as exc:
                 reason = (getattr(exc, "verdict", None) or {}).get("reason") or "policy denied"
@@ -134,10 +139,6 @@ class ReplayService:
                 )
                 return
 
-            # Phase 24 (24-03 sweep): OS-sandbox wrap (no-op unless AGENTED_SANDBOX opted in).
-            from app.services.sandbox_wrap import wrap_harness_command
-
-            cmd, _sandboxed = wrap_harness_command(cmd, PROJECT_ROOT, net=True)
             process = subprocess.Popen(
                 cmd,
                 cwd=PROJECT_ROOT,
