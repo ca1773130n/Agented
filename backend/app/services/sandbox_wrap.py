@@ -86,6 +86,35 @@ _CRED_FILES = (
 )
 
 
+def _is_home_or_cred(path: str) -> bool:
+    """True iff ``path`` is ``$HOME`` itself, an ANCESTOR of ``$HOME`` (e.g.
+    ``/Users``), or a credential dir / anything nested under one.
+
+    BLOCKER 1 defense-in-depth: these paths must NEVER be re-allowed for read. A
+    home-rooted tool like ``$HOME/bin/claude`` makes ``_interpreter_read_paths``
+    derive the parent ``$HOME`` (and a bare ``$HOME/claude`` even derives ``/Users``);
+    re-allowing either would re-open the whole home — and thus the credential dirs —
+    for read. Filtering them here is the suspenders to the SBPL credential-deny
+    reorder's belt. Never raises.
+    """
+    home = os.path.realpath(os.path.expanduser("~"))
+    if not home or home == "/":
+        return False
+    try:
+        rp = os.path.realpath(path)
+    except OSError:  # pragma: no cover - defensive
+        return True
+    # ``path`` is $HOME or an ancestor of $HOME (== home, or a strict prefix of it).
+    if rp == home or home.startswith(rp.rstrip(os.sep) + os.sep):
+        return True
+    # ``path`` is a credential dir or nested under one.
+    for name in _CRED_DIRS:
+        cred = os.path.join(home, name)
+        if rp == cred or rp.startswith(cred + os.sep):
+            return True
+    return False
+
+
 def _interpreter_read_paths(cmd: list[str]) -> list[str]:
     """Install roots whose file *contents* the wrapped child must still read.
 
@@ -97,6 +126,12 @@ def _interpreter_read_paths(cmd: list[str]) -> list[str]:
     the profile otherwise denies reading file contents under the home dir — the
     interpreter is not a secret, and denying it would break exec of anything
     installed under home. Never raises.
+
+    SECURITY (24-fix, BLOCKER 1): the derived paths are FILTERED so we never emit
+    ``$HOME`` itself, an ancestor of ``$HOME``, or a credential dir. A tool at
+    ``$HOME/bin/claude`` derives the parent ``$HOME`` — re-allowing that would
+    re-open the entire home (incl. ``~/.ssh``) for read, defeating the credential
+    denies. ``_is_home_or_cred`` drops those; the SBPL reorder is the second layer.
     """
     paths: set[str] = set()
     for p in (sys.prefix, sys.base_prefix, os.path.dirname(sys.executable)):
@@ -115,8 +150,8 @@ def _interpreter_read_paths(cmd: list[str]) -> list[str]:
                     paths.add(parent)  # bin/ → install root (sibling lib/)
         except OSError:  # pragma: no cover - defensive
             pass
-    # Drop empty / root ("/" would re-allow everything and defeat the scoping).
-    return sorted(p for p in paths if p and p != "/")
+    # Drop empty / root ("/" would re-allow everything) and any $HOME/cred path.
+    return sorted(p for p in paths if p and p != "/" and not _is_home_or_cred(p))
 
 
 def _platform() -> str:
@@ -196,7 +231,12 @@ def _proxy_port(proxy_url: str) -> str | None:
 
 
 def _build_bwrap_prefix(
-    cmd: list[str], workspace: str, *, net: bool, proxy_url: str | None
+    cmd: list[str],
+    workspace: str,
+    *,
+    net: bool,
+    proxy_url: str | None,
+    config_dirs: list[str] | None = None,
 ) -> list[str]:
     """Compose a bubblewrap argv prefix (Linux). Lifted from 24-RESEARCH Rec 1.
 
@@ -226,6 +266,14 @@ def _build_bwrap_prefix(
             argv += ["--ro-bind", src, src]
     argv += ["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp"]
     argv += ["--bind", workspace, workspace, "--chdir", workspace]
+    # Harness config dirs (CLAUDE_CONFIG_DIR / CODEX_HOME / GEMINI_HOME) — bound
+    # READ-WRITE so a sandboxed harness can read its auth/plugins AND persist state
+    # into its config dir (MAJOR 1: previously bwrap bound only workspace/system, so
+    # a sandboxed claude could not read CLAUDE_CONFIG_DIR). Guarded by existence so a
+    # missing dir doesn't make bwrap fail.
+    for cd in config_dirs or []:
+        if cd and os.path.exists(cd):
+            argv += ["--bind", cd, cd]
     # Isolate EVERY namespace INCLUDING the network: a private, empty netns with no
     # host network means a hostile child cannot bypass the egress proxy (no raw
     # sockets / DNS / hard-coded IP off-box). ``--unshare-all`` already unshares the
@@ -245,30 +293,43 @@ def _build_sbpl_profile(
     net: bool,
     proxy_url: str | None,
     read_paths: list[str] | None = None,
+    config_dirs: list[str] | None = None,
 ) -> str:
     """Compose a macOS seatbelt (SBPL) profile string. Lifted from 24-RESEARCH Rec 2.
 
     ``(deny default)`` then narrow allows. Apple SBPL resolves by LAST-match, which
-    this profile leans on twice:
+    this profile leans on for both read scoping and network:
 
-    READ SCOPING (24-fix, BLOCKER 1 — no more global ``file-read*``):
+    READ SCOPING (24-fix, BLOCKER 1 — no more global ``file-read*``, and the
+    credential denies are the FINAL word):
       1. ``(allow file-read*)`` — broad read so dyld / system libs / path traversal
          work (a fully deny-default read profile SIGABRTs modern macOS binaries).
       2. ``(deny file-read-data (subpath <home>))`` — but the *contents* of files
          under the home dir are NOT readable (metadata/traversal still is, so exec
          of interpreters nested under home keeps working).
-      3. ``(deny file-read* (subpath <home>/.ssh))`` … — the credential dirs are
-         fully denied (metadata too); credential files by literal.
-      4. ``(allow file-read-data (subpath <workspace>))`` + the interpreter/tool
-         install roots — re-allow reading exactly what the child legitimately needs.
-      Net effect: a wrapped child can read the workspace and run, but cannot
-      exfiltrate ``~/.ssh/id_rsa`` / ``~/.aws/credentials`` / other home secrets.
+      3. ``(allow file-read-data (subpath <workspace>))`` + the interpreter/tool
+         install roots + harness config dirs — re-allow reading exactly what the
+         child legitimately needs.
+      4. ``(deny file-read* (subpath <home>/.ssh))`` + ``(deny file-read-data
+         (subpath <home>/.ssh))`` … — the credential dirs are denied both metadata
+         (``file-read*``) AND data (``file-read-data``), emitted LAST among the read
+         rules so they WIN over any broad or home-rooted re-allow above.
 
-    WRITE: write only inside the workspace (+ TMPDIR + /dev). NETWORK: ``(deny
-    network*)`` then a MORE-SPECIFIC allow — the later ``(allow network* (remote
-    ...))`` permits exactly the proxy while everything else stays denied (Pitfall 4
-    deny-wins quirk). ``net`` without a proxy allows network broadly (no egress
-    filtering); ``net`` false + no proxy leaves the sandbox fully offline.
+         EMPIRICAL SBPL QUIRK (verified live, BLOCKER 1): seatbelt does NOT let a
+         ``(deny file-read*)`` override a *preceding* ``(allow file-read-data)`` for
+         the data operation — only an explicit ``(deny file-read-data)`` does. So a
+         ``file-read*``-only credential deny left ``~/.ssh/id_rsa`` READABLE whenever
+         a home-rooted re-allow was present; the paired ``file-read-data`` deny is
+         what actually closes it. (The previous ordering also appended these denies
+         BEFORE the re-allows, compounding the leak.)
+      Net effect: a wrapped child can read the workspace/config-dirs and run, but
+      cannot exfiltrate ``~/.ssh/id_rsa`` / ``~/.aws/credentials`` / other secrets.
+
+    WRITE: write only inside the workspace (+ TMPDIR + /dev + harness config dirs).
+    NETWORK: ``(deny network*)`` then a MORE-SPECIFIC allow — the later ``(allow
+    network* (remote ...))`` permits exactly the proxy while everything else stays
+    denied (Pitfall 4 deny-wins quirk). ``net`` without a proxy allows network
+    broadly (no egress filtering); ``net`` false + no proxy leaves it fully offline.
     """
     home = os.path.expanduser("~")
     lines = [
@@ -283,16 +344,25 @@ def _build_sbpl_profile(
     if home and home != "/":
         # ...but NOT the CONTENTS of files under the home dir (secrets live here).
         lines.append(f'(deny file-read-data (subpath "{home}"))')
-        # Fully deny the highest-value credential dirs (metadata + data).
-        for name in _CRED_DIRS:
-            lines.append(f'(deny file-read* (subpath "{home}/{name}"))')
-        for name in _CRED_FILES:
-            lines.append(f'(deny file-read* (literal "{home}/{name}"))')
-    # Re-allow reading contents of the workspace + interpreter/tool install roots
-    # (these may sit under home; last-match-wins lets the child read exactly them).
-    for rp in [workspace, *(read_paths or [])]:
+    # Re-allow reading contents of the workspace + interpreter/tool install roots +
+    # harness config dirs (these may sit under home; last-match-wins lets the child
+    # read exactly them). The credential denies below come AFTER, so they still win.
+    for rp in [workspace, *(read_paths or []), *(config_dirs or [])]:
         if rp:
             lines.append(f'(allow file-read-data (subpath "{rp}"))')
+    # CREDENTIAL DENIES — emitted LAST among the read rules so they are the FINAL
+    # word (BLOCKER 1). Each credential path gets BOTH a ``file-read*`` deny (metadata)
+    # and an explicit ``file-read-data`` deny (contents): a ``file-read*`` deny alone
+    # does NOT override a preceding ``file-read-data`` re-allow in seatbelt, so the
+    # paired data-deny is what actually keeps ``~/.ssh/id_rsa`` unreadable under a
+    # broad or home-rooted re-allow.
+    if home and home != "/":
+        for name in _CRED_DIRS:
+            lines.append(f'(deny file-read* (subpath "{home}/{name}"))')
+            lines.append(f'(deny file-read-data (subpath "{home}/{name}"))')
+        for name in _CRED_FILES:
+            lines.append(f'(deny file-read* (literal "{home}/{name}"))')
+            lines.append(f'(deny file-read-data (literal "{home}/{name}"))')
     lines += [
         "(deny file-write*)",
         f'(allow file-write* (subpath "{workspace}"))',
@@ -300,6 +370,13 @@ def _build_sbpl_profile(
         '(allow file-write* (subpath "/private/tmp"))',
         '(allow file-write* (subpath "/dev"))',
     ]
+    # Harness config dirs are read+write — a harness persists state (sessions, todos,
+    # projects/) into its config dir (MAJOR 1). None of ``_CRED_DIRS`` overlap the
+    # default config dirs (~/.claude, ~/.codex, ~/.gemini), so this does not re-open
+    # a credential dir.
+    for cd in config_dirs or []:
+        if cd:
+            lines.append(f'(allow file-write* (subpath "{cd}"))')
     # Network rules — empirically verified against macOS seatbelt (24-RESEARCH
     # Pitfall 4): a SPECIFIC ``(allow network* (remote ip "localhost:PORT"))`` after
     # ``(deny network*)`` IS honored (the proxy is reachable), but a BROAD
@@ -325,6 +402,7 @@ def build_sandbox_prefix(
     *,
     net: bool = False,
     proxy_url: str | None = None,
+    config_dirs: list[str] | None = None,
 ) -> tuple[list[str], bool]:
     """Return ``(argv_prefix_incl_cmd, sandboxed)`` for the current OS.
 
@@ -333,7 +411,9 @@ def build_sandbox_prefix(
     ``(list(cmd), False)`` and logs ONE warning — it NEVER raises. ``net`` keeps the
     child able to reach the local egress proxy; ``proxy_url`` injects
     ``HTTPS_PROXY``/``HTTP_PROXY`` (bwrap) or the SBPL network allow so the sandbox's
-    egress rule matches the proxy the child is pointed at.
+    egress rule matches the proxy the child is pointed at. ``config_dirs`` (harness
+    config dirs — CLAUDE_CONFIG_DIR / CODEX_HOME / GEMINI_HOME) are bound/allowed
+    read-write so a sandboxed harness can reach its auth/plugins (MAJOR 1).
     """
     global _DEGRADE_WARNED
     platform = _platform()
@@ -349,13 +429,19 @@ def build_sandbox_prefix(
         return list(cmd), False
 
     if platform.startswith("linux"):
-        return _build_bwrap_prefix(cmd, workspace, net=net, proxy_url=proxy_url), True
+        return (
+            _build_bwrap_prefix(
+                cmd, workspace, net=net, proxy_url=proxy_url, config_dirs=config_dirs
+            ),
+            True,
+        )
     if platform == "darwin":
         profile = _build_sbpl_profile(
             workspace,
             net=net,
             proxy_url=proxy_url,
             read_paths=_interpreter_read_paths(cmd),
+            config_dirs=config_dirs,
         )
         return ["sandbox-exec", "-p", profile, *cmd], True
 
@@ -372,17 +458,22 @@ def wrap_harness_command(
     *,
     net: bool = True,
     proxy_url: str | None = None,
+    config_dirs: list[str] | None = None,
 ) -> tuple[list[str], bool]:
     """Live-launch entry point used by the harness Popen sites (Plan 03 sweep).
 
     Gates on :func:`sandbox_enabled` so normal operation is untouched until an
     operator sets ``AGENTED_SANDBOX``; when enabled it delegates to
     :func:`build_sandbox_prefix`. A missing workspace degrades to pass-through.
-    Returns ``(argv, sandboxed)``.
+    ``config_dirs`` are the harness config dirs the sandbox must keep readable
+    (CLAUDE_CONFIG_DIR / CODEX_HOME / GEMINI_HOME — MAJOR 1). Returns
+    ``(argv, sandboxed)``.
     """
     if not workspace or not sandbox_enabled():
         return list(cmd), False
-    return build_sandbox_prefix(cmd, workspace, net=net, proxy_url=proxy_url)
+    return build_sandbox_prefix(
+        cmd, workspace, net=net, proxy_url=proxy_url, config_dirs=config_dirs
+    )
 
 
 def apply_sandbox_and_enforce(
@@ -395,6 +486,7 @@ def apply_sandbox_and_enforce(
     net: bool = True,
     proxy_url: str | None = None,
     interactive: bool = False,
+    config_dirs: list[str] | None = None,
 ) -> tuple[list[str], bool]:
     """Shared Phase-24 launch seam: OS-sandbox-wrap ``cmd`` then run the Phase-23
     launch gate with the REAL ``sandboxed`` flag — BEFORE the caller's Popen/fork.
@@ -418,7 +510,9 @@ def apply_sandbox_and_enforce(
     """
     from .policy_service import PolicyService
 
-    wrapped, sandboxed = wrap_harness_command(cmd, workspace, net=net, proxy_url=proxy_url)
+    wrapped, sandboxed = wrap_harness_command(
+        cmd, workspace, net=net, proxy_url=proxy_url, config_dirs=config_dirs
+    )
     gate = (
         PolicyService.enforce_launch if interactive else PolicyService.enforce_launch_noninteractive
     )

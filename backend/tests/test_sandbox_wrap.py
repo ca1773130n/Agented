@@ -168,3 +168,95 @@ def test_wrap_harness_command_no_workspace_passthrough(monkeypatch):
     out, sandboxed = sandbox_wrap.wrap_harness_command(["echo", "x"], None)
     assert out == ["echo", "x"]
     assert sandboxed is False
+
+
+# --------------------------------------------------------------------------- #
+# BLOCKER 1 (24-fix): the credential denies must be the FINAL word, and
+# _interpreter_read_paths must never re-allow $HOME / a credential dir.
+# --------------------------------------------------------------------------- #
+def test_interpreter_read_paths_never_emits_home(monkeypatch, tmp_path):
+    """A home-rooted tool ($HOME/bin/claude) derives the parent $HOME — but that must
+    be FILTERED, else re-allowing $HOME re-opens ~/.ssh for read (defense-in-depth
+    beside the SBPL reorder)."""
+    home = str(tmp_path)
+    monkeypatch.setattr(os.path, "expanduser", lambda p: home if p == "~" else p)
+    paths = sandbox_wrap._interpreter_read_paths([os.path.join(home, "bin", "claude")])
+    assert home not in paths, "must not re-allow $HOME"
+    assert os.path.dirname(home) not in paths, "must not re-allow an ancestor of $HOME"
+    # The tool's own bin dir (neither $HOME nor a cred dir) IS still allowed.
+    assert os.path.join(home, "bin") in paths
+
+
+def test_interpreter_read_paths_filters_credential_dirs(monkeypatch, tmp_path):
+    """A tool nested under a credential dir must not re-allow that credential dir."""
+    home = str(tmp_path)
+    monkeypatch.setattr(os.path, "expanduser", lambda p: home if p == "~" else p)
+    tool = os.path.join(home, ".config", "foo", "bin", "tool")
+    paths = sandbox_wrap._interpreter_read_paths([tool])
+    cfg_root = os.path.join(home, ".config")
+    for p in paths:
+        assert not p.startswith(cfg_root), f"{p} re-opens a credential dir"
+
+
+def test_sbpl_credential_denies_are_the_final_word(monkeypatch):
+    """The credential denies are emitted AFTER the workspace/interpreter re-allows, so
+    SBPL last-match-wins keeps ~/.ssh denied even under a home-rooted read allow."""
+    _reset(monkeypatch)
+    monkeypatch.setattr(os.path, "expanduser", lambda p: "/Users/tester" if p == "~" else p)
+    # Force a home-rooted read allow (an interpreter resolved under $HOME).
+    profile = sandbox_wrap._build_sbpl_profile(
+        "/ws", net=False, proxy_url=None, read_paths=["/Users/tester"]
+    )
+    lines = profile.splitlines()
+    allow_idxs = [
+        i for i, ln in enumerate(lines) if ln.startswith("(allow file-read-data (subpath")
+    ]
+    ssh_deny_idx = next(
+        i for i, ln in enumerate(lines) if ln == '(deny file-read* (subpath "/Users/tester/.ssh"))'
+    )
+    # An explicit file-read-DATA deny is REQUIRED — a file-read* deny alone does not
+    # override a preceding file-read-data allow (empirical seatbelt quirk).
+    ssh_data_deny_idx = next(
+        i
+        for i, ln in enumerate(lines)
+        if ln == '(deny file-read-data (subpath "/Users/tester/.ssh"))'
+    )
+    assert allow_idxs, "expected read re-allows in the profile"
+    assert ssh_deny_idx > max(allow_idxs), "credential deny must WIN over any read allow"
+    assert ssh_data_deny_idx > max(allow_idxs), "credential DATA deny must WIN over any read allow"
+    # The home-rooted allow really is present (the exact defeat scenario we guard).
+    assert '(allow file-read-data (subpath "/Users/tester"))' in profile
+
+
+def test_sbpl_config_dirs_readable_and_writable(monkeypatch):
+    """MAJOR 1 (24-fix): harness config dirs are re-allowed for READ and WRITE so a
+    sandboxed claude/codex/gemini can reach CLAUDE_CONFIG_DIR / CODEX_HOME / GEMINI_HOME."""
+    _reset(monkeypatch)
+    monkeypatch.setattr(sandbox_wrap, "_platform", lambda: "darwin")
+    monkeypatch.setattr(sandbox_wrap, "sandbox_available", lambda: True)
+    monkeypatch.setattr(os.path, "expanduser", lambda p: "/Users/tester" if p == "~" else p)
+    cfg = "/Users/tester/.claude"
+    prefix, _ = sandbox_wrap.build_sandbox_prefix(
+        ["claude", "-p", "hi"], "/ws", net=False, config_dirs=[cfg]
+    )
+    profile = prefix[2]
+    assert f'(allow file-read-data (subpath "{cfg}"))' in profile
+    assert f'(allow file-write* (subpath "{cfg}"))' in profile
+
+
+def test_bwrap_binds_config_dirs(monkeypatch, tmp_path):
+    """MAJOR 1 (24-fix): bwrap binds existing harness config dirs read-write; a missing
+    config dir is skipped (existence-guarded) so bwrap never fails."""
+    _reset(monkeypatch)
+    monkeypatch.setattr(sandbox_wrap, "_platform", lambda: "linux")
+    monkeypatch.setattr(sandbox_wrap, "sandbox_available", lambda: True)
+    cfg = tmp_path / "dot-claude"
+    cfg.mkdir()
+    ws = str(tmp_path / "ws")
+    os.makedirs(ws)
+    prefix, _ = sandbox_wrap.build_sandbox_prefix(["claude"], ws, net=False, config_dirs=[str(cfg)])
+    assert f"--bind {cfg} {cfg}" in " ".join(prefix)
+    # A non-existent config dir is skipped (guarded).
+    missing = str(tmp_path / "nope")
+    prefix2, _ = sandbox_wrap.build_sandbox_prefix(["claude"], ws, net=False, config_dirs=[missing])
+    assert missing not in " ".join(prefix2)

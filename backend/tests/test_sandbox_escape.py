@@ -19,7 +19,7 @@ import time
 
 import pytest
 
-from app.services import egress_proxy
+from app.services import egress_proxy, sandbox_wrap
 from app.services.egress_proxy import ThreadedEgressProxy
 from app.services.sandbox_wrap import build_sandbox_prefix, sandbox_available
 
@@ -99,6 +99,46 @@ def test_escape_read_secret_outside_workspace_blocked(tmp_path):
             os.remove(secret)
         except OSError:
             pass
+
+
+def test_sbpl_home_rooted_read_allow_does_not_expose_ssh_live(tmp_path, monkeypatch):
+    """BLOCKER 1 (24-fix), LIVE seatbelt: even when a read re-allow covers $HOME
+    (the exact case a tool resolved under $HOME would produce), reading
+    ``~/.ssh/id_rsa`` is STILL blocked — the credential denies are the FINAL word in
+    the reordered profile. This proves the reorder at runtime, not just in the argv.
+
+    macOS-only (SBPL). On Linux bwrap the host FS simply isn't bound, so there is no
+    analogous last-match ordering to prove — that path is covered argv-only."""
+    if sys.platform != "darwin":
+        pytest.skip("macOS seatbelt (SBPL) last-match ordering only")
+
+    # macOS canonicalizes paths (/var → /private/var) before matching SBPL subpaths,
+    # so every path baked into the profile MUST be realpath'd or the rules silently
+    # miss the kernel's canonical path (mirrors the other live tests' os.path.realpath).
+    base = os.path.realpath(str(tmp_path))
+    fake_home = os.path.join(base, "home")
+    ssh = os.path.join(fake_home, ".ssh")
+    os.makedirs(ssh)
+    secret = os.path.join(ssh, "id_rsa")
+    with open(secret, "w") as fh:
+        fh.write("TOP-SECRET-KEY-MATERIAL")
+    ws = os.path.join(base, "ws")
+    os.makedirs(ws)
+    # ``_build_sbpl_profile`` reads $HOME via expanduser("~"); point it at the fake home.
+    monkeypatch.setenv("HOME", fake_home)
+
+    # Force a home-rooted read allow (read_paths=[$HOME]) — the defeat scenario.
+    profile = sandbox_wrap._build_sbpl_profile(
+        ws, net=False, proxy_url=None, read_paths=[fake_home]
+    )
+    r = subprocess.run(
+        ["sandbox-exec", "-p", profile, "/bin/cat", secret],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert r.returncode != 0, "home-rooted read allow must NOT re-expose ~/.ssh/id_rsa"
+    assert "TOP-SECRET" not in r.stdout
 
 
 def test_escape_connect_non_allowlisted_blocked(tmp_path, monkeypatch):
