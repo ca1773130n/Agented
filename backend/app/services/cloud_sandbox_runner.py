@@ -28,6 +28,27 @@ logger = logging.getLogger(__name__)
 _HIGH_RISK = {"high", "highest", "critical"}
 
 
+def _requires_goal_loop(session_config: dict) -> bool:
+    """True iff ``session_config`` carries goal-loop / PSM semantics that a cmd-only
+    cloud runner CANNOT honor.
+
+    SECURITY (24-fix, BLOCKER 3): the E2B/Modal runners only run ``session_config["cmd"]``
+    in an ephemeral sandbox and return a SYNTHETIC session id — they do not drive the
+    governed goal-loop (human_gate, quality_gate, iteration records, a trackable PSM
+    session). Routing goal-loop work to such a runner would silently degrade a
+    governed loop into a fire-and-forget command while the caller believes a real
+    goal-loop ran. This flag lets the cloud runners fall back to the local goal-loop
+    for that work instead of executing the degraded stub. Never raises.
+    """
+    if not isinstance(session_config, dict):
+        return False
+    return bool(
+        session_config.get("goal_loop_config")
+        or session_config.get("execution_type") == "goal_loop"
+        or session_config.get("requires_goal_loop")
+    )
+
+
 def _has_e2b_creds() -> bool:
     return bool(os.environ.get("E2B_API_KEY"))
 
@@ -93,10 +114,20 @@ class E2BRunner:
         finally:
             sbx.kill()
 
-    def execute(self, session_config: dict):  # pragma: no cover - needs live creds (L3)
-        """Run the session's command in an ephemeral E2B cloud sandbox."""
-        result = self.run(list(session_config.get("cmd") or []))
-        return {
+    def execute(self, session_config: dict):
+        """Run the session's command in an ephemeral E2B cloud sandbox — UNLESS the
+        session requires goal-loop/PSM semantics this cmd-only runner cannot honor,
+        in which case fall back to the LOCAL goal-loop (24-fix, BLOCKER 3: honest
+        routing — never run a degraded cmd-only stub while the caller believes a
+        governed goal-loop ran)."""
+        if _requires_goal_loop(session_config):
+            logger.warning(
+                "E2BRunner cannot honor goal-loop/PSM semantics; falling back to the "
+                "LOCAL goal-loop for this session (no cmd-only cloud stub)."
+            )
+            return LocalRunner(self.config).execute(session_config)
+        result = self.run(list(session_config.get("cmd") or []))  # pragma: no cover - live creds
+        return {  # pragma: no cover - needs live creds (L3)
             "session_id": f"{self.kind}-{uuid.uuid4().hex[:8]}",
             "runner": self.kind,
             "result": result,
@@ -126,10 +157,20 @@ class ModalRunner:
         finally:
             sb.terminate()
 
-    def execute(self, session_config: dict):  # pragma: no cover - needs live creds (L3)
-        """Run the session's command in an ephemeral Modal cloud sandbox."""
-        result = self.run(list(session_config.get("cmd") or []))
-        return {
+    def execute(self, session_config: dict):
+        """Run the session's command in an ephemeral Modal cloud sandbox — UNLESS the
+        session requires goal-loop/PSM semantics this cmd-only runner cannot honor,
+        in which case fall back to the LOCAL goal-loop (24-fix, BLOCKER 3: honest
+        routing — never run a degraded cmd-only stub while the caller believes a
+        governed goal-loop ran)."""
+        if _requires_goal_loop(session_config):
+            logger.warning(
+                "ModalRunner cannot honor goal-loop/PSM semantics; falling back to the "
+                "LOCAL goal-loop for this session (no cmd-only cloud stub)."
+            )
+            return LocalRunner(self.config).execute(session_config)
+        result = self.run(list(session_config.get("cmd") or []))  # pragma: no cover - live creds
+        return {  # pragma: no cover - needs live creds (L3)
             "session_id": f"{self.kind}-{uuid.uuid4().hex[:8]}",
             "runner": self.kind,
             "result": result,

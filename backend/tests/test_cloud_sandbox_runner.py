@@ -1,8 +1,11 @@
 """L1 tests for the optional cloud-sandbox runners (24-04).
 
-Runner selection + absent-credential graceful skip + no-ImportError-when-absent,
-plus that both highest-risk autonomous consumers consult select_runner. No live
-E2B/Modal round-trip (that needs credentials — L3, out of CI scope).
+Runner selection + absent-credential graceful skip + no-ImportError-when-absent.
+The competitor-strategy auto-implement consumer consults select_runner; the
+harness-autonomy patch-apply consumer does NOT (24-fix MAJOR 2 — patch-apply is a
+local git op, not a spawn). A cloud runner handed goal-loop work falls back to the
+local goal-loop rather than running a degraded cmd-only stub (24-fix BLOCKER 3). No
+live E2B/Modal round-trip (that needs credentials — L3, out of CI scope).
 """
 
 import importlib
@@ -90,16 +93,20 @@ def test_local_runner_wrap_delegates(monkeypatch):
     assert sandboxed is False
 
 
-def test_process_project_autonomy_consults_select_runner(monkeypatch):
+def test_process_project_autonomy_does_not_select_runner(monkeypatch):
+    """MAJOR 2 (24-fix): autonomy's apply is a LOCAL git patch-apply
+    (``apply_dry_run_round``), not a spawnable command, so it must NOT select a cloud
+    runner. The prior select-then-ignore dead routing is removed — ``select_runner``
+    is never consulted here."""
     from app.services import harness_autonomy
 
-    spy = {"risk": None}
+    calls = {"n": 0}
 
-    def _fake_select(*, risk, config=None):
-        spy["risk"] = risk
-        return LocalRunner(config)
+    def _boom_select(*a, **k):
+        calls["n"] += 1
+        raise AssertionError("process_project_autonomy must not select a runner")
 
-    monkeypatch.setattr(csr, "select_runner", _fake_select)
+    monkeypatch.setattr(csr, "select_runner", _boom_select)
 
     class _Policy:
         enabled = True
@@ -110,7 +117,7 @@ def test_process_project_autonomy_consults_select_runner(monkeypatch):
 
     out = harness_autonomy.process_project_autonomy("proj-x")
     assert out == []
-    assert spy["risk"] == "high"
+    assert calls["n"] == 0
 
 
 def test_start_autoimplement_wires_select_runner():
@@ -251,3 +258,55 @@ def test_competitor_strategy_routes_through_runner_execute():
     src = (_SERVICES / "competitor_strategy_service.py").read_text()
     assert "runner.execute(session_config)" in src
     assert "handler.start(session_config)" not in src
+
+
+# --------------------------------------------------------------------------- #
+# BLOCKER 3 (24-fix): a cmd-only cloud runner must NOT silently run goal-loop work.
+# --------------------------------------------------------------------------- #
+def test_requires_goal_loop_detection():
+    from app.services.cloud_sandbox_runner import _requires_goal_loop
+
+    assert _requires_goal_loop({"goal_loop_config": {"goal": "x"}}) is True
+    assert _requires_goal_loop({"execution_type": "goal_loop"}) is True
+    assert _requires_goal_loop({"requires_goal_loop": True}) is True
+    assert _requires_goal_loop({"cmd": ["claude"]}) is False
+    assert _requires_goal_loop(None) is False
+
+
+def test_cloud_runner_goal_loop_falls_back_to_local(monkeypatch):
+    """BLOCKER 3 (24-fix): a cloud runner (E2B/Modal) handed goal-loop work must NOT
+    run the cmd-only cloud stub (which returns a SYNTHETIC id while the caller
+    believes a governed PSM goal-loop ran). It falls back to the LOCAL goal-loop.
+
+    Asserts: no synthetic ``e2b-``/``modal-`` id is produced for goal-loop work, the
+    real local goal-loop handler runs, and the cloud ``run()`` stub is never called."""
+    from app.services import execution_type_handler
+
+    started = {}
+
+    class _Handler:
+        def start(self, cfg):
+            started["cfg"] = cfg
+            return {"session_id": "psess-real"}
+
+    monkeypatch.setattr(execution_type_handler, "get_handler", lambda kind: _Handler())
+
+    # If the degraded cmd-only path were taken, .run() would fire — make it explode so
+    # any degraded stub path fails loudly rather than silently.
+    def _boom_run(self, cmd, *, timeout=300):
+        raise AssertionError("cloud cmd-only stub must not run for goal-loop work")
+
+    monkeypatch.setattr(csr.E2BRunner, "run", _boom_run)
+    monkeypatch.setattr(csr.ModalRunner, "run", _boom_run)
+
+    session_config = {
+        "cmd": ["claude", "--dangerously-skip-permissions"],
+        "execution_type": "goal_loop",
+        "goal_loop_config": {"goal": "do it", "max_iterations": 3},
+    }
+
+    for runner_cls in (csr.E2BRunner, csr.ModalRunner):
+        out = runner_cls({"project_id": "p"}).execute(session_config)
+        assert out == {"session_id": "psess-real"}
+        assert not str(out.get("session_id", "")).startswith(("e2b-", "modal-"))
+    assert started["cfg"]["goal_loop_config"]["goal"] == "do it"
