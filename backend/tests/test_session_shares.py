@@ -1,13 +1,22 @@
-"""Tests for live-share tokens + two-client attach (Phase 25, 25-01)."""
+"""Tests for live-share tokens + two-client attach (Phase 25, 25-01).
 
+Also covers the Codex security fixes: mint ownership gate (#1), token hashing
+(#6), and co-drive CSRF / cross-site protection (#5).
+"""
+
+import hashlib
 import threading
 import time
 from collections import deque
 from datetime import datetime
+from types import SimpleNamespace
 
 import pytest
+from litestar.exceptions import PermissionDeniedException
 
+from app.db.connection import get_connection
 from app.db.session_shares import (
+    _hash_token,
     list_shares_for_session,
     mint_share_token,
     resolve_share_token,
@@ -15,6 +24,8 @@ from app.db.session_shares import (
 )
 from app.services.project_session_manager import ProjectSessionManager, SessionInfo
 from app.services.session_sharing_service import SessionSharingService
+from app_litestar.auth import Caller
+from app_litestar.routes.session_shares import co_drive_send, mint_share
 
 
 @pytest.fixture(autouse=True)
@@ -145,3 +156,132 @@ class TestTwoClientAttach:
         t.join(timeout=5)
 
         assert any("hello teammate" in ev for ev in received), received
+
+
+# ---------------------------------------------------------------------------
+# #6 — the stored column is a sha256 hash, not the raw token (no timing/enum)
+# ---------------------------------------------------------------------------
+
+
+class TestTokenHashing:
+    def test_stored_column_is_hash_not_raw(self, isolated_db):
+        token = mint_share_token("psess-hash", scope="read")
+        with get_connection() as conn:
+            rows = [r[0] for r in conn.execute("SELECT token FROM session_share_tokens").fetchall()]
+        assert token not in rows, "raw token must NOT be persisted"
+        assert hashlib.sha256(token.encode()).hexdigest() in rows
+        assert _hash_token(token) in rows
+
+    def test_lookup_by_correct_token_succeeds(self, isolated_db):
+        token = mint_share_token("psess-hash", scope="chat")
+        row = resolve_share_token(token)
+        assert row is not None and row["scope"] == "chat"
+
+    def test_lookup_by_wrong_token_fails(self, isolated_db):
+        mint_share_token("psess-hash", scope="chat")
+        assert resolve_share_token("not-the-token") is None
+
+    def test_revoke_by_correct_token(self, isolated_db):
+        token = mint_share_token("psess-hash", scope="read")
+        assert revoke_share_token(token) is True
+        assert resolve_share_token(token) is None
+
+
+# ---------------------------------------------------------------------------
+# #1 — mint requires session ownership (or admin); non-owner → 403
+# ---------------------------------------------------------------------------
+
+
+def _seed_owned_session_row(session_id, owner):
+    with get_connection() as conn:
+        conn.execute("INSERT OR IGNORE INTO projects (id, name) VALUES ('proj-mint', 'M')")
+        cols = "id, project_id, status"
+        vals = [session_id, "proj-mint", "active"]
+        if owner is not None:
+            cols += ", created_by"
+            vals.append(owner)
+        conn.execute(
+            f"INSERT INTO project_sessions ({cols}) VALUES ({', '.join(['?'] * len(vals))})",
+            vals,
+        )
+        conn.commit()
+
+
+def _caller(user_id, role="member"):
+    return Caller(api_key="k", role=role, user_id=user_id, auth_method="api_key")
+
+
+class TestMintOwnershipGate:
+    def test_owner_mints_ok(self, isolated_db):
+        _seed_owned_session_row("psess-mine", owner="owner-1")
+        result = mint_share.fn("proj-mint", "psess-mine", {"scope": "read"}, _caller("owner-1"))
+        assert result["token"]
+        assert result["scope"] == "read"
+
+    def test_non_owner_mint_forbidden(self, isolated_db):
+        _seed_owned_session_row("psess-mine", owner="owner-1")
+        with pytest.raises(PermissionDeniedException):
+            mint_share.fn("proj-mint", "psess-mine", {"scope": "chat"}, _caller("intruder"))
+
+    def test_admin_can_mint_any(self, isolated_db):
+        _seed_owned_session_row("psess-mine", owner="owner-1")
+        result = mint_share.fn(
+            "proj-mint", "psess-mine", {"scope": "read"}, _caller("root", role="admin")
+        )
+        assert result["token"]
+
+    def test_unowned_session_mint_forbidden_for_non_admin(self, isolated_db):
+        # Fail CLOSED: an unattributed (NULL created_by) session cannot be shared
+        # by a non-admin, even one that "knows" the session id.
+        _seed_owned_session_row("psess-orphan", owner=None)
+        with pytest.raises(PermissionDeniedException):
+            mint_share.fn("proj-mint", "psess-orphan", {"scope": "read"}, _caller("anyone"))
+
+
+# ---------------------------------------------------------------------------
+# #5 — co-drive SEND requires the X-Share-Token header + rejects cross-site
+# ---------------------------------------------------------------------------
+
+
+def _req(headers=None):
+    """A minimal request stub with case-insensitive header lookup."""
+    low = {k.lower(): v for k, v in (headers or {}).items()}
+
+    class _H:
+        def get(self, key, default=None):
+            return low.get(key.lower(), default)
+
+    return SimpleNamespace(headers=_H())
+
+
+class TestCoDriveCsrf:
+    def test_token_only_in_url_rejected(self, isolated_db):
+        # No X-Share-Token header (token only in the URL path) → rejected.
+        token = mint_share_token("psess-csrf", scope="chat")
+        with pytest.raises(PermissionDeniedException):
+            co_drive_send.fn(token, {"text": "hi"}, _req())
+
+    def test_wrong_header_token_rejected(self, isolated_db):
+        token = mint_share_token("psess-csrf", scope="chat")
+        with pytest.raises(PermissionDeniedException):
+            co_drive_send.fn(token, {"text": "hi"}, _req({"X-Share-Token": "mismatch"}))
+
+    def test_cross_site_origin_rejected(self, isolated_db):
+        token = mint_share_token("psess-csrf", scope="chat")
+        req = _req(
+            {"X-Share-Token": token, "Origin": "https://evil.example", "Host": "agented.app"}
+        )
+        with pytest.raises(PermissionDeniedException):
+            co_drive_send.fn(token, {"text": "hi"}, req)
+
+    def test_same_origin_header_carrying_post_accepted(self, isolated_db, monkeypatch):
+        token = mint_share_token("psess-csrf", scope="chat")
+        # Stub co_drive so we isolate the CSRF gate (the accept path).
+        monkeypatch.setattr(
+            SessionSharingService, "co_drive", staticmethod(lambda *a, **k: True)
+        )
+        req = _req(
+            {"X-Share-Token": token, "Origin": "https://agented.app", "Host": "agented.app"}
+        )
+        result = co_drive_send.fn(token, {"text": "go"}, req)
+        assert result["sent"] is True
