@@ -59,6 +59,48 @@ def test_escape_write_outside_workspace_blocked(tmp_path):
                 pass
 
 
+def test_escape_read_secret_outside_workspace_blocked(tmp_path):
+    """BLOCKER 1 (24-fix): a wrapped child can read WITHIN the workspace and run a
+    real interpreter, but reading a secret under the home dir is BLOCKED — the SBPL
+    no longer grants global ``file-read*``. Linux bwrap already can't see the host FS
+    outside its binds; this asserts the macOS seatbelt read-scoping empirically."""
+    ws = os.path.realpath(str(tmp_path))
+    inside = os.path.join(ws, "inside.txt")
+    with open(inside, "w") as fh:
+        fh.write("workspace-data")
+
+    # A secret UNDER the home dir (where ~/.ssh / ~/.aws / credentials live). We use
+    # a uniquely-named probe file so we never touch real user secrets; cleaned up.
+    home = os.path.expanduser("~")
+    secret = os.path.join(home, ".agented_sandbox_read_probe")
+    with open(secret, "w") as fh:
+        fh.write("TOP-SECRET")
+    try:
+        # Reading the in-workspace file SUCCEEDS (proves it's a boundary, not a block).
+        pfx_in, sandboxed = build_sandbox_prefix(["/bin/cat", inside], ws, net=False)
+        assert sandboxed is True, "sandbox_available() was True but the wrap degraded"
+        r_in = subprocess.run(pfx_in, capture_output=True, text=True, timeout=30)
+        assert r_in.returncode == 0 and "workspace-data" in r_in.stdout, r_in.stderr
+
+        # Running a real interpreter still works (system libs remain readable).
+        pfx_py, _ = build_sandbox_prefix(
+            [sys.executable, "-c", "import json,ssl,hashlib;print('pyok')"], ws, net=False
+        )
+        r_py = subprocess.run(pfx_py, capture_output=True, text=True, timeout=30)
+        assert r_py.returncode == 0 and "pyok" in r_py.stdout, r_py.stderr
+
+        # Reading the home-dir secret is DENIED — cat cannot read the contents.
+        pfx_secret, _ = build_sandbox_prefix(["/bin/cat", secret], ws, net=False)
+        r_secret = subprocess.run(pfx_secret, capture_output=True, text=True, timeout=30)
+        assert r_secret.returncode != 0, "reading a home-dir secret must be blocked"
+        assert "TOP-SECRET" not in r_secret.stdout
+    finally:
+        try:
+            os.remove(secret)
+        except OSError:
+            pass
+
+
 def test_escape_connect_non_allowlisted_blocked(tmp_path, monkeypatch):
     ws = os.path.realpath(str(tmp_path))
     captured: list = []

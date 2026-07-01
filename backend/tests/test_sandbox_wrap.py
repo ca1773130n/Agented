@@ -6,6 +6,8 @@ and availability are monkeypatched so BOTH the Linux (bwrap) and macOS (SBPL) pa
 are asserted regardless of the host running the suite.
 """
 
+import os
+
 from app.services import sandbox_wrap
 
 
@@ -35,7 +37,11 @@ def test_bwrap_prefix_composition(monkeypatch):
     assert "--dev /dev" in s
     assert "--tmpfs /tmp" in s
     assert "--unshare-all" in prefix
-    assert "--share-net" in prefix
+    # BLOCKER 2 (24-fix): private, empty netns — NO host network. The child cannot
+    # bypass the L7 egress proxy (raw socket / DNS / hard-coded IP) because it has no
+    # route off-box. ``--share-net`` (the bypass) must be gone.
+    assert "--unshare-net" in prefix
+    assert "--share-net" not in prefix
     assert "--die-with-parent" in prefix
     assert "--setenv HTTPS_PROXY http://127.0.0.1:9000" in s
     assert "--setenv HTTP_PROXY http://127.0.0.1:9000" in s
@@ -74,6 +80,33 @@ def test_sbpl_profile_composition(monkeypatch):
     assert '(allow file-write* (subpath "/ws"))' in profile
     assert "(deny network*)" in profile
     assert '(allow network* (remote ip "localhost:9000"))' in profile
+
+
+def test_sbpl_reads_are_scoped_not_global(monkeypatch):
+    """BLOCKER 1 (24-fix): the SBPL no longer grants an unconditional global read of
+    the whole filesystem. It keeps broad read for system libs (dyld/exec) but DENIES
+    reading file CONTENTS under the home dir, fully denies the credential dirs, and
+    re-allows only the workspace + interpreter/tool install roots."""
+    _reset(monkeypatch)
+    monkeypatch.setattr(sandbox_wrap, "_platform", lambda: "darwin")
+    monkeypatch.setattr(sandbox_wrap, "sandbox_available", lambda: True)
+    monkeypatch.setattr(os.path, "expanduser", lambda p: "/Users/tester" if p == "~" else p)
+
+    prefix, sandboxed = sandbox_wrap.build_sandbox_prefix(["claude", "-p", "hi"], "/ws", net=False)
+    assert sandboxed is True
+    profile = prefix[2]
+
+    # Reading the CONTENTS of files under the home dir is denied...
+    assert '(deny file-read-data (subpath "/Users/tester"))' in profile
+    # ...and the high-value credential dirs are fully denied (metadata too).
+    assert '(deny file-read* (subpath "/Users/tester/.ssh"))' in profile
+    assert '(deny file-read* (subpath "/Users/tester/.aws"))' in profile
+    assert '(deny file-read* (subpath "/Users/tester/.config"))' in profile
+    assert '(deny file-read* (literal "/Users/tester/.netrc"))' in profile
+    # The workspace contents ARE re-allowed (so the child can actually work).
+    assert '(allow file-read-data (subpath "/ws"))' in profile
+    # The bare, unconditional global read grant is gone.
+    assert "(allow file-read*)\n(deny file-write*)" not in profile
 
 
 def test_sbpl_network_allow_only_with_proxy(monkeypatch):

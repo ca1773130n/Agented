@@ -14,13 +14,22 @@ raises; the Phase-23 ``enforce_sandbox`` policy then decides launch-vs-refuse
 (fail closed). This generalizes the ``sandbox_eval.py`` pattern (scrubbed-env
 allowlist, ``IsolatedResult.sandboxed`` reporting) beyond deterministic eval checks.
 
-ponytail: v1 egress is env+proxy BEST-EFFORT — bwrap keeps ``--share-net`` (host
-netns) and only injects ``HTTPS_PROXY``/``HTTP_PROXY``, which a hostile child could
-unset or bypass by connecting to a raw IP. The airtight upgrade is an unprivileged
-network namespace (``--unshare-net`` with the proxy bound inside it) + ``nftables``
-forcing all egress to the proxy port; deferred to a later wave (see 24-RESEARCH
-Pitfall 3 + Open Q1). We reuse ``sandbox_eval._ENV_ALLOWLIST`` rather than deriving
-a second env allowlist.
+SECURITY (24-fix, fail CLOSED):
+  * Linux bwrap uses ``--unshare-net`` — a PRIVATE, empty network namespace with NO
+    host network. A hostile child therefore cannot bypass the L7 egress proxy with a
+    raw socket / its own DNS / a hard-coded IP: it simply has no route off-box. The
+    netns↔proxy BRIDGE that would let the child reach the local egress proxy from
+    inside the namespace (``pasta`` / ``slirp4netns`` / an ``nftables`` NAT to the
+    proxy port) is NOT wired in this round, so when a policy REQUIRES egress the run
+    is fail-closed (no network) rather than run wide-open with ``--share-net`` — see
+    the follow-up in ``_build_bwrap_prefix``.
+  * macOS seatbelt reads are SCOPED: the profile keeps broad read for system libs
+    (so dyld/exec work) but DENIES reading file *contents* under the home dir and
+    fully denies the credential dirs (``~/.ssh``/``~/.aws``/``~/.config``/…), then
+    re-allows only the workspace + the interpreter/tool install roots. A wrapped
+    child can no longer exfiltrate ``~/.ssh/id_rsa`` or ``~/.aws/credentials``.
+
+We reuse ``sandbox_eval._ENV_ALLOWLIST`` rather than deriving a second env allowlist.
 """
 
 from __future__ import annotations
@@ -51,6 +60,63 @@ _SANDBOX_ENABLED_ENV = "AGENTED_SANDBOX"
 _PROBE_CACHE: dict[str, bool] = {}
 # Ensures the degrade warning is logged once per process, not per launch.
 _DEGRADE_WARNED = False
+
+# macOS read-scoping (24-fix, BLOCKER 1). Credential DIRECTORIES fully denied
+# (metadata + data), so not even their listing leaks. Credential FILES denied by
+# literal. These live under the home dir; the profile also denies reading the
+# *contents* of anything else under home, then re-allows workspace + interpreter.
+_CRED_DIRS = (
+    ".ssh",
+    ".aws",
+    ".config",
+    ".gnupg",
+    ".gcloud",
+    ".azure",
+    ".kube",
+    ".docker",
+    ".terraform.d",
+    ".cloudflared",
+)
+_CRED_FILES = (
+    ".netrc",
+    ".git-credentials",
+    ".npmrc",
+    ".pypirc",
+    ".databrickscfg",
+)
+
+
+def _interpreter_read_paths(cmd: list[str]) -> list[str]:
+    """Install roots whose file *contents* the wrapped child must still read.
+
+    Covers (a) THIS process's Python runtime (``sys.prefix``/``sys.base_prefix`` —
+    the venv + its base, e.g. a uv-managed CPython nested under ``$HOME``) so a
+    Python-based wrapped command keeps working, and (b) the resolved tool being
+    launched (``cmd[0]`` and its parent, catching a harness binary under
+    ``~/.local/bin`` / ``~/.nvm`` / …). These are RE-ALLOWED for read even though
+    the profile otherwise denies reading file contents under the home dir — the
+    interpreter is not a secret, and denying it would break exec of anything
+    installed under home. Never raises.
+    """
+    paths: set[str] = set()
+    for p in (sys.prefix, sys.base_prefix, os.path.dirname(sys.executable)):
+        if p:
+            paths.add(p)
+    exe = cmd[0] if cmd else None
+    if exe:
+        resolved = exe if os.path.isabs(exe) else (shutil.which(exe) or exe)
+        try:
+            real = os.path.realpath(resolved)
+            d = os.path.dirname(real)
+            if d:
+                paths.add(d)
+                parent = os.path.dirname(d)
+                if parent:
+                    paths.add(parent)  # bin/ → install root (sibling lib/)
+        except OSError:  # pragma: no cover - defensive
+            pass
+    # Drop empty / root ("/" would re-allow everything and defeat the scoping).
+    return sorted(p for p in paths if p and p != "/")
 
 
 def _platform() -> str:
@@ -134,12 +200,25 @@ def _build_bwrap_prefix(
 ) -> list[str]:
     """Compose a bubblewrap argv prefix (Linux). Lifted from 24-RESEARCH Rec 1.
 
-    Binds ONLY the workspace read-write; everything else read-only. Uses
-    ``--unshare-all --share-net`` so the child is isolated (pid/ipc/uts/…) but can
-    still reach the LOCAL egress proxy over loopback (full ``--unshare-net`` would
-    cut it off — Rec 1 egress note). ``--die-with-parent`` reaps the child if the
-    harness dies. Read-only binds are guarded by existence so a distro missing
-    ``/lib64`` doesn't make bwrap fail.
+    Binds ONLY the workspace read-write; everything else read-only.
+
+    SECURITY (24-fix, fail CLOSED): uses ``--unshare-net`` — a PRIVATE, empty
+    network namespace with NO host network. This closes the ``--share-net`` bypass:
+    a hostile child sharing the host netns could open a raw socket, run its own
+    DNS, or dial a hard-coded IP straight past the L7 egress proxy. With
+    ``--unshare-net`` the child has no route off-box at all, so the ONLY possible
+    network path is one deliberately bridged INTO the namespace.
+
+    FOLLOW-UP (not wired this round): the netns↔proxy bridge that would let the
+    child reach the local egress proxy from inside its private namespace —
+    ``pasta`` / ``slirp4netns``, or an ``nftables`` NAT redirecting outbound to the
+    proxy port. Until that lands, an egress-requiring run is fail-CLOSED (the child
+    is simply offline) rather than running wide-open on the host network. The
+    ``--setenv HTTPS_PROXY`` injection is kept so the bridge, once added, needs no
+    further launch-site change.
+
+    ``--die-with-parent`` reaps the child if the harness dies. Read-only binds are
+    guarded by existence so a distro missing ``/lib64`` doesn't make bwrap fail.
     """
     argv: list[str] = ["bwrap"]
     for src in ("/usr", "/bin", "/lib", "/lib64", "/etc/resolv.conf", "/etc/ssl"):
@@ -147,8 +226,12 @@ def _build_bwrap_prefix(
             argv += ["--ro-bind", src, src]
     argv += ["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp"]
     argv += ["--bind", workspace, workspace, "--chdir", workspace]
-    # Isolate every namespace but keep the network shared so loopback → proxy works.
-    argv += ["--unshare-all", "--share-net", "--die-with-parent"]
+    # Isolate EVERY namespace INCLUDING the network: a private, empty netns with no
+    # host network means a hostile child cannot bypass the egress proxy (no raw
+    # sockets / DNS / hard-coded IP off-box). ``--unshare-all`` already unshares the
+    # net namespace; ``--unshare-net`` is stated explicitly so the intent — and the
+    # absence of ``--share-net`` — is unmistakable at the launch boundary.
+    argv += ["--unshare-all", "--unshare-net", "--die-with-parent"]
     if proxy_url:
         argv += ["--setenv", "HTTPS_PROXY", proxy_url, "--setenv", "HTTP_PROXY", proxy_url]
     argv.append("--")
@@ -156,24 +239,61 @@ def _build_bwrap_prefix(
     return argv
 
 
-def _build_sbpl_profile(workspace: str, *, net: bool, proxy_url: str | None) -> str:
+def _build_sbpl_profile(
+    workspace: str,
+    *,
+    net: bool,
+    proxy_url: str | None,
+    read_paths: list[str] | None = None,
+) -> str:
     """Compose a macOS seatbelt (SBPL) profile string. Lifted from 24-RESEARCH Rec 2.
 
-    ``(deny default)`` then narrow allows: read broadly, write only inside the
-    workspace (+ TMPDIR + /dev), and — for network — ``(deny network*)`` followed by
-    a MORE-SPECIFIC allow. Apple SBPL resolves by last-match, so the later specific
-    ``(allow network* (remote ...))`` permits exactly the proxy while everything else
-    stays denied (Pitfall 4 deny-wins quirk). ``net`` without a proxy allows network
-    broadly (no egress filtering); ``net`` false + no proxy leaves the sandbox
-    fully offline.
+    ``(deny default)`` then narrow allows. Apple SBPL resolves by LAST-match, which
+    this profile leans on twice:
+
+    READ SCOPING (24-fix, BLOCKER 1 — no more global ``file-read*``):
+      1. ``(allow file-read*)`` — broad read so dyld / system libs / path traversal
+         work (a fully deny-default read profile SIGABRTs modern macOS binaries).
+      2. ``(deny file-read-data (subpath <home>))`` — but the *contents* of files
+         under the home dir are NOT readable (metadata/traversal still is, so exec
+         of interpreters nested under home keeps working).
+      3. ``(deny file-read* (subpath <home>/.ssh))`` … — the credential dirs are
+         fully denied (metadata too); credential files by literal.
+      4. ``(allow file-read-data (subpath <workspace>))`` + the interpreter/tool
+         install roots — re-allow reading exactly what the child legitimately needs.
+      Net effect: a wrapped child can read the workspace and run, but cannot
+      exfiltrate ``~/.ssh/id_rsa`` / ``~/.aws/credentials`` / other home secrets.
+
+    WRITE: write only inside the workspace (+ TMPDIR + /dev). NETWORK: ``(deny
+    network*)`` then a MORE-SPECIFIC allow — the later ``(allow network* (remote
+    ...))`` permits exactly the proxy while everything else stays denied (Pitfall 4
+    deny-wins quirk). ``net`` without a proxy allows network broadly (no egress
+    filtering); ``net`` false + no proxy leaves the sandbox fully offline.
     """
+    home = os.path.expanduser("~")
     lines = [
         "(version 1)",
         "(deny default)",
         "(allow process-exec)",
         "(allow process-fork)",
         "(allow sysctl-read)",
+        # Broad read so dyld / system libraries / path traversal work...
         "(allow file-read*)",
+    ]
+    if home and home != "/":
+        # ...but NOT the CONTENTS of files under the home dir (secrets live here).
+        lines.append(f'(deny file-read-data (subpath "{home}"))')
+        # Fully deny the highest-value credential dirs (metadata + data).
+        for name in _CRED_DIRS:
+            lines.append(f'(deny file-read* (subpath "{home}/{name}"))')
+        for name in _CRED_FILES:
+            lines.append(f'(deny file-read* (literal "{home}/{name}"))')
+    # Re-allow reading contents of the workspace + interpreter/tool install roots
+    # (these may sit under home; last-match-wins lets the child read exactly them).
+    for rp in [workspace, *(read_paths or [])]:
+        if rp:
+            lines.append(f'(allow file-read-data (subpath "{rp}"))')
+    lines += [
         "(deny file-write*)",
         f'(allow file-write* (subpath "{workspace}"))',
         '(allow file-write* (subpath "/private/var/folders"))',
@@ -231,7 +351,12 @@ def build_sandbox_prefix(
     if platform.startswith("linux"):
         return _build_bwrap_prefix(cmd, workspace, net=net, proxy_url=proxy_url), True
     if platform == "darwin":
-        profile = _build_sbpl_profile(workspace, net=net, proxy_url=proxy_url)
+        profile = _build_sbpl_profile(
+            workspace,
+            net=net,
+            proxy_url=proxy_url,
+            read_paths=_interpreter_read_paths(cmd),
+        )
         return ["sandbox-exec", "-p", profile, *cmd], True
 
     # Unsupported platform with a (spuriously) available tool — degrade.
@@ -258,3 +383,50 @@ def wrap_harness_command(
     if not workspace or not sandbox_enabled():
         return list(cmd), False
     return build_sandbox_prefix(cmd, workspace, net=net, proxy_url=proxy_url)
+
+
+def apply_sandbox_and_enforce(
+    cmd: list[str],
+    workspace: str | None,
+    *,
+    session_id: str,
+    backend: str,
+    team_id: str | None = None,
+    net: bool = True,
+    proxy_url: str | None = None,
+    interactive: bool = False,
+) -> tuple[list[str], bool]:
+    """Shared Phase-24 launch seam: OS-sandbox-wrap ``cmd`` then run the Phase-23
+    launch gate with the REAL ``sandboxed`` flag — BEFORE the caller's Popen/fork.
+
+    SECURITY (24-fix, crit 4-7): every autonomous harness spawn that previously
+    only *wrapped* (ignoring the ``sandboxed`` return, so an ``enforce_sandbox``
+    policy could be silently bypassed) routes through this ONE helper. Because the
+    wrap runs FIRST, the ``sandboxed`` flag handed to the gate is the true one, so a
+    policy that mandates a sandbox DENIES an unsandboxable launch. A DENY raises
+    ``PolicyDenied`` and the caller never reaches its spawn (fail CLOSED). Wrapping
+    is a no-op pass-through unless ``AGENTED_SANDBOX`` is opted in, so normal
+    operation is unchanged by default.
+
+    ``interactive`` selects the gate: ``enforce_launch`` (blocks on a human-gate
+    ASK) for operator-facing spawns; ``enforce_launch_noninteractive`` (ASK == deny,
+    no operator prompt) for unattended check/generation/streaming spawns.
+
+    Returns ``(wrapped_cmd, sandboxed)``. ``ExecutionService.run_trigger`` keeps its
+    own equivalent inline seam (``_apply_sandbox_and_enforce``) because it also
+    threads live cost/tool-call context into the gate.
+    """
+    from .policy_service import PolicyService
+
+    wrapped, sandboxed = wrap_harness_command(cmd, workspace, net=net, proxy_url=proxy_url)
+    gate = (
+        PolicyService.enforce_launch if interactive else PolicyService.enforce_launch_noninteractive
+    )
+    gate(
+        session_id=session_id,
+        team_id=team_id,
+        cmd=wrapped,
+        backend=backend,
+        sandboxed=sandboxed,
+    )
+    return wrapped, sandboxed
