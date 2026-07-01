@@ -74,6 +74,30 @@ class SkillTestingService:
             # Use configurable playground directory
             working_dir = get_playground_working_dir()
 
+            # SECURITY (23): gate the autonomous `claude -p` skill-test spawn
+            # through the shared non-interactive policy layer BEFORE launching. A
+            # DENY (or ASK, treated as a refusal here) aborts before any spawn or
+            # AI cost.
+            from .policy_service import PolicyDenied, PolicyService
+
+            try:
+                PolicyService.enforce_launch_noninteractive(
+                    session_id="",
+                    cmd=cmd,
+                    backend="claude",
+                )
+            except PolicyDenied as exc:
+                reason = (getattr(exc, "verdict", None) or {}).get("reason") or "policy denied"
+                blocked = f"Launch blocked by policy: {reason}"
+                with cls._lock:
+                    if test_id in cls._test_sessions:
+                        cls._test_sessions[test_id]["status"] = "failed"
+                        cls._test_sessions[test_id]["error"] = blocked
+                        cls._test_sessions[test_id]["exit_code"] = 126
+                cls._broadcast_test(test_id, "error", {"error": blocked})
+                cls._broadcast_test(test_id, "complete", {"exit_code": 126, "status": "failed"})
+                return
+
             process = subprocess.Popen(
                 cmd,
                 cwd=working_dir,

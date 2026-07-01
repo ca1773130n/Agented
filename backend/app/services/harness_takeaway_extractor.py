@@ -565,6 +565,19 @@ def _extract_llm(
     # AGENTED_TAKEAWAY_<PROVIDER>_CMD (e.g. AGENTED_TAKEAWAY_OPENAI_CMD for the codex CLI).
     try:
         cmd_template = resolve_llm_cmd(provider_kind, model_override)
+        # SECURITY (23): gate the autonomous provider-CLI extraction spawn (an
+        # unattended LLM generation incurring AI cost) BEFORE invoking it.
+        from .policy_service import PolicyDenied, PolicyService
+
+        try:
+            PolicyService.enforce_launch_noninteractive(
+                session_id=session_id or "",
+                cmd=list(cmd_template),
+                backend=provider_kind,
+            )
+        except PolicyDenied as exc:
+            logger.warning("takeaway LLM blocked by policy: %s", exc)
+            return []
         raw_output = _run_llm_for_extraction(
             prompt,
             cmd_template=cmd_template,

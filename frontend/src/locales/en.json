@@ -9687,5 +9687,50 @@
     "autoImplementConfirmMsg": "This launches an autonomous coding agent that writes code in an ISOLATED git worktree — never your main checkout — and pauses for your approval before it finishes. Continue?",
     "autoImplementStarted": "Auto-implement started — session {id}",
     "autoImplementNotEligible": "This strategy is no longer eligible for auto-implement (re-check its status and §5B clearance)."
+  },
+  "policy": {
+    "title": "Policies",
+    "subtitle": "Stackable governance rules, evaluated session-first.",
+    "newPolicy": "Create policy",
+    "edit": "Edit",
+    "delete": "Delete",
+    "save": "Save changes",
+    "cancel": "Cancel",
+    "empty": "No policies configured yet.",
+    "scope": "Scope",
+    "scopeId": "Scope ID",
+    "kind": "Kind",
+    "effect": "Effect",
+    "priority": "Priority",
+    "maxCostUsd": "Max cost (USD)",
+    "askThresholds": "Ask thresholds (USD, comma-separated)",
+    "maxToolCalls": "Max tool calls",
+    "scopes": {
+      "server": "Server",
+      "team": "Team",
+      "session": "Session"
+    },
+    "effects": {
+      "allow": "Allow",
+      "deny": "Deny",
+      "ask": "Ask"
+    },
+    "kinds": {
+      "cost_budget": "Cost budget",
+      "max_tool_calls_per_session": "Max tool calls",
+      "ask_on_os_tools": "Ask on OS tools",
+      "enforce_sandbox": "Enforce sandbox",
+      "custom": "Custom"
+    },
+    "ask": {
+      "title": "Approval required",
+      "reason": "Reason",
+      "scope": "Scope",
+      "approve": "Approve",
+      "deny": "Deny",
+      "awaiting": "Awaiting your decision…",
+      "resolved": "Resolved",
+      "alreadyResolved": "This request was already resolved or timed out."
+    }
   }
 }

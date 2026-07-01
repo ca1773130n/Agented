@@ -914,6 +914,16 @@ def _run_codex_in_workspace(scratch_dir: Path, *, timeout: int = 600) -> None:
         cmd = list(template)
         stdin_input = prompt_text
 
+    # SECURITY (23): gate the autonomous codex generation spawn (life-harness
+    # self-improvement) through the shared non-interactive policy layer BEFORE
+    # launching. A DENY (or ASK, a refusal here) fails the round closed.
+    from app.services.policy_service import PolicyDenied, PolicyService
+
+    try:
+        PolicyService.enforce_launch_noninteractive(session_id="", cmd=list(cmd), backend="codex")
+    except PolicyDenied as exc:
+        raise RuntimeError(f"harness_evolver codex launch blocked by policy: {exc}") from exc
+
     logger.info(
         "harness_evolver: invoking codex in %s",
         scratch_dir,

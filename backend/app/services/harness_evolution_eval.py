@@ -89,6 +89,17 @@ def _run_judge(prompt: str, provider_kind: str) -> str:
     else:
         cmd = list(template)
         stdin = prompt
+    # SECURITY (23): gate the autonomous provider-CLI judge spawn (an unattended
+    # LLM eval incurring AI cost) through the shared non-interactive policy layer
+    # BEFORE launching. A DENY (or ASK, a refusal here) fails the eval closed.
+    from app.services.policy_service import PolicyDenied, PolicyService
+
+    try:
+        PolicyService.enforce_launch_noninteractive(
+            session_id="", cmd=list(cmd), backend=provider_kind
+        )
+    except PolicyDenied as exc:
+        raise RuntimeError(f"harness eval judge blocked by policy: {exc}") from exc
     try:
         r = subprocess.run(
             cmd,

@@ -170,6 +170,8 @@ class GoalJudgeService:
         metric_spec: Optional[dict] = None,
         quality_gate: Optional["QualityGate"] = None,
         sandbox: str = "isolated",
+        session_id: Optional[str] = None,
+        team_id: Optional[str] = None,
     ) -> JudgeVerdict:
         """v0.7.86 — when both ``hypothesis`` and ``predicted_outcome``
         are supplied, the LLM judge runs in Ouroboros mode and
@@ -233,7 +235,9 @@ class GoalJudgeService:
                 ),
             )
         if check_cmd:
-            return cls._run_deterministic(check_cmd, cwd, sandbox=sandbox)
+            return cls._run_deterministic(
+                check_cmd, cwd, sandbox=sandbox, session_id=session_id, team_id=team_id
+            )
         from app.services.model_discovery_service import ModelDiscoveryService
 
         model = (
@@ -255,8 +259,43 @@ class GoalJudgeService:
 
     @staticmethod
     def _run_deterministic(
-        check_cmd: str, cwd: Optional[str], *, sandbox: str = "isolated"
+        check_cmd: str,
+        cwd: Optional[str],
+        *,
+        sandbox: str = "isolated",
+        session_id: Optional[str] = None,
+        team_id: Optional[str] = None,
     ) -> JudgeVerdict:
+        # SECURITY (FIX 1 — 23 BLOCKER): a deterministic check spawns an operator
+        # shell command via subprocess.Popen(shell=True) in sandbox_eval. That is an
+        # autonomous, unattended launch, so it MUST clear the shared stackable policy
+        # layer BEFORE anything is spawned — this was the one autonomous spawn path
+        # that bypassed governance. We route through the NON-interactive gate: a
+        # check is fire-and-forget, so a DENY refuses to run AND an ASK is ALSO
+        # treated as a refusal (no human to prompt → fail closed) rather than
+        # blocking the grader on an approval card.
+        from .policy_service import PolicyDenied, PolicyService
+
+        try:
+            PolicyService.enforce_launch_noninteractive(
+                session_id=session_id or "",
+                team_id=team_id,
+                # shell=True in sandbox_eval → the real argv is the shell wrapper.
+                cmd=["/bin/sh", "-c", check_cmd],
+                backend="goal-judge-check",
+                # the isolated path snapshots + scrubs the env (a real isolation
+                # boundary); the inherit escape hatch runs in-place (not sandboxed).
+                sandboxed=(sandbox == "isolated"),
+            )
+        except PolicyDenied as exc:
+            reason = (getattr(exc, "verdict", None) or {}).get("reason") or "policy denied"
+            return JudgeVerdict(
+                met=False,
+                source="deterministic",
+                reason=f"policy blocked deterministic check: {reason}",
+                confidence=0.0,
+            )
+
         # Both paths run through the hardened sandbox_eval runner (scrubbed env +
         # process-group SIGKILL on timeout). ``isolated`` (default, F9) grades
         # against a throwaway snapshot; ``inherit`` (escape hatch) runs in the

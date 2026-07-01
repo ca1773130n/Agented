@@ -1,209 +1,161 @@
-# Roadmap: v0.8.0 — Team Harness & Self-Improvement
+# Roadmap: v0.10.0 — Competitive Hardening (omnigent lessons)
 
-> **Active milestone.** First GRD-planned milestone since v0.5.0. Derived
-> from the approved design spec
-> `docs/superpowers/specs/2026-06-13-team-harness-self-improvement-design.md`
-> (+ `.ko.md`). Delivery is PR-per-phase with codex-review-until-green
-> before merge. The historical v0.5.0 roadmap lives at
-> `.planning/milestones/v0.5.0/ROADMAP.md`.
+> **Active milestone.** Operationalizes the verified competitive analysis
+> `docs/research/omnigent-vs-agented.md` (+ `.ko.md`). Delivery is
+> PR-per-phase with codex-review-until-green before merge. The paused v0.8.0
+> roadmap lives at `.planning/milestones/v0.8.0/ROADMAP.md`.
 
 ## Overview
 
-Make every Agented project able to one-click bootstrap a **team harness**.
-The journey runs backend-first: lay the forge creation surface (new
-`subagent` primitive, atomic create+bind+materialize, cross-kind bundles,
-the `forge-creator` skill bundle, session-completion auto-import), then route
-the sketch panel into primitive create/improve, make GRD the default
-execution driver for all superagent chat, wire GRD's full feature set
-(autoresearch, life-harness completion, full `/grd:` command surface) to the
-frontend, assemble the one-click `TeamHarnessSetupService`, and finally close
-the self-improvement loop with repeated-request detection that converts
-recurring user requests into skills behind hybrid confidence gates. Every
-LLM-calling addition covers all four harnesses (claude/codex/gemini/opencode),
-every new UI surface ships en/ko/ja/zh, and every phase passes the house
-gates (`just build`, backend pytest watchdog, frontend no-new-failures).
+omnigent-ai/omnigent (a Databricks meta-harness in Agented's exact category)
+is genuinely ahead on three operator-facing dimensions: a stackable
+policy/governance engine, OS-level sandboxing + egress control, and real-time
+multi-user collaboration, plus deployment/extensibility breadth (Postgres,
+container/self-update distribution, YAML-authored agents, key-isolated
+server/runner split). Agented remains ahead on autonomy (unified loop layer),
+memory (Tesserae/CodeGraph), and self-improvement (life-harness,
+competitive-intel) — which omnigent has no equivalent for.
+
+This milestone **closes the governance/collaboration/deployment gap** without
+touching the moat. Order is risk-first: land the policy engine (Phase 23)
+because it both consolidates today's scattered controls and is the prerequisite
+that keeps the later sandboxing and shared-session features safe; then OS-level
+sandboxing + egress control (Phase 24, gated by the Phase-23 `enforce_sandbox`
+policy hook); then multi-user collaboration (Phase 25, governed by the Phase-23
+policy engine so shared sessions stay safe); finally deployment/extensibility
+ergonomics (Phase 26, independent of the other three).
 
 ## Phases
 
 **Phase Numbering:**
 - Integer phases: Planned milestone work. This milestone continues the
-  project's phase sequence — the highest archived phase is 16, so v0.8.0
-  runs phases **17–22** (spec Phase 1→6 = roadmap Phase 17→22).
-- Decimal phases (17.1, 17.2): Urgent insertions (marked with INSERTED).
+  project's phase sequence — v0.8.0 ran phases **17–22**, so v0.10.0 runs
+  phases **23–26**.
+- Decimal phases (23.1, 23.2): Urgent insertions (marked with INSERTED).
 
 **Phase Types:** survey | implement | evaluate | integrate
 
-- [x] **Phase 17: Forge creation surface** - `subagent` kind, atomic create+bind+materialize, cross-kind bundles, `forge-creator` bundle, session-completion auto-import `implement` ✓ 2026-06-13
-- [x] **Phase 18: Sketch → primitive routing** - classification `action` dimension, `primitive_generator` target, PrimitiveForgeService create + ACE-style improve, outcome card with undo `implement` (completed 2026-06-13)
-- [x] **Phase 19: GRD default driver** - `resolve_execution_driver()` 3-way (default grd), GrdChatSessionHandler PSM→chat-SSE bridge, cwd/backend fixes, driver selector UI `implement` ✓ 2026-06-13
-- [x] **Phase 20: GRD frontend wiring** - autoresearch page, life-harness completion UI (16 unwired routes), full `/grd:` command bar, 4-locale i18n `implement` ✓ 2026-06-13
-- [x] **Phase 21: One-click team harness setup** - ProjectDashboard button + idempotent TeamHarnessSetupService (GRD init, topology, bundles, tesserae, policies, 4-harness materialization) `integrate` ✓ 2026-06-13
-- [x] **Phase 22: Repeated-request auto-skill** - `repeated_request_signals` store, embedding detection over 5 session kinds, hybrid gates, patch-over-create, provenance, security scan `implement`
+- [ ] **Phase 23: Stackable policy / governance engine** - one declarative `ALLOW`/`DENY`/`ASK` policy layer stacked across server → team → session (session-first, short-circuit on DENY), builtins (cost caps, max tool calls, ask-on-os-tools, enforce-sandbox), enforcement at action boundaries + goal_loop human-gate, CRUD API + editor UI `implement`
+- [ ] **Phase 24: OS-level harness sandboxing + egress control** - bwrap/seatbelt wrap of each `subprocess.Popen` harness, L7 egress allowlist (deny-by-default for autonomous runs), interim cloud-sandbox (E2B/Modal) runner `implement`
+- [ ] **Phase 25: Real-time multi-user collaboration** - live-share by scoped URL token, co-drive against the operator's running session (policy-governed), session fork, optional OIDC SSO `implement`
+- [ ] **Phase 26: Deployment & extensibility ergonomics** - first-class Postgres alongside SQLite, container image + one-click/self-update distribution, declarative-YAML agent/team authoring, optional server/runner key-isolation split `implement`
 
 ## Phase Details
 
-### Phase 17: Forge creation surface
-**Goal**: Forge can create and persist a fifth-and-sixth-class of primitive — `subagent` — and any primitive can be created, bound, and materialized to the repo `.claude/` projection in one atomic call; cross-kind bundles bind as a unit; a default `forge-creator` skill bundle exists; and primitives an agent scaffolds during an Agented-driven session are auto-imported with provenance.
+### Phase 23: Stackable policy / governance engine
+**Goal**: One declarative `ALLOW`/`DENY`/`ASK` policy layer, stacked across server → team → session (session, the stricter scope, evaluated first and able to short-circuit on DENY), that subsumes today's scattered controls — the goal_loop exit-ladder budgets and the `bot-security`/`bot-pr-review` safety checks — under one layer, enforced at action boundaries with an `ASK` approval card over SSE.
 **Type**: implement
-**Depends on**: Nothing (first phase of milestone)
-**Requirements**: REQ-01, REQ-02, REQ-03, REQ-04, REQ-05
+**Depends on**: Nothing (first phase of milestone; the safety substrate the next two phases build on)
+**Requirements**: REQ-27, REQ-28, REQ-29, REQ-30
 **Verification Level**: proxy
 **Success Criteria** (what must be TRUE):
-  1. `subagent` is a valid forge kind: `subagents` table (`subag-` ID prefix) with CRUD routes, `VALID_KINDS` entry, materialization to `.claude/agents/<name>.md`, and context-compiler/renderer support across claude/codex/gemini/opencode (golden-file tests pass, including `.claude/agents/`).
-  2. `POST /admin/projects/{id}/forge/create` with `{kind, payload, bind, materialize}` creates+binds+materializes in one flow; on injected mid-flow failure, compensating cleanup leaves no orphaned row, binding, or repo file (route test for success + cleanup).
-  3. `replace_for_project` preserves `source_scope`, `source_shared_binding_id`, `fingerprint`, and `conflict_policy` (regression test asserting columns survive a replace).
-  4. `forge_bundles` + `forge_bundle_items` exist and the bundle-bind endpoint binds every item cross-kind in one call; `skill_sets` is unchanged.
-  5. The `forge-creator` bundle ships five global-scope creator skills (skill/rule/hook/command/subagent-creator) in agentskills.io-compatible SKILL.md format; the session-completion import handler diffs `.claude/` against the forge manifest and auto-imports only Agented-driven-session artifacts, recording origin content-hash + source session id (import-handler test against a fixture `.claude/` tree).
+  1. A `policies` store + a `PolicyVerdict` (`ALLOW`/`DENY`/`ASK`) evaluator stacks across server → team → session scopes, evaluating the session (stricter) scope first and short-circuiting on DENY; anchored on the SESSION scope per the standing session-not-bot rule (stacking-order unit test: session DENY short-circuits a server ALLOW).
+  2. Builtin policies exist and consolidate today's controls: `cost_budget` (hard `max_cost_usd` + soft `ask_thresholds_usd`), `max_tool_calls_per_session`, `ask_on_os_tools` (approve before shell / file-write), `enforce_sandbox`; the goal_loop exit-ladder budgets and `bot-security`/`bot-pr-review` checks route through this layer (builtin-evaluator tests per policy).
+  3. Enforcement integrates at action boundaries in `ExecutionService` plus a `goal_loop_runner.py` human-gate hook; an `ASK` verdict surfaces an approval card over SSE and blocks the action until resolved (enforcement + ASK-blocks-until-resolved tests).
+  4. `/admin/policies` CRUD + `app_litestar/middleware.py` policy middleware, a frontend policy editor, and `budgets.ts` surfacing cost-cap verdicts ship with en/ko/ja/zh key-identical catalogs (route + middleware + component tests).
+  5. **Verification check:** a policy ALLOW/DENY/ASK end-to-end test drives a real session — a configured DENY blocks the action, an ASK pauses for an approval card and resumes on approve, and an ALLOW passes through.
   6. House gates pass: `just build`; backend pytest (watchdog procedure, targeted substitution disclosed if the known hang hits); frontend no-new-failures.
+**Plans**: 5 plans
+
+Plans:
+- [ ] 23-01-PLAN.md — policies table (migration 176) + PolicyService.evaluate stacking/short-circuit (TDD, SC1)
+- [ ] 23-02-PLAN.md — four builtin evaluators (cost_budget, max_tool_calls_per_session, ask_on_os_tools, enforce_sandbox) (TDD, SC2)
+- [ ] 23-03-PLAN.md — enforcement: ExecutionService Popen boundary + goal_loop human-gate + ASK-over-SSE reuse + route bot/budget checks through (SC2/SC3)
+- [ ] 23-04-PLAN.md — /admin/policies CRUD + /decision route + PolicyMiddleware (SC4)
+- [ ] 23-05-PLAN.md — frontend editor + ASK card + budgets.ts verdicts + en/ko/ja/zh + e2e ALLOW/DENY/ASK + house gates (SC4/SC5/SC6)
+
+### Phase 24: OS-level harness sandboxing + egress control
+**Goal**: Each live harness `subprocess.Popen` runs inside an OS sandbox (bwrap on Linux / seatbelt on macOS) behind an L7 egress allowlist — generalizing `sandbox_eval.py` beyond deterministic eval checks to the running harness, deny-by-default egress for autonomous / auto-implement runs, and an optional cloud-sandbox (E2B/Modal) runner for the highest-risk autonomous consumers — gated by the Phase-23 `enforce_sandbox` policy.
+**Type**: implement
+**Depends on**: Phase 23 (the `enforce_sandbox` policy hook decides when sandboxing is mandatory)
+**Requirements**: REQ-31, REQ-32, REQ-33
+**Verification Level**: proxy
+**Success Criteria** (what must be TRUE):
+  1. Each `subprocess.Popen` harness is wrapped in bwrap (Linux) / seatbelt (macOS), generalizing `sandbox_eval.py` from deterministic eval checks to the running harness; where the OS sandbox is unavailable it degrades gracefully with a logged warning (sandbox-wrap test + degrade-path test).
+  2. An L7 egress allowlist proxy governs outbound network for harness sessions, deny-by-default for autonomous / auto-implement runs (allowlist pass + denied-host block tests).
+  3. An optional E2B/Modal cloud-sandbox runner exists for untrusted autonomous runs, wired as the execution target for competitive-intel auto-implement and the life-harness autonomy loop (runner-selection test; absent-credential graceful skip).
+  4. The Phase-23 `enforce_sandbox` verdict drives whether a session is admitted unsandboxed (integration test: `enforce_sandbox` DENY refuses to launch an unsandboxed harness).
+  5. **Verification check:** a sandbox-escape attempt (write outside the workspace + connect to a non-allowlisted host) from inside a wrapped harness is blocked and logged.
+  6. House gates pass: `just build`; backend pytest (watchdog procedure); frontend no-new-failures.
 **Plans**: TBD
 
 Plans:
-- [ ] 17-NN: TBD (set by /grd:plan-phase 17)
+- [ ] 24-NN: TBD (set by /grd:plan-phase 24)
 
-### Phase 18: Sketch → primitive routing
-**Goal**: The sketch panel can turn a free-text request into a created or improved forge primitive — classification gains an `action` dimension, a `primitive_generator` routing target drives `PrimitiveForgeService` (create via per-kind generators, improve via ACE-style delta over fuzzy-resolved bound primitives), and the panel renders a primitive outcome card with one-click undo.
+### Phase 25: Real-time multi-user collaboration
+**Goal**: A running SSE session can be shared, co-driven, and forked across users — live-share by a scoped URL token (read + chat) over a multi-attach session model, co-drive where a teammate's message executes against the operator's running session **governed by the Phase-23 policy engine**, session fork onto a separate run, and optional OIDC SSO alongside the existing API-key path.
 **Type**: implement
-**Depends on**: Phase 17 (uses the atomic create/bind/materialize API and the per-kind primitives)
-**Requirements**: REQ-06, REQ-07, REQ-08, REQ-09
+**Depends on**: Phase 23 (shared sessions must stay policy-governed; co-drive routes teammate actions through the policy engine)
+**Requirements**: REQ-34, REQ-35, REQ-36, REQ-37
 **Verification Level**: proxy
 **Success Criteria** (what must be TRUE):
-  1. `SketchRoutingService` classification emits an `action` ∈ {create_skill, create_rule, create_hook, create_command, create_subagent, improve_primitive, none} from both the keyword stage and the LLM prompt/schema (unit tests, keyword + LLM-mocked, per action).
-  2. `route` returns `target_type: "primitive_generator"` (target_id = kind) when a primitive action carries confidence ≥ 0.6, ahead of SA/team resolution (routing-precedence test).
-  3. `PrimitiveForgeService` create path drives per-kind generation to a complete draft then persists+binds+materializes via Phase 17's atomic API (create test).
-  4. Improve path fuzzy-resolves the referenced primitive over bound primitives, applies an ACE-style old→new delta patch, and re-materializes; an ambiguous reference yields sketch status `collaborating` with a clarification question (improve + ambiguity tests; `SketchStatus` enum includes `collaborating`).
-  5. The sketch panel renders a "primitive created/updated" outcome card (kind, name, diff, bound-project list, one-click undo = unbind+delete or revert-update) (component test).
-  6. Dogfood: ≥3 real sketches routed through the live pipeline before sign-off. House gates pass.
-**Plans**: 4 (planned 2026-06-13)
+  1. Live-share: a running SSE session is shareable by a scoped URL token (read + chat) backed by a multi-attach session model in `ExecutionService`, an incremental extension of the existing SSE fan-out (share-token mint + two-client attach test).
+  2. Co-drive: a teammate's message executes against the operator's running session and every co-drive action is evaluated by the Phase-23 policy engine before execution (co-drive test asserting a DENY/ASK verdict blocks the teammate action).
+  3. Session fork: a conversation/session forks onto a separate independent run (fork test: parent unaffected, child diverges).
+  4. Optional OIDC SSO (Google / GitHub / Okta / Microsoft) via the ApiKey/auth middleware + ai-accounts, alongside the existing API-key path (OIDC-mocked auth test; API-key path unchanged regression).
+  5. **Verification check:** a live-share two-client end-to-end test — a second client attaches by scoped token, sees streamed deltas read-only, and a co-drive message is policy-checked before it runs.
+  6. House gates pass: `just build`; backend pytest (watchdog procedure); frontend no-new-failures (new share/attach UI ships en/ko/ja/zh).
+**Plans**: TBD
 
 Plans:
-- [ ] 18-01 (wave 1): Backend foundation — `SketchStatus.COLLABORATING` + `action` classification dimension (keyword `ACTION_KEYWORDS` + LLM prompt/schema, 4-backend litellm model-string map)
-- [ ] 18-02 (wave 2): `route()` `primitive_generator` precedence branch (conf ≥ 0.6, target_id=kind, ahead of SA/team)
-- [ ] 18-03 (wave 3): `PrimitiveForgeService` (create via atomic API + skill→add_user_skill; improve via difflib fuzzy-resolve + old→new delta; ambiguity→collaborating) + `route_sketch` dispatch + undo endpoint
-- [ ] 18-04 (wave 4): Sketch panel primitive outcome card + undo + `SketchPrimitiveOutcome` type + `sketchPrimitiveOutcome.*` i18n (4 locales) + dogfood checkpoint
+- [ ] 25-NN: TBD (set by /grd:plan-phase 25)
 
-### Phase 19: GRD default driver
-**Goal**: GRD is the default execution driver for superagent chat — a 3-way `resolve_execution_driver()` (cliproxy | cli_agent | grd, default grd) is honored at the single streaming funnel, task-shaped turns spawn GRD PSM sessions bridged into the chat SSE protocol while conversational turns stay on cliproxy, delegation/project_chat cwd-and-backend bugs are fixed, and the driver is operator-selectable.
+### Phase 26: Deployment & extensibility ergonomics
+**Goal**: Lower the bar from clone-and-run — first-class Postgres alongside SQLite (same schema + migrations, selected via `DATABASE_URL`, SQLite stays the zero-config default), a container image + one-click deploy target + single-install/self-update distribution, declarative-YAML agent/team/orchestrator authoring ("the YAML file is the agent"), and an optional server/runner key-isolation split (hosted server carries no LLM keys).
 **Type**: implement
-**Depends on**: Phase 17 (driver/forge plumbing; GRD sessions consume forge bundles)
-**Requirements**: REQ-10, REQ-11, REQ-12, REQ-13
+**Depends on**: Nothing (independent of the governance/sandbox/collaboration track)
+**Requirements**: REQ-38, REQ-39, REQ-40, REQ-41
 **Verification Level**: proxy
 **Success Criteria** (what must be TRUE):
-  1. `resolve_execution_driver()` returns one of cliproxy/cli_agent/grd with precedence turn-override → SA `config_json.driver` → instance → project default → global default `grd`, and silently degrades to `cli_agent` when GRD binary/workspace is unavailable (precedence-matrix test incl. degrade path).
-  2. `GrdChatSessionHandler` is registered in `HANDLER_REGISTRY`: task-shaped turns spawn a PSM session in the project cwd running `/grd:quick` (or the mapped `/grd:` command), with output bridged to chat SSE `state_delta` (content_delta/tool_use/finish/error); conversational turns stay on cliproxy via the turn classifier (handler test with fake PSM; SSE delta-ordering + error-propagation tests).
-  3. The cliproxy conversational path is provably unchanged (regression test).
-  4. `execute_delegate`, `_scan_mentions_and_notify`, and `grd_routes.project_chat` resolve the project workspace instead of `cwd=None`, and `project_chat` no longer hardcodes `backend='claude'` (delegation cwd tests).
-  5. A driver selector (default GRD) appears on superagent and project settings, and the chat transcript shows GRD session linkage (component test).
-  6. House gates pass.
-**Plans**: 6 plans
+  1. A Postgres adapter in `app/database.py` runs the same schema + migrations as SQLite, selected via `DATABASE_URL`; SQLite stays the zero-config default (adapter parity tests).
+  2. A container image + one-click deploy target + a single-install / self-update distribution path exist, lowering the bar from clone-and-run (image build smoke + self-update path test).
+  3. Declarative YAML agent/team/orchestrator definitions make teams/super-agents authorable without code; a YAML file round-trips to a created team/SA (YAML-load → materialize test).
+  4. An optional server/runner key-isolation split lets a hosted deployment carry no LLM keys, with runner-side key custody via ai-accounts (no-keys-on-server config test).
+  5. **Verification check:** the same backend pytest suite runs green against both SQLite and a Postgres `DATABASE_URL` (Postgres + SQLite same-suite green).
+  6. House gates pass: `just build`; backend pytest (watchdog procedure); frontend no-new-failures.
+**Plans**: TBD
 
 Plans:
-- [x] 19-01-PLAN.md — Driver resolver + migration 158 (projects.default_driver, project_sa_instances.driver) + degrade injection (Wave 1)
-- [x] 19-02-PLAN.md — Turn classifier classify_turn + /grd: command mapping (Wave 1)
-- [x] 19-03-PLAN.md — cwd/backend bug fixes (execute_delegate, _scan_mentions_and_notify, project_chat) (Wave 1)
-- [x] 19-04-PLAN.md — GrdChatSessionHandler + HANDLER_REGISTRY entry + PSM→chat-SSE bridge (Wave 2)
-- [x] 19-05-PLAN.md — Funnel integration: 3-way branch in run_streaming_response + 2 call-site migrations + cliproxy regression (Wave 3)
-- [x] 19-06-PLAN.md — Frontend driver selectors (default GRD) + transcript GRD-session linkage + 4-locale i18n (Wave 3)
+- [ ] 26-NN: TBD (set by /grd:plan-phase 26)
 
-### Phase 20: GRD frontend wiring
-**Goal**: GRD's full feature set is reachable from the frontend — autoresearch (`gd research`) has backend routes and a Research page, the life-harness completion surfaces (autonomy editor, round revert, shared-forge adopt, the 16 previously-unwired GRD routes) have UI, the PlanningCommandBar exposes the full supported `/grd:` command set from a manifest, and every new surface is fully localized.
-**Type**: implement
-**Depends on**: Phase 19 (shares the driver/GRD-session plumbing; the `grd_research` handler follows the GRD session pattern)
-**Requirements**: REQ-14, REQ-15, REQ-16, REQ-17, REQ-18
-**Verification Level**: proxy
-**Success Criteria** (what must be TRUE):
-  1. Autoresearch backend routes wrap `gd research` (start/status/resume/report/portfolio + thread browser over `.planning/research/threads/<id>/`) with a `grd_research` execution-type handler (PSM + SSE) (route + SSE-streaming tests).
-  2. A Research page provides question intake, thread list with status/iteration, hypothesis ledger view, report viewer, and portfolio runs (component tests).
-  3. Life-harness completion UI ships: autonomy policy editor, round revert, shared-forge browse/adopt, and panels for the 16 unwired GRD routes (health/think/dead-ends/genome/verify-mechanical/reflections/verdict-counts/evolve) (per-panel component tests).
-  4. PlanningCommandBar exposes the full supported `/grd:` command set, grouped (Plan/Execute/Verify/Research/Harness/Misc), driven from a declarative manifest.
-  5. Every new UI surface ships en/ko/ja/zh key-identical catalogs.
-  6. House gates pass (frontend no-new-failures explicitly).
-**Plans**: 6 plans
+## Out of scope (the moat)
 
-Plans:
-- [ ] 20-01-PLAN.md — Autoresearch backend: grd_research handler + research CLI helpers + 5 routes (REQ-14)
-- [ ] 20-02-PLAN.md — Frontend api modules: research.ts + grdHarness.ts + barrel (REQ-14/15/16 plumbing)
-- [ ] 20-03-PLAN.md — Research page: intake/threads/ledger/report/portfolio + SSE + i18n (REQ-15)
-- [ ] 20-04-PLAN.md — Life-harness UI: autonomy editor, round revert, shared-forge, 7 GRD-route panels + i18n (REQ-16)
-- [ ] 20-05-PLAN.md — PlanningCommandBar manifest: planningCommands.ts, 6 groups, group-aware invoke + i18n (REQ-17)
-- [ ] 20-06-PLAN.md — i18n parity sweep + house-gate green certification (REQ-18)
-
-### Phase 21: One-click team harness setup
-**Goal**: A single ProjectDashboard button bootstraps a complete team harness — an idempotent `TeamHarnessSetupService` runs GRD init, team topology + GRD-driven superagents, project-tailored bundle binding, tesserae enablement, default policies, and 4-harness materialization with a per-backend compile smoke check; re-running reconciles rather than duplicates, and each step is independently retryable with step-level SSE progress.
-**Type**: integrate
-**Depends on**: Phase 17, Phase 19 (assembles the forge surface + GRD-driven SAs; this is the milestone's integration point for those two)
-**Requirements**: REQ-19, REQ-20, REQ-21
-**Verification Level**: full
-**Success Criteria** (what must be TRUE):
-  1. `projects.harness_setup_status` (none/running/ready/failed) backs a "Setup Team Harness" button on ProjectDashboard that streams step-level progress over SSE (grd_init pattern) (route + SSE + dashboard component tests).
-  2. `TeamHarnessSetupService.setup(project_id)` runs the six idempotent steps — GRD init, team topology + SAs (`driver=grd`), bundle binding, tesserae enable, default policies (evolution autonomy conservative; takeaway auto-apply per-project on, scoped to skill-from-repetition), 4-harness materialization + per-backend compile smoke check (service step tests: fresh, partial, full re-run).
-  3. Bundle selection is tailored by map-codebase output (language/framework-conditional rule selection).
-  4. Re-running reconciles via manifest/fingerprint comparison without duplicating; a failed run leaves a step log + `failed` status and every step is independently retryable; setup performs no destructive deletes.
-  5. One live dogfood run completes against a real project end-to-end, with all four backends compiling the materialized projection.
-  6. House gates pass.
-**Plans**: 8 plans (3 waves)
-
-Plans:
-- [ ] 21-01-PLAN.md — migration 159 (harness_setup_status + harness_setup_steps) + status/step helpers
-- [ ] 21-02-PLAN.md — TeamHarnessSetupService skeleton: 6 step keys, StepResult, state machine, retry-skips-ok
-- [ ] 21-03-PLAN.md — steps a+b: GRD-init reconcile + team topology + SA instances driver=grd (dedup + post-update)
-- [ ] 21-04-PLAN.md — steps c+d: STACK.md-tailored bundle binding (forge-creator floor) + idempotent tesserae enable
-- [ ] 21-05-PLAN.md — step e: dual-consumer autonomy policy (auto-apply ON scoped to discovered_procedure; evolution conservative)
-- [ ] 21-06-PLAN.md — step f: 4-renderer materialize + per-backend compile smoke
-- [ ] 21-07-PLAN.md — route trio (POST/status/SSE-stream) + ProjectDashboard button/chip/step-panel + 4-locale i18n
-- [ ] 21-08-PLAN.md — deferred: live 4-backend dogfood + session auto-import idempotency + house gates
-
-### Phase 22: Repeated-request auto-skill
-**Goal**: The harness self-improves — a `repeated_request_signals` store and a session-completion detection handler (over all five session kinds) embed and match recurring user requests, and hybrid confidence gates convert them into skills automatically (≥3 occurrences + verified + scan-pass) or queue them for approval, with patch-over-create dedup, origin-hash provenance protecting operator-modified skills, and prompt-injection/exfiltration/invisible-Unicode scanning.
-**Type**: implement
-**Depends on**: Phase 17 (uses the skill creation/bind/materialize path; closes the self-improvement loop)
-**Verification Level**: proxy
-**Requirements**: REQ-22, REQ-23, REQ-24, REQ-25, REQ-26
-**Success Criteria** (what must be TRUE):
-  1. `repeated_request_signals` UPSERT preserves `first_seen_at`, increments `occurrence_count`, stores `embedding`, caps `example_session_ids`, and tracks `verified_success_count` + `skill_created` (signal-store upsert tests; salience grows with repetition, not decays).
-  2. The detection handler runs on the session-completion bus for all five session kinds: extracts user-request turns via `_FETCHERS`, embeds and matches by cosine ≥ 0.83, cross-checks tesserae, and is verification-record aware (handler tests over fixture transcripts).
-  3. Hybrid gates: auto path (≥3 occurrences/30d + ≥1 verified + scan pass → `discovered_procedure` takeaway conf 0.9 → auto-apply skill) vs propose path (conf 0.65, operator queue); takeaway auto-apply is promoted from the env flag to per-project policy (gate-matrix tests: auto vs propose vs reject).
-  4. Quality/safety: patch-over-create dedup against the bound-skills index turns near-duplicates into update proposals; origin-hash provenance never overwrites operator-modified skills; prompt-injection/exfiltration + invisible-Unicode scan rejects unsafe content (security-scan tests).
-  5. Consistency fixes land: evolver `_DESIGN_GUIDE`/`_PROMPT_TEMPLATE` reflect writable skills; `tesserae_integration._build_harness_session` normalizes `project_session`/`workflow`/`team_session`.
-  6. Live dogfood: replay ≥3 real session transcripts through the detector before sign-off. House gates pass.
-**Plans**: 6 plans (4 waves)
-
-Plans:
-- [x] 22-01-PLAN.md — repeated_request_signals store (DDL + repo + model + UPSERT invariants)
-- [x] 22-02-PLAN.md — consistency fixes: _build_harness_session 5-kind normalizers + evolver writable-skill prompts
-- [x] 22-03-PLAN.md — detection handler (register_session_handler, _FETCHERS, cosine ≥ 0.83, embed-disabled fallback, non-blocking)
-- [x] 22-04-PLAN.md — safety scanner (injection/exfiltration/invisible-Unicode) + dedup + origin-hash provenance
-- [x] 22-05-PLAN.md — hybrid gate (auto/propose/reject matrix + per-project policy + evolver skill-create dispatch)
-- [x] 22-06-PLAN.md — live dogfood: replay ≥3 real transcripts, operator review, house gates
+Unified loop layer (LoopSpec + goal_loop_runner exit ladder), Tesserae/CodeGraph
+federated grounding, life-harness self-improvement, competitive-intelligence
+pipeline, GRD planning, trigger-based delivery, HarnessSync — keep investing;
+do **not** chase omnigent here. The goal is to **widen** the
+autonomy/memory/self-improvement gap while **closing** the
+governance/collaboration/deployment gap.
 
 ## Dependencies
 
 ```
-17 ──► 18
-17 ──┐
-     ├──► 21
-19 ──┘
-19 ──► 20
-17 ──► 22
+23 ──► 24
+23 ──► 25
+26  (independent)
 ```
 
-- 17 → 18 (sketch routing consumes the atomic forge API)
-- 17 + 19 → 21 (one-click setup assembles forge surface + GRD-driven SAs)
-- 19 → 20 (frontend wiring shares GRD-session plumbing)
-- 17 → 22 (auto-skill uses the skill creation path)
+- 23 → 24 (sandboxing is gated by the `enforce_sandbox` policy hook)
+- 23 → 25 (shared/co-driven sessions must stay policy-governed)
+- 26 has no dependencies
 
-**Execution order:** 17, 18, 19, 20, 21, 22.
+**Execution order:** 23, 24, 25, 26. Dependency waves (Kahn): **Wave 1 = {23, 26}**,
+**Wave 2 = {24, 25}** — but `parallelization` is disabled in config, so phases
+execute sequentially by number.
 
 ## Progress
 
 | Phase | Name | Requirements | Depends on | Verification | Status |
 |-------|------|--------------|------------|--------------|--------|
-| 17 | Forge creation surface | REQ-01..05 | — | proxy | Complete (6/6 ✓ 2026-06-13) |
-| 18 | Sketch → primitive routing | REQ-06..09 | 17 | proxy | Complete (2026-06-13) |
-| 19 | GRD default driver | REQ-10..13 | 17 | proxy | Complete (2026-06-13) |
-| 20 | GRD frontend wiring | REQ-14..18 | 19 | proxy | Complete (5/5 ✓ 2026-06-13) |
-| 21 | One-click team harness setup | REQ-19..21 | 17, 19 | full | Complete (2026-06-13) — L1 5/5, L2 8/8; D1/D2 live dogfood deferred |
-| 22 | Repeated-request auto-skill | REQ-22..26 | 17 | proxy | Complete (2026-06-13) |
+| 23 | Stackable policy / governance engine | REQ-27..30 | — | proxy | Not started |
+| 24 | OS-level harness sandboxing + egress control | REQ-31..33 | 23 | proxy | Not started |
+| 25 | Real-time multi-user collaboration | REQ-34..37 | 23 | proxy | Not started |
+| 26 | Deployment & extensibility ergonomics | REQ-38..41 | — | proxy | Not started |
 
-**Coverage:** 26/26 requirements mapped (REQ-01 … REQ-26), each to exactly one phase. No orphans, no duplicates.
+**Coverage:** 15/15 requirements mapped (REQ-27 … REQ-41), each to exactly one
+phase. No orphans, no duplicates.
 
-**Integration phase:** Phase 21 (One-click team harness setup) is the milestone's integration point — it assembles the forge surface (17) and GRD-driven superagents (19) into a single idempotent bootstrap, validated by a live end-to-end dogfood run with all four backends compiling.
+**Integration note:** no separate integration phase — Phase 24 and Phase 25 are
+each integration points against Phase 23's policy substrate (sandbox admission
+and co-drive governance respectively), verified by their escape-attempt and
+two-client end-to-end checks.

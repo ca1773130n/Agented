@@ -1566,6 +1566,45 @@ def _migrate_175_competitor_strategy_session(conn) -> None:
         conn.execute("ALTER TABLE competitor_strategy ADD COLUMN session_id TEXT")
 
 
+def _migrate_176_policies(conn) -> None:
+    """v0.10.0 phase 23 (23-01): the stackable policy / governance primitive.
+
+    A SINGLE ``policies`` table holds rows at the SERVER / TEAM / SESSION scopes
+    (``scope`` + nullable ``scope_id``; server rows have ``scope_id IS NULL``).
+    Each row carries a ``kind`` (builtin name — the dispatch lands in 23-02), an
+    ``effect`` (allow/deny/ask), JSON ``params``, an ``enabled`` flag and an
+    integer ``priority`` (higher first within a scope). ``PolicyService.evaluate``
+    walks scopes SESSION-first (the stricter scope, per the session-not-bot rule)
+    and short-circuits on the FIRST deny.
+
+    Idempotent: CREATE TABLE / CREATE INDEX use IF NOT EXISTS, so re-running is a
+    no-op. Mirrors the create-table shape of the sibling v07 migrations.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS policies (
+            id          TEXT PRIMARY KEY,
+            scope       TEXT NOT NULL,
+            scope_id    TEXT,
+            kind        TEXT NOT NULL,
+            effect      TEXT NOT NULL DEFAULT 'ask',
+            params      TEXT NOT NULL DEFAULT '{}',
+            enabled     INTEGER NOT NULL DEFAULT 1,
+            priority    INTEGER NOT NULL DEFAULT 0,
+            created_at  TIMESTAMP NOT NULL,
+            updated_at  TIMESTAMP NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_policies_scope "
+        "ON policies(scope, scope_id, enabled)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_policies_kind ON policies(kind, enabled)"
+    )
+
+
 def _migrate_168_grd_genome_suggestions(conn) -> None:
     """GRD 0.4.1 pattern mining: mirror ``gd patterns`` (→ GENOME-SUGGESTIONS).
 
@@ -1795,4 +1834,8 @@ V07_MIGRATIONS: list = [
     # start_autoimplement seam launches (NULL unless the flag+legal+confirm gates
     # all pass).
     (175, "competitor_strategy_session", _migrate_175_competitor_strategy_session),
+    # v0.10.0 phase 23 (23-01): the stackable policy / governance primitive — a
+    # single `policies` table (server/team/session scopes) read SESSION-first by
+    # PolicyService.evaluate, short-circuiting on the first DENY.
+    (176, "policies", _migrate_176_policies),
 ]

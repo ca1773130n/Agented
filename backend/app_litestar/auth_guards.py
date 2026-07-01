@@ -38,6 +38,17 @@ ROLE_REQUIRED: list[tuple[str, str, str]] = [
     ("PUT", "/admin/secrets", "admin"),
     ("PATCH", "/admin/secrets", "admin"),
     ("DELETE", "/admin/secrets", "admin"),
+    # Policy / governance engine: admin for every method. Listed before the
+    # generic /admin/ rows (first-match-wins) so a missing per-route guard can
+    # never downgrade policy reads/writes to editor/viewer. Defence-in-depth
+    # alongside the router-level requires_role("admin") guard on policies_router.
+    # Policies are the governance substrate — mutating them disables other
+    # controls — so they are gated as strictly as the secret vault (23 BLOCKER 2).
+    ("GET", "/admin/policies", "admin"),
+    ("POST", "/admin/policies", "admin"),
+    ("PUT", "/admin/policies", "admin"),
+    ("PATCH", "/admin/policies", "admin"),
+    ("DELETE", "/admin/policies", "admin"),
     ("GET", "/admin/", "viewer"),
     ("POST", "/admin/", "editor"),
     ("PUT", "/admin/", "editor"),

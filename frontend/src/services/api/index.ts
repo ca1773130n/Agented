@@ -33,6 +33,17 @@ export {
 } from './backend-management';
 export { orchestrationApi } from './orchestration';
 export { budgetApi } from './budgets';
+export { policyApi } from './policies';
+export type {
+  Policy,
+  PolicyInput,
+  PolicyVerdict,
+  PolicyAskEvent,
+  PolicyScope,
+  PolicyEffect,
+  PolicyKind,
+  PolicyDecision,
+} from './types/policies';
 export { analyticsApi } from './analytics';
 export { monitoringApi } from './monitoring';
 export type { CredentialStatusRow } from './monitoring';

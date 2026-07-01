@@ -800,6 +800,16 @@ class ProjectSessionManager:
     # two payload shapes on one queue would force every consumer to
     # parse SSE strings, defeating the point.
     _raw_subscribers: Dict[str, List[Queue]] = {}
+    # Phase 23 (launch-ASK deadlock fix): pending policy_ask cards keyed by
+    # session_id. ``_broadcast`` only reaches subscribers connected RIGHT NOW,
+    # but a launch-time ASK fires from inside ``create_session`` /
+    # ``enforce_launch`` BEFORE the frontend subscribes (it subscribes only
+    # after ``createSession()`` resolves). PolicyService.await_decision registers
+    # the pending card here; ``subscribe`` REPLAYS it to a late-connecting client
+    # so the already-wired ``policy_ask`` handler renders it. Cleared when the
+    # operator's decision resolves the awaiting launch. Survives within the
+    # (workers=1) process — mirrors the other class-level in-memory registries.
+    _pending_policy_asks: Dict[str, dict] = {}
     _lock = threading.Lock()
 
     @classmethod
@@ -854,6 +864,24 @@ class ProjectSessionManager:
         # Generate session_id from DB to ensure uniqueness
         with get_connection() as conn:
             session_id = _get_unique_project_session_id(conn)
+
+        # Stackable policy gate (23 BLOCKER 4 — close the ungated launch path).
+        # Every autonomous harness launch funnels through create_session (goal-loop
+        # / ralph / team-spawn / agent / sketch sessions), so it must clear the SAME
+        # shared launch gate ExecutionService.run_trigger uses — no spawner may
+        # bypass governance. Evaluated BEFORE any pty.fork / subprocess.Popen so a
+        # DENY raises PolicyDenied and nothing is ever spawned. Server-scope
+        # policies (scope_id IS NULL) always apply for this brand-new session id;
+        # the default (no policy authored) is ALLOW, so existing behaviour is
+        # unchanged until an operator authors a policy.
+        from .policy_service import PolicyService
+
+        PolicyService.enforce_launch(
+            session_id=session_id,
+            team_id=None,
+            cmd=cmd,
+            backend=(cmd[0] if cmd else "unknown"),
+        )
 
         # Auto-inject CLAUDE_CONFIG_DIR for claude CLI sessions so the spawned
         # process inherits the user's auth and plugins (e.g. GRD skill provider).
@@ -1799,6 +1827,16 @@ class ProjectSessionManager:
                 current_status = session_info.status
             else:
                 current_status = None
+            # Phase 23: capture any launch-time policy_ask awaiting an operator
+            # decision for this session so we can REPLAY it below (the card was
+            # broadcast before this subscriber connected).
+            pending_ask = cls._pending_policy_asks.get(session_id)
+
+        # Step 2b: Replay a pending policy_ask card to this (possibly late)
+        # subscriber so the frontend's policy_ask handler can render it and the
+        # operator can resolve the blocked launch. Yielded outside the lock.
+        if pending_ask is not None:
+            yield cls._format_sse("policy_ask", pending_ask)
 
         # Step 3: Check if session already completed
         if current_status in ("completed", "failed"):
@@ -1815,7 +1853,7 @@ class ProjectSessionManager:
                         pass  # Intentionally silenced: invalid value handled gracefully
             return
 
-        if current_status is None:
+        if current_status is None and pending_ask is None:
             # Session not found in memory
             yield cls._format_sse(
                 "error",
@@ -1828,6 +1866,11 @@ class ProjectSessionManager:
                     except ValueError:
                         pass  # Intentionally silenced: invalid value handled gracefully
             return
+        # Phase 23: when current_status is None BUT a policy_ask is pending, the
+        # session is being GATED at its launch boundary (create_session hasn't
+        # registered it in _sessions yet). Don't bail with "Session not found" —
+        # stay connected so the operator receives policy_ask_resolved and the
+        # session's first output once the launch proceeds.
 
         # Step 4: Stream live events
         try:
@@ -1869,6 +1912,42 @@ class ProjectSessionManager:
                 q.put(message)
             for q in cls._raw_subscribers.get(session_id, []):
                 q.put((event_type, data))
+
+    @classmethod
+    def register_and_broadcast_policy_ask(cls, session_id: str, payload: dict) -> None:
+        """Persist a launch-time ``policy_ask`` card AND push it to already-connected
+        subscribers atomically (FIX 3 — exactly-once delivery).
+
+        Called by ``PolicyService.await_decision`` at the launch boundary. The card
+        must reach BOTH:
+          * subscribers connected RIGHT NOW (pushed here, under the lock), and
+          * a subscriber that connects LATER (it replays ``_pending_policy_asks`` on
+            ``subscribe`` — the frontend subscribes only after ``createSession()``
+            resolves, so without persistence the launch deadlocks until it fails
+            closed).
+
+        Doing the persist + the live push in ONE locked section is what makes
+        delivery exactly-once: ``subscribe`` registers its queue AND reads
+        ``_pending_policy_asks`` under the SAME lock, so a given subscriber is in
+        exactly one bucket — either it was already registered when we pushed (and so
+        read ``pending=None`` earlier → it will NOT replay), or it registers after us
+        (reads the pending card → replays, and was NOT in our push set). The previous
+        two-step ``register`` then separate ``_broadcast`` let a subscriber connecting
+        in the gap get the card from BOTH paths (a duplicate ``policy_ask``).
+        """
+        message = cls._format_sse("policy_ask", payload)
+        with cls._lock:
+            cls._pending_policy_asks[session_id] = payload
+            for q in cls._subscribers.get(session_id, []):
+                q.put(message)
+            for q in cls._raw_subscribers.get(session_id, []):
+                q.put(("policy_ask", payload))
+
+    @classmethod
+    def clear_pending_policy_ask(cls, session_id: str) -> None:
+        """Drop a pending policy_ask once its awaiting launch has been resolved."""
+        with cls._lock:
+            cls._pending_policy_asks.pop(session_id, None)
 
     @classmethod
     def subscribe_raw(cls, session_id: str) -> Queue:

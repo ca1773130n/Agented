@@ -9687,5 +9687,50 @@
     "autoImplementConfirmMsg": "这将启动一个自主编码智能体，在隔离的 git 工作树（绝不是你的主检出）中编写代码，并在完成前暂停等待你的批准。是否继续？",
     "autoImplementStarted": "自动实施已启动 — 会话 {id}",
     "autoImplementNotEligible": "该策略已不再符合自动实施条件（请重新检查其状态与§5B许可）。"
+  },
+  "policy": {
+    "title": "策略",
+    "subtitle": "以会话优先评估的可叠加治理规则。",
+    "newPolicy": "创建策略",
+    "edit": "编辑",
+    "delete": "删除",
+    "save": "保存更改",
+    "cancel": "取消",
+    "empty": "尚未配置任何策略。",
+    "scope": "范围",
+    "scopeId": "范围 ID",
+    "kind": "类型",
+    "effect": "效果",
+    "priority": "优先级",
+    "maxCostUsd": "最高成本（USD）",
+    "askThresholds": "询问阈值（USD，逗号分隔）",
+    "maxToolCalls": "最大工具调用数",
+    "scopes": {
+      "server": "服务器",
+      "team": "团队",
+      "session": "会话"
+    },
+    "effects": {
+      "allow": "允许",
+      "deny": "拒绝",
+      "ask": "询问"
+    },
+    "kinds": {
+      "cost_budget": "成本预算",
+      "max_tool_calls_per_session": "最大工具调用",
+      "ask_on_os_tools": "OS 工具时询问",
+      "enforce_sandbox": "强制沙箱",
+      "custom": "自定义"
+    },
+    "ask": {
+      "title": "需要批准",
+      "reason": "原因",
+      "scope": "范围",
+      "approve": "批准",
+      "deny": "拒绝",
+      "awaiting": "正在等待您的决定…",
+      "resolved": "已处理",
+      "alreadyResolved": "该请求已被处理或已超时。"
+    }
   }
 }

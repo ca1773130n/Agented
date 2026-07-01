@@ -9687,5 +9687,50 @@
     "autoImplementConfirmMsg": "メインのチェックアウトではなく、隔離されたgitワークツリーでコードを書く自律コーディングエージェントを起動し、完了前に承認のため一時停止します。続行しますか？",
     "autoImplementStarted": "自動実装を開始しました — セッション {id}",
     "autoImplementNotEligible": "この戦略は自動実装の対象ではなくなりました（ステータスと§5Bクリアランスを再確認してください）。"
+  },
+  "policy": {
+    "title": "ポリシー",
+    "subtitle": "セッション優先で評価される積み重ね型のガバナンスルールです。",
+    "newPolicy": "ポリシーを作成",
+    "edit": "編集",
+    "delete": "削除",
+    "save": "変更を保存",
+    "cancel": "キャンセル",
+    "empty": "まだポリシーが構成されていません。",
+    "scope": "スコープ",
+    "scopeId": "スコープID",
+    "kind": "種類",
+    "effect": "効果",
+    "priority": "優先度",
+    "maxCostUsd": "最大コスト（USD）",
+    "askThresholds": "確認しきい値（USD、カンマ区切り）",
+    "maxToolCalls": "最大ツール呼び出し数",
+    "scopes": {
+      "server": "サーバー",
+      "team": "チーム",
+      "session": "セッション"
+    },
+    "effects": {
+      "allow": "許可",
+      "deny": "拒否",
+      "ask": "確認"
+    },
+    "kinds": {
+      "cost_budget": "コスト予算",
+      "max_tool_calls_per_session": "最大ツール呼び出し",
+      "ask_on_os_tools": "OSツールで確認",
+      "enforce_sandbox": "サンドボックス強制",
+      "custom": "カスタム"
+    },
+    "ask": {
+      "title": "承認が必要です",
+      "reason": "理由",
+      "scope": "スコープ",
+      "approve": "承認",
+      "deny": "拒否",
+      "awaiting": "判断を待っています…",
+      "resolved": "解決済み",
+      "alreadyResolved": "このリクエストは既に解決済みか、タイムアウトしました。"
+    }
   }
 }

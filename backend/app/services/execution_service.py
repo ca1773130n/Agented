@@ -531,6 +531,56 @@ class ExecutionService:
         return build_subprocess_env(env_overrides)
 
     @classmethod
+    def _enforce_launch_policy(
+        cls,
+        *,
+        session_id: str,
+        team_id: Optional[str],
+        cmd: list,
+        backend: str,
+        total_cost_usd: float = 0.0,
+        tool_calls: int = 0,
+    ) -> None:
+        """Evaluate the stackable policy layer at the process-launch boundary.
+
+        Called AFTER cmd/proc_env are built but BEFORE ``subprocess.Popen`` (the
+        launch boundary, run_trigger:~767). Evaluating here — not inside the
+        daemon stream-reader threads — is the rule from 23-RESEARCH.md Pitfall 1:
+        a blocking ASK must hold the LAUNCHING call, never the live output pipe.
+
+        Policy is anchored on the SESSION scope (session-not-bot HARD rule); the
+        bot/trigger id is NEVER a policy key. ``action.kind == "process_launch"``
+        so ``ask_on_os_tools`` and ``enforce_sandbox`` (inert) builtins can match.
+
+        CONSOLIDATION (23-03, Pitfall 5): predefined safety bots (bot-security,
+        bot-pr-review) launch through this same boundary, so their governance now
+        DELEGATES to this one session-scoped policy gate rather than a parallel
+        inline bot-keyed check — there is no second governance layer to keep in
+        sync, and nothing is keyed on the bot id.
+
+        Behaviour:
+          - decision == "deny"  -> raise PolicyDenied (caller aborts, no Popen).
+          - decision == "ask"   -> block via PolicyService.await_decision (reuses
+            the human-gate SSE round-trip); anything but "approve" raises
+            PolicyDenied (timeout fails closed to deny inside await_decision).
+          - decision == "allow" -> return (caller proceeds to Popen unchanged).
+        """
+        from .policy_service import PolicyService
+
+        # Delegate to the ONE shared launch gate (23 BLOCKER 4) so this path and
+        # ProjectSessionManager.create_session enforce identical semantics — there
+        # is no second gate implementation to drift out of sync.
+        PolicyService.enforce_launch(
+            session_id=session_id,
+            team_id=team_id,
+            cmd=cmd,
+            backend=backend,
+            sandboxed=False,  # no sandbox runtime until Phase 24
+            total_cost_usd=total_cost_usd,
+            tool_calls=tool_calls,
+        )
+
+    @classmethod
     def run_trigger(
         cls,
         trigger: dict,
@@ -763,6 +813,21 @@ class ExecutionService:
                     exc_info=True,
                 )
 
+            # Stackable policy gate (23-03): evaluate at the launch boundary,
+            # AFTER cmd/proc_env/cwd are built but BEFORE Popen (Pitfall 1 — never
+            # block the daemon stream-reader threads). A DENY raises PolicyDenied;
+            # an ASK blocks the launching call until an operator resolves it.
+            # Policy is SESSION-scoped (session-not-bot rule): prefer the injected
+            # AGENTED_SESSION_ID, falling back to execution_id; team scope is
+            # best-effort from the trigger's _team_id.
+            policy_session_id = (proc_env or {}).get("AGENTED_SESSION_ID") or execution_id
+            cls._enforce_launch_policy(
+                session_id=policy_session_id,
+                team_id=trigger.get("_team_id"),
+                cmd=cmd,
+                backend=backend,
+            )
+
             # Use Popen for streaming output (start_new_session for process group management)
             process = subprocess.Popen(
                 cmd,
@@ -971,8 +1036,17 @@ class ExecutionService:
                     execution_id=execution_id, status=ExecutionState.FAILED, error_message=error_msg
                 )
         except Exception as e:
-            error_msg = str(e)
-            logger.exception("Error running trigger '%s'", trigger["name"])
+            from .policy_service import PolicyDenied
+
+            # A policy DENY (or operator-denied ASK) at the launch boundary aborts
+            # the run WITHOUT launching the subprocess — surface the verdict reason
+            # as a clean FAILED, not an unexpected error/stacktrace.
+            if isinstance(e, PolicyDenied):
+                error_msg = f"Blocked by policy: {e}"
+                logger.warning("Policy blocked execution for trigger '%s': %s", trigger["name"], e)
+            else:
+                error_msg = str(e)
+                logger.exception("Error running trigger '%s'", trigger["name"])
             if execution_id:
                 ExecutionLogService.finish_execution(
                     execution_id=execution_id, status=ExecutionState.FAILED, error_message=error_msg

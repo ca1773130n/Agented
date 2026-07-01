@@ -19,6 +19,7 @@ from .lifecycle import on_shutdown, on_startup
 from .middleware import (
     ApiKeyMiddleware,
     PerformanceMiddleware,
+    PolicyMiddleware,
     RateLimitMiddleware,
     RequestContextMiddleware,
     RequestLoggingMiddleware,
@@ -41,6 +42,7 @@ from .routes.bot_health import bot_health_router
 from .routes.bot_templates import bot_stubs_router, bot_templates_router
 from .routes.budgets import budgets_router
 from .routes.cliproxy_lifecycle import cliproxy_lifecycle_router
+from .routes.policies import policies_router
 from .routes.conversation_cluster import (
     command_conversations_router,
     hook_conversations_router,
@@ -227,6 +229,9 @@ def create_app() -> Litestar:
         #     silently falls back to per-IP keying.
         middleware=[
             RequestContextMiddleware(),
+            # 23-04: annotate the request with its governance scope (non-blocking,
+            # pass-through). After RequestContext so request_id/current_user are set.
+            PolicyMiddleware(),
             RequestLoggingMiddleware(),
             SecurityHeadersMiddleware(),
             ApiKeyMiddleware(),
@@ -258,6 +263,7 @@ def create_app() -> Litestar:
             bot_stubs_router,
             integrations_github_router,
             budgets_router,
+            policies_router,
             quality_ratings_router,
             answer_eval_router,
             verification_router,

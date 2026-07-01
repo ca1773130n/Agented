@@ -29,6 +29,7 @@ import { onboardingRoutes } from './routes/onboarding';
 import { infraRoutes } from './routes/infra';
 import { agentsExtRoutes } from './routes/agentsExt';
 import { observabilityExtRoutes } from './routes/observabilityExt';
+import { policyRoutes } from './routes/policies';
 import { registerGuards } from './guards';
 
 // Extend RouteMeta with Agented-specific fields
@@ -74,6 +75,7 @@ export const router = createRouter({
     ...infraRoutes,
     ...agentsExtRoutes,
     ...observabilityExtRoutes,
+    ...policyRoutes,
     ...miscRoutes,
     ...observabilityRoutes,
     // Phase 23 — project-scoped competitive-intelligence dashboard (REQ-27/30).

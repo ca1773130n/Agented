@@ -101,7 +101,7 @@ def _fake_runner(calls):
     return run_agent
 
 
-def test_generator_critic_oracle_passes_breaks(tmp_path):
+def test_generator_critic_oracle_passes_breaks(tmp_path, isolated_db):
     calls = []
     ids = topology_strategies.execute_generator_critic(
         {"id": "t"},
@@ -117,7 +117,7 @@ def test_generator_critic_oracle_passes_breaks(tmp_path):
     assert len(ids) == 2
 
 
-def test_generator_critic_oracle_feeds_failing_output(tmp_path):
+def test_generator_critic_oracle_feeds_failing_output(tmp_path, isolated_db):
     calls = []
     topology_strategies.execute_generator_critic(
         {"id": "t"},

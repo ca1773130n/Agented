@@ -270,11 +270,30 @@ def execute_generator_critic(
         # A sandbox/setup failure must NOT crash the team run — fall back to the
         # critic gate below when the check can't be evaluated.
         if check_cmd and working_directory:
+            from app.services.policy_service import PolicyDenied, PolicyService
             from app.services.sandbox_eval import run_isolated_check
 
             result = None
             try:
+                # SECURITY (23): the oracle check spawns a subprocess over the
+                # shared workspace (an isolated snapshot) — an autonomous,
+                # unattended, cost-free-but-agentic launch. Gate it through the
+                # shared NON-interactive policy layer BEFORE spawning; a DENY (or
+                # ASK, which is a refusal here) skips the check and falls back to
+                # the critic gate, exactly like a check that cannot be evaluated.
+                PolicyService.enforce_launch_noninteractive(
+                    session_id="",
+                    team_id=team.get("id"),
+                    cmd=["/bin/sh", "-c", check_cmd],
+                    backend="generator-critic-check",
+                    sandboxed=True,  # run_isolated_check uses a scrubbed snapshot
+                )
                 result = run_isolated_check(check_cmd, working_directory, timeout=_GC_CHECK_TIMEOUT)
+            except PolicyDenied:
+                logger.warning(
+                    "Generator-critic oracle check blocked by policy; falling back to critic gate",
+                    exc_info=True,
+                )
             except Exception:
                 logger.warning(
                     "Generator-critic oracle check errored; falling back to critic gate",

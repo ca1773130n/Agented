@@ -39,20 +39,40 @@ class BaseGenerationService(ABC):
         # Phase 3: Run Claude CLI with streaming
         yield sse("phase", {"message": "Calling Claude CLI..."})
 
+        cmd = [
+            "claude",
+            "-p",
+            prompt,
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--include-partial-messages",
+        ]
+
+        # SECURITY (23): gate the autonomous `claude -p` generation spawn through
+        # the shared non-interactive policy layer BEFORE launching. There is no
+        # operator turn here (a one-shot generation endpoint), so server-scope
+        # policies govern; a DENY (or ASK, treated as a refusal) aborts before any
+        # spawn or AI cost.
+        from .policy_service import PolicyDenied, PolicyService
+
+        try:
+            PolicyService.enforce_launch_noninteractive(
+                session_id="",
+                cmd=cmd,
+                backend="claude",
+            )
+        except PolicyDenied as exc:
+            reason = (getattr(exc, "verdict", None) or {}).get("reason") or "policy denied"
+            yield sse("error", {"error": f"Launch blocked by policy: {reason}"})
+            return
+
         try:
             project_root = os.path.dirname(
                 os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             )
             process = subprocess.Popen(
-                [
-                    "claude",
-                    "-p",
-                    prompt,
-                    "--output-format",
-                    "stream-json",
-                    "--verbose",
-                    "--include-partial-messages",
-                ],
+                cmd,
                 cwd=project_root,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,

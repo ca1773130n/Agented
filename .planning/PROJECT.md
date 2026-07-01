@@ -139,22 +139,25 @@ The codebase has grown organically and has accumulated technical debt documented
 
 ## Current Milestone
 
-**v0.8.0 — Team Harness & Self-Improvement** (started 2026-06-13; first
-GRD-planned milestone since v0.5.0; last shipped version v0.7.98 via PR #146)
+**v0.10.0 — Competitive Hardening (omnigent lessons)** (started 2026-06-30)
 
-**Goal:** Every project can one-click bootstrap a team harness where agents
-and the sketch panel create/improve forge primitives (skill, rule, hook,
-command, subagent), GRD drives all superagent conversations by default with
-its full feature set (autoresearch, life-harness, tesserae) wired to the
-frontend, and repeated similar user requests are detected via life-harness
-memory + tesserae and auto-converted into skills behind confidence gates.
+**Goal:** Close the governance / collaboration / deployment gap that
+omnigent-ai/omnigent (a Databricks meta-harness in Agented's exact category)
+demonstrates, **without** diluting Agented's autonomy/memory/self-improvement
+moat. Adopt a stackable ALLOW/DENY/ASK policy engine, OS-level harness
+sandboxing + egress control, real-time multi-user session collaboration, and
+deployment/extensibility ergonomics (Postgres, one-click deploy, declarative
+YAML agents). Keep widening the lead on the unified loop layer,
+Tesserae/CodeGraph grounding, life-harness, and competitive-intel.
 
-**Target features:** forge creation surface; sketch→primitive routing; GRD
-default driver; GRD frontend wiring; one-click team harness setup;
-repeated-request auto-skill. Approved design spec:
-``docs/superpowers/specs/2026-06-13-team-harness-self-improvement-design.md``
-(+ ``.ko.md`` sibling). PRs remain phase-scoped with
-codex-review-until-green.
+**Target features (4 phases / REQ-27..41):** policy/governance engine (23);
+OS-level harness sandboxing + egress (24); real-time multi-user collaboration
+(25); deployment & extensibility ergonomics (26). Basis: the verified
+competitive analysis ``docs/research/omnigent-vs-agented.md`` (+ ``.ko.md``).
+PRs remain phase-scoped with codex-review-until-green.
+
+**Paused:** v0.8.0 — Team Harness & Self-Improvement (phases 17–22) archived at
+``.planning/milestones/v0.8.0/``; open REQs 01–13, 19–21 carry forward.
 
 ---
-*Last updated: 2026-06-13 — started milestone v0.8.0 Team Harness & Self-Improvement*
+*Last updated: 2026-06-30 — started milestone v0.10.0 Competitive Hardening (omnigent lessons)*

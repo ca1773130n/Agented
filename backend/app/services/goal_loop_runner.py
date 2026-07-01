@@ -510,6 +510,62 @@ def _await_gate(
     return (decision, message)
 
 
+def _cost_ask_blocks(gate_decision: Optional[str]) -> bool:
+    """Whether a cost-ASK human gate result should BLOCK (deny) the loop.
+
+    SECURITY (23 MAJOR 6): a cost ASK proceeds ONLY on an explicit approve
+    action — "continue" (the human-gate card's primary approve) or "modify"
+    (proceed with a note). Everything else — "abort", an unknown/typo'd verdict,
+    or a timed-out gate (which returns "abort") — fails CLOSED to a block. The
+    earlier code only treated "modify" as proceed, so an operator approving via
+    "continue" was wrongly denied/stopped.
+    """
+    return gate_decision not in ("continue", "modify")
+
+
+def _evaluate_cost_policy(
+    *,
+    session_id: str,
+    team_id: Optional[str],
+    total_cost_usd: float,
+    tool_calls: int,
+    max_cost_usd: float,
+) -> tuple[str, Optional[str]]:
+    """Route the exit-ladder cost/tool budgets through the stackable policy layer.
+
+    Returns ``(decision, reason)`` where decision ∈ {allow, ask, deny}. This is
+    the consolidation half of 23-03 (Pitfall 5): the goal-loop no longer keeps a
+    parallel inline cost gate — ``PolicyService.evaluate`` (the ``cost_budget`` /
+    ``max_tool_calls_per_session`` builtins) is the source of truth, anchored on
+    the SESSION scope (session-not-bot HARD rule), never on a bot/trigger id.
+
+    The spec's ``max_cost_usd`` ceiling is folded in as an IMPLICIT hard cap so
+    configs that set ``exit.max_cost_usd`` but author no policy row keep their
+    existing behaviour: if no policy denies but the implicit ceiling is hit, this
+    returns ``("deny", ...)`` exactly as the old inline gate did.
+    """
+    from .policy_service import PolicyService
+
+    action = {
+        "kind": "iteration",
+        "total_cost_usd": total_cost_usd,
+        "tool_calls": tool_calls,
+    }
+    verdict = PolicyService.evaluate(session_id=session_id, team_id=team_id, action=action)
+    decision = verdict.get("decision", "allow")
+    # SECURITY (23 BLOCKER 1): the spec ``max_cost_usd`` ceiling is a HARD cap and
+    # must be enforced ABSOLUTELY — evaluate it FIRST, before honouring a softer
+    # policy verdict. A soft cost-budget ASK can pause the loop but must NEVER let
+    # spend cross the configured ceiling: an ASK while already over the cap
+    # collapses to a DENY here so an approval cannot raise the ceiling. (A policy
+    # DENY is also a deny, so ordering the cap first never weakens a deny.)
+    if max_cost_usd > 0 and total_cost_usd >= max_cost_usd:
+        return "deny", f"cost ${total_cost_usd:.4f} reached cap ${max_cost_usd:.4f}"
+    if decision in ("deny", "ask"):
+        return decision, verdict.get("reason")
+    return "allow", None
+
+
 def get_runner_state(session_id: str) -> Optional[dict]:
     """Snapshot the runner state for UI/monitor consumers."""
     with _runners_lock:
@@ -697,6 +753,10 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                 metric_spec=metric_spec,
                 quality_gate=gate,
                 sandbox=sandbox,
+                # FIX 1: the stable operator session id is the policy session key
+                # for the deterministic-check launch gate (server-scope policies
+                # always apply; a session-scope DENY/ASK refuses to run the check).
+                session_id=session_id,
             )
 
             # If the operator clicked Stop while the judge was
@@ -767,17 +827,49 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                     ProjectSessionManager.stop_session(live_id)
                     break
 
-            # Budget guard (06 H1): accumulate judge cost and stop if a
-            # configured ceiling is exceeded, so a misconfigured large
-            # max_iterations × expensive model can't burn unbounded spend
-            # within the wall-clock window. Checked AFTER the met-break so a
-            # successful final iteration is never denied.
+            # Budget guard (06 H1) — now ROUTED THROUGH the stackable policy
+            # layer (23-03) so the cost_budget builtin is the source of truth and
+            # the loop no longer carries a parallel inline cost gate (Pitfall 5 —
+            # don't double-govern). The spend is accumulated then passed in on the
+            # action ctx; the loop's exit BEHAVIOUR is identical on a DENY. An ASK
+            # (a soft cost threshold) routes through the EXISTING _await_gate human
+            # gate — no parallel poll loop. Policy is SESSION-scoped (session-not-
+            # bot rule): keyed on session_id, never on a bot/trigger id. The
+            # spec.exit.max_cost_usd ceiling is forwarded as an implicit
+            # session-scope cost_budget so existing configs keep working even
+            # without an authored policy row.
             state.total_cost_usd += float(verdict.cost_usd or 0.0)
-            if max_cost_usd > 0 and state.total_cost_usd >= max_cost_usd:
+            cost_decision, cost_reason = _evaluate_cost_policy(
+                session_id=session_id,
+                team_id=getattr(state, "team_id", None),
+                total_cost_usd=state.total_cost_usd,
+                tool_calls=iteration_no,
+                max_cost_usd=max_cost_usd,
+            )
+            if cost_decision == "ask":
+                gate_decision, gate_msg = _await_gate(
+                    state,
+                    session_id,
+                    iteration_no,
+                    gate_reason=f"policy: {cost_reason}",
+                    max_wall_seconds=max_wall_seconds,
+                )
+                # SECURITY (23 MAJOR 6): align the cost-ASK approval mapping with
+                # the human-gate vocabulary via _cost_ask_blocks. The card's
+                # PRIMARY approve action is "continue"; "modify" also proceeds
+                # (with an optional note). Everything else fails CLOSED. Previously
+                # only "modify" proceeded, so an operator clicking "continue"
+                # wrongly stopped the loop.
+                if gate_decision == "modify" and gate_msg:
+                    state.pending_note = gate_msg
+                if _cost_ask_blocks(gate_decision):
+                    cost_decision = "deny"
+            if cost_decision == "deny":
                 _broadcast_end(
                     session_id,
                     reason="budget_cap",
-                    detail=f"cost ${state.total_cost_usd:.4f} reached cap ${max_cost_usd:.4f}",
+                    detail=cost_reason
+                    or f"cost ${state.total_cost_usd:.4f} reached cap ${max_cost_usd:.4f}",
                 )
                 ProjectSessionManager.stop_session(live_id)
                 break
