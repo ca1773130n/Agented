@@ -110,6 +110,67 @@ class ConversationBranchService:
         branch = get_branch(branch_id)
         return branch if branch else {"branch_id": branch_id}
 
+    @staticmethod
+    def _build_fork_seed(messages: list[dict]) -> str:
+        """Render a branch's messages into a resume-style seed prompt.
+
+        The forked transcript (roles + content, 0..fork_point) is replayed as the
+        initial context of the NEW run so the child continues from the fork point.
+        """
+        lines = ["[Resuming a forked conversation — prior context follows]"]
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            lines.append(f"{role}: {content}")
+        return "\n".join(lines)
+
+    @classmethod
+    def fork_to_run(
+        cls,
+        conversation_id: str,
+        fork_message_index: int,
+        project_id: str,
+        cwd: str,
+        *,
+        name: str | None = None,
+        backend: str = "claude",
+    ) -> dict:
+        """Fork a conversation onto a SEPARATE independent run (REQ-36, locked #4).
+
+        Composes two existing primitives, no process clone:
+          1. ``create_branch`` snapshots messages 0..fork_message_index into a NEW
+             branch — the parent conversation's ``messages`` JSON is NEVER mutated
+             (ContextBranch immutability).
+          2. ``ProjectSessionManager.create_session`` starts a FRESH run seeded with
+             the forked transcript (a new ``psess-`` id with its OWN ``_subscribers``;
+             it does NOT join the parent session's subscriber list — no stream
+             cross-wiring). The parent's running session/process is untouched
+             (different session_id key).
+
+        Returns ``{"branch_id": ..., "session_id": <new psess id>}``.
+        """
+        branch = cls.create_branch(conversation_id, fork_message_index, name)
+        branch_id = branch.get("id") or branch.get("branch_id")
+
+        messages = get_messages_for_branch(branch_id, conversation_id)
+        seed = cls._build_fork_seed(messages)
+
+        # Lazy import — the PSM imports back into services on load.
+        from .project_session_manager import ProjectSessionManager
+
+        # A fresh, independent run seeded with the forked transcript (resume-style).
+        # ``claude --print`` refuses a tty, so pipe transport (use_pty=False). The
+        # NEW session gets its own isolated _subscribers — no parent cross-wiring.
+        session_id = ProjectSessionManager.create_session(
+            project_id=project_id,
+            cmd=[backend, "-p", seed],
+            cwd=cwd,
+            execution_type="direct",
+            execution_mode="interactive",
+            use_pty=False,
+        )
+        return {"branch_id": branch_id, "session_id": session_id}
+
     @classmethod
     def create_main_branch(cls, conversation_id: str) -> dict:
         """Create a 'main' branch for a conversation without branch structure.

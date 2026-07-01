@@ -119,7 +119,8 @@ export type {
 export { mcpServerApi } from './mcp-servers';
 export { replayApi } from './replay';
 export { collaborativeApi } from './collaborative';
-export { branchApi } from './conversation-branches';
+export { branchApi, sessionForkApi } from './conversation-branches';
+export type { ForkRunResult } from './conversation-branches';
 export { sessionShareApi } from './session-shares';
 export type { ShareScope, MintShareResponse, CoDriveResponse } from './session-shares';
 export { chunkApi } from './chunks';

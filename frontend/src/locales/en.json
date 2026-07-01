@@ -9761,5 +9761,14 @@
     "readOnlyNote": "This share is read-only — you cannot drive the session.",
     "drover": "co-drove",
     "driverLabel": "Driven by"
+  },
+  "fork": {
+    "fork": "Fork",
+    "forkFromHere": "Fork from here",
+    "forking": "Forking…",
+    "forked": "Forked onto a new run",
+    "openNewRun": "Open new run",
+    "diverge": "Explore a divergent path without disturbing this session",
+    "error": "Could not fork this conversation"
   }
 }

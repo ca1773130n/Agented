@@ -9761,5 +9761,14 @@
     "readOnlyNote": "此共享为只读 — 您无法操作会话。",
     "drover": "已协同操作",
     "driverLabel": "操作者"
+  },
+  "fork": {
+    "fork": "分叉",
+    "forkFromHere": "从这里分叉",
+    "forking": "正在分叉…",
+    "forked": "已分叉到新的运行",
+    "openNewRun": "打开新运行",
+    "diverge": "在不干扰此会话的情况下探索不同的路径",
+    "error": "无法分叉此对话"
   }
 }

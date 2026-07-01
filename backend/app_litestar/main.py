@@ -47,6 +47,7 @@ from .routes.competitor_intel_routes import (
     competitor_intel_router,
 )
 from .routes.competitor_strategy_routes import strategy_router
+from .routes.conversation_branches import session_fork_router
 from .routes.conversation_cluster import (
     command_conversations_router,
     hook_conversations_router,
@@ -368,6 +369,7 @@ def create_app() -> Litestar:
             shared_session_stream_router,
             session_shares_router,
             co_drive_router,
+            session_fork_router,
             backends_stream_router,
             setup_stream_router,
             super_agents_stream_router,
