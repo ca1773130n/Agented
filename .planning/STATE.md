@@ -24,9 +24,19 @@ unknown effects). Hardened over **5 Codex rounds** (fixed 2 fail-opens, 14 ungat
 stale-approval leak, a broken ASK flow, a TTL leak). Accepted follow-ups: create_session-ASK async
 refactor (fail-closed), setup_execution operator-command gate.
 
-Next: **Phase 24** (OS-level harness sandboxing + egress) — plans 24-01..05 ready; depends on 23 (now merged).
+Phase: 24 of 26 (OS-level harness sandboxing + egress) — **✅ COMPLETE & MERGED** (PR #287, main efb2efa548, 2026-07-02)
+Status: sandbox_wrap (bwrap Linux / seatbelt macOS, realpath-canonicalized credential denies, validated config-dir
+allows), deny-by-default egress proxy (fail-closed on non-readiness), wrap→enforce at ALL launch sites incl. the
+project_session_manager chokepoint, cloud_sandbox_runner (goal-loop→local fallback, no ungoverned stub), escape
+tests (live seatbelt: secret-read + non-allowlisted-connect blocked), docs/sandboxing.md(+.ko). Hardened over
+**4 Codex rounds** (fixed a globally-readable sandbox, --share-net proxy bypass, egress fail-open+leak, 6+
+wrap-without-enforce paths, ordering bug, cloud shell-injection, config-dir re-exposure, realpath/symlink escapes).
+Opt-in via AGENTED_SANDBOX (default off; require_sandbox + off → fail closed). Follow-ups: bwrap netns↔proxy bridge
+(Linux egress currently fail-closed-offline), live E2B/Modal creds.
 
-Progress: [##--------] 25% (1 of 4 phases complete — Phase 23 merged)
+Next: **Phase 25** (real-time multi-user collaboration — live-share SSE, co-drive [policy-governed], fork, OIDC) — plans 25-01.. ready; depends on 23.
+
+Progress: [#####-----] 50% (2 of 4 phases complete — Phases 23+24 merged)
 
 **Decisions (23-01):** PolicyVerdict = `{decision, policy_id, kind, reason, scope}`;
 SESSION-first stacking with first-DENY short-circuit (SC1 proven); default ALLOW has
