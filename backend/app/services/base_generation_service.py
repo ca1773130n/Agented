@@ -71,6 +71,10 @@ class BaseGenerationService(ABC):
             project_root = os.path.dirname(
                 os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             )
+            # Phase 24 (24-03 sweep): OS-sandbox wrap (no-op unless AGENTED_SANDBOX opted in).
+            from .sandbox_wrap import wrap_harness_command
+
+            cmd, _sandboxed = wrap_harness_command(cmd, project_root, net=True)
             process = subprocess.Popen(
                 cmd,
                 cwd=project_root,

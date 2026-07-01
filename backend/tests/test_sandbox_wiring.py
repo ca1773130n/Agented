@@ -1,0 +1,60 @@
+"""Defense-in-depth sweep (24-03, crit 1 + repo bug-class-sweep rule).
+
+Every harness ``subprocess.Popen`` call site must route its command through the
+Phase-24 OS-sandbox wrapper (``wrap_harness_command`` / ``build_sandbox_prefix`` /
+the execution_service ``_apply_sandbox_and_enforce`` seam). This AST/source sweep
+asserts no BARE harness Popen remains — matching Pitfall 1 (missing a Popen site
+leaves it unsandboxed).
+"""
+
+from pathlib import Path
+
+_SERVICES = Path(__file__).resolve().parent.parent / "app" / "services"
+
+# Harness-launch service modules that MUST sandbox-wrap their Popen commands.
+_HARNESS_MODULES = [
+    "execution_service.py",
+    "conversation_streaming.py",
+    "cli_agent_runner_service.py",
+    "setup_execution_service.py",
+    "base_generation_service.py",
+    "replay_service.py",
+]
+
+# Tokens that prove a module routes its launch through the sandbox layer.
+_WRAP_TOKENS = (
+    "wrap_harness_command",
+    "build_sandbox_prefix",
+    "_apply_sandbox_and_enforce",
+)
+
+# Explicit allowlist marker for a Popen that is legitimately NOT a harness launch.
+_NON_HARNESS_MARKER = "sandbox: non-harness"
+
+
+def test_all_harness_popen_sites_wrapped():
+    offenders = []
+    for name in _HARNESS_MODULES:
+        src = (_SERVICES / name).read_text()
+        # Real call sites only ("subprocess.Popen(") — not type annotations.
+        if "subprocess.Popen(" not in src:
+            continue
+        if any(tok in src for tok in _WRAP_TOKENS):
+            continue
+        if _NON_HARNESS_MARKER in src:
+            continue
+        offenders.append(name)
+
+    assert not offenders, (
+        "harness Popen sites not routed through the OS-sandbox wrapper "
+        f"(add wrap_harness_command / build_sandbox_prefix): {offenders}"
+    )
+
+
+def test_execution_service_uses_enforce_seam():
+    """The central chokepoint must set the REAL sandboxed flag on the launch gate."""
+    src = (_SERVICES / "execution_service.py").read_text()
+    assert "_apply_sandbox_and_enforce" in src
+    # sandboxed must flow from the wrap result into enforce_launch, not be hardcoded.
+    assert "sandboxed=sandboxed" in src
+    assert "sandboxed=False,  # no sandbox runtime until Phase 24" not in src

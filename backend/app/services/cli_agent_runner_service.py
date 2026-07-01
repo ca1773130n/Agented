@@ -88,6 +88,10 @@ def _run_subprocess(
     inherits the harness's env unchanged.
     """
     logger.info("CLI agent: spawning %s (cwd=%s) cmd=%s", backend_label, cwd, " ".join(cmd))
+    # Phase 24 (24-03 sweep): OS-sandbox wrap (no-op unless AGENTED_SANDBOX opted in).
+    from .sandbox_wrap import wrap_harness_command
+
+    cmd, _sandboxed = wrap_harness_command(cmd, cwd, net=True)
     try:
         proc = subprocess.Popen(
             cmd,

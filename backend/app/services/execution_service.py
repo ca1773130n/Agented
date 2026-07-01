@@ -526,9 +526,16 @@ class ExecutionService:
         return clone_repos(path_entries, cloned_dirs, github_repo_map)
 
     @staticmethod
-    def _build_subprocess_env(env_overrides: dict) -> Optional[dict]:
-        """Build subprocess environment, injecting vault secrets and account overrides."""
-        return build_subprocess_env(env_overrides)
+    def _build_subprocess_env(
+        env_overrides: dict, proxy_url: Optional[str] = None
+    ) -> Optional[dict]:
+        """Build subprocess environment, injecting vault secrets and account overrides.
+
+        Phase 24: when ``proxy_url`` is set, the egress proxy env (HTTPS_PROXY/
+        HTTP_PROXY/NO_PROXY) is merged so the child routes outbound through the
+        deny-by-default proxy and matches the sandbox ``--setenv``.
+        """
+        return build_subprocess_env(env_overrides, proxy_url=proxy_url)
 
     @classmethod
     def _enforce_launch_policy(
@@ -538,6 +545,7 @@ class ExecutionService:
         team_id: Optional[str],
         cmd: list,
         backend: str,
+        sandboxed: bool = False,
         total_cost_usd: float = 0.0,
         tool_calls: int = 0,
     ) -> None:
@@ -575,10 +583,59 @@ class ExecutionService:
             team_id=team_id,
             cmd=cmd,
             backend=backend,
-            sandboxed=False,  # no sandbox runtime until Phase 24
+            # Phase 24: the REAL sandboxed flag from build_sandbox_prefix — no longer
+            # hardcoded False. When a policy mandates enforce_sandbox and the launch
+            # is NOT sandboxed (degraded / sandbox disabled), evaluate() DENIES and
+            # this raises PolicyDenied so the process never starts (fail closed).
+            sandboxed=sandboxed,
             total_cost_usd=total_cost_usd,
             tool_calls=tool_calls,
         )
+
+    @classmethod
+    def _egress_allowlist_from_env(cls) -> set:
+        """Per-run egress allowlist. ``AGENTED_EGRESS_ALLOWLIST`` (comma-separated)
+        overrides; otherwise a conservative required set. Empty ⇒ deny-by-default."""
+        raw = os.environ.get("AGENTED_EGRESS_ALLOWLIST")
+        if raw is not None:
+            return {h.strip() for h in raw.split(",") if h.strip()}
+        return {"github.com", "api.github.com", "api.anthropic.com"}
+
+    @classmethod
+    def _apply_sandbox_and_enforce(
+        cls,
+        cmd: list,
+        workspace: str,
+        *,
+        session_id: str,
+        team_id: Optional[str],
+        backend: str,
+        proxy_url: Optional[str] = None,
+        total_cost_usd: float = 0.0,
+        tool_calls: int = 0,
+    ) -> tuple:
+        """Phase-24 launch seam: OS-sandbox-wrap the command, then run the Phase-23
+        launch gate with the REAL ``sandboxed`` flag BEFORE ``subprocess.Popen``.
+
+        Returns ``(wrapped_cmd, sandboxed)``. A DENY inside ``_enforce_launch_policy``
+        raises ``PolicyDenied`` and the caller never reaches Popen — so an
+        ``enforce_sandbox`` policy refuses an unsandboxable launch (crit 4, fail
+        closed). ``wrap_harness_command`` is a no-op pass-through unless
+        ``AGENTED_SANDBOX`` is set, so normal operation is unchanged by default.
+        """
+        from .sandbox_wrap import wrap_harness_command
+
+        wrapped, sandboxed = wrap_harness_command(cmd, workspace, net=True, proxy_url=proxy_url)
+        cls._enforce_launch_policy(
+            session_id=session_id,
+            team_id=team_id,
+            cmd=wrapped,
+            backend=backend,
+            sandboxed=sandboxed,
+            total_cost_usd=total_cost_usd,
+            tool_calls=tool_calls,
+        )
+        return wrapped, sandboxed
 
     @classmethod
     def run_trigger(
@@ -607,6 +664,7 @@ class ExecutionService:
         execution_id = None
         cloned_dirs = []  # temp dirs to clean up
         github_repo_map = {}  # clone_dir -> repo_url (for auto-resolve PR flow)
+        egress_handle = None  # Phase 24: deny-by-default egress proxy for this run
 
         try:
             # Get detailed path info (includes path_type and github_repo_url)
@@ -813,19 +871,49 @@ class ExecutionService:
                     exc_info=True,
                 )
 
-            # Stackable policy gate (23-03): evaluate at the launch boundary,
-            # AFTER cmd/proc_env/cwd are built but BEFORE Popen (Pitfall 1 — never
-            # block the daemon stream-reader threads). A DENY raises PolicyDenied;
-            # an ASK blocks the launching call until an operator resolves it.
             # Policy is SESSION-scoped (session-not-bot rule): prefer the injected
             # AGENTED_SESSION_ID, falling back to execution_id; team scope is
             # best-effort from the trigger's _team_id.
             policy_session_id = (proc_env or {}).get("AGENTED_SESSION_ID") or execution_id
-            cls._enforce_launch_policy(
+
+            # Phase 24: deny-by-default egress proxy (opt-in via AGENTED_SANDBOX) —
+            # start it for the run, merge its env so HTTPS_PROXY/HTTP_PROXY match the
+            # sandbox --setenv, and pass its url into the sandbox prefix. Best-effort:
+            # a failure here degrades to env-only / no egress, never blocks the spawn.
+            proxy_url = None
+            from .sandbox_wrap import sandbox_enabled
+
+            if sandbox_enabled():
+                try:
+                    from .egress_proxy import ThreadedEgressProxy
+
+                    egress_handle = ThreadedEgressProxy(
+                        cls._egress_allowlist_from_env(), session_id=policy_session_id
+                    ).start()
+                    proxy_url = egress_handle.url
+                    proc_env = cls._build_subprocess_env(env_overrides, proxy_url=proxy_url)
+                except Exception:
+                    logger.warning(
+                        "egress proxy failed to start for %s; continuing without egress filtering",
+                        execution_id,
+                        exc_info=True,
+                    )
+                    egress_handle = None
+                    proxy_url = None
+
+            # Stackable policy gate (23-03) + OS sandbox (24-03): wrap the command in
+            # the OS sandbox, set the REAL sandboxed flag, and evaluate the launch gate
+            # BEFORE Popen (Pitfall 1 — never block the daemon stream-reader threads).
+            # A DENY (incl. enforce_sandbox on an unsandboxable launch) raises
+            # PolicyDenied; an ASK blocks the launching call until an operator resolves
+            # it. The process never starts on a refusal.
+            cmd, _sandboxed = cls._apply_sandbox_and_enforce(
+                cmd,
+                effective_cwd,
                 session_id=policy_session_id,
                 team_id=trigger.get("_team_id"),
-                cmd=cmd,
                 backend=backend,
+                proxy_url=proxy_url,
             )
 
             # Use Popen for streaming output (start_new_session for process group management)
@@ -1052,6 +1140,12 @@ class ExecutionService:
                     execution_id=execution_id, status=ExecutionState.FAILED, error_message=error_msg
                 )
         finally:
+            # Phase 24: tear down the per-run egress proxy (best-effort).
+            if egress_handle is not None:
+                try:
+                    egress_handle.stop()
+                except Exception:
+                    logger.debug("egress proxy stop raised", exc_info=True)
             # Clean up all cloned directories (each wrapped independently to ensure all are attempted)
             for d in cloned_dirs:
                 try:

@@ -66,6 +66,11 @@ class SetupExecutionService:
         # Split command into list
         cmd_list = shlex.split(command)
 
+        # Phase 24 (24-03 sweep): OS-sandbox wrap (no-op unless AGENTED_SANDBOX opted in).
+        from .sandbox_wrap import wrap_harness_command
+
+        cmd_list, _sandboxed = wrap_harness_command(cmd_list, working_dir, net=True)
+
         # Launch subprocess
         process = subprocess.Popen(
             cmd_list,

@@ -830,6 +830,12 @@ def _stream_via_cli(
 
     cmd = ["claude", "-p", prompt, "--output-format", "stream-json", "--verbose"]
 
+    # Phase 24 (24-03 sweep): route the harness spawn through the OS-sandbox prefix
+    # builder. No-op pass-through unless AGENTED_SANDBOX is opted in.
+    from .sandbox_wrap import wrap_harness_command
+
+    cmd, _sandboxed = wrap_harness_command(cmd, cwd, net=True)
+
     try:
         proc = subprocess.Popen(
             cmd,
@@ -956,6 +962,11 @@ def _stream_via_opencode_cli(
 
     # opencode run takes message as positional arg, model in provider/model format
     cmd = ["opencode", "run", prompt, "--model", model]
+
+    # Phase 24 (24-03 sweep): OS-sandbox wrap (no-op unless AGENTED_SANDBOX opted in).
+    from .sandbox_wrap import wrap_harness_command
+
+    cmd, _sandboxed = wrap_harness_command(cmd, cwd, net=True)
 
     try:
         proc = subprocess.Popen(

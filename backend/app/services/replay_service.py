@@ -134,6 +134,10 @@ class ReplayService:
                 )
                 return
 
+            # Phase 24 (24-03 sweep): OS-sandbox wrap (no-op unless AGENTED_SANDBOX opted in).
+            from app.services.sandbox_wrap import wrap_harness_command
+
+            cmd, _sandboxed = wrap_harness_command(cmd, PROJECT_ROOT, net=True)
             process = subprocess.Popen(
                 cmd,
                 cwd=PROJECT_ROOT,
