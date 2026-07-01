@@ -248,19 +248,52 @@ class ThreadedEgressProxy:
         self._boot_task = self._loop.create_task(_boot())
         self._loop.run_forever()
 
-    def _shutdown_loop(self) -> None:
-        """Cancel a still-pending boot task then stop the loop (fail-closed teardown).
+    def _join_and_close(self) -> None:
+        """Join the loop thread then CLOSE the loop so a failed/finished proxy leaks
+        neither a daemon thread nor an open event loop (MAJOR 2). Safe if the thread
+        was never started (``ident is None``) or the loop is already closed; only
+        closes once the thread has actually exited ``run_forever`` (never closes a
+        still-running loop).
+        """
+        if self._thread.ident is not None:
+            self._thread.join(timeout=5.0)
+        if not self._thread.is_alive() and not self._loop.is_closed():
+            self._loop.close()
 
-        Cancelling first avoids a dangling ``_boot`` task being destroyed while pending
-        when a never-ready boot is abandoned on timeout.
+    def _shutdown_loop(self) -> None:
+        """Fail-closed teardown of a not-ready / errored boot — leaks no loop/thread.
+
+        MAJOR 2: the previous version cancelled the boot task and called ``loop.stop()``
+        in the SAME callback. ``task.cancel()`` only *schedules* the ``CancelledError``;
+        stopping the loop in that same tick returned ``run_forever`` BEFORE the
+        cancellation was delivered, orphaning the boot task pending (a "Task was
+        destroyed but it is pending" warning + an un-retrieved result), and it never
+        joined the thread or closed the loop. Now we defer ``loop.stop()`` to the boot
+        task's done-callback so the loop keeps spinning until the cancellation is
+        actually delivered and the task is done; when the task is already done (the
+        boot-error path stores into ``_boot_error`` and returns) we retrieve its stored
+        result first so nothing is reported as never-retrieved. Finally we join the
+        thread and close the loop.
         """
 
-        def _cancel_and_stop() -> None:
-            if self._boot_task is not None and not self._boot_task.done():
-                self._boot_task.cancel()
-            self._loop.stop()
+        def _cancel_then_stop() -> None:
+            task = self._boot_task
+            if task is not None and not task.done():
+                # Stop ONLY after the cancellation has been delivered and the task is
+                # truly done (done-callback), so the CancelledError is retrieved.
+                task.add_done_callback(lambda _t: self._loop.stop())
+                task.cancel()
+            else:
+                if task is not None:
+                    # Retrieve any stored result/exception so asyncio does not warn.
+                    try:
+                        task.exception()
+                    except (asyncio.CancelledError, asyncio.InvalidStateError):
+                        pass
+                self._loop.stop()
 
-        self._loop.call_soon_threadsafe(_cancel_and_stop)
+        self._loop.call_soon_threadsafe(_cancel_then_stop)
+        self._join_and_close()
 
     def start(self, timeout: float = 5.0) -> "ThreadedEgressProxy":
         """Start the proxy thread and BLOCK until it is actually listening.
@@ -285,6 +318,8 @@ class ThreadedEgressProxy:
         return self
 
     def stop(self) -> None:
+        if self._loop.is_closed():
+            return
         if self._proxy is not None:
             fut = asyncio.run_coroutine_threadsafe(self._proxy.stop(), self._loop)
             try:
@@ -292,3 +327,6 @@ class ThreadedEgressProxy:
             except (TimeoutError, Exception):  # noqa: BLE001 - best-effort teardown
                 pass
         self._loop.call_soon_threadsafe(self._loop.stop)
+        # Join the thread + close the loop so a normal stop() also leaks neither a
+        # daemon thread nor an open event loop (MAJOR 2).
+        self._join_and_close()

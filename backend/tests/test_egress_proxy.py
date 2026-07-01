@@ -219,3 +219,47 @@ def test_egress_not_ready_url_none_fails_closed(monkeypatch):
             env_overrides={},
             proc_env={},
         )
+
+
+# --------------------------------------------------------------------------- #
+# MAJOR 2 (24-fix): a FAILED start() must leak NEITHER a daemon thread NOR an
+# event loop — teardown cancels+awaits the boot task, stops AND closes the loop,
+# and joins the thread. N repeated failures must not grow the live thread count.
+# --------------------------------------------------------------------------- #
+def test_threaded_proxy_repeated_boot_errors_no_leak(monkeypatch):
+    import threading
+
+    async def _boom(*a, **k):
+        raise OSError("bind failed")
+
+    monkeypatch.setattr(egress_proxy, "start_egress_proxy", _boom)
+    baseline = threading.active_count()
+    for _ in range(8):
+        tp = egress_proxy.ThreadedEgressProxy(allowlist={"x"}, session_id="leak-boom")
+        with pytest.raises(RuntimeError):
+            tp.start(timeout=2.0)
+        assert not tp._thread.is_alive(), "boot thread must be joined, not leaked"
+        assert tp._loop.is_closed(), "event loop must be closed, not leaked"
+    assert threading.active_count() <= baseline + 1, "threads leaked across repeated failures"
+
+
+def test_threaded_proxy_repeated_not_ready_no_leak(monkeypatch):
+    """The cancel path (boot never signals ready): the pending boot task must be
+    cancelled AND its CancelledError delivered (task done, not orphaned) before the
+    loop stops — then thread joined + loop closed. No leak across repeats."""
+    import threading
+
+    async def _never_ready(*a, **k):
+        await asyncio.Event().wait()  # hang forever; readiness never set
+
+    monkeypatch.setattr(egress_proxy, "start_egress_proxy", _never_ready)
+    baseline = threading.active_count()
+    for _ in range(6):
+        tp = egress_proxy.ThreadedEgressProxy(allowlist={"x"}, session_id="leak-nr")
+        with pytest.raises(RuntimeError):
+            tp.start(timeout=0.2)
+        assert not tp._thread.is_alive(), "hung boot thread must be joined, not leaked"
+        assert tp._loop.is_closed(), "event loop must be closed, not leaked"
+        # The boot task actually finished (cancelled + retrieved), not left pending.
+        assert tp._boot_task is None or tp._boot_task.done()
+    assert threading.active_count() <= baseline + 1, "threads leaked across repeated failures"
