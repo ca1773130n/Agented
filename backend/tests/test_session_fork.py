@@ -8,21 +8,44 @@ the parent.
 
 import json
 
+import pytest
+from litestar.exceptions import PermissionDeniedException
+
 from app.db.agents import (
     create_agent_conversation,
     get_agent_conversation,
     update_agent_conversation,
 )
+from app.db.connection import get_connection
 from app.services.conversation_branch_service import ConversationBranchService
+from app_litestar.auth import Caller
+from app_litestar.routes.conversation_branches import fork_session
 
 
-def _seed_conversation(n=3):
-    conv_id = create_agent_conversation()
+def _seed_conversation(n=3, user_id=None):
+    conv_id = create_agent_conversation(user_id=user_id)
     messages = [
         {"role": "user" if i % 2 == 0 else "assistant", "content": f"message-{i}"} for i in range(n)
     ]
     update_agent_conversation(conv_id, messages=json.dumps(messages))
     return conv_id
+
+
+def _seed_project(project_id="proj-fork", owner=None):
+    with get_connection() as conn:
+        if owner is None:
+            conn.execute("INSERT INTO projects (id, name) VALUES (?, ?)", (project_id, "F"))
+        else:
+            conn.execute(
+                "INSERT INTO projects (id, name, user_id) VALUES (?, ?, ?)",
+                (project_id, "F", owner),
+            )
+        conn.commit()
+    return project_id
+
+
+def _caller(user_id, role="member"):
+    return Caller(api_key="k", role=role, user_id=user_id, auth_method="api_key")
 
 
 def test_fork_to_run_returns_branch_and_session(isolated_db, monkeypatch):
@@ -82,3 +105,60 @@ def test_child_divergence_does_not_leak_to_parent(isolated_db, monkeypatch):
     parent_after = get_agent_conversation(conv_id)["messages"]
     assert parent_after == parent_before
     assert "child-only divergence" not in parent_after
+
+
+# ---------------------------------------------------------------------------
+# #3 — fork route enforces ownership of the source conversation/project
+# ---------------------------------------------------------------------------
+
+
+def _fork_body(conv_id, idx=1):
+    return {"conversation_id": conv_id, "fork_message_index": idx}
+
+
+def _make_owner(email="owner@example.com"):
+    # projects.user_id + agent_conversations.user_id FK to users(id), so the
+    # owner must be a real user row.
+    from app.db.users import create_user
+
+    return create_user(email)
+
+
+class TestForkOwnershipGate:
+    def test_owner_forks_ok(self, isolated_db, monkeypatch):
+        owner = _make_owner()
+        proj = _seed_project(owner=owner)
+        conv_id = _seed_conversation(3, user_id=owner)
+        monkeypatch.setattr(
+            "app.services.project_session_manager.ProjectSessionManager.create_session",
+            staticmethod(lambda **kwargs: "psess-forked-owned"),
+        )
+        result = fork_session.fn(proj, "sid", _fork_body(conv_id, 2), _caller(owner))
+        assert result["session_id"] == "psess-forked-owned"
+        assert result["branch_id"]
+
+    def test_non_owner_fork_forbidden(self, isolated_db):
+        owner = _make_owner()
+        proj = _seed_project(owner=owner)
+        conv_id = _seed_conversation(3, user_id=owner)
+        with pytest.raises(PermissionDeniedException):
+            fork_session.fn(proj, "sid", _fork_body(conv_id), _caller("intruder"))
+
+    def test_unowned_conversation_forbidden_for_non_admin(self, isolated_db):
+        # Fail CLOSED: an unattributed (NULL user_id) conversation cannot be
+        # forked by an arbitrary authenticated caller.
+        proj = _seed_project(owner=None)
+        conv_id = _seed_conversation(3, user_id=None)
+        with pytest.raises(PermissionDeniedException):
+            fork_session.fn(proj, "sid", _fork_body(conv_id), _caller("anyone"))
+
+    def test_admin_can_fork_any(self, isolated_db, monkeypatch):
+        owner = _make_owner()
+        proj = _seed_project(owner=owner)
+        conv_id = _seed_conversation(3, user_id=owner)
+        monkeypatch.setattr(
+            "app.services.project_session_manager.ProjectSessionManager.create_session",
+            staticmethod(lambda **kwargs: "psess-forked-admin"),
+        )
+        result = fork_session.fn(proj, "sid", _fork_body(conv_id, 2), _caller("root", role="admin"))
+        assert result["session_id"] == "psess-forked-admin"

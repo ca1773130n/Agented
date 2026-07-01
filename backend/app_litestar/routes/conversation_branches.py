@@ -13,17 +13,26 @@ from __future__ import annotations
 from typing import Any
 
 from litestar import Router, post
-from litestar.exceptions import ClientException, NotFoundException
+from litestar.exceptions import ClientException, NotFoundException, PermissionDeniedException
 
 from app.database import get_project
+from app.db.agents import get_agent_conversation
 from app.services.conversation_branch_service import ConversationBranchService
+from app_litestar.auth import Caller
 
 
 @post("/{project_id:str}/sessions/{session_id:str}/fork", status_code=201, sync_to_thread=False)
-def fork_session(project_id: str, session_id: str, data: dict) -> dict[str, Any]:
+def fork_session(project_id: str, session_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     """Fork a conversation onto a new run. Returns the child ``{branch_id, session_id}``.
 
     Body: ``{conversation_id, fork_message_index, name?}``.
+
+    SECURITY (25 BLOCKER — ownership gate): forking copies the source
+    conversation's transcript into a new run, so the caller must OWN the source
+    conversation (and, when it has one, the project) — else 403. Fail CLOSED: an
+    unattributed (NULL-owner) conversation is forkable only by an admin, never by
+    an arbitrary authenticated caller. This blocks reading another user's
+    transcript (and spending resources) via a guessed conversation/project id.
     """
     del session_id
     project = get_project(project_id)
@@ -40,6 +49,23 @@ def fork_session(project_id: str, session_id: str, data: dict) -> dict[str, Any]
     except (TypeError, ValueError) as exc:
         raise ClientException(detail="fork_message_index must be an integer") from exc
 
+    caller_user_id = getattr(caller, "user_id", None) if caller else None
+    is_admin = (getattr(caller, "role", None) if caller else None) == "admin"
+
+    conversation = get_agent_conversation(conversation_id)
+    if not conversation:
+        raise NotFoundException(detail="Conversation not found")
+
+    if not is_admin:
+        # Hard gate: own the source conversation (fail closed on an unknown owner).
+        conv_owner = conversation.get("user_id")
+        if conv_owner is None or caller_user_id is None or conv_owner != caller_user_id:
+            raise PermissionDeniedException(detail="You do not own this conversation")
+        # If the project is owned, it must be by the same caller.
+        proj_owner = project.get("user_id")
+        if proj_owner is not None and proj_owner != caller_user_id:
+            raise PermissionDeniedException(detail="You do not own this project")
+
     cwd = project.get("local_path") or project.get("worktree_base_path") or "."
     try:
         result = ConversationBranchService.fork_to_run(
@@ -48,6 +74,9 @@ def fork_session(project_id: str, session_id: str, data: dict) -> dict[str, Any]
             project_id=project_id,
             cwd=cwd,
             name=body.get("name"),
+            # The forked run is owned by the caller so they can stream it (the
+            # SSE gate now fails closed on an unattributed session).
+            created_by=caller_user_id,
         )
     except ValueError as exc:
         msg = str(exc)

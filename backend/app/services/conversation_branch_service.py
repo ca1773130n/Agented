@@ -134,6 +134,7 @@ class ConversationBranchService:
         *,
         name: str | None = None,
         backend: str = "claude",
+        created_by: str | None = None,
     ) -> dict:
         """Fork a conversation onto a SEPARATE independent run (REQ-36, locked #4).
 
@@ -168,6 +169,7 @@ class ConversationBranchService:
             execution_type="direct",
             execution_mode="interactive",
             use_pty=False,
+            created_by=created_by,
         )
         return {"branch_id": branch_id, "session_id": session_id}
 
