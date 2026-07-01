@@ -45,6 +45,8 @@ def _hash_token(token: str) -> str:
     underlying token.
     """
     return hashlib.sha256((token or "").encode("utf-8")).hexdigest()
+
+
 # Default lifetime for a minted share token (24h) — bounded so a leaked URL
 # stops working even if the operator forgets to revoke it.
 DEFAULT_TTL_SECONDS = 24 * 60 * 60
@@ -137,13 +139,27 @@ def resolve_share_token(token: str) -> Optional[dict]:
     return d
 
 
-def revoke_share_token(token: str) -> bool:
-    """Revoke a share token. Returns True if a live row was flipped to revoked."""
+def revoke_share_token(token: str, session_id: Optional[str] = None) -> bool:
+    """Revoke a share token. Returns True if a live row was flipped to revoked.
+
+    SECURITY (Phase 25 BLOCKER — ITEM 7): when ``session_id`` is given, the revoke
+    is SCOPED to that session — a token is only flipped when it belongs to
+    ``session_id``. Callers holding a token they don't own therefore cannot revoke
+    it across sessions even if the higher-level ownership check were ever bypassed.
+    The route ALWAYS passes ``session_id`` (from the owner-verified path); the
+    ``None`` default is retained only for internal/test callers that revoke a token
+    they already own by construction.
+    """
+    sql = "UPDATE session_share_tokens SET revoked = 1 WHERE token = ? AND revoked = 0"
+    params: tuple = (_hash_token(token),)
+    if session_id is not None:
+        sql += " AND session_id = ?"
+        params = (_hash_token(token), session_id)
     with get_connection() as conn:
         cur = conn.execute(
-            "UPDATE session_share_tokens SET revoked = 1 WHERE token = ? AND revoked = 0",
+            sql,
             # Revoke by digest — mirrors mint/resolve (the raw token is only a key).
-            (_hash_token(token),),
+            params,
         )
         conn.commit()
         return cur.rowcount > 0

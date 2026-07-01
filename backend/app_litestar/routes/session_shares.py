@@ -46,6 +46,27 @@ SHARE_TOKEN_HEADER = "x-share-token"
 # ---------------------------------------------------------------------------
 
 
+def _require_session_owner(session_id: str, caller: Optional[Caller]) -> Optional[str]:
+    """Assert ``caller`` may manage share tokens for ``session_id``; return its user_id.
+
+    SECURITY (25 BLOCKER — ownership gate, shared by MINT + REVOKE so the two can
+    never drift): a share token hands out access to a session, so ONLY the
+    session's recorded owner (or an admin) may mint OR revoke one. Fail CLOSED —
+    an unknown owner (no ``created_by`` recorded) or a caller who isn't that owner
+    is forbidden, so a non-owner can never fabricate a share for, or revoke a
+    share on, a session they don't own.
+    """
+    created_by = getattr(caller, "user_id", None) if caller else None
+    role = getattr(caller, "role", None) if caller else None
+    if role != "admin":
+        owner = get_project_session_owner(session_id)
+        if owner is None or created_by is None or created_by != owner:
+            raise PermissionDeniedException(
+                detail="Only the session owner may manage share tokens for this session"
+            )
+    return created_by
+
+
 @post("/{project_id:str}/sessions/{session_id:str}/share", status_code=201, sync_to_thread=False)
 def mint_share(project_id: str, session_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     """Mint a scoped share token for a running session (owner action).
@@ -58,20 +79,7 @@ def mint_share(project_id: str, session_id: str, data: dict, caller: Caller) -> 
     scope = body.get("scope", "read")
     if scope not in VALID_SCOPES:
         raise ClientException(detail=f"scope must be one of {VALID_SCOPES}")
-    created_by = getattr(caller, "user_id", None) if caller else None
-    role = getattr(caller, "role", None) if caller else None
-
-    # SECURITY (25 BLOCKER — ownership gate): minting a share token hands out
-    # access to a session, so ONLY the session's owner (or an admin) may mint
-    # one. Fail CLOSED: an unknown owner (no ``created_by`` recorded) or a
-    # caller who isn't that owner is forbidden — a non-owner must never be able
-    # to fabricate a share for a session they don't own.
-    if role != "admin":
-        owner = get_project_session_owner(session_id)
-        if owner is None or created_by is None or created_by != owner:
-            raise PermissionDeniedException(
-                detail="Only the session owner may mint a share token"
-            )
+    created_by = _require_session_owner(session_id, caller)
 
     ttl = body.get("ttl_seconds")
     kwargs: dict[str, Any] = {"scope": scope, "created_by": created_by}
@@ -97,9 +105,18 @@ def mint_share(project_id: str, session_id: str, data: dict, caller: Caller) -> 
     sync_to_thread=False,
 )
 def revoke_share(project_id: str, session_id: str, token: str, caller: Caller) -> dict[str, Any]:
-    """Revoke a previously-minted share token (owner action)."""
-    del project_id, session_id, caller
-    revoked = revoke_share_token(token)
+    """Revoke a previously-minted share token (owner action).
+
+    SECURITY (25 BLOCKER — ITEM 7): revocation is an owner action, exactly like
+    mint. Previously this route discarded the caller/session scope and revoked by
+    token alone, so ANY authenticated user who learned a share token could revoke
+    it cross-session. Now the caller must own the session (same gate as mint) and
+    the DB revoke is scoped to ``session_id`` — a non-owner is rejected 403 and a
+    token can only ever be flipped for the session it belongs to.
+    """
+    del project_id
+    _require_session_owner(session_id, caller)
+    revoked = revoke_share_token(token, session_id=session_id)
     if not revoked:
         raise NotFoundException(detail="Share token not found or already revoked")
     return {"revoked": True}
@@ -160,7 +177,11 @@ def _enforce_co_drive_csrf(request: Request, token: str) -> None:
         origin_host = (urlsplit(origin).hostname or "").lower()
         host = (request.headers.get("host") or "").split(":")[0].lower()
         fwd = (request.headers.get("x-forwarded-host") or "").split(":")[0].lower()
-        if origin_host and origin_host not in {host, fwd} and origin_host not in _trusted_origin_hosts():
+        if (
+            origin_host
+            and origin_host not in {host, fwd}
+            and origin_host not in _trusted_origin_hosts()
+        ):
             raise PermissionDeniedException(detail="cross-site co-drive rejected")
 
 

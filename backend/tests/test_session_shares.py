@@ -25,7 +25,7 @@ from app.db.session_shares import (
 from app.services.project_session_manager import ProjectSessionManager, SessionInfo
 from app.services.session_sharing_service import SessionSharingService
 from app_litestar.auth import Caller
-from app_litestar.routes.session_shares import co_drive_send, mint_share
+from app_litestar.routes.session_shares import co_drive_send, mint_share, revoke_share
 
 
 @pytest.fixture(autouse=True)
@@ -239,6 +239,67 @@ class TestMintOwnershipGate:
 
 
 # ---------------------------------------------------------------------------
+# ITEM 7 — revoke is scoped to the session at the DB layer (no cross-session
+# revoke even if the higher-level owner check were bypassed)
+# ---------------------------------------------------------------------------
+
+
+class TestRevokeScoping:
+    def test_revoke_wrong_session_is_noop(self, isolated_db):
+        token = mint_share_token("psess-A", scope="read")
+        # A revoke scoped to a DIFFERENT session must NOT flip this token.
+        assert revoke_share_token(token, session_id="psess-OTHER") is False
+        assert resolve_share_token(token) is not None  # still live
+        # The token's own session revokes it.
+        assert revoke_share_token(token, session_id="psess-A") is True
+        assert resolve_share_token(token) is None
+
+    def test_revoke_without_session_still_works(self, isolated_db):
+        # Back-compat: internal/test callers may revoke by token alone.
+        token = mint_share_token("psess-A", scope="read")
+        assert revoke_share_token(token) is True
+        assert resolve_share_token(token) is None
+
+
+# ---------------------------------------------------------------------------
+# ITEM 7 — revoke_share route requires session ownership (or admin); a non-owner
+# who merely knows a token can no longer revoke it cross-session
+# ---------------------------------------------------------------------------
+
+
+class TestRevokeOwnershipGate:
+    def test_owner_revokes_ok(self, isolated_db):
+        _seed_owned_session_row("psess-mine", owner="owner-1")
+        token = mint_share_token("psess-mine", scope="read", created_by="owner-1")
+        result = revoke_share.fn("proj-mint", "psess-mine", token, _caller("owner-1"))
+        assert result == {"revoked": True}
+        assert resolve_share_token(token) is None
+
+    def test_non_owner_revoke_forbidden_and_share_still_resolves(self, isolated_db):
+        _seed_owned_session_row("psess-mine", owner="owner-1")
+        token = mint_share_token("psess-mine", scope="read", created_by="owner-1")
+        with pytest.raises(PermissionDeniedException):
+            revoke_share.fn("proj-mint", "psess-mine", token, _caller("intruder"))
+        # The intruder did NOT revoke it — the share is still live.
+        assert resolve_share_token(token) is not None
+
+    def test_admin_revokes_any(self, isolated_db):
+        _seed_owned_session_row("psess-mine", owner="owner-1")
+        token = mint_share_token("psess-mine", scope="read", created_by="owner-1")
+        result = revoke_share.fn("proj-mint", "psess-mine", token, _caller("root", role="admin"))
+        assert result == {"revoked": True}
+
+    def test_unowned_session_revoke_forbidden_for_non_admin(self, isolated_db):
+        # Fail CLOSED: an unattributed (NULL created_by) session's token cannot be
+        # revoked by a non-admin, even one that "knows" the token.
+        _seed_owned_session_row("psess-orphan", owner=None)
+        token = mint_share_token("psess-orphan", scope="read")
+        with pytest.raises(PermissionDeniedException):
+            revoke_share.fn("proj-mint", "psess-orphan", token, _caller("anyone"))
+        assert resolve_share_token(token) is not None
+
+
+# ---------------------------------------------------------------------------
 # #5 — co-drive SEND requires the X-Share-Token header + rejects cross-site
 # ---------------------------------------------------------------------------
 
@@ -277,11 +338,7 @@ class TestCoDriveCsrf:
     def test_same_origin_header_carrying_post_accepted(self, isolated_db, monkeypatch):
         token = mint_share_token("psess-csrf", scope="chat")
         # Stub co_drive so we isolate the CSRF gate (the accept path).
-        monkeypatch.setattr(
-            SessionSharingService, "co_drive", staticmethod(lambda *a, **k: True)
-        )
-        req = _req(
-            {"X-Share-Token": token, "Origin": "https://agented.app", "Host": "agented.app"}
-        )
+        monkeypatch.setattr(SessionSharingService, "co_drive", staticmethod(lambda *a, **k: True))
+        req = _req({"X-Share-Token": token, "Origin": "https://agented.app", "Host": "agented.app"})
         result = co_drive_send.fn(token, {"text": "go"}, req)
         assert result["sent"] is True
