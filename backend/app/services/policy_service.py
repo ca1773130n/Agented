@@ -39,6 +39,15 @@ POLICY_ID_LENGTH = 6
 _POLICY_POLL_SECONDS = 0.5
 _POLICY_DEFAULT_MAX_WALL_SECONDS = 600
 
+# FIX 4 (orphan-tuple leak): a decision stored with no waiter (a race-ahead
+# decision that IS later consumed, OR a stray/late decision for an ask that
+# already timed out / was never awaited and is consumed by NOBODY) must not
+# accumulate forever. Any decision tuple still unconsumed after this TTL is a
+# leaked orphan and is swept opportunistically on the next submit — bounding the
+# registry without dropping a legitimate race-ahead decision (which is consumed
+# within milliseconds, far inside this window).
+_POLICY_DECISION_TTL_SECONDS = 900
+
 # ASK-id-keyed decision registry. In-process is coherent under gunicorn
 # workers=1 (CLAUDE.md): a single worker shares this dict across the launching
 # call (which polls in await_decision) and the HTTP decision route (which calls
@@ -228,36 +237,56 @@ class PolicyService:
         ASK if no DENY is found. Defaults to ALLOW (scope=None) when nothing
         matches. ``action`` is forwarded to per-row evaluation (used by 23-02
         builtins; ignored by the verbatim-effect evaluator here).
+
+        SECURITY (FIX 1 — fail CLOSED on DB error): if the policy store itself
+        cannot be consulted (locked DB, missing ``policies`` table, transient
+        operational error) this returns a DENY verdict — NEVER the default ALLOW.
+        A governance substrate that cannot read its own rules must assume the
+        launch is forbidden, not permitted. This is the single choke point every
+        launch gate (``enforce_launch`` / ``enforce_launch_noninteractive``) and
+        the goal-loop cost gate route through, so all of them fail closed here.
         """
         scope_ids = {"session": session_id, "team": team_id, "server": None}
         ask_verdict = None
 
-        for scope in cls._SCOPE_ORDER:
-            scope_id = scope_ids[scope]
-            # Skip a scoped lookup with no id, EXCEPT server (the sentinel scope
-            # whose scope_id is intentionally NULL).
-            if scope != "server" and scope_id is None:
-                continue
+        try:
+            for scope in cls._SCOPE_ORDER:
+                scope_id = scope_ids[scope]
+                # Skip a scoped lookup with no id, EXCEPT server (the sentinel
+                # scope whose scope_id is intentionally NULL).
+                if scope != "server" and scope_id is None:
+                    continue
 
-            for row in cls._rows_for(scope, scope_id):
-                decision, reason = cls._eval_row(row, action)
-                if decision == "deny":
-                    return {
-                        "decision": "deny",
-                        "policy_id": row["id"],
-                        "kind": row["kind"],
-                        "reason": reason,
-                        "scope": scope,
-                    }
-                if decision == "ask" and ask_verdict is None:
-                    ask_verdict = {
-                        "decision": "ask",
-                        "policy_id": row["id"],
-                        "kind": row["kind"],
-                        "reason": reason,
-                        "scope": scope,
-                    }
-                # ALLOW rows do not short-circuit — they fall through.
+                for row in cls._rows_for(scope, scope_id):
+                    decision, reason = cls._eval_row(row, action)
+                    if decision == "deny":
+                        return {
+                            "decision": "deny",
+                            "policy_id": row["id"],
+                            "kind": row["kind"],
+                            "reason": reason,
+                            "scope": scope,
+                        }
+                    if decision == "ask" and ask_verdict is None:
+                        ask_verdict = {
+                            "decision": "ask",
+                            "policy_id": row["id"],
+                            "kind": row["kind"],
+                            "reason": reason,
+                            "scope": scope,
+                        }
+                    # ALLOW rows do not short-circuit — they fall through.
+        except sqlite3.Error as exc:
+            # FAIL CLOSED: a policy-lookup DB error must never be read as
+            # "no matching policy → allow". Deny the launch instead.
+            logger.error("Policy store unavailable during evaluate; failing closed: %s", exc)
+            return {
+                "decision": "deny",
+                "policy_id": None,
+                "kind": None,
+                "reason": f"policy store unavailable (DB error) — failing closed: {exc}",
+                "scope": None,
+            }
 
         if ask_verdict is not None:
             return ask_verdict
@@ -371,13 +400,33 @@ class PolicyService:
         ``session_id`` is kept for symmetry/logging only.
 
         STORE the resolution, don't merely signal a waiter: we record the
-        ``(decision, message)`` tuple even when no waiter is registered yet, so a
-        decision that races ahead of ``await_decision`` for the SAME ask_id is
+        ``(decision, message, ts)`` tuple even when no waiter is registered yet, so
+        a decision that races ahead of ``await_decision`` for the SAME ask_id is
         replayed to it rather than dropped (the await-side init refuses to overwrite
-        a stored tuple)."""
+        a stored tuple).
+
+        FIX 4 (no orphan leak): a decision stored with no waiter that is consumed by
+        NOBODY (a stray/late decision for an ask that already timed out or was never
+        awaited) would otherwise sit in ``_POLICY_DECISIONS`` forever. Each stored
+        tuple carries a timestamp, and every submit first sweeps tuples older than
+        ``_POLICY_DECISION_TTL_SECONDS`` — so the registry stays bounded while a
+        legitimate race-ahead decision (consumed within milliseconds) is untouched.
+        Returns True iff a waiter/decision was already registered for this ask_id
+        (mirrors goal_loop_runner.submit_gate_decision:452)."""
+        now = time.time()
         with _POLICY_LOCK:
+            # Sweep leaked orphans: unconsumed decision tuples past their TTL.
+            stale = [
+                key
+                for key, val in _POLICY_DECISIONS.items()
+                if isinstance(val, tuple)
+                and len(val) >= 3
+                and now - val[2] > _POLICY_DECISION_TTL_SECONDS
+            ]
+            for key in stale:
+                _POLICY_DECISIONS.pop(key, None)
             pending = ask_id in _POLICY_DECISIONS
-            _POLICY_DECISIONS[ask_id] = (decision, message)
+            _POLICY_DECISIONS[ask_id] = (decision, message, now)
         return pending
 
     # -- Shared launch gate (the ONE chokepoint every spawner calls) ------
@@ -471,11 +520,13 @@ class PolicyService:
             place for an approval prompt — documented choice).
           - anything else -> raise ``PolicyDenied`` (defence in depth).
 
-        Server-scope policies (scope_id IS NULL) always apply. If the policy store
-        itself cannot be consulted (uninitialized table in a unit test, or a
-        transient operational error), there are no policies to enforce, so the
-        check proceeds rather than breaking ALL grading — production always has the
-        table (migration 176), and a real DENY verdict (table present) still blocks.
+        Server-scope policies (scope_id IS NULL) always apply. SECURITY (FIX 1 —
+        fail CLOSED): if the policy store itself cannot be consulted (locked DB,
+        missing ``policies`` table, transient operational error), ``evaluate``
+        returns a DENY verdict and this refuses to run the check — a governance
+        substrate that cannot read its own rules must NOT let an unattended,
+        cost-incurring spawn through. Production always has the table
+        (migration 176); tests must initialise it (``isolated_db``).
         """
         action = {
             "kind": "process_launch",
@@ -485,12 +536,10 @@ class PolicyService:
             "total_cost_usd": total_cost_usd,
             "tool_calls": tool_calls,
         }
-        try:
-            verdict = cls.evaluate(session_id=session_id, team_id=team_id, action=action)
-        except sqlite3.OperationalError:
-            # Policy store not initialized / transient DB error — no policies to
-            # enforce for this fire-and-forget check. Proceed (see docstring).
-            return
+        # ``evaluate`` itself fails CLOSED on a policy-lookup DB error (returns a
+        # DENY verdict), so a store outage lands in the ``decision == "deny"``
+        # branch below rather than silently permitting the launch.
+        verdict = cls.evaluate(session_id=session_id, team_id=team_id, action=action)
         decision = verdict.get("decision")
         if decision == "allow":
             return

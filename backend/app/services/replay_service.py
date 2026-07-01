@@ -78,7 +78,12 @@ class ReplayService:
         if cmd_str:
             thread = threading.Thread(
                 target=cls._run_replay_subprocess,
-                args=(replay_execution_id, cmd_str, original.get("trigger_id", "")),
+                args=(
+                    replay_execution_id,
+                    cmd_str,
+                    original.get("trigger_id", ""),
+                    original.get("backend_type", "claude"),
+                ),
                 daemon=True,
             )
             thread.start()
@@ -97,7 +102,9 @@ class ReplayService:
         }
 
     @classmethod
-    def _run_replay_subprocess(cls, execution_id: str, cmd_str: str, trigger_id: str) -> None:
+    def _run_replay_subprocess(
+        cls, execution_id: str, cmd_str: str, trigger_id: str, backend_type: str = "claude"
+    ) -> None:
         """Run the replay subprocess in background (mirrors run_trigger pattern)."""
         from app.config import PROJECT_ROOT
 
@@ -107,6 +114,25 @@ class ReplayService:
             # Wrap with stdbuf for line-buffered output if available
             if shutil.which("stdbuf"):
                 cmd = ["stdbuf", "-oL", "-eL"] + cmd
+
+            # SECURITY (23): a replay re-launches a PRIOR harness command as a new
+            # unattended spawn — potentially long after a DENY policy was added.
+            # Gate it through the shared non-interactive policy layer BEFORE the
+            # Popen so a deny (or ask, a refusal here) fails the replay closed.
+            from app.services.policy_service import PolicyDenied, PolicyService
+
+            try:
+                PolicyService.enforce_launch_noninteractive(
+                    session_id="", cmd=cmd, backend=backend_type
+                )
+            except PolicyDenied as exc:
+                reason = (getattr(exc, "verdict", None) or {}).get("reason") or "policy denied"
+                ExecutionLogService.finish_execution(
+                    execution_id=execution_id,
+                    status="failed",
+                    error_message=f"Replay blocked by policy: {reason}",
+                )
+                return
 
             process = subprocess.Popen(
                 cmd,

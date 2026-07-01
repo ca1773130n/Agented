@@ -550,9 +550,24 @@ class ModelDiscoveryService:
                 env["GEMINI_CLI_HOME"] = str(gemini_home)
                 break
 
+        # SECURITY (23): the model probe is a `gemini -p .` harness invocation
+        # (incurs a small AI call). Gate it through the shared non-interactive
+        # policy layer BEFORE launching; a DENY (or ASK, a refusal here) skips the
+        # probe (returns None → discovery falls back to cached/static lists).
+        from app.services.policy_service import PolicyDenied, PolicyService
+
+        probe_cmd = [cli_path, "-p", ".", "--output-format", "json"]
+        try:
+            PolicyService.enforce_launch_noninteractive(
+                session_id="", cmd=probe_cmd, backend="gemini"
+            )
+        except PolicyDenied as exc:
+            logger.debug("gemini model-discovery probe blocked by policy: %s", exc)
+            return None
+
         try:
             result = subprocess.run(
-                [cli_path, "-p", ".", "--output-format", "json"],
+                probe_cmd,
                 capture_output=True,
                 text=True,
                 timeout=30,

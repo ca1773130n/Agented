@@ -29,9 +29,22 @@ class TeamGenerationService(BaseGenerationService):
         context = cls._gather_context()
         prompt = cls._build_prompt(description, context)
 
+        cmd = ["claude", "-p", prompt]
+
+        # SECURITY (23): gate the autonomous `claude -p` team-generation spawn
+        # through the shared non-interactive policy layer BEFORE launching. A
+        # DENY (or ASK, treated as a refusal here) aborts before any spawn / cost.
+        from .policy_service import PolicyDenied, PolicyService
+
+        try:
+            PolicyService.enforce_launch_noninteractive(session_id="", cmd=cmd, backend="claude")
+        except PolicyDenied as exc:
+            reason = (getattr(exc, "verdict", None) or {}).get("reason") or "policy denied"
+            raise RuntimeError(f"Team generation blocked by policy: {reason}")
+
         try:
             result = subprocess.run(
-                ["claude", "-p", prompt],
+                cmd,
                 capture_output=True,
                 text=True,
                 timeout=cls.SUBPROCESS_TIMEOUT,

@@ -185,7 +185,9 @@ def test_decision_resolves_pending_ask(client):
     assert r.status_code == 201
     assert r.json() == {"ok": True}
     # The decision tuple is now recorded (keyed by ask_id) for the poll loop.
-    assert ps_mod._POLICY_DECISIONS[aid] == ("deny", "no")
+    # FIX 4: the stored tuple carries a trailing timestamp (decision, message, ts)
+    # so unconsumed orphans can be TTL-swept; the decision/message shape is stable.
+    assert ps_mod._POLICY_DECISIONS[aid][:2] == ("deny", "no")
     ps_mod._POLICY_DECISIONS.pop(aid, None)
 
 
