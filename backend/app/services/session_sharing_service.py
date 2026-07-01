@@ -32,6 +32,88 @@ class CoDriveScopeError(Exception):
     """Raised when a non-``chat`` token is used on the co-drive write path."""
 
 
+def _session_tool_call_count(session_id: str) -> int:
+    """Best-effort per-session tool-call proxy (goal-loop iterations executed).
+
+    The goal-loop's own cost gate uses its iteration count as the ``tool_calls``
+    ctx (``goal_loop_runner``), so we mirror that: the number of recorded
+    iterations for the session. 0 when the table is absent or the session has
+    none — never raises.
+    """
+    if not session_id:
+        return 0
+    from ..db.connection import get_connection
+
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM goal_loop_iterations WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+    if row is None:
+        return 0
+    return int(row["n"] if not isinstance(row, tuple) else row[0])
+
+
+def _session_policy_context(session_id: str) -> dict:
+    """Snapshot the co-driven session's REAL running totals for the policy gate.
+
+    SECURITY (25 MAJOR — co-drive was toothless): the policy action ctx used to
+    carry zeroed cost/tool/backend/sandbox, so ``cost_budget`` /
+    ``max_tool_calls_per_session`` / ``enforce_sandbox`` builtins could never trip
+    for a teammate's action. We now source the operator session's actual
+    accumulated context so those caps apply to the co-driver too. Every lookup is
+    defensive — a missing source degrades to a conservative default, never a
+    500.
+    """
+    total_cost_usd = 0.0
+    tool_calls = 0
+    backend: Optional[str] = None
+
+    try:
+        from ..db.budgets import get_session_total_cost
+
+        total_cost_usd = get_session_total_cost(session_id)
+    except Exception:  # noqa: BLE001
+        logger.debug("co_drive: session cost lookup failed", exc_info=True)
+
+    try:
+        from .project_session_manager import ProjectSessionManager
+
+        si = ProjectSessionManager._sessions.get(session_id)
+        if si is not None:
+            backend = getattr(si, "backend", None)
+    except Exception:  # noqa: BLE001
+        logger.debug("co_drive: live-session backend lookup failed", exc_info=True)
+
+    if not backend:
+        try:
+            from ..db.connection import get_connection
+
+            with get_connection() as conn:
+                row = conn.execute(
+                    "SELECT backend FROM project_sessions WHERE id = ?", (session_id,)
+                ).fetchone()
+            if row is not None:
+                backend = row["backend"] if not isinstance(row, tuple) else row[0]
+        except Exception:  # noqa: BLE001
+            logger.debug("co_drive: persisted backend lookup failed", exc_info=True)
+
+    try:
+        tool_calls = _session_tool_call_count(session_id)
+    except Exception:  # noqa: BLE001
+        logger.debug("co_drive: tool-call count lookup failed", exc_info=True)
+
+    return {
+        "total_cost_usd": total_cost_usd or 0.0,
+        "tool_calls": tool_calls or 0,
+        "backend": backend or "unknown",
+        # send_input is not a launch kind so ``sandboxed`` is inert for this
+        # verdict, but we pass the honest flag: co-drive never sandboxes the
+        # operator's already-running session.
+        "sandboxed": False,
+    }
+
+
 class SessionSharingService:
     """Classmethod service (no instance state) for shared-session attach + co-drive."""
 
@@ -101,6 +183,10 @@ class SessionSharingService:
             "actor_user_id": actor_user_id,
             "session_id": session_id,
             "text_summary": (text or "")[:200],
+            # 25 MAJOR fix — the co-driven session's REAL accumulated context, so
+            # cost/tool-call/sandbox caps actually gate the teammate's action
+            # instead of always seeing zeroed cost/tool_calls.
+            **_session_policy_context(session_id),
         }
         verdict = PolicyService.evaluate(session_id=session_id, team_id=team_id, action=action)
         decision = verdict.get("decision")

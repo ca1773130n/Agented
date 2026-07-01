@@ -247,6 +247,25 @@ def get_token_usage_total_cost(
         return float(row["total"]) if row else 0.0
 
 
+def get_session_total_cost(session_id: str) -> float:
+    """Sum ``token_usage.total_cost_usd`` recorded for a single session.
+
+    The running spend of one live session, keyed on the ``token_usage.session_id``
+    column. Phase 25 feeds this into the co-drive policy gate so a teammate's
+    action is judged against the operator session's REAL accumulated cost rather
+    than a zeroed context.
+    """
+    if not session_id:
+        return 0.0
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT COALESCE(SUM(total_cost_usd), 0) AS total "
+            "FROM token_usage WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+    return float(row["total"]) if row else 0.0
+
+
 def get_usage_aggregated_summary(
     group_by: str = "day",
     entity_type: Optional[str] = None,

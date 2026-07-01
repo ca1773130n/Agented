@@ -112,6 +112,61 @@ def test_ask_blocks_then_resolves(isolated_db, monkeypatch):
     assert calls == [(SID, "approved cmd")]
 
 
+def test_cost_budget_denies_over_cap(isolated_db, monkeypatch):
+    """25 MAJOR — a co-drive under a session cost cap already exceeded is DENIED.
+
+    Pre-fix the policy ctx carried a zeroed ``total_cost_usd``, so ``cost_budget``
+    never tripped for a teammate and this co-drive would ALLOW. Now the session's
+    REAL accumulated spend (token_usage) is fed in, so the hard cap denies before
+    send_input.
+    """
+    from app.db.budgets import create_token_usage_record
+
+    calls = _spy_send_input(monkeypatch)
+    token = mint_share_token(SID, scope="chat")
+    PolicyService.create_policy(
+        scope="session",
+        scope_id=SID,
+        kind="cost_budget",
+        params={"max_cost_usd": 1.0},
+        effect="deny",
+        enabled=1,
+    )
+    # Real recorded spend for the session, ABOVE the $1.00 cap.
+    create_token_usage_record(
+        execution_id="exec-codrive-cost",
+        entity_type="session",
+        entity_id=SID,
+        backend_type="claude",
+        total_cost_usd=5.0,
+        session_id=SID,
+    )
+    with pytest.raises(PolicyDenied):
+        SessionSharingService.co_drive(SID, token, "spend more", actor_user_id="teammate")
+    assert calls == []  # denied by real cost before stdin
+
+
+def test_cost_budget_allows_under_cap(isolated_db, monkeypatch):
+    """Control — the SAME cost cap with spend BELOW it allows the co-drive.
+
+    Proves the deny in the sibling test comes from the real accumulated cost, not
+    from a blanket denial: with no recorded spend (0 < cap) the co-drive proceeds.
+    """
+    calls = _spy_send_input(monkeypatch)
+    token = mint_share_token(SID, scope="chat")
+    PolicyService.create_policy(
+        scope="session",
+        scope_id=SID,
+        kind="cost_budget",
+        params={"max_cost_usd": 1.0},
+        effect="deny",
+        enabled=1,
+    )
+    ok = SessionSharingService.co_drive(SID, token, "cheap", actor_user_id="teammate")
+    assert ok is True
+    assert calls == [(SID, "cheap")]
+
+
 def test_ask_denied_raises(isolated_db, monkeypatch):
     calls = _spy_send_input(monkeypatch)
     token = mint_share_token(SID, scope="chat")
