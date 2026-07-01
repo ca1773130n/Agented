@@ -122,6 +122,27 @@ def _resolve_session_user(authorization: str | None) -> str | None:
     return sess["user_id"] if sess else None
 
 
+def _resolve_cookie_user(cookie_header: str | None) -> str | None:
+    """Resolve the session user from the HttpOnly session COOKIE.
+
+    SECURITY (Phase 25 BLOCKER — ITEM 2, defense-in-depth): the normal SPA path
+    authenticates via the session cookie, not an ``X-API-Key`` header or an
+    ``Authorization: Bearer`` token. Without resolving the cookie here,
+    ``current_user_var`` stayed ``None`` for every cookie-authenticated request,
+    so any code that reads it (e.g. a session-owner backfill) saw no principal.
+    The authoritative owner stamp is taken from the resolved ``Caller`` in the
+    route, but keeping ``current_user_var`` correct for cookie auth closes the
+    gap for all other readers too.
+    """
+    if not cookie_header:
+        return None
+    token = parse_cookies(cookie_header).get(SESSION_COOKIE)
+    if not token:
+        return None
+    sess = get_session_by_token(token)
+    return sess["user_id"] if sess else None
+
+
 class RequestContextMiddleware(ASGIMiddleware):
     """Set request_id + current_user contextvars; emit X-Request-ID header."""
 
@@ -147,6 +168,10 @@ class RequestContextMiddleware(ASGIMiddleware):
                 logger.debug("user lookup failed: %s", exc)
         if user_id is None:
             user_id = _resolve_session_user(headers.get("authorization"))
+        if user_id is None:
+            # Cookie-auth (SPA) path — the session token lives in the HttpOnly
+            # cookie, not a header. See _resolve_cookie_user (25 BLOCKER ITEM 2).
+            user_id = _resolve_cookie_user(headers.get("cookie"))
         current_user_var.set(user_id)
 
         async def send_with_request_id(message: Any) -> None:

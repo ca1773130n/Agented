@@ -55,6 +55,7 @@ from app.services.project_session_manager import ProjectSessionManager
 from app.services.project_workspace_service import ProjectWorkspaceService
 from app.services.team_harness_setup_service import TeamHarnessSetupService
 from app.utils.timezone import utcnow as _utcnow
+from app_litestar.auth import Caller
 
 logger = logging.getLogger(__name__)
 
@@ -888,7 +889,7 @@ async def harness_setup_stream(project_id: str) -> Stream:
 
 
 @post("/{project_id:str}/sessions", status_code=201, sync_to_thread=False)
-def create_session(project_id: str, data: dict) -> dict[str, Any]:
+def create_session(project_id: str, data: dict, caller: Caller) -> dict[str, Any]:
     _ensure_project(project_id)
     body = data or {}
     cmd = body.get("cmd")
@@ -1036,15 +1037,18 @@ def create_session(project_id: str, data: dict) -> dict[str, Any]:
     # know about dialog fields.
     session_id = result.get("session_id")
     if session_id:
-        # Phase 25 — backfill the owning principal from the request context so the
-        # owner-gated SSE stream (which fails CLOSED on an unknown owner) admits
-        # the operator who started the session. Sourced from the middleware-set
-        # current-user contextvar, so no route-signature change is needed;
-        # COALESCE never clobbers an already-recorded owner. In a direct unit call
-        # (no request context) this is None → created_by stays NULL as before.
+        # Phase 25 (25 BLOCKER — ITEM 2) — backfill the owning principal from the
+        # RESOLVED CALLER identity. provide_caller populates ``caller.user_id`` for
+        # EVERY auth method (API-key, bearer, AND the normal SPA cookie), whereas
+        # ``current_user_var`` was only set for API-key/bearer — so a
+        # cookie-authenticated create used to leave ``created_by`` NULL, and the
+        # owner-gated SSE stream (which fails CLOSED on an unknown owner) would then
+        # treat the session as unowned/streamable by any authenticated caller. We
+        # fall back to ``current_user_var`` only for a direct unit call where no
+        # Caller was injected. COALESCE never clobbers an already-recorded owner.
         from app.logging_config import current_user_var
 
-        owner = current_user_var.get()
+        owner = (getattr(caller, "user_id", None) if caller else None) or current_user_var.get()
         try:
             from app.db.connection import get_connection
 
