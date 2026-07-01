@@ -149,6 +149,15 @@ def process_project_autonomy(project_id: str) -> list[dict]:
     policy = autonomy_cfg.get_policy(project_id)
     if policy is None or not policy.enabled:
         return []
+    # Phase 24 (24-04): this is one of the two highest-risk fully-autonomous
+    # consumers — choose the execution target (cloud E2B/Modal when credentialed,
+    # else the local OS sandbox). Graceful without cloud creds; never crashes.
+    from app.services.cloud_sandbox_runner import select_runner
+
+    runner = select_runner(risk="high", config={"project_id": project_id})
+    logger.debug(
+        "autonomy: selected %s runner for project %s", getattr(runner, "kind", "?"), project_id
+    )
     results: list[dict] = []
     day_cut = _utc_minus(days=1)
     cooldown_cut = _utc_minus(seconds=policy.cooldown_seconds)

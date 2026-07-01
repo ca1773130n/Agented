@@ -39,6 +39,13 @@ dev = [
     "pytest>=7.0.0",
     "ruff>=0.9.7",
 ]
+# Phase 24 (24-04): OPTIONAL offboard cloud sandboxes for the highest-risk
+# autonomous runs. NOT runtime-required — imported lazily and credential-gated;
+# a cloud-less install works unchanged. Install with: pip install '.[cloud-sandbox]'.
+cloud-sandbox = [
+    "e2b>=1.0.0",
+    "modal>=0.70.0",
+]
 
 [build-system]
 requires = ["setuptools>=61.0"]

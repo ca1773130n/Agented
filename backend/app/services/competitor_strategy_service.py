@@ -471,6 +471,22 @@ class CompetitorStrategyService:
                 )
             worktree_created = True
 
+            # Phase 24 (24-04): highest-risk autonomous consumer — choose the
+            # execution target. Cloud (E2B/Modal) only when credentialed; otherwise
+            # LocalRunner reproduces today's worktree goal-loop path EXACTLY (no
+            # regression, no hard cloud dependency, graceful without keys).
+            from .cloud_sandbox_runner import select_runner
+
+            runner = select_runner(
+                risk="high",
+                config={"project_id": project_id, "worktree_path": worktree_path},
+            )
+            logger.info(
+                "start_autoimplement: selected %s runner for strategy %s",
+                getattr(runner, "kind", "?"),
+                strategy_id,
+            )
+
             goal_loop_config = {
                 "goal": goal,
                 # human_gate present → the runner pauses for operator approval. Mode
