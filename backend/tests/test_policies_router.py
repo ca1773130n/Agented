@@ -164,40 +164,48 @@ def test_decision_resolves_pending_ask(client):
     from app.services import policy_service as ps_mod
 
     sid = "sess-decide"
+    aid = "ask-decide"  # FIX 2 — decisions are scoped to a unique ask_id.
     # No pending wait yet → ok False (but the decision is still recorded).
     r = client.post(
         "/admin/policies/decision",
-        json={"session_id": sid, "decision": "approve"},
+        json={"session_id": sid, "ask_id": aid, "decision": "approve"},
         headers=_hdr(key),
     )
     assert r.status_code == 201, r.text
     assert r.json() == {"ok": False}
 
-    # Simulate a pending ASK (await_decision seeds None) then resolve it.
-    ps_mod._POLICY_DECISIONS[sid] = None
+    # Simulate a pending ASK (await_decision seeds None keyed by ask_id) then
+    # resolve it.
+    ps_mod._POLICY_DECISIONS[aid] = None
     r = client.post(
         "/admin/policies/decision",
-        json={"session_id": sid, "decision": "deny", "message": "no"},
+        json={"session_id": sid, "ask_id": aid, "decision": "deny", "message": "no"},
         headers=_hdr(key),
     )
     assert r.status_code == 201
     assert r.json() == {"ok": True}
-    # The decision tuple is now recorded for the poll loop.
-    assert ps_mod._POLICY_DECISIONS[sid] == ("deny", "no")
-    ps_mod._POLICY_DECISIONS.pop(sid, None)
+    # The decision tuple is now recorded (keyed by ask_id) for the poll loop.
+    assert ps_mod._POLICY_DECISIONS[aid] == ("deny", "no")
+    ps_mod._POLICY_DECISIONS.pop(aid, None)
 
 
 def test_decision_rejects_bad_input(client):
     key = _setup_admin_user()
     r = client.post(
         "/admin/policies/decision",
-        json={"decision": "approve"},  # missing session_id
+        json={"ask_id": "a", "decision": "approve"},  # missing session_id
         headers=_hdr(key),
     )
     assert r.status_code == 400
     r = client.post(
         "/admin/policies/decision",
-        json={"session_id": "s", "decision": "maybe"},
+        json={"session_id": "s", "decision": "approve"},  # missing ask_id (FIX 2)
+        headers=_hdr(key),
+    )
+    assert r.status_code == 400
+    r = client.post(
+        "/admin/policies/decision",
+        json={"session_id": "s", "ask_id": "a", "decision": "maybe"},  # bad decision
         headers=_hdr(key),
     )
     assert r.status_code == 400
@@ -277,7 +285,7 @@ def test_admin_allowed_on_mutations(client):
     assert r.status_code == 200, r.text
     r = client.post(
         "/admin/policies/decision",
-        json={"session_id": "s", "decision": "approve"},
+        json={"session_id": "s", "ask_id": "a", "decision": "approve"},
         headers=_hdr(admin_key),
     )
     assert r.status_code == 201, r.text

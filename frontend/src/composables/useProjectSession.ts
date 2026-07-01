@@ -344,6 +344,7 @@ export function useProjectSession(projectId: Ref<string>) {
         try {
           const data = JSON.parse(event.data);
           onPolicyAskCb?.({
+            ask_id: data.ask_id ?? '',
             policy_id: data.policy_id ?? null,
             kind: data.kind ?? null,
             reason: data.reason ?? '',

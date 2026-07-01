@@ -14,6 +14,7 @@ vi.mock('../../../services/api', () => ({
 }));
 
 const event = {
+  ask_id: 'ask-xyz',
   policy_id: 'pol-abc',
   kind: 'ask_on_os_tools',
   reason: 'OS tool requires approval: shell',
@@ -33,19 +34,19 @@ describe('PolicyAskCard', () => {
     expect(wrapper.text().toLowerCase()).toContain('session');
   });
 
-  it('calls decide(sessionId, "approve") on Approve and emits resolved', async () => {
+  it('calls decide(sessionId, askId, "approve") on Approve and emits resolved', async () => {
     const wrapper = mount(PolicyAskCard, { props: { event, sessionId: 'sess-1' } });
     await btn(wrapper, 'Approve').trigger('click');
     await flushPromises();
-    expect(decide).toHaveBeenCalledWith('sess-1', 'approve');
+    expect(decide).toHaveBeenCalledWith('sess-1', 'ask-xyz', 'approve');
     expect(wrapper.emitted('resolved')?.[0]).toEqual(['approve']);
   });
 
-  it('calls decide(sessionId, "deny") on Deny', async () => {
+  it('calls decide(sessionId, askId, "deny") on Deny', async () => {
     const wrapper = mount(PolicyAskCard, { props: { event, sessionId: 'sess-2' } });
     await btn(wrapper, 'Deny').trigger('click');
     await flushPromises();
-    expect(decide).toHaveBeenCalledWith('sess-2', 'deny');
+    expect(decide).toHaveBeenCalledWith('sess-2', 'ask-xyz', 'deny');
     expect(wrapper.emitted('resolved')?.[0]).toEqual(['deny']);
   });
 
@@ -65,7 +66,7 @@ describe('PolicyAskCard', () => {
     await btn(wrapper, 'Approve').trigger('click');
     await flushPromises();
 
-    expect(decide).toHaveBeenCalledWith('sess-stale', 'approve');
+    expect(decide).toHaveBeenCalledWith('sess-stale', 'ask-xyz', 'approve');
     // No false success: 'resolved' is NOT emitted and the resolved view is hidden.
     expect(wrapper.emitted('resolved')).toBeFalsy();
     // The stale notice is shown and the action buttons are gone.

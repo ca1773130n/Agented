@@ -79,6 +79,7 @@ const Harness = defineComponent({
 });
 
 const askPayload = {
+  ask_id: 'ask-xyz',
   policy_id: 'pol-abc',
   kind: 'ask_on_os_tools',
   reason: 'OS tool requires approval: shell',
@@ -109,7 +110,7 @@ describe('policy_ask SSE wiring', () => {
     const approve = wrapper.findAll('button').find((b) => b.text() === 'Approve')!;
     await approve.trigger('click');
     await flushPromises();
-    expect(decide).toHaveBeenCalledWith('sess-1', 'approve');
+    expect(decide).toHaveBeenCalledWith('sess-1', 'ask-xyz', 'approve');
 
     // Resolution clears the card.
     await nextTick();

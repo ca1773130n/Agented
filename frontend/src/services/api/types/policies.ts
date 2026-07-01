@@ -53,8 +53,13 @@ export interface PolicyVerdict {
   scope: PolicyScope | null;
 }
 
-/** The `policy_ask` SSE event payload the ASK card renders. */
+/** The `policy_ask` SSE event payload the ASK card renders.
+ *
+ * `ask_id` (FIX 2 — ask-scoped) uniquely identifies THIS ask; the card must echo
+ * it back on the decision POST so a stale/late decision can't resolve a different
+ * or future ask on the same session. */
 export interface PolicyAskEvent {
+  ask_id: string;
   policy_id: string | null;
   kind: string | null;
   reason: string;

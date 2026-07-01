@@ -41,7 +41,12 @@ def _seed(scope, scope_id, effect, *, kind="custom", priority=0, params=None):
 
 
 def _stub_broadcast(monkeypatch):
-    """Replace ProjectSessionManager._broadcast with an event recorder."""
+    """Replace ProjectSessionManager._broadcast with an event recorder.
+
+    Also records the launch-time ``policy_ask`` card, which (FIX 3) is now emitted
+    via the atomic ``register_and_broadcast_policy_ask`` rather than ``_broadcast``,
+    and persists the pending ask so ``await_decision``'s clear-on-resolve contract
+    is intact (a test can read the minted ``ask_id`` back off the recorded card)."""
     from app.services.project_session_manager import ProjectSessionManager
 
     events = []
@@ -49,7 +54,14 @@ def _stub_broadcast(monkeypatch):
     def _rec(cls, session_id, event_type, data):
         events.append((session_id, event_type, data))
 
+    def _rec_ask(cls, session_id, payload):
+        cls._pending_policy_asks[session_id] = payload
+        events.append((session_id, "policy_ask", payload))
+
     monkeypatch.setattr(ProjectSessionManager, "_broadcast", classmethod(_rec))
+    monkeypatch.setattr(
+        ProjectSessionManager, "register_and_broadcast_policy_ask", classmethod(_rec_ask)
+    )
     return events
 
 
@@ -144,11 +156,13 @@ def test_ask_pauses_then_resumes_on_approve(isolated_db, monkeypatch):
     ask_events = [e for e in events if e[1] == "policy_ask"]
     assert ask_events, "a policy_ask card must be broadcast"
     _, _, payload = ask_events[0]
-    assert set(payload) >= {"policy_id", "kind", "reason", "scope"}
+    assert set(payload) >= {"ask_id", "policy_id", "kind", "reason", "scope"}
     assert payload["kind"] == "ask_on_os_tools"
     assert payload["scope"] == "session"
+    assert payload["ask_id"], "the card must carry the unique ask_id the decision echoes"
 
-    PolicyService.submit_policy_decision("sess-e2e-ask-ok", "approve")
+    # The decision must echo the card's ask_id (FIX 2 — ask-scoped).
+    PolicyService.submit_policy_decision("sess-e2e-ask-ok", "approve", ask_id=payload["ask_id"])
     t.join(timeout=5)
     assert outcome.get("ok") is True, "approve must let the launch proceed"
 
@@ -181,7 +195,10 @@ def test_ask_aborts_on_deny(isolated_db, monkeypatch):
     t.start()
     time.sleep(0.3)
     assert t.is_alive()
-    PolicyService.submit_policy_decision("sess-e2e-ask-no", "deny")
+    ask_events = [e for e in events if e[1] == "policy_ask"]
+    assert ask_events, "a policy_ask card must be broadcast"
+    ask_id = ask_events[0][2]["ask_id"]
+    PolicyService.submit_policy_decision("sess-e2e-ask-no", "deny", ask_id=ask_id)
     t.join(timeout=5)
     assert "denied" in outcome, "operator deny must raise PolicyDenied"
 

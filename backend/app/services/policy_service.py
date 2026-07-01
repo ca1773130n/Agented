@@ -20,8 +20,10 @@ Verdict shape (PolicyVerdict — a plain dict):
 
 import json
 import logging
+import sqlite3
 import threading
 import time
+import uuid
 from datetime import datetime, timezone
 
 from ..database import get_connection
@@ -37,18 +39,22 @@ POLICY_ID_LENGTH = 6
 _POLICY_POLL_SECONDS = 0.5
 _POLICY_DEFAULT_MAX_WALL_SECONDS = 600
 
-# Session-keyed ASK decision registry. In-process is coherent under gunicorn
+# ASK-id-keyed decision registry. In-process is coherent under gunicorn
 # workers=1 (CLAUDE.md): a single worker shares this dict across the launching
 # call (which polls in await_decision) and the HTTP decision route (which calls
 # submit_policy_decision). value: None = pending; (decision, message) = resolved.
-# This MIRRORS goal_loop_runner's per-session state.gate_decision registry rather
-# than inventing a second SSE transport (23-RESEARCH.md Recommendation 1).
+#
+# SECURITY (FIX 2 — ask-scoped): the key is the UNIQUE ``ask_id`` of an individual
+# ASK, NOT the ``session_id``. Keying by session let a stale, no-waiter decision
+# for one ask sit in the registry and get consumed by a LATER ASK on the same
+# session (a silent auto-approve of a future, un-answered ask). An ask_id is a
+# fresh uuid per ASK, so a decision can only ever resolve the exact ask it answers.
 _POLICY_DECISIONS: dict = {}
 
 # Guards the read-modify-write on _POLICY_DECISIONS so a decision that arrives
 # BEFORE the launching call registers its waiter is not lost to a clobbering
-# write (launch-ASK deadlock fix). value states: absent = no ask in flight;
-# None = ask awaiting a decision; (decision, message) tuple = resolved.
+# write (launch-ASK deadlock fix), now scoped per ask_id. value states: absent =
+# no ask in flight; None = ask awaiting a decision; (decision, message) = resolved.
 _POLICY_LOCK = threading.Lock()
 
 
@@ -272,16 +278,22 @@ class PolicyService:
         session_id: str,
         verdict: dict,
         *,
+        ask_id: str,
         max_wall_seconds: int = _POLICY_DEFAULT_MAX_WALL_SECONDS,
     ) -> str:
-        """Block the launching call until an operator resolves an ASK verdict.
+        """Block the launching call until an operator resolves THIS ASK (``ask_id``).
 
         MIRRORS goal_loop_runner._await_gate (goal_loop_runner.py:487): broadcast
-        an ASK card over the EXISTING SSE primitive, poll a session-keyed registry
-        every ``_POLICY_POLL_SECONDS``, and bound the wait by ``max_wall_seconds``.
-        It does NOT introduce a new transport — the broadcast goes through
-        ``ProjectSessionManager._broadcast`` (project_session_manager.py:1853), the
-        same primitive the goal-gate and ``ask_user_question`` cards use.
+        an ASK card over the EXISTING SSE primitive, poll the registry every
+        ``_POLICY_POLL_SECONDS``, and bound the wait by ``max_wall_seconds``. It
+        does NOT introduce a new transport — the broadcast goes through
+        ``ProjectSessionManager`` (the same primitive the goal-gate and
+        ``ask_user_question`` cards use).
+
+        SECURITY (FIX 2 — ask-scoped): the pending sentinel + the resolution are
+        keyed by the unique ``ask_id`` carried in the card, so only a decision
+        that echoes THIS ask_id can resolve THIS wait. A stale/old decision for a
+        prior ask can no longer auto-approve a later ask on the same session.
 
         Returns the decision string ("approve" | "deny"). GOVERNANCE FAIL-SAFE:
         on timeout (or a missing session id) this returns "deny" — distinct from
@@ -295,6 +307,7 @@ class PolicyService:
             return "deny"
 
         ask_payload = {
+            "ask_id": ask_id,
             "policy_id": verdict.get("policy_id"),
             "kind": verdict.get("kind"),
             "reason": verdict.get("reason"),
@@ -303,25 +316,28 @@ class PolicyService:
 
         # RACE: an operator decision may arrive (submit_policy_decision) BEFORE we
         # register here — e.g. a fast approve, or a retry. submit stores a
-        # (decision, message) tuple; we must NOT clobber it back to None, or the
-        # resolution is lost and the launch fails closed on timeout. Initialise to
-        # the pending sentinel ONLY when no resolution is already waiting.
+        # (decision, message) tuple keyed by ask_id; we must NOT clobber it back to
+        # None, or the resolution is lost and the launch fails closed on timeout.
+        # Initialise to the pending sentinel ONLY when no resolution is already
+        # waiting for THIS ask_id.
         with _POLICY_LOCK:
-            if not isinstance(_POLICY_DECISIONS.get(session_id), tuple):
-                _POLICY_DECISIONS[session_id] = None
+            if not isinstance(_POLICY_DECISIONS.get(ask_id), tuple):
+                _POLICY_DECISIONS[ask_id] = None
 
-        # PERSIST then broadcast: register the card so a LATE SSE subscriber (the
-        # frontend subscribes only after createSession resolves) can REPLAY it,
-        # then push it to any already-connected subscriber. Registering first
-        # guarantees no window where the card exists for neither path.
-        ProjectSessionManager.register_pending_policy_ask(session_id, ask_payload)
-        ProjectSessionManager._broadcast(session_id, "policy_ask", ask_payload)
+        # FIX 3: persist the pending card AND push it to already-connected
+        # subscribers in ONE atomic step. A LATE subscriber (the frontend
+        # subscribes only after createSession resolves) REPLAYS the pending card on
+        # connect; an already-connected one gets the live push. Doing both under a
+        # single lock guarantees each subscriber gets the card EXACTLY once — never
+        # both (the old register-then-separate-broadcast double-delivered to a
+        # subscriber connecting in the gap).
+        ProjectSessionManager.register_and_broadcast_policy_ask(session_id, ask_payload)
 
         entered = time.time()
         decision = "deny"
         try:
             while True:
-                pending = _POLICY_DECISIONS.get(session_id)
+                pending = _POLICY_DECISIONS.get(ask_id)
                 if isinstance(pending, tuple):
                     decision = pending[0]
                     break
@@ -331,29 +347,37 @@ class PolicyService:
                 time.sleep(_POLICY_POLL_SECONDS)
         finally:
             with _POLICY_LOCK:
-                _POLICY_DECISIONS.pop(session_id, None)
+                _POLICY_DECISIONS.pop(ask_id, None)
             ProjectSessionManager.clear_pending_policy_ask(session_id)
 
         ProjectSessionManager._broadcast(
             session_id,
             "policy_ask_resolved",
-            {"policy_id": verdict.get("policy_id"), "decision": decision},
+            {"ask_id": ask_id, "policy_id": verdict.get("policy_id"), "decision": decision},
         )
         return decision
 
     @classmethod
-    def submit_policy_decision(cls, session_id: str, decision: str, message=None) -> bool:
-        """Resolve a pending ASK for ``session_id``. Returns True if a wait was
-        pending (mirrors goal_loop_runner.submit_gate_decision:452). The HTTP entry
-        point is added in 23-04 (mirroring grd_routes.loop_gate_decision:1441).
+    def submit_policy_decision(
+        cls, session_id: str, decision: str, message=None, *, ask_id: str
+    ) -> bool:
+        """Resolve the pending ASK identified by ``ask_id``. Returns True if a wait
+        was pending (mirrors goal_loop_runner.submit_gate_decision:452). The HTTP
+        entry point is ``policies.decide`` (the frontend echoes the card's ask_id).
+
+        SECURITY (FIX 2 — ask-scoped): the resolution is stored under the unique
+        ``ask_id`` it answers, NOT the ``session_id``. A decision for a resolved/old
+        ask therefore cannot satisfy a DIFFERENT or FUTURE ask on the same session.
+        ``session_id`` is kept for symmetry/logging only.
 
         STORE the resolution, don't merely signal a waiter: we record the
         ``(decision, message)`` tuple even when no waiter is registered yet, so a
-        decision that races ahead of ``await_decision`` is replayed to it rather
-        than dropped (the await-side init refuses to overwrite a stored tuple)."""
+        decision that races ahead of ``await_decision`` for the SAME ask_id is
+        replayed to it rather than dropped (the await-side init refuses to overwrite
+        a stored tuple)."""
         with _POLICY_LOCK:
-            pending = session_id in _POLICY_DECISIONS
-            _POLICY_DECISIONS[session_id] = (decision, message)
+            pending = ask_id in _POLICY_DECISIONS
+            _POLICY_DECISIONS[ask_id] = (decision, message)
         return pending
 
     # -- Shared launch gate (the ONE chokepoint every spawner calls) ------
@@ -404,9 +428,85 @@ class PolicyService:
         if decision == "deny":
             raise PolicyDenied(verdict)
         if decision == "ask":
-            if cls.await_decision(session_id, verdict) != "approve":
+            # A fresh ask_id scopes the round-trip so only a decision echoing THIS
+            # id can resolve THIS wait (FIX 2 — no stale auto-approve).
+            ask_id = uuid.uuid4().hex
+            if cls.await_decision(session_id, verdict, ask_id=ask_id) != "approve":
                 raise PolicyDenied({**verdict, "decision": "deny", "reason": "operator denied"})
             return
+        # Unknown verdict — fail closed (evaluate() should never reach here).
+        raise PolicyDenied(
+            {**verdict, "decision": "deny", "reason": f"unknown verdict {decision!r}"}
+        )
+
+    @classmethod
+    def enforce_launch_noninteractive(
+        cls,
+        *,
+        session_id: str,
+        team_id=None,
+        cmd: list,
+        backend: str,
+        sandboxed: bool = False,
+        total_cost_usd: float = 0.0,
+        tool_calls: int = 0,
+    ) -> None:
+        """Non-interactive launch gate for AUTONOMOUS *check* spawns.
+
+        FIX 1 (23 BLOCKER) — the goal-judge deterministic eval
+        (``GoalJudgeService._run_deterministic`` → ``sandbox_eval``) spawns an
+        operator ``check_cmd`` via ``subprocess.Popen(shell=True)``. That is an
+        autonomous, unattended launch, so it MUST clear the SAME stackable policy
+        layer every other spawner does — it was the one autonomous spawn path that
+        bypassed governance.
+
+        It differs from ``enforce_launch`` in ONE deliberate way: an ASK is NOT
+        interactively approvable here. A deterministic eval check is fire-and-forget
+        grading machinery, not an operator turn — there is nobody to prompt and
+        blocking the grader on a human approval card would be wrong. So this fails
+        CLOSED on anything but ALLOW:
+          - ``allow`` -> return (caller runs the check).
+          - ``deny``  -> raise ``PolicyDenied`` (refuse to run the check).
+          - ``ask``   -> raise ``PolicyDenied`` (treated as deny: a check is not a
+            place for an approval prompt — documented choice).
+          - anything else -> raise ``PolicyDenied`` (defence in depth).
+
+        Server-scope policies (scope_id IS NULL) always apply. If the policy store
+        itself cannot be consulted (uninitialized table in a unit test, or a
+        transient operational error), there are no policies to enforce, so the
+        check proceeds rather than breaking ALL grading — production always has the
+        table (migration 176), and a real DENY verdict (table present) still blocks.
+        """
+        action = {
+            "kind": "process_launch",
+            "cmd": cmd,
+            "backend": backend,
+            "sandboxed": sandboxed,
+            "total_cost_usd": total_cost_usd,
+            "tool_calls": tool_calls,
+        }
+        try:
+            verdict = cls.evaluate(session_id=session_id, team_id=team_id, action=action)
+        except sqlite3.OperationalError:
+            # Policy store not initialized / transient DB error — no policies to
+            # enforce for this fire-and-forget check. Proceed (see docstring).
+            return
+        decision = verdict.get("decision")
+        if decision == "allow":
+            return
+        if decision == "ask":
+            raise PolicyDenied(
+                {
+                    **verdict,
+                    "decision": "deny",
+                    "reason": (
+                        "eval check requires approval (ASK) — refusing to run a "
+                        f"deterministic check non-interactively: {verdict.get('reason')}"
+                    ),
+                }
+            )
+        if decision == "deny":
+            raise PolicyDenied(verdict)
         # Unknown verdict — fail closed (evaluate() should never reach here).
         raise PolicyDenied(
             {**verdict, "decision": "deny", "reason": f"unknown verdict {decision!r}"}

@@ -116,19 +116,29 @@ def remove_policy(policy_id: str) -> None:
 def decide(data: dict) -> dict[str, Any]:
     """Resolve a pending ASK for a session.
 
-    Body: ``{session_id, decision in {approve,deny}, message?}``. Mirrors
+    Body: ``{session_id, ask_id, decision in {approve,deny}, message?}``. Mirrors
     ``grd_routes.loop_gate_decision``: forwards to
     ``PolicyService.submit_policy_decision`` and returns whether a wait was
     pending (``ok``).
+
+    SECURITY (FIX 2 — ask-scoped): ``ask_id`` is REQUIRED and must echo the id the
+    frontend received on the ``policy_ask`` card. The decision resolves ONLY the
+    ask with that id, so a late/stale decision can't approve a different or future
+    ask on the same session.
     """
     body = data or {}
     session_id = body.get("session_id")
+    ask_id = body.get("ask_id")
     decision = body.get("decision")
     if not session_id:
         raise ClientException(detail="session_id is required")
+    if not ask_id:
+        raise ClientException(detail="ask_id is required")
     if decision not in _VALID_DECISIONS:
         raise ClientException(detail=f"decision must be one of {_VALID_DECISIONS}")
-    pending = PolicyService.submit_policy_decision(session_id, decision, body.get("message"))
+    pending = PolicyService.submit_policy_decision(
+        session_id, decision, body.get("message"), ask_id=ask_id
+    )
     return {"ok": pending}
 
 

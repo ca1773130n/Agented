@@ -35,7 +35,7 @@ async function decide(decision: PolicyDecision) {
   if (resolving.value || resolved.value || stale.value) return;
   resolving.value = true;
   try {
-    const res = await policyApi.decide(props.sessionId, decision);
+    const res = await policyApi.decide(props.sessionId, props.event.ask_id, decision);
     if (res && res.ok) {
       resolved.value = decision;
       emit('resolved', decision);

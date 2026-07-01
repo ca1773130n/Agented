@@ -25,9 +25,13 @@ export const policyApi = {
   remove: (id: string): Promise<void> =>
     apiFetch<void>(`/admin/policies/${id}`, { method: 'DELETE' }),
 
-  /** Resolve a pending ASK for a session (the PolicyAskCard action). */
+  /** Resolve a pending ASK for a session (the PolicyAskCard action).
+   *
+   * `askId` (FIX 2 — ask-scoped) echoes the id from the `policy_ask` card so the
+   * backend resolves ONLY that ask — never a different or future ask. */
   decide: (
     sessionId: string,
+    askId: string,
     decision: PolicyDecision,
     message?: string,
   ): Promise<{ ok: boolean }> =>
@@ -35,6 +39,7 @@ export const policyApi = {
       method: 'POST',
       body: JSON.stringify({
         session_id: sessionId,
+        ask_id: askId,
         decision,
         ...(message ? { message } : {}),
       }),

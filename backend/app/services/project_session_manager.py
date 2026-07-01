@@ -1914,17 +1914,34 @@ class ProjectSessionManager:
                 q.put((event_type, data))
 
     @classmethod
-    def register_pending_policy_ask(cls, session_id: str, payload: dict) -> None:
-        """Persist a launch-time policy_ask card so a LATE subscriber can replay it.
+    def register_and_broadcast_policy_ask(cls, session_id: str, payload: dict) -> None:
+        """Persist a launch-time ``policy_ask`` card AND push it to already-connected
+        subscribers atomically (FIX 3 — exactly-once delivery).
 
-        Called by ``PolicyService.await_decision`` right before it broadcasts the
-        card and begins blocking the launching call. ``_broadcast`` only reaches
-        subscribers connected at broadcast time, so without this a card emitted
-        while the frontend is still awaiting ``createSession()`` (and therefore
-        not yet subscribed) is lost → the launch deadlocks until it fails closed.
+        Called by ``PolicyService.await_decision`` at the launch boundary. The card
+        must reach BOTH:
+          * subscribers connected RIGHT NOW (pushed here, under the lock), and
+          * a subscriber that connects LATER (it replays ``_pending_policy_asks`` on
+            ``subscribe`` — the frontend subscribes only after ``createSession()``
+            resolves, so without persistence the launch deadlocks until it fails
+            closed).
+
+        Doing the persist + the live push in ONE locked section is what makes
+        delivery exactly-once: ``subscribe`` registers its queue AND reads
+        ``_pending_policy_asks`` under the SAME lock, so a given subscriber is in
+        exactly one bucket — either it was already registered when we pushed (and so
+        read ``pending=None`` earlier → it will NOT replay), or it registers after us
+        (reads the pending card → replays, and was NOT in our push set). The previous
+        two-step ``register`` then separate ``_broadcast`` let a subscriber connecting
+        in the gap get the card from BOTH paths (a duplicate ``policy_ask``).
         """
+        message = cls._format_sse("policy_ask", payload)
         with cls._lock:
             cls._pending_policy_asks[session_id] = payload
+            for q in cls._subscribers.get(session_id, []):
+                q.put(message)
+            for q in cls._raw_subscribers.get(session_id, []):
+                q.put(("policy_ask", payload))
 
     @classmethod
     def clear_pending_policy_ask(cls, session_id: str) -> None:

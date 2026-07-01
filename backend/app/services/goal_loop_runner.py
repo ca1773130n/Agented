@@ -753,6 +753,10 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                 metric_spec=metric_spec,
                 quality_gate=gate,
                 sandbox=sandbox,
+                # FIX 1: the stable operator session id is the policy session key
+                # for the deterministic-check launch gate (server-scope policies
+                # always apply; a session-scope DENY/ASK refuses to run the check).
+                session_id=session_id,
             )
 
             # If the operator clicked Stop while the judge was
