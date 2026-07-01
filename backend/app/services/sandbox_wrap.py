@@ -179,15 +179,23 @@ def _build_sbpl_profile(workspace: str, *, net: bool, proxy_url: str | None) -> 
         '(allow file-write* (subpath "/private/var/folders"))',
         '(allow file-write* (subpath "/private/tmp"))',
         '(allow file-write* (subpath "/dev"))',
-        "(deny network*)",
     ]
+    # Network rules — empirically verified against macOS seatbelt (24-RESEARCH
+    # Pitfall 4): a SPECIFIC ``(allow network* (remote ip "localhost:PORT"))`` after
+    # ``(deny network*)`` IS honored (the proxy is reachable), but a BROAD
+    # ``(allow network*)`` after ``(deny network*)`` is NOT (deny wins). So the
+    # net-without-proxy case must emit the broad allow WITHOUT a preceding deny.
     port = _proxy_port(proxy_url) if proxy_url else None
     if port is not None:
+        # Only the local egress proxy is reachable; everything else denied.
+        lines.append("(deny network*)")
         lines.append(f'(allow network* (remote ip "localhost:{port}"))')
     elif net:
-        # net requested but no proxy → allow full network (last-match wins over
-        # the earlier deny). No egress filtering in this mode.
+        # net requested, no proxy → full network (no egress filtering in this mode).
         lines.append("(allow network*)")
+    else:
+        # Fully offline.
+        lines.append("(deny network*)")
     return "\n".join(lines)
 
 
