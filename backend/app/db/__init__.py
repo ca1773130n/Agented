@@ -676,6 +676,7 @@ from .rbac import (  # noqa: F401
     count_user_roles,
     create_user_role,
     delete_user_role,
+    get_authorized_api_keys,
     get_role_for_api_key,
     get_user_role,
     list_user_roles,

@@ -1,5 +1,6 @@
 """The sidecar's LazyFlaskKeyAuth must honor a just-minted admin key without
-waiting out its 5s cache TTL.
+waiting out its 5s cache TTL — and it must read keys through the shared,
+DATABASE_URL-aware DB layer so the same behavior holds on SQLite and Postgres.
 
 Onboarding creates the admin key on the welcome page and *immediately* drives
 the backends step, which calls the sidecar (`/api/v1/*`). If the sidecar's
@@ -9,7 +10,11 @@ backend" in the UI. The fix: on a cache MISS, force one throttled DB re-read
 before rejecting, so a new key is accepted on the very next request.
 
 `scripts/run_ai_accounts.py` builds the sidecar app at import time, so we load
-just the class via AST extraction rather than importing the module.
+just the class via AST extraction rather than importing the module. The
+extracted class reads keys via ``app.db.rbac.get_authorized_api_keys`` (a
+runtime import inside ``_read_keys_from_db``), which follows
+``config.DATABASE_URL`` — so seeding through ``get_connection`` and driving the
+class exercises the real read path on whichever backend ``isolated_db`` selects.
 """
 
 import ast
@@ -19,14 +24,10 @@ import sys
 import types
 from pathlib import Path
 
-import pytest
+from app.db.connection import get_connection
+from app.db.ids import _get_unique_role_id
 
 _SRC = Path(__file__).resolve().parents[1] / "scripts" / "run_ai_accounts.py"
-
-
-@pytest.fixture(autouse=True)
-def _skip_pg(skip_on_pg):
-    """SQLite-specific: the sidecar lazy-auth reads keys from a SQLite DB file — skip on PG."""
 
 
 def _load_lazy_auth_class():
@@ -57,48 +58,58 @@ class _Req:
         self.headers = {"authorization": f"bearer {token}"}
 
 
-def _make_db(tmp_path, keys):
-    db = tmp_path / "agented.db"
-    conn = sqlite3.connect(db)
-    conn.execute("CREATE TABLE user_roles (id TEXT, api_key TEXT, label TEXT, role TEXT)")
-    conn.executemany(
-        "INSERT INTO user_roles VALUES (?, ?, 'l', 'admin')",
-        [(f"r{i}", k) for i, k in enumerate(keys)],
-    )
-    conn.commit()
-    conn.close()
-    return str(db)
+def _seed_keys(keys):
+    """Insert admin ``user_roles`` rows through the shared DATABASE_URL-aware
+    connection (the same path the sidecar now reads). Clears first so each test
+    starts from a known set on either backend."""
+    with get_connection() as conn:
+        conn.execute("DELETE FROM user_roles")
+        for k in keys:
+            rid = _get_unique_role_id(conn)
+            conn.execute(
+                "INSERT INTO user_roles (id, api_key, label, role) VALUES (?, ?, ?, 'admin')",
+                (rid, k, k),
+            )
+        conn.commit()
 
 
-def test_new_key_honored_on_cache_miss(tmp_path):
+def _add_key(k):
+    with get_connection() as conn:
+        rid = _get_unique_role_id(conn)
+        conn.execute(
+            "INSERT INTO user_roles (id, api_key, label, role) VALUES (?, ?, ?, 'admin')",
+            (rid, k, k),
+        )
+        conn.commit()
+
+
+def test_new_key_honored_on_cache_miss(isolated_db):
     Lazy = _load_lazy_auth_class()
-    db = _make_db(tmp_path, ["OLDKEY"])
-    auth = Lazy(db)
+    _seed_keys(["OLDKEY"])
+    auth = Lazy(isolated_db)
 
     # Prime the cache with the current key set {OLDKEY} (a HIT).
     assert asyncio.run(auth.authenticate(_Req("OLDKEY"))) is not None
 
     # A new admin key lands in the DB *after* the cache was primed — exactly the
     # onboarding race. The cached set still holds only {OLDKEY}.
-    conn = sqlite3.connect(db)
-    conn.execute("INSERT INTO user_roles VALUES ('r9', 'NEWKEY', 'l', 'admin')")
-    conn.commit()
-    conn.close()
+    _add_key("NEWKEY")
 
     # Without force-refresh-on-miss this is None until the 5s TTL lapses.
     assert asyncio.run(auth.authenticate(_Req("NEWKEY"))) is not None
 
 
-def test_unknown_key_still_rejected(tmp_path):
+def test_unknown_key_still_rejected(isolated_db):
     Lazy = _load_lazy_auth_class()
-    db = _make_db(tmp_path, ["OLDKEY"])
-    auth = Lazy(db)
+    _seed_keys(["OLDKEY"])
+    auth = Lazy(isolated_db)
     assert asyncio.run(auth.authenticate(_Req("BOGUS"))) is None
 
 
-def test_missing_authorization_header_rejected(tmp_path):
+def test_missing_authorization_header_rejected(isolated_db):
     Lazy = _load_lazy_auth_class()
-    auth = Lazy(_make_db(tmp_path, ["OLDKEY"]))
+    _seed_keys(["OLDKEY"])
+    auth = Lazy(isolated_db)
 
     class _NoAuth:
         headers: dict = {}

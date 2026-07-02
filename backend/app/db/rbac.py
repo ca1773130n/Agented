@@ -226,6 +226,34 @@ def get_role_and_user_for_api_key(api_key: str) -> Optional[tuple[str, Optional[
         return None
 
 
+def get_authorized_api_keys() -> set[str]:
+    """Return every API key in ``user_roles`` as a set (DATABASE_URL-aware).
+
+    Backs the ai-accounts sidecar's fallback bearer auth
+    (``scripts/run_ai_accounts.py`` — ``LazyFlaskKeyAuth``): a presented bearer
+    token is accepted iff it appears in this set. Routing through
+    :func:`get_connection` means the lookup follows ``config.DATABASE_URL`` — the
+    SQLite ``agented.db`` file by default, the Postgres ``user_roles`` table when
+    a ``DATABASE_URL`` is set. The sidecar previously opened a hard-coded
+    ``agented.db`` via ``sqlite3.connect`` directly, so a Postgres deploy (admin
+    key seeded in Postgres) returned an empty set and left ``/api/v1``
+    unauthorized even after the admin key was created (codex #5).
+
+    Best-effort: returns an empty set on any DB error (e.g. the table not yet
+    created on a fresh boot), preserving the sidecar's boot-before-keyed
+    tolerance — it 401s until a key row appears, then picks it up live.
+    """
+    try:
+        with get_connection() as conn:
+            rows = conn.execute(
+                "SELECT api_key FROM user_roles WHERE api_key IS NOT NULL"
+            ).fetchall()
+    except Exception as exc:  # missing table pre-init, locked DB, PG down, etc.
+        logger.debug("get_authorized_api_keys: could not read user_roles: %s", exc)
+        return set()
+    return {r[0] for r in rows if r and r[0]}
+
+
 _ROLE_RANK = {"viewer": 0, "operator": 1, "editor": 2, "admin": 3}
 
 
