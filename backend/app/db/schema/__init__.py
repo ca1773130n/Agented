@@ -8,6 +8,7 @@ point. Modules MUST NOT import each other.
 
 import logging
 
+from ..connection import _is_pg
 from ._agents import create_agent_tables
 from ._answer_eval import create_answer_eval_tables
 from ._core import create_core_tables
@@ -55,9 +56,19 @@ def create_fresh_schema(conn):
     SQLite tolerates one direction of unresolved FK at CREATE time, so we
     create ``_super_agents`` first; the reverse edge resolves at INSERT.
 
+    Dialect: the per-domain DDL is written in the SQLite idiom. On Postgres
+    (``_is_pg()``) the ``_PgConnWrapper`` transparently rewrites the finite
+    SQLite-ism set as each statement executes — most importantly
+    ``INTEGER PRIMARY KEY AUTOINCREMENT`` → ``BIGINT GENERATED ALWAYS AS
+    IDENTITY PRIMARY KEY`` — so the SAME DDL builders below run unchanged on
+    both backends. Postgres keeps DDL inside the transaction, so the explicit
+    ``conn.commit()`` at the end is what persists the fresh schema there.
+
     Args:
-        conn: An open sqlite3 connection.
+        conn: An open connection (sqlite3 or the psycopg ``_PgConnWrapper``).
     """
+    if _is_pg():
+        logger.info("create_fresh_schema: Postgres dialect (AUTOINCREMENT→IDENTITY)")
     create_agent_tables(conn)
     create_super_agent_tables(conn)
     create_harness_evidence_tables(conn)

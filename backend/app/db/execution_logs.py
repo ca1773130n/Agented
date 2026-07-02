@@ -6,9 +6,9 @@ re-exported from `app.db.triggers` for backward compatibility.
 """
 
 import logging
-import sqlite3
 from typing import Dict, List, Optional
 
+from . import errors
 from .connection import get_connection
 
 logger = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ def create_execution_log(
             )
             conn.commit()
             return True
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return False
 
 

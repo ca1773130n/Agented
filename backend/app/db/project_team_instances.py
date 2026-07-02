@@ -1,9 +1,9 @@
 """Project Team Instance CRUD operations."""
 
 import logging
-import sqlite3
 from typing import List, Optional
 
+from . import errors
 from .connection import get_connection
 from .ids import _get_unique_pti_id
 
@@ -34,7 +34,7 @@ def create_project_team_instance(
             )
             conn.commit()
             return pti_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 

@@ -3,9 +3,9 @@
 import graphlib
 import json
 import logging
-import sqlite3
 from typing import List, Optional, Tuple
 
+from . import errors
 from .connection import get_connection
 from .ids import _get_unique_workflow_execution_id, _get_unique_workflow_id
 
@@ -97,7 +97,7 @@ def create_workflow(
             )
             conn.commit()
             return workflow_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 
@@ -224,7 +224,7 @@ def add_workflow_version(
             )
             conn.commit()
             return version
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 
@@ -272,7 +272,7 @@ def add_workflow_version_raw(
             )
             conn.commit()
             return version, ""
-        except sqlite3.IntegrityError as e:
+        except errors.IntegrityError as e:
             return None, f"Database error: {e}"
 
 
@@ -334,7 +334,7 @@ def add_workflow_execution(
             )
             conn.commit()
             return execution_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 
@@ -425,7 +425,7 @@ def add_workflow_node_execution(
             )
             conn.commit()
             return cursor.lastrowid
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 
@@ -505,7 +505,7 @@ def add_workflow_approval_state(
             )
             conn.commit()
             return cursor.lastrowid
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 

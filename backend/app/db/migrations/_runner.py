@@ -18,13 +18,31 @@ import re
 
 import app.config as config
 
-from ..connection import get_connection
+from ..connection import _is_pg, get_connection
 from ..ids import generate_trigger_id
 from ..schema import create_fresh_schema
 
 logger = logging.getLogger(__name__)
 
 _SAFE_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
+def _table_exists(conn, name: str) -> bool:
+    """Backend-agnostic table-existence check.
+
+    Postgres has no ``sqlite_master``; it exposes ``information_schema.tables``
+    instead. On SQLite the exact original query is preserved (invariant).
+    """
+    if _is_pg():
+        row = conn.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_name = ?",
+            (name,),
+        ).fetchone()
+        return row is not None
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (name,)
+    ).fetchone()
+    return row is not None
 
 
 def _validate_sql_identifier(name: str, kind: str = "identifier") -> str:
@@ -160,21 +178,19 @@ def init_db():
     from app.db.migrations.v04_initial import _migrate_add_github_columns
 
     with get_connection() as conn:
-        # Enable WAL mode for concurrent read/write safety
-        result = conn.execute("PRAGMA journal_mode=WAL").fetchone()
-        if result[0].lower() != "wal":
-            logger.warning("WAL mode not enabled, got: %s", result[0])
-        else:
-            logger.info("SQLite WAL mode enabled")
+        # Enable WAL mode for concurrent read/write safety (SQLite only — journal
+        # modes/PRAGMA don't exist on Postgres, which manages WAL internally).
+        if not _is_pg():
+            result = conn.execute("PRAGMA journal_mode=WAL").fetchone()
+            if result[0].lower() != "wal":
+                logger.warning("WAL mode not enabled, got: %s", result[0])
+            else:
+                logger.info("SQLite WAL mode enabled")
 
         # Check if we need to migrate from old schema (INTEGER id) to new (TEXT id)
         # Check for either legacy bots table or current triggers table
-        cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='bots'")
-        has_bots = cursor.fetchone()
-        cursor = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='triggers'"
-        )
-        has_triggers = cursor.fetchone()
+        has_bots = _table_exists(conn, "bots")
+        has_triggers = _table_exists(conn, "triggers")
 
         if has_bots or has_triggers:
             if has_bots:

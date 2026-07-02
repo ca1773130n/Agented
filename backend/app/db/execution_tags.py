@@ -5,9 +5,9 @@ execution log entries for categorization and filtering.
 """
 
 import logging
-import sqlite3
 from typing import Optional
 
+from . import errors
 from .connection import get_connection
 from .ids import generate_id
 
@@ -65,7 +65,7 @@ def create_tag(name: str, color: str = "blue") -> Optional[dict]:
             )
             row = cursor.fetchone()
             return dict(row) if row else None
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             logger.warning("Failed to create execution tag (name conflict?): %s", name)
             return None
 
@@ -100,7 +100,7 @@ def add_tag_to_execution(tag_id: str, execution_id: str) -> bool:
             )
             conn.commit()
             return True
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             logger.warning(
                 "Failed to add tag %s to execution %s (FK violation?)", tag_id, execution_id
             )

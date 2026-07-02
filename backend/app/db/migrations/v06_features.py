@@ -5,6 +5,7 @@ Function bodies are byte-identical copies from the original migrations.py.
 
 import logging
 
+from .. import errors
 from ._runner import _validate_sql_identifier
 
 logger = logging.getLogger(__name__)
@@ -71,7 +72,6 @@ def _migrate_109_session_audit_columns(conn):
     column name". Catching that error makes the migration idempotent
     under concurrent invocation (`just deploy` + ad-hoc CLI overlap).
     """
-    import sqlite3
 
     def _add_column_if_missing(name: str, ddl_type: str) -> None:
         cursor = conn.execute("PRAGMA table_info(sessions)")
@@ -80,7 +80,7 @@ def _migrate_109_session_audit_columns(conn):
             return
         try:
             conn.execute(f"ALTER TABLE sessions ADD COLUMN {name} {ddl_type}")
-        except sqlite3.OperationalError as exc:
+        except errors.OperationalError as exc:
             # Concurrent boot won the race; column now exists.
             if "duplicate column name" not in str(exc).lower():
                 raise
@@ -130,14 +130,13 @@ def _migrate_110_session_rotated_at(conn):
     `rotated_at` column set only by `rotate_session`, never by the
     per-request touch.
     """
-    import sqlite3
 
     cursor = conn.execute("PRAGMA table_info(sessions)")
     existing = {row[1] for row in cursor.fetchall()}
     if "rotated_at" not in existing:
         try:
             conn.execute("ALTER TABLE sessions ADD COLUMN rotated_at TIMESTAMP")
-        except sqlite3.OperationalError as exc:
+        except errors.OperationalError as exc:
             if "duplicate column name" not in str(exc).lower():
                 raise
 

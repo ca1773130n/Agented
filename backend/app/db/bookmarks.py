@@ -5,9 +5,9 @@ for display on bot profile pages.
 """
 
 import logging
-import sqlite3
 from typing import Optional
 
+from . import errors
 from .connection import get_connection
 from .ids import _get_unique_bookmark_id
 
@@ -61,7 +61,7 @@ def create_bookmark(
             )
             conn.commit()
             return bookmark_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             logger.exception("Failed to create bookmark")
             return None
 

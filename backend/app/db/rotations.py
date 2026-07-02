@@ -1,9 +1,9 @@
 """Rotation events and organizational CRUD operations."""
 
 import logging
-import sqlite3
 from typing import List, Optional
 
+from . import errors
 from .connection import get_connection
 from .ids import (
     _get_unique_product_decision_id,
@@ -40,7 +40,7 @@ def add_rotation_event(
             )
             conn.commit()
             return event_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 
@@ -185,7 +185,7 @@ def add_product_decision(
             )
             conn.commit()
             return decision_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 
@@ -321,7 +321,7 @@ def add_product_milestone(
             )
             conn.commit()
             return milestone_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 
@@ -437,7 +437,7 @@ def add_team_connection(
             )
             conn.commit()
             return cursor.lastrowid
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 
@@ -482,7 +482,7 @@ def add_milestone_project(
             )
             conn.commit()
             return cursor.lastrowid
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 

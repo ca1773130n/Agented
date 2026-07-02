@@ -5,9 +5,9 @@ prompt templates using {{snippet_name}} syntax.
 """
 
 import logging
-import sqlite3
 from typing import List, Optional
 
+from . import errors
 from .connection import get_connection
 from .ids import _get_unique_snippet_id
 
@@ -33,7 +33,7 @@ def create_snippet(
             )
             conn.commit()
             return snippet_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 
@@ -99,7 +99,7 @@ def update_snippet(
             )
             conn.commit()
             return cursor.rowcount > 0
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return False
 
 

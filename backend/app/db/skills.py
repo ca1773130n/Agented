@@ -1,9 +1,9 @@
 """User skills CRUD operations."""
 
 import logging
-import sqlite3
 from typing import List, Optional
 
+from . import errors
 from .connection import get_connection
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ def add_user_skill(
             )
             conn.commit()
             return cursor.lastrowid
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 

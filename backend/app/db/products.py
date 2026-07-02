@@ -1,9 +1,9 @@
 """Product CRUD operations."""
 
 import logging
-import sqlite3
 from typing import List, Optional
 
+from . import errors
 from .connection import get_connection
 from .ids import _get_unique_product_id
 
@@ -66,7 +66,7 @@ def create_product(
             )
             conn.commit()
             return product_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 

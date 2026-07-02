@@ -1,9 +1,9 @@
 """Skill sets CRUD operations."""
 
 import logging
-import sqlite3
 from typing import List, Optional
 
+from . import errors
 from .connection import get_connection
 from .ids import generate_id
 
@@ -29,7 +29,7 @@ def create_skill_set(name: str, skill_ids_json: str = "[]") -> Optional[str]:
             )
             conn.commit()
             return sset_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 
@@ -78,7 +78,7 @@ def update_skill_set(
             )
             conn.commit()
             return cursor.rowcount > 0
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return False
 
 

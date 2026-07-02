@@ -14,6 +14,12 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 # Default database path is in backend/ folder to avoid creating in project root
 _DEFAULT_DB_PATH = os.path.join(PROJECT_ROOT, "backend", "agented.db")
 DB_PATH = os.environ.get("AGENTED_DB_PATH", _DEFAULT_DB_PATH)
+
+# Postgres opt-in (REQ-38). Empty string = SQLite (the zero-config default):
+# with DATABASE_URL unset the sqlite3 path is byte-for-byte unchanged. When it
+# starts with postgres://|postgresql:// the DB layer selects psycopg 3 instead.
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+
 SYMLINK_DIR = os.path.join(PROJECT_ROOT, "project_links")
 
 # --- Execution ---

@@ -5,9 +5,9 @@ Persisted to SQLite for durability beyond SSE sessions.
 """
 
 import logging
-import sqlite3
 from typing import Optional
 
+from . import errors
 from .connection import get_connection
 from .ids import generate_comment_id
 
@@ -49,7 +49,7 @@ def create_viewer_comment(
             )
             conn.commit()
             return comment_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             logger.exception("Failed to create viewer comment")
             return None
 

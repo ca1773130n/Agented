@@ -4,6 +4,7 @@ import logging
 import sqlite3
 from typing import List, Optional
 
+from . import errors
 from .connection import get_connection
 from .ids import _get_unique_project_id
 from .owned_entities import resolve_owner_user_id
@@ -56,7 +57,7 @@ def create_project(
             )
             conn.commit()
             return project_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 
@@ -304,7 +305,7 @@ def assign_team_to_project(project_id: str, team_id: str) -> bool:
             )
             conn.commit()
             return True
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return False
 
 
@@ -499,7 +500,7 @@ def add_project_team_edge(
             )
             conn.commit()
             return cursor.lastrowid
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 

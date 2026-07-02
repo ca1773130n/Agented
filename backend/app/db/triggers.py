@@ -8,9 +8,9 @@ execution history and review records.
 
 import difflib
 import logging
-import sqlite3
 from typing import List, Optional
 
+from . import errors
 from .connection import get_connection
 from .ids import _get_unique_trigger_id
 
@@ -266,7 +266,7 @@ def create_trigger(
             )
             conn.commit()
             return trigger_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 

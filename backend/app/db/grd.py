@@ -1,9 +1,9 @@
 """GRD project management CRUD operations."""
 
 import logging
-import sqlite3
 from typing import List, Optional
 
+from . import errors
 from .connection import get_connection, safe_set_clause
 from .ids import (
     _get_unique_milestone_id,
@@ -52,7 +52,7 @@ def create_milestone(
             )
             conn.commit()
             return milestone_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 
@@ -159,7 +159,7 @@ def add_project_phase(
             )
             conn.commit()
             return phase_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 
@@ -254,7 +254,7 @@ def add_project_plan(
             )
             conn.commit()
             return plan_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 
@@ -360,7 +360,7 @@ def add_project_session(
             )
             conn.commit()
             return session_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 
@@ -611,7 +611,7 @@ def upsert_project_sync_state(
             )
             conn.commit()
             return True
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return False
 
 

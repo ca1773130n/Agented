@@ -4,6 +4,7 @@ import logging
 import sqlite3
 from typing import List, Optional
 
+from . import errors
 from .connection import get_connection
 from .ids import _generate_short_id, _get_unique_plugin_id
 
@@ -35,7 +36,7 @@ def create_plugin(
             )
             conn.commit()
             return plugin_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 
@@ -167,7 +168,7 @@ def add_plugin_component(
             )
             conn.commit()
             return cursor.lastrowid
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 

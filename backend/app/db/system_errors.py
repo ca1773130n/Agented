@@ -5,9 +5,9 @@ status management, and autofix attempt history.
 """
 
 import logging
-import sqlite3
 from typing import Optional
 
+from . import errors
 from .connection import get_connection, safe_set_clause
 from .ids import _get_unique_error_id, _get_unique_fix_attempt_id
 
@@ -45,7 +45,7 @@ def create_system_error(
             )
             conn.commit()
             return error_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             logger.exception("Failed to create system error")
             return None
 
@@ -159,7 +159,7 @@ def create_fix_attempt(error_id: str, tier: int) -> Optional[str]:
             )
             conn.commit()
             return fix_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             logger.exception("Failed to create fix attempt")
             return None
 
