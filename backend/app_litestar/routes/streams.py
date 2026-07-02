@@ -192,9 +192,7 @@ def stream_project_session(
     owner = _project_session_owner(session_id)
     user_id = getattr(caller, "user_id", None) if caller else None
     role = getattr(caller, "role", None) if caller else None
-    authorized = role == "admin" or (
-        owner is not None and user_id is not None and user_id == owner
-    )
+    authorized = role == "admin" or (owner is not None and user_id is not None and user_id == owner)
     if not authorized:
         share_token = request.query_params.get("share_token")
         if not (share_token and SessionSharingService.can_attach(share_token, session_id)):

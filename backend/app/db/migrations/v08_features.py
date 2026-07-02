@@ -66,9 +66,7 @@ def _migrate_179_oidc_identities(conn):
         )
         """
     )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_oidc_identities_user ON oidc_identities(user_id)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_oidc_identities_user ON oidc_identities(user_id)")
 
 
 V08_MIGRATIONS = [
