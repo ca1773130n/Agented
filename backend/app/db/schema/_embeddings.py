@@ -1,6 +1,47 @@
 """Memory + embeddings DDL: chunked_executions, memory_threads/messages/embeddings,
 working_memory, knowledge graph, consolidation, bot_memory."""
 
+from ..connection import _is_pg
+
+
+def _create_memory_messages_fts(conn):
+    """SQLite-only FTS5 index + sync triggers for memory_messages semantic recall.
+
+    Verbatim (byte-for-byte) copy of the DDL that lived inline in
+    ``create_embedding_tables``; extracted so it can be skipped on Postgres (which
+    has no FTS5) without re-indenting the SQLite path. On PG, recall degrades to
+    an ILIKE scan over memory_messages (see app/db/agent_memory.py).
+    """
+    conn.execute("""
+        CREATE VIRTUAL TABLE IF NOT EXISTS memory_messages_fts
+        USING fts5(
+            content,
+            content='memory_messages',
+            content_rowid='rowid',
+            tokenize='porter unicode61'
+        )
+    """)
+
+    # Triggers to keep FTS index in sync
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS memory_messages_ai AFTER INSERT ON memory_messages BEGIN
+            INSERT INTO memory_messages_fts(rowid, content) VALUES (new.rowid, new.content);
+        END
+    """)
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS memory_messages_ad AFTER DELETE ON memory_messages BEGIN
+            INSERT INTO memory_messages_fts(memory_messages_fts, rowid, content)
+            VALUES ('delete', old.rowid, old.content);
+        END
+    """)
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS memory_messages_au AFTER UPDATE ON memory_messages BEGIN
+            INSERT INTO memory_messages_fts(memory_messages_fts, rowid, content)
+            VALUES ('delete', old.rowid, old.content);
+            INSERT INTO memory_messages_fts(rowid, content) VALUES (new.rowid, new.content);
+        END
+    """)
+
 
 def create_embedding_tables(conn):
     # Chunked executions (EXE-03: smart chunking with merge/dedup)
@@ -89,36 +130,12 @@ def create_embedding_tables(conn):
         "ON memory_messages(thread_id, created_at)"
     )
 
-    # FTS5 virtual table for semantic recall (external content mode)
-    conn.execute("""
-        CREATE VIRTUAL TABLE IF NOT EXISTS memory_messages_fts
-        USING fts5(
-            content,
-            content='memory_messages',
-            content_rowid='rowid',
-            tokenize='porter unicode61'
-        )
-    """)
-
-    # Triggers to keep FTS index in sync
-    conn.execute("""
-        CREATE TRIGGER IF NOT EXISTS memory_messages_ai AFTER INSERT ON memory_messages BEGIN
-            INSERT INTO memory_messages_fts(rowid, content) VALUES (new.rowid, new.content);
-        END
-    """)
-    conn.execute("""
-        CREATE TRIGGER IF NOT EXISTS memory_messages_ad AFTER DELETE ON memory_messages BEGIN
-            INSERT INTO memory_messages_fts(memory_messages_fts, rowid, content)
-            VALUES ('delete', old.rowid, old.content);
-        END
-    """)
-    conn.execute("""
-        CREATE TRIGGER IF NOT EXISTS memory_messages_au AFTER UPDATE ON memory_messages BEGIN
-            INSERT INTO memory_messages_fts(memory_messages_fts, rowid, content)
-            VALUES ('delete', old.rowid, old.content);
-            INSERT INTO memory_messages_fts(rowid, content) VALUES (new.rowid, new.content);
-        END
-    """)
+    # FTS5 virtual table for semantic recall (external content mode). FTS5 is
+    # SQLite-only; on PG recall degrades to ILIKE over memory_messages, so the
+    # virtual table + sync triggers are SQLite-only (kept verbatim in a helper so
+    # the SQLite path is byte-for-byte unchanged).
+    if not _is_pg():
+        _create_memory_messages_fts(conn)
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS agent_working_memory (

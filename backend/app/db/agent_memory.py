@@ -3,7 +3,7 @@
 import json
 import logging
 
-from .connection import get_connection, safe_set_clause
+from .connection import _is_pg, get_connection, safe_set_clause
 from .ids import generate_memory_message_id, generate_thread_id
 
 logger = logging.getLogger(__name__)
@@ -192,12 +192,10 @@ def recall_messages(
         words = re.findall(r"\w+", query)
         if not words:
             return []
-        # Quote each word for safe FTS5 matching
-        fts_query = " OR ".join(f'"{w}"' for w in words)
 
         try:
             return _execute_recall(
-                conn, fts_query, thread_id, resource_id, resource_type, top_k, message_range
+                conn, words, thread_id, resource_id, resource_type, top_k, message_range
             )
         except Exception:
             logger.warning("FTS5 recall query failed for: %s", query[:100])
@@ -205,23 +203,54 @@ def recall_messages(
 
 
 def _execute_recall(
-    conn, fts_query: str, thread_id, resource_id, resource_type, top_k, message_range
+    conn, words: list, thread_id, resource_id, resource_type, top_k, message_range
 ) -> list[dict]:
-    """Execute the FTS5 recall query and expand context."""
-    if thread_id:
-        cursor = conn.execute(
-            """SELECT m.id, m.thread_id, m.role, m.content, m.type, m.metadata, m.created_at
+    """Execute the recall query (FTS5 on SQLite, ILIKE on Postgres) and expand context."""
+    if _is_pg():
+        # Postgres has no FTS5 → degraded OR-of-ILIKE over memory_messages.content,
+        # ordered by recency (no BM25 rank). One ? placeholder per word.
+        like_clause = " OR ".join(["m.content ILIKE ?"] * len(words))
+        like_params = [f"%{w}%" for w in words]
+        if thread_id:
+            cursor = conn.execute(
+                f"""SELECT m.id, m.thread_id, m.role, m.content, m.type, m.metadata, m.created_at
+                   FROM memory_messages m
+                   WHERE ({like_clause})
+                     AND m.thread_id = ?
+                   ORDER BY m.created_at DESC
+                   LIMIT ?""",
+                (*like_params, thread_id, top_k),
+            )
+        elif resource_id:
+            cursor = conn.execute(
+                f"""SELECT m.id, m.thread_id, m.role, m.content, m.type, m.metadata, m.created_at
+                   FROM memory_messages m
+                   JOIN memory_threads t ON t.id = m.thread_id
+                   WHERE ({like_clause})
+                     AND t.resource_id = ? AND t.resource_type = ?
+                   ORDER BY m.created_at DESC
+                   LIMIT ?""",
+                (*like_params, resource_id, resource_type, top_k),
+            )
+        else:
+            return []
+    else:
+        # Quote each word for safe FTS5 matching
+        fts_query = " OR ".join(f'"{w}"' for w in words)
+        if thread_id:
+            cursor = conn.execute(
+                """SELECT m.id, m.thread_id, m.role, m.content, m.type, m.metadata, m.created_at
                FROM memory_messages_fts fts
                JOIN memory_messages m ON m.rowid = fts.rowid
                WHERE memory_messages_fts MATCH ?
                  AND m.thread_id = ?
                ORDER BY rank
                LIMIT ?""",
-            (fts_query, thread_id, top_k),
-        )
-    elif resource_id:
-        cursor = conn.execute(
-            """SELECT m.id, m.thread_id, m.role, m.content, m.type, m.metadata, m.created_at
+                (fts_query, thread_id, top_k),
+            )
+        elif resource_id:
+            cursor = conn.execute(
+                """SELECT m.id, m.thread_id, m.role, m.content, m.type, m.metadata, m.created_at
                FROM memory_messages_fts fts
                JOIN memory_messages m ON m.rowid = fts.rowid
                JOIN memory_threads t ON t.id = m.thread_id
@@ -229,10 +258,10 @@ def _execute_recall(
                  AND t.resource_id = ? AND t.resource_type = ?
                ORDER BY rank
                LIMIT ?""",
-            (fts_query, resource_id, resource_type, top_k),
-        )
-    else:
-        return []
+                (fts_query, resource_id, resource_type, top_k),
+            )
+        else:
+            return []
 
     matches = [_msg_row_to_dict(row) for row in cursor.fetchall()]
 

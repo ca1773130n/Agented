@@ -34,7 +34,7 @@ from ._session_shares import create_session_share_tables
 from ._setup import create_setup_tables
 from ._skill_sleep import create_skill_sleep_tables
 from ._skills import create_skill_tables
-from ._super_agents import create_super_agent_tables
+from ._super_agents import add_super_agent_deferred_fks, create_super_agent_tables
 from ._team_executions import create_team_execution_tables
 from ._triggers_infra import create_triggers_infra_tables
 from ._verification_records import create_verification_records_tables
@@ -55,6 +55,9 @@ def create_fresh_schema(conn):
     ``_orgs.team_members`` references ``super_agents`` — a true cycle.
     SQLite tolerates one direction of unresolved FK at CREATE time, so we
     create ``_super_agents`` first; the reverse edge resolves at INSERT.
+    Postgres rejects the forward reference at CREATE time, so on PG the three
+    forward FK edges are omitted from ``_super_agents`` and re-added via
+    ``add_super_agent_deferred_fks`` after all tables exist (see below).
 
     Dialect: the per-domain DDL is written in the SQLite idiom. On Postgres
     (``_is_pg()``) the ``_PgConnWrapper`` transparently rewrites the finite
@@ -99,4 +102,11 @@ def create_fresh_schema(conn):
     create_skill_sleep_tables(conn)
     create_session_share_tables(conn)
     create_oidc_identity_tables(conn)
+    # Postgres validates FK targets at CREATE time, so the super_agents FK cycle
+    # (super_agents→teams / super_agent_sessions→projects,project_sa_instances)
+    # was created without those edges; now that every table exists, add them via
+    # ALTER TABLE so PG referential integrity matches SQLite. SQLite declared
+    # them inline, so it needs nothing here.
+    if _is_pg():
+        add_super_agent_deferred_fks(conn)
     conn.commit()

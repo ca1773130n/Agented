@@ -256,8 +256,10 @@ def test_pg_round_trip(monkeypatch):
     monkeypatch.setattr(config, "DATABASE_URL", _PG_URL)
     from app.db.teams import create_team, get_team
 
-    team = create_team(name="PG Team", description="round trip")
-    assert team is not None
-    fetched = get_team(team["id"])
+    # create_team returns the new team_id (str); round-trip it back through
+    # get_team (dict) to prove an INSERT + SELECT works end-to-end on Postgres.
+    team_id = create_team(name="PG Team", description="round trip")
+    assert team_id is not None
+    fetched = get_team(team_id)
     assert fetched is not None
     assert fetched["name"] == "PG Team"

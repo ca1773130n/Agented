@@ -4,7 +4,7 @@ import logging
 import sqlite3
 from typing import List, Optional
 
-from app.db.connection import get_connection
+from app.db.connection import _is_pg, get_connection
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,30 @@ class ExecutionSearchService:
         """
         try:
             with get_connection() as conn:
-                sql = """
+                if _is_pg():
+                    # Postgres has no FTS5. Degrade to a case-insensitive ILIKE scan
+                    # over the execution_logs base table (no BM25 ranking, recency
+                    # order instead). Snippets are truncated raw text — the shared
+                    # _escape_snippets pass still HTML-escapes them safely.
+                    sql = """
+                        SELECT
+                            e.execution_id,
+                            e.trigger_id,
+                            t.name AS trigger_name,
+                            e.started_at,
+                            e.status,
+                            e.prompt,
+                            substr(e.stdout_log, 1, 200) AS stdout_match,
+                            substr(e.stderr_log, 1, 200) AS stderr_match
+                        FROM execution_logs e
+                        LEFT JOIN triggers t ON e.trigger_id = t.id
+                        WHERE (e.stdout_log ILIKE ? OR e.stderr_log ILIKE ? OR e.prompt ILIKE ?)
+                    """
+                    like = f"%{query}%"
+                    params: list = [like, like, like]
+                    order_clause = " ORDER BY e.started_at DESC LIMIT ?"
+                else:
+                    sql = """
                     SELECT
                         e.execution_id,
                         e.trigger_id,
@@ -54,7 +77,8 @@ class ExecutionSearchService:
                     LEFT JOIN triggers t ON e.trigger_id = t.id
                     WHERE execution_logs_fts MATCH ?
                 """
-                params: list = [query]
+                    params = [query]
+                    order_clause = " ORDER BY rank LIMIT ?"
 
                 if trigger_id:
                     sql += " AND e.trigger_id = ?"
@@ -76,7 +100,7 @@ class ExecutionSearchService:
                     sql += " AND t.name LIKE ?"
                     params.append(f"%{bot_name}%")
 
-                sql += " ORDER BY rank LIMIT ?"
+                sql += order_clause
                 params.append(limit)
 
                 cursor = conn.execute(sql, params)
@@ -113,6 +137,8 @@ class ExecutionSearchService:
             Dict with indexed_documents count.
         """
         with get_connection() as conn:
-            cursor = conn.execute("SELECT count(*) FROM execution_logs_fts")
+            # execution_logs_fts is SQLite-only; on PG count the base table.
+            table = "execution_logs" if _is_pg() else "execution_logs_fts"
+            cursor = conn.execute(f"SELECT count(*) FROM {table}")
             count = cursor.fetchone()[0]
             return {"indexed_documents": count}

@@ -250,8 +250,18 @@ def init_db():
         # Run only v0.3.0 migration functions (30+) for new tables.
         # Legacy migrations (1-29) operate on bots/triggers transition
         # and are not safe to run on a fresh schema that already has triggers.
+        #
+        # Postgres: every PG init is a FRESH init (PG support is new — no legacy
+        # PG databases exist), and the versioned migrations are SQLite
+        # schema-EVOLUTION steps toward exactly the state create_fresh_schema
+        # already builds. Many of them use SQLite-only table-rebuild idioms
+        # (DROP TABLE while other tables' FKs still depend on it, INTEGER
+        # AUTOINCREMENT re-creation, PRAGMA-driven column probes) that Postgres
+        # rejects. So on PG we treat create_fresh_schema as authoritative and do
+        # NOT replay them — we only record them as applied. SQLite is unchanged.
+        pg = _is_pg()
         for version, name, func in VERSIONED_MIGRATIONS:
-            if version >= 30:
+            if version >= 30 and not pg:
                 func(conn)
             _record_version(conn, version, name)
         # Create tables that exist only in legacy migration code, not in fresh schema

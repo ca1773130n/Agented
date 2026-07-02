@@ -170,7 +170,13 @@ def apply_migrations(isolated_db):
     The fresh-schema init_db() path does not create 5 agent columns that the
     migration path adds (layer, detected_role, matched_skills, preferred_model,
     effort_level). Since create_agent() references these columns, we add them here.
+
+    Postgres: ``isolated_db`` is a DATABASE_URL (not a file), the fresh PG schema
+    already includes these columns, and ``sqlite3.connect`` cannot open it — so
+    this SQLite-only defensive guard is a no-op on PG.
     """
+    if str(isolated_db).startswith(("postgres://", "postgresql://")):
+        return
     conn = sqlite3.connect(isolated_db)
     cursor = conn.execute("PRAGMA table_info(agents)")
     existing = {row[1] for row in cursor.fetchall()}

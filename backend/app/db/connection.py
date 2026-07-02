@@ -63,6 +63,10 @@ def _translate_params(sql: str) -> str:
 # is unaffected.
 _AUTOINC_RE = re.compile(r"INTEGER\s+PRIMARY\s+KEY\s+AUTOINCREMENT", re.IGNORECASE)
 _DATETIME_NOW_RE = re.compile(r"datetime\(\s*'now'\s*\)", re.IGNORECASE)
+# SQLite's ``BLOB`` column type has no Postgres analogue → ``BYTEA``. Matched as
+# an upper-case whole word (the DDL idiom) so it can never touch a lower-case
+# identifier or a string literal in DML.
+_BLOB_TYPE_RE = re.compile(r"\bBLOB\b")
 
 # `PRAGMA table_info(<table>)` — the only PRAGMA whose result set call-sites read
 # (positionally as row[1] / by name as row["name"]). Captures the table name so
@@ -108,11 +112,13 @@ def _translate_dialect(sql: str) -> str:
 
     - ``INTEGER PRIMARY KEY AUTOINCREMENT`` → ``BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY``
     - ``datetime('now')`` → ``now()``
+    - ``BLOB`` → ``BYTEA`` (SQLite binary column type → Postgres binary type)
     (``INSERT OR IGNORE/REPLACE`` is handled in ``_PgConnWrapper.execute`` where
     the ON CONFLICT clause must be positioned before any RETURNING.)
     """
     s = _AUTOINC_RE.sub("BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY", sql)
     s = _DATETIME_NOW_RE.sub("now()", s)
+    s = _BLOB_TYPE_RE.sub("BYTEA", s)
     return s
 
 
