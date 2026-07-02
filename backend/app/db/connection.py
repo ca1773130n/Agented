@@ -90,6 +90,18 @@ _PG_TABLE_INFO_SQL = """
     ORDER BY ordinal_position
 """
 
+# `SELECT ... FROM sqlite_master WHERE type='table' AND name=<X>` — the table
+# existence-check shape used verbatim at 55+ migration/db call-sites (and the
+# init_db bootstrap). sqlite_master has no Postgres analogue; captures the name
+# token (already `?`→`%s`-translated, or a 'literal') to re-target
+# information_schema. Any OTHER sqlite_master shape fails loud rather than
+# silently returning wrong rows.
+_SQLITE_MASTER_EXISTS_RE = re.compile(
+    r"^\s*select\s+.+?\s+from\s+sqlite_master\s+where\s+type\s*=\s*'table'"
+    r"\s+and\s+name\s*=\s*(%s|'[^']*')\s*;?\s*$",
+    re.IGNORECASE | re.DOTALL,
+)
+
 
 def _translate_dialect(sql: str) -> str:
     """Rewrite the finite set of SQLite-only DDL/DML idioms to Postgres.
@@ -207,6 +219,25 @@ class _PgConnWrapper:
                 cur.execute(_PG_TABLE_INFO_SQL, (m.group(1),))
             else:
                 cur.execute("SELECT NULL")
+            return _PgCursor(cur)
+
+        # sqlite_master is SQLite's catalog and does not exist on Postgres.
+        # Translate the dominant existence-check shape to information_schema so
+        # init_db bootstrap + the 55 idempotent-migration guards work on PG.
+        if "sqlite_master" in stripped:
+            m = _SQLITE_MASTER_EXISTS_RE.match(_translate_params(sql))
+            if m is None:
+                raise NotImplementedError(
+                    "Unhandled sqlite_master query on Postgres — rewrite via "
+                    f"information_schema. Offending SQL: {sql.strip()[:160]}"
+                )
+            pg = (
+                "SELECT table_name AS name FROM information_schema.tables "
+                "WHERE table_schema = current_schema() "
+                "AND table_type = 'BASE TABLE' AND table_name = " + m.group(1)
+            )
+            cur = self._conn.cursor(row_factory=_hybrid_row_factory)
+            cur.execute(pg, params)
             return _PgCursor(cur)
 
         query = _translate_dialect(_translate_params(sql))

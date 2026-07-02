@@ -18,6 +18,7 @@ from app.db.connection import (
     _is_pg,
     _PgConnWrapper,
     _Row,
+    _SQLITE_MASTER_EXISTS_RE,
     _translate_dialect,
     _translate_params,
 )
@@ -51,6 +52,21 @@ def test_dialect_autoincrement_to_identity():
 
 def test_dialect_datetime_now():
     assert _translate_dialect("SELECT datetime('now')") == "SELECT now()"
+
+
+def test_sqlite_master_exists_translation_regex():
+    # canonical existence-check shape (literal name) — the 55-site pattern
+    m = _SQLITE_MASTER_EXISTS_RE.match(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'"
+    )
+    assert m and m.group(1) == "'schema_version'"
+    # parameterized form (after ?->%s translation)
+    m = _SQLITE_MASTER_EXISTS_RE.match(
+        _translate_params("SELECT name FROM sqlite_master WHERE type='table' AND name=?")
+    )
+    assert m and m.group(1) == "%s"
+    # an unhandled sqlite_master shape must NOT match (wrapper fails loud instead)
+    assert _SQLITE_MASTER_EXISTS_RE.match("SELECT sql FROM sqlite_master WHERE name='t'") is None
 
 
 # --------------------------------------------------------------------------- #
