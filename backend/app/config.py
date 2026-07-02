@@ -56,3 +56,34 @@ GIT_OP_TIMEOUT = 120  # 2 minutes
 # --- Autoresearch kernel ---
 
 AUTORESEARCH_KERNEL_ENABLED = os.environ.get("AUTORESEARCH_KERNEL_ENABLED", "0") == "1"
+
+# --- LLM key isolation (REQ-41) ---
+#
+# AGENTED_SERVER_NO_LLM_KEYS: when set truthy, the server refuses to read raw
+# LLM *inference* keys (e.g. ANTHROPIC_API_KEY) from its OWN process
+# environment. Credentials must instead flow in per-request via explicit
+# ``api_key`` arguments sourced from the ai-accounts sidecar. This isolates a
+# shared or "poison" server-wide key from silently backing every user's
+# inference. Default (unset) = read env keys as before, byte-for-byte
+# unchanged. The flag is read dynamically (not cached at import) so operators
+# and tests can toggle it at runtime.
+
+_TRUTHY_FLAG_VALUES = {"1", "true", "yes", "on"}
+
+
+def server_no_llm_keys() -> bool:
+    """Return True when the server must ignore raw LLM keys from its own env."""
+    return os.environ.get("AGENTED_SERVER_NO_LLM_KEYS", "").strip().lower() in _TRUTHY_FLAG_VALUES
+
+
+def env_llm_key(name: str, default: str = "") -> str:
+    """Read an LLM inference key from the environment, honoring the isolation flag.
+
+    When AGENTED_SERVER_NO_LLM_KEYS is set, the server-side environment fallback
+    is suppressed and ``default`` is returned instead — so a key baked into the
+    server process cannot back user inference. Explicit ``api_key`` arguments
+    passed by callers are unaffected; they never route through here.
+    """
+    if server_no_llm_keys():
+        return default
+    return os.environ.get(name, default)

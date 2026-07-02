@@ -184,11 +184,12 @@ class CLIProxyChatService:
         """Stream via LiteLLM directly without CLIProxyAPI.
 
         Uses the provided API key directly with LiteLLM, bypassing
-        the CLIProxyAPI binary. Falls back to ANTHROPIC_API_KEY env var.
+        the CLIProxyAPI binary. Falls back to ANTHROPIC_API_KEY env var
+        (suppressed when AGENTED_SERVER_NO_LLM_KEYS is set — REQ-41).
         """
-        import os
+        from app.config import env_llm_key
 
-        resolved_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+        resolved_key = api_key or env_llm_key("ANTHROPIC_API_KEY")
         if not resolved_key:
             yield ChatDelta(
                 type=ChatDeltaType.ERROR,

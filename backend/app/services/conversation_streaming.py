@@ -25,6 +25,8 @@ from typing import Any, Generator, List, Optional, Union
 
 import yaml
 
+from app.config import env_llm_key
+
 logger = logging.getLogger(__name__)
 
 SUBPROCESS_TIMEOUT = 120
@@ -323,7 +325,9 @@ def stream_llm_response(
     else:
         resolved_model = _get_default_model(effective_backend)
     resolved_base = api_base or os.environ.get("ANTHROPIC_API_BASE", "").strip()
-    resolved_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    # ANTHROPIC_API_KEY server-env fallback is suppressed when
+    # AGENTED_SERVER_NO_LLM_KEYS is set (REQ-41).
+    resolved_key = api_key or env_llm_key("ANTHROPIC_API_KEY").strip()
 
     # Work mode: project context is already in the system prompt via assemble_system_prompt.
     # Use the normal routing (CLIProxy for real-time streaming) rather than forcing CLI
