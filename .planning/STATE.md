@@ -34,9 +34,22 @@ wrap-without-enforce paths, ordering bug, cloud shell-injection, config-dir re-e
 Opt-in via AGENTED_SANDBOX (default off; require_sandbox + off → fail closed). Follow-ups: bwrap netns↔proxy bridge
 (Linux egress currently fail-closed-offline), live E2B/Modal creds.
 
-Next: **Phase 25** (real-time multi-user collaboration — live-share SSE, co-drive [policy-governed], fork, OIDC) — plans 25-01.. ready; depends on 23.
+Phase: 25 of 26 (Real-time multi-user collaboration) — **✅ COMPLETE & MERGED** (PR #288, main 4969a39dc0, 2026-07-02)
+Status: live-share (scoped URL share tokens, hashed-at-rest, read-only multi-attach, owner-gated stream),
+co-drive (teammate message runs against the operator's session, policy-checked via `PolicyService`/`PolicyDenied`
++ CSRF), session fork (fork a conversation onto a separate independent run, ownership-gated), optional OIDC SSO
+(authlib code-flow alongside the unchanged X-API-Key path), 4-locale parity. Security-hardened post-implementation
+(token hashing at rest, ownership gates on mint/fork/revoke, fail-CLOSED on unknown session owner + created_by
+backfill, co-drive CSRF, real cost/tool policy context). Verified locally (CI runs only GitGuardian): build ✅ 0
+type errors, backend 67 passed / 0 failed across 8 phase-25 files, frontend 7 known-baseline failures / no new
+(see `25-VERIFICATION.md`). Note: per-plan SUMMARY.md files (25-01..05) were not committed, so grd-tools
+auto-routing undercounts summaries and mis-reports current phase — position tracked here.
 
-Progress: [#####-----] 50% (2 of 4 phases complete — Phases 23+24 merged)
+Next: **Phase 26** (deployment & extensibility ergonomics — first-class Postgres alongside SQLite, container
+image + one-click/self-update distribution, declarative-YAML agent/team authoring, optional server/runner
+key-isolation split) — plans 26-01..04 + RESEARCH + EVAL ready; independent of phases 23–25.
+
+Progress: [###############-----] 75% (3 of 4 phases complete — Phases 23+24+25 merged)
 
 **Decisions (23-01):** PolicyVerdict = `{decision, policy_id, kind, reason, scope}`;
 SESSION-first stacking with first-DENY short-circuit (SC1 proven); default ALLOW has
