@@ -3,30 +3,37 @@
 Load, validate, materialize, and export a team topology as a single
 human-authorable YAML document.
 
-The import path validates the ENTIRE document before performing any DB
-write, so a malformed document can never leave a partially-created team
-behind (the partial-state guard). Edge endpoints reference members by a
-stable ``ref`` (agent_id, super_agent_id, or member name) rather than by
-DB-assigned member ids, which are not portable across instances.
+The import path validates the ENTIRE document — including every referenced
+agent/super_agent — before performing any DB write, and then applies the
+delete-on-upsert, team create, member inserts, and edge inserts inside a
+SINGLE transaction with one commit at the end. A malformed document, a bad
+foreign key, or a duplicate edge can therefore never leave a partially-created
+team behind, and an upsert never destroys the prior team unless its
+replacement fully materialises (the partial-state / atomicity guard). Edge
+endpoints reference members by a stable ``ref`` (agent_id, super_agent_id, or
+member name) rather than by DB-assigned member ids, which are not portable
+across instances.
 """
 
 import json
 import logging
+import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Optional
 
 import yaml
 
 from app.database import (
-    add_team_edge,
-    add_team_member,
-    create_team,
-    delete_team,
     get_team_by_name,
     get_team_detail,
     get_team_edges,
     get_team_members,
 )
+from app.db.agents import get_agent
+from app.db.connection import get_connection
+from app.db.ids import _get_unique_team_id
+from app.db.super_agents import get_super_agent
+from app.db.teams import _get_team_members_columns
 from app.models.team import VALID_EDGE_TYPES, VALID_TOPOLOGIES
 
 logger = logging.getLogger(__name__)
@@ -227,19 +234,66 @@ def export_team(team_id: str) -> Optional[str]:
 
 
 # ---------------------------------------------------------------------------
-# Import (partial-state guarded)
+# Import (atomic + partial-state guarded)
 # ---------------------------------------------------------------------------
 
 
-def import_team(yaml_str: str, upsert: bool = False) -> tuple[str, str]:
-    """Materialize a team from a YAML document.
+def _validate_db_references(members: list[dict]) -> dict[str, Optional[str]]:
+    """Resolve/validate every member's DB reference BEFORE any write.
 
-    The whole document is parsed and validated before any DB write. Returns
-    ``(team_id, status)`` where status is ``"created"`` or ``"updated"``.
+    For each member with an ``agent_id``/``super_agent_id``, confirm the
+    referenced record exists and resolve a display name (matching
+    ``add_team_member``'s behaviour). Runs entirely on read connections, so a
+    dangling reference is caught before the import transaction is opened.
+
+    Returns a ``ref -> resolved_name`` map for the writer to reuse.
 
     Raises:
-        ValueError: on parse/validation failure, name collision without
-            upsert, or a DB write failure.
+        ValueError: if any member references a non-existent agent/super_agent.
+    """
+    resolved: dict[str, Optional[str]] = {}
+    for i, member in enumerate(members):
+        ref = _member_ref(member)
+        name = member.get("name")
+        agent_id = member.get("agent_id")
+        super_agent_id = member.get("super_agent_id")
+        if agent_id:
+            agent = get_agent(agent_id)
+            if not agent:
+                raise ValueError(f"member {i} references unknown agent_id: {agent_id!r}")
+            if not name:
+                name = agent.get("name") or "Unknown Agent"
+        elif super_agent_id:
+            super_agent = get_super_agent(super_agent_id)
+            if not super_agent:
+                raise ValueError(
+                    f"member {i} references unknown super_agent_id: {super_agent_id!r}"
+                )
+            if not name:
+                name = super_agent.get("name") or "Unknown SuperAgent"
+        resolved[ref] = name
+    return resolved
+
+
+def import_team(yaml_str: str, upsert: bool = False) -> tuple[str, str]:
+    """Materialize a team from a YAML document, atomically.
+
+    The whole document is parsed and validated — including every referenced
+    agent/super_agent — before any DB write. The delete-on-upsert, team
+    create, member inserts, and edge inserts then run inside a SINGLE
+    connection/transaction with one commit at the end. Any failing member or
+    edge insert (bad FK, duplicate edge, self-loop, duplicate member name)
+    raises and rolls the whole transaction back, so on failure the DB is left
+    unchanged: a prior team survives an upsert, and a create leaves nothing
+    behind.
+
+    Returns ``(team_id, status)`` where status is ``"created"`` or
+    ``"updated"``.
+
+    Raises:
+        ValueError: on parse/validation failure, an unresolved agent/
+            super_agent reference, a name collision without upsert, or any DB
+            write failure (the transaction is rolled back first).
     """
     config = load_team_config(yaml_str)
     ok, err = validate_team_config(config)
@@ -249,57 +303,110 @@ def import_team(yaml_str: str, upsert: bool = False) -> tuple[str, str]:
     metadata = config["metadata"]
     spec = config["spec"]
     name = metadata["name"].strip()
+    members = spec.get("members", [])
+    edges = spec.get("edges", [])
+
+    # Validate ALL DB references before opening the write transaction.
+    resolved_names = _validate_db_references(members)
 
     existing = get_team_by_name(name)
     if existing and not upsert:
         raise ValueError(f"A team named {name!r} already exists")
-
-    status = "created"
-    if existing and upsert:
-        delete_team(existing["id"])
-        status = "updated"
+    status = "updated" if existing else "created"
 
     topology_config = spec.get("topology_config")
     topology_config_str = json.dumps(topology_config) if isinstance(topology_config, dict) else None
 
-    team_id = create_team(
-        name=name,
-        description=metadata.get("description"),
-        color=metadata.get("color") or "#00d4ff",
-        topology=spec.get("topology"),
-        topology_config=topology_config_str,
-        trigger_source=spec.get("trigger_source"),
-    )
-    if not team_id:
-        raise ValueError("Failed to create team (name collision or DB error)")
+    # Single transaction: delete (if upsert) + create + members + edges. Any
+    # exception propagates out of the `with` block, where get_connection()
+    # rolls back before closing, so nothing is committed on failure.
+    with get_connection() as conn:
+        if existing and upsert:
+            conn.execute("DELETE FROM teams WHERE id = ?", (existing["id"],))
 
-    ref_to_member_id: dict[str, int] = {}
-    for member in spec.get("members", []):
-        ref = _member_ref(member)
-        member_id = add_team_member(
-            team_id=team_id,
-            name=member.get("name"),
-            role=member.get("role") or "member",
-            layer=member.get("layer") or "backend",
-            agent_id=member.get("agent_id"),
-            super_agent_id=member.get("super_agent_id"),
-            tier=member.get("tier"),
-        )
-        if member_id is not None:
-            ref_to_member_id[ref] = member_id
+        team_id = _get_unique_team_id(conn)
+        try:
+            conn.execute(
+                """
+                INSERT INTO teams (id, name, description, color, leader_id, source,
+                                   topology, topology_config, trigger_source, trigger_config)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    team_id,
+                    name,
+                    metadata.get("description"),
+                    metadata.get("color") or "#00d4ff",
+                    None,
+                    "ui_created",
+                    spec.get("topology"),
+                    topology_config_str,
+                    spec.get("trigger_source"),
+                    None,
+                ),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise ValueError(f"Failed to create team {name!r}: {exc}") from exc
 
-    for edge in spec.get("edges", []):
-        source_id = ref_to_member_id.get(edge["source"])
-        target_id = ref_to_member_id.get(edge["target"])
-        if source_id is None or target_id is None:
-            continue
-        add_team_edge(
-            team_id=team_id,
-            source_member_id=source_id,
-            target_member_id=target_id,
-            edge_type=edge.get("edge_type", "delegation"),
-            label=edge.get("label"),
-            weight=edge.get("weight", 1),
-        )
+        member_cols = _get_team_members_columns(conn)
+        ref_to_member_id: dict[str, int] = {}
+        for member in members:
+            ref = _member_ref(member)
+            columns = ["team_id", "name", "email", "role", "layer", "description", "agent_id"]
+            values: list[Any] = [
+                team_id,
+                resolved_names.get(ref),
+                None,
+                member.get("role") or "member",
+                member.get("layer") or "backend",
+                None,
+                member.get("agent_id"),
+            ]
+            if "super_agent_id" in member_cols:
+                columns.append("super_agent_id")
+                values.append(member.get("super_agent_id"))
+            if "tier" in member_cols and member.get("tier") is not None:
+                columns.append("tier")
+                values.append(member.get("tier"))
+            placeholders = ", ".join("?" for _ in columns)
+            col_str = ", ".join(columns)
+            try:
+                cursor = conn.execute(
+                    f"INSERT INTO team_members ({col_str}) VALUES ({placeholders})",
+                    tuple(values),
+                )
+            except sqlite3.IntegrityError as exc:
+                raise ValueError(f"Failed to add team member {ref!r}: {exc}") from exc
+            ref_to_member_id[ref] = cursor.lastrowid
+
+        for i, edge in enumerate(edges):
+            source_id = ref_to_member_id.get(edge["source"])
+            target_id = ref_to_member_id.get(edge["target"])
+            # validate_team_config guarantees both refs are declared members;
+            # a missing id here would be a logic error, not silently ignorable.
+            if source_id is None or target_id is None:
+                raise ValueError(f"edge {i} references a member that was not created")
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO team_edges
+                        (team_id, source_member_id, target_member_id, edge_type, label, weight)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        team_id,
+                        source_id,
+                        target_id,
+                        edge.get("edge_type", "delegation"),
+                        edge.get("label"),
+                        edge.get("weight", 1),
+                    ),
+                )
+            except sqlite3.IntegrityError as exc:
+                raise ValueError(
+                    f"Failed to add edge {edge['source']!r} -> {edge['target']!r}: {exc}"
+                ) from exc
+
+        conn.commit()
 
     return team_id, status

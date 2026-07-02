@@ -9,7 +9,7 @@ Covers:
 
 import pytest
 
-from app.database import count_teams, get_team_edges, get_team_members
+from app.database import count_teams, get_team_by_name, get_team_edges, get_team_members
 from app.services import yaml_authoring_service as yas
 
 
@@ -154,3 +154,69 @@ def test_import_upsert_replaces_existing(isolated_db):
     team_id, status = yas.import_team(yas.dump_team_config(cfg), upsert=True)
     assert status == "updated"
     assert len(get_team_members(team_id)) == 3
+
+
+# ---------------------------------------------------------------------------
+# Atomicity / rollback (Codex finding #3 — data-loss guard)
+# ---------------------------------------------------------------------------
+
+
+def test_import_bad_agent_ref_raises_and_writes_nothing(isolated_db):
+    """A member pointing at a non-existent agent is rejected before any write."""
+    cfg = _sample_config()
+    cfg["metadata"]["name"] = "BadAgentRef"
+    cfg["spec"]["members"] = [
+        {"ref": "ghost", "agent_id": "agent-nope99", "role": "member", "layer": "backend"}
+    ]
+    cfg["spec"]["edges"] = []
+    before = count_teams()
+    with pytest.raises(ValueError, match="unknown agent_id"):
+        yas.import_team(yas.dump_team_config(cfg))
+    assert count_teams() == before
+
+
+def test_import_duplicate_edge_rolls_back_and_creates_nothing(isolated_db):
+    """A duplicate edge passes structural validation but fails at insert.
+
+    The whole create must roll back — no partial team survives.
+    """
+    cfg = _sample_config()
+    cfg["metadata"]["name"] = "DupEdge"
+    # Two structurally identical edges -> UNIQUE(team, src, tgt, type) violation.
+    cfg["spec"]["edges"] = [
+        {"source": "lead", "target": "w1", "edge_type": "delegation", "weight": 1},
+        {"source": "lead", "target": "w1", "edge_type": "delegation", "weight": 1},
+    ]
+    before = count_teams()
+    with pytest.raises(ValueError, match="Failed to add edge"):
+        yas.import_team(yas.dump_team_config(cfg))
+    # Nothing committed: no team, no orphan members/edges.
+    assert count_teams() == before
+    assert get_team_by_name("DupEdge") is None
+
+
+def test_import_upsert_rollback_preserves_prior_team(isolated_db):
+    """A failing upsert must NOT destroy the pre-existing team (data-loss guard)."""
+    good = _sample_config()
+    good["metadata"]["name"] = "SurvivorTeam"
+    orig_id, _ = yas.import_team(yas.dump_team_config(good))
+    before_count = count_teams()
+
+    # Replacement is structurally valid but has a duplicate edge -> insert fails
+    # AFTER the delete + create statements run inside the transaction.
+    bad = _sample_config()
+    bad["metadata"]["name"] = "SurvivorTeam"
+    bad["spec"]["edges"] = [
+        {"source": "lead", "target": "w1", "edge_type": "delegation", "weight": 1},
+        {"source": "lead", "target": "w1", "edge_type": "delegation", "weight": 1},
+    ]
+    with pytest.raises(ValueError):
+        yas.import_team(yas.dump_team_config(bad), upsert=True)
+
+    # The prior team is untouched: same id, same membership, same count.
+    survivor = get_team_by_name("SurvivorTeam")
+    assert survivor is not None
+    assert survivor["id"] == orig_id
+    assert count_teams() == before_count
+    assert len(get_team_members(orig_id)) == 2
+    assert len(get_team_edges(orig_id)) == 1
