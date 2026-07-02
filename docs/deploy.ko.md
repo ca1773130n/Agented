@@ -112,6 +112,16 @@ GHCR_TAG=v0.10.0 just self-update
 
 ## 선택적 Postgres (`DATABASE_URL`)
 
+> [!WARNING]
+> **Postgres 지원은 실험적이며 아직 프로덕션 준비가 되지 않았습니다.** Phase 26의
+> DB-API 어댑터는 동작하는 기반이고 SQLite 기본값은 완전히 통과하지만, 백엔드 간
+> 완전한 패리티는 아직 미완성입니다(**DEFER-26-01**, PR #289로 추적). Postgres의
+> 알려진 미비점: 신규 스키마 DDL(SQLite `fts5`/`randomblob`, 순환 FK 하나),
+> 현재 PG에서 인증을 깨뜨리는 `row_factory`/`cursor.description` 호환성, 여전히
+> SQLite에서 관리자 키를 읽는 ai-accounts 사이드카, 일부 미변환 날짜/카탈로그 SQL.
+> 패리티가 완성될 때까지 **프로덕션에는 SQLite를 사용하세요** — Render 블루프린트의
+> 관리형 Postgres도 현재로서는 실험적입니다.
+
 **SQLite가 설정이 필요 없는 기본값입니다.** `DATABASE_URL`이 **설정되지 않으면** 동작은
 바이트 단위로 동일합니다 — compose 스택과 로컬 개발 흐름은 `AGENTED_DB_PATH`의 임베디드
 SQLite 데이터베이스를 사용합니다.
