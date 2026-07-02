@@ -61,4 +61,12 @@ export const authApi = {
       method: 'POST',
       body: JSON.stringify({ token, password }),
     }),
+
+  /**
+   * OIDC SSO start URL (Phase 25, 25-04). Navigating here begins the
+   * authorization-code flow; the callback establishes a session cookie and
+   * redirects back to the SPA. Only providers listed in
+   * `/health/auth-status`'s `oidc_providers` are configured/available.
+   */
+  oidcStartUrl: (provider: string) => `/api/auth/oidc/${provider}/start`,
 };

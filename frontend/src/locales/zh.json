@@ -9732,5 +9732,53 @@
       "resolved": "已处理",
       "alreadyResolved": "该请求已被处理或已超时。"
     }
+  },
+  "sharedSession": {
+    "title": "共享会话",
+    "readOnly": "只读",
+    "share": "共享会话",
+    "shareRead": "共享（只读）",
+    "shareChat": "共享（协同操作）",
+    "copyLink": "复制链接",
+    "linkCopied": "已复制链接",
+    "revoke": "撤销",
+    "revoked": "共享已撤销",
+    "expired": "此共享链接已过期或已被撤销。",
+    "connecting": "正在连接共享会话…",
+    "disconnected": "与共享会话的连接已断开。",
+    "waiting": "正在等待会话输出…",
+    "scope": "范围",
+    "attachedReadOnly": "您正在以只读方式查看此会话。"
+  },
+  "coDrive": {
+    "title": "协同操作",
+    "inputPlaceholder": "输入要发送到操作员会话的消息…",
+    "send": "发送",
+    "sending": "发送中…",
+    "waitingApproval": "正在等待操作员批准…",
+    "denied": "已被策略拦截",
+    "sent": "消息已发送",
+    "readOnlyNote": "此共享为只读 — 您无法操作会话。",
+    "drover": "已协同操作",
+    "driverLabel": "操作者"
+  },
+  "fork": {
+    "fork": "分叉",
+    "forkFromHere": "从这里分叉",
+    "forking": "正在分叉…",
+    "forked": "已分叉到新的运行",
+    "openNewRun": "打开新运行",
+    "diverge": "在不干扰此会话的情况下探索不同的路径",
+    "error": "无法分叉此对话"
+  },
+  "sso": {
+    "continueWith": "使用 {provider} 继续",
+    "signInWith": "使用 SSO 登录",
+    "orSso": "或",
+    "error": "单点登录失败，请重试。",
+    "google": "Google",
+    "github": "GitHub",
+    "okta": "Okta",
+    "microsoft": "Microsoft"
   }
 }

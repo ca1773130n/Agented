@@ -23,11 +23,13 @@ from ._harness_state import create_harness_state_tables
 from ._harness_takeaways import create_harness_takeaway_tables
 from ._misc import create_misc_tables
 from ._monitoring import create_monitoring_tables
+from ._oidc_identities import create_oidc_identity_tables
 from ._orgs import create_org_tables
 from ._plugins import create_plugin_tables
 from ._project_autonomy import create_project_autonomy_tables
 from ._repeated_request_signals import create_repeated_request_signal_tables
 from ._security import create_security_tables
+from ._session_shares import create_session_share_tables
 from ._setup import create_setup_tables
 from ._skill_sleep import create_skill_sleep_tables
 from ._skills import create_skill_tables
@@ -84,4 +86,6 @@ def create_fresh_schema(conn):
     create_extracted_facts_tables(conn)
     create_answer_eval_tables(conn)
     create_skill_sleep_tables(conn)
+    create_session_share_tables(conn)
+    create_oidc_identity_tables(conn)
     conn.commit()

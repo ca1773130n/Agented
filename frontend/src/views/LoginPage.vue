@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuth } from '../composables/useAuth';
 import { useI18n } from 'vue-i18n';
-import { healthApi } from '../services/api';
+import { healthApi, authApi } from '../services/api';
 import { setApiKey, clearApiKey } from '../services/api/client';
 
 const { t } = useI18n();
@@ -48,6 +48,31 @@ async function onSubmit() {
 const apiKey = ref('');
 const apiKeySubmitting = ref(false);
 const apiKeyError = ref<string | null>(null);
+
+// Optional OIDC SSO (25-04): render a button per configured provider returned by
+// /health/auth-status. None configured → no buttons; the API-key/login form is
+// unchanged and primary.
+const oidcProviders = ref<string[]>([]);
+
+onMounted(async () => {
+  try {
+    const status = await healthApi.authStatus();
+    oidcProviders.value = status.oidc_providers ?? [];
+  } catch {
+    oidcProviders.value = [];
+  }
+});
+
+function providerLabel(provider: string): string {
+  const key = `sso.${provider}`;
+  const label = t(key);
+  return label === key ? provider : label;
+}
+
+function startSso(provider: string) {
+  // Full navigation (not fetch) so the browser follows the IdP redirect chain.
+  window.location.href = authApi.oidcStartUrl(provider);
+}
 
 async function onApiKeySubmit() {
   const key = apiKey.value.trim();
@@ -125,6 +150,20 @@ async function onApiKeySubmit() {
           <router-link :to="{ name: 'forgot-password' }" class="login-link">{{ t('login.forgotPassword') }}</router-link>
         </p>
       </form>
+
+      <div v-if="oidcProviders.length" class="login-sso">
+        <div class="login-divider"><span>{{ t('sso.orSso') }}</span></div>
+        <button
+          v-for="provider in oidcProviders"
+          :key="provider"
+          type="button"
+          class="login-sso-btn"
+          :data-test="`sso-${provider}`"
+          @click="startSso(provider)"
+        >
+          {{ t('sso.continueWith', { provider: providerLabel(provider) }) }}
+        </button>
+      </div>
 
       <div class="login-divider"><span>{{ t('login.or') }}</span></div>
 
@@ -297,5 +336,24 @@ async function onApiKeySubmit() {
 
 .login-link:hover {
   text-decoration: underline;
+}
+
+.login-sso {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.login-sso-btn {
+  width: 100%;
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+  background: var(--surface, #1a1a1a);
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.login-sso-btn:hover {
+  background: var(--surface-hover, #222);
 }
 </style>

@@ -20,7 +20,14 @@ export const healthApi = {
 
   /** Check whether the backend requires API key authentication. Public endpoint. */
   authStatus: () =>
-    apiFetch<{ auth_required: boolean; authenticated: boolean; needs_setup?: boolean }>('/health/auth-status'),
+    apiFetch<{
+      auth_required: boolean;
+      authenticated: boolean;
+      needs_setup?: boolean;
+      signup_enabled?: boolean;
+      // Phase 25 (25-04): configured OIDC SSO providers (empty/absent → no SSO).
+      oidc_providers?: string[];
+    }>('/health/auth-status'),
 
   /** Verify an API key without storing it. Public endpoint. */
   verifyKey: (apiKey: string) =>

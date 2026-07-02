@@ -9732,5 +9732,53 @@
       "resolved": "Resolved",
       "alreadyResolved": "This request was already resolved or timed out."
     }
+  },
+  "sharedSession": {
+    "title": "Shared session",
+    "readOnly": "Read-only",
+    "share": "Share session",
+    "shareRead": "Share (read-only)",
+    "shareChat": "Share (co-drive)",
+    "copyLink": "Copy link",
+    "linkCopied": "Link copied",
+    "revoke": "Revoke",
+    "revoked": "Share revoked",
+    "expired": "This share link has expired or was revoked.",
+    "connecting": "Connecting to shared session…",
+    "disconnected": "Connection to the shared session was lost.",
+    "waiting": "Waiting for session output…",
+    "scope": "Scope",
+    "attachedReadOnly": "You are viewing this session read-only."
+  },
+  "coDrive": {
+    "title": "Co-drive",
+    "inputPlaceholder": "Type a message to the operator's session…",
+    "send": "Send",
+    "sending": "Sending…",
+    "waitingApproval": "Waiting for the operator to approve…",
+    "denied": "Blocked by policy",
+    "sent": "Message sent",
+    "readOnlyNote": "This share is read-only — you cannot drive the session.",
+    "drover": "co-drove",
+    "driverLabel": "Driven by"
+  },
+  "fork": {
+    "fork": "Fork",
+    "forkFromHere": "Fork from here",
+    "forking": "Forking…",
+    "forked": "Forked onto a new run",
+    "openNewRun": "Open new run",
+    "diverge": "Explore a divergent path without disturbing this session",
+    "error": "Could not fork this conversation"
+  },
+  "sso": {
+    "continueWith": "Continue with {provider}",
+    "signInWith": "Sign in with SSO",
+    "orSso": "or",
+    "error": "Single sign-on failed. Please try again.",
+    "google": "Google",
+    "github": "GitHub",
+    "okta": "Okta",
+    "microsoft": "Microsoft"
   }
 }

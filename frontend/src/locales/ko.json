@@ -9732,5 +9732,53 @@
       "resolved": "처리됨",
       "alreadyResolved": "이 요청은 이미 처리되었거나 시간이 초과되었습니다."
     }
+  },
+  "sharedSession": {
+    "title": "공유된 세션",
+    "readOnly": "읽기 전용",
+    "share": "세션 공유",
+    "shareRead": "공유 (읽기 전용)",
+    "shareChat": "공유 (공동 조작)",
+    "copyLink": "링크 복사",
+    "linkCopied": "링크가 복사되었습니다",
+    "revoke": "취소",
+    "revoked": "공유가 취소되었습니다",
+    "expired": "이 공유 링크가 만료되었거나 취소되었습니다.",
+    "connecting": "공유 세션에 연결하는 중…",
+    "disconnected": "공유 세션 연결이 끊어졌습니다.",
+    "waiting": "세션 출력을 기다리는 중…",
+    "scope": "범위",
+    "attachedReadOnly": "이 세션을 읽기 전용으로 보고 있습니다."
+  },
+  "coDrive": {
+    "title": "공동 조작",
+    "inputPlaceholder": "운영자 세션에 보낼 메시지를 입력하세요…",
+    "send": "보내기",
+    "sending": "보내는 중…",
+    "waitingApproval": "운영자의 승인을 기다리는 중…",
+    "denied": "정책에 의해 차단됨",
+    "sent": "메시지를 보냈습니다",
+    "readOnlyNote": "이 공유는 읽기 전용입니다 — 세션을 조작할 수 없습니다.",
+    "drover": "공동 조작함",
+    "driverLabel": "조작한 사람"
+  },
+  "fork": {
+    "fork": "분기",
+    "forkFromHere": "여기서 분기",
+    "forking": "분기하는 중…",
+    "forked": "새 실행으로 분기했습니다",
+    "openNewRun": "새 실행 열기",
+    "diverge": "이 세션을 방해하지 않고 다른 경로를 탐색합니다",
+    "error": "이 대화를 분기할 수 없습니다"
+  },
+  "sso": {
+    "continueWith": "{provider}(으)로 계속하기",
+    "signInWith": "SSO로 로그인",
+    "orSso": "또는",
+    "error": "싱글 사인온에 실패했습니다. 다시 시도해 주세요.",
+    "google": "Google",
+    "github": "GitHub",
+    "okta": "Okta",
+    "microsoft": "Microsoft"
   }
 }

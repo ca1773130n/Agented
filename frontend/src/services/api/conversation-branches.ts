@@ -40,3 +40,34 @@ export const branchApi = {
       { method: 'POST', body: JSON.stringify(data) }
     ),
 };
+
+/** Result of forking a conversation onto a separate independent run (25-03). */
+export interface ForkRunResult {
+  branch_id: string;
+  session_id: string;
+}
+
+/**
+ * Session fork API (Phase 25, 25-03). Fork a conversation/session onto a
+ * SEPARATE independent run (a new branch + a fresh seeded psess- session). The
+ * parent conversation stays immutable and the parent's running session is
+ * untouched.
+ */
+export const sessionForkApi = {
+  fork: (
+    projectId: string,
+    sessionId: string,
+    data: { conversationId: string; forkMessageIndex: number; name?: string },
+  ) =>
+    apiFetch<ForkRunResult>(
+      `/api/projects/${projectId}/sessions/${sessionId}/fork`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          conversation_id: data.conversationId,
+          fork_message_index: data.forkMessageIndex,
+          ...(data.name ? { name: data.name } : {}),
+        }),
+      },
+    ),
+};

@@ -173,8 +173,10 @@ def setup_status() -> dict[str, Any]:
 
 
 @get("/auth-status", sync_to_thread=False)
-def auth_status(request: Request) -> dict[str, bool]:
+def auth_status(request: Request) -> dict[str, Any]:
     """Tells the frontend whether auth is configured. Public."""
+    from app.services.oidc_service import OidcService
+
     has_db_keys = has_any_keys()
     env_key_set = bool(os.environ.get("AGENTED_API_KEY", ""))
     auth_configured = has_db_keys or env_key_set
@@ -183,6 +185,9 @@ def auth_status(request: Request) -> dict[str, bool]:
         "auth_required": auth_configured,
         "authenticated": _is_authenticated_request(request),
         "signup_enabled": registration_open(),
+        # Phase 25 (25-04): configured OIDC providers (empty when no env secrets)
+        # so the SPA renders only available SSO buttons. OIDC absent → unchanged.
+        "oidc_providers": OidcService.configured_providers(),
     }
 
 

@@ -35,6 +35,14 @@ export const authRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/ResetPasswordPage.vue'),
     meta: { title: 'Reset password', fullBleed: true, public: true },
   },
+  // Phase 25: live-share — a teammate attaches a shared session by URL token.
+  // Public: the scoped share token IS the credential (no login required).
+  {
+    path: '/shared/:token',
+    name: 'shared-session',
+    component: () => import('../../views/SharedSessionView.vue'),
+    meta: { title: 'Shared session', fullBleed: true, public: true },
+  },
   // API Key-Based Programmatic Access (Feature 38)
   {
     path: '/settings/api-keys',

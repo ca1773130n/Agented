@@ -30,6 +30,7 @@ from app.services.hook_conversation_service import HookConversationService
 from app.services.plugin_conversation_service import PluginConversationService
 from app.services.project_session_manager import ProjectSessionManager
 from app.services.rule_conversation_service import RuleConversationService
+from app.services.session_sharing_service import SessionSharingService
 from app.services.setup_execution_service import SetupExecutionService
 from app.services.team_generation_service import TeamGenerationService
 from app_litestar.auth import Caller
@@ -152,13 +153,78 @@ def stream_project_chat(project_id: str, request: Request) -> Stream:
     return _sse_response(generate())
 
 
+def _project_session_owner(session_id: str) -> str | None:
+    """Return ``project_sessions.created_by`` for a session, or None if unknown.
+
+    Delegates to the canonical ``get_project_session_owner`` helper. ``None``
+    means the owner is UNKNOWN (absent row / NULL column / lookup error) and the
+    gate MUST fail closed on it — a session with no recorded owner is not public.
+    ``created_by`` is added in migration 178 (25-01) and backfilled on create.
+    """
+    from app.db.session_shares import get_project_session_owner
+
+    return get_project_session_owner(session_id)
+
+
 @get(
     "/{project_id:str}/sessions/{session_id:str}/stream",
     media_type="text/event-stream",
     sync_to_thread=False,
 )
-def stream_project_session(project_id: str, session_id: str) -> Stream:
+def stream_project_session(
+    project_id: str, session_id: str, caller: Caller, request: Request
+) -> Stream:
+    """Stream a running project session (owner/token-gated — 25-01 locked #5).
+
+    SECURITY (25 BLOCKER — fail CLOSED): previously ANY authenticated caller could
+    stream ANY session, and a session with a NULL owner was streamable by anyone
+    (fail OPEN). Now a caller may stream ONLY when they are:
+
+      * an ``admin``, OR
+      * the session's recorded owner (``created_by`` == caller), OR
+      * a holder of a valid scoped share token (``?share_token=``).
+
+    A NULL/unknown owner grants NOTHING to a non-admin, non-token caller — an
+    unattributed session is treated as forbidden, not public. Every denied path
+    raises ``NotFoundException`` (a 404 leaks less than a 403).
+    """
     del project_id
+    owner = _project_session_owner(session_id)
+    user_id = getattr(caller, "user_id", None) if caller else None
+    role = getattr(caller, "role", None) if caller else None
+    authorized = role == "admin" or (owner is not None and user_id is not None and user_id == owner)
+    if not authorized:
+        share_token = request.query_params.get("share_token")
+        if not (share_token and SessionSharingService.can_attach(share_token, session_id)):
+            raise NotFoundException(detail="Session not found")
+
+    def generate():
+        for event in ProjectSessionManager.subscribe(session_id):
+            yield event
+
+    return _sse_response(generate())
+
+
+@get(
+    "/{token:str}/stream",
+    media_type="text/event-stream",
+    sync_to_thread=False,
+)
+def stream_shared_session(token: str) -> Stream:
+    """Read/chat attach to a shared session by scoped token (25-01 live-share).
+
+    A tokenless teammate enters by URL; the token is resolved IN-HANDLER (the path
+    is in the ApiKeyMiddleware bypass set). On miss/expiry/revocation → 404
+    (mirrors ``_make_conversation_stream``). On hit, join the EXISTING
+    ``ProjectSessionManager.subscribe`` fan-out — the SAME generator, NOT a second
+    broadcast path — so the teammate is just one more ``Queue`` in ``_subscribers``.
+    """
+    from app.db.session_shares import resolve_share_token
+
+    row = resolve_share_token(token)
+    if not row:
+        raise NotFoundException(detail="Shared session not found")
+    session_id = row["session_id"]
 
     def generate():
         for event in ProjectSessionManager.subscribe(session_id):
@@ -170,6 +236,11 @@ def stream_project_session(project_id: str, session_id: str) -> Stream:
 project_stream_router = Router(
     path="/api/projects",
     route_handlers=[stream_project_chat, stream_project_session],
+)
+
+shared_session_stream_router = Router(
+    path="/api/shared-sessions",
+    route_handlers=[stream_shared_session],
 )
 
 
