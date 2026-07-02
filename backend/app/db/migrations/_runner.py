@@ -34,8 +34,15 @@ def _table_exists(conn, name: str) -> bool:
     instead. On SQLite the exact original query is preserved (invariant).
     """
     if _is_pg():
+        # MUST scope to the current schema + base tables: information_schema.tables
+        # lists every schema the role can see, so an unscoped name='triggers'/'views'
+        # matches the built-in information_schema.* system VIEWS and falsely reports
+        # existence on a fresh DB (sending init_db down the legacy-replay path).
+        # `table_type='BASE TABLE'` mirrors SQLite's `type='table'` (excludes views).
         row = conn.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_name = ?",
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_name = ? AND table_schema = current_schema() "
+            "AND table_type = 'BASE TABLE'",
             (name,),
         ).fetchone()
         return row is not None
