@@ -1,0 +1,83 @@
+# Render Blueprint for Agented — one-click deploy.
+#
+# Deploy: https://render.com/deploy?repo=https://github.com/ca1773130n/Agented
+#
+# ── Build-context caveat (research pitfall #5) ────────────────────────────
+# The Agented Dockerfile REQUIRES the sibling `ai-accounts/` tree at build
+# time (backend `pyproject.toml` + frontend `package.json` reference
+# `../../ai-accounts/packages/*` path deps). Locally this is satisfied by
+# building from the PARENT directory:
+#
+#     cd .. && docker build -f Agented/Dockerfile .
+#
+# Render clones ONLY the connected repository and builds with that repo as
+# the Docker context root. For the build below to resolve `ai-accounts/`,
+# the connected repo MUST be a PARENT monorepo that contains BOTH
+# `Agented/` and `ai-accounts/` as siblings at its root. `dockerContext: .`
+# then points at that monorepo root and `dockerfilePath` reaches into
+# `Agented/Dockerfile`, mirroring the local parent-dir build.
+#
+# If you instead connect the standalone `Agented` repo (no sibling
+# `ai-accounts/` present), the Docker build WILL FAIL at the
+# `COPY ai-accounts/ ...` step. Two documented workarounds:
+#   1. Vendor `ai-accounts/` into the Agented repo (git submodule or copy)
+#      and change `dockerContext` to `.` with `dockerfilePath: Dockerfile`.
+#   2. Connect the parent monorepo (recommended) and keep the paths below.
+# This blueprint is intentionally shipped as the monorepo variant so the
+# build context matches the proven local `docker build -f Agented/Dockerfile ..`.
+# ──────────────────────────────────────────────────────────────────────────
+
+databases:
+  - name: agented-postgres
+    databaseName: agented
+    user: agented
+    plan: basic-256mb
+
+services:
+  # Backend + static frontend (the primary web service).
+  - type: web
+    name: agented-web
+    runtime: docker
+    plan: standard
+    # Context = monorepo root (parent of Agented/, sibling to ai-accounts/).
+    dockerContext: .
+    dockerfilePath: ./Agented/Dockerfile
+    healthCheckPath: /health/liveness
+    autoDeploy: false
+    envVars:
+      # Managed Postgres → DATABASE_URL. This DOGFOODS the 26-01 Postgres
+      # adapter: when DATABASE_URL is set the backend uses Postgres; unset
+      # elsewhere it stays on the zero-config SQLite default.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: agented-postgres
+          property: connectionString
+      - key: AGENTED_ENV
+        value: production
+      - key: GUNICORN_BIND
+        value: 0.0.0.0:20000
+      - key: PORT
+        value: "20000"
+      # First registrant becomes admin; close signup after onboarding.
+      - key: AGENTED_DISABLE_SIGNUP
+        value: "0"
+
+  # ai-accounts identity sidecar (private service on :20001). Reuses the
+  # same image build, overriding the command — mirrors docker-compose.yml.
+  - type: pserv
+    name: agented-sidecar
+    runtime: docker
+    plan: starter
+    dockerContext: .
+    dockerfilePath: ./Agented/Dockerfile
+    dockerCommand: python scripts/run_ai_accounts.py
+    autoDeploy: false
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: agented-postgres
+          property: connectionString
+      - key: AGENTED_ENV
+        value: production
+      - key: PORT
+        value: "20001"

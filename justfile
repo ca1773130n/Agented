@@ -247,6 +247,15 @@ docker-logs:
 docker-backup:
     docker compose exec agented-backend python scripts/backup.py
 
+# v0.10.0: self-update the running stack to the latest GHCR image. The
+# IMAGE is the self-update unit — pull the newer tag, then `up -d`
+# reconciles the running containers. No source pull / rebuild needed.
+# Override the tag with GHCR_TAG (e.g. `GHCR_TAG=v0.10.0 just self-update`).
+self-update:
+    docker compose pull
+    docker compose up -d
+    @echo "Self-update complete. Logs: just docker-logs"
+
 # v0.6.0: hit running server N times per endpoint; report p50/p95.
 profile *args:
     cd backend && uv run python scripts/profile.py {{args}}
