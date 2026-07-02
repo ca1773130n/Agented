@@ -173,6 +173,44 @@ def _bootstrap_schema_version(conn):
 
 
 # =============================================================================
+# Postgres fresh-init replay policy
+# =============================================================================
+
+# Versioned migrations (≥30) that must NOT be replayed on a fresh Postgres DB.
+# Every entry is SQLite-only in a way the _PgConnWrapper shim cannot translate,
+# AND its end-state (tables + columns) is already built by create_fresh_schema,
+# so skipping the replay leaves the PG column set complete. On SQLite _is_pg()
+# is False, so this set is never consulted — SQLite replays everything as before.
+#
+#   40  add_in_review_plan_status  — DROP+CREATE+copy rebuild to widen a CHECK
+#                                     (project_plans; same column set in fresh)
+#   41  fix_in_review_check_constraint — re-invokes the v40 project_plans rebuild
+#                                     (same rebuild; project_plans already in fresh)
+#   43  expand_mcp_schema          — unguarded try/except ALTER ADD loop over
+#                                     mcp_servers/project_mcp_servers columns (all
+#                                     already in fresh schema → would poison PG txn)
+#   71  template_history_author_diff — unguarded try/except ALTER ADD; columns
+#                                     (author, diff_text) already in fresh schema,
+#                                     so a replay only fail-poisons the PG txn
+#   72  add_execution_logs_fts     — fts5 virtual table + triggers (SQLite-only)
+#   75  trigger_cron_expression    — unguarded try/except ALTER ADD; cron_expression
+#                                     already in fresh schema (would poison PG txn)
+#   76  super_agent_dispatch       — unguarded try/except ALTERs (all 4 cols in
+#                                     fresh) + execution_logs rebuild + fts triggers
+#   91  add_sketch_collaborating_status — CHECK-widen rebuild (sketches; same cols)
+#   94  project_scoped_instances   — tables already in fresh + unguarded try/except
+#                                     ALTER (super_agent_sessions.instance_id in fresh);
+#                                     data-migration is a no-op on empty fresh tables
+#   96  app_meta_instance_id       — INSERT seed via SQLite randomblob(); create_fresh
+#                                     already creates+seeds app_meta (gen_random_uuid)
+#   97  agent_memory_tables        — memory_* tables already in fresh + fts5 vtable
+#                                     + fts sync triggers (SQLite-only)
+#   135 harness_evolution_dry_run  — CHECK-widen rebuild (harness_evolution_rounds)
+#   136 harness_skill_index        — fts5 virtual table (SQLite-only; dropped by 137)
+_PG_SKIP_MIGRATIONS = frozenset({40, 41, 43, 71, 72, 75, 76, 91, 94, 96, 97, 135, 136})
+
+
+# =============================================================================
 # Database initialization
 # =============================================================================
 
@@ -252,16 +290,28 @@ def init_db():
         # and are not safe to run on a fresh schema that already has triggers.
         #
         # Postgres: every PG init is a FRESH init (PG support is new — no legacy
-        # PG databases exist), and the versioned migrations are SQLite
+        # PG databases exist). The versioned migrations ≥30 are SQLite
         # schema-EVOLUTION steps toward exactly the state create_fresh_schema
-        # already builds. Many of them use SQLite-only table-rebuild idioms
-        # (DROP TABLE while other tables' FKs still depend on it, INTEGER
-        # AUTOINCREMENT re-creation, PRAGMA-driven column probes) that Postgres
-        # rejects. So on PG we treat create_fresh_schema as authoritative and do
-        # NOT replay them — we only record them as applied. SQLite is unchanged.
+        # already builds. MOST of them are purely ADDITIVE (CREATE TABLE IF NOT
+        # EXISTS, PRAGMA-guarded ALTER TABLE ADD COLUMN, CREATE INDEX) and those
+        # DDL idioms translate cleanly through the ``_PgConnWrapper`` shim
+        # (AUTOINCREMENT→IDENTITY, sqlite_master/PRAGMA→information_schema), so we
+        # REPLAY them on PG — that is what lands the ~31 migration-only tables
+        # (users, sessions, session_events, …) and the migration-only columns
+        # (agent_conversations.user_id, …) that create_fresh_schema alone lacks.
+        #
+        # A minority use SQLite-ONLY idioms Postgres rejects and are listed in
+        # ``_PG_SKIP_MIGRATIONS``: table-REBUILD (DROP+CREATE+copy for a CHECK/FK
+        # change), fts5 virtual tables, ``randomblob`` seeds, and additive
+        # migrations whose columns already exist in create_fresh_schema and so
+        # would only fail-and-poison the PG transaction (unguarded try/except
+        # ALTER). Their END-STATE (table + column set) is already present in
+        # create_fresh_schema (verified), so skipping their REPLAY on PG loses no
+        # table/column — only a SQLite-only CHECK/fts detail. SQLite is unchanged:
+        # ``_is_pg()`` is False there, so every migration replays exactly as before.
         pg = _is_pg()
         for version, name, func in VERSIONED_MIGRATIONS:
-            if version >= 30 and not pg:
+            if version >= 30 and not (pg and version in _PG_SKIP_MIGRATIONS):
                 func(conn)
             _record_version(conn, version, name)
         # Create tables that exist only in legacy migration code, not in fresh schema
