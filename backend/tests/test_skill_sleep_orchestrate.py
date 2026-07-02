@@ -209,7 +209,7 @@ def test_adopt_run_refuses_non_accepted(isolated_db):
     assert SkillSleepGate.adopt_run(999999)["adopted"] is False
 
 
-def test_adopt_migrations_161_162_registered():
+def test_adopt_migrations_161_162_registered(skip_on_pg):
     from app.db.migrations import VERSIONED_MIGRATIONS
 
     versions = {v for (v, _n, _f) in VERSIONED_MIGRATIONS}

@@ -173,7 +173,7 @@ def get_executions_with_tags(
         LEFT JOIN triggers t ON e.trigger_id = t.id
         LEFT JOIN execution_tag_assignments a ON e.execution_id = a.execution_id
         {filter_join}
-        GROUP BY e.execution_id
+        GROUP BY e.id, t.name
         {having_clause}
         ORDER BY e.started_at DESC
         LIMIT ? OFFSET ?

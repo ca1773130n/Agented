@@ -130,7 +130,7 @@ def get_bot_quality_stats() -> list[dict]:
                     SUM(CASE WHEN r.rating <= 2 THEN 1 ELSE 0 END) as thumbs_down
                 FROM execution_quality_ratings r
                 LEFT JOIN triggers t ON r.trigger_id = t.id
-                GROUP BY r.trigger_id
+                GROUP BY r.trigger_id, t.name
                 ORDER BY total_rated DESC
             """)
             stats = [dict(row) for row in cursor.fetchall()]

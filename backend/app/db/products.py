@@ -140,7 +140,7 @@ def get_all_products(limit: Optional[int] = None, offset: int = 0) -> List[dict]
             LEFT JOIN teams t ON p.owner_team_id = t.id
             LEFT JOIN super_agents sa ON p.owner_agent_id = sa.id
             LEFT JOIN projects pr ON p.id = pr.product_id
-            GROUP BY p.id
+            GROUP BY p.id, t.name, sa.name
             ORDER BY p.name ASC
         """
         params: list = []
@@ -171,7 +171,7 @@ def get_products_for_user(
             LEFT JOIN super_agents sa ON p.owner_agent_id = sa.id
             LEFT JOIN projects pr ON p.id = pr.product_id
             WHERE p.user_id = ?
-            GROUP BY p.id
+            GROUP BY p.id, t.name, sa.name
             ORDER BY p.name ASC
         """
         params: list = [user_id]

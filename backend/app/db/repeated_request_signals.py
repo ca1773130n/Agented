@@ -92,11 +92,11 @@ def upsert_signal(
                  first_seen_at, last_seen_at)
             VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)
             ON CONFLICT(request_hash) DO UPDATE SET
-                occurrence_count = occurrence_count + 1,
+                occurrence_count = repeated_request_signals.occurrence_count + 1,
                 last_seen_at = excluded.last_seen_at,
                 example_session_ids = excluded.example_session_ids,
                 representative_text = excluded.representative_text,
-                embedding = COALESCE(excluded.embedding, embedding)
+                embedding = COALESCE(excluded.embedding, repeated_request_signals.embedding)
             """,
             (
                 request_hash,

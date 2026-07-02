@@ -12,7 +12,7 @@ def test_migration_151_registered():
     assert "per_run_budget_limit" in names
 
 
-def test_fresh_schema_has_column():
+def test_fresh_schema_has_column(skip_on_pg):
     """Call create_fresh_schema DIRECTLY — the isolated_db fixture runs all
     migrations too, so checking the fixture DB would pass even if only the
     migration (not the fresh DDL) added the column (false positive)."""
@@ -27,7 +27,7 @@ def test_fresh_schema_has_column():
     assert "per_run_limit_usd" in cols
 
 
-def test_migration_151_alter_is_idempotent():
+def test_migration_151_alter_is_idempotent(skip_on_pg):
     import sqlite3
 
     from app.db.migrations.v07_features import _migrate_151_per_run_budget_limit

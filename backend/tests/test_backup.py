@@ -9,6 +9,11 @@ from pathlib import Path
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _skip_pg(skip_on_pg):
+    """SQLite-specific: exercises SQLite backup tooling (VACUUM INTO / WAL) — skip on PG."""
+
+
 def _seed_db(path: Path, rows: int = 5) -> None:
     conn = sqlite3.connect(str(path))
     conn.execute("CREATE TABLE IF NOT EXISTS t (id INTEGER PRIMARY KEY, name TEXT)")

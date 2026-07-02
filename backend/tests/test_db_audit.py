@@ -3,6 +3,13 @@
 import json
 import sqlite3
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _skip_pg(skip_on_pg):
+    """SQLite-specific: audits a purpose-built SQLite DB file — skip on Postgres."""
+
 
 def _seed_minimal_db(path) -> None:
     conn = sqlite3.connect(str(path))

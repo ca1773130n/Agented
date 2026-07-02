@@ -71,7 +71,7 @@ EXPECTED_TABLE_COUNT = 136
 EXPECTED_INDEX_COUNT = 184
 
 
-def test_table_count_parity():
+def test_table_count_parity(skip_on_pg):
     """Every CREATE TABLE in the schema package produces exactly one runtime table."""
     conn = _fresh_in_memory()
     count = conn.execute(
@@ -84,7 +84,7 @@ def test_table_count_parity():
     )
 
 
-def test_index_count_parity():
+def test_index_count_parity(skip_on_pg):
     """Every CREATE INDEX produces exactly one runtime index."""
     conn = _fresh_in_memory()
     count = conn.execute(
@@ -96,7 +96,7 @@ def test_index_count_parity():
     )
 
 
-def test_ddl_signature_stable():
+def test_ddl_signature_stable(skip_on_pg):
     """A SHA-256 of the canonicalized DDL catches silent schema drift.
 
     Sums the normalized SQL of every table and index, hashes the result.

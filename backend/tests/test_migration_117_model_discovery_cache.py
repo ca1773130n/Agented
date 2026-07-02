@@ -34,7 +34,7 @@ def test_indices_exist(isolated_db):
 
 def test_unique_constraint(isolated_db):
     """Unique on (backend_kind, auth_method)."""
-    import sqlite3
+    from app.db import errors
 
     with get_connection() as conn:
         conn.execute(
@@ -54,7 +54,7 @@ def test_unique_constraint(isolated_db):
                 ("codex", "api_key", "[]", "subprocess", "2026-01-01", "2026-01-08"),
             )
             conn.commit()
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return
     raise AssertionError("expected IntegrityError on duplicate (backend_kind, auth_method)")
 

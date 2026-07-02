@@ -17,7 +17,9 @@ class TestTeamMembersMigration:
     super_agent_id, then verifies migration adds the column.
     """
 
-    def test_migration_adds_super_agent_id_to_existing_table(self, tmp_path, monkeypatch):
+    def test_migration_adds_super_agent_id_to_existing_table(
+        self, skip_on_pg, tmp_path, monkeypatch
+    ):
         """Upgrade from schema without super_agent_id to schema with it."""
         db_file = str(tmp_path / "legacy.db")
         monkeypatch.setattr("app.config.DB_PATH", db_file)
@@ -137,7 +139,7 @@ class TestTeamMembersMigration:
             assert row["name"] == "SuperBot"
             assert row["super_agent_id"] == "sa-test1"
 
-    def test_migration_is_idempotent(self, tmp_path, monkeypatch):
+    def test_migration_is_idempotent(self, skip_on_pg, tmp_path, monkeypatch):
         """Running migration twice does not error (column already exists)."""
         db_file = str(tmp_path / "idempotent.db")
         monkeypatch.setattr("app.config.DB_PATH", db_file)
@@ -206,7 +208,7 @@ class TestTeamMembersMigration:
             assert "super_agent_id" in columns
             assert "agent_id" in columns
 
-    def test_existing_members_preserved_after_migration(self, tmp_path, monkeypatch):
+    def test_existing_members_preserved_after_migration(self, skip_on_pg, tmp_path, monkeypatch):
         """Existing team members retain their data after column addition."""
         db_file = str(tmp_path / "preserve.db")
         monkeypatch.setattr("app.config.DB_PATH", db_file)

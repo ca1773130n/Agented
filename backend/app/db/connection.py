@@ -107,6 +107,25 @@ _SQLITE_MASTER_EXISTS_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
+# Emulates SQLite's `sqlite_master` catalog as a Postgres subquery yielding the
+# same columns (type, name, tbl_name, sql). Substituted for the `sqlite_master`
+# token in any read shape the fast existence-check regex above doesn't cover
+# (schema-assertion enumerations: `SELECT name FROM sqlite_master WHERE
+# type='table'/'index'`, `SELECT type,name,sql ...`, `COUNT(*) ...`, `... AND
+# tbl_name='x'`, `... AND name NOT LIKE 'sqlite_%'`). The original SELECT list /
+# WHERE / ORDER BY then run unchanged. PG-path only. Indexes come from
+# `pg_indexes` (includes PK/unique-constraint-backed indexes — an exact index
+# COUNT differs from SQLite, but membership checks for a named `idx_*` hold).
+_SQLITE_MASTER_SUBQUERY = (
+    "(SELECT 'table' AS type, table_name AS name, table_name AS tbl_name, "
+    "NULL::text AS sql FROM information_schema.tables "
+    "WHERE table_schema = current_schema() AND table_type = 'BASE TABLE' "
+    "UNION ALL "
+    "SELECT 'index' AS type, indexname AS name, tablename AS tbl_name, "
+    "indexdef AS sql FROM pg_indexes WHERE schemaname = current_schema()) AS sqlite_master"
+)
+_SQLITE_MASTER_TOKEN_RE = re.compile(r"\bsqlite_master\b")
+
 
 def _translate_dialect(sql: str) -> str:
     """Rewrite the finite set of SQLite-only DDL/DML idioms to Postgres.
@@ -331,6 +350,58 @@ def _translate_sqlite_dates(sql: str) -> str:
     return sql
 
 
+def _round_transform(argstext: str) -> str:
+    args = _split_top_args(argstext)
+    # SQLite's ``ROUND(x, n)`` accepts a float first arg; Postgres has no
+    # ``round(double precision, integer)`` overload — only ``round(numeric, int)``
+    # — so ``ROUND(AVG(col), 1)`` over a REAL/double column raises. Cast the value
+    # arg to ``numeric`` to hit the two-arg overload. One-arg ``round(x)`` exists
+    # for both float and numeric, so it is left untouched.
+    if len(args) == 2:
+        return f"round(({args[0]})::numeric, {args[1]})"
+    return f"round({argstext})"
+
+
+def _group_concat_transform(argstext: str) -> str:
+    args = _split_top_args(argstext)
+    if not args:
+        return f"group_concat({argstext})"
+    first = args[0].strip()
+    distinct = ""
+    m = re.match(r"(?is)^distinct\s+(.*)$", first)
+    if m:
+        distinct = "DISTINCT "
+        first = m.group(1).strip()
+    # SQLite defaults the separator to ',' ; Postgres' string_agg requires it
+    # explicitly. Cast the value to text so a non-text column (e.g. an int id)
+    # is accepted, matching SQLite's implicit stringification.
+    sep = args[1].strip() if len(args) >= 2 else "','"
+    return f"string_agg({distinct}({first})::text, {sep})"
+
+
+def _translate_group_concat(sql: str) -> str:
+    """Rewrite SQLite ``GROUP_CONCAT(x[, sep])`` to Postgres ``string_agg`` (PG path only).
+
+    Runs on the RAW statement (before ``?``→``%s``), balanced-paren aware.
+    PG-path only, so the SQLite default is byte-for-byte unchanged.
+    """
+    if "group_concat" not in sql.lower():
+        return sql
+    return _rewrite_calls(sql, "group_concat", _group_concat_transform)
+
+
+def _translate_round(sql: str) -> str:
+    """Cast the value arg of two-arg ``ROUND`` to ``numeric`` (PG path only).
+
+    Runs on the RAW statement (before ``?``→``%s``), balanced-paren aware so a
+    nested idiom (e.g. ``ROUND(julianday(a) - julianday(b), 2)``) rewrites
+    correctly. PG-path only, so the SQLite default is byte-for-byte unchanged.
+    """
+    if "round(" not in sql.lower():
+        return sql
+    return _rewrite_calls(sql, "round", _round_transform)
+
+
 def _sqlite_value(v):
     """Coerce a psycopg-returned value to the shape SQLite would return.
 
@@ -518,26 +589,37 @@ class _PgConnWrapper:
         # Translate the dominant existence-check shape to information_schema so
         # init_db bootstrap + the 55 idempotent-migration guards work on PG.
         if "sqlite_master" in stripped:
-            m = _SQLITE_MASTER_EXISTS_RE.match(_translate_params(sql))
-            if m is None:
-                raise NotImplementedError(
-                    "Unhandled sqlite_master query on Postgres — rewrite via "
-                    f"information_schema. Offending SQL: {sql.strip()[:160]}"
+            translated = _translate_params(sql)
+            m = _SQLITE_MASTER_EXISTS_RE.match(translated)
+            if m is not None:
+                # Fast path: the dominant `... WHERE type='table' AND name=X`
+                # existence check → a direct information_schema lookup.
+                pg = (
+                    "SELECT table_name AS name FROM information_schema.tables "
+                    "WHERE table_schema = current_schema() "
+                    "AND table_type = 'BASE TABLE' AND table_name = " + m.group(1)
                 )
-            pg = (
-                "SELECT table_name AS name FROM information_schema.tables "
-                "WHERE table_schema = current_schema() "
-                "AND table_type = 'BASE TABLE' AND table_name = " + m.group(1)
-            )
+            else:
+                # General read (schema-assertion enumerations, COUNT(*), etc.):
+                # emulate the whole `sqlite_master` catalog as a subquery so the
+                # original SELECT list / WHERE / ORDER BY run unchanged on PG.
+                pg = _SQLITE_MASTER_TOKEN_RE.sub(_SQLITE_MASTER_SUBQUERY, translated, count=1)
             cur = self._conn.cursor(row_factory=_hybrid_row_factory)
             cur.execute(pg, params)
             return _PgCursor(cur, row_factory=self.row_factory)
 
-        query = _translate_dialect(_translate_params(_translate_sqlite_dates(sql)))
+        query = _translate_dialect(
+            _translate_params(
+                _translate_round(_translate_group_concat(_translate_sqlite_dates(sql)))
+            )
+        )
 
         # INSERT OR IGNORE/REPLACE → ON CONFLICT (positioned before RETURNING).
+        # lstrip first: multi-line INSERTs begin with a newline + indentation, so
+        # a bare ``query.lower().startswith`` would miss ``INSERT OR IGNORE`` and
+        # leak the SQLite-only syntax to Postgres (syntax error at "OR").
         on_conflict = ""
-        low = query.lower()
+        low = query.lstrip().lower()
         if low.startswith("insert or ignore"):
             query = re.sub(
                 r"^\s*insert\s+or\s+ignore", "INSERT", query, count=1, flags=re.IGNORECASE
@@ -582,7 +664,12 @@ class _PgConnWrapper:
     def executemany(self, sql, seq_of_params):
         cur = self._conn.cursor(row_factory=_hybrid_row_factory)
         cur.executemany(
-            _translate_dialect(_translate_params(_translate_sqlite_dates(sql))), seq_of_params
+            _translate_dialect(
+                _translate_params(
+                    _translate_round(_translate_group_concat(_translate_sqlite_dates(sql)))
+                )
+            ),
+            seq_of_params,
         )
         return _PgCursor(cur, row_factory=self.row_factory)
 

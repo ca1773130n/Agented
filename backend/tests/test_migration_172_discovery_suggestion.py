@@ -8,9 +8,9 @@ registered (the runner applies them in order, so 172 implies all prior
 versions ran).
 """
 
-import sqlite3
-
 import pytest
+
+from app.db import errors
 
 
 def test_schema_version_is_172(isolated_db):
@@ -127,7 +127,7 @@ def test_unique_project_owner_repo_constraint(isolated_db):
             ("dsug-uniq001", project_id, "acme", "widget", "https://github.com/acme/widget"),
         )
         conn.commit()
-        with pytest.raises(sqlite3.IntegrityError):
+        with pytest.raises(errors.IntegrityError):
             conn.execute(
                 "INSERT INTO discovery_suggestion "
                 "(id, project_id, candidate_owner, candidate_repo, candidate_url) "

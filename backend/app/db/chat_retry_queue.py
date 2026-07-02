@@ -40,7 +40,7 @@ def enqueue_chat_retry(
                  chat_mode, instance_id, use_cli_agent, reason, attempts)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(session_id) DO UPDATE SET
-                attempts = attempts + 1,
+                attempts = chat_retry_queue.attempts + 1,
                 reason = excluded.reason,
                 super_agent_id = excluded.super_agent_id,
                 backend = excluded.backend,

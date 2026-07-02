@@ -177,7 +177,7 @@ def get_all_teams(limit: Optional[int] = None, offset: int = 0) -> List[dict]:
             FROM teams t
             LEFT JOIN team_members tm ON t.id = tm.team_id
             LEFT JOIN agents a ON t.leader_id = a.id
-            GROUP BY t.id
+            GROUP BY t.id, a.name
             ORDER BY t.name ASC
         """
         params: list = []

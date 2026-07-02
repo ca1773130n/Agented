@@ -32,9 +32,8 @@ class TestMigration113:
 
     def test_uniqueness_enforced_on_non_null_values(self, isolated_db):
         """Two rows with the same rotated_from_token should fail to insert."""
-        import sqlite3
-
         from app.database import get_connection
+        from app.db import errors
         from app.db.sessions import _generate_token, _get_unique_session_id
         from app.db.users import create_user
 
@@ -49,7 +48,7 @@ class TestMigration113:
                 (id1, _generate_token(), uid, "2099-01-01", "shared-rotated-token"),
             )
             conn.commit()
-            with pytest.raises(sqlite3.IntegrityError):
+            with pytest.raises(errors.IntegrityError):
                 conn.execute(
                     "INSERT INTO sessions (id, token, user_id, expires_at, "
                     "rotated_from_token) VALUES (?, ?, ?, ?, ?)",

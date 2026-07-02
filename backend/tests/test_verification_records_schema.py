@@ -31,7 +31,7 @@ def test_migration_150_registered():
     assert "verification_records" in names
 
 
-def test_status_check_constraint_rejects_bad_value():
+def test_status_check_constraint_rejects_bad_value(skip_on_pg):
     import sqlite3
 
     from app.db.migrations.v07_features import _migrate_150_verification_records

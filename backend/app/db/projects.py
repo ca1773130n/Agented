@@ -239,7 +239,7 @@ def get_all_projects(limit: Optional[int] = None, offset: int = 0) -> List[dict]
             LEFT JOIN products pd ON p.product_id = pd.id
             LEFT JOIN teams t ON p.owner_team_id = t.id
             LEFT JOIN project_teams pt ON p.id = pt.project_id
-            GROUP BY p.id
+            GROUP BY p.id, pd.name, t.name
             ORDER BY p.name ASC
         """
         params: list = []

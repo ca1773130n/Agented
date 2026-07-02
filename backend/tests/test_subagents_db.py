@@ -5,14 +5,13 @@ Covers the DB+registry half of phase success criterion #1: subagents table
 membership, and that the legacy ``agents`` table is kept distinct.
 """
 
-import sqlite3
-
 import pytest
 
 from app.db import (
     VALID_FORGE_BINDING_KINDS,
     create_subagent,
     delete_subagent,
+    errors,
     get_subagent,
     list_subagents,
     update_subagent,
@@ -47,7 +46,7 @@ def test_crud_round_trip():
 
 def test_name_unique():
     create_subagent(name="dup", content="a")
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(errors.IntegrityError):
         create_subagent(name="dup", content="b")
 
 

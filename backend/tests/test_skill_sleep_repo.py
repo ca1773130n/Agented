@@ -18,7 +18,7 @@ def test_migration_160_registered():
     assert "skill_sleep" in names
 
 
-def test_fresh_schema_has_skill_sleep_table():
+def test_fresh_schema_has_skill_sleep_table(skip_on_pg):
     from app.db.schema import create_fresh_schema
 
     conn = sqlite3.connect(":memory:")
@@ -73,7 +73,7 @@ def test_finalize_stores_current_body_for_diff():
     assert row["candidate_body"] == "# new\n"
 
 
-def test_migration_164_current_body_present():
+def test_migration_164_current_body_present(skip_on_pg):
     import sqlite3
 
     from app.db.migrations import VERSIONED_MIGRATIONS
@@ -88,8 +88,10 @@ def test_migration_164_current_body_present():
 
 
 def test_status_check_rejects_bad_value():
+    from app.db import errors
+
     run_id = skill_sleep.create_run("proj-ss2", "s")
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(errors.IntegrityError):
         skill_sleep.finalize_run(run_id, status="bogus")
 
 

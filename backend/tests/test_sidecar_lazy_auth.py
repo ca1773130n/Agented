@@ -19,7 +19,14 @@ import sys
 import types
 from pathlib import Path
 
+import pytest
+
 _SRC = Path(__file__).resolve().parents[1] / "scripts" / "run_ai_accounts.py"
+
+
+@pytest.fixture(autouse=True)
+def _skip_pg(skip_on_pg):
+    """SQLite-specific: the sidecar lazy-auth reads keys from a SQLite DB file — skip on PG."""
 
 
 def _load_lazy_auth_class():

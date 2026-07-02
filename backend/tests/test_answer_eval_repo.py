@@ -1,10 +1,8 @@
 """TDD tests for answer_eval store (migration 154)."""
 
-import sqlite3
-
 import pytest
 
-from app.db import answer_eval
+from app.db import answer_eval, errors
 
 # ---------------------------------------------------------------------------
 # Migration registration
@@ -25,7 +23,7 @@ def test_migration_154_registered():
 # ---------------------------------------------------------------------------
 
 
-def test_fresh_schema_has_answer_eval_tables():
+def test_fresh_schema_has_answer_eval_tables(skip_on_pg):
     import sqlite3 as _sqlite3
 
     from app.db.schema import create_fresh_schema
@@ -167,7 +165,7 @@ def test_list_runs_project_filter():
 
 def test_record_result_rejects_bad_arm():
     run_id = answer_eval.create_run("proj-chk", judge_backend="claude")
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(errors.IntegrityError):
         answer_eval.record_result(
             run_id,
             question="Q?",
