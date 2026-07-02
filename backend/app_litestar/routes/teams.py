@@ -346,6 +346,58 @@ def manual_run(team_id: str, data: TeamRunBody, authorized: Caller) -> dict[str,
 
 
 # ---------------------------------------------------------------------------
+# YAML authoring (Phase 26 / REQ-40)
+# ---------------------------------------------------------------------------
+
+
+class ImportTeamYamlBody(Struct, kw_only=True):
+    yaml: str = ""
+    upsert: bool = False
+
+
+@post(
+    "/import-yaml",
+    dependencies={"authorized": require_role("admin")},
+    sync_to_thread=False,
+)
+def import_team_yaml(data: ImportTeamYamlBody, authorized: Caller) -> dict[str, Any]:
+    """Materialize a team from a single human-authored YAML document.
+
+    The whole document is validated before any DB write, so a malformed
+    document never leaves a partially-created team behind.
+    """
+    del authorized
+    if not (data.yaml or "").strip():
+        raise ClientException(detail="yaml body is required")
+
+    from app.services import yaml_authoring_service as yas
+
+    try:
+        team_id, status = yas.import_team(data.yaml, upsert=data.upsert)
+    except ValueError as exc:
+        raise ClientException(detail=str(exc)) from None
+
+    return {"message": f"Team {status}", "status": status, "team": get_team_detail(team_id)}
+
+
+@get(
+    "/{team_id:str}/export-yaml",
+    dependencies={"authorized": require_role("viewer", "operator", "editor", "admin")},
+    media_type="text/yaml",
+    sync_to_thread=False,
+)
+def export_team_yaml(team_id: str, authorized: Caller) -> str:
+    """Export a materialized team as a portable YAML document."""
+    del authorized
+    from app.services import yaml_authoring_service as yas
+
+    exported = yas.export_team(team_id)
+    if exported is None:
+        raise NotFoundException(detail="Team not found")
+    return exported
+
+
+# ---------------------------------------------------------------------------
 # Members
 # ---------------------------------------------------------------------------
 
@@ -651,6 +703,8 @@ teams_router = Router(
         update_topology,
         update_team_trigger,
         manual_run,
+        import_team_yaml,
+        export_team_yaml,
         list_team_members_endpoint,
         add_member_endpoint,
         update_member_endpoint,
