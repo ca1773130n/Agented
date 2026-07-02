@@ -118,15 +118,15 @@ the repo checked out.
 ## Optional Postgres (`DATABASE_URL`)
 
 > [!WARNING]
-> **Postgres support is EXPERIMENTAL and not production-ready yet.** The
-> Phase-26 DB-API adapter is a working foundation and the SQLite default is
-> fully green, but full cross-backend parity is incomplete (tracked as
-> **DEFER-26-01**, PR #289). Known gaps on Postgres: fresh-schema DDL
-> (SQLite `fts5`/`randomblob`, one cyclic FK), `row_factory`/`cursor.description`
-> compat that currently breaks auth on PG, the ai-accounts sidecar still reading
-> admin keys from SQLite, and some untranslated date/catalog SQL. **Use SQLite
-> for production** until parity lands — the Render blueprint's managed Postgres
-> is likewise experimental for now.
+> **Postgres support is EXPERIMENTAL.** The Phase-26 DB-API adapter now runs the
+> core stack on Postgres — fresh-schema build + full migration replay, CRUD,
+> auth/RBAC/sessions, date/analytics queries, and the sidecar admin-key lookup
+> are all verified against a live Postgres 16 (PR #289 / **DEFER-26-01**), and the
+> SQLite default stays byte-for-byte unchanged. Remaining caveats: full-text
+> search degrades to `ILIKE` (no `fts5` BM25 ranking), a few SQLite-only
+> maintenance/backup paths are skipped on PG, and not every code path is exercised
+> on Postgres yet. **Validate your workload before relying on it in production**;
+> SQLite remains the supported default.
 
 **SQLite is the zero-config default.** With `DATABASE_URL` **unset**, behavior
 is byte-for-byte unchanged — the compose stack and the local dev flow use the
