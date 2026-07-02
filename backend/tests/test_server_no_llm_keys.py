@@ -14,6 +14,7 @@ Three guard clauses route their env fallback through ``config.env_llm_key``:
 Default (flag unset) behavior is byte-for-byte unchanged.
 """
 
+import os
 import re
 from pathlib import Path
 
@@ -218,6 +219,114 @@ def test_stream_via_cli_flag_off_inherits_env(monkeypatch):
     monkeypatch.setattr(cs.subprocess, "Popen", _fake_popen)
     list(cs._stream_via_cli([{"role": "user", "content": "hi"}], "claude-x"))
     assert captured["env"] is None
+
+
+# --- fork path: config.scrub_env_inplace (PTY child, no real fork) ---------
+
+
+def test_scrub_env_inplace_flag_on_pops_poison(monkeypatch):
+    monkeypatch.setenv("AGENTED_SERVER_NO_LLM_KEYS", "1")
+    environ = {"ANTHROPIC_API_KEY": POISON, "CLAUDE_CONFIG_DIR": "/cfg", "PATH": "/bin"}
+    config.scrub_env_inplace(environ)
+    assert "ANTHROPIC_API_KEY" not in environ
+    # Non-inference vars (incl. the harness config dir) are untouched.
+    assert environ["CLAUDE_CONFIG_DIR"] == "/cfg"
+    assert environ["PATH"] == "/bin"
+
+
+def test_scrub_env_inplace_flag_off_is_noop(monkeypatch):
+    """Regression: flag off ⇒ mapping left byte-for-byte unchanged."""
+    environ = {"ANTHROPIC_API_KEY": POISON, "PATH": "/bin"}
+    before = dict(environ)
+    config.scrub_env_inplace(environ)
+    assert environ == before
+
+
+def test_fork_child_scrubs_real_os_environ(monkeypatch):
+    """The PTY child scrubs its inherited os.environ before execvp (no fork).
+
+    We can't fork inside the test, so exercise the exact statement the child
+    runs against the real os.environ it would inherit. monkeypatch owns both
+    vars, so the pop is restored at teardown.
+    """
+    monkeypatch.setenv("ANTHROPIC_API_KEY", POISON)
+    monkeypatch.setenv("AGENTED_SERVER_NO_LLM_KEYS", "1")
+
+    config.scrub_env_inplace(os.environ)
+    assert "ANTHROPIC_API_KEY" not in os.environ
+    # A harness override layered on AFTER the scrub still survives.
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", "/cfg")
+    assert os.environ["CLAUDE_CONFIG_DIR"] == "/cfg"
+
+
+# --- pipe path: project_session_manager._build_pipe_env --------------------
+
+
+def test_pipe_env_flag_on_strips_poison(monkeypatch):
+    from app.services.project_session_manager import _build_pipe_env
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", POISON)
+    monkeypatch.setenv("AGENTED_SERVER_NO_LLM_KEYS", "1")
+
+    env = _build_pipe_env({"CLAUDE_CONFIG_DIR": "/cfg"})
+    assert env is not None
+    assert "ANTHROPIC_API_KEY" not in env
+    assert env["CLAUDE_CONFIG_DIR"] == "/cfg"
+
+
+def test_pipe_env_flag_off_inherits_poison(monkeypatch):
+    """Regression: flag off ⇒ merged env carries os.environ byte-for-byte."""
+    from app.services.project_session_manager import _build_pipe_env
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", POISON)
+
+    env = _build_pipe_env(None)
+    assert env["ANTHROPIC_API_KEY"] == POISON
+
+
+# --- runner path: cli_agent_runner_service._build_env ----------------------
+
+
+def test_runner_build_env_flag_on_with_config_dir_strips_poison(monkeypatch):
+    from app.services.cli_agent_runner_service import _build_env
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", POISON)
+    monkeypatch.setenv("AGENTED_SERVER_NO_LLM_KEYS", "1")
+
+    env = _build_env("claude", "~/.claude-personal1")
+    assert env is not None
+    assert "ANTHROPIC_API_KEY" not in env
+    # The per-backend config override still lands.
+    assert env["CLAUDE_CONFIG_DIR"].endswith(".claude-personal1")
+
+
+def test_runner_build_env_flag_on_no_config_dir_returns_scrubbed(monkeypatch):
+    """No override needed, but flag on ⇒ scrubbed dict (not raw os.environ)."""
+    from app.services.cli_agent_runner_service import _build_env
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", POISON)
+    monkeypatch.setenv("AGENTED_SERVER_NO_LLM_KEYS", "1")
+
+    env = _build_env("claude", None)
+    assert env is not None
+    assert "ANTHROPIC_API_KEY" not in env
+
+
+def test_runner_build_env_flag_off_no_override_returns_none(monkeypatch):
+    """Regression: flag off + no config dir ⇒ None (inherit os.environ)."""
+    from app.services.cli_agent_runner_service import _build_env
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", POISON)
+    assert _build_env("claude", None) is None
+
+
+def test_runner_build_env_flag_off_with_config_dir_keeps_poison(monkeypatch):
+    """Regression: flag off ⇒ override env still inherits the env key."""
+    from app.services.cli_agent_runner_service import _build_env
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", POISON)
+    env = _build_env("claude", "~/.claude-personal1")
+    assert env["ANTHROPIC_API_KEY"] == POISON
 
 
 # --- grep-guard: no NEW unguarded raw LLM-key reads ------------------------

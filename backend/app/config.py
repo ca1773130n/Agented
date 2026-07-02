@@ -117,6 +117,25 @@ def subprocess_env(base: dict | None = None) -> dict | None:
     return {k: v for k, v in source.items() if k not in LLM_INFERENCE_KEY_ENV_VARS}
 
 
+def scrub_env_inplace(environ) -> None:
+    """Pop LLM inference keys from a mutable ``environ`` mapping in place.
+
+    The pipe path can swap to an explicit scrubbed ``env`` dict via
+    :func:`subprocess_env`, but the fork/exec (PTY) path has no such hook — the
+    forked child inherits the parent's ``os.environ`` directly and there is no
+    ``env=`` argument to interpose. Call this in the child *after* fork and
+    *before* ``execvp`` to strip every :data:`LLM_INFERENCE_KEY_ENV_VARS` entry
+    the child inherited, so a server-baked ``ANTHROPIC_API_KEY`` cannot reach it.
+
+    No-op when ``AGENTED_SERVER_NO_LLM_KEYS`` is unset — the mapping is left
+    byte-for-byte unchanged (default behavior).
+    """
+    if not server_no_llm_keys():
+        return
+    for name in LLM_INFERENCE_KEY_ENV_VARS:
+        environ.pop(name, None)
+
+
 def env_llm_key(name: str, default: str = "") -> str:
     """Read an LLM inference key from the environment, honoring the isolation flag.
 

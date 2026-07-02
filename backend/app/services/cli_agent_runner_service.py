@@ -41,6 +41,8 @@ import subprocess
 import threading
 from typing import Callable, Generator, List, Optional
 
+from .. import config
+
 logger = logging.getLogger(__name__)
 
 # Subprocess timeout — agents can run for a while; align with the existing
@@ -331,15 +333,19 @@ _CONFIG_ENV_VAR = {
 def _build_env(backend_norm: str, config_dir: Optional[str]) -> Optional[dict]:
     """Inherit os.environ + override the per-backend config var.
 
-    Returns ``None`` (Popen inherits env unchanged) when no override is
-    needed — keeps the spawn cheap and avoids surprising downstream
-    tools that read other env vars.
+    Both return paths funnel through :func:`config.subprocess_env` (4th-leak
+    guard, REQ-41): when ``AGENTED_SERVER_NO_LLM_KEYS`` is set, a server-baked
+    LLM inference key (e.g. ANTHROPIC_API_KEY) is stripped so it cannot reach
+    the harness child. Flag off ⇒ identical to before — ``None`` when no
+    override is needed (Popen inherits os.environ unchanged), else the merged
+    dict byte-for-byte.
     """
-    if not config_dir:
-        return None
     var = _CONFIG_ENV_VAR.get(backend_norm)
-    if not var:
-        return None
+    if not config_dir or not var:
+        # No per-backend override needed: pass None through the guard so the
+        # flag-on path still hands back a scrubbed env instead of letting the
+        # child inherit os.environ (with the poison key) wholesale.
+        return config.subprocess_env(None)
     expanded = os.path.expanduser(config_dir)
     env = dict(os.environ)
     env[var] = expanded
@@ -349,7 +355,7 @@ def _build_env(backend_norm: str, config_dir: Optional[str]) -> Optional[dict]:
         expanded,
         backend_norm,
     )
-    return env
+    return config.subprocess_env(env)
 
 
 def stream_via_cli_agent(
