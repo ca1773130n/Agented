@@ -38,9 +38,10 @@ Agented를 프로덕션에서 실행하는 세 가지 방법을 노력이 적은
 ### 빌드 컨텍스트 주의사항 (배포 전 필독)
 
 `Dockerfile`은 빌드 시 **형제 디렉터리 `ai-accounts/` 트리**를 필요로 합니다 —
-백엔드 `pyproject.toml`과 프런트엔드 `package.json`이 모두 `../../ai-accounts/packages/*`
-경로 의존성을 참조하기 때문입니다. 로컬에서는 상위 디렉터리에서 빌드하여 이를 충족합니다
-(`cd .. && docker build -f Agented/Dockerfile .`).
+이미지가 빌드 시 `COPY ai-accounts/ …`를 무조건 수행하기 때문입니다(백엔드
+`pyproject.toml`과 프런트엔드 `package.json` 자체는 이제 게시된 레지스트리 의존성을
+사용하지만, 이미지 빌드에는 여전히 형제 트리가 필요합니다). 로컬에서는 상위 디렉터리에서
+빌드하여 이를 충족합니다 (`cd .. && docker build -f Agented/Dockerfile .`).
 
 Render는 **연결된 저장소를 Docker 컨텍스트 루트로** 빌드하므로, `render.yaml`은
 `dockerContext: .` + `dockerfilePath: ./Agented/Dockerfile`을 사용합니다. 빌드가

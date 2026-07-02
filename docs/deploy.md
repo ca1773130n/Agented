@@ -40,9 +40,10 @@ the zero-config SQLite default (see [§Optional Postgres](#optional-postgres-dat
 ### Build-context caveat (read before deploying)
 
 The `Dockerfile` requires the **sibling `ai-accounts/` tree** at build time —
-backend `pyproject.toml` and frontend `package.json` both reference
-`../../ai-accounts/packages/*` path deps. Locally this is satisfied by building
-from the parent directory (`cd .. && docker build -f Agented/Dockerfile .`).
+it unconditionally `COPY ai-accounts/ …` (the backend `pyproject.toml` and
+frontend `package.json` themselves now use published registry deps, but the
+image build still needs the sibling tree present). Locally this is satisfied by
+building from the parent directory (`cd .. && docker build -f Agented/Dockerfile .`).
 
 Render builds with the **connected repository as the Docker context root**, so
 `render.yaml` uses `dockerContext: .` + `dockerfilePath: ./Agented/Dockerfile`.

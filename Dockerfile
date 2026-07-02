@@ -1,10 +1,10 @@
 # v0.5.13: multi-stage container image for Agented.
 #
 # Build context MUST be the PARENT directory of Agented so the
-# sibling `ai-accounts/` repo is reachable. Both backend
-# (`pyproject.toml`) and frontend (`package.json`) reference
-# `../../ai-accounts/packages/*` as path deps, which can't be
-# resolved without the sibling tree present.
+# sibling `ai-accounts/` repo is reachable — the image `COPY`s
+# `ai-accounts/` at build time. (The backend `pyproject.toml` and
+# frontend `package.json` now use published registry deps, but the
+# build still needs the sibling tree present.)
 #
 # Build invocation:
 #   cd ..

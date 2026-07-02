@@ -17,7 +17,6 @@ across instances.
 
 import json
 import logging
-import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -29,6 +28,7 @@ from app.database import (
     get_team_edges,
     get_team_members,
 )
+from app.db import errors
 from app.db.agents import get_agent
 from app.db.connection import get_connection
 from app.db.ids import _get_unique_team_id
@@ -345,7 +345,7 @@ def import_team(yaml_str: str, upsert: bool = False) -> tuple[str, str]:
                     None,
                 ),
             )
-        except sqlite3.IntegrityError as exc:
+        except errors.IntegrityError as exc:
             raise ValueError(f"Failed to create team {name!r}: {exc}") from exc
 
         member_cols = _get_team_members_columns(conn)
@@ -375,7 +375,7 @@ def import_team(yaml_str: str, upsert: bool = False) -> tuple[str, str]:
                     f"INSERT INTO team_members ({col_str}) VALUES ({placeholders})",
                     tuple(values),
                 )
-            except sqlite3.IntegrityError as exc:
+            except errors.IntegrityError as exc:
                 raise ValueError(f"Failed to add team member {ref!r}: {exc}") from exc
             ref_to_member_id[ref] = cursor.lastrowid
 
@@ -402,7 +402,7 @@ def import_team(yaml_str: str, upsert: bool = False) -> tuple[str, str]:
                         edge.get("weight", 1),
                     ),
                 )
-            except sqlite3.IntegrityError as exc:
+            except errors.IntegrityError as exc:
                 raise ValueError(
                     f"Failed to add edge {edge['source']!r} -> {edge['target']!r}: {exc}"
                 ) from exc
