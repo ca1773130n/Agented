@@ -10,6 +10,7 @@ support BOTH ``row["col"]`` and ``row[0]``, and populates ``.lastrowid`` from a
 below is byte-for-byte unchanged.
 """
 
+import datetime as _dt
 import re
 import sqlite3
 from contextlib import contextmanager
@@ -122,6 +123,25 @@ def _translate_dialect(sql: str) -> str:
     return s
 
 
+def _sqlite_value(v):
+    """Coerce a psycopg-returned value to the shape SQLite would return.
+
+    Timestamp/date columns are declared ``TIMESTAMP``/``DATE`` but SQLite has no
+    native date type — every call-site writes ``.isoformat()`` and reads
+    ``datetime.fromisoformat(...)``, so on SQLite those columns come back as
+    ISO-8601 ``str``. Postgres' native ``TIMESTAMP``/``DATE`` make psycopg return
+    ``datetime``/``date``/``time`` objects instead, which breaks the string-based
+    call-sites (e.g. ``sessions.get_session_by_token`` →
+    ``fromisoformat(datetime)`` → TypeError; ``session_shares.resolve_share_token``
+    then fails closed). Coercing back to an ISO string restores byte-for-byte
+    parity. Runs ONLY on the Postgres path (inside :class:`_Row`), so the SQLite
+    default is untouched.
+    """
+    if isinstance(v, (_dt.datetime, _dt.date, _dt.time)):
+        return v.isoformat()
+    return v
+
+
 def _hybrid_row_factory(cursor):
     """psycopg row factory yielding rows that mimic ``sqlite3.Row``.
 
@@ -144,7 +164,9 @@ class _Row:
 
     def __init__(self, cols, values):
         self._cols = cols
-        self._values = tuple(values)
+        # Coerce native PG date/time objects back to the ISO strings SQLite
+        # returns, so string-based call-sites keep working (see _sqlite_value).
+        self._values = tuple(_sqlite_value(v) for v in values)
         self._map = dict(zip(cols, self._values))
 
     def __getitem__(self, key):
@@ -154,6 +176,17 @@ class _Row:
 
     def keys(self):
         return list(self._cols)
+
+    def values(self):
+        # Not part of sqlite3.Row, but harmless on the PG-only `_Row`: some
+        # call-sites treat a fetched row as a plain mapping (`.values()`).
+        return list(self._values)
+
+    def items(self):
+        # dict-style pairs. Keyed off the name→value map (NOT __iter__, which
+        # deliberately yields VALUES to mimic sqlite3.Row). Lets call-sites like
+        # users.authenticate() do `{k: v for k, v in row.items()}` on Postgres.
+        return list(self._map.items())
 
     def __iter__(self):
         # sqlite3.Row iterates VALUES, not keys.
@@ -170,42 +203,88 @@ class _Row:
 
 
 class _PgCursor:
-    """Cursor-like wrapper exposing the sqlite3 attributes call-sites rely on."""
+    """Cursor-like wrapper exposing the sqlite3 attributes call-sites rely on.
 
-    __slots__ = ("_cur", "lastrowid")
+    Two behaviours mirror sqlite3 so raw call-sites work unchanged on Postgres:
 
-    def __init__(self, cur, lastrowid=None):
+    * ``.description`` — a sqlite3-shaped 7-tuple sequence
+      ``(name, None, None, None, None, None, None)`` per column. Call-sites read
+      ``col[0]`` for the column name (``app/db/grd_ouroboros.py`` and the
+      ``_row_to_dict``/``_dict_factory`` helpers in users/rbac/sessions).
+    * ``row_factory`` — when the connection had a sqlite-style
+      ``row_factory=fn`` set at ``execute()`` time (``fn(cursor, row) -> mapped``),
+      fetched rows are passed through it, exactly as sqlite3 applies the
+      connection's row_factory to the cursor it creates. With no factory, rows
+      are the hybrid :class:`_Row` (positional + keyed).
+    """
+
+    __slots__ = ("_cur", "lastrowid", "_row_factory")
+
+    def __init__(self, cur, lastrowid=None, row_factory=None):
         self._cur = cur
         self.lastrowid = lastrowid
+        self._row_factory = row_factory
 
     @property
     def rowcount(self):
         return self._cur.rowcount
 
+    @property
+    def description(self):
+        """sqlite3-style description: a list of 7-tuples, name in slot 0.
+
+        psycopg exposes ``Column`` objects (name via ``.name``); sqlite3 exposes
+        7-item sequences with only the name populated. Call-sites index ``[0]``
+        for the name and only care about ordering/length, so we normalise to the
+        sqlite3 shape. Returns ``None`` for statements with no result columns
+        (e.g. UPDATE/DELETE), matching both drivers.
+        """
+        desc = self._cur.description
+        if desc is None:
+            return None
+        return [(col.name, None, None, None, None, None, None) for col in desc]
+
+    def _map(self, row):
+        if row is None or self._row_factory is None:
+            return row
+        return self._row_factory(self, row)
+
     def fetchone(self):
-        return self._cur.fetchone()
+        return self._map(self._cur.fetchone())
 
     def fetchall(self):
-        return self._cur.fetchall()
+        if self._row_factory is None:
+            return self._cur.fetchall()
+        return [self._row_factory(self, r) for r in self._cur.fetchall()]
 
     def fetchmany(self, size=None):
-        return self._cur.fetchmany(size) if size is not None else self._cur.fetchmany()
+        rows = self._cur.fetchmany(size) if size is not None else self._cur.fetchmany()
+        if self._row_factory is None:
+            return rows
+        return [self._row_factory(self, r) for r in rows]
 
     def __iter__(self):
-        return iter(self._cur)
+        if self._row_factory is None:
+            return iter(self._cur)
+        return (self._row_factory(self, r) for r in self._cur)
 
 
 class _PgConnWrapper:
     """Thin DB-API shim over a psycopg-3 connection (paramstyle + Row + lastrowid).
 
     Exposes ``.execute/.commit/.rollback/.close/.cursor`` plus a ``row_factory``
-    slot (no-op — the hybrid factory is always used) so the connection is a
-    drop-in for the sqlite3 connection the call-sites expect.
+    slot that is HONORED (sqlite3-style): setting ``conn.row_factory = fn``
+    before an ``execute()`` makes that cursor's fetches return ``fn(cursor, row)``
+    — matching how sqlite3 applies the connection factory to the cursor it
+    creates. Auth/RBAC/session code relies on this (``conn.row_factory =
+    _row_to_dict`` → real ``dict`` rows). With ``row_factory`` left ``None`` the
+    fetches yield the hybrid :class:`_Row` (positional + keyed + mapping).
     """
 
     def __init__(self, conn):
         self._conn = conn
-        self.row_factory = None  # accepted for sqlite3 API compat; hybrid used
+        # sqlite3-style row factory: honored at execute() time (see _PgCursor).
+        self.row_factory = None
 
     def execute(self, sql, params=()):
         import psycopg
@@ -225,7 +304,7 @@ class _PgConnWrapper:
                 cur.execute(_PG_TABLE_INFO_SQL, (m.group(1),))
             else:
                 cur.execute("SELECT NULL")
-            return _PgCursor(cur)
+            return _PgCursor(cur, row_factory=self.row_factory)
 
         # sqlite_master is SQLite's catalog and does not exist on Postgres.
         # Translate the dominant existence-check shape to information_schema so
@@ -244,7 +323,7 @@ class _PgConnWrapper:
             )
             cur = self._conn.cursor(row_factory=_hybrid_row_factory)
             cur.execute(pg, params)
-            return _PgCursor(cur)
+            return _PgCursor(cur, row_factory=self.row_factory)
 
         query = _translate_dialect(_translate_params(sql))
 
@@ -284,18 +363,18 @@ class _PgConnWrapper:
                     cur.execute(query + on_conflict + " RETURNING id", params)
                     row = cur.fetchone()
                     lastrowid = row[0] if row is not None else None
-                    return _PgCursor(cur, lastrowid)
+                    return _PgCursor(cur, lastrowid, row_factory=self.row_factory)
             except psycopg.Error:
                 pass  # retry without RETURNING below
 
         cur = self._conn.cursor(row_factory=_hybrid_row_factory)
         cur.execute(query + on_conflict, params)
-        return _PgCursor(cur)
+        return _PgCursor(cur, row_factory=self.row_factory)
 
     def executemany(self, sql, seq_of_params):
         cur = self._conn.cursor(row_factory=_hybrid_row_factory)
         cur.executemany(_translate_dialect(_translate_params(sql)), seq_of_params)
-        return _PgCursor(cur)
+        return _PgCursor(cur, row_factory=self.row_factory)
 
     def cursor(self):
         return self._conn.cursor(row_factory=_hybrid_row_factory)

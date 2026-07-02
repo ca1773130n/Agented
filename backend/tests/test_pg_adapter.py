@@ -263,3 +263,118 @@ def test_pg_round_trip(monkeypatch):
     fetched = get_team(team_id)
     assert fetched is not None
     assert fetched["name"] == "PG Team"
+
+
+# --------------------------------------------------------------------------- #
+# Unit: _Row full-mapping methods + _PgCursor.description + honored row_factory
+# (codex #4 — auth/RBAC/session use row.items()/.values(), cursor.description,
+#  and set a sqlite-style conn.row_factory=_row_to_dict).
+# --------------------------------------------------------------------------- #
+
+
+def test_hybrid_row_coerces_pg_datetime_to_iso_string():
+    # PG returns native datetime/date for TIMESTAMP/DATE columns; SQLite returns
+    # ISO strings. _Row must coerce so `datetime.fromisoformat(row[col])` works.
+    import datetime as dt
+
+    when = dt.datetime(2026, 6, 29, 12, 34, 56, tzinfo=dt.timezone.utc)
+    row = _Row(["id", "expires_at"], ["sess-1", when])
+    assert row["expires_at"] == when.isoformat()
+    assert isinstance(row["expires_at"], str)
+    # round-trips back through fromisoformat (the sessions.py call-site)
+    assert dt.datetime.fromisoformat(row["expires_at"]) == when
+    # plain date and non-temporal values pass through appropriately
+    d = _Row(["d", "n"], [dt.date(2026, 1, 2), 7])
+    assert d["d"] == "2026-01-02" and d["n"] == 7
+
+
+def test_hybrid_row_items_and_values():
+    row = _Row(["id", "name"], ["team-1", "Alpha"])
+    # dict-style mapping methods that auth/RBAC call-sites rely on
+    assert row.values() == ["team-1", "Alpha"]
+    assert row.items() == [("id", "team-1"), ("name", "Alpha")]
+    assert row.get("name") == "Alpha"
+    assert row.get("missing", "d") == "d"
+    # authenticate()-shaped comprehension works:
+    assert {k: v for k, v in row.items() if k != "name"} == {"id": "team-1"}
+    # __iter__ still yields VALUES (sqlite3.Row semantics), NOT keys — unchanged
+    assert list(row) == ["team-1", "Alpha"]
+
+
+class _FakeCol:
+    """psycopg Column stand-in: only ``.name`` is read by the adapter."""
+
+    def __init__(self, name):
+        self.name = name
+
+
+class _FakeResultCur:
+    """Minimal psycopg-cursor stand-in returning pre-seeded rows."""
+
+    def __init__(self, cols, rows):
+        self._cols = cols
+        self._rows = list(rows)
+        self.description = [_FakeCol(c) for c in cols] if cols is not None else None
+        self.rowcount = len(self._rows)
+
+    def execute(self, sql, params=()):
+        pass
+
+    def fetchone(self):
+        return self._rows.pop(0) if self._rows else None
+
+    def fetchall(self):
+        rows, self._rows = self._rows, []
+        return rows
+
+    def __iter__(self):
+        return iter(self._rows)
+
+
+def _row_to_dict(cursor, row):
+    # exact shape of the helper in users.py / rbac.py / sessions.py
+    return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
+
+
+def test_pg_cursor_description_is_sqlite_7tuple():
+    from app.db.connection import _PgCursor
+
+    cur = _FakeResultCur(["id", "email"], [])
+    desc = _PgCursor(cur).description
+    assert [c[0] for c in desc] == ["id", "email"]  # name in slot 0
+    assert all(len(c) == 7 for c in desc)  # sqlite3 7-tuple shape
+    assert all(c[1] is None for c in desc)  # only the name is populated
+    # non-result statements (UPDATE/DELETE) → None, matching both drivers
+    assert _PgCursor(_FakeResultCur(None, [])).description is None
+
+
+def test_pg_cursor_honors_row_factory():
+    from app.db.connection import _PgCursor
+
+    seeded = _Row(["id", "email"], ["u-1", "a@b.c"])
+    cur = _FakeResultCur(["id", "email"], [seeded])
+    got = _PgCursor(cur, row_factory=_row_to_dict).fetchone()
+    assert got == {"id": "u-1", "email": "a@b.c"}
+    assert type(got) is dict  # a real dict, not a _Row
+
+
+class _FakeSelectConn:
+    def __init__(self, cols, rows):
+        self._cols, self._rows = cols, rows
+
+    def cursor(self, row_factory=None):
+        return _FakeResultCur(self._cols, self._rows)
+
+
+def test_wrapper_execute_honors_connection_row_factory():
+    # sqlite-style: set conn.row_factory=fn BEFORE execute → fetched rows mapped.
+    conn = _FakeSelectConn(["id", "email"], [_Row(["id", "email"], ["u-1", "a@b.c"])])
+    wrapper = _PgConnWrapper(conn)
+    wrapper.row_factory = _row_to_dict
+    row = wrapper.execute("SELECT id, email FROM users WHERE id = ?", ("u-1",)).fetchone()
+    assert row == {"id": "u-1", "email": "a@b.c"}
+
+    # with no factory the hybrid _Row (positional + keyed) is returned unchanged
+    conn2 = _FakeSelectConn(["id", "email"], [_Row(["id", "email"], ["u-1", "a@b.c"])])
+    r2 = _PgConnWrapper(conn2).execute("SELECT id, email FROM users", ()).fetchone()
+    assert r2["id"] == "u-1" and r2[0] == "u-1"
