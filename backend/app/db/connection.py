@@ -123,6 +123,214 @@ def _translate_dialect(sql: str) -> str:
     return s
 
 
+# --- Runtime SQLite date/time idiom → Postgres translation (PG path only) ----
+# The runtime query layer (codex #6) uses SQLite-only date builtins with no
+# Postgres analogue: datetime()/date() modifier arithmetic, strftime()
+# formatting, and julianday() day-difference math (~17 call-sites across
+# agents/execution_logs/monitoring/execution_queue/workflows and friends).
+# These are rewritten to portable Postgres expressions BEFORE `?`→`%s` param
+# translation, so strftime `%` specifiers are never confused with psycopg
+# placeholders. Runs ONLY inside _PgConnWrapper, so the SQLite path is
+# byte-for-byte unchanged. A balanced-paren scanner (not a flat regex) extracts
+# each call's arguments so nested idioms (e.g. strftime over a COALESCE/date())
+# rewrite correctly.
+
+
+def _match_paren(sql: str, open_idx: int) -> int:
+    """Index of the ``)`` matching the ``(`` at ``open_idx`` (quote/nesting aware)."""
+    depth = 0
+    in_str = False
+    for i in range(open_idx, len(sql)):
+        c = sql[i]
+        if in_str:
+            if c == "'":
+                in_str = False
+        elif c == "'":
+            in_str = True
+        elif c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                return i
+    return -1
+
+
+def _split_top_args(argstext: str) -> list:
+    """Split a call's argument text on top-level commas (nesting/quote aware)."""
+    args: list = []
+    cur: list = []
+    depth = 0
+    in_str = False
+    for c in argstext:
+        if in_str:
+            cur.append(c)
+            if c == "'":
+                in_str = False
+        elif c == "'":
+            in_str = True
+            cur.append(c)
+        elif c == "(":
+            depth += 1
+            cur.append(c)
+        elif c == ")":
+            depth -= 1
+            cur.append(c)
+        elif c == "," and depth == 0:
+            args.append("".join(cur).strip())
+            cur = []
+        else:
+            cur.append(c)
+    if cur or args:
+        args.append("".join(cur).strip())
+    return args
+
+
+def _rewrite_calls(sql: str, name: str, transform) -> str:
+    """Rewrite every ``name(...)`` call via ``transform(argstext) -> replacement``.
+
+    Balanced-paren + quote aware, so nested idioms rewrite correctly regardless
+    of what the inner expression contains. ``\\bname\\(`` never matches a longer
+    identifier (``datetime`` is not matched by the ``date`` pass since ``(`` must
+    follow ``date`` directly).
+    """
+    pat = re.compile(r"\b" + name + r"\s*\(", re.IGNORECASE)
+    out: list = []
+    pos = 0
+    while True:
+        m = pat.search(sql, pos)
+        if m is None:
+            out.append(sql[pos:])
+            return "".join(out)
+        open_idx = m.end() - 1
+        close_idx = _match_paren(sql, open_idx)
+        if close_idx < 0:
+            out.append(sql[pos:])
+            return "".join(out)
+        out.append(sql[pos : m.start()])
+        out.append(transform(sql[open_idx + 1 : close_idx]))
+        pos = close_idx + 1
+
+
+# SQLite strftime specifier → Postgres to_char field code.
+_STRFTIME_TOKENS = {
+    "Y": "YYYY",
+    "m": "MM",
+    "d": "DD",
+    "H": "HH24",
+    "M": "MI",
+    "S": "SS",
+    "j": "DDD",
+    "W": "IW",
+}
+
+
+def _strftime_to_to_char(fmt: str) -> str:
+    """Translate a SQLite strftime format to a Postgres to_char template.
+
+    Literal runs (``-``, ``T``, ``:``, the ``W`` in ``-W`` …) are double-quoted so
+    to_char does not read them as field codes. An unknown specifier raises
+    (``KeyError``) rather than silently mistranslating — fail loud, per the shim.
+    """
+    out: list = []
+    literal: list = []
+    i = 0
+    n = len(fmt)
+    while i < n:
+        c = fmt[i]
+        if c == "%" and i + 1 < n:
+            spec = fmt[i + 1]
+            i += 2
+            if spec == "%":
+                literal.append("%")
+                continue
+            if literal:
+                out.append('"' + "".join(literal) + '"')
+                literal = []
+            out.append(_STRFTIME_TOKENS[spec])
+        else:
+            literal.append(c)
+            i += 1
+    if literal:
+        out.append('"' + "".join(literal) + '"')
+    return "".join(out)
+
+
+def _unquote(tok: str) -> str:
+    tok = tok.strip()
+    if len(tok) >= 2 and tok[0] == "'" and tok[-1] == "'":
+        return tok[1:-1]
+    return tok
+
+
+def _datetime_transform(argstext: str) -> str:
+    args = _split_top_args(argstext)
+    if not args or _unquote(args[0]).lower() != "now":
+        return f"datetime({argstext})"  # non-'now' form: leave untouched
+    if len(args) == 1:
+        return "now()"
+    if len(args) == 2:
+        return f"(now() + ({args[1]})::interval)"
+    return f"datetime({argstext})"
+
+
+def _date_transform(argstext: str) -> str:
+    args = _split_top_args(argstext)
+    if len(args) == 1:
+        if _unquote(args[0]).lower() == "now":
+            return "current_date"
+        return f"({args[0]})::date"
+    if len(args) == 2 and _unquote(args[0]).lower() == "now":
+        return f"(now() + ({args[1]})::interval)::date"
+    return f"date({argstext})"  # unexpected form: leave untouched
+
+
+def _julianday_transform(argstext: str) -> str:
+    # SQLite julianday(x) is days since the Julian epoch; only DIFFERENCES are
+    # used (julianday(a) - julianday(b) → day count, sometimes * 86400 → seconds).
+    # Epoch-seconds/86400 preserves those differences exactly.
+    expr = argstext.strip()
+    if _unquote(expr).lower() == "now":
+        expr = "now()"
+    return f"(extract(epoch from ({expr})::timestamp) / 86400.0)"
+
+
+def _strftime_transform(argstext: str) -> str:
+    args = _split_top_args(argstext)
+    if len(args) != 2:
+        return f"strftime({argstext})"  # unexpected form: leave untouched
+    fmt = _unquote(args[0])
+    expr = args[1]
+    # SQLite %w = day-of-week text '0'..'6' (Sunday=0); Postgres extract(dow …)
+    # uses the same numbering — cast back to int/text to match the string result.
+    if fmt == "%w":
+        return f"(extract(dow from ({expr})::timestamp))::int::text"
+    return f"to_char(({expr})::timestamp, '{_strftime_to_to_char(fmt)}')"
+
+
+def _translate_sqlite_dates(sql: str) -> str:
+    """Rewrite SQLite-only date/time builtins to portable Postgres SQL (codex #6).
+
+    Runs on the RAW statement (before ``?``→``%s``). PG-path only.
+
+    - ``datetime('now', <mod>)``     → ``now() + (<mod>)::interval``
+    - ``date('now')`` / ``date(col)`` → ``current_date`` / ``(col)::date``
+    - ``date('now', <mod>)``          → ``(now() + (<mod>)::interval)::date``
+    - ``strftime('<fmt>', col)``      → ``to_char(col::timestamp, '<tmpl>')`` (or
+      ``extract(dow …)`` for ``%w``)
+    - ``julianday(x)``                → ``extract(epoch from x::timestamp)/86400``
+    """
+    if not ("datetime(" in sql or "date(" in sql or "strftime(" in sql or "julianday(" in sql):
+        return sql
+    sql = _rewrite_calls(sql, "datetime", _datetime_transform)
+    sql = _rewrite_calls(sql, "julianday", _julianday_transform)
+    sql = _rewrite_calls(sql, "strftime", _strftime_transform)
+    # `date` runs LAST so date('now'…) special-cases are resolved first and so
+    # any date() nested inside a rewritten strftime expression is picked up.
+    sql = _rewrite_calls(sql, "date", _date_transform)
+    return sql
+
+
 def _sqlite_value(v):
     """Coerce a psycopg-returned value to the shape SQLite would return.
 
@@ -325,7 +533,7 @@ class _PgConnWrapper:
             cur.execute(pg, params)
             return _PgCursor(cur, row_factory=self.row_factory)
 
-        query = _translate_dialect(_translate_params(sql))
+        query = _translate_dialect(_translate_params(_translate_sqlite_dates(sql)))
 
         # INSERT OR IGNORE/REPLACE → ON CONFLICT (positioned before RETURNING).
         on_conflict = ""
@@ -373,7 +581,9 @@ class _PgConnWrapper:
 
     def executemany(self, sql, seq_of_params):
         cur = self._conn.cursor(row_factory=_hybrid_row_factory)
-        cur.executemany(_translate_dialect(_translate_params(sql)), seq_of_params)
+        cur.executemany(
+            _translate_dialect(_translate_params(_translate_sqlite_dates(sql))), seq_of_params
+        )
         return _PgCursor(cur, row_factory=self.row_factory)
 
     def cursor(self):

@@ -8,7 +8,7 @@ import json
 import logging
 from typing import List, Optional
 
-from .connection import get_connection
+from .connection import _is_pg, get_connection
 
 logger = logging.getLogger(__name__)
 
@@ -27,13 +27,16 @@ def create_health_alert(
     """
     details_json = json.dumps(details) if details else None
 
+    # created_at is a TEXT column (TEXT DEFAULT (datetime('now'))); on Postgres it
+    # must be cast to timestamptz to compare against the translated date cutoff.
+    created_at = "created_at::timestamptz" if _is_pg() else "created_at"
     with get_connection() as conn:
         # Deduplication: check for same alert_type+trigger_id within 30 minutes
         cursor = conn.execute(
-            """
+            f"""
             SELECT id FROM health_alerts
             WHERE alert_type = ? AND trigger_id = ?
-              AND created_at > datetime('now', '-30 minutes')
+              AND {created_at} > datetime('now', '-30 minutes')
             LIMIT 1
             """,
             (alert_type, trigger_id),
@@ -87,9 +90,10 @@ def acknowledge_alert(alert_id: int) -> bool:
 
 def delete_old_alerts(days: int = 7) -> int:
     """Delete alerts older than specified days. Returns count deleted."""
+    created_at = "created_at::timestamptz" if _is_pg() else "created_at"
     with get_connection() as conn:
         cursor = conn.execute(
-            "DELETE FROM health_alerts WHERE created_at < datetime('now', ?)",
+            f"DELETE FROM health_alerts WHERE {created_at} < datetime('now', ?)",
             (f"-{days} days",),
         )
         conn.commit()

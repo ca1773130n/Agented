@@ -15,12 +15,14 @@ import pytest
 import app.config as config
 from app.db import errors
 from app.db.connection import (
+    _SQLITE_MASTER_EXISTS_RE,
     _is_pg,
     _PgConnWrapper,
     _Row,
-    _SQLITE_MASTER_EXISTS_RE,
+    _strftime_to_to_char,
     _translate_dialect,
     _translate_params,
+    _translate_sqlite_dates,
 )
 
 _PG_URL = os.environ.get("DATABASE_URL", "")
@@ -52,6 +54,92 @@ def test_dialect_autoincrement_to_identity():
 
 def test_dialect_datetime_now():
     assert _translate_dialect("SELECT datetime('now')") == "SELECT now()"
+
+
+# --------------------------------------------------------------------------- #
+# Unit: SQLite date/time idiom → Postgres translation (codex #6, no DB needed)
+# --------------------------------------------------------------------------- #
+
+
+def test_dates_datetime_now_modifier_literal():
+    # datetime('now', '-N unit') → now() + (interval)  (health_alerts.py)
+    out = _translate_sqlite_dates("... created_at > datetime('now', '-30 minutes')")
+    assert out == "... created_at > (now() + ('-30 minutes')::interval)"
+
+
+def test_dates_datetime_now_modifier_param():
+    # datetime('now', ?) — the dominant shape (agents/execution_logs/monitoring/workflows)
+    out = _translate_sqlite_dates("WHERE started_at < datetime('now', ?)")
+    assert out == "WHERE started_at < (now() + (?)::interval)"
+
+
+def test_dates_datetime_now_modifier_concat():
+    # datetime('now', ? || ' hours') — execution_queue; ? || ' seconds' — system_errors
+    assert _translate_sqlite_dates("x < datetime('now', ? || ' hours')") == (
+        "x < (now() + (? || ' hours')::interval)"
+    )
+    assert _translate_sqlite_dates("t >= datetime('now', ? || ' seconds')") == (
+        "t >= (now() + (? || ' seconds')::interval)"
+    )
+
+
+def test_dates_bare_datetime_now():
+    # Bare datetime('now') → now() (same result as _translate_dialect's regex).
+    assert _translate_sqlite_dates("SELECT datetime('now')") == "SELECT now()"
+
+
+def test_dates_date_now_and_column_and_modifier():
+    assert (
+        _translate_sqlite_dates("WHERE date(recorded_at) >= ?") == "WHERE (recorded_at)::date >= ?"
+    )
+    assert _translate_sqlite_dates("date(el.started_at) = date('now')") == (
+        "(el.started_at)::date = current_date"
+    )
+    assert _translate_sqlite_dates("date(created_at) >= date('now', ? || ' days')") == (
+        "(created_at)::date >= (now() + (? || ' days')::interval)::date"
+    )
+
+
+def test_dates_julianday_difference():
+    # workflows.py / analytics.py duration math: diff stays a day-count, so the
+    # surrounding `* 86400.0` still yields seconds exactly as on SQLite.
+    out = _translate_sqlite_dates("(julianday(ne.ended_at) - julianday(ne.started_at)) * 86400.0")
+    assert out == (
+        "((extract(epoch from (ne.ended_at)::timestamp) / 86400.0)"
+        " - (extract(epoch from (ne.started_at)::timestamp) / 86400.0)) * 86400.0"
+    )
+    # julianday('now') resolves to now()
+    assert "extract(epoch from (now())::timestamp)" in _translate_sqlite_dates(
+        "julianday('now') - julianday(created_at)"
+    )
+
+
+def test_dates_strftime_formats():
+    # %Y-%m-%d bucketing (workflows/analytics) — literals double-quoted for to_char
+    assert _translate_sqlite_dates("SELECT strftime('%Y-%m-%d', we.started_at)") == (
+        'SELECT to_char((we.started_at)::timestamp, \'YYYY"-"MM"-"DD\')'
+    )
+    # %Y-W%W (monitoring week bucket) — the literal 'W' after '-' must be quoted
+    assert _strftime_to_to_char("%Y-W%W") == 'YYYY"-W"IW'
+    # standalone %H (hour) → HH24 (returns '00'..'23', int-parseable like SQLite)
+    assert _translate_sqlite_dates("strftime('%H', started_at)") == (
+        "to_char((started_at)::timestamp, 'HH24')"
+    )
+    # %w (day-of-week) has no to_char analogue → extract(dow) as text '0'..'6'
+    assert _translate_sqlite_dates("strftime('%w', started_at)") == (
+        "(extract(dow from (started_at)::timestamp))::int::text"
+    )
+
+
+def test_dates_noop_when_no_idioms():
+    sql = "SELECT id, name FROM teams WHERE id = ? ORDER BY created_at DESC"
+    assert _translate_sqlite_dates(sql) == sql
+
+
+def test_dates_do_not_touch_column_named_date_or_datetime_word():
+    # `... as date` (pr_reviews) and the DATE type keyword must be untouched.
+    assert _translate_sqlite_dates("SELECT x AS date FROM t") == "SELECT x AS date FROM t"
+    assert _translate_sqlite_dates("col DATE NOT NULL") == "col DATE NOT NULL"
 
 
 def test_sqlite_master_exists_translation_regex():
@@ -263,6 +351,68 @@ def test_pg_round_trip(monkeypatch):
     fetched = get_team(team_id)
     assert fetched is not None
     assert fetched["name"] == "PG Team"
+
+
+@_pg_only
+def test_pg_live_date_idioms_execute(monkeypatch):
+    """End-to-end: every translated SQLite date idiom executes on real Postgres.
+
+    Drives the raw SQLite SQL through _PgConnWrapper against a TEMP table, proving
+    the translations are valid PG and semantically correct (codex #6).
+    """
+    import datetime as dt
+
+    import psycopg
+
+    monkeypatch.setattr(config, "DATABASE_URL", _PG_URL)
+    conn = _PgConnWrapper(psycopg.connect(_PG_URL, autocommit=True))
+    try:
+        conn.execute(
+            "CREATE TEMP TABLE _probe "
+            "(id INTEGER PRIMARY KEY AUTOINCREMENT, started_at TIMESTAMP, ended_at TIMESTAMP)"
+        )
+        now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None, microsecond=0)
+        started = (now - dt.timedelta(hours=1)).isoformat()
+        ended = now.isoformat()
+        conn.execute("INSERT INTO _probe (started_at, ended_at) VALUES (?, ?)", (started, ended))
+
+        # datetime('now', ?) modifier arithmetic (agents/execution_logs/monitoring/workflows)
+        c = conn.execute(
+            "SELECT COUNT(*) FROM _probe WHERE started_at >= datetime('now', ?)", ("-7 days",)
+        )
+        assert c.fetchone()[0] == 1
+        # datetime('now', ? || ' hours') concat modifier (execution_queue)
+        c = conn.execute(
+            "SELECT COUNT(*) FROM _probe WHERE started_at < datetime('now', ? || ' hours')", ("1",)
+        )
+        assert c.fetchone()[0] == 1
+        # date(col) + date('now', '-N days') (cross_team_insights/pr_reviews)
+        c = conn.execute(
+            "SELECT COUNT(*) FROM _probe WHERE date(started_at) >= date('now', '-7 days')"
+        )
+        assert c.fetchone()[0] == 1
+        # strftime formatting (workflows/monitoring/analytics)
+        assert (
+            len(conn.execute("SELECT strftime('%Y-%m-%d', started_at) FROM _probe").fetchone()[0])
+            == 10
+        )
+        assert conn.execute("SELECT strftime('%H', started_at) FROM _probe").fetchone()[0].isdigit()
+        assert conn.execute("SELECT strftime('%w', started_at) FROM _probe").fetchone()[0] in {
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+        }
+        # julianday() day-difference math → seconds (workflows/analytics duration)
+        secs = conn.execute(
+            "SELECT (julianday(ended_at) - julianday(started_at)) * 86400.0 FROM _probe"
+        ).fetchone()[0]
+        assert abs(float(secs) - 3600.0) < 1.0
+    finally:
+        conn.close()
 
 
 # --------------------------------------------------------------------------- #
