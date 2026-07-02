@@ -8,15 +8,19 @@ Agented를 프로덕션에서 실행하는 세 가지 방법을 노력이 적은
 
 | 경로 | 노력 | 사용 시점 |
 |---|---|---|
-| [1. 원클릭 Render](#1-원클릭-render) | 클릭 | 가장 빠른 호스팅 시작; 관리형 Postgres |
+| [1. Render Blueprint](#1-render-blueprint) | Blueprint | 호스팅; 관리형 Postgres; 상위 모노레포 체크아웃 필요 |
 | [2. 단일 설치 스크립트](#2-단일-설치-스크립트) | 명령 한 줄 | Docker가 있는 자체 호스트/VM |
 | [3. 자체 업데이트](#3-자체-업데이트) | 명령 한 줄 | 기존 설치 업그레이드 |
 
 ---
 
-## 1. 원클릭 Render
+## 1. Render Blueprint
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/ca1773130n/Agented)
+> **독립형 저장소에서는 원클릭이 아닙니다.** Render는 연결된 저장소만 클론하여 Docker
+> 빌드 컨텍스트로 사용합니다. 이미지는 형제 디렉터리 `ai-accounts/` 트리(아래 주의사항
+> 참조)를 필요로 하므로, `Agented/`와 `ai-accounts/`를 모두 포함하는 **상위 모노레포**를
+> 연결하고 이 `render.yaml`의 사본을 그 루트에 두어야 합니다. 독립형 `Agented` 저장소를
+> 연결하면 빌드는 `COPY ai-accounts/ …` 단계에서 실패합니다.
 
 이 저장소는 다음을 선언하는 [`render.yaml`](../render.yaml) Blueprint를 제공합니다:
 

@@ -10,7 +10,7 @@ auditability built in.
 
 [Architecture](docs/self-improving-harness-architecture.md) · [Tutorial](docs/self-improving-harness-tutorial.md) · [Security](docs/SECURITY.md) · [Deploy](docs/deploy.md)
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/ca1773130n/Agented)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](docs/deploy.md#1-render-blueprint)
 
 **Docs in your language:** [한국어](docs/ko/self-improving-harness-architecture.md) · [日本語](docs/ja/self-improving-harness-architecture.md) · [中文](docs/zh/self-improving-harness-architecture.md)
 
@@ -50,9 +50,13 @@ curl -fsSL https://raw.githubusercontent.com/ca1773130n/Agented/main/install.sh 
 just self-update
 ```
 
-Or click **Deploy to Render** above for a one-click blueprint (web + sidecar +
-managed Postgres wired to `DATABASE_URL`). Full guide, including the optional
-Postgres story, in **[docs/deploy.md](docs/deploy.md)** ([한국어](docs/deploy.ko.md)).
+The **Deploy to Render** badge above opens the Blueprint guide (web + sidecar +
+managed Postgres wired to `DATABASE_URL`). It is **not** one-click from this
+standalone repo: the image build needs the sibling `ai-accounts/` tree, so
+Render must connect a **parent monorepo** holding both `Agented/` and
+`ai-accounts/` (with `render.yaml` at its root). Full setup, including the
+optional Postgres story, in **[docs/deploy.md](docs/deploy.md)**
+([한국어](docs/deploy.ko.md)).
 
 > **First run:** the **first** account to register becomes admin. Set
 > `AGENTED_DISABLE_SIGNUP=1` once you've registered — always before exposing the
@@ -125,7 +129,7 @@ cd frontend && npm run test:run  # frontend suite
 | Self-improving harness — tutorial | [docs/self-improving-harness-tutorial.md](docs/self-improving-harness-tutorial.md) |
 | Harness-1 integration (research) | [docs/harness-1-integration.md](docs/harness-1-integration.md) |
 | Security | [docs/SECURITY.md](docs/SECURITY.md) |
-| Deploy — one-click / install / self-update | [docs/deploy.md](docs/deploy.md) · [한국어](docs/deploy.ko.md) |
+| Deploy — Render Blueprint / install / self-update | [docs/deploy.md](docs/deploy.md) · [한국어](docs/deploy.ko.md) |
 | Deploy — runbook · backup · secrets | [runbook](docs/deploy/RUNBOOK.md) · [backup](docs/deploy/BACKUP.md) · [secrets](docs/deploy/SECRETS.md) |
 | ai-accounts sidecar | [docs/ai-accounts/ARCHITECTURE.md](docs/ai-accounts/ARCHITECTURE.md) |
 | Internationalization | [docs/i18n.md](docs/i18n.md) |

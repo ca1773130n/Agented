@@ -9,15 +9,20 @@ update.
 
 | Path | Effort | When |
 |---|---|---|
-| [1. One-click Render](#1-one-click-render) | click | fastest hosted start; managed Postgres |
+| [1. Render Blueprint](#1-render-blueprint) | Blueprint | hosted; managed Postgres; needs a parent-monorepo checkout |
 | [2. Single-install script](#2-single-install-script) | one command | your own host / VM with Docker |
 | [3. Self-update](#3-self-update) | one command | upgrade an existing install |
 
 ---
 
-## 1. One-click Render
+## 1. Render Blueprint
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/ca1773130n/Agented)
+> **Not one-click from the standalone repo.** Render clones only the connected
+> repository and uses it as the Docker build context. Because the image needs
+> the sibling `ai-accounts/` tree (see the caveat below), you must connect a
+> **parent monorepo** that contains both `Agented/` and `ai-accounts/`, with a
+> copy of this `render.yaml` at its root. If you connect the standalone
+> `Agented` repo, the build fails at the `COPY ai-accounts/ …` step.
 
 The repo ships a [`render.yaml`](../render.yaml) Blueprint that declares:
 
