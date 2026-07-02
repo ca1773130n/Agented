@@ -25,6 +25,7 @@ from typing import Any, Generator, List, Optional, Union
 
 import yaml
 
+from app import config
 from app.config import env_llm_key
 
 logger = logging.getLogger(__name__)
@@ -856,6 +857,11 @@ def _stream_via_cli(
             stderr=subprocess.PIPE,
             bufsize=0,
             cwd=cwd,
+            # 4th-leak guard (REQ-41): when AGENTED_SERVER_NO_LLM_KEYS is on,
+            # strip server-baked LLM inference keys so a poison ANTHROPIC_API_KEY
+            # cannot back inference through the CLI child. Flag off ⇒ None ⇒
+            # inherit os.environ unchanged.
+            env=config.subprocess_env(),
             # Own process group so a timeout/disconnect can kill tool
             # grandchildren too (03 H1).
             start_new_session=True,
@@ -998,6 +1004,9 @@ def _stream_via_opencode_cli(
             stderr=subprocess.PIPE,
             bufsize=0,
             cwd=cwd,
+            # 4th-leak guard (REQ-41): strip server-baked LLM inference keys when
+            # AGENTED_SERVER_NO_LLM_KEYS is on (flag off ⇒ None ⇒ inherit env).
+            env=config.subprocess_env(),
             start_new_session=True,  # killable process group (03 H1)
         )
 

@@ -106,10 +106,17 @@ def embed_and_store(message_id: str, content: str) -> str | None:
     emb_id = generate_embedding_id()
     blob = serialize_embedding(embedding)
     with get_connection() as conn:
+        # Explicit, portable upsert on the (message_id, model) UNIQUE constraint
+        # (SQLite ≥3.24 and Postgres) — the connection shim refuses to translate
+        # INSERT OR REPLACE. Re-embedding a message overwrites its row in place.
         conn.execute(
-            """INSERT OR REPLACE INTO memory_embeddings
+            """INSERT INTO memory_embeddings
                (id, message_id, embedding, model, dimension)
-               VALUES (?, ?, ?, 'all-MiniLM-L6-v2', 384)""",
+               VALUES (?, ?, ?, 'all-MiniLM-L6-v2', 384)
+               ON CONFLICT (message_id, model) DO UPDATE SET
+                   id = excluded.id,
+                   embedding = excluded.embedding,
+                   dimension = excluded.dimension""",
             (emb_id, message_id, blob),
         )
         conn.commit()

@@ -128,6 +128,87 @@ def test_pg_conn_wrapper_exists():
 
 
 # --------------------------------------------------------------------------- #
+# Unit: PRAGMA table_info → real Postgres introspection (26-01 crit)
+# --------------------------------------------------------------------------- #
+
+
+class _FakeCur:
+    def __init__(self):
+        self.calls = []
+
+    def execute(self, sql, params=()):
+        self.calls.append((sql, params))
+
+    def fetchone(self):
+        return None
+
+
+class _FakeConn:
+    """Minimal psycopg-conn stand-in: records the SQL the wrapper issues."""
+
+    def __init__(self):
+        self.cur = _FakeCur()
+
+    def cursor(self, row_factory=None):
+        return self.cur
+
+
+def test_pragma_table_info_regex_extracts_table_name():
+    from app.db.connection import _PRAGMA_TABLE_INFO_RE
+
+    for sql, name in [
+        ("PRAGMA table_info(bots)", "bots"),
+        ("  pragma table_info( team_members )", "team_members"),
+        ('PRAGMA table_info("projects")', "projects"),
+        ("PRAGMA table_info(execution_logs);", "execution_logs"),
+    ]:
+        m = _PRAGMA_TABLE_INFO_RE.match(sql)
+        assert m is not None and m.group(1) == name
+    # a non-table_info PRAGMA must NOT match (stays a no-op)
+    assert _PRAGMA_TABLE_INFO_RE.match("PRAGMA foreign_keys = ON") is None
+
+
+def test_pg_table_info_sql_has_sqlite_shape():
+    from app.db.connection import _PG_TABLE_INFO_SQL
+
+    # rows must be shaped like SQLite's (cid,name,type,notnull,dflt_value,pk)
+    for col in ("cid", "name", "type", "notnull", "dflt_value", "pk"):
+        assert col in _PG_TABLE_INFO_SQL
+    assert "information_schema.columns" in _PG_TABLE_INFO_SQL
+
+
+def test_pragma_table_info_routes_to_introspection():
+    conn = _FakeConn()
+    wrapper = _PgConnWrapper(conn)
+    wrapper.execute("PRAGMA table_info(team_members)")
+    sql, params = conn.cur.calls[-1]
+    assert "information_schema.columns" in sql
+    assert params == ("team_members",)
+
+
+def test_pragma_other_is_noop_select_null():
+    conn = _FakeConn()
+    wrapper = _PgConnWrapper(conn)
+    wrapper.execute("PRAGMA foreign_keys = ON")
+    sql, _params = conn.cur.calls[-1]
+    assert sql == "SELECT NULL"
+
+
+# --------------------------------------------------------------------------- #
+# Unit: INSERT OR REPLACE fails loudly (no silent overwrite→UniqueViolation)
+# --------------------------------------------------------------------------- #
+
+
+def test_insert_or_replace_raises_not_implemented():
+    conn = _FakeConn()
+    wrapper = _PgConnWrapper(conn)
+    with pytest.raises(NotImplementedError):
+        wrapper.execute("INSERT OR REPLACE INTO t (a) VALUES (?)", (1,))
+    # it must fail BEFORE issuing any SQL to the cursor
+    assert conn.cur.calls == []
+
+
+# --------------------------------------------------------------------------- #
 # Postgres-only smoke + round-trip (skipped without DATABASE_URL)
 # --------------------------------------------------------------------------- #
 

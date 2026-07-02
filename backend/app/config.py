@@ -70,10 +70,51 @@ AUTORESEARCH_KERNEL_ENABLED = os.environ.get("AUTORESEARCH_KERNEL_ENABLED", "0")
 
 _TRUTHY_FLAG_VALUES = {"1", "true", "yes", "on"}
 
+# Env var names that carry raw LLM *inference* credentials. When the isolation
+# flag is on, these are stripped from any subprocess environment that would
+# otherwise be inherited from the server's own os.environ — so a key baked into
+# the deploy cannot back user inference via a harness/CLI child. Per-request
+# credentials layered on top by callers (sourced from the ai-accounts sidecar)
+# are unaffected. Sidecar/self-auth and sandbox-provider keys (AI_ACCOUNTS_API_KEY,
+# AGENTED_API_KEY, E2B_API_KEY) are intentionally NOT here — they are not
+# inference keys and are legitimately read from the server env.
+LLM_INFERENCE_KEY_ENV_VARS = (
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+    "OPENROUTER_API_KEY",
+    "MISTRAL_API_KEY",
+    "GROQ_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "XAI_API_KEY",
+    "COHERE_API_KEY",
+    "PERPLEXITY_API_KEY",
+)
+
 
 def server_no_llm_keys() -> bool:
     """Return True when the server must ignore raw LLM keys from its own env."""
     return os.environ.get("AGENTED_SERVER_NO_LLM_KEYS", "").strip().lower() in _TRUTHY_FLAG_VALUES
+
+
+def subprocess_env(base: dict | None = None) -> dict | None:
+    """Environment dict for a harness/CLI subprocess, honoring key isolation.
+
+    This is the 4th-leak guard (REQ-41): the three ``env_llm_key`` sites only
+    cover the in-process paths, but a subprocess that inherits the full
+    ``os.environ`` re-exposes a server-baked ``ANTHROPIC_API_KEY`` to the child.
+
+    - Flag OFF → return ``base`` unchanged (default ``None`` ⇒ the child
+      inherits ``os.environ`` exactly as before, byte-for-byte).
+    - Flag ON → a concrete copy of ``base`` (or ``os.environ`` when ``base`` is
+      ``None``) with every :data:`LLM_INFERENCE_KEY_ENV_VARS` entry removed, so
+      no server-process inference key reaches the subprocess.
+    """
+    if not server_no_llm_keys():
+        return base
+    source = base if base is not None else os.environ
+    return {k: v for k, v in source.items() if k not in LLM_INFERENCE_KEY_ENV_VARS}
 
 
 def env_llm_key(name: str, default: str = "") -> str:

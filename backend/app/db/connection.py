@@ -64,6 +64,32 @@ def _translate_params(sql: str) -> str:
 _AUTOINC_RE = re.compile(r"INTEGER\s+PRIMARY\s+KEY\s+AUTOINCREMENT", re.IGNORECASE)
 _DATETIME_NOW_RE = re.compile(r"datetime\(\s*'now'\s*\)", re.IGNORECASE)
 
+# `PRAGMA table_info(<table>)` — the only PRAGMA whose result set call-sites read
+# (positionally as row[1] / by name as row["name"]). Captures the table name so
+# it can be introspected via information_schema on Postgres.
+_PRAGMA_TABLE_INFO_RE = re.compile(
+    r"^\s*pragma\s+table_info\s*\(\s*[\"']?([A-Za-z_][A-Za-z0-9_]*)[\"']?\s*\)\s*;?\s*$",
+    re.IGNORECASE,
+)
+
+# Postgres introspection that returns rows shaped EXACTLY like SQLite's
+# `PRAGMA table_info` output: (cid, name, type, notnull, dflt_value, pk). So
+# consumers that read row[1]/row["name"] (existing-column guards), row[2]
+# (type), or row[3] (notnull flag) keep working, and idempotent ALTERs see the
+# real column set instead of an empty one (which would double-add columns).
+# `%s` is psycopg's native placeholder — this SQL bypasses `?`→`%s` translation.
+_PG_TABLE_INFO_SQL = """
+    SELECT (ordinal_position - 1)                          AS cid,
+           column_name                                     AS name,
+           data_type                                       AS type,
+           CASE WHEN is_nullable = 'NO' THEN 1 ELSE 0 END  AS notnull,
+           column_default                                  AS dflt_value,
+           0                                               AS pk
+    FROM information_schema.columns
+    WHERE table_name = %s AND table_schema = current_schema()
+    ORDER BY ordinal_position
+"""
+
 
 def _translate_dialect(sql: str) -> str:
     """Rewrite the finite set of SQLite-only DDL/DML idioms to Postgres.
@@ -168,10 +194,19 @@ class _PgConnWrapper:
 
         stripped = sql.lstrip().lower()
 
-        # PRAGMA is a SQLite-only statement — no-op on Postgres.
+        # PRAGMA is SQLite-only. `table_info` must return REAL introspection rows
+        # (SQLite shape: cid,name,type,notnull,dflt_value,pk) — call-sites read
+        # row[1]/row["name"] to guard idempotent ALTERs, so an empty/NULL row
+        # would both crash (IndexError/KeyError) and, if it didn't, double-add
+        # existing columns. Every other PRAGMA (foreign_keys, busy_timeout,
+        # journal_mode, synchronous, …) is meaningless on PG → harmless no-op.
         if stripped.startswith("pragma"):
             cur = self._conn.cursor(row_factory=_hybrid_row_factory)
-            cur.execute("SELECT NULL")
+            m = _PRAGMA_TABLE_INFO_RE.match(sql)
+            if m:
+                cur.execute(_PG_TABLE_INFO_SQL, (m.group(1),))
+            else:
+                cur.execute("SELECT NULL")
             return _PgCursor(cur)
 
         query = _translate_dialect(_translate_params(sql))
@@ -185,10 +220,18 @@ class _PgConnWrapper:
             )
             on_conflict = " ON CONFLICT DO NOTHING"
         elif low.startswith("insert or replace"):
-            # No universal conflict target is known here; fall back to a plain
-            # INSERT (call-site sweep owns exact ON CONFLICT … DO UPDATE targets).
-            query = re.sub(
-                r"^\s*insert\s+or\s+replace", "INSERT", query, count=1, flags=re.IGNORECASE
+            # `INSERT OR REPLACE` has no universal Postgres translation — the
+            # conflict target is unknowable from the statement text, and a plain
+            # INSERT silently degrades overwrite→UniqueViolation. So FAIL LOUDLY:
+            # every call-site must be swept to an explicit, portable
+            # `INSERT … ON CONFLICT (<cols>) DO UPDATE …` (works on both SQLite
+            # ≥3.24 and Postgres). See app/db/grd.py and
+            # app/services/embedding_service.py for the swept forms.
+            raise NotImplementedError(
+                "INSERT OR REPLACE cannot be translated to Postgres (no known "
+                "conflict target). Rewrite the call-site as an explicit "
+                "INSERT ... ON CONFLICT (<cols>) DO UPDATE. Offending SQL: "
+                f"{sql.strip()[:160]}"
             )
 
         is_insert = query.lstrip().lower().startswith("insert")

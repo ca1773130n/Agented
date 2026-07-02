@@ -133,6 +133,93 @@ def test_orchestration_build_account_env_flag_off_maps_key(monkeypatch):
     assert env.get("ANTHROPIC_API_KEY") == POISON
 
 
+# --- 4th leak: subprocess env passthrough (REQ-41) -------------------------
+
+
+def test_subprocess_env_flag_off_returns_base_unchanged(monkeypatch):
+    # flag off ⇒ None (child inherits os.environ, byte-for-byte unchanged)
+    assert config.subprocess_env() is None
+    base = {"X": "1"}
+    assert config.subprocess_env(base) is base
+
+
+def test_subprocess_env_flag_on_strips_inference_keys(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", POISON)
+    monkeypatch.setenv("AGENTED_SERVER_NO_LLM_KEYS", "1")
+    env = config.subprocess_env()
+    assert env is not None
+    assert "ANTHROPIC_API_KEY" not in env
+    # non-inference server vars still present
+    assert env.get("AGENTED_SERVER_NO_LLM_KEYS") == "1"
+
+
+def test_build_subprocess_env_flag_on_strips_poison(monkeypatch):
+    from app.services.execution_runner import build_subprocess_env
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", POISON)
+    monkeypatch.setenv("AGENTED_SERVER_NO_LLM_KEYS", "1")
+    env = build_subprocess_env({"FOO": "bar"})
+    assert env is not None
+    assert "ANTHROPIC_API_KEY" not in env
+    assert env["FOO"] == "bar"
+
+
+def test_build_subprocess_env_flag_on_keeps_per_request_override(monkeypatch):
+    """A sidecar-sourced key layered in via env_overrides survives scrubbing."""
+    from app.services.execution_runner import build_subprocess_env
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", POISON)
+    monkeypatch.setenv("AGENTED_SERVER_NO_LLM_KEYS", "1")
+    env = build_subprocess_env({"ANTHROPIC_API_KEY": "sk-per-request"})
+    assert env["ANTHROPIC_API_KEY"] == "sk-per-request"
+
+
+def test_build_subprocess_env_flag_off_passthrough(monkeypatch):
+    """Regression: flag off ⇒ env behavior byte-for-byte unchanged."""
+    from app.services.execution_runner import build_subprocess_env
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", POISON)
+    assert build_subprocess_env(None) is None
+    env = build_subprocess_env({"FOO": "bar"})
+    assert env["ANTHROPIC_API_KEY"] == POISON
+
+
+def test_stream_via_cli_flag_on_passes_scrubbed_env(monkeypatch):
+    """The CLI-fallback Popen must not inherit a server-baked poison key."""
+    import app.services.conversation_streaming as cs
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", POISON)
+    monkeypatch.setenv("AGENTED_SERVER_NO_LLM_KEYS", "1")
+
+    captured = {}
+
+    def _fake_popen(cmd, **kwargs):
+        captured["env"] = kwargs.get("env")
+        raise RuntimeError("stop after capture")
+
+    monkeypatch.setattr(cs.subprocess, "Popen", _fake_popen)
+    list(cs._stream_via_cli([{"role": "user", "content": "hi"}], "claude-x"))
+    assert captured["env"] is not None
+    assert "ANTHROPIC_API_KEY" not in captured["env"]
+
+
+def test_stream_via_cli_flag_off_inherits_env(monkeypatch):
+    """Regression: flag off ⇒ env=None (inherit os.environ, unchanged)."""
+    import app.services.conversation_streaming as cs
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", POISON)
+
+    captured = {}
+
+    def _fake_popen(cmd, **kwargs):
+        captured["env"] = kwargs.get("env")
+        raise RuntimeError("stop after capture")
+
+    monkeypatch.setattr(cs.subprocess, "Popen", _fake_popen)
+    list(cs._stream_via_cli([{"role": "user", "content": "hi"}], "claude-x"))
+    assert captured["env"] is None
+
+
 # --- grep-guard: no NEW unguarded raw LLM-key reads ------------------------
 
 # Raw *_API_KEY names that are NOT LLM inference keys and are legitimately read

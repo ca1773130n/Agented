@@ -596,16 +596,23 @@ def upsert_project_sync_state(
 ) -> bool:
     """Insert or replace sync state for a project file.
 
-    Uses INSERT OR REPLACE on the (project_id, file_path) UNIQUE constraint.
+    Upserts on the (project_id, file_path) UNIQUE constraint via an explicit,
+    portable ``ON CONFLICT ... DO UPDATE`` (works on both SQLite ≥3.24 and
+    Postgres) — the connection shim refuses to translate ``INSERT OR REPLACE``.
     Returns True on success, False on failure.
     """
     with get_connection() as conn:
         try:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO project_sync_state
+                INSERT INTO project_sync_state
                 (project_id, file_path, content_hash, entity_type, entity_id, last_synced_at)
                 VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (project_id, file_path) DO UPDATE SET
+                    content_hash = excluded.content_hash,
+                    entity_type = excluded.entity_type,
+                    entity_id = excluded.entity_id,
+                    last_synced_at = CURRENT_TIMESTAMP
             """,
                 (project_id, file_path, content_hash, entity_type, entity_id),
             )
