@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 from typing import Any, Optional
 
 from litestar import Router, delete, get, post, put
@@ -33,6 +32,7 @@ from app.database import (
     get_team_members,
     update_team,
 )
+from app.db import errors as db_errors
 from app.models.team import VALID_EDGE_TYPES, VALID_TOPOLOGIES
 from app.services.team_service import TeamService
 
@@ -136,12 +136,12 @@ def create_team(data: CreateTeamBody, authorized: Caller) -> dict[str, Any]:
             trigger_source=data.trigger_source,
             trigger_config=data.trigger_config,
         )
-    except sqlite3.IntegrityError:
+    except db_errors.IntegrityError:
         raise HTTPException(
             status_code=409,
             detail="A team with this name or configuration already exists",
         ) from None
-    except sqlite3.OperationalError:
+    except db_errors.OperationalError:
         raise HTTPException(status_code=503, detail="Database unavailable, please retry") from None
 
     if not team_id:

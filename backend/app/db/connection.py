@@ -47,6 +47,25 @@ def _is_pg() -> bool:
     return bool(url) and url.startswith(("postgres://", "postgresql://"))
 
 
+def insertion_tiebreak_col() -> str:
+    """Secondary-sort column for a "latest row wins" tie, portable across backends.
+
+    SQLite exposes an implicit monotonic ``rowid`` == true insertion order, so a
+    query can ``ORDER BY <ts> DESC, rowid DESC`` to break same-timestamp ties by
+    insertion order. Postgres has no ``rowid`` (``column rowid does not exist``),
+    so on PG this returns the table's ``id`` column instead. It is used ONLY as a
+    TIE-BREAKER after a real ordering column (a timestamp): Postgres
+    ``CURRENT_TIMESTAMP`` carries sub-second precision, so genuine same-timestamp
+    ties are effectively impossible there and the ``id`` fallback is merely a
+    stable deterministic order, not a correctness-critical one. With DATABASE_URL
+    unset it returns ``rowid`` — the SQLite path is byte-for-byte unchanged.
+
+    Only valid for tables whose primary key is literally named ``id`` (the repo
+    convention); pass no column name because every current caller uses ``id``.
+    """
+    return "id" if _is_pg() else "rowid"
+
+
 def _translate_params(sql: str) -> str:
     """Translate the sqlite3 ``?`` paramstyle to psycopg's ``%s``.
 
@@ -250,7 +269,20 @@ def _strftime_to_to_char(fmt: str) -> str:
     Literal runs (``-``, ``T``, ``:``, the ``W`` in ``-W`` …) are double-quoted so
     to_char does not read them as field codes. An unknown specifier raises
     (``KeyError``) rather than silently mistranslating — fail loud, per the shim.
+
+    ISO-week consistency: SQLite ``%W`` is a *non-ISO* week-of-year (00-53,
+    Monday-based, paired with the calendar year). The closest Postgres field is
+    ISO week ``IW`` (01-53), but pairing ISO ``IW`` with the *calendar* year
+    ``YYYY`` is wrong on the days an ISO week straddles a year boundary
+    (e.g. 2021-01-01 is ISO ``2020-W53``, so ``YYYY``+``IW`` would emit the
+    self-contradictory ``2021-W53``). So when the format contains ``%W`` we emit
+    the ISO year ``IYYY`` for ``%Y`` instead of ``YYYY``, keeping the
+    ``(year, week)`` pair internally consistent. This makes the PG week bucket a
+    stable, self-consistent ISO-8601 key that can differ from SQLite's ``%W``
+    near year boundaries — the SQLite path (DATABASE_URL unset) still runs the
+    real ``strftime('%Y-W%W', …)`` unchanged.
     """
+    tokens = {**_STRFTIME_TOKENS, "Y": "IYYY"} if "%W" in fmt else _STRFTIME_TOKENS
     out: list = []
     literal: list = []
     i = 0
@@ -266,7 +298,7 @@ def _strftime_to_to_char(fmt: str) -> str:
             if literal:
                 out.append('"' + "".join(literal) + '"')
                 literal = []
-            out.append(_STRFTIME_TOKENS[spec])
+            out.append(tokens[spec])
         else:
             literal.append(c)
             i += 1

@@ -119,8 +119,14 @@ def test_dates_strftime_formats():
     assert _translate_sqlite_dates("SELECT strftime('%Y-%m-%d', we.started_at)") == (
         'SELECT to_char((we.started_at)::timestamp, \'YYYY"-"MM"-"DD\')'
     )
-    # %Y-W%W (monitoring week bucket) — the literal 'W' after '-' must be quoted
-    assert _strftime_to_to_char("%Y-W%W") == 'YYYY"-W"IW'
+    # %Y-W%W (monitoring week bucket) — the literal 'W' after '-' must be quoted.
+    # ISO-week consistency: when %W (ISO week IW) is present, %Y maps to the ISO
+    # year IYYY (not calendar YYYY) so the (year, week) pair never contradicts
+    # itself near a year boundary (e.g. 2021-01-01 is ISO 2020-W53). See
+    # _strftime_to_to_char.
+    assert _strftime_to_to_char("%Y-W%W") == 'IYYY"-W"IW'
+    # Without %W, %Y stays the calendar year YYYY (unchanged).
+    assert _strftime_to_to_char("%Y-%m") == 'YYYY"-"MM'
     # standalone %H (hour) → HH24 (returns '00'..'23', int-parseable like SQLite)
     assert _translate_sqlite_dates("strftime('%H', started_at)") == (
         "to_char((started_at)::timestamp, 'HH24')"
@@ -209,6 +215,55 @@ def test_operational_error_unified():
 
 
 # --------------------------------------------------------------------------- #
+# Unit: global exception handlers register BOTH backends' driver classes (#2)
+# --------------------------------------------------------------------------- #
+
+
+def test_exception_handlers_register_both_backend_db_errors():
+    """26-01 #2: the global registry maps EACH driver class in the cross-backend
+    alias tuples (sqlite3 + psycopg) to the integrity/operational handlers, so a
+    psycopg UniqueViolation on Postgres becomes 409/503 rather than a generic
+    500. On a SQLite-only install the tuples hold just the sqlite3 classes, so
+    the SQLite mapping stays identical.
+    """
+    from app_litestar.exception_handlers import (
+        build_exception_handlers,
+        integrity_error_handler,
+        operational_error_handler,
+    )
+
+    handlers = build_exception_handlers()
+    assert handlers[sqlite3.IntegrityError] is integrity_error_handler
+    assert handlers[sqlite3.OperationalError] is operational_error_handler
+    for exc_cls in errors.IntegrityError:
+        assert handlers.get(exc_cls) is integrity_error_handler
+    for exc_cls in errors.OperationalError:
+        assert handlers.get(exc_cls) is operational_error_handler
+
+
+def test_psycopg_db_errors_map_to_409_and_503_via_handlers():
+    """26-01 #2 end-to-end: a raised psycopg IntegrityError / OperationalError
+    resolves through the registered handlers to 409 / 503 (not a generic 500)."""
+    import psycopg
+    from litestar import get
+    from litestar.testing import create_test_client
+
+    from app_litestar.exception_handlers import build_exception_handlers
+
+    @get("/dup", sync_to_thread=False)
+    def dup() -> dict:
+        raise psycopg.errors.UniqueViolation("dup key")
+
+    @get("/down", sync_to_thread=False)
+    def down() -> dict:
+        raise psycopg.errors.OperationalError("db down")
+
+    with create_test_client([dup, down], exception_handlers=build_exception_handlers()) as client:
+        assert client.get("/dup").status_code == 409
+        assert client.get("/down").status_code == 503
+
+
+# --------------------------------------------------------------------------- #
 # Unit: _is_pg default is SQLite (zero-config invariant)
 # --------------------------------------------------------------------------- #
 
@@ -216,6 +271,25 @@ def test_operational_error_unified():
 def test_is_pg_default_false(monkeypatch):
     monkeypatch.setattr(config, "DATABASE_URL", "")
     assert _is_pg() is False
+
+
+# --------------------------------------------------------------------------- #
+# Unit: portable insertion-order tiebreaker (rowid on SQLite / id on PG) (#1)
+# --------------------------------------------------------------------------- #
+
+
+def test_insertion_tiebreak_col_default_rowid(monkeypatch):
+    from app.db.connection import insertion_tiebreak_col
+
+    monkeypatch.setattr(config, "DATABASE_URL", "")
+    assert insertion_tiebreak_col() == "rowid"
+
+
+def test_insertion_tiebreak_col_pg_id(monkeypatch):
+    from app.db.connection import insertion_tiebreak_col
+
+    monkeypatch.setattr(config, "DATABASE_URL", "postgresql://u@localhost/db")
+    assert insertion_tiebreak_col() == "id"
 
 
 def test_is_pg_true_for_postgres_url(monkeypatch):

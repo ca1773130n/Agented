@@ -195,9 +195,10 @@ def build_exception_handlers() -> dict:
     (``create_test_client(route_handlers=...)``) can opt in by
     passing the result as ``exception_handlers=...``.
     """
+    from app.db import errors as db_errors
     from app.services.project_session_manager import SessionPersistError
 
-    return {
+    handlers: dict = {
         NotAuthorizedException: not_authorized_handler,
         PermissionDeniedException: permission_denied_handler,
         NotFoundException: not_found_handler,
@@ -205,8 +206,17 @@ def build_exception_handlers() -> dict:
         HTTPException: http_exception_handler,
         ValueError: value_error_handler,
         PermissionError: permission_error_handler,
-        sqlite3.IntegrityError: integrity_error_handler,
-        sqlite3.OperationalError: operational_error_handler,
         SessionPersistError: session_persist_error_handler,
         Exception: unhandled_handler,
     }
+    # Register the integrity/operational handlers for BOTH backends' driver
+    # classes. ``db_errors.IntegrityError`` / ``OperationalError`` are alias
+    # tuples that union sqlite3 + psycopg — so on Postgres a UniqueViolation
+    # (psycopg.errors.IntegrityError) still maps to 409 rather than falling
+    # through to the generic 500 handler. On a SQLite-only install the tuples
+    # hold just the sqlite3 classes, so behavior is byte-for-byte unchanged.
+    for _exc in db_errors.IntegrityError:
+        handlers[_exc] = integrity_error_handler
+    for _exc in db_errors.OperationalError:
+        handlers[_exc] = operational_error_handler
+    return handlers

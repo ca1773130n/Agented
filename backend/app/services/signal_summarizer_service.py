@@ -42,6 +42,7 @@ from typing import Optional
 import httpx
 
 from app.database import get_connection
+from app.db.connection import insertion_tiebreak_col
 from app.db.ids import generate_id
 
 # The taint fence is the shared OWASP-LLM01 chokepoint — ONE implementation in
@@ -127,9 +128,10 @@ class SignalSummarizerService:
         from the prior one (or when it is the first-ever snapshot), else ``None``.
 
         Compares the two most-recent ``competitor_snapshot`` rows for
-        ``source_id``. Ordering is ``fetched_at DESC, rowid DESC`` so a tied
-        ``CURRENT_TIMESTAMP`` (second granularity) still resolves to true
-        insertion order via the always-monotonic ``rowid``.
+        ``source_id``. Ordering is ``fetched_at DESC`` plus a portable
+        insertion-order tiebreaker (SQLite ``rowid`` / Postgres ``id`` via
+        :func:`insertion_tiebreak_col`) so a tied ``CURRENT_TIMESTAMP`` still
+        resolves deterministically.
 
         Descriptor shape (what ``summarize_change`` / ``score_signal`` read)::
 
@@ -144,13 +146,15 @@ class SignalSummarizerService:
         """
         with get_connection() as conn:
             rows = conn.execute(
-                """
+                # rowid on SQLite / id on Postgres — deterministic tiebreaker
+                # after fetched_at (see insertion_tiebreak_col).
+                f"""
                 SELECT id, content_hash, raw_ref
                 FROM competitor_snapshot
                 WHERE source_id = ?
-                ORDER BY fetched_at DESC, rowid DESC
+                ORDER BY fetched_at DESC, {insertion_tiebreak_col()} DESC
                 LIMIT 2
-                """,
+                """,  # noqa: S608
                 (source_id,),
             ).fetchall()
         if not rows:

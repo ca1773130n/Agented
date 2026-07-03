@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 import re
-import sqlite3
 from typing import Any, Optional
 
 from litestar import Router, delete, get, patch, post, put
@@ -25,6 +24,7 @@ from app.database import (
     get_snapshot_history,
     set_fallback_chain,
 )
+from app.db import errors as db_errors
 from app.db.bot_pipes import (
     create_pipe,
     get_all_pipes,
@@ -461,7 +461,7 @@ def create_instance(project_id: str, data: dict) -> Any:
             result = InstanceService.create_team_instances(project_id, team_id)
         else:
             result = InstanceService.create_sa_instance(project_id, super_agent_id)
-    except sqlite3.IntegrityError as e:
+    except db_errors.IntegrityError as e:
         raise HTTPException(
             status_code=409,
             detail="Instance already exists for this project and template",

@@ -7,12 +7,12 @@ legacy ``agents`` table — these routes never touch ``create_agent``.
 
 from __future__ import annotations
 
-import sqlite3
 from typing import Any, Optional
 
 from litestar import Router, delete, get, post, put
 from litestar.exceptions import ClientException, HTTPException, NotFoundException
 
+from app.db import errors as db_errors
 from app.db.subagents import (
     create_subagent,
     delete_subagent,
@@ -45,7 +45,7 @@ def create_subagent_endpoint(data: dict, caller: Caller) -> dict[str, Any]:
             project_id=data.get("project_id"),
             source_path=data.get("source_path"),
         )
-    except sqlite3.IntegrityError:
+    except db_errors.IntegrityError:
         raise ClientException(detail="Subagent name already exists")
     if not subagent:
         raise HTTPException(status_code=500, detail="Failed to create subagent")
