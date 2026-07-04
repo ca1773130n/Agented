@@ -1,3 +1,8 @@
+// @vitest-environment jsdom
+// DOMPurify sanitization is a no-op under happy-dom (it strips valid tags AND
+// leaves XSS attributes) because it needs a real DOM. Run this component's
+// tests under jsdom so the sanitize()-behind-v-html path is exercised the way
+// it runs in a browser.
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import MarkdownContent from '../MarkdownContent.vue'

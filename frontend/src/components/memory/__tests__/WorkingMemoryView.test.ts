@@ -1,3 +1,6 @@
+// @vitest-environment jsdom
+// Renders markdown via MarkdownContent (DOMPurify), which needs a real DOM —
+// happy-dom breaks sanitization. Run under jsdom.
 import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
 import WorkingMemoryView from '../WorkingMemoryView.vue';

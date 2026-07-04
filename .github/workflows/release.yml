@@ -11,6 +11,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # Bound the job: the backend `uv run pytest` full suite can hang (known
+    # issue); without this it would run to GitHub's 6h default before failing.
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:

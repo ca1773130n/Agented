@@ -1,3 +1,6 @@
+// @vitest-environment jsdom
+// The label is DOMPurify-sanitized before v-html; DOMPurify needs a real DOM
+// (happy-dom strips the <span> and drops sanitization). Run under jsdom.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 

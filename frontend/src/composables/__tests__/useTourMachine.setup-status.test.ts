@@ -156,7 +156,10 @@ describe('autoSkipCompletedSteps — real machine walker', () => {
       create_project: true,
       create_team: true,
     })
-    expect(actor.getSnapshot().status).toBe('done')
+    // The tour machine has no top-level `type: 'final'` state — 'complete' is a
+    // normal resting state (it stays interactive), so `.status` is 'active', not
+    // 'done'. Assert the reached state like every other test in this file.
+    expect(actor.getSnapshot().value).toBe('complete')
     actor.stop()
   })
 
