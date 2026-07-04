@@ -151,9 +151,6 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .shared-session {
-  padding: 24px;
-  max-width: 960px;
-  margin: 0 auto;
 }
 .shared-session__header {
   display: flex;

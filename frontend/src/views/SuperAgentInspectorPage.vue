@@ -309,7 +309,7 @@ function fmtPayload(p: string): string {
 </template>
 
 <style scoped>
-.sa-inspector { padding: 24px; max-width: 1280px; margin: 0 auto; }
+.sa-inspector { }
 .sa-inspector__header {
   display: flex;
   justify-content: space-between;

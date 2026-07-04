@@ -88,7 +88,7 @@ useFocusRefresh(refreshMessages);
 </template>
 
 <style scoped>
-.thread-detail-page { padding: 24px; max-width: 900px; margin: 0 auto; }
+.thread-detail-page { }
 .back-link { display: inline-block; margin-bottom: 16px; color: var(--accent-cyan); text-decoration: none; font-size: 13px; }
 .back-link:hover { text-decoration: underline; }
 .thread-header { margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border-subtle); }

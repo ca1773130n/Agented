@@ -283,16 +283,20 @@ const { showApiKeyBanner, appReady, onAuthenticated, handleTourRetry } = useAppB
 
 /*
  * Canonical page-header typography — every content page's title/subtitle the
- * same size. Applies to the standard page-header conventions; scoped page
- * styles inherit these unless they set their own font-size. Modals, auth
- * screens, and wizards use different header classes and are unaffected.
+ * same size, from ONE place. `.main-content h1` catches the page title even on
+ * pages that never styled their h1 (which fell back to the 28px UA default);
+ * pages that set their own title size (scoped, higher specificity) keep it and
+ * are already 18px. Auth screens and modals live outside `.main-content`.
  */
+.main-content h1,
 .page-header h1,
 .header-title h1,
 .page-title h1 {
   font-size: 18px;
   font-weight: 600;
 }
+.main-content .page-subtitle,
+.main-content .subtitle,
 .page-subtitle,
 .header-title p,
 .page-title p {
@@ -1504,14 +1508,15 @@ body.tour-active .modal-overlay {
 }
 
 .page-header .header-content h1 {
-  font-size: 28px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--text-primary);
   margin: 0 0 8px 0;
 }
 
 .page-header .subtitle {
-  color: var(--text-secondary);
+  font-size: 13px;
+  color: var(--text-tertiary);
   margin: 0;
 }
 

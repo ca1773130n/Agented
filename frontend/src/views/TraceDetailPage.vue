@@ -111,7 +111,7 @@ watch(traceId, () => {
 </template>
 
 <style scoped>
-.trace-detail-page { padding: 24px; }
+.trace-detail-page { }
 .trace-header { margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border-subtle); }
 .trace-header h1 { margin: 0 0 8px; }
 .trace-meta { display: flex; gap: 16px; color: var(--text-tertiary); font-size: 13px; }

@@ -29,14 +29,15 @@ defineProps<{
 }
 
 .ds-header-content h1 {
-  font-size: 28px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--text-primary);
   margin: 0 0 8px 0;
 }
 
 .ds-subtitle {
-  color: var(--text-secondary);
+  font-size: 13px;
+  color: var(--text-tertiary);
   margin: 0;
 }
 

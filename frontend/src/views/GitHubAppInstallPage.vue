@@ -324,9 +324,6 @@ onMounted(loadInstallations);
 
 <style scoped>
 .page-container {
-  padding: 24px;
-  max-width: 1100px;
-  margin: 0 auto;
 }
 .page-header {
   display: flex;

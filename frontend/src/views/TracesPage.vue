@@ -132,7 +132,7 @@ function prevPage() { offset.value = Math.max(0, offset.value - limit); load(); 
 </template>
 
 <style scoped>
-.traces-page { padding: 24px; }
+.traces-page { }
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .stats-header { display: flex; gap: 16px; color: var(--text-tertiary); font-size: 13px; }
 .filter-bar { display: flex; gap: 12px; margin-bottom: 16px; }

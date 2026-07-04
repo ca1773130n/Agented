@@ -86,7 +86,7 @@ useFocusRefresh(refreshAll);
 </template>
 
 <style scoped>
-.memory-page { padding: 24px; max-width: 1100px; margin: 0 auto; }
+.memory-page { }
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
 .page-header h1 { margin: 0; }
 .header-meta { display: flex; gap: 16px; align-items: center; }
