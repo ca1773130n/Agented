@@ -72,7 +72,7 @@ export type { DirectoryEntry, BrowseDirectoryResponse, CreateDirectoryResponse }
 export type { SystemError, FixAttempt, SystemErrorWithFixes, ErrorSource, ErrorCategory, ErrorStatus, FixTier, FixStatus, SystemErrorListResponse, ErrorCountsResponse, ReportErrorRequest } from './types/system';
 export { superAgentApi, superAgentDocumentApi, superAgentSessionApi, agentMessageApi } from './super-agents';
 export type { SuperAgentActivityStatus } from './super-agents';
-export { workflowApi, workflowExecutionApi } from './workflows';
+export { workflowApi, workflowExecutionApi, workflowConversationApi } from './workflows';
 export { sketchApi } from './sketches';
 export type { RetrievalDetails, RetrievalSource, RetrievalStats, RetrievalFederation } from './sketches';
 export { grdApi } from './grd';

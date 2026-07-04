@@ -22,6 +22,7 @@ from app.services.command_conversation_service import CommandConversationService
 from app.services.hook_conversation_service import HookConversationService
 from app.services.plugin_conversation_service import PluginConversationService
 from app.services.rule_conversation_service import RuleConversationService
+from app.services.workflow_conversation_service import WorkflowConversationService
 from app_litestar.auth import Caller
 
 
@@ -184,4 +185,13 @@ rule_conversations_router = _make_conversation_router(
     include_list=True,
     include_resume=True,
     name_prefix="rule_conv",
+)
+
+workflow_conversations_router = _make_conversation_router(
+    path="/api/workflows/conversations",
+    service=WorkflowConversationService,
+    finalize_method="finalize_entity",
+    include_list=True,
+    include_resume=True,
+    name_prefix="workflow_conv",
 )

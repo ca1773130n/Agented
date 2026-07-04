@@ -8097,6 +8097,12 @@
       "message": "⚠️ The AI assistant isn't connected ({reason}), so I can't answer freeform questions yet. Pick a starter template below, or connect an AI account. Conversational workflow design is coming.",
       "templateMatched": "Matched a starter template (not an AI answer — the workflow assistant isn't connected):",
       "templateInserted": "Inserted a starter template:"
+    },
+    "templatePrompts": {
+      "deploy": "Design a deploy pipeline: build, run tests, and deploy to production with a rollback step if tests fail.",
+      "review": "Design a code review workflow for pull requests that analyzes the diff, runs tests, and posts a review comment.",
+      "data": "Design a data ETL pipeline that extracts data from a source, transforms it, and loads it into a destination.",
+      "monitor": "Design a monitoring workflow with a scheduled health check that sends an alert when a service is unhealthy."
     }
   },
   "workflows": {

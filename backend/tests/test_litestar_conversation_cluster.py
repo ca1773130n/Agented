@@ -9,6 +9,7 @@ from app_litestar.routes.conversation_cluster import (
     hook_conversations_router,
     plugin_conversations_router,
     rule_conversations_router,
+    workflow_conversations_router,
 )
 
 
@@ -20,6 +21,7 @@ def client():
             command_conversations_router,
             hook_conversations_router,
             rule_conversations_router,
+            workflow_conversations_router,
         ],
         dependencies={"caller": provide_caller},
     ) as c:
@@ -28,7 +30,7 @@ def client():
 
 @pytest.mark.parametrize(
     "namespace",
-    ["plugins", "commands", "hooks", "rules"],
+    ["plugins", "commands", "hooks", "rules", "workflows"],
 )
 def test_send_message_requires_message(client, namespace, isolated_db):
     resp = client.post(f"/api/{namespace}/conversations/conv-x/message", json={})
@@ -37,7 +39,7 @@ def test_send_message_requires_message(client, namespace, isolated_db):
 
 @pytest.mark.parametrize(
     "namespace",
-    ["plugins", "commands", "hooks", "rules"],
+    ["plugins", "commands", "hooks", "rules", "workflows"],
 )
 def test_unknown_conversation_404(client, namespace, isolated_db):
     resp = client.get(f"/api/{namespace}/conversations/missing")
@@ -69,7 +71,7 @@ def test_resume_unknown_404(client, namespace, isolated_db):
 
 @pytest.mark.parametrize(
     "namespace",
-    ["plugins", "commands", "hooks", "rules"],
+    ["plugins", "commands", "hooks", "rules", "workflows"],
 )
 def test_abandon_unknown(client, namespace, isolated_db):
     resp = client.post(f"/api/{namespace}/conversations/missing/abandon", json={})
@@ -78,7 +80,7 @@ def test_abandon_unknown(client, namespace, isolated_db):
 
 @pytest.mark.parametrize(
     "namespace",
-    ["plugins", "commands", "hooks", "rules"],
+    ["plugins", "commands", "hooks", "rules", "workflows"],
 )
 def test_finalize_unknown(client, namespace, isolated_db):
     resp = client.post(f"/api/{namespace}/conversations/missing/finalize", json={})
@@ -107,7 +109,7 @@ def _seed_two_users():
 
 @pytest.mark.parametrize(
     "namespace",
-    ["plugins", "commands", "hooks", "rules"],
+    ["plugins", "commands", "hooks", "rules", "workflows"],
 )
 def test_cross_user_get_returns_404(client, namespace, isolated_db):
     """Alice starts a conv; Bob's GET returns 404 (not 200, not 403)."""
@@ -126,7 +128,7 @@ def test_cross_user_get_returns_404(client, namespace, isolated_db):
 
 @pytest.mark.parametrize(
     "namespace",
-    ["plugins", "commands", "hooks", "rules"],
+    ["plugins", "commands", "hooks", "rules", "workflows"],
 )
 def test_cross_user_send_message_returns_404(client, namespace, isolated_db):
     """Alice's conv must reject Bob's POST /message."""
@@ -146,7 +148,7 @@ def test_cross_user_send_message_returns_404(client, namespace, isolated_db):
 
 @pytest.mark.parametrize(
     "namespace",
-    ["plugins", "commands", "hooks", "rules"],
+    ["plugins", "commands", "hooks", "rules", "workflows"],
 )
 def test_cross_user_abandon_returns_404(client, namespace, isolated_db):
     """Alice's conv must reject Bob's abandon — and stay active."""
@@ -166,7 +168,7 @@ def test_cross_user_abandon_returns_404(client, namespace, isolated_db):
 
 @pytest.mark.parametrize(
     "namespace",
-    ["plugins", "commands", "hooks", "rules"],
+    ["plugins", "commands", "hooks", "rules", "workflows"],
 )
 def test_cross_user_finalize_returns_404(client, namespace, isolated_db):
     """v0.7.83 codex BLOCK fix — Bob attempting to finalize
@@ -190,7 +192,7 @@ def test_cross_user_finalize_returns_404(client, namespace, isolated_db):
 
 @pytest.mark.parametrize(
     "namespace",
-    ["plugins", "commands", "hooks", "rules"],
+    ["plugins", "commands", "hooks", "rules", "workflows"],
 )
 def test_active_scopes_to_caller(client, namespace, isolated_db):
     """Alice's /active returns only her own conv; Bob's doesn't see it."""

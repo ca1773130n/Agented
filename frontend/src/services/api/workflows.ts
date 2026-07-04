@@ -2,12 +2,13 @@
  * Workflow and workflow execution API modules.
  */
 import { API_BASE, apiFetch, createAuthenticatedEventSource } from './client';
-import type { AuthenticatedEventSource } from './client';
+import type { AuthenticatedEventSource, AuthenticatedEventSourceOptions } from './client';
 import type {
   Workflow,
   WorkflowVersion,
   WorkflowExecution,
   WorkflowNodeExecution,
+  ConversationMessage,
 } from './types';
 
 export const workflowApi = {
@@ -87,4 +88,57 @@ export const workflowExecutionApi = {
         timeout_seconds: number;
       }>;
     }>('/admin/workflows/pending-approvals'),
+};
+
+/**
+ * Workflow **design conversation** API — a real LLM chat (resolved from the
+ * caller's configured account) that designs a workflow and can finalize it into
+ * a workflow + first graph version. Conforms to the `ConversationApi` shape used
+ * by `useConversation`, mirroring commandConversationApi / ruleConversationApi.
+ */
+export const workflowConversationApi = {
+  list: () =>
+    apiFetch<{
+      conversations: { id: string; entity_type: string; status: string; updated_at: string }[];
+    }>('/api/workflows/conversations/'),
+  listActive: () =>
+    apiFetch<{ active_conversations: { conversation_id: string; updated_at: string }[] }>(
+      '/api/workflows/conversations/active',
+    ),
+  start: () =>
+    apiFetch<{ conversation_id: string; message: string }>('/api/workflows/conversations/start', {
+      method: 'POST',
+    }),
+  get: (convId: string) =>
+    apiFetch<{ id: string; status: string; messages_parsed?: ConversationMessage[] }>(
+      `/api/workflows/conversations/${convId}`,
+    ),
+  sendMessage: (
+    convId: string,
+    message: string,
+    options?: { backend?: string; account_id?: string; model?: string; use_cli_agent?: boolean },
+  ) =>
+    apiFetch<{ message_id: string; status: string }>(
+      `/api/workflows/conversations/${convId}/message`,
+      { method: 'POST', body: JSON.stringify({ message, ...options }) },
+    ),
+  stream: (convId: string, options?: AuthenticatedEventSourceOptions): AuthenticatedEventSource =>
+    createAuthenticatedEventSource(
+      `${API_BASE}/api/workflows/conversations/${convId}/stream`,
+      options,
+    ),
+  finalize: (convId: string) =>
+    apiFetch<{ message: string; workflow_id: string; workflow: Workflow }>(
+      `/api/workflows/conversations/${convId}/finalize`,
+      { method: 'POST' },
+    ),
+  resume: (convId: string) =>
+    apiFetch<{ message: string; conversation_id: string }>(
+      `/api/workflows/conversations/${convId}/resume`,
+      { method: 'POST' },
+    ),
+  abandon: (convId: string) =>
+    apiFetch<{ message: string }>(`/api/workflows/conversations/${convId}/abandon`, {
+      method: 'POST',
+    }),
 };

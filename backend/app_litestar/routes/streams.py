@@ -33,6 +33,7 @@ from app.services.rule_conversation_service import RuleConversationService
 from app.services.session_sharing_service import SessionSharingService
 from app.services.setup_execution_service import SetupExecutionService
 from app.services.team_generation_service import TeamGenerationService
+from app.services.workflow_conversation_service import WorkflowConversationService
 from app_litestar.auth import Caller
 
 SSE_HEADERS = {
@@ -115,6 +116,9 @@ command_conversation_stream_router = _make_conversation_stream(
 hook_conversation_stream_router = _make_conversation_stream("hooks", HookConversationService)
 rule_conversation_stream_router = _make_conversation_stream("rules", RuleConversationService)
 agent_conversation_stream_router = _make_conversation_stream("agents", AgentConversationService)
+workflow_conversation_stream_router = _make_conversation_stream(
+    "workflows", WorkflowConversationService
+)
 
 
 # ===========================================================================

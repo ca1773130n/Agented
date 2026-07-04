@@ -53,6 +53,7 @@ from .routes.conversation_cluster import (
     hook_conversations_router,
     plugin_conversations_router,
     rule_conversations_router,
+    workflow_conversations_router,
 )
 from .routes.discovery_routes import discovery_router
 from .routes.executions import executions_router
@@ -162,6 +163,7 @@ from .routes.streams import (
     shared_session_stream_router,
     super_agents_stream_router,
     teams_stream_router,
+    workflow_conversation_stream_router,
 )
 from .routes.super_agent_activity import super_agent_activity_router
 from .routes.super_agents_cluster import (
@@ -340,6 +342,7 @@ def create_app() -> Litestar:
             command_conversations_router,
             hook_conversations_router,
             rule_conversations_router,
+            workflow_conversations_router,
             utility_leftover_router,
             backends_router,
             grd_router,
@@ -367,6 +370,7 @@ def create_app() -> Litestar:
             hook_conversation_stream_router,
             rule_conversation_stream_router,
             agent_conversation_stream_router,
+            workflow_conversation_stream_router,
             project_stream_router,
             shared_session_stream_router,
             session_shares_router,

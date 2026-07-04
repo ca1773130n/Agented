@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, nextTick, onUnmounted } from 'vue';
+import { ref, nextTick, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
-import type { ConversationMessage, AuthenticatedEventSource } from '../services/api';
-import { workflowApi, superAgentApi, superAgentSessionApi } from '../services/api';
+import { workflowApi, workflowConversationApi } from '../services/api';
+import { useConversation, createConfigParser } from '../composables/useConversation';
 import { AiChatPanelManaged as AiChatPanel } from '@ai-accounts/vue-styled';
 import WorkflowCanvas from '../components/workflow/WorkflowCanvas.vue';
 import { useToast } from '../composables/useToast';
@@ -18,18 +18,23 @@ const showToast = useToast();
 // State
 // ---------------------------------------------------------------------------
 
-const messages = ref<ConversationMessage[]>([]);
-const isProcessing = ref(false);
-const streamingContent = ref('');
-const inputMessage = ref('');
+/** Workflow config the assistant emits between ---WORKFLOW_CONFIG--- markers. */
+interface ParsedWorkflowConfig {
+  name?: string;
+  description?: string;
+  graph?: { nodes?: unknown[]; edges?: unknown[]; settings?: Record<string, unknown> };
+}
+
+// Real workflow-design chat: a live LLM resolved from the caller's configured
+// account via /api/workflows/conversations, exactly like the Command/Rule/Hook
+// design pages. Replaces the old SuperAgent-gated keyword stub.
+const conversation = useConversation<ParsedWorkflowConfig>(
+  workflowConversationApi,
+  createConfigParser<ParsedWorkflowConfig>('---WORKFLOW_CONFIG---'),
+);
+
 const previewWorkflowId = ref<string | null>(null);
 const generatedWorkflowId = ref<string | null>(null);
-
-// Real AI backend state
-const isDemoMode = ref(true);
-// Why the real assistant isn't connected (surfaced honestly instead of
-// silently faking a reply). Null when a real backend is streaming.
-const backendError = ref<string | null>(null);
 
 useWebMcpTool({
   name: 'agented_workflow_playground_get_state',
@@ -40,26 +45,15 @@ useWebMcpTool({
       type: 'text' as const,
       text: JSON.stringify({
         page: 'WorkflowPlaygroundPage',
-        messageCount: messages.value.length,
-        isProcessing: isProcessing.value,
+        messageCount: conversation.messages.value.length,
+        isProcessing: conversation.isProcessing.value,
         previewWorkflowId: previewWorkflowId.value,
-        isDemoMode: isDemoMode.value,
+        chatStarted: conversation.chatStarted.value,
       }),
     }],
   }),
-  deps: [messages, isProcessing, previewWorkflowId, isDemoMode],
+  deps: [conversation.messages, conversation.isProcessing, previewWorkflowId, conversation.chatStarted],
 });
-const aiSuperAgentId = ref<string | null>(null);
-const aiSessionId = ref<string | null>(null);
-const selectedBackend = ref('auto');
-const selectedAccountId = ref<string | null>(null);
-const selectedModel = ref<string | null>(null);
-// AiChatPanel CLI runner toggle. Default ON because the workflow
-// playground asks the agent to design and execute multi-step pipelines
-// — that needs tool privileges. Flipping the pill OFF routes through
-// CLIProxyAPI for pure-token brainstorming.
-const useCliRunner = ref(true);
-let chatEventSource: AuthenticatedEventSource | null = null;
 
 // Chat panel configuration
 const assistantIconPaths = [
@@ -69,342 +63,36 @@ const assistantIconPaths = [
 ];
 
 // ---------------------------------------------------------------------------
-// Real AI Backend Discovery
+// Conversation lifecycle (start / resume) + graph preview
 // ---------------------------------------------------------------------------
 
-async function discoverAiBackend() {
-  try {
-    const result = await superAgentApi.list();
-    const agents = result.super_agents || [];
-    if (agents.length > 0) {
-      // Use the first available SuperAgent for workflow AI
-      aiSuperAgentId.value = agents[0].id;
-      // Create a session
-      const sess = await superAgentSessionApi.create(agents[0].id);
-      aiSessionId.value = sess.session_id;
-      isDemoMode.value = false;
-      backendError.value = null;
-      // Connect SSE
-      connectChatStream();
-    } else {
-      // No SuperAgent to drive the assistant — stay honest about it.
-      isDemoMode.value = true;
-      backendError.value = t('workflowPlayground.noBackend.noAgent');
-    }
-  } catch (e: unknown) {
-    // Surface WHY the assistant isn't available instead of silently faking a
-    // reply. Common causes: session-create failed, or the LLM backend isn't
-    // authenticated. The operator sees the real reason and can act on it.
-    isDemoMode.value = true;
-    backendError.value = e instanceof Error ? e.message : String(e);
+function ensureChatStarted() {
+  if (conversation.chatStarted.value) return;
+  if (conversation.activeConversations.value.length > 0) {
+    conversation.resumeConversation(conversation.activeConversations.value[0].id);
+  } else {
+    conversation.startConversation();
   }
 }
 
-function connectChatStream() {
-  if (!aiSuperAgentId.value || !aiSessionId.value) return;
-  chatEventSource = superAgentSessionApi.chatStream(aiSuperAgentId.value, aiSessionId.value);
-
-  let accumulatedContent = '';
-
-  chatEventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      if (data.type === 'state_delta' && data.delta?.content) {
-        accumulatedContent += data.delta.content;
-        streamingContent.value = accumulatedContent;
-      } else if (data.type === 'finish' || data.type === 'done') {
-        // Final content
-        const finalContent = accumulatedContent || streamingContent.value;
-        if (finalContent) {
-          messages.value.push({
-            role: 'assistant',
-            content: finalContent,
-            timestamp: new Date().toISOString(),
-          });
-          // Check for JSON graph in the response
-          const jsonMatch = finalContent.match(/```json\n([\s\S]*?)\n```/);
-          if (jsonMatch) {
-            tryCreateWorkflowFromJson(jsonMatch[1]);
-          }
-        }
-        streamingContent.value = '';
-        accumulatedContent = '';
-        isProcessing.value = false;
-      } else if (data.type === 'error') {
-        isProcessing.value = false;
-        streamingContent.value = '';
-        accumulatedContent = '';
-        showToast(data.error || t('workflowPlayground.toast.backendError'), 'error');
-      }
-    } catch {
-      // Ignore parse errors for heartbeat events
-    }
-  };
-
-  chatEventSource.onerror = () => {
-    // SSE error -- fall back to demo mode gracefully
-    if (isProcessing.value) {
-      isProcessing.value = false;
-      streamingContent.value = '';
-    }
-  };
-}
-
-// Cleanup SSE on unmount
-onUnmounted(() => {
-  if (chatEventSource) {
-    chatEventSource.close();
-    chatEventSource = null;
-  }
+onMounted(async () => {
+  await conversation.checkActiveConversations();
+  ensureChatStarted();
 });
 
-// Try to discover AI backend on mount (non-blocking)
-discoverAiBackend();
+// When the assistant emits a workflow graph, materialize a live preview.
+watch(
+  () => conversation.detectedConfig.value,
+  (cfg) => {
+    if (cfg?.graph) tryCreateWorkflowFromJson(JSON.stringify(cfg.graph));
+  },
+);
 
-// ---------------------------------------------------------------------------
-// Message Handling
-// ---------------------------------------------------------------------------
-
-function handleSend() {
-  if (!inputMessage.value.trim()) return;
-  const userMsg = inputMessage.value.trim();
-  inputMessage.value = '';
-
-  // Add user message
-  messages.value.push({
-    role: 'user',
-    content: userMsg,
-    timestamp: new Date().toISOString(),
-  });
-
-  isProcessing.value = true;
-
-  if (!isDemoMode.value && aiSuperAgentId.value && aiSessionId.value) {
-    // Send via real AI backend
-    superAgentSessionApi
-      .sendChatMessage(aiSuperAgentId.value, aiSessionId.value, userMsg, {
-        useCliAgent: useCliRunner.value,
-      })
-      .catch((e: unknown) => {
-        // Real backend failed — report the actual reason. Never fake a reply.
-        isProcessing.value = false;
-        isDemoMode.value = true;
-        backendError.value = e instanceof Error ? e.message : String(e);
-        respondWithoutBackend(userMsg);
-      });
-  } else {
-    respondWithoutBackend(userMsg);
-  }
-}
-
-// When no real assistant is connected we do NOT fabricate a conversational
-// reply. We either (a) match a known starter template by keyword and insert a
-// REAL workflow graph — clearly labelled as a template, not an AI answer — or
-// (b) tell the user honestly that the assistant isn't connected and why.
-function respondWithoutBackend(userMsg: string) {
-  isProcessing.value = true;
-  setTimeout(() => {
-    const template = matchTemplate(userMsg);
-    if (template) {
-      messages.value.push({
-        role: 'assistant',
-        content: `${t('workflowPlayground.noBackend.templateMatched')}\n\n${template}`,
-        timestamp: new Date().toISOString(),
-      });
-      const jsonMatch = template.match(/```json\n([\s\S]*?)\n```/);
-      if (jsonMatch) tryCreateWorkflowFromJson(jsonMatch[1]);
-    } else {
-      // No template matched and no live assistant — be honest, don't fake.
-      messages.value.push({
-        role: 'assistant',
-        content: t('workflowPlayground.noBackend.message', {
-          reason: backendError.value || t('workflowPlayground.noBackend.generic'),
-        }),
-        timestamp: new Date().toISOString(),
-      });
-    }
-    isProcessing.value = false;
-  }, 250);
-}
-
-// Insert a starter template directly (from the template buttons).
+// Template quick-starts: send a starter prompt to the REAL assistant so it
+// designs (and can then refine) the workflow conversationally.
 function insertTemplate(kind: 'deploy' | 'review' | 'data' | 'monitor') {
-  const gen = {
-    deploy: generateDeployWorkflowResponse,
-    review: generateReviewWorkflowResponse,
-    data: generateDataWorkflowResponse,
-    monitor: generateMonitorWorkflowResponse,
-  }[kind];
-  const template = gen();
-  messages.value.push({
-    role: 'assistant',
-    content: `${t('workflowPlayground.noBackend.templateInserted')}\n\n${template}`,
-    timestamp: new Date().toISOString(),
-  });
-  const jsonMatch = template.match(/```json\n([\s\S]*?)\n```/);
-  if (jsonMatch) tryCreateWorkflowFromJson(jsonMatch[1]);
-}
-
-function handleKeyDown(e: KeyboardEvent) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    handleSend();
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Starter-template matching (keyword → real workflow graph). NOT an LLM.
-// ---------------------------------------------------------------------------
-
-function matchTemplate(userMessage: string): string | null {
-  const lower = userMessage.toLowerCase();
-  if (lower.includes('deploy') || lower.includes('ci') || lower.includes('build')) {
-    return generateDeployWorkflowResponse();
-  }
-  if (lower.includes('review') || lower.includes('pr') || lower.includes('code')) {
-    return generateReviewWorkflowResponse();
-  }
-  if (lower.includes('data') || lower.includes('etl') || lower.includes('transform')) {
-    return generateDataWorkflowResponse();
-  }
-  if (lower.includes('monitor') || lower.includes('alert') || lower.includes('check')) {
-    return generateMonitorWorkflowResponse();
-  }
-  return null;
-}
-
-function generateDeployWorkflowResponse(): string {
-  const graph = {
-    nodes: [
-      { id: 'trigger-1', type: 'trigger', label: 'Deploy Trigger', config: { trigger_subtype: 'manual' }, error_mode: 'stop', retry_max: 0, retry_backoff_seconds: 1 },
-      { id: 'command-1', type: 'command', label: 'Run Build', config: { command: 'npm run build' }, error_mode: 'stop', retry_max: 2, retry_backoff_seconds: 5 },
-      { id: 'command-2', type: 'command', label: 'Run Tests', config: { command: 'npm test' }, error_mode: 'stop', retry_max: 1, retry_backoff_seconds: 3 },
-      { id: 'conditional-1', type: 'conditional', label: 'Tests Passed?', config: { condition: 'exit_code == 0' }, error_mode: 'stop', retry_max: 0, retry_backoff_seconds: 1 },
-      { id: 'script-1', type: 'script', label: 'Deploy to Production', config: { script_path: './deploy.sh' }, error_mode: 'continue_with_error', retry_max: 1, retry_backoff_seconds: 10 },
-      { id: 'agent-1', type: 'agent', label: 'Notify Team', config: { agent_id: '' }, error_mode: 'continue', retry_max: 0, retry_backoff_seconds: 1 },
-    ],
-    edges: [
-      { source: 'trigger-1', target: 'command-1' },
-      { source: 'command-1', target: 'command-2' },
-      { source: 'command-2', target: 'conditional-1' },
-      { source: 'conditional-1', target: 'script-1' },
-      { source: 'script-1', target: 'agent-1' },
-    ],
-    settings: {},
-  };
-
-  return `Here's a deploy pipeline workflow for you:
-
-\`\`\`json
-${JSON.stringify(graph, null, 2)}
-\`\`\`
-
-This workflow:
-1. **Trigger** - starts manually (you can change to cron or webhook)
-2. **Run Build** - executes the build command with 2 retries
-3. **Run Tests** - validates the build
-4. **Tests Passed?** - conditional check on test results
-5. **Deploy** - deploys to production with error continuation
-6. **Notify Team** - sends notification via an agent
-
-The workflow has been loaded into the preview canvas. Click "Open in Builder" to customize it further.`;
-}
-
-function generateReviewWorkflowResponse(): string {
-  const graph = {
-    nodes: [
-      { id: 'trigger-1', type: 'trigger', label: 'PR Opened', config: { trigger_subtype: 'manual' }, error_mode: 'stop', retry_max: 0, retry_backoff_seconds: 1 },
-      { id: 'agent-1', type: 'agent', label: 'Analyze Code', config: { agent_id: '' }, error_mode: 'stop', retry_max: 1, retry_backoff_seconds: 5 },
-      { id: 'command-1', type: 'command', label: 'Run Linter', config: { command: 'npm run lint' }, error_mode: 'continue', retry_max: 0, retry_backoff_seconds: 1 },
-      { id: 'transform-1', type: 'transform', label: 'Aggregate Results', config: { mapping: 'merge_reports' }, error_mode: 'stop', retry_max: 0, retry_backoff_seconds: 1 },
-      { id: 'agent-2', type: 'agent', label: 'Generate Review', config: { agent_id: '' }, error_mode: 'stop', retry_max: 1, retry_backoff_seconds: 5 },
-    ],
-    edges: [
-      { source: 'trigger-1', target: 'agent-1' },
-      { source: 'trigger-1', target: 'command-1' },
-      { source: 'agent-1', target: 'transform-1' },
-      { source: 'command-1', target: 'transform-1' },
-      { source: 'transform-1', target: 'agent-2' },
-    ],
-    settings: {},
-  };
-
-  return `Here's a code review workflow:
-
-\`\`\`json
-${JSON.stringify(graph, null, 2)}
-\`\`\`
-
-This workflow:
-1. **PR Opened** - triggers when a pull request is created
-2. **Analyze Code** (parallel) - AI agent analyzes the code changes
-3. **Run Linter** (parallel) - static analysis runs alongside
-4. **Aggregate Results** - combines both analysis outputs
-5. **Generate Review** - AI generates a comprehensive review comment
-
-Click "Open in Builder" to customize the agents and commands.`;
-}
-
-function generateDataWorkflowResponse(): string {
-  const graph = {
-    nodes: [
-      { id: 'trigger-1', type: 'trigger', label: 'Schedule', config: { trigger_subtype: 'cron' }, error_mode: 'stop', retry_max: 0, retry_backoff_seconds: 1 },
-      { id: 'script-1', type: 'script', label: 'Extract Data', config: { script_path: './extract.py' }, error_mode: 'stop', retry_max: 3, retry_backoff_seconds: 10 },
-      { id: 'transform-1', type: 'transform', label: 'Clean & Transform', config: { mapping: 'normalize' }, error_mode: 'stop', retry_max: 1, retry_backoff_seconds: 5 },
-      { id: 'script-2', type: 'script', label: 'Load to DB', config: { script_path: './load.py' }, error_mode: 'stop', retry_max: 2, retry_backoff_seconds: 10 },
-    ],
-    edges: [
-      { source: 'trigger-1', target: 'script-1' },
-      { source: 'script-1', target: 'transform-1' },
-      { source: 'transform-1', target: 'script-2' },
-    ],
-    settings: {},
-  };
-
-  return `Here's a data pipeline (ETL) workflow:
-
-\`\`\`json
-${JSON.stringify(graph, null, 2)}
-\`\`\`
-
-This workflow:
-1. **Schedule** - runs on a cron schedule
-2. **Extract Data** - pulls data from source with 3 retries
-3. **Clean & Transform** - normalizes and transforms the data
-4. **Load to DB** - writes transformed data to the database
-
-Click "Open in Builder" to configure the scripts and schedule.`;
-}
-
-function generateMonitorWorkflowResponse(): string {
-  const graph = {
-    nodes: [
-      { id: 'trigger-1', type: 'trigger', label: 'Health Check Timer', config: { trigger_subtype: 'cron' }, error_mode: 'stop', retry_max: 0, retry_backoff_seconds: 1 },
-      { id: 'command-1', type: 'command', label: 'Check Services', config: { command: 'curl -s http://api/health' }, error_mode: 'continue', retry_max: 2, retry_backoff_seconds: 5 },
-      { id: 'conditional-1', type: 'conditional', label: 'All Healthy?', config: { condition: 'status == ok' }, error_mode: 'stop', retry_max: 0, retry_backoff_seconds: 1 },
-      { id: 'agent-1', type: 'agent', label: 'Send Alert', config: { agent_id: '' }, error_mode: 'stop', retry_max: 1, retry_backoff_seconds: 5 },
-    ],
-    edges: [
-      { source: 'trigger-1', target: 'command-1' },
-      { source: 'command-1', target: 'conditional-1' },
-      { source: 'conditional-1', target: 'agent-1' },
-    ],
-    settings: {},
-  };
-
-  return `Here's a monitoring workflow:
-
-\`\`\`json
-${JSON.stringify(graph, null, 2)}
-\`\`\`
-
-This workflow:
-1. **Health Check Timer** - runs periodically via cron
-2. **Check Services** - pings the health endpoint with retries
-3. **All Healthy?** - evaluates the health response
-4. **Send Alert** - notifies the team if services are unhealthy
-
-Click "Open in Builder" to set the cron schedule and alert configuration.`;
+  conversation.inputMessage.value = t(`workflowPlayground.templatePrompts.${kind}`);
+  conversation.sendMessage();
 }
 
 // ---------------------------------------------------------------------------
@@ -459,10 +147,6 @@ function openInBuilder() {
         <h1>{{ t('workflowPlayground.title') }}</h1>
         <p>{{ t('workflowPlayground.subtitle') }}</p>
       </div>
-      <div v-if="isDemoMode" class="demo-badge">
-        {{ t('workflowPlayground.demoBadge') }}
-        <span v-if="backendError" class="demo-reason">— {{ backendError }}</span>
-      </div>
       <div class="header-actions">
         <button
           v-if="generatedWorkflowId"
@@ -484,30 +168,31 @@ function openInBuilder() {
       <!-- Left panel: Chat UI -->
       <div class="left-panel">
         <AiChatPanel
-          :messages="messages"
-          :isProcessing="isProcessing"
-          :streamingContent="streamingContent"
-          :inputMessage="inputMessage"
-          :conversationId="null"
-          :canFinalize="false"
-          :isFinalizing="false"
+          :messages="conversation.messages.value"
+          :isProcessing="conversation.isProcessing.value"
+          :streamingContent="conversation.streamingContent.value"
+          :inputMessage="conversation.inputMessage.value"
+          :conversationId="conversation.conversationId.value"
+          :canFinalize="conversation.canFinalize.value"
+          :isFinalizing="conversation.isFinalizing.value"
+          :initStreamingParser="conversation.initStreamingParser"
           :assistantIconPaths="assistantIconPaths"
           :inputPlaceholder="t('workflowPlayground.inputPlaceholder')"
           :entityLabel="t('workflowPlayground.entityLabel')"
           bannerTitle=""
           bannerButtonLabel=""
           :showBackendSelector="true"
-          :selected-backend="selectedBackend"
-          :selected-account-id="selectedAccountId"
-          :selected-model="selectedModel"
-          :useCliRunner="useCliRunner"
-          @update:inputMessage="inputMessage = $event"
-          @update:selected-backend="selectedBackend = $event"
-          @update:selected-account-id="selectedAccountId = $event"
-          @update:selected-model="selectedModel = $event"
-          @update:useCliRunner="useCliRunner = $event"
-          @send="handleSend"
-          @keydown="handleKeyDown"
+          :selected-backend="conversation.selectedBackend.value"
+          :selected-account-id="conversation.selectedAccountId.value"
+          :selected-model="conversation.selectedModel.value"
+          :useCliRunner="conversation.useCliRunner.value"
+          @update:inputMessage="conversation.inputMessage.value = $event"
+          @update:selected-backend="conversation.setBackend($event)"
+          @update:selected-account-id="conversation.setAccountId($event)"
+          @update:selected-model="conversation.setModel($event)"
+          @update:useCliRunner="conversation.setUseCliRunner($event)"
+          @send="conversation.sendMessage"
+          @keydown="conversation.handleKeyDown"
         >
           <template #welcome>
             <div class="wf-welcome">
