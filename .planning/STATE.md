@@ -14,6 +14,14 @@ started 2026-06-30. **Roadmap created 2026-06-30** — 4 phases (23–26),
 `docs/research/omnigent-vs-agented.md` (+ `.ko.md`). PR-per-phase +
 codex-review-until-green cadence.
 
+### ✅ v0.10.0 COMPLETE — ALL 4 PHASES SHIPPED (2026-07-04, main bb7c9f8144)
+Progress: [##########] 100% (4/4). Merged: **#286** Phase 23 policy engine (5 codex rounds),
+**#287** Phase 24 sandboxing+egress (4 rounds), **#288** Phase 25 collaboration (3 rounds) + **#290**
+follow-ups, **#289** Phase 26 deployment (Postgres/Render/YAML/key-isolation; multi-round + my take-over
+install-RCE fix). NOTE: Phases 23–25 driven by this session's controlled cadence; Phase 26 (#289) was
+built in parallel by the `/remote-control` process and I took over its final merge (fixed the curl|bash
+installer RCE + YAML body cap). Milestone-complete archival (/grd:complete-milestone) still TODO.
+
 Phase: 23 of 26 (Stackable policy / governance engine) — **✅ COMPLETE & MERGED** (PR #286, main 3cec4976c3, 2026-07-01)
 Status: Full engine shipped — policies store (migration 176), PolicyEvaluator (server→team→session,
 session-first, DENY short-circuit), builtins (cost_budget hard/soft, max_tool_calls, ask_on_os_tools,
