@@ -1471,6 +1471,12 @@ def _create_fresh_loop_child(origin_session: dict, cwd: Optional[str]) -> str:
         # the permission-hook overlay and block the unattended loop. The
         # original handler expresses yolo solely via this flag — mirror it.
         yolo_mode=bool(origin_session.get("yolo_mode")),
+        # Phase 25 follow-up A — inherit the OWNER from the origin session so the
+        # autonomously-respawned reset/resume child is not NULL-owner. The
+        # initiator is the operator who launched the loop (already recorded on the
+        # origin row that ``SELECT *`` loaded); carrying it keeps the owner-gated
+        # SSE stream working across the respawn instead of falling to admin-only.
+        created_by=origin_session.get("created_by"),
     )
 
 
