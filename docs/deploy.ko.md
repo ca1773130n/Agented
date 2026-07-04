@@ -62,17 +62,42 @@ Render는 **연결된 저장소를 Docker 컨텍스트 루트로** 빌드하므�
 
 ## 2. 단일 설치 스크립트
 
-Docker + `docker compose`(v2)가 있는 임의의 호스트에서:
+Docker + `docker compose`(v2)가 있는 임의의 호스트에서.
+
+### 권장: 먼저 클론하고 확인하기
+
+원격 스크립트를 셸로 바로 파이프하는 것은 읽어보지 않은 코드를 실행하는 것입니다. 안전한
+경로는 저장소를 클론해 실행할 내용을 눈으로 확인한 뒤 실행하는 것입니다:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ca1773130n/Agented/main/install.sh | bash
+git clone https://github.com/ca1773130n/Agented && cd Agented
+./install.sh
 ```
+
+클론에서 실행하면 `install.sh`는 바로 옆에 있는 `docker-compose.yml`을 재사용합니다 —
+확인하지 않은 어떤 것도 가져와서 실행하지 않습니다.
+
+### 편의용 원라이너 (덜 안전 — 릴리스 태그에 고정할 것)
+
+굳이 원라이너를 써야 한다면 **불변 릴리스 태그**에 고정하세요. 그러면 설치 스크립트는
+다운로드한 `docker-compose.yml`을 그 태그 버전의 `install.sh`에 내장된 체크섬과 SHA-256으로
+검증하고, **불일치 시 중단**합니다 — 변조된 저장소/CDN가 악성 compose 파일을 몰래 끼워
+넣을 수 없습니다:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ca1773130n/Agented/v0.8.0/install.sh | bash
+```
+
+> [!WARNING]
+> 가변적인 `main` 브랜치에서 가져오는 것은 `AGENTED_INSTALL_UNVERIFIED=1`을 명시적으로
+> 설정하지 않는 한 **거부됩니다**. 이 설정은 체크섬 검증을 건너뛰고 보안 경고를 출력합니다.
+> 위험을 이해한 경우에만 사용하세요.
 
 [`install.sh`](../install.sh)는:
 
 - `ghcr.io/ca1773130n/agented:${GHCR_TAG:-latest}`를 pull하고,
-- `docker-compose.yml`과 `.env`가 있는지 확인하며(기존 파일은 덮어쓰지 않아 커스터마이즈가
-  유지됨),
+- `docker-compose.yml`(클론에서 번들되거나, 고정 태그에서 가져와 **체크섬 검증됨**)과
+  `.env`가 있는지 확인하며(기존 파일은 덮어쓰지 않아 커스터마이즈가 유지됨),
 - `docker compose pull && docker compose up -d`를 실행합니다.
 
 이 스크립트는 **멱등적**입니다 — 재실행은 no-op 업그레이드입니다. 아무것도 실행하지 않고
@@ -83,8 +108,9 @@ curl -fsSL https://raw.githubusercontent.com/ca1773130n/Agented/main/install.sh 
 ```
 
 환경 변수: `GHCR_TAG`(이미지 태그, 기본값 `latest`), `INSTALL_DIR`(compose 파일이 기록되는
-위치, 기본값 현재 디렉터리). 시크릿은 `.env`에 추가하세요 —
-[docs/deploy/SECRETS.md](deploy/SECRETS.md) 참조.
+위치, 기본값 현재 디렉터리), `AGENTED_INSTALL_REF`(compose를 가져올 git ref, 기본값은 태그된
+릴리스), `AGENTED_INSTALL_UNVERIFIED=1`(검증 없이 가변 ref에서 가져오도록 옵트인). 시크릿은
+`.env`에 추가하세요 — [docs/deploy/SECRETS.md](deploy/SECRETS.md) 참조.
 
 ---
 

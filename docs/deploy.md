@@ -65,17 +65,43 @@ fails at the `COPY ai-accounts/ …` step. Two workarounds:
 
 ## 2. Single-install script
 
-On any host with Docker + `docker compose` (v2):
+On any host with Docker + `docker compose` (v2).
+
+### Recommended: clone and inspect first
+
+Piping a remote script straight into a shell runs code you never read. The
+safe path is to clone the repo, look at what you're about to run, then run it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ca1773130n/Agented/main/install.sh | bash
+git clone https://github.com/ca1773130n/Agented && cd Agented
+./install.sh
 ```
+
+When run from a clone, `install.sh` reuses the `docker-compose.yml` sitting
+next to it — nothing is fetched-and-executed sight-unseen.
+
+### Convenience one-liner (less safe — pin to a release tag)
+
+If you must one-line it, pin to an **immutable release tag**. The installer
+then SHA-256-verifies the `docker-compose.yml` it downloads against a checksum
+baked into that tagged copy of `install.sh`, and **aborts on mismatch** — a
+tampered repo/CDN cannot swap in a malicious compose file:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ca1773130n/Agented/v0.8.0/install.sh | bash
+```
+
+> [!WARNING]
+> Fetching from the **mutable `main` branch is refused** unless you explicitly
+> set `AGENTED_INSTALL_UNVERIFIED=1`, which skips checksum verification and
+> prints a security warning. Do that only when you understand the risk.
 
 [`install.sh`](../install.sh):
 
 - pulls `ghcr.io/ca1773130n/agented:${GHCR_TAG:-latest}`,
-- ensures a `docker-compose.yml` and a `.env` are present (never clobbering an
-  existing one — customizations survive),
+- ensures a `docker-compose.yml` (bundled from the clone, or fetched from a
+  pinned tag **and checksum-verified**) and a `.env` are present (never
+  clobbering an existing one — customizations survive),
 - runs `docker compose pull && docker compose up -d`.
 
 It is **idempotent** — re-running is a no-op upgrade. Preview the exact commands
@@ -86,8 +112,11 @@ without executing anything:
 ```
 
 Environment knobs: `GHCR_TAG` (image tag, default `latest`), `INSTALL_DIR`
-(where the compose file is written, default the current directory). Add secrets
-to `.env` — see [docs/deploy/SECRETS.md](deploy/SECRETS.md).
+(where the compose file is written, default the current directory),
+`AGENTED_INSTALL_REF` (git ref the compose fetch is pinned to; defaults to a
+tagged release), `AGENTED_INSTALL_UNVERIFIED=1` (opt in to an unverified
+mutable-ref fetch). Add secrets to `.env` —
+see [docs/deploy/SECRETS.md](deploy/SECRETS.md).
 
 ---
 

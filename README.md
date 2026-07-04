@@ -40,12 +40,35 @@ Open the console at **http://localhost:3000**. Interactive API docs (Swagger UI)
 live at **http://localhost:20000/schema**. Run pieces individually with
 `just dev-backend`, `just dev-frontend`, `just dev-ai-accounts`.
 
-### Deploy without cloning
+### Deploy the prebuilt image
+
+**Recommended — clone and inspect first** (read the code, *then* run it):
 
 ```bash
-# One-liner: pull the prebuilt image + bring up the compose stack
-curl -fsSL https://raw.githubusercontent.com/ca1773130n/Agented/main/install.sh | bash
+git clone https://github.com/ca1773130n/Agented && cd Agented
+./install.sh                 # pull the prebuilt image + bring up the stack
+```
 
+`install.sh` reuses the `docker-compose.yml` it was cloned with, so no code is
+fetched-and-executed sight-unseen.
+
+<details>
+<summary>Convenience one-liner (less safe)</summary>
+
+Piping a remote script into a shell executes code you haven't read. Only do
+this pinned to an **immutable release tag** — the installer then SHA-256
+verifies the compose file it downloads and aborts on mismatch:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ca1773130n/Agented/v0.8.0/install.sh | bash
+```
+
+Fetching from the mutable `main` branch is refused unless you explicitly set
+`AGENTED_INSTALL_UNVERIFIED=1` (which skips checksum verification and prints a
+security warning). See [docs/deploy.md](docs/deploy.md#2-single-install-script).
+</details>
+
+```bash
 # Update an existing install in one command (image is the update unit)
 just self-update
 ```
