@@ -30,7 +30,7 @@ def test_migration_149_registered():
     assert "harness_evidence" in names
 
 
-def test_migration_149_creates_table_on_existing_db():
+def test_migration_149_creates_table_on_existing_db(skip_on_pg):
     import sqlite3
 
     from app.db.migrations.v07_features import _migrate_149_harness_evidence

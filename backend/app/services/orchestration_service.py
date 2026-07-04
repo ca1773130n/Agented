@@ -1,10 +1,11 @@
 """Orchestration service for fallback chain execution with account rotation."""
 
 import logging
-import os
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
+
+from app.config import env_llm_key
 
 from ..database import (
     get_fallback_chain,
@@ -388,8 +389,9 @@ class OrchestrationService:
         env = {}
         api_key_env = account.get("api_key_env")
         if api_key_env:
-            # api_key_env is the NAME of the env var (e.g., "ANTHROPIC_API_KEY_2")
-            key_value = os.environ.get(api_key_env, "")
+            # api_key_env is the NAME of the env var (e.g., "ANTHROPIC_API_KEY_2").
+            # Suppressed when AGENTED_SERVER_NO_LLM_KEYS is set (REQ-41).
+            key_value = env_llm_key(api_key_env)
             if key_value:
                 # Map to the standard env var expected by the backend
                 env["ANTHROPIC_API_KEY"] = key_value

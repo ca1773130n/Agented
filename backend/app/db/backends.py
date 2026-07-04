@@ -2,9 +2,9 @@
 
 import json
 import logging
-import sqlite3
 from typing import List, Optional
 
+from . import errors
 from .connection import get_connection, safe_set_clause
 
 logger = logging.getLogger(__name__)
@@ -80,7 +80,7 @@ def set_fallback_chain(entity_type: str, entity_id: str, entries: list) -> bool:
                 )
             conn.commit()
             return True
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return False
 
 

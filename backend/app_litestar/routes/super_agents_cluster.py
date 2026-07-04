@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 import subprocess
 import tempfile
 import time
@@ -37,6 +36,7 @@ from app.database import (
     update_super_agent_document,
 )
 from app.database import create_super_agent as db_create_super_agent
+from app.db import errors as db_errors
 
 from ..auth import Caller
 from ..list_scope import admin_or_scoped
@@ -131,12 +131,12 @@ def create_super_agent(data: dict, caller: Caller) -> dict[str, Any]:
             max_concurrent_sessions=data.get("max_concurrent_sessions", 10),
             config_json=data.get("config_json"),
         )
-    except sqlite3.IntegrityError:
+    except db_errors.IntegrityError:
         raise HTTPException(
             status_code=409,
             detail="A super agent with this name or configuration already exists",
         ) from None
-    except sqlite3.OperationalError:
+    except db_errors.OperationalError:
         raise HTTPException(status_code=503, detail="Database unavailable, please retry") from None
     if not sa_id:
         raise HTTPException(status_code=500, detail="Failed to create super agent")

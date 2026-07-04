@@ -14,10 +14,10 @@ Functions:
 """
 
 import logging
-import sqlite3
 
 import app.config as config
 
+from . import errors
 from .connection import get_connection
 from .ids import _get_unique_mcp_server_id, _get_unique_template_id
 from .triggers import PREDEFINED_TRIGGER_ID, PREDEFINED_TRIGGERS
@@ -357,7 +357,7 @@ def auto_register_project_root():
                 )
                 conn.commit()
                 print(f"Auto-registered project root for security trigger: {config.PROJECT_ROOT}")
-            except sqlite3.IntegrityError:
+            except errors.IntegrityError:
                 _remove_symlink(symlink_name)
 
 

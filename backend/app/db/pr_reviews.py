@@ -6,9 +6,9 @@ re-exported from `app.db.triggers` for backward compatibility.
 """
 
 import logging
-import sqlite3
 from typing import List, Optional
 
+from . import errors
 from .connection import get_connection
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ def add_pr_review(
             )
             conn.commit()
             return cursor.lastrowid
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 

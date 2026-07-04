@@ -7,7 +7,7 @@ Entries persist across server restarts, enabling durable dispatch.
 import logging
 from typing import List, Optional
 
-from .connection import get_connection
+from .connection import _is_pg, get_connection
 from .ids import _generate_short_id
 
 logger = logging.getLogger(__name__)
@@ -221,12 +221,16 @@ def cleanup_completed_entries(max_age_hours: int = 24) -> int:
     Returns:
         Number of entries removed.
     """
+    # completed_at is a TEXT column (stores ISO strings); on Postgres it must be
+    # cast to timestamptz to compare against the translated date cutoff. On SQLite
+    # the bare text column compares directly (unchanged).
+    completed_at = "completed_at::timestamptz" if _is_pg() else "completed_at"
     with get_connection() as conn:
         cursor = conn.execute(
-            """
+            f"""
             DELETE FROM execution_queue
             WHERE status IN ('completed', 'failed', 'cancelled')
-              AND completed_at < datetime('now', ? || ' hours')
+              AND {completed_at} < datetime('now', ? || ' hours')
             """,
             (f"-{max_age_hours}",),
         )

@@ -7,6 +7,8 @@ viewer comments, execution queue, circuit breakers, findings, version
 pins, app_meta, rotation_events.
 """
 
+from ..connection import _is_pg
+
 
 def create_misc_tables(conn):
     # Fallback chains table - ordered fallback backends per trigger/agent
@@ -492,16 +494,26 @@ def create_misc_tables(conn):
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    conn.execute("""
-        INSERT OR IGNORE INTO app_meta (key, value) VALUES (
-            'instance_id',
-            lower(
-                hex(randomblob(4)) || '-' ||
-                hex(randomblob(2)) || '-4' ||
-                substr(hex(randomblob(2)),2) || '-' ||
-                substr('89ab', abs(random()) % 4 + 1, 1) ||
-                substr(hex(randomblob(2)),2) || '-' ||
-                hex(randomblob(6))
-            )
+    if _is_pg():
+        # randomblob()/random() are SQLite-only. Postgres ships gen_random_uuid()
+        # in core (v13+), which yields the same canonical UUID-v4 text shape the
+        # SQLite expression hand-builds.
+        conn.execute(
+            "INSERT INTO app_meta (key, value) "
+            "VALUES ('instance_id', gen_random_uuid()::text) "
+            "ON CONFLICT (key) DO NOTHING"
         )
-    """)
+    else:
+        conn.execute("""
+            INSERT OR IGNORE INTO app_meta (key, value) VALUES (
+                'instance_id',
+                lower(
+                    hex(randomblob(4)) || '-' ||
+                    hex(randomblob(2)) || '-4' ||
+                    substr(hex(randomblob(2)),2) || '-' ||
+                    substr('89ab', abs(random()) % 4 + 1, 1) ||
+                    substr(hex(randomblob(2)),2) || '-' ||
+                    hex(randomblob(6))
+                )
+            )
+        """)

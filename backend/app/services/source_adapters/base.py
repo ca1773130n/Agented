@@ -36,6 +36,7 @@ from dataclasses import dataclass
 from typing import Literal, Optional, Protocol, runtime_checkable
 
 from app.database import get_connection
+from app.db.connection import insertion_tiebreak_col
 from app.db.ids import generate_id
 
 # Outcome tags an adapter's ``fetch`` returns. ``changed`` is the only one that
@@ -141,7 +142,9 @@ class AdapterBase:
             # guard).
             prev = conn.execute(
                 "SELECT content_hash FROM competitor_snapshot WHERE source_id = ? "
-                "ORDER BY fetched_at DESC, rowid DESC LIMIT 1",
+                # rowid on SQLite / id on Postgres — deterministic insertion-order
+                # tiebreaker after fetched_at (see insertion_tiebreak_col).
+                f"ORDER BY fetched_at DESC, {insertion_tiebreak_col()} DESC LIMIT 1",  # noqa: S608
                 (source_id,),
             ).fetchone()
             if prev is not None and prev["content_hash"] == content_hash:

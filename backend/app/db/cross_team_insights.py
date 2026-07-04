@@ -108,7 +108,7 @@ def _build_team_insight(conn, team: dict) -> dict:
             FROM execution_logs el
             JOIN triggers t ON el.trigger_id = t.id
             WHERE t.team_id = ?
-            GROUP BY el.trigger_id
+            GROUP BY el.trigger_id, t.name
             ORDER BY cnt DESC
             LIMIT 1
             """,

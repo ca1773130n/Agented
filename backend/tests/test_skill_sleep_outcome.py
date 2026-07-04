@@ -183,7 +183,7 @@ def test_evaluate_with_outcome_persists_measurement(isolated_db, monkeypatch):
     assert run["outcome_delta"] is not None
 
 
-def test_migration_163_outcome_columns():
+def test_migration_163_outcome_columns(skip_on_pg):
     import sqlite3
 
     from app.db.migrations import VERSIONED_MIGRATIONS

@@ -15,11 +15,11 @@ contract:
 
 from __future__ import annotations
 
-import sqlite3
 from typing import Any
 
 import pytest
 
+from app.db.connection import get_connection
 from app.services import sidecar_account_sync_service as svc
 
 
@@ -87,28 +87,34 @@ def _patch_httpx(monkeypatch: pytest.MonkeyPatch, resp: _FakeResp | Exception) -
     monkeypatch.setattr(httpx, "Client", lambda **_kw: _FakeClient(resp))
 
 
-def _seed_admin_key(db_path: str, key: str = "test-admin-key") -> None:
-    """Insert a row into user_roles so the sync resolver finds a key."""
-    conn = sqlite3.connect(db_path)
-    try:
-        conn.execute("INSERT INTO user_roles (api_key, role) VALUES (?, 'admin')", (key,))
-        conn.commit()
-    finally:
-        conn.close()
+def _seed_admin_key(key: str = "test-admin-key") -> None:
+    """Insert an admin row into user_roles so the sync resolver finds a key.
+
+    Backend-agnostic (26-01): routes through the app's ``create_user_role`` helper
+    (which supplies the ``TEXT PRIMARY KEY`` id) instead of a raw INSERT — the old
+    ``INSERT INTO user_roles (api_key, role)`` relied on SQLite allowing a NULL
+    non-integer PRIMARY KEY, which Postgres rejects (NOT NULL on the PK).
+    """
+    from app.db.rbac import create_user_role
+
+    create_user_role(key, "test admin", role="admin")
 
 
 def test_sync_inserts_sidecar_accounts(monkeypatch, isolated_db):
-    _seed_admin_key(isolated_db)
+    _seed_admin_key()
     _patch_httpx(monkeypatch, _FakeResp(200, _sample_payload()))
 
     n = svc.sync_sidecar_accounts()
     assert n == 2
 
-    conn = sqlite3.connect(isolated_db)
-    rows = conn.execute(
-        "SELECT backend_id, account_name, email, config_path, plan, is_default "
-        "FROM backend_accounts ORDER BY backend_id, account_name"
-    ).fetchall()
+    with get_connection() as conn:
+        rows = [
+            tuple(r)
+            for r in conn.execute(
+                "SELECT backend_id, account_name, email, config_path, plan, is_default "
+                "FROM backend_accounts ORDER BY backend_id, account_name"
+            ).fetchall()
+        ]
     assert rows == [
         ("backend-claude", "Personal1", "alice@example.com", "~/.claude-personal1", "max", 1),
         ("backend-codex", "Codex-Pro", "alice@example.com", "~/.codex", "pro", 0),
@@ -119,7 +125,7 @@ def test_sync_maps_antigravity_kind_to_gemini(monkeypatch, isolated_db):
     """ai-accounts 0.4.0 renamed the gemini backend kind to "antigravity"; the
     sidecar's antigravity accounts must still sync under Agented's backend-gemini
     (otherwise they're silently dropped)."""
-    _seed_admin_key(isolated_db)
+    _seed_admin_key()
     payload = {
         "items": [
             {
@@ -139,28 +145,28 @@ def test_sync_maps_antigravity_kind_to_gemini(monkeypatch, isolated_db):
     _patch_httpx(monkeypatch, _FakeResp(200, payload))
 
     assert svc.sync_sidecar_accounts() == 1
-    conn = sqlite3.connect(isolated_db)
-    row = conn.execute("SELECT backend_id, account_name FROM backend_accounts").fetchone()
-    assert row == ("backend-gemini", "AG-Main")
+    with get_connection() as conn:
+        row = conn.execute("SELECT backend_id, account_name FROM backend_accounts").fetchone()
+    assert tuple(row) == ("backend-gemini", "AG-Main")
 
 
 def test_sync_is_idempotent(monkeypatch, isolated_db):
     """Re-running the sync upserts in place — no duplicates."""
-    _seed_admin_key(isolated_db)
+    _seed_admin_key()
     _patch_httpx(monkeypatch, _FakeResp(200, _sample_payload()))
 
     svc.sync_sidecar_accounts()
     svc.sync_sidecar_accounts()
     svc.sync_sidecar_accounts()
 
-    conn = sqlite3.connect(isolated_db)
-    count = conn.execute("SELECT COUNT(*) FROM backend_accounts").fetchone()[0]
+    with get_connection() as conn:
+        count = conn.execute("SELECT COUNT(*) FROM backend_accounts").fetchone()[0]
     assert count == 2
 
 
 def test_sync_updates_existing_rows_on_rename(monkeypatch, isolated_db):
     """Display-name change on the same config_path updates the existing row."""
-    _seed_admin_key(isolated_db)
+    _seed_admin_key()
     _patch_httpx(monkeypatch, _FakeResp(200, _sample_payload()))
     svc.sync_sidecar_accounts()
 
@@ -170,10 +176,10 @@ def test_sync_updates_existing_rows_on_rename(monkeypatch, isolated_db):
     _patch_httpx(monkeypatch, _FakeResp(200, renamed))
     svc.sync_sidecar_accounts()
 
-    conn = sqlite3.connect(isolated_db)
-    names = sorted(
-        r[0] for r in conn.execute("SELECT account_name FROM backend_accounts").fetchall()
-    )
+    with get_connection() as conn:
+        names = sorted(
+            r[0] for r in conn.execute("SELECT account_name FROM backend_accounts").fetchall()
+        )
     assert names == ["Codex-Pro", "Primary"]
 
 
@@ -195,18 +201,18 @@ def test_sync_returns_zero_when_no_admin_key(monkeypatch, isolated_db):
 
 
 def test_sync_returns_zero_on_http_error(monkeypatch, isolated_db):
-    _seed_admin_key(isolated_db)
+    _seed_admin_key()
     import httpx
 
     _patch_httpx(monkeypatch, httpx.ConnectError("connection refused"))
 
     assert svc.sync_sidecar_accounts() == 0
-    conn = sqlite3.connect(isolated_db)
-    assert conn.execute("SELECT COUNT(*) FROM backend_accounts").fetchone()[0] == 0
+    with get_connection() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM backend_accounts").fetchone()[0] == 0
 
 
 def test_sync_returns_zero_on_non_200(monkeypatch, isolated_db):
-    _seed_admin_key(isolated_db)
+    _seed_admin_key()
     _patch_httpx(monkeypatch, _FakeResp(401, {"error": "unauthorized"}))
 
     assert svc.sync_sidecar_accounts() == 0
@@ -214,7 +220,7 @@ def test_sync_returns_zero_on_non_200(monkeypatch, isolated_db):
 
 def test_sync_skips_unknown_kinds(monkeypatch, isolated_db):
     """An unknown backend kind in the sidecar response is dropped silently."""
-    _seed_admin_key(isolated_db)
+    _seed_admin_key()
     payload = {
         "items": [
             {
@@ -229,13 +235,13 @@ def test_sync_skips_unknown_kinds(monkeypatch, isolated_db):
     _patch_httpx(monkeypatch, _FakeResp(200, payload))
 
     assert svc.sync_sidecar_accounts() == 0
-    conn = sqlite3.connect(isolated_db)
-    assert conn.execute("SELECT COUNT(*) FROM backend_accounts").fetchone()[0] == 0
+    with get_connection() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM backend_accounts").fetchone()[0] == 0
 
 
 def test_sync_falls_back_when_display_name_missing(monkeypatch, isolated_db):
     """Sidecar id is a stable fallback when display_name is null."""
-    _seed_admin_key(isolated_db)
+    _seed_admin_key()
     payload = {
         "items": [
             {
@@ -250,6 +256,6 @@ def test_sync_falls_back_when_display_name_missing(monkeypatch, isolated_db):
     _patch_httpx(monkeypatch, _FakeResp(200, payload))
 
     assert svc.sync_sidecar_accounts() == 1
-    conn = sqlite3.connect(isolated_db)
-    name = conn.execute("SELECT account_name FROM backend_accounts").fetchone()[0]
+    with get_connection() as conn:
+        name = conn.execute("SELECT account_name FROM backend_accounts").fetchone()[0]
     assert name == "bkd-noname"

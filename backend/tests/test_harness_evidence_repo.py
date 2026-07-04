@@ -70,9 +70,9 @@ def test_fk_cascade_delete_removes_evidence():
 
 def test_unique_session_seq_constraint_rejects_duplicate():
     """The UNIQUE(session_id, seq) backstop forbids two rows sharing an ordinal."""
-    import sqlite3
-
     import pytest
+
+    from app.db import errors
 
     _make_session()
     with get_connection() as conn:
@@ -80,7 +80,7 @@ def test_unique_session_seq_constraint_rejects_duplicate():
             "INSERT INTO harness_evidence (session_id, seq, tool_name) VALUES ('sess-1', 1, 'a')"
         )
         conn.commit()
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(errors.IntegrityError):
         with get_connection() as conn:
             conn.execute(
                 "INSERT INTO harness_evidence (session_id, seq, tool_name) VALUES ('sess-1', 1, 'b')"

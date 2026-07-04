@@ -4,6 +4,13 @@ import sqlite3
 import time
 from pathlib import Path
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _skip_pg(skip_on_pg):
+    """SQLite-specific: exercises SQLite restore tooling (WAL/shm handling) — skip on PG."""
+
 
 def _seed_db(path: Path, marker: str) -> None:
     conn = sqlite3.connect(str(path))

@@ -23,7 +23,7 @@ def test_migration_153_registered():
 # ---------------------------------------------------------------------------
 
 
-def test_fresh_schema_has_extracted_facts_tables():
+def test_fresh_schema_has_extracted_facts_tables(skip_on_pg):
     import sqlite3 as _sqlite3
 
     from app.db.schema import create_fresh_schema

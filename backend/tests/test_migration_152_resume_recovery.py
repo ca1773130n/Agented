@@ -26,7 +26,7 @@ def test_migration_152_registered():
     assert "resume_recovery" in names
 
 
-def test_fresh_schema_has_all_three_columns():
+def test_fresh_schema_has_all_three_columns(skip_on_pg):
     """create_fresh_schema directly — the fixture DB also runs migrations and
     would mask a missing fresh-DDL edit (Phase-3 lesson)."""
     import sqlite3
@@ -44,7 +44,7 @@ def test_fresh_schema_has_all_three_columns():
     assert "resumed_from" in ps
 
 
-def test_migration_152_alter_is_idempotent():
+def test_migration_152_alter_is_idempotent(skip_on_pg):
     import sqlite3
 
     from app.db.migrations.v07_features import _migrate_152_resume_recovery

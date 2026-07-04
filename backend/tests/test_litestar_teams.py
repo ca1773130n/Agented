@@ -95,3 +95,49 @@ def test_list_connections_unknown_team(isolated_db):
         )
     assert resp.status_code == 200
     assert resp.json() == {"connections": []}
+
+
+def test_import_yaml_rejects_oversized_body(isolated_db):
+    """An over-cap YAML import body is rejected at the route before parsing."""
+    from app_litestar.routes.teams import _YAML_IMPORT_MAX_BYTES
+
+    create_user_role("admin-key-tm7", "Admin", "admin")
+    oversized = "a: " + ("x" * (_YAML_IMPORT_MAX_BYTES + 1))
+    with _client() as c:
+        resp = c.post(
+            "/admin/teams/import-yaml",
+            headers={"X-API-Key": "admin-key-tm7"},
+            json={"yaml": oversized},
+        )
+    assert resp.status_code == 400
+    assert "at most" in resp.json()["detail"]
+
+
+def test_import_yaml_accepts_normal_team(isolated_db):
+    """A normal-sized team YAML imports fine (the cap does not block real use)."""
+    from app.services import yaml_authoring_service as yas
+
+    create_user_role("admin-key-tm8", "Admin", "admin")
+    cfg = {
+        "version": yas.CONFIG_VERSION,
+        "kind": yas.CONFIG_KIND,
+        "metadata": {"name": "Import Crew"},
+        "spec": {
+            "topology": "coordinator",
+            "topology_config": {"coordinator": "lead", "workers": ["w1"]},
+            "members": [
+                {"ref": "lead", "name": "lead", "role": "leader", "layer": "backend"},
+                {"ref": "w1", "name": "w1", "role": "member", "layer": "backend"},
+            ],
+            "edges": [{"source": "lead", "target": "w1", "edge_type": "delegation", "weight": 1}],
+        },
+    }
+    text = yas.dump_team_config(cfg)
+    with _client() as c:
+        resp = c.post(
+            "/admin/teams/import-yaml",
+            headers={"X-API-Key": "admin-key-tm8"},
+            json={"yaml": text},
+        )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["status"] == "created"

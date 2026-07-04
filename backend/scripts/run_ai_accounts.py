@@ -16,9 +16,19 @@ import logging
 import os
 import resource
 import sqlite3
+import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+
+# The sidecar is launched as ``python scripts/run_ai_accounts.py`` (see justfile
+# / render.yaml), so ``sys.path[0]`` is the ``scripts/`` dir — not the backend
+# package root. Put the backend root on the path so ``import app.*`` (the shared,
+# DATABASE_URL-aware DB layer we read admin keys through) resolves regardless of
+# launch cwd or whether the package is installed editable.
+_BACKEND_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _BACKEND_ROOT not in sys.path:
+    sys.path.insert(0, _BACKEND_ROOT)
 
 # Bump soft file-descriptor limit early. macOS defaults to 256, which the
 # bundle plugin install + concurrent SQLite + subprocess CLI orchestrators
@@ -179,8 +189,10 @@ def _migrate_legacy_backends(legacy_db: str, target_db: str) -> None:
 #      previous fallback queried ``settings.api_key`` which never existed,
 #      so the sidecar silently ran with NoAuth even when Flask was
 #      properly keyed — H3 in code review).
-#   3. ``LazyFlaskKeyAuth`` — re-reads ``user_roles`` on each request.
-#      This makes the sidecar bootable BEFORE Flask has been keyed: it
+#   3. ``LazyFlaskKeyAuth`` — re-reads ``user_roles`` on each request via the
+#      shared, DATABASE_URL-aware DB layer (SQLite ``agented.db`` by default,
+#      Postgres when ``DATABASE_URL`` is set — codex #5).
+#      This makes the sidecar bootable BEFORE the backend has been keyed: it
 #      refuses every request until the welcome page inserts a row, and
 #      auto-picks up the new key on the very next request without needing
 #      a restart.  Without this, ``just deploy`` on a fresh DB would race
@@ -199,10 +211,16 @@ except Exception as exc:  # pragma: no cover — migration must never crash boot
 
 
 class LazyFlaskKeyAuth:
-    """Auth strategy that mirrors Flask's ``user_roles`` admin keys on
-    every request.  Lets the sidecar boot before Flask has been keyed
-    (returns 401 until a row appears) and auto-picks up new keys without
-    a restart.  Bearer-token only, like :class:`ApiKeyAuth`.
+    """Auth strategy that mirrors the backend's ``user_roles`` keys on every
+    request.  Lets the sidecar boot before the backend has been keyed (returns
+    401 until a row appears) and auto-picks up new keys without a restart.
+    Bearer-token only, like :class:`ApiKeyAuth`.
+
+    Reads through the shared, DATABASE_URL-aware DB layer
+    (``app.db.rbac.get_authorized_api_keys``), so it works on BOTH the SQLite
+    default and a Postgres ``DATABASE_URL`` (codex #5). The ``db_path`` ctor arg
+    is retained for signature compatibility / diagnostics only — the actual read
+    target follows ``config.DATABASE_URL`` / ``config.DB_PATH``, not this path.
     """
 
     _PREFIX = "bearer "
@@ -242,22 +260,21 @@ class LazyFlaskKeyAuth:
         return True
 
     def _read_keys_from_db(self) -> set[str]:
-        if not os.path.exists(self._db_path):
-            return set()
+        # Route through the shared, DATABASE_URL-aware DB layer instead of opening
+        # a hard-coded SQLite file. On a Postgres deploy the admin key lives in
+        # Postgres ``user_roles``, not ``self._db_path`` — the old raw
+        # ``sqlite3.connect`` read returned an empty set and left ``/api/v1``
+        # unauthorized forever (codex #5). On the SQLite default this resolves the
+        # exact same keys as before (``config.DB_PATH`` == the old agented.db path).
+        # ``get_authorized_api_keys`` is itself best-effort (returns an empty set on
+        # any DB error), and the import is guarded so a boot before the backend is
+        # importable degrades to "no keys" (401) rather than crashing.
         try:
-            conn = sqlite3.connect(self._db_path)
-        except sqlite3.Error:
+            from app.db.rbac import get_authorized_api_keys
+
+            return get_authorized_api_keys()
+        except Exception:
             return set()
-        try:
-            try:
-                rows = conn.execute(
-                    "SELECT api_key FROM user_roles WHERE api_key IS NOT NULL"
-                ).fetchall()
-            except sqlite3.Error:
-                return set()
-        finally:
-            conn.close()
-        return {r[0] for r in rows if r and r[0]}
 
     def _allowed_keys(self) -> set[str]:
         import time
@@ -302,9 +319,10 @@ elif os.environ.get("AI_ACCOUNTS_ALLOW_NOAUTH") == "1":
 else:
     auth = LazyFlaskKeyAuth(_legacy_db_path)
     logger.info(
-        "ai-accounts: using LazyFlaskKeyAuth — every request validates "
-        "against agented.db's user_roles. Sidecar will refuse traffic "
-        "until the welcome page generates an admin key (or until "
+        "ai-accounts: using LazyFlaskKeyAuth — every request validates against "
+        "the backend's user_roles via the shared DATABASE_URL-aware DB layer "
+        "(SQLite by default, Postgres when DATABASE_URL is set). Sidecar will "
+        "refuse traffic until the welcome page generates an admin key (or until "
         "AI_ACCOUNTS_API_KEY is set in the environment)."
     )
 

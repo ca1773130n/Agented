@@ -5,10 +5,10 @@ status management, and autofix attempt history.
 """
 
 import logging
-import sqlite3
 from typing import Optional
 
-from .connection import get_connection, safe_set_clause
+from . import errors
+from .connection import _is_pg, get_connection, safe_set_clause
 from .ids import _get_unique_error_id, _get_unique_fix_attempt_id
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ def create_system_error(
             )
             conn.commit()
             return error_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             logger.exception("Failed to create system error")
             return None
 
@@ -135,11 +135,14 @@ def update_system_error_status(error_id: str, status: str) -> bool:
 
 def find_recent_duplicate(error_hash: str, window_seconds: int = 60) -> Optional[dict]:
     """Find a recent error with the same hash within the dedup window."""
+    # timestamp is a TEXT column; on Postgres cast it to timestamptz to compare
+    # against the translated date cutoff (bare text compare unchanged on SQLite).
+    ts = "timestamp::timestamptz" if _is_pg() else "timestamp"
     with get_connection() as conn:
         cursor = conn.execute(
-            """SELECT * FROM system_errors
+            f"""SELECT * FROM system_errors
                WHERE error_hash = ?
-                 AND timestamp >= datetime('now', ? || ' seconds')
+                 AND {ts} >= datetime('now', ? || ' seconds')
                ORDER BY timestamp DESC LIMIT 1""",
             (error_hash, str(-window_seconds)),
         )
@@ -159,7 +162,7 @@ def create_fix_attempt(error_id: str, tier: int) -> Optional[str]:
             )
             conn.commit()
             return fix_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             logger.exception("Failed to create fix attempt")
             return None
 

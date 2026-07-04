@@ -18,13 +18,38 @@ import re
 
 import app.config as config
 
-from ..connection import get_connection
+from ..connection import _is_pg, get_connection
 from ..ids import generate_trigger_id
 from ..schema import create_fresh_schema
 
 logger = logging.getLogger(__name__)
 
 _SAFE_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
+def _table_exists(conn, name: str) -> bool:
+    """Backend-agnostic table-existence check.
+
+    Postgres has no ``sqlite_master``; it exposes ``information_schema.tables``
+    instead. On SQLite the exact original query is preserved (invariant).
+    """
+    if _is_pg():
+        # MUST scope to the current schema + base tables: information_schema.tables
+        # lists every schema the role can see, so an unscoped name='triggers'/'views'
+        # matches the built-in information_schema.* system VIEWS and falsely reports
+        # existence on a fresh DB (sending init_db down the legacy-replay path).
+        # `table_type='BASE TABLE'` mirrors SQLite's `type='table'` (excludes views).
+        row = conn.execute(
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_name = ? AND table_schema = current_schema() "
+            "AND table_type = 'BASE TABLE'",
+            (name,),
+        ).fetchone()
+        return row is not None
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (name,)
+    ).fetchone()
+    return row is not None
 
 
 def _validate_sql_identifier(name: str, kind: str = "identifier") -> str:
@@ -148,6 +173,44 @@ def _bootstrap_schema_version(conn):
 
 
 # =============================================================================
+# Postgres fresh-init replay policy
+# =============================================================================
+
+# Versioned migrations (≥30) that must NOT be replayed on a fresh Postgres DB.
+# Every entry is SQLite-only in a way the _PgConnWrapper shim cannot translate,
+# AND its end-state (tables + columns) is already built by create_fresh_schema,
+# so skipping the replay leaves the PG column set complete. On SQLite _is_pg()
+# is False, so this set is never consulted — SQLite replays everything as before.
+#
+#   40  add_in_review_plan_status  — DROP+CREATE+copy rebuild to widen a CHECK
+#                                     (project_plans; same column set in fresh)
+#   41  fix_in_review_check_constraint — re-invokes the v40 project_plans rebuild
+#                                     (same rebuild; project_plans already in fresh)
+#   43  expand_mcp_schema          — unguarded try/except ALTER ADD loop over
+#                                     mcp_servers/project_mcp_servers columns (all
+#                                     already in fresh schema → would poison PG txn)
+#   71  template_history_author_diff — unguarded try/except ALTER ADD; columns
+#                                     (author, diff_text) already in fresh schema,
+#                                     so a replay only fail-poisons the PG txn
+#   72  add_execution_logs_fts     — fts5 virtual table + triggers (SQLite-only)
+#   75  trigger_cron_expression    — unguarded try/except ALTER ADD; cron_expression
+#                                     already in fresh schema (would poison PG txn)
+#   76  super_agent_dispatch       — unguarded try/except ALTERs (all 4 cols in
+#                                     fresh) + execution_logs rebuild + fts triggers
+#   91  add_sketch_collaborating_status — CHECK-widen rebuild (sketches; same cols)
+#   94  project_scoped_instances   — tables already in fresh + unguarded try/except
+#                                     ALTER (super_agent_sessions.instance_id in fresh);
+#                                     data-migration is a no-op on empty fresh tables
+#   96  app_meta_instance_id       — INSERT seed via SQLite randomblob(); create_fresh
+#                                     already creates+seeds app_meta (gen_random_uuid)
+#   97  agent_memory_tables        — memory_* tables already in fresh + fts5 vtable
+#                                     + fts sync triggers (SQLite-only)
+#   135 harness_evolution_dry_run  — CHECK-widen rebuild (harness_evolution_rounds)
+#   136 harness_skill_index        — fts5 virtual table (SQLite-only; dropped by 137)
+_PG_SKIP_MIGRATIONS = frozenset({40, 41, 43, 71, 72, 75, 76, 91, 94, 96, 97, 135, 136})
+
+
+# =============================================================================
 # Database initialization
 # =============================================================================
 
@@ -160,21 +223,19 @@ def init_db():
     from app.db.migrations.v04_initial import _migrate_add_github_columns
 
     with get_connection() as conn:
-        # Enable WAL mode for concurrent read/write safety
-        result = conn.execute("PRAGMA journal_mode=WAL").fetchone()
-        if result[0].lower() != "wal":
-            logger.warning("WAL mode not enabled, got: %s", result[0])
-        else:
-            logger.info("SQLite WAL mode enabled")
+        # Enable WAL mode for concurrent read/write safety (SQLite only — journal
+        # modes/PRAGMA don't exist on Postgres, which manages WAL internally).
+        if not _is_pg():
+            result = conn.execute("PRAGMA journal_mode=WAL").fetchone()
+            if result[0].lower() != "wal":
+                logger.warning("WAL mode not enabled, got: %s", result[0])
+            else:
+                logger.info("SQLite WAL mode enabled")
 
         # Check if we need to migrate from old schema (INTEGER id) to new (TEXT id)
         # Check for either legacy bots table or current triggers table
-        cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='bots'")
-        has_bots = cursor.fetchone()
-        cursor = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='triggers'"
-        )
-        has_triggers = cursor.fetchone()
+        has_bots = _table_exists(conn, "bots")
+        has_triggers = _table_exists(conn, "triggers")
 
         if has_bots or has_triggers:
             if has_bots:
@@ -227,8 +288,30 @@ def init_db():
         # Run only v0.3.0 migration functions (30+) for new tables.
         # Legacy migrations (1-29) operate on bots/triggers transition
         # and are not safe to run on a fresh schema that already has triggers.
+        #
+        # Postgres: every PG init is a FRESH init (PG support is new — no legacy
+        # PG databases exist). The versioned migrations ≥30 are SQLite
+        # schema-EVOLUTION steps toward exactly the state create_fresh_schema
+        # already builds. MOST of them are purely ADDITIVE (CREATE TABLE IF NOT
+        # EXISTS, PRAGMA-guarded ALTER TABLE ADD COLUMN, CREATE INDEX) and those
+        # DDL idioms translate cleanly through the ``_PgConnWrapper`` shim
+        # (AUTOINCREMENT→IDENTITY, sqlite_master/PRAGMA→information_schema), so we
+        # REPLAY them on PG — that is what lands the ~31 migration-only tables
+        # (users, sessions, session_events, …) and the migration-only columns
+        # (agent_conversations.user_id, …) that create_fresh_schema alone lacks.
+        #
+        # A minority use SQLite-ONLY idioms Postgres rejects and are listed in
+        # ``_PG_SKIP_MIGRATIONS``: table-REBUILD (DROP+CREATE+copy for a CHECK/FK
+        # change), fts5 virtual tables, ``randomblob`` seeds, and additive
+        # migrations whose columns already exist in create_fresh_schema and so
+        # would only fail-and-poison the PG transaction (unguarded try/except
+        # ALTER). Their END-STATE (table + column set) is already present in
+        # create_fresh_schema (verified), so skipping their REPLAY on PG loses no
+        # table/column — only a SQLite-only CHECK/fts detail. SQLite is unchanged:
+        # ``_is_pg()`` is False there, so every migration replays exactly as before.
+        pg = _is_pg()
         for version, name, func in VERSIONED_MIGRATIONS:
-            if version >= 30:
+            if version >= 30 and not (pg and version in _PG_SKIP_MIGRATIONS):
                 func(conn)
             _record_version(conn, version, name)
         # Create tables that exist only in legacy migration code, not in fresh schema

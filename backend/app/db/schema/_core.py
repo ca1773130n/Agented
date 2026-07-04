@@ -1,5 +1,57 @@
 """Core trigger / project_paths / execution_logs / prompt_snippets / pr_reviews DDL."""
 
+from ..connection import _is_pg
+
+
+def _create_execution_logs_fts(conn):
+    """SQLite-only FTS5 index + sync triggers for execution_logs full-text search.
+
+    Verbatim (byte-for-byte) copy of the DDL that lived inline in
+    ``create_core_tables``; extracted so it can be skipped on Postgres (which has
+    no FTS5) without re-indenting the SQLite path.
+    """
+    conn.execute("""
+        CREATE VIRTUAL TABLE IF NOT EXISTS execution_logs_fts
+        USING fts5(
+            stdout_log,
+            stderr_log,
+            prompt,
+            content=execution_logs,
+            content_rowid=id,
+            tokenize='porter unicode61'
+        )
+    """)
+
+    # Sync triggers to keep FTS5 index in sync with execution_logs
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS execution_logs_fts_insert
+        AFTER INSERT ON execution_logs
+        BEGIN
+            INSERT INTO execution_logs_fts(rowid, stdout_log, stderr_log, prompt)
+            VALUES (new.id, COALESCE(new.stdout_log, ''), COALESCE(new.stderr_log, ''), COALESCE(new.prompt, ''));
+        END
+    """)
+
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS execution_logs_fts_update
+        AFTER UPDATE OF stdout_log, stderr_log ON execution_logs
+        BEGIN
+            INSERT INTO execution_logs_fts(execution_logs_fts, rowid, stdout_log, stderr_log, prompt)
+            VALUES ('delete', old.id, COALESCE(old.stdout_log, ''), COALESCE(old.stderr_log, ''), COALESCE(old.prompt, ''));
+            INSERT INTO execution_logs_fts(rowid, stdout_log, stderr_log, prompt)
+            VALUES (new.id, COALESCE(new.stdout_log, ''), COALESCE(new.stderr_log, ''), COALESCE(new.prompt, ''));
+        END
+    """)
+
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS execution_logs_fts_delete
+        AFTER DELETE ON execution_logs
+        BEGIN
+            INSERT INTO execution_logs_fts(execution_logs_fts, rowid, stdout_log, stderr_log, prompt)
+            VALUES ('delete', old.id, COALESCE(old.stdout_log, ''), COALESCE(old.stderr_log, ''), COALESCE(old.prompt, ''));
+        END
+    """)
+
 
 def create_core_tables(conn):
     # Triggers table with TEXT id
@@ -93,48 +145,14 @@ def create_core_tables(conn):
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_execution_logs_status ON execution_logs(status)")
 
-    # FTS5 virtual table for full-text search over execution logs (BM25 ranking)
-    conn.execute("""
-        CREATE VIRTUAL TABLE IF NOT EXISTS execution_logs_fts
-        USING fts5(
-            stdout_log,
-            stderr_log,
-            prompt,
-            content=execution_logs,
-            content_rowid=id,
-            tokenize='porter unicode61'
-        )
-    """)
-
-    # Sync triggers to keep FTS5 index in sync with execution_logs
-    conn.execute("""
-        CREATE TRIGGER IF NOT EXISTS execution_logs_fts_insert
-        AFTER INSERT ON execution_logs
-        BEGIN
-            INSERT INTO execution_logs_fts(rowid, stdout_log, stderr_log, prompt)
-            VALUES (new.id, COALESCE(new.stdout_log, ''), COALESCE(new.stderr_log, ''), COALESCE(new.prompt, ''));
-        END
-    """)
-
-    conn.execute("""
-        CREATE TRIGGER IF NOT EXISTS execution_logs_fts_update
-        AFTER UPDATE OF stdout_log, stderr_log ON execution_logs
-        BEGIN
-            INSERT INTO execution_logs_fts(execution_logs_fts, rowid, stdout_log, stderr_log, prompt)
-            VALUES ('delete', old.id, COALESCE(old.stdout_log, ''), COALESCE(old.stderr_log, ''), COALESCE(old.prompt, ''));
-            INSERT INTO execution_logs_fts(rowid, stdout_log, stderr_log, prompt)
-            VALUES (new.id, COALESCE(new.stdout_log, ''), COALESCE(new.stderr_log, ''), COALESCE(new.prompt, ''));
-        END
-    """)
-
-    conn.execute("""
-        CREATE TRIGGER IF NOT EXISTS execution_logs_fts_delete
-        AFTER DELETE ON execution_logs
-        BEGIN
-            INSERT INTO execution_logs_fts(execution_logs_fts, rowid, stdout_log, stderr_log, prompt)
-            VALUES ('delete', old.id, COALESCE(old.stdout_log, ''), COALESCE(old.stderr_log, ''), COALESCE(old.prompt, ''));
-        END
-    """)
+    # FTS5 virtual table for full-text search over execution logs (BM25 ranking).
+    # FTS5 is a SQLite-only extension with no Postgres analogue; on PG the
+    # execution-log search degrades to an ILIKE scan over the execution_logs base
+    # table (see ExecutionSearchService), so the virtual table + its sync triggers
+    # are SQLite-only. The DDL strings are kept verbatim in a helper so the SQLite
+    # path is byte-for-byte unchanged.
+    if not _is_pg():
+        _create_execution_logs_fts(conn)
 
     # Prompt snippets (reusable prompt fragments for {{snippet}} resolution)
     conn.execute("""

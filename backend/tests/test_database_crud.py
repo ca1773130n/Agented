@@ -170,7 +170,13 @@ def apply_migrations(isolated_db):
     The fresh-schema init_db() path does not create 5 agent columns that the
     migration path adds (layer, detected_role, matched_skills, preferred_model,
     effort_level). Since create_agent() references these columns, we add them here.
+
+    Postgres: ``isolated_db`` is a DATABASE_URL (not a file), the fresh PG schema
+    already includes these columns, and ``sqlite3.connect`` cannot open it — so
+    this SQLite-only defensive guard is a no-op on PG.
     """
+    if str(isolated_db).startswith(("postgres://", "postgresql://")):
+        return
     conn = sqlite3.connect(isolated_db)
     cursor = conn.execute("PRAGMA table_info(agents)")
     existing = {row[1] for row in cursor.fetchall()}
@@ -1153,7 +1159,6 @@ class TestHookCRUD:
 class TestHookSearchSort:
     def test_search_finds_off_page_row(self):
         """Search must find a row that does NOT appear on the first page."""
-        from app.database import count_hooks
 
         # Insert 25 'filler' hooks then one needle. Default sort is name ASC,
         # 'filler-NN' all sort before 'needle' so the needle is on a later page.
@@ -2138,6 +2143,62 @@ class TestTokenUsageCRUD:
             end_date="2030-12-31",
         )
         assert isinstance(result, list)
+
+    def test_aggregated_summary_dedups_duplicate_execution_id(self):
+        """Two rows sharing an execution_id (a re-collection) must be deduped to
+        the LATEST insert only — MAX(id), never the sum. This exercises the
+        rowid -> id replacement (26-01 #1): MAX(id) is portable (Postgres has no
+        rowid) and equals the old MAX(rowid) since token_usage.id is the
+        autoincrement PK. Runs on both SQLite and Postgres via isolated_db.
+        """
+        create_token_usage_record(
+            execution_id="exec-dup",
+            entity_type="trigger",
+            entity_id="trig-dedup",
+            backend_type="claude",
+            total_cost_usd=0.05,
+            usage_date="2026-03-10",
+        )
+        create_token_usage_record(
+            execution_id="exec-dup",
+            entity_type="trigger",
+            entity_id="trig-dedup",
+            backend_type="claude",
+            total_cost_usd=0.99,
+            usage_date="2026-03-10",
+        )
+        rows = get_usage_aggregated_summary(
+            group_by="day", entity_type="trigger", entity_id="trig-dedup"
+        )
+        assert len(rows) == 1
+        # Deduped to ONE canonical row (the MAX(id) insert), not two.
+        assert rows[0]["execution_count"] == 1
+        # Cost is the latest insert's 0.99, NOT 0.05 and NOT the 1.04 sum.
+        assert rows[0]["total_cost_usd"] == pytest.approx(0.99)
+
+    def test_aggregated_summary_week_bucket_shape(self):
+        """Week grouping yields a stable 'YYYY-Www' key on BOTH backends (SQLite
+        %W / Postgres ISO IYYY-W IW). Two same-week rows collapse to one bucket
+        whose key matches the -Www shape. Exercises the ISO-week strftime path
+        (26-01 #4). A mid-week, mid-year date avoids year-boundary skew between
+        the two backends' week definitions.
+        """
+        for eid in ("exec-wk-1", "exec-wk-2"):
+            create_token_usage_record(
+                execution_id=eid,
+                entity_type="trigger",
+                entity_id="trig-week",
+                backend_type="claude",
+                total_cost_usd=0.10,
+                usage_date="2026-03-10",
+            )
+        rows = get_usage_aggregated_summary(
+            group_by="week", entity_type="trigger", entity_id="trig-week"
+        )
+        assert len(rows) == 1  # both rows fall in the same week bucket
+        period = rows[0]["period_start"]
+        assert period[:4].isdigit() and period[4:6] == "-W" and period[6:].isdigit()
+        assert rows[0]["execution_count"] == 2
 
 
 class TestBudgetLimitCRUD:

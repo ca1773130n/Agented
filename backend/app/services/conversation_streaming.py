@@ -25,6 +25,9 @@ from typing import Any, Generator, List, Optional, Union
 
 import yaml
 
+from app import config
+from app.config import env_llm_key
+
 logger = logging.getLogger(__name__)
 
 SUBPROCESS_TIMEOUT = 120
@@ -323,7 +326,9 @@ def stream_llm_response(
     else:
         resolved_model = _get_default_model(effective_backend)
     resolved_base = api_base or os.environ.get("ANTHROPIC_API_BASE", "").strip()
-    resolved_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    # ANTHROPIC_API_KEY server-env fallback is suppressed when
+    # AGENTED_SERVER_NO_LLM_KEYS is set (REQ-41).
+    resolved_key = api_key or env_llm_key("ANTHROPIC_API_KEY").strip()
 
     # Work mode: project context is already in the system prompt via assemble_system_prompt.
     # Use the normal routing (CLIProxy for real-time streaming) rather than forcing CLI
@@ -852,6 +857,11 @@ def _stream_via_cli(
             stderr=subprocess.PIPE,
             bufsize=0,
             cwd=cwd,
+            # 4th-leak guard (REQ-41): when AGENTED_SERVER_NO_LLM_KEYS is on,
+            # strip server-baked LLM inference keys so a poison ANTHROPIC_API_KEY
+            # cannot back inference through the CLI child. Flag off ⇒ None ⇒
+            # inherit os.environ unchanged.
+            env=config.subprocess_env(),
             # Own process group so a timeout/disconnect can kill tool
             # grandchildren too (03 H1).
             start_new_session=True,
@@ -994,6 +1004,9 @@ def _stream_via_opencode_cli(
             stderr=subprocess.PIPE,
             bufsize=0,
             cwd=cwd,
+            # 4th-leak guard (REQ-41): strip server-baked LLM inference keys when
+            # AGENTED_SERVER_NO_LLM_KEYS is on (flag off ⇒ None ⇒ inherit env).
+            env=config.subprocess_env(),
             start_new_session=True,  # killable process group (03 H1)
         )
 

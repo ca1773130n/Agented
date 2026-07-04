@@ -175,10 +175,10 @@ def get_token_usage_summary(
         query += " AND entity_id = ?"
         params.append(entity_id)
     if start_date:
-        query += " AND date(recorded_at) >= ?"
+        query += " AND CAST(date(recorded_at) AS TEXT) >= ?"
         params.append(start_date)
     if end_date:
-        query += " AND date(recorded_at) <= ?"
+        query += " AND CAST(date(recorded_at) AS TEXT) <= ?"
         params.append(end_date)
 
     query += " ORDER BY recorded_at DESC LIMIT ? OFFSET ?"
@@ -206,10 +206,10 @@ def get_token_usage_count(
         query += " AND entity_id = ?"
         params.append(entity_id)
     if start_date:
-        query += " AND date(recorded_at) >= ?"
+        query += " AND CAST(date(recorded_at) AS TEXT) >= ?"
         params.append(start_date)
     if end_date:
-        query += " AND date(recorded_at) <= ?"
+        query += " AND CAST(date(recorded_at) AS TEXT) <= ?"
         params.append(end_date)
 
     with get_connection() as conn:
@@ -235,10 +235,10 @@ def get_token_usage_total_cost(
         query += " AND entity_id = ?"
         params.append(entity_id)
     if start_date:
-        query += " AND date(recorded_at) >= ?"
+        query += " AND CAST(date(recorded_at) AS TEXT) >= ?"
         params.append(start_date)
     if end_date:
-        query += " AND date(recorded_at) <= ?"
+        query += " AND CAST(date(recorded_at) AS TEXT) <= ?"
         params.append(end_date)
 
     with get_connection() as conn:
@@ -282,6 +282,9 @@ def get_usage_aggregated_summary(
     if group_by == "day":
         date_fmt = "%Y-%m-%d"
     elif group_by == "week":
+        # SQLite %W is a non-ISO week-of-year; on Postgres the shim emits an
+        # internally-consistent ISO year+week (IYYY-W IW), so the week bucket can
+        # differ near a year boundary but stays a stable per-backend week key.
         date_fmt = "%Y-W%W"
     else:  # month
         date_fmt = "%Y-%m"
@@ -290,7 +293,11 @@ def get_usage_aggregated_summary(
     # (which re-collection rewrites). COALESCE keeps any pre-migration row
     # working by falling back to its recorded_at date. This is what makes a
     # past day's cost fixed once the day has passed.
-    day_expr = "COALESCE(tu.usage_date, date(tu.recorded_at))"
+    # usage_date is a 'YYYY-MM-DD' TEXT column; wrap the fallback in CAST(... AS
+    # TEXT) so both COALESCE branches are text. On SQLite date() already returns
+    # text so this is a no-op; on Postgres date() is a real DATE and COALESCE of
+    # text+date is a hard type error — the cast keeps the pair text on both.
+    day_expr = "COALESCE(tu.usage_date, CAST(date(tu.recorded_at) AS TEXT))"
     query = f"""
         SELECT
             strftime('{date_fmt}', {day_expr}) as period_start,
@@ -307,8 +314,10 @@ def get_usage_aggregated_summary(
           -- Dedupe: a session re-collected under two project dirs (or the
           -- same id seen twice) lands as duplicate execution_id rows, which
           -- would double-count its cost/tokens. Keep one canonical row
-          -- (latest insert = MAX(rowid)) per execution_id.
-          AND tu.rowid IN (SELECT MAX(rowid) FROM token_usage GROUP BY execution_id)
+          -- (latest insert = MAX(id)) per execution_id. token_usage.id is the
+          -- INTEGER PRIMARY KEY AUTOINCREMENT — identical to SQLite's implicit
+          -- rowid, but portable (Postgres has no rowid).
+          AND tu.id IN (SELECT MAX(id) FROM token_usage GROUP BY execution_id)
     """
     params: list = []
 
@@ -354,8 +363,10 @@ def get_usage_by_entity(
           -- Dedupe: a session re-collected under two project dirs (or the
           -- same id seen twice) lands as duplicate execution_id rows, which
           -- would double-count its cost/tokens. Keep one canonical row
-          -- (latest insert = MAX(rowid)) per execution_id.
-          AND tu.rowid IN (SELECT MAX(rowid) FROM token_usage GROUP BY execution_id)
+          -- (latest insert = MAX(id)) per execution_id. token_usage.id is the
+          -- INTEGER PRIMARY KEY AUTOINCREMENT — identical to SQLite's implicit
+          -- rowid, but portable (Postgres has no rowid).
+          AND tu.id IN (SELECT MAX(id) FROM token_usage GROUP BY execution_id)
     """
     params: list = []
 
@@ -363,10 +374,12 @@ def get_usage_by_entity(
         query += " AND tu.entity_type = ?"
         params.append(entity_type)
     if start_date:
-        query += " AND date(tu.recorded_at) >= ?"
+        # CAST(date(...) AS TEXT) so the comparison is text>=text on both backends
+        # (no-op on SQLite; avoids Postgres' "date >= text" operator error).
+        query += " AND CAST(date(tu.recorded_at) AS TEXT) >= ?"
         params.append(start_date)
     if end_date:
-        query += " AND date(tu.recorded_at) <= ?"
+        query += " AND CAST(date(tu.recorded_at) AS TEXT) <= ?"
         params.append(end_date)
 
     query += " GROUP BY tu.entity_type, tu.entity_id ORDER BY total_cost_usd DESC"

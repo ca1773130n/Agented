@@ -30,6 +30,7 @@ from datetime import datetime
 from queue import Empty, Queue
 from typing import Dict, Generator, List, Optional
 
+from .. import config
 from ..db import (
     _get_unique_project_session_id,
     get_active_sessions,
@@ -39,6 +40,20 @@ from ..db import (
 from ..db.backends import get_accounts_for_backend_type
 
 logger = logging.getLogger(__name__)
+
+
+def _build_pipe_env(env: Optional[dict]) -> Optional[dict]:
+    """Build the pipe-transport Popen env, honoring LLM-key isolation.
+
+    Merges ``os.environ`` with the harness ``env`` overrides (a forked child
+    inherits os.environ automatically; Popen does not, so we merge to match),
+    then routes the result through :func:`config.subprocess_env` — the 4th-leak
+    guard (REQ-41) that strips server-baked LLM inference keys when
+    ``AGENTED_SERVER_NO_LLM_KEYS`` is set. Flag off ⇒ the merged dict is
+    returned byte-for-byte unchanged.
+    """
+    return config.subprocess_env({**os.environ, **(env or {})})
+
 
 # Compiled regex to strip ANSI escape codes from PTY output.
 # Handles CSI sequences (\x1b[...X), OSC sequences (\x1b]...BEL), and other common escapes.
@@ -1021,6 +1036,14 @@ class ProjectSessionManager:
                 os.dup2(slave_fd, 2)  # stderr
                 if slave_fd > 2:
                     os.close(slave_fd)
+                # 4th-leak guard (REQ-41): the forked child inherits the
+                # parent's full os.environ, so a server-baked LLM inference key
+                # (e.g. ANTHROPIC_API_KEY) would reach the harness. Scrub those
+                # keys BEFORE layering the harness env overrides on top — mirrors
+                # config.subprocess_env for the pipe path and lets an explicit
+                # per-request override survive. No-op when the flag is unset
+                # (os.environ left byte-for-byte unchanged).
+                config.scrub_env_inplace(os.environ)
                 # Apply optional environment variables before exec
                 if env:
                     for k, v in env.items():
@@ -1045,7 +1068,11 @@ class ProjectSessionManager:
             # Env merges with os.environ to match the PTY behavior (a fork
             # child inherits the parent's env; Popen does not unless we
             # explicitly merge).
-            popen_env = {**os.environ, **(env or {})}
+            # 4th-leak guard (REQ-41): route the merged env through
+            # config.subprocess_env so a server-baked LLM inference key is
+            # stripped when AGENTED_SERVER_NO_LLM_KEYS is set. Flag off ⇒ the
+            # merged dict is returned unchanged (byte-for-byte as before).
+            popen_env = _build_pipe_env(env)
             try:
                 popen = subprocess.Popen(
                     spawn_cmd,

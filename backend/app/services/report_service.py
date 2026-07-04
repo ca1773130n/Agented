@@ -79,7 +79,7 @@ class ReportService:
                 FROM execution_logs e
                 LEFT JOIN triggers t ON e.trigger_id = t.id
                 WHERE e.started_at >= datetime('now', '-7 days')
-                GROUP BY e.trigger_id
+                GROUP BY e.trigger_id, t.name
                 ORDER BY execution_count DESC
                 LIMIT 5
                 """
@@ -102,7 +102,7 @@ class ReportService:
                 FROM execution_logs e
                 LEFT JOIN triggers t ON e.trigger_id = t.id
                 WHERE e.started_at >= datetime('now', '-7 days')
-                GROUP BY e.trigger_id
+                GROUP BY e.trigger_id, t.name
                 HAVING total > 0 AND (CAST(failed AS FLOAT) / total) > 0.5
                 """
             )
@@ -128,7 +128,7 @@ class ReportService:
                 FROM health_alerts h
                 LEFT JOIN triggers t ON h.trigger_id = t.id
                 WHERE h.acknowledged = 0
-                GROUP BY h.trigger_id
+                GROUP BY h.trigger_id, t.name
                 """
             )
             for row in cursor.fetchall():

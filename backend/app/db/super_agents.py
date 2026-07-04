@@ -1,9 +1,9 @@
 """SuperAgent, Document, and Session CRUD operations."""
 
 import logging
-import sqlite3
 from typing import List, Optional
 
+from . import errors
 from .connection import get_connection
 from .ids import _get_unique_super_agent_id, _get_unique_super_agent_session_id
 
@@ -53,7 +53,7 @@ def create_super_agent(
             )
             conn.commit()
             return sa_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 
@@ -174,7 +174,7 @@ def add_super_agent_document(
             )
             conn.commit()
             return cursor.lastrowid
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 
@@ -269,7 +269,7 @@ def add_super_agent_session(
             )
             conn.commit()
             return sess_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 

@@ -1,6 +1,13 @@
 import sqlite3
 
+import pytest
+
 from app.db.migrations import _migrate_76_super_agent_dispatch
+
+
+@pytest.fixture(autouse=True)
+def _skip_pg(skip_on_pg):
+    """SQLite-specific: applies a migration to a hand-built SQLite DB file — skip on PG."""
 
 
 def test_migration_adds_dispatch_columns(tmp_path):

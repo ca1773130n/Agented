@@ -2,9 +2,9 @@
 
 import datetime
 import logging
-import sqlite3
 from typing import List, Optional
 
+from . import errors
 from .connection import get_connection
 from .ids import _get_unique_message_id
 
@@ -54,7 +54,7 @@ def add_agent_message(
             )
             conn.commit()
             return msg_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 

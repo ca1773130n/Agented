@@ -1,10 +1,10 @@
 """Team CRUD operations."""
 
 import logging
-import sqlite3
 import threading
 from typing import List, Optional
 
+from . import errors
 from .connection import get_connection
 from .ids import _get_unique_team_id
 
@@ -85,7 +85,7 @@ def create_team(
             )
             conn.commit()
             return team_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 
@@ -177,7 +177,7 @@ def get_all_teams(limit: Optional[int] = None, offset: int = 0) -> List[dict]:
             FROM teams t
             LEFT JOIN team_members tm ON t.id = tm.team_id
             LEFT JOIN agents a ON t.leader_id = a.id
-            GROUP BY t.id
+            GROUP BY t.id, a.name
             ORDER BY t.name ASC
         """
         params: list = []
@@ -322,7 +322,7 @@ def add_team_member(
             )
             conn.commit()
             return cursor.lastrowid
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 
@@ -452,7 +452,7 @@ def add_team_agent_assignment(
             )
             conn.commit()
             return cursor.lastrowid if cursor.rowcount > 0 else None
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 
@@ -558,7 +558,7 @@ def add_team_edge(
             )
             conn.commit()
             return cursor.lastrowid
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 

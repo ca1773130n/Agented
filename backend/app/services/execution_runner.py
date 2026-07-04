@@ -410,6 +410,16 @@ def build_subprocess_env(env_overrides: dict, proxy_url: Optional[str] = None) -
         # A lightweight handle object carries just the url that proxy_env reads.
         env_overrides.update(proxy_env(type("_H", (), {"url": proxy_url})()))
 
+    # 4th-leak guard (REQ-41): when AGENTED_SERVER_NO_LLM_KEYS is set, strip
+    # server-baked LLM inference keys from the inherited os.environ BEFORE
+    # layering explicit per-request overrides (sidecar-sourced keys) on top —
+    # otherwise a poison ANTHROPIC_API_KEY in the server env would pass straight
+    # through here to the harness subprocess. Flag off ⇒ original behavior.
+    from .. import config
+
+    if config.server_no_llm_keys():
+        base = {k: v for k, v in os.environ.items() if k not in config.LLM_INFERENCE_KEY_ENV_VARS}
+        return {**base, **(env_overrides or {})}
     return {**os.environ, **env_overrides} if env_overrides else None
 
 

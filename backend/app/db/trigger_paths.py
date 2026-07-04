@@ -9,11 +9,11 @@ backward compatibility.
 import logging
 import os
 import re
-import sqlite3
 from typing import Dict, List
 
 import app.config as config
 
+from . import errors
 from .connection import get_connection
 
 logger = logging.getLogger(__name__)
@@ -108,7 +108,7 @@ def add_project_path(trigger_id: str, local_project_path: str) -> bool:
             )
             conn.commit()
             return True
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             # Rollback symlink if DB insert fails
             _remove_symlink(symlink_name)
             return False
@@ -204,7 +204,7 @@ def add_github_repo(trigger_id: str, github_repo_url: str) -> bool:
             )
             conn.commit()
             return True
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return False
 
 
@@ -242,7 +242,7 @@ def add_project_to_trigger(trigger_id: str, project_id: str) -> bool:
             )
             conn.commit()
             return True
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return False
 
 

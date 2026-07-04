@@ -1,9 +1,9 @@
 """MCP server and execution type handler CRUD operations."""
 
 import logging
-import sqlite3
 from typing import List, Optional
 
+from . import errors
 from .connection import get_connection, safe_set_clause
 from .ids import _get_unique_mcp_server_id
 
@@ -72,7 +72,7 @@ def create_mcp_server(
             )
             conn.commit()
             return server_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 
@@ -188,7 +188,7 @@ def assign_mcp_to_project(
             )
             conn.commit()
             return cursor.lastrowid
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 
@@ -282,7 +282,7 @@ def add_execution_type_handler(
             )
             conn.commit()
             return cursor.lastrowid
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 

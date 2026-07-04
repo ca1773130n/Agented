@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 from typing import Any, Optional
 
 from litestar import Router, delete, get, post, put
@@ -33,6 +32,7 @@ from app.database import (
     get_team_members,
     update_team,
 )
+from app.db import errors as db_errors
 from app.models.team import VALID_EDGE_TYPES, VALID_TOPOLOGIES
 from app.services.team_service import TeamService
 
@@ -41,6 +41,11 @@ from ..list_scope import admin_or_scoped
 
 logger = logging.getLogger(__name__)
 _MAX_TOPOLOGY_MEMBERS = 50
+# Reject an oversized YAML import body at the route boundary, BEFORE the
+# service ever calls yaml.safe_load. 256 KiB fits any hand-authored team
+# topology; anything larger is a cheap DoS vector. Kept in sync with
+# yaml_authoring_service._YAML_MAX_LEN.
+_YAML_IMPORT_MAX_BYTES = 256 * 1024
 
 
 def _auto_generate_topology_edges(team_id: str, topology: str, topology_config=None) -> None:
@@ -136,12 +141,12 @@ def create_team(data: CreateTeamBody, authorized: Caller) -> dict[str, Any]:
             trigger_source=data.trigger_source,
             trigger_config=data.trigger_config,
         )
-    except sqlite3.IntegrityError:
+    except db_errors.IntegrityError:
         raise HTTPException(
             status_code=409,
             detail="A team with this name or configuration already exists",
         ) from None
-    except sqlite3.OperationalError:
+    except db_errors.OperationalError:
         raise HTTPException(status_code=503, detail="Database unavailable, please retry") from None
 
     if not team_id:
@@ -343,6 +348,61 @@ def manual_run(team_id: str, data: TeamRunBody, authorized: Caller) -> dict[str,
     except ValueError as exc:
         raise ClientException(detail=str(exc)) from None
     return {"message": "Team execution started", "team_execution_id": team_exec_id}
+
+
+# ---------------------------------------------------------------------------
+# YAML authoring (Phase 26 / REQ-40)
+# ---------------------------------------------------------------------------
+
+
+class ImportTeamYamlBody(Struct, kw_only=True):
+    yaml: str = ""
+    upsert: bool = False
+
+
+@post(
+    "/import-yaml",
+    dependencies={"authorized": require_role("admin")},
+    sync_to_thread=False,
+)
+def import_team_yaml(data: ImportTeamYamlBody, authorized: Caller) -> dict[str, Any]:
+    """Materialize a team from a single human-authored YAML document.
+
+    The whole document is validated before any DB write, so a malformed
+    document never leaves a partially-created team behind.
+    """
+    del authorized
+    if not (data.yaml or "").strip():
+        raise ClientException(detail="yaml body is required")
+    # Size-gate at the boundary, before the service parses the document.
+    if len(data.yaml.encode("utf-8")) > _YAML_IMPORT_MAX_BYTES:
+        raise ClientException(detail=f"yaml body must be at most {_YAML_IMPORT_MAX_BYTES} bytes")
+
+    from app.services import yaml_authoring_service as yas
+
+    try:
+        team_id, status = yas.import_team(data.yaml, upsert=data.upsert)
+    except ValueError as exc:
+        raise ClientException(detail=str(exc)) from None
+
+    return {"message": f"Team {status}", "status": status, "team": get_team_detail(team_id)}
+
+
+@get(
+    "/{team_id:str}/export-yaml",
+    dependencies={"authorized": require_role("viewer", "operator", "editor", "admin")},
+    media_type="text/yaml",
+    sync_to_thread=False,
+)
+def export_team_yaml(team_id: str, authorized: Caller) -> str:
+    """Export a materialized team as a portable YAML document."""
+    del authorized
+    from app.services import yaml_authoring_service as yas
+
+    exported = yas.export_team(team_id)
+    if exported is None:
+        raise NotFoundException(detail="Team not found")
+    return exported
 
 
 # ---------------------------------------------------------------------------
@@ -651,6 +711,8 @@ teams_router = Router(
         update_topology,
         update_team_trigger,
         manual_run,
+        import_team_yaml,
+        export_team_yaml,
         list_team_members_endpoint,
         add_member_endpoint,
         update_member_endpoint,

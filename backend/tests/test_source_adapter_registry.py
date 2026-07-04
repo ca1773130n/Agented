@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 
 from app.database import get_connection
+from app.db.connection import insertion_tiebreak_col
 from app.db.projects import create_project
 from app.services.competitor_source_service import CompetitorSourceService
 from app.services.source_adapters import registry
@@ -51,7 +52,7 @@ def _snapshot_rows(source_id: str) -> list[dict]:
     with get_connection() as conn:
         rows = conn.execute(
             "SELECT id, content_hash, raw_ref FROM competitor_snapshot WHERE source_id = ? "
-            "ORDER BY fetched_at DESC, rowid DESC",
+            f"ORDER BY fetched_at DESC, {insertion_tiebreak_col()} DESC",  # noqa: S608
             (source_id,),
         ).fetchall()
     return [dict(r) for r in rows]

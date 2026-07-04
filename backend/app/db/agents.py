@@ -4,6 +4,7 @@ import logging
 import sqlite3
 from typing import List, Optional
 
+from . import errors
 from .connection import get_connection, safe_set_clause
 from .ids import _get_unique_agent_id, _get_unique_conversation_id
 from .owned_entities import resolve_owner_user_id
@@ -104,7 +105,7 @@ def create_agent(
             )
             conn.commit()
             return agent_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 

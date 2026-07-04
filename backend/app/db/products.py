@@ -1,9 +1,9 @@
 """Product CRUD operations."""
 
 import logging
-import sqlite3
 from typing import List, Optional
 
+from . import errors
 from .connection import get_connection
 from .ids import _get_unique_product_id
 
@@ -66,7 +66,7 @@ def create_product(
             )
             conn.commit()
             return product_id
-        except sqlite3.IntegrityError:
+        except errors.IntegrityError:
             return None
 
 
@@ -140,7 +140,7 @@ def get_all_products(limit: Optional[int] = None, offset: int = 0) -> List[dict]
             LEFT JOIN teams t ON p.owner_team_id = t.id
             LEFT JOIN super_agents sa ON p.owner_agent_id = sa.id
             LEFT JOIN projects pr ON p.id = pr.product_id
-            GROUP BY p.id
+            GROUP BY p.id, t.name, sa.name
             ORDER BY p.name ASC
         """
         params: list = []
@@ -171,7 +171,7 @@ def get_products_for_user(
             LEFT JOIN super_agents sa ON p.owner_agent_id = sa.id
             LEFT JOIN projects pr ON p.id = pr.product_id
             WHERE p.user_id = ?
-            GROUP BY p.id
+            GROUP BY p.id, t.name, sa.name
             ORDER BY p.name ASC
         """
         params: list = [user_id]

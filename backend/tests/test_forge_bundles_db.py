@@ -83,9 +83,12 @@ _EXPECTED_SKILL_SETS_DDL = _norm(
 )
 
 
-def test_skill_sets_schema_unchanged(isolated_db):
+def test_skill_sets_schema_unchanged(skip_on_pg, isolated_db):
     """Byte-for-byte (whitespace-normalized) guard on the legacy skill_sets
-    DDL. The bundle work must not alter skill_sets in any way."""
+    DDL. The bundle work must not alter skill_sets in any way.
+
+    SQLite-specific: asserts the exact ``sqlite_master`` CREATE TABLE text,
+    which Postgres does not store verbatim (skip_on_pg)."""
     with get_connection() as conn:
         row = conn.execute(
             "SELECT sql FROM sqlite_master WHERE type='table' AND name='skill_sets'"

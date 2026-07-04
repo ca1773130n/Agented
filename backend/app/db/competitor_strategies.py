@@ -41,7 +41,7 @@ This module is deliberately thin: NO LLM calls and NO route logic live here.
 import json
 from typing import Optional
 
-from .connection import get_connection
+from .connection import get_connection, insertion_tiebreak_col
 from .ids import generate_id
 
 # The 7 §5B clean-room / freedom-to-operate items an operator must affirm before
@@ -163,10 +163,11 @@ def list_strategies(project_id: str, *, statuses: Optional[list] = None) -> list
     """Return a project's strategies, newest first (``created_at DESC``).
 
     ``statuses`` optionally filters to the given status values (default: all).
-    Project-scoped — a foreign project's rows are never returned. ``rowid DESC``
-    is a deterministic tiebreaker so two rows minted within the same
-    ``CURRENT_TIMESTAMP`` second (which is only second-precise) still order by
-    true insertion order rather than arbitrarily.
+    Project-scoped — a foreign project's rows are never returned. A portable
+    insertion-order tiebreaker (SQLite ``rowid`` / Postgres ``id`` via
+    :func:`insertion_tiebreak_col`) breaks two rows minted within the same
+    ``CURRENT_TIMESTAMP`` tick so ordering stays deterministic rather than
+    arbitrary.
     """
     sql = "SELECT * FROM competitor_strategy WHERE project_id = ?"  # noqa: S608 (params bound)
     params: list = [project_id]
@@ -174,7 +175,7 @@ def list_strategies(project_id: str, *, statuses: Optional[list] = None) -> list
         placeholders = ", ".join("?" for _ in statuses)
         sql += f" AND status IN ({placeholders})"
         params.extend(statuses)
-    sql += " ORDER BY created_at DESC, rowid DESC"
+    sql += f" ORDER BY created_at DESC, {insertion_tiebreak_col()} DESC"
     with get_connection() as conn:
         rows = conn.execute(sql, params).fetchall()
     return [_row_to_dict(r) for r in rows]
