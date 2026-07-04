@@ -27,6 +27,9 @@ const generatedWorkflowId = ref<string | null>(null);
 
 // Real AI backend state
 const isDemoMode = ref(true);
+// Why the real assistant isn't connected (surfaced honestly instead of
+// silently faking a reply). Null when a real backend is streaming.
+const backendError = ref<string | null>(null);
 
 useWebMcpTool({
   name: 'agented_workflow_playground_get_state',
@@ -80,12 +83,20 @@ async function discoverAiBackend() {
       const sess = await superAgentSessionApi.create(agents[0].id);
       aiSessionId.value = sess.session_id;
       isDemoMode.value = false;
+      backendError.value = null;
       // Connect SSE
       connectChatStream();
+    } else {
+      // No SuperAgent to drive the assistant — stay honest about it.
+      isDemoMode.value = true;
+      backendError.value = t('workflowPlayground.noBackend.noAgent');
     }
-  } catch {
-    // No AI backend available, stay in demo mode
+  } catch (e: unknown) {
+    // Surface WHY the assistant isn't available instead of silently faking a
+    // reply. Common causes: session-create failed, or the LLM backend isn't
+    // authenticated. The operator sees the real reason and can act on it.
     isDemoMode.value = true;
+    backendError.value = e instanceof Error ? e.message : String(e);
   }
 }
 
@@ -174,36 +185,64 @@ function handleSend() {
       .sendChatMessage(aiSuperAgentId.value, aiSessionId.value, userMsg, {
         useCliAgent: useCliRunner.value,
       })
-      .catch(() => {
-        // If real AI fails, fall back to stub
+      .catch((e: unknown) => {
+        // Real backend failed — report the actual reason. Never fake a reply.
         isProcessing.value = false;
-        showToast(t('workflowPlayground.toast.backendUnavailable'), 'info');
         isDemoMode.value = true;
-        handleStubResponse(userMsg);
+        backendError.value = e instanceof Error ? e.message : String(e);
+        respondWithoutBackend(userMsg);
       });
   } else {
-    // Use stub response
-    handleStubResponse(userMsg);
+    respondWithoutBackend(userMsg);
   }
 }
 
-function handleStubResponse(userMsg: string) {
+// When no real assistant is connected we do NOT fabricate a conversational
+// reply. We either (a) match a known starter template by keyword and insert a
+// REAL workflow graph — clearly labelled as a template, not an AI answer — or
+// (b) tell the user honestly that the assistant isn't connected and why.
+function respondWithoutBackend(userMsg: string) {
   isProcessing.value = true;
   setTimeout(() => {
-    const response = generateStubResponse(userMsg);
-    messages.value.push({
-      role: 'assistant',
-      content: response,
-      timestamp: new Date().toISOString(),
-    });
-    isProcessing.value = false;
-
-    // Check if response contains a JSON code block and try to create workflow
-    const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/);
-    if (jsonMatch) {
-      tryCreateWorkflowFromJson(jsonMatch[1]);
+    const template = matchTemplate(userMsg);
+    if (template) {
+      messages.value.push({
+        role: 'assistant',
+        content: `${t('workflowPlayground.noBackend.templateMatched')}\n\n${template}`,
+        timestamp: new Date().toISOString(),
+      });
+      const jsonMatch = template.match(/```json\n([\s\S]*?)\n```/);
+      if (jsonMatch) tryCreateWorkflowFromJson(jsonMatch[1]);
+    } else {
+      // No template matched and no live assistant — be honest, don't fake.
+      messages.value.push({
+        role: 'assistant',
+        content: t('workflowPlayground.noBackend.message', {
+          reason: backendError.value || t('workflowPlayground.noBackend.generic'),
+        }),
+        timestamp: new Date().toISOString(),
+      });
     }
-  }, 800);
+    isProcessing.value = false;
+  }, 250);
+}
+
+// Insert a starter template directly (from the template buttons).
+function insertTemplate(kind: 'deploy' | 'review' | 'data' | 'monitor') {
+  const gen = {
+    deploy: generateDeployWorkflowResponse,
+    review: generateReviewWorkflowResponse,
+    data: generateDataWorkflowResponse,
+    monitor: generateMonitorWorkflowResponse,
+  }[kind];
+  const template = gen();
+  messages.value.push({
+    role: 'assistant',
+    content: `${t('workflowPlayground.noBackend.templateInserted')}\n\n${template}`,
+    timestamp: new Date().toISOString(),
+  });
+  const jsonMatch = template.match(/```json\n([\s\S]*?)\n```/);
+  if (jsonMatch) tryCreateWorkflowFromJson(jsonMatch[1]);
 }
 
 function handleKeyDown(e: KeyboardEvent) {
@@ -214,13 +253,11 @@ function handleKeyDown(e: KeyboardEvent) {
 }
 
 // ---------------------------------------------------------------------------
-// Stub AI Response Generator
+// Starter-template matching (keyword → real workflow graph). NOT an LLM.
 // ---------------------------------------------------------------------------
 
-function generateStubResponse(userMessage: string): string {
+function matchTemplate(userMessage: string): string | null {
   const lower = userMessage.toLowerCase();
-
-  // If the user mentions specific workflow patterns, generate a template
   if (lower.includes('deploy') || lower.includes('ci') || lower.includes('build')) {
     return generateDeployWorkflowResponse();
   }
@@ -233,16 +270,7 @@ function generateStubResponse(userMessage: string): string {
   if (lower.includes('monitor') || lower.includes('alert') || lower.includes('check')) {
     return generateMonitorWorkflowResponse();
   }
-
-  // Generic response for unrecognized patterns
-  return `I can help you design a workflow! Here are some things I can create:
-
-- **Deploy Pipeline** - trigger -> build -> test -> deploy with conditional rollback
-- **Code Review** - trigger -> analyze code -> run tests -> generate report
-- **Data Pipeline** - trigger -> extract data -> transform -> load
-- **Monitoring** - trigger -> health check -> conditional alert
-
-Describe what your workflow should do and I'll generate the graph for you.`;
+  return null;
 }
 
 function generateDeployWorkflowResponse(): string {
@@ -433,6 +461,7 @@ function openInBuilder() {
       </div>
       <div v-if="isDemoMode" class="demo-badge">
         {{ t('workflowPlayground.demoBadge') }}
+        <span v-if="backendError" class="demo-reason">— {{ backendError }}</span>
       </div>
       <div class="header-actions">
         <button
@@ -493,12 +522,21 @@ function openInBuilder() {
               </div>
               <h2>{{ t('workflowPlayground.welcome.title') }}</h2>
               <p>{{ t('workflowPlayground.welcome.intro') }}</p>
-              <ul class="suggestions">
-                <li>{{ t('workflowPlayground.welcome.suggestions.deploy') }}</li>
-                <li>{{ t('workflowPlayground.welcome.suggestions.review') }}</li>
-                <li>{{ t('workflowPlayground.welcome.suggestions.data') }}</li>
-                <li>{{ t('workflowPlayground.welcome.suggestions.monitor') }}</li>
-              </ul>
+              <div class="template-buttons">
+                <button type="button" class="template-btn" @click="insertTemplate('deploy')">
+                  {{ t('workflowPlayground.templates.deploy') }}
+                </button>
+                <button type="button" class="template-btn" @click="insertTemplate('review')">
+                  {{ t('workflowPlayground.templates.review') }}
+                </button>
+                <button type="button" class="template-btn" @click="insertTemplate('data')">
+                  {{ t('workflowPlayground.templates.data') }}
+                </button>
+                <button type="button" class="template-btn" @click="insertTemplate('monitor')">
+                  {{ t('workflowPlayground.templates.monitor') }}
+                </button>
+              </div>
+              <p class="welcome-hint">{{ t('workflowPlayground.welcome.hint') }}</p>
             </div>
           </template>
         </AiChatPanel>
@@ -661,6 +699,42 @@ function openInBuilder() {
   color: var(--text-secondary);
   font-size: 13px;
   cursor: default;
+}
+
+.demo-reason {
+  margin-left: 4px;
+  opacity: 0.85;
+  font-weight: 400;
+}
+
+.template-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin: 4px 0 12px 0;
+}
+
+.template-btn {
+  padding: 8px 14px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.template-btn:hover {
+  border-color: var(--accent-cyan);
+  background: var(--bg-secondary);
+}
+
+.welcome-hint {
+  font-size: 12px;
+  color: var(--text-tertiary, var(--text-secondary));
+  max-width: 420px;
 }
 
 /* Preview placeholder */

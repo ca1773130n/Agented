@@ -8055,8 +8055,8 @@
   },
   "workflowPlayground": {
     "title": "工作流游乐场",
-    "subtitle": "描述一个工作流，AI 将为您生成",
-    "demoBadge": "演示模式 — 连接 AI 后端以获得真实协助",
+    "subtitle": "从入门模板生成工作流，或连接 AI 后端进行对话式设计",
+    "demoBadge": "演示模式 — 未连接 AI 助手，使用入门模板",
     "openInBuilder": "在构建器中打开",
     "inputPlaceholder": "描述您的工作流... 例如: '创建一个包含构建、测试和通知的部署流水线'",
     "entityLabel": "工作流",
@@ -8074,7 +8074,8 @@
         "review": "\"为拉取请求构建一个代码审查工作流\"",
         "data": "\"设计一个包含提取和转换的数据 ETL 流水线\"",
         "monitor": "\"设置一个包含健康检查和告警的监控工作流\""
-      }
+      },
+      "hint": "选择入门模板即可生成真实的工作流图。对话式 AI 设计需要连接 AI 后端。"
     },
     "preview": {
       "title": "画布预览",
@@ -8083,6 +8084,19 @@
     "generated": {
       "name": "AI 生成的工作流 {time}",
       "description": "由 AI 工作流演练场生成"
+    },
+    "templates": {
+      "deploy": "部署流水线",
+      "review": "代码审查",
+      "data": "数据流水线",
+      "monitor": "监控"
+    },
+    "noBackend": {
+      "noAgent": "没有可运行助手的 SuperAgent。",
+      "generic": "AI 后端未连接",
+      "message": "⚠️ AI 助手未连接（{reason}），暂时无法回答自由问题。请选择下方的入门模板，或连接 AI 账户。对话式工作流设计即将推出。",
+      "templateMatched": "已匹配入门模板（不是 AI 回答 — 工作流助手未连接）：",
+      "templateInserted": "已插入入门模板："
     }
   },
   "workflows": {
