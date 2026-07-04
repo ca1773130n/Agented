@@ -111,3 +111,59 @@ def test_middleware_resolves_cookie_user(isolated_db):
     assert _resolve_cookie_user("") is None
     assert _resolve_cookie_user(None) is None
     assert _resolve_cookie_user(f"{SESSION_COOKIE}=bogus-token") is None
+
+
+def test_goal_loop_respawn_inherits_created_by_from_origin(monkeypatch):
+    """Phase 25 follow-up A — a context_policy=reset / resume respawn stamps the
+    fresh child's ``created_by`` from the origin session's owner.
+
+    The autonomous respawn has no ``Caller`` (it fires from inside the running
+    loop), but the initiator is known: the operator who launched the loop, already
+    recorded on the origin row. ``_create_fresh_loop_child`` must thread it into
+    ``create_session`` so the respawned child isn't NULL-owner.
+    """
+    from app.services import goal_loop_runner
+    from app.services.project_session_manager import ProjectSessionManager
+
+    captured: dict = {}
+
+    def fake_create_session(**kwargs):
+        captured.update(kwargs)
+        return "psess-respawn"
+
+    monkeypatch.setattr(ProjectSessionManager, "create_session", fake_create_session)
+
+    origin = {
+        "project_id": "proj-own",
+        "phase_id": None,
+        "plan_id": None,
+        "agent_id": None,
+        "worktree_path": "/tmp/wt",
+        "execution_mode": "autonomous",
+        "yolo_mode": 1,
+        "created_by": "owner-42",
+    }
+    new_id = goal_loop_runner._create_fresh_loop_child(origin, "/tmp/wt")
+    assert new_id == "psess-respawn"
+    # The fresh child inherits the origin operator as its owner (not NULL).
+    assert captured["created_by"] == "owner-42"
+
+
+def test_goal_loop_respawn_leaves_null_when_origin_unowned(monkeypatch):
+    """When the origin session itself has no owner (e.g. a trigger/scheduler-driven
+    autonomous run), the respawn stays NULL-owner — the accepted fail-closed
+    tradeoff, never a fabricated owner."""
+    from app.services import goal_loop_runner
+    from app.services.project_session_manager import ProjectSessionManager
+
+    captured: dict = {}
+
+    def fake_create_session(**kwargs):
+        captured.update(kwargs)
+        return "psess-respawn2"
+
+    monkeypatch.setattr(ProjectSessionManager, "create_session", fake_create_session)
+
+    origin = {"project_id": "proj-own", "worktree_path": None, "execution_mode": "autonomous"}
+    goal_loop_runner._create_fresh_loop_child(origin, ".")
+    assert captured["created_by"] is None

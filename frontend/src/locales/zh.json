@@ -2718,6 +2718,10 @@
     "noMessages": "此分支中没有消息。",
     "forkFromHere": "从此处分叉",
     "fork": "分叉",
+    "forkToRun": "分叉为运行",
+    "forkToRunHint": "将此对话分叉到一个独立的运行中",
+    "forkingRun": "正在分叉…",
+    "forkRunSuccess": "已分叉到新运行 {id}",
     "branchNamePlaceholder": "分支名称（可选）"
   },
   "chunkResults": {
