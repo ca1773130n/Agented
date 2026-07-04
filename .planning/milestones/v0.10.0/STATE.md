@@ -20,10 +20,7 @@ Progress: [##########] 100% (4/4). Merged: **#286** Phase 23 policy engine (5 co
 follow-ups, **#289** Phase 26 deployment (Postgres/Render/YAML/key-isolation; multi-round + my take-over
 install-RCE fix). NOTE: Phases 23–25 driven by this session's controlled cadence; Phase 26 (#289) was
 built in parallel by the `/remote-control` process and I took over its final merge (fixed the curl|bash
-installer RCE + YAML body cap). Milestone-complete archival DONE 2026-07-04 —
-snapshot at `.planning/milestones/v0.10.0/` (STATE/ROADMAP/REQUIREMENTS, matching
-the v0.8.0 archive convention; `/grd:complete-milestone` skipped — config tracker
-was already `current_milestone: null` with phases under `anonymous/`).
+installer RCE + YAML body cap). Milestone-complete archival (/grd:complete-milestone) still TODO.
 
 Phase: 23 of 26 (Stackable policy / governance engine) — **✅ COMPLETE & MERGED** (PR #286, main 3cec4976c3, 2026-07-01)
 Status: Full engine shipped — policies store (migration 176), PolicyEvaluator (server→team→session,

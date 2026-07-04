@@ -132,9 +132,10 @@ class TeamHarnessSetupService:
 
 
 # ---------------------------------------------------------------------------
-# Placeholder step bodies. Wave-2 plans (21-03..06) replace these with the
-# real work. They are intentionally side-effect-free so the import smoke (S3)
-# and the skeleton state-machine tests pass immediately.
+# Step bodies (Wave-2 plans 21-03..06, all shipped). Each _step_<name> does
+# real work — GRD init reconcile, SA-instance topology, forge-bundle binding,
+# tesserae enable, default policies, materialize + compile. They persist no
+# rows themselves (the orchestrator does) and never call destructive deletes.
 # ---------------------------------------------------------------------------
 
 

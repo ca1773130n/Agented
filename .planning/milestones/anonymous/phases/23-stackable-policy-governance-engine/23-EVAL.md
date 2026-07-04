@@ -236,8 +236,8 @@ cd frontend && npm run test:run
 
 | ID | Metric | Status | Validates At |
 |----|--------|--------|-------------|
-| DEFER-23-01 | E2E ALLOW/DENY/ASK (SC5) | PENDING | phase-23 / 23-05 |
-| DEFER-23-02 | House gates (SC6) | PENDING | phase-23 / 23-05 |
+| DEFER-23-01 | E2E ALLOW/DENY/ASK (SC5) | PASS (2026-07-04) — `test_policy_e2e.py` green (automated ALLOW/DENY/ASK round-trip); manual live-browser pass still optional | phase-23 / 23-05 |
+| DEFER-23-02 | House gates (SC6) | PASS (2026-07-04) — build GREEN (vue-tsc+vite); frontend 1686 pass / 7 known-baseline / 0 NEW; backend targeted 286 pass / 2 fail (both `test_sandbox_escape.py` — macOS-seatbelt over-restriction at the interpreter-import precondition, env-dependent → DEFER-24-01 territory, NOT a policy regression). All policy suites green. | phase-23 / 23-05 |
 
 ## Evaluation Confidence
 

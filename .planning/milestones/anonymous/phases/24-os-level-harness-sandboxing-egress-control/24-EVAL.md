@@ -234,7 +234,7 @@ cd frontend && npm run test:run
 
 | ID | Metric | Status | Validates At |
 |----|--------|--------|-------------|
-| DEFER-24-01 | Real escape blocked+logged | PENDING | Linux host w/ bwrap + userns |
+| DEFER-24-01 | Real escape blocked+logged | PENDING — 2026-07-04 macOS run: `test_sandbox_escape.py` seatbelt profile OVER-restricts (denies interpreter's own path-cache read → `PermissionError` at the "legit run still works" precondition). Confirms the wrap denies aggressively; the escape-blocked assertions need a Linux/bwrap host to run past the precondition. Env-dependent, tracked here. | Linux host w/ bwrap + userns |
 | DEFER-24-02 | Live E2B/Modal run | PENDING | credentialed manual/integration run |
 | DEFER-24-03 | bwrap+userns in prod image | PENDING | phase-26-deployment-extensibility-ergonomics |
 
