@@ -69,9 +69,12 @@ jobs:
 
       - name: Backend install + tests
         working-directory: Agented/backend
+        # --timeout is a safety net: any single test that hangs is killed and
+        # reported instead of stalling the whole job (belt-and-braces with the
+        # 30-minute job timeout above). pytest-timeout is a dev dependency.
         run: |
           uv sync --extra dev || uv sync
-          uv run pytest
+          uv run pytest --timeout=300 --timeout-method=thread
 
   build-image:
     needs: test

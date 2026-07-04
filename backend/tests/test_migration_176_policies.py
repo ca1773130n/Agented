@@ -16,7 +16,9 @@ def test_schema_version_is_176(isolated_db):
 
     with get_connection() as conn:
         max_version = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
-    assert max_version == 176
+    # >= not ==: newer milestones add migrations past 176 (collab 177-179, etc.),
+    # so this pins the floor (176 ran) without breaking every time the schema advances.
+    assert max_version >= 176
 
 
 def test_migration_176_registered_after_175():
