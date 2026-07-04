@@ -41,6 +41,11 @@ from ..list_scope import admin_or_scoped
 
 logger = logging.getLogger(__name__)
 _MAX_TOPOLOGY_MEMBERS = 50
+# Reject an oversized YAML import body at the route boundary, BEFORE the
+# service ever calls yaml.safe_load. 256 KiB fits any hand-authored team
+# topology; anything larger is a cheap DoS vector. Kept in sync with
+# yaml_authoring_service._YAML_MAX_LEN.
+_YAML_IMPORT_MAX_BYTES = 256 * 1024
 
 
 def _auto_generate_topology_edges(team_id: str, topology: str, topology_config=None) -> None:
@@ -369,6 +374,9 @@ def import_team_yaml(data: ImportTeamYamlBody, authorized: Caller) -> dict[str, 
     del authorized
     if not (data.yaml or "").strip():
         raise ClientException(detail="yaml body is required")
+    # Size-gate at the boundary, before the service parses the document.
+    if len(data.yaml.encode("utf-8")) > _YAML_IMPORT_MAX_BYTES:
+        raise ClientException(detail=f"yaml body must be at most {_YAML_IMPORT_MAX_BYTES} bytes")
 
     from app.services import yaml_authoring_service as yas
 

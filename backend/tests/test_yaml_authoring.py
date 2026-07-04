@@ -67,6 +67,34 @@ def test_load_rejects_malformed_yaml():
         yas.load_team_config("foo: [1, 2\nbar: baz")
 
 
+def test_load_rejects_oversized_body_before_parsing(monkeypatch):
+    """An over-cap body is rejected BEFORE yaml.safe_load is ever called."""
+
+    # Sentinel that fails if safe_load runs — proves the size gate precedes it.
+    def _boom(_):  # pragma: no cover - must never be reached
+        raise AssertionError("yaml.safe_load must not run on an oversized body")
+
+    monkeypatch.setattr(yas.yaml, "safe_load", _boom)
+    oversized = "a: " + ("x" * (yas._YAML_MAX_LEN + 1))
+    with pytest.raises(ValueError, match="at most"):
+        yas.load_team_config(oversized)
+
+
+def test_load_accepts_body_at_cap():
+    """A normal-sized team YAML (well under the cap) parses fine."""
+    text = yas.dump_team_config(_sample_config())
+    assert len(text.encode("utf-8")) < yas._YAML_MAX_LEN
+    assert yas.load_team_config(text) == _sample_config()
+
+
+def test_import_oversized_body_writes_nothing(isolated_db):
+    before = count_teams()
+    oversized = "a: " + ("x" * (yas._YAML_MAX_LEN + 1))
+    with pytest.raises(ValueError, match="at most"):
+        yas.import_team(oversized)
+    assert count_teams() == before
+
+
 def test_import_malformed_yaml_writes_nothing(isolated_db):
     before = count_teams()
     with pytest.raises(ValueError):

@@ -43,6 +43,13 @@ CONFIG_KIND = "team"
 
 _REQUIRED_KEYS = {"version", "kind", "metadata", "spec"}
 
+# Reject an oversized YAML body BEFORE handing it to ``yaml.safe_load`` — an
+# unbounded document is a cheap DoS vector (deep nesting / huge scalars) even
+# with the safe loader. 256 KiB comfortably fits any hand-authored team
+# topology while capping the parser's input. Matches the ``_MAX_BYTES`` cap
+# convention in ``url_summarizer`` (256 * 1024).
+_YAML_MAX_LEN = 256 * 1024
+
 
 # ---------------------------------------------------------------------------
 # Serialization
@@ -58,8 +65,12 @@ def load_team_config(yaml_str: str) -> dict:
     """Parse a YAML document into a config dict.
 
     Raises:
-        ValueError: if the document is not valid YAML or not a mapping.
+        ValueError: if the body exceeds ``_YAML_MAX_LEN`` (checked BEFORE any
+            parse), the document is not valid YAML, or it is not a mapping.
     """
+    # Size-gate BEFORE parsing: never feed an oversized body to yaml.safe_load.
+    if len(yaml_str.encode("utf-8")) > _YAML_MAX_LEN:
+        raise ValueError(f"YAML body must be at most {_YAML_MAX_LEN} bytes")
     try:
         parsed = yaml.safe_load(yaml_str)
     except yaml.YAMLError as exc:
