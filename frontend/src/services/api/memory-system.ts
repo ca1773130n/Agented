@@ -86,12 +86,14 @@ export const memorySystemApi = {
       '/admin/system/memory/tesserae/projects',
     ),
 
-  setTesseraeRoot: (projectId: string, root: string | null) =>
+  // enabled=true auto-resolves the workspace from the project (no path needed);
+  // enabled=false disables. An explicit `root` overrides the auto-resolution.
+  setTesseraeRoot: (projectId: string, enabled: boolean, root: string | null = null) =>
     apiFetch<{ project: TesseraeProjectState }>(
       `/admin/system/memory/tesserae/projects/${encodeURIComponent(projectId)}`,
       {
         method: 'POST',
-        body: JSON.stringify({ root }),
+        body: JSON.stringify({ enabled, root }),
       },
     ),
 

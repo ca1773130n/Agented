@@ -61,18 +61,10 @@ async function loadAll() {
 async function toggleTesserae(project: TesseraeProjectState) {
   busyProjectId.value = project.project_id;
   try {
-    const nextRoot = project.enabled
-      ? null
-      : (project.local_path || prompt(
-          t('settings.memory.promptWorkspacePath', { name: project.project_name }),
-          project.local_path || '',
-        ));
-    if (project.enabled === false && !nextRoot) {
-      // user cancelled the prompt
-      return;
-    }
+    // Enabling auto-resolves the workspace from the project on the backend — no
+    // path prompt. Disabling just clears it.
     const res = await memorySystemApi.setTesseraeRoot(
-      project.project_id, nextRoot,
+      project.project_id, !project.enabled,
     );
     // Replace the row in-place to avoid re-fetching.
     const idx = tesseraeProjects.value.findIndex(

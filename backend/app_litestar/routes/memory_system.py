@@ -28,7 +28,9 @@ from litestar import Router, get, post
 from litestar.exceptions import NotFoundException, ValidationException
 
 from app.db.connection import get_connection
+from app.db.projects import get_project
 from app.services import tesserae_integration as ti
+from app.services.project_workspace_service import ProjectWorkspaceService
 
 # ---------------------------------------------------------------------------
 # Status discovery
@@ -152,6 +154,28 @@ def list_tesserae_projects() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _auto_resolve_tesserae_root(project: dict) -> Any:
+    """Resolve a Tesserae workspace root for a project without asking the operator.
+
+    Prefers the project's own ``local_path``; otherwise the default per-project
+    workspace directory (``workspace_root/projects/{name}``). Raises when neither
+    can be determined so the caller returns a clear error instead of silently
+    binding the wrong path.
+    """
+    from pathlib import Path
+
+    local = project.get("local_path")
+    if local:
+        return Path(local).expanduser().resolve()
+    clone_dir = ProjectWorkspaceService._get_clone_dir(project)
+    if clone_dir:
+        return Path(clone_dir).resolve()
+    raise ValidationException(
+        detail="Cannot auto-resolve a Tesserae workspace for this project — set a "
+        "local path (or a workspace_root in settings) first."
+    )
+
+
 @post(
     "/system/memory/tesserae/projects/{project_id:str}",
     sync_to_thread=True,
@@ -172,19 +196,22 @@ def set_tesserae_for_project(
     from pathlib import Path
 
     payload = data or {}
-    if "root" not in payload:
-        raise ValidationException(detail="missing 'root' in request body")
-    raw_root = payload["root"]
+    raw_root = payload.get("root")
+    # ``enabled`` is the explicit intent flag (new): true => enable (auto-resolve
+    # the workspace from the project if no ``root`` given), false => disable. When
+    # absent, fall back to the legacy root-only contract (path => enable, null =>
+    # disable) so existing callers keep working.
+    enabled = payload.get("enabled")
+    if "root" not in payload and enabled is None:
+        raise ValidationException(detail="missing 'root' or 'enabled' in request body")
 
-    with get_connection() as conn:
-        exists = conn.execute(
-            "SELECT 1 FROM projects WHERE id = ?",
-            (project_id,),
-        ).fetchone()
-        if not exists:
-            raise NotFoundException(detail=f"project not found: {project_id}")
+    project = get_project(project_id)
+    if not project:
+        raise NotFoundException(detail=f"project not found: {project_id}")
 
-    if raw_root in (None, ""):
+    disable = enabled is False or (enabled is None and raw_root in (None, ""))
+
+    if disable:
         # Clear the column AND disable the Tesserae MCP binding so the
         # team-leader SA stops getting tesserae_ask. Row in mcp_servers
         # stays for history.
@@ -196,9 +223,13 @@ def set_tesserae_for_project(
             conn.commit()
         ti.unset_tesserae_root_bindings(project_id)
     else:
-        if not isinstance(raw_root, str):
-            raise ValidationException(detail="'root' must be a string or null")
-        resolved_path = Path(raw_root).expanduser().resolve()
+        # Enable. Use an explicit ``root`` if provided, otherwise auto-resolve the
+        # project's own workspace — the operator shouldn't have to type a path the
+        # app already knows.
+        if isinstance(raw_root, str) and raw_root.strip():
+            resolved_path = Path(raw_root).expanduser().resolve()
+        else:
+            resolved_path = _auto_resolve_tesserae_root(project)
         # set_tesserae_root does the column write AND upserts /
         # rebinds the per-project Tesserae MCP server.
         ti.set_tesserae_root(project_id, resolved_path)
