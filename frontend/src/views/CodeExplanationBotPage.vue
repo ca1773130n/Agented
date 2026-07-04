@@ -235,7 +235,7 @@ onMounted(loadHistory);
 
 <style scoped>
 .page-container {
-  padding: 2rem;
+  padding: 24px;
   max-width: 1200px;
   margin: 0 auto;
 }

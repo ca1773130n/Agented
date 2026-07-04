@@ -247,7 +247,7 @@ onMounted(loadHistory);
 </template>
 
 <style scoped>
-.page-container { padding: 2rem; max-width: 1200px; margin: 0 auto; }
+.page-container { padding: 24px; max-width: 1200px; margin: 0 auto; }
 .page-header { margin-bottom: 1.5rem; }
 .page-title { font-size: 1.75rem; font-weight: 700; color: var(--color-text-primary, #f0f0f0); margin: 0 0 0.5rem; }
 .page-subtitle { color: var(--color-text-secondary, #a0a0a0); margin: 0; }
