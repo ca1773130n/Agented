@@ -2718,6 +2718,10 @@
     "noMessages": "No messages in this branch.",
     "forkFromHere": "Fork from here",
     "fork": "Fork",
+    "forkToRun": "Fork to run",
+    "forkToRunHint": "Fork this conversation onto a separate independent run",
+    "forkingRun": "Forking…",
+    "forkRunSuccess": "Forked to new run {id}",
     "branchNamePlaceholder": "Branch name (optional)"
   },
   "chunkResults": {

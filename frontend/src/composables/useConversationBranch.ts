@@ -1,6 +1,6 @@
 import { ref, watch, type Ref } from 'vue';
-import type { ConversationBranch, BranchMessage, BranchTree } from '../services/api';
-import { branchApi } from '../services/api';
+import type { ConversationBranch, BranchMessage, BranchTree, ForkRunResult } from '../services/api';
+import { branchApi, sessionForkApi } from '../services/api';
 
 /**
  * Composable for managing conversation branch state.
@@ -78,6 +78,38 @@ export function useConversationBranch(conversationId: Ref<string>) {
     }
   }
 
+  /**
+   * Fork the conversation onto a SEPARATE independent run (Phase 25, 25-03).
+   *
+   * Unlike ``createBranch`` (which only snapshots messages into a new branch of
+   * the same conversation), this spawns a fresh, seeded ``psess-`` run via
+   * ``sessionForkApi.fork`` — the parent conversation stays immutable and the
+   * parent's running session is untouched. Needs the owning ``projectId`` +
+   * ``sessionId``; returns the ``ForkRunResult`` ({branch_id, session_id}) on
+   * success or ``null`` on failure so the caller can surface / navigate to the
+   * new ``psess-`` id.
+   */
+  async function forkRun(
+    projectId: string,
+    sessionId: string,
+    forkMessageIndex: number,
+    name?: string,
+  ): Promise<ForkRunResult | null> {
+    if (!conversationId.value || !projectId || !sessionId) return null;
+    isLoading.value = true;
+    try {
+      return await sessionForkApi.fork(projectId, sessionId, {
+        conversationId: conversationId.value,
+        forkMessageIndex,
+        name,
+      });
+    } catch {
+      return null;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
   /** Add a message to the currently selected branch. */
   async function addMessage(role: string, content: string) {
     if (!selectedBranch.value) return;
@@ -114,6 +146,7 @@ export function useConversationBranch(conversationId: Ref<string>) {
     loadBranches,
     selectBranch,
     createBranch,
+    forkRun,
     addMessage,
   };
 }

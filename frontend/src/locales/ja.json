@@ -2718,6 +2718,10 @@
     "noMessages": "このブランチにメッセージはありません。",
     "forkFromHere": "ここから分岐",
     "fork": "分岐",
+    "forkToRun": "実行にフォーク",
+    "forkToRunHint": "この会話を独立した別の実行にフォークします",
+    "forkingRun": "フォーク中…",
+    "forkRunSuccess": "新しい実行 {id} にフォークしました",
     "branchNamePlaceholder": "ブランチ名（任意）"
   },
   "chunkResults": {

@@ -2718,6 +2718,10 @@
     "noMessages": "이 브랜치에 메시지가 없습니다.",
     "forkFromHere": "여기서 분기",
     "fork": "분기",
+    "forkToRun": "실행으로 포크",
+    "forkToRunHint": "이 대화를 별도의 독립 실행으로 포크합니다",
+    "forkingRun": "포크 중…",
+    "forkRunSuccess": "새 실행 {id}(으)로 포크됨",
     "branchNamePlaceholder": "브랜치 이름 (선택)"
   },
   "chunkResults": {

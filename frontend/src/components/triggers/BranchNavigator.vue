@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, toRef } from 'vue';
+import { ref, toRef, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { BranchTree } from '../../services/api';
 
@@ -10,6 +10,19 @@ import MarkdownContent from '../base/MarkdownContent.vue';
 
 const props = defineProps<{
   conversationId: string;
+  // Phase 25 (25-03) — when BOTH are supplied, each message also offers a
+  // "Fork to run" action that spawns a fresh, seeded ``psess-`` run (a separate
+  // independent process) via ``sessionForkApi.fork``, in addition to the in-place
+  // branch fork. Omitting them (e.g. the bot/trigger ExecutionHistory mount, which
+  // has no project scope) hides the run-fork action — branch fork still works.
+  projectId?: string;
+  sessionId?: string;
+}>();
+
+// Surface the new run to the parent so it can navigate to / highlight the
+// forked ``psess-`` session.
+const emit = defineEmits<{
+  (e: 'forked-run', payload: { sessionId: string; branchId: string }): void;
 }>();
 
 const conversationIdRef = toRef(props, 'conversationId');
@@ -22,11 +35,32 @@ const {
   loadBranches,
   selectBranch,
   createBranch,
+  forkRun,
 } = useConversationBranch(conversationIdRef);
 
 const forkingAtIndex = ref<number | null>(null);
 const newBranchName = ref('');
 const hoveredMessageIndex = ref<number | null>(null);
+
+// Run-fork is only offered when the owning project + session are known.
+const canForkRun = computed(() => !!props.projectId && !!props.sessionId);
+const forkingRunIndex = ref<number | null>(null);
+const forkedRunSessionId = ref<string | null>(null);
+
+async function handleForkRun(messageIndex: number) {
+  if (!props.projectId || !props.sessionId || forkingRunIndex.value !== null) return;
+  forkingRunIndex.value = messageIndex;
+  forkedRunSessionId.value = null;
+  try {
+    const result = await forkRun(props.projectId, props.sessionId, messageIndex);
+    if (result?.session_id) {
+      forkedRunSessionId.value = result.session_id;
+      emit('forked-run', { sessionId: result.session_id, branchId: result.branch_id });
+    }
+  } finally {
+    forkingRunIndex.value = null;
+  }
+}
 
 function handleFork(messageIndex: number) {
   forkingAtIndex.value = messageIndex;
@@ -176,18 +210,39 @@ loadBranches();
             <MarkdownContent class="message-content" :content="msg.content" />
             <div class="message-footer">
               <span class="message-time">{{ formatDate(msg.created_at) }}</span>
-              <button
-                v-if="hoveredMessageIndex === msg.message_index"
-                class="fork-btn"
-                @click.stop="handleFork(msg.message_index)"
-                :title="t('branchNavigator.forkFromHere')"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
-                  <path d="M6 3v12M18 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM18 9c-3 0-6 3-6 6v3"/>
-                </svg>
-                {{ t('branchNavigator.fork') }}
-              </button>
+              <div class="fork-actions">
+                <button
+                  v-if="hoveredMessageIndex === msg.message_index"
+                  class="fork-btn"
+                  @click.stop="handleFork(msg.message_index)"
+                  :title="t('branchNavigator.forkFromHere')"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                    <path d="M6 3v12M18 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM18 9c-3 0-6 3-6 6v3"/>
+                  </svg>
+                  {{ t('branchNavigator.fork') }}
+                </button>
+                <!-- Phase 25 (25-03) — fork onto a SEPARATE independent run -->
+                <button
+                  v-if="canForkRun && (hoveredMessageIndex === msg.message_index || forkingRunIndex === msg.message_index)"
+                  class="fork-run-btn"
+                  :disabled="forkingRunIndex !== null"
+                  @click.stop="handleForkRun(msg.message_index)"
+                  :title="t('branchNavigator.forkToRunHint')"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                    <path d="M5 3l14 9-14 9V3z"/>
+                  </svg>
+                  {{ forkingRunIndex === msg.message_index ? t('branchNavigator.forkingRun') : t('branchNavigator.forkToRun') }}
+                </button>
+              </div>
             </div>
+            <p
+              v-if="forkedRunSessionId && forkingRunIndex === null && hoveredMessageIndex === msg.message_index"
+              class="fork-run-success"
+            >
+              {{ t('branchNavigator.forkRunSuccess', { id: forkedRunSessionId }) }}
+            </p>
 
             <!-- Fork input (shown inline below the message) -->
             <div v-if="forkingAtIndex === msg.message_index" class="fork-input-wrapper">
@@ -466,6 +521,43 @@ loadBranches();
 .fork-btn:hover {
   background: rgba(139, 92, 246, 0.15);
   border-color: var(--accent-violet, #8b5cf6);
+}
+
+.fork-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fork-run-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid var(--accent-cyan, #22d3ee);
+  border-radius: 4px;
+  color: var(--accent-cyan, #22d3ee);
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.fork-run-btn:hover:not(:disabled) {
+  background: var(--accent-cyan-dim, rgba(34, 211, 238, 0.15));
+}
+
+.fork-run-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.fork-run-success {
+  margin: 6px 0 0;
+  font-size: 0.72rem;
+  color: var(--accent-cyan, #22d3ee);
+  font-family: var(--font-mono, monospace);
 }
 
 .fork-input-wrapper {
