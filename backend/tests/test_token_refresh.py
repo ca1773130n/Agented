@@ -107,27 +107,26 @@ class TestRunOauthFlow:
         result = CLIProxyManager._run_oauth_flow(Path("/fake/profile"), timeout=10)
         assert result is False
 
-    @patch("subprocess.Popen")
-    def test_no_oauth_url_returns_false(self, mock_popen):
+    # _run_oauth_flow delegates spawn + URL capture to start_login (ai-accounts
+    # owns the binary), so mock THAT — mocking subprocess.Popen isn't enough and
+    # trips the real cliproxyapi binary on CI (absent → FileNotFoundError).
+    @patch.object(CLIProxyManager, "start_login")
+    def test_no_oauth_url_returns_false(self, mock_start_login):
         proc = MagicMock()
-        proc.poll.return_value = 0  # Process exits immediately
-        proc.stdout.readline.return_value = ""
-        mock_popen.return_value = proc
+        mock_start_login.return_value = (proc, {})  # no "url" in info
 
         result = CLIProxyManager._run_oauth_flow(Path("/fake/profile"), timeout=5)
         assert result is False
         proc.kill.assert_called()
 
     @patch.object(CLIProxyManager, "_run_playwright_oauth", return_value=False)
-    @patch("subprocess.Popen")
-    def test_playwright_failure_returns_false(self, mock_popen, mock_oauth):
+    @patch.object(CLIProxyManager, "start_login")
+    def test_playwright_failure_returns_false(self, mock_start_login, mock_oauth):
         proc = MagicMock()
-        proc.poll.return_value = None
-        proc.stdout.readline.side_effect = [
-            "Starting OAuth flow...\n",
-            "Open this URL: https://claude.ai/oauth?redirect_uri=http%3A%2F%2Flocalhost%3A9876%2Fcallback\n",
-        ]
-        mock_popen.return_value = proc
+        mock_start_login.return_value = (
+            proc,
+            {"url": "https://claude.ai/oauth?redirect_uri=http%3A%2F%2Flocalhost%3A9876%2Fcallback"},
+        )
 
         result = CLIProxyManager._run_oauth_flow(Path("/fake/profile"), timeout=10)
         assert result is False

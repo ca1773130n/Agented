@@ -63,12 +63,13 @@ def test_expected_tables_present(isolated_db):
 # CREATE TABLE statement was added, removed, or renamed in the schema package.
 # Re-baselined after accumulated feature growth (budgets, traces, findings,
 # system_errors, rbac, secrets, sso, etc.) since the v0.7.6 baseline of 125.
-EXPECTED_TABLE_COUNT = 136
+# v0.10.0 added policies (176), collaboration (177-179), and discovery (180+).
+EXPECTED_TABLE_COUNT = 148
 
 # Bump only when intentionally adding/removing an index. A drift here means a
 # CREATE INDEX statement was added, removed, or renamed in the schema package.
 # Re-baselined alongside the table growth above (was 162 at v0.7.6).
-EXPECTED_INDEX_COUNT = 184
+EXPECTED_INDEX_COUNT = 196
 
 
 def test_table_count_parity(skip_on_pg):

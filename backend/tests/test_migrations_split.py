@@ -25,6 +25,7 @@ from app.db.migrations import (
     V05_MIGRATIONS,
     V06_MIGRATIONS,
     V07_MIGRATIONS,
+    V08_MIGRATIONS,
     VERSIONED_MIGRATIONS,
     init_db,
     run_migrations,
@@ -54,7 +55,9 @@ def test_runner_callable():
 
 def test_buckets_concatenate_to_registry():
     """The package __init__ should be a pure concatenation of the buckets."""
-    expected = V04_MIGRATIONS + V05_MIGRATIONS + V06_MIGRATIONS + V07_MIGRATIONS
+    expected = (
+        V04_MIGRATIONS + V05_MIGRATIONS + V06_MIGRATIONS + V07_MIGRATIONS + V08_MIGRATIONS
+    )
     assert list(VERSIONED_MIGRATIONS) == list(expected)
 
 

@@ -30,9 +30,16 @@ def test_get_owner_helper_and_can_access(isolated_db):
     assert can_access("projects", pid, "bob@test", "admin") is True
     assert can_access("projects", pid, "bob@test", "editor") is False
 
-    # Unowned (legacy) and non-existent rows are shared / pass-through.
-    _mk_user("legacy@local")
-    legacy = create_project(name="legacy", user_id="legacy@local")
+    # Unowned (legacy) and non-existent rows are shared / pass-through. NULL the
+    # owner directly to model a pre-ownership row (create_project always resolves
+    # some owner now, so passing a user_id can't produce a genuinely legacy row).
+    from app.database import get_connection
+
+    legacy = create_project(name="legacy")
+    with get_connection() as conn:
+        conn.execute("UPDATE projects SET user_id = NULL WHERE id = ?", (legacy,))
+        conn.commit()
+    assert get_owner("projects", legacy) is None
     assert can_access("projects", legacy, "bob@test", "viewer") is True
     assert can_access("projects", "proj-nope", "bob@test", "viewer") is True
 

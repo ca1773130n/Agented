@@ -185,10 +185,11 @@ def test_add_dead_end_builds_correct_argv():
     GrdCliService._binary_available = True
     captured = {}
 
-    def fake_run(binary, cwd, argv, *, raw):
+    def fake_run(binary, cwd, argv, *, raw, is_exec=False):
         captured["binary"] = binary
         captured["argv"] = argv
         captured["raw"] = raw
+        captured["is_exec"] = is_exec
         return _mock_runner(True, output="ok")
 
     with patch.object(GrdCliService, "_run", side_effect=fake_run):
