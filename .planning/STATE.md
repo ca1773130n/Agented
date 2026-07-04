@@ -4,7 +4,7 @@
 
 See: .planning/PROJECT.md
 **Core value:** Enable engineering teams to orchestrate AI-powered automation through a unified dashboard
-**Current version:** v0.7.98 (pyproject); informal v0.9.0 competitive-intel shipped via PRs
+**Current version:** v0.10.0 (pyproject + package.json bumped at the v0.10.0 close-out; git tag v0.10.0)
 
 ## Current Position
 

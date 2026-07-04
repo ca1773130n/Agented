@@ -141,13 +141,59 @@ in PR #148 from commit-message + diff data.
 
 ---
 
+## v0.8.0 — Team Harness & Self-Improvement (Shipped: 2026-06-13)
+
+**Phases completed:** 6 phases (17–22).
+
+Forge creation surface (skill/rule/hook/command/subagent creators +
+session-completion auto-import), Sketch→primitive routing, GRD as the default
+execution driver, GRD frontend wiring (autoresearch page, life-harness
+completion UI, `/grd:` command bar), one-click team-harness setup (6-step
+orchestrator), and repeated-request→auto-skill mining. The self-improvement
+"life-harness" loop (meta-harness + eval-gated, git-reversible primitive
+evolution) also landed in this arc.
+
+See: ``.planning/milestones/v0.8.0/``
+
+---
+
+## v0.9.0 — Competitive Intelligence (Shipped: 2026-06-20)
+
+**PR-driven** (PRs #240–248), each codex-reviewed-until-green.
+
+Competitor monitor MVP, autonomous discovery, source adapters (arXiv +
+Greenhouse/Lever job boards), strategy → HITL → gated-materialize (legal gate +
+inert auto-implement), human-gated auto-implement in a worktree goal-loop, and
+pluggable market-lookalikes. Full monitor → discover → source → strategize →
+implement arc. No formal phase tree — PR-driven milestone.
+
+See: per-PR history #240–248.
+
+---
+
+## v0.10.0 — Competitive Hardening (Shipped: 2026-07-04)
+
+**Phases completed:** 4 phases (23–26), PRs #286–290.
+
+Hardening from the omnigent competitive analysis; each phase
+codex-reviewed-until-green and fail-closed. Stackable policy/governance engine
+(server→team→session, DENY short-circuit, enforced at all 14 launch sites),
+OS-level harness sandboxing + deny-by-default egress (bwrap/seatbelt), real-time
+multi-user collaboration (live-share, OIDC, owner-stamp respawn, Fork), and
+deployment/extensibility ergonomics (experimental Postgres adapter, Render
+blueprint, declarative-YAML authoring, LLM-key isolation).
+
+See: ``.planning/milestones/v0.10.0/``
+
+---
+
 ## Convention
 
 - **Version numbers** live in commit subjects (e.g. ``fix(v0.7.97): …``).
   ``backend/pyproject.toml`` / ``frontend/package.json`` are bumped on
   each milestone-summary PR rather than every commit; both are at
-  v0.7.98 as of this PR.
-- **Git tags** track the major arcs (last tag is v0.6.4); patch-level
+  **v0.10.0** as of the v0.10.0 close-out.
+- **Git tags** track the major arcs (last tag is v0.10.0); patch-level
   versions are commit-subject only.
 - **Per-version STATE.md** files are the canonical planning trail when
   the wave was PR-driven rather than phase-planned.

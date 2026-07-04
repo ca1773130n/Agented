@@ -78,28 +78,11 @@ Enable engineering teams to orchestrate AI-powered automation (bots, agents, wor
 
 ### Active
 
-v0.8.0 — Team Harness & Self-Improvement (see
-``docs/superpowers/specs/2026-06-13-team-harness-self-improvement-design.md``):
-
-- A **Forge creation surface** — `subagent` primitive kind, atomic
-  create+bind+materialize API, cross-kind `forge_bundles`, shipped
-  `forge-creator` skill bundle + session-completion auto-import
-- A **Sketch → primitive routing** — classification `action` dimension,
-  `primitive_generator` routing target, PrimitiveForgeService
-  (create + ACE-style improve), outcome card with undo
-- A **GRD default driver** — `resolve_execution_driver()` 3-way
-  (cliproxy | cli_agent | grd, default grd), GrdChatSessionHandler
-  bridging PSM → chat SSE, cwd fixes for delegations/project_chat
-- A **GRD frontend wiring** — autoresearch (gd research) page,
-  life-harness completion UI (autonomy/revert/shared-forge/16 unwired
-  routes), full /grd: command surface, 4-locale i18n
-- A **One-click team harness setup** — ProjectDashboard button +
-  idempotent TeamHarnessSetupService (GRD init, team topology,
-  bundles, tesserae, policies, 4-harness materialization)
-- A **Repeated-request auto-skill** — `repeated_request_signals`
-  store, embedding-similarity detection over all 5 session kinds,
-  hybrid confidence gates (auto ≥3 occurrences + verified; else
-  propose), patch-over-create, provenance hashes, security scan
+**None** — no milestone is in flight. The last three arcs all shipped
+(v0.8.0 Team Harness, v0.9.0 Competitive Intelligence, v0.10.0 Competitive
+Hardening); see ``.planning/MILESTONES.md`` for the chronological record and
+each ``.planning/milestones/<version>/`` for detail. Run ``/grd:new-milestone``
+to populate this section for the next arc.
 
 ### Out of Scope
 
@@ -121,7 +104,7 @@ The codebase has grown organically and has accumulated technical debt documented
 ## Constraints
 
 - **Tech stack**: Litestar backend (post-wave-80) + Vue 3 frontend — established, not changing
-- **Database**: SQLite — current choice, migration to PostgreSQL is a future possibility
+- **Database**: SQLite is the supported zero-config default; an **experimental** Postgres adapter shipped in v0.10.0 (`DATABASE_URL`, Phase-26 DB-API layer) with core paths verified on a live PG 16 — validate your workload before production
 - **Execution**: Subprocess-based CLI tools — requires claude/opencode/gemini/codex installed on host
 - **Platform**: macOS/Linux only — PTY service uses POSIX fork
 - **Deployment**: Single-machine — in-memory state prevents horizontal scaling currently
@@ -139,25 +122,23 @@ The codebase has grown organically and has accumulated technical debt documented
 
 ## Current Milestone
 
-**v0.10.0 — Competitive Hardening (omnigent lessons)** (started 2026-06-30)
+**None active.** v0.10.0 — Competitive Hardening (omnigent lessons) **COMPLETE
+& SHIPPED 2026-07-04** (phases 23–26, PRs #286–290; archived at
+``.planning/milestones/v0.10.0/``). Delivered the stackable ALLOW/DENY/ASK
+policy engine, OS-level harness sandboxing + deny-by-default egress, real-time
+multi-user collaboration (live-share/OIDC/Fork), and deployment/extensibility
+ergonomics (experimental Postgres adapter, Render blueprint, declarative-YAML
+authoring, LLM-key isolation) — each phase codex-reviewed-until-green and
+fail-closed. Basis: the verified competitive analysis
+``docs/research/omnigent-vs-agented.md`` (+ ``.ko.md``).
 
-**Goal:** Close the governance / collaboration / deployment gap that
-omnigent-ai/omnigent (a Databricks meta-harness in Agented's exact category)
-demonstrates, **without** diluting Agented's autonomy/memory/self-improvement
-moat. Adopt a stackable ALLOW/DENY/ASK policy engine, OS-level harness
-sandboxing + egress control, real-time multi-user session collaboration, and
-deployment/extensibility ergonomics (Postgres, one-click deploy, declarative
-YAML agents). Keep widening the lead on the unified loop layer,
-Tesserae/CodeGraph grounding, life-harness, and competitive-intel.
+**Deferred (live-infra / manual validation only, no missing code):** real
+Linux/bwrap escape run + E2B/Modal creds (DEFER-24-01/02), multi-browser
+live-share + real OIDC (DEFER-25-01/03/04), live Render deploy + `just
+self-update` (DEFER-26-01/02).
 
-**Target features (4 phases / REQ-27..41):** policy/governance engine (23);
-OS-level harness sandboxing + egress (24); real-time multi-user collaboration
-(25); deployment & extensibility ergonomics (26). Basis: the verified
-competitive analysis ``docs/research/omnigent-vs-agented.md`` (+ ``.ko.md``).
-PRs remain phase-scoped with codex-review-until-green.
-
-**Paused:** v0.8.0 — Team Harness & Self-Improvement (phases 17–22) archived at
-``.planning/milestones/v0.8.0/``; open REQs 01–13, 19–21 carry forward.
+**Next:** run ``/grd:new-milestone`` to open the next arc. Carry-forward REQs
+from earlier arcs (01–13, 19–21) remain open.
 
 ---
-*Last updated: 2026-06-30 — started milestone v0.10.0 Competitive Hardening (omnigent lessons)*
+*Last updated: 2026-07-04 — completed milestone v0.10.0 Competitive Hardening; no active milestone*
