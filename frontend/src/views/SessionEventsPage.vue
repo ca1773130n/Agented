@@ -113,7 +113,7 @@ const eventCount = computed(() => events.value.length);
 
 <style scoped>
 .page {
-  padding: 1.5rem;
+  padding: 24px;
   max-width: 100%;
 }
 .page-header h1 { margin: 0 0 0.25rem 0; }

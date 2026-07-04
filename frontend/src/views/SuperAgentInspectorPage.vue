@@ -318,7 +318,7 @@ function fmtPayload(p: string): string {
 }
 .sa-inspector__subtitle {
   margin: 4px 0 0;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-tertiary, rgba(255, 255, 255, 0.5));
   font-family: var(--font-mono, monospace);
 }

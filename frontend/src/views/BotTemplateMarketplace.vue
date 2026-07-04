@@ -275,7 +275,7 @@ onMounted(loadTemplates);
 
 <style scoped>
 .marketplace-page {
-  padding: 2rem;
+  padding: 24px;
   max-width: 1200px;
   margin: 0 auto;
 }

@@ -281,6 +281,25 @@ const { showApiKeyBanner, appReady, onAuthenticated, handleTourRetry } = useAppB
  * strict CSP needs no external font/style origins.
  */
 
+/*
+ * Canonical page-header typography — every content page's title/subtitle the
+ * same size. Applies to the standard page-header conventions; scoped page
+ * styles inherit these unless they set their own font-size. Modals, auth
+ * screens, and wizards use different header classes and are unaffected.
+ */
+.page-header h1,
+.header-title h1,
+.page-title h1 {
+  font-size: 18px;
+  font-weight: 600;
+}
+.page-subtitle,
+.header-title p,
+.page-title p {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
 :root {
   /* Base colors */
   --bg-primary: #0a0a0f;

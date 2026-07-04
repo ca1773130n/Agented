@@ -269,8 +269,8 @@ onMounted(loadData);
 
 .title-icon svg { width: 22px; height: 22px; color: var(--accent-violet); }
 
-.page-title h1 { font-size: 1.2rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
-.page-title p { font-size: 0.85rem; color: var(--text-tertiary); }
+.page-title h1 { font-size: 18px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.page-title p { font-size: 13px; color: var(--text-tertiary); }
 
 .summary-badges { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; }
 

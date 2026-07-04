@@ -27,7 +27,7 @@ const { t } = useI18n();
   font-family: var(--font-family, 'Geist', system-ui, sans-serif);
 }
 .pm-title {
-  font-size: 1.4rem;
+  font-size: 18px;
   margin: 0 0 18px;
   color: var(--color-text, #e6e6e6);
 }
