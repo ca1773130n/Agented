@@ -80,13 +80,20 @@ sandboxing + egress (REQ-31..33) → 25 Real-time multi-user collaboration
 
 **Next command:** `/grd:discuss-phase 23` (or `/grd:plan-phase 23` to plan directly)
 
-## Paused milestone
+## Shipped milestone — v0.8.0 (Team Harness & Self-Improvement)
 
-**v0.8.0 — Team Harness & Self-Improvement** (phases 17–22) is **paused** and
-archived at `.planning/milestones/v0.8.0/` (ROADMAP/REQUIREMENTS/STATE). Open
-REQs 01–13 and 19–21 carry forward; resume after v0.10.0 or interleave a phase
-if a v0.8.0 item becomes urgent. Phases 17, 19, 20, 22 landed on main via PRs;
-phase 21 (one-click team harness setup) was in progress at 21-07.
+**SHIPPED 2026-06-13** — all 6 phases (17–22) landed on main and are archived at
+`.planning/milestones/v0.8.0/` (see MILESTONES.md). This supersedes the earlier
+"paused / phase 21 in progress" note, which was stale mid-development state.
+
+Delivered here and **live today**: the **one-click team-harness setup** (phase 21
+— a 6-step idempotent orchestrator: `grd_init → team_topology → bundle_binding →
+tesserae_enable → default_policies → materialize_compile`), reachable from the
+Project Dashboard's **Set up harness** button (`POST /admin/grd/{project_id}/
+harness-setup`, live SSE step progress; retry resumes from the failed step, never
+rolls back). Also shipped: the Forge creation surface, GRD-as-default-driver + GRD
+frontend wiring, Sketch→primitive routing, repeated-request→auto-skill mining, and
+the eval-gated, git-reversible self-improvement "life-harness" loop.
 
 ## Session Continuity
 
