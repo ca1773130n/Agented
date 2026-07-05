@@ -91,6 +91,7 @@
     "sectionPlatform": "プラットフォーム",
     "dashboards": "ダッシュボード",
     "sketch": "スケッチ",
+    "research": "リサーチ",
     "products": "プロダクト",
     "projects": "プロジェクト",
     "teams": "チーム",
@@ -9347,6 +9348,10 @@
   "surface": {
     "research": {
       "title": "リサーチ",
+      "pickProject": "プロジェクト",
+      "pickProjectHint": "リサーチするプロジェクトを選択",
+      "noProjects": "リサーチを開始するにはプロジェクトを作成してください。",
+      "goToProjects": "プロジェクトへ",
       "loadError": "リサーチデータの読み込みに失敗しました",
       "loadThreadError": "リサーチスレッドの読み込みに失敗しました",
       "intake": {

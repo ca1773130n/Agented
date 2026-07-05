@@ -91,6 +91,7 @@
     "sectionPlatform": "平台",
     "dashboards": "仪表板",
     "sketch": "草图",
+    "research": "研究",
     "products": "产品",
     "projects": "项目",
     "teams": "团队",
@@ -9347,6 +9348,10 @@
   "surface": {
     "research": {
       "title": "研究",
+      "pickProject": "项目",
+      "pickProjectHint": "选择要研究的项目",
+      "noProjects": "创建一个项目以开始研究。",
+      "goToProjects": "前往项目",
       "loadError": "加载研究数据失败",
       "loadThreadError": "加载研究线程失败",
       "intake": {

@@ -15,4 +15,11 @@ export const onboardingRoutes: RouteRecordRaw[] = [
     component: () => import('../../views/SketchChatPage.vue'),
     meta: { title: 'Sketch Chat' },
   },
+  // Research (top-level, project-scoped via in-page picker)
+  {
+    path: '/research',
+    name: 'research',
+    component: () => import('../../views/ResearchPage.vue'),
+    meta: { title: 'Research' },
+  },
 ];

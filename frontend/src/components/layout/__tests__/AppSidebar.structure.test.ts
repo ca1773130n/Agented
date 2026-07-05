@@ -48,7 +48,7 @@ function buildRouter(): Router {
     // PR-D — 4 new lane routes + service-health redirect still resolves
     'dashboards-quality', 'dashboards-cost', 'dashboards-health',
     'dashboards-activity', 'service-health',
-    'sketch-chat', 'products', 'product-dashboard', 'product-settings',
+    'sketch-chat', 'research', 'products', 'product-dashboard', 'product-settings',
     'projects', 'project-dashboard', 'project-settings', 'project-planning',
     'project-instance-playground', 'teams', 'team-dashboard', 'team-settings',
     'agents', 'agent-create',
@@ -467,6 +467,36 @@ describe('AppSidebar — PR-B structure', () => {
     expect(dashIdx).toBeLessThan(orgIdx);
     expect(sketchIdx).toBeGreaterThan(dashIdx);
     expect(sketchIdx).toBeLessThan(orgIdx);
+  });
+
+  it('Research is a top-level flat link in the Work group, after Sketch', () => {
+    // The top-level "Research" surface (Sketch parity): a flat link — no
+    // chevron, no aria-expanded — sitting in the Work section right after
+    // Sketch and before the Organization label.
+    const all = Array.from(rootEl(wrapper).children[0].children) as HTMLElement[];
+    function indexOfLabelText(text: string): number {
+      return all.findIndex(
+        (el) =>
+          el.classList.contains('nav-section-label') && el.textContent?.trim() === text,
+      );
+    }
+    function indexOfButtonText(text: string): number {
+      return all.findIndex(
+        (el) =>
+          el.tagName === 'BUTTON' &&
+          el.querySelector<HTMLElement>('.nav-text')?.textContent?.trim() === text,
+      );
+    }
+    const sketchIdx = indexOfButtonText('Sketch');
+    const researchIdx = indexOfButtonText('Research');
+    const orgIdx = indexOfLabelText('Organization');
+    expect(researchIdx).toBeGreaterThan(sketchIdx);
+    expect(researchIdx).toBeLessThan(orgIdx);
+
+    // Flat-link shape: no chevron, no aria-expanded.
+    const researchBtn = all[researchIdx] as HTMLElement;
+    expect(researchBtn.querySelector('.chevron-icon')).toBeNull();
+    expect(researchBtn.hasAttribute('aria-expanded')).toBe(false);
   });
 
   it('PR-F: Forge group children appear in order Workflows → Triggers → Plugins → MCPs → Skills → Commands → Hooks → Rules', () => {

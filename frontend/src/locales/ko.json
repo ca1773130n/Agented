@@ -91,6 +91,7 @@
     "sectionPlatform": "플랫폼",
     "dashboards": "대시보드",
     "sketch": "스케치",
+    "research": "리서치",
     "products": "제품",
     "projects": "프로젝트",
     "teams": "팀",
@@ -9347,6 +9348,10 @@
   "surface": {
     "research": {
       "title": "리서치",
+      "pickProject": "프로젝트",
+      "pickProjectHint": "연구할 프로젝트를 선택하세요",
+      "noProjects": "연구를 시작하려면 프로젝트를 생성하세요.",
+      "goToProjects": "프로젝트로 이동",
       "loadError": "리서치 데이터를 불러오지 못했습니다",
       "loadThreadError": "리서치 스레드를 불러오지 못했습니다",
       "intake": {

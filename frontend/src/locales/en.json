@@ -91,6 +91,7 @@
     "sectionPlatform": "Platform",
     "dashboards": "Dashboards",
     "sketch": "Sketch",
+    "research": "Research",
     "products": "Products",
     "projects": "Projects",
     "teams": "Teams",
@@ -9347,6 +9348,10 @@
   "surface": {
     "research": {
       "title": "Research",
+      "pickProject": "Project",
+      "pickProjectHint": "Pick a project to research",
+      "noProjects": "Create a project to start research.",
+      "goToProjects": "Go to Projects",
       "loadError": "Failed to load research data",
       "loadThreadError": "Failed to load research thread",
       "intake": {
