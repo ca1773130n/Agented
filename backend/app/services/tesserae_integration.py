@@ -876,6 +876,13 @@ def build_activity_summary(
     optionally scopes to one registered project (else all of them). Returns
     ``{"ok": bool, "markdown": str, "reason": str | None}``.
     """
+    # Guard against argv flag-smuggling: `day`/`project` reach us from the HTTP
+    # query and become CLI argv, so a value like `--foo` could be read as a flag.
+    # Constrain both to their expected shapes (neither can start with '-').
+    if day is not None and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+        return {"ok": False, "markdown": "", "reason": "invalid date (expected YYYY-MM-DD)"}
+    if project is not None and not re.fullmatch(r"[A-Za-z0-9_.][A-Za-z0-9._-]{0,63}", project):
+        return {"ok": False, "markdown": "", "reason": "invalid project id"}
     args = ["summary", "--no-llm"]
     if period == "week":
         args += ["--week", day] if day else ["--week"]
@@ -1258,14 +1265,17 @@ def ask_tesserae(
     root = get_tesserae_root(project_id)
     if root is None:
         return None
+    # `--` terminates flag parsing so a user question starting with '-' can't be
+    # smuggled in as a CLI flag (argv injection).
     cmd = [
         _TESSERAE_CMD,
         "ask",
-        question,
         "--project",
         str(root),
         "--top-k",
         str(top_k),
+        "--",
+        question,
     ]
     try:
         result = subprocess.run(
@@ -1303,11 +1313,14 @@ def context_tesserae(
     root = get_tesserae_root(project_id)
     if root is None:
         return None
-    cmd = [_TESSERAE_CMD, "context", question, "--project", str(root)]
+    cmd = [_TESSERAE_CMD, "context", "--project", str(root)]
     if multi_pool:
         cmd.append("--multi-pool")
     if budget is not None:
         cmd += ["--budget", str(budget)]
+    # `--` terminates flag parsing so a user question starting with '-' can't be
+    # smuggled in as a CLI flag (argv injection).
+    cmd += ["--", question]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:

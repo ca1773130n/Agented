@@ -74,6 +74,16 @@ def test_set_tesserae_root_is_idempotent(isolated_db, tmp_path):
     assert ti.get_tesserae_root("proj-set") == tmp_path.resolve()
 
 
+def test_build_activity_summary_rejects_argv_flag_smuggling():
+    """`day`/`project` become CLI argv — a leading-dash value must be rejected
+    (argv flag smuggling), never handed to the subprocess."""
+    with patch.object(ti, "_run_tesserae") as run:
+        assert ti.build_activity_summary(period="day", project="--output=/tmp/x")["ok"] is False
+        assert ti.build_activity_summary(period="day", day="--week")["ok"] is False
+        assert ti.build_activity_summary(period="week", day="-9999-01-01")["ok"] is False
+        run.assert_not_called()
+
+
 # ---------- session normalization -------------------------------------------
 
 
