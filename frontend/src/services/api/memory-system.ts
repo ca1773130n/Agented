@@ -75,11 +75,25 @@ export interface TesseraeAsyncJob {
   result?: TesseraeOpResult;
 }
 
+export interface ActivitySummary {
+  ok: boolean;
+  markdown: string;
+  reason: string | null;
+}
+
 export const memorySystemApi = {
   list: () =>
     apiFetch<{ memory_systems: MemorySystemSummary[] }>(
       '/admin/system/memory',
     ),
+
+  // Daily/weekly "what you did" digest (markdown) via `tesserae summary`.
+  activitySummary: (period: 'day' | 'week', date?: string | null, project?: string | null) => {
+    const qs = new URLSearchParams({ period });
+    if (date) qs.set('date', date);
+    if (project) qs.set('project', project);
+    return apiFetch<ActivitySummary>(`/admin/system/memory/activity-summary?${qs.toString()}`);
+  },
 
   listTesseraeProjects: () =>
     apiFetch<{ projects: TesseraeProjectState[] }>(

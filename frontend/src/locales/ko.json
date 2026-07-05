@@ -180,7 +180,8 @@
     "conversationHistory": "대화 기록",
     "systemErrors": "시스템 오류",
     "failedToLoad": "{sections} 불러오기 실패",
-    "setup": "설정"
+    "setup": "설정",
+    "activitySummary": "활동 요약"
   },
   "apiKeyBanner": {
     "title": "API 키 필요",
@@ -9804,5 +9805,17 @@
     "github": "GitHub",
     "okta": "Okta",
     "microsoft": "Microsoft"
+  },
+  "activitySummary": {
+    "title": "활동 요약",
+    "subtitle": "매일·매주 프로젝트별로 무엇을 했는지 한눈에.",
+    "period": "기간",
+    "daily": "일간",
+    "weekly": "주간",
+    "dateLabel": "날짜",
+    "refresh": "새로고침",
+    "loading": "불러오는 중…",
+    "empty": "이 기간의 활동이 없습니다.",
+    "failed": "요약을 만들지 못했습니다."
   }
 }

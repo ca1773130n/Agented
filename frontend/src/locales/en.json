@@ -180,7 +180,8 @@
     "conversationHistory": "Conversation History",
     "systemErrors": "System Errors",
     "failedToLoad": "{sections} failed to load",
-    "setup": "Setup"
+    "setup": "Setup",
+    "activitySummary": "Activity Summary"
   },
   "apiKeyBanner": {
     "title": "API key required",
@@ -9804,5 +9805,17 @@
     "github": "GitHub",
     "okta": "Okta",
     "microsoft": "Microsoft"
+  },
+  "activitySummary": {
+    "title": "Activity Summary",
+    "subtitle": "What you accomplished each day and week, across every project.",
+    "period": "Period",
+    "daily": "Daily",
+    "weekly": "Weekly",
+    "dateLabel": "Date",
+    "refresh": "Refresh",
+    "loading": "Loading…",
+    "empty": "No activity for this period.",
+    "failed": "Couldn't build the summary."
   }
 }

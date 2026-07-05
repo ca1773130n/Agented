@@ -180,7 +180,8 @@
     "conversationHistory": "对话历史",
     "systemErrors": "系统错误",
     "failedToLoad": "{sections} 加载失败",
-    "setup": "设置"
+    "setup": "设置",
+    "activitySummary": "活动摘要"
   },
   "apiKeyBanner": {
     "title": "需要 API 密钥",
@@ -9804,5 +9805,17 @@
     "github": "GitHub",
     "okta": "Okta",
     "microsoft": "Microsoft"
+  },
+  "activitySummary": {
+    "title": "活动摘要",
+    "subtitle": "每天、每周在各项目中完成了什么，一目了然。",
+    "period": "周期",
+    "daily": "每日",
+    "weekly": "每周",
+    "dateLabel": "日期",
+    "refresh": "刷新",
+    "loading": "加载中…",
+    "empty": "该周期没有活动。",
+    "failed": "无法生成摘要。"
   }
 }

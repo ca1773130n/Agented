@@ -2,6 +2,12 @@ import type { RouteRecordRaw } from 'vue-router';
 
 export const observabilityRoutes: RouteRecordRaw[] = [
   {
+    path: '/activity-summary',
+    name: 'activity-summary',
+    component: () => import('../../views/ActivitySummaryPage.vue'),
+    meta: { title: 'Activity Summary' },
+  },
+  {
     path: '/traces',
     name: 'traces-list',
     component: () => import('../../views/TracesPage.vue'),

@@ -861,6 +861,43 @@ def _run_tesserae(
     )
 
 
+def build_activity_summary(
+    *,
+    period: str = "day",
+    day: Optional[str] = None,
+    project: Optional[str] = None,
+    timeout: int = 120,
+) -> dict:
+    """Run ``tesserae summary`` and return the markdown activity digest.
+
+    ``period`` is ``"day"`` (a single day — ``day`` or today) or ``"week"``
+    (seven daily windows ending on ``day``/today). Uses ``--no-llm`` so the
+    digest is fast and deterministic and never needs an LLM backend. ``project``
+    optionally scopes to one registered project (else all of them). Returns
+    ``{"ok": bool, "markdown": str, "reason": str | None}``.
+    """
+    args = ["summary", "--no-llm"]
+    if period == "week":
+        args += ["--week", day] if day else ["--week"]
+    elif day:
+        args += ["--day", day]
+    if project:
+        args += ["--project", project]
+    res = _run_tesserae("summary", args, cwd=Path.home(), timeout=timeout)
+    if not res.ok:
+        return {
+            "ok": False,
+            "markdown": res.stdout or "",
+            "reason": res.reason or (res.stderr or "").strip()[:400] or "tesserae summary failed",
+        }
+    # stdout is one or more ``wrote <path>`` preamble lines followed by the
+    # ``# Activity summary`` markdown body — return just the body.
+    out = res.stdout or ""
+    marker = out.find("# Activity summary")
+    md = out[marker:] if marker >= 0 else out
+    return {"ok": True, "markdown": md.strip(), "reason": None}
+
+
 def init_workspace(project_id: str) -> TesseraeOpResult:
     """Create the ``.tesserae/`` skeleton inside the project root.
 
