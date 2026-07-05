@@ -14,7 +14,7 @@ Think a Hermes-style agent system, but broader, with a WebUI built for
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](docs/deploy.md#1-render-blueprint)
 
-**Docs in your language:** [한국어](docs/ko/self-improving-harness-architecture.md) · [日本語](docs/ja/self-improving-harness-architecture.md) · [中文](docs/zh/self-improving-harness-architecture.md)
+**Read this in:** [한국어](README.ko.md) · [日本語](README.ja.md) · [中文](README.zh.md)
 
 </div>
 
