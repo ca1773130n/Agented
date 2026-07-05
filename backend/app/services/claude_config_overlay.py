@@ -33,6 +33,14 @@ logger = logging.getLogger(__name__)
 
 # Items in the user's claude config dir that we symlink (passthrough)
 # rather than override. Anything else we silently skip.
+#
+# NOTE: `.credentials.json` / `.oauth-token` carry the account's OAuth login.
+# Without them a spawned `claude` reads the overlay as its CLAUDE_CONFIG_DIR,
+# finds no credentials, and dies with "Not logged in · Please run /login" —
+# even though the account is configured. The gemini/opencode overlays already
+# pass their `credentials.json` through; this list simply omitted the claude
+# equivalents, which broke every spawned claude harness session (research,
+# autopilot, harness-round, grd_chat). Symlinked read-only from the account dir.
 _PASSTHROUGH_ITEMS = {
     "plugins",
     "mcp.json",
@@ -44,6 +52,8 @@ _PASSTHROUGH_ITEMS = {
     "last-activity",
     "settings.local.json",
     "harnesssync_health_history.json",
+    ".credentials.json",
+    ".oauth-token",
 }
 
 
