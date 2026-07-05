@@ -2,13 +2,15 @@
 
 # Agented
 
-**A harness-engineering meta-layer for AI coding agents.**
+**A meta-harness engineering platform for running a virtual startup with autonomous AI agents.**
 
-Orchestrate Claude Code, Codex, and Gemini CLI into end-to-end, autonomous
-product development — from one operator console, with provenance and
-auditability built in.
+Agented gathers the state of the art in AI harness engineering — loop
+engineering, agent orchestration, swarms, self-improvement, autoresearch,
+persistent memory — into one product- and project-centric operator console.
+Think a Hermes-style agent system, but broader, with a WebUI built for
+**operating a company**, not just chatting with a model.
 
-[Architecture](docs/self-improving-harness-architecture.md) · [Tutorial](docs/self-improving-harness-tutorial.md) · [Security](docs/SECURITY.md) · [Deploy](docs/deploy.md)
+[Architecture](docs/self-improving-harness-architecture.md) · [Tutorial](docs/self-improving-harness-tutorial.md) · [Changelog](CHANGELOG.md) · [Security](docs/SECURITY.md) · [Deploy](docs/deploy.md)
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](docs/deploy.md#1-render-blueprint)
 
@@ -18,12 +20,51 @@ auditability built in.
 
 ---
 
-Agented is the **control plane on top of AI coding harnesses**. It coordinates
-**products → projects → teams → agents**, drives the underlying CLIs as live
-subprocesses, and streams their work back to you in real time. On top of that
-sits a **self-improving harness**: every action an agent takes is checkpointed,
-attributed to its source, budget-governed, and verifiable — provenance and
-auditability as first-class concerns, not afterthoughts.
+## What Agented is
+
+How to get real, sustained work out of AI agents is being figured out **right
+now** — in conference talks, blog posts, and the working notes of the people
+building harnesses. Agented's bet is that those ideas shouldn't stay scattered
+across one-off scripts and private rigs. It collects them into a single
+**meta-harness layer** that sits on top of the coding CLIs (Claude Code, Codex,
+Gemini CLI, OpenCode, …) and turns them into the workforce of a **virtual
+startup** — organized around **products and projects**, run from one console.
+
+It is **early stage and moving fast**. What's already here:
+
+- **🔁 Loop engineering** — one `LoopSpec` schema and a single executor drive
+  every loop pattern (goal-loops, Ralph): an exit ladder (quality-gate →
+  stagnation → convergence → budget), per-iteration checkpoints, resume, and
+  human gates. → [Architecture](docs/self-improving-harness-architecture.md)
+- **🎛 Agent orchestration** — a first-class model of **products → projects →
+  teams → agents**, coordinated from one dashboard, each run composed from
+  per-project context, accounts, and primitives.
+- **🐝 Swarms across many AI accounts** — schedule and hand off work across
+  multiple provider accounts (via the `ai-accounts` sidecar), with **auto-routing**
+  to the right backend and model.
+- **♻️ Self-improvement** — an eval-gated, git-reversible "life-harness" loop
+  that evolves the harness's own primitives instead of leaving you to hand-tune
+  them.
+- **🔬 Autoresearch** — the GRD engine runs research → plan → execute → verify as
+  an autonomous, milestone-planned pipeline.
+- **🧠 Persistent memory + LLM-wiki** — Tesserae compiles a typed knowledge graph
+  of code, docs, and session history (plus generated wiki pages) that grounds
+  every retrieval.
+- **⏳ Long-horizon agents** — durable per-run state, incremental checkpoints, and
+  `--resume` so a run survives crashes and spans days.
+- **📊 Observability** — live SSE traces, session events, an audit trail, and
+  daily/weekly **activity summaries** of everything the agents did.
+- **🧩 Harness sharing & composition** — build harnesses by organizing
+  **primitives** (skills, hooks, commands, rules, subagents) in the Forge, and
+  share them through a plugin marketplace.
+- **📦 Product & project management** — competitor monitoring, discovery, and
+  strategy; project planning; and **one-click team-harness setup** per project.
+- **🛡 Governance & safety** — a stackable policy engine, OS-level sandboxing with
+  deny-by-default egress, and real-time multi-user collaboration.
+
+Underneath, every action an agent takes is checkpointed, attributed to its
+source, budget-governed, and verifiable — **provenance, auditability, and
+rollback are designed in**, not bolted on.
 
 ## Quickstart
 
@@ -60,7 +101,7 @@ this pinned to an **immutable release tag** — the installer then SHA-256
 verifies the compose file it downloads and aborts on mismatch:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ca1773130n/Agented/v0.8.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ca1773130n/Agented/v0.10.0/install.sh | bash
 ```
 
 Fetching from the mutable `main` branch is refused unless you explicitly set
@@ -85,42 +126,18 @@ optional Postgres story, in **[docs/deploy.md](docs/deploy.md)**
 > `AGENTED_DISABLE_SIGNUP=1` once you've registered — always before exposing the
 > instance to an untrusted network.
 
-## What's inside
+## How the pieces fit
 
-**🎛 Multi-harness orchestration** — Drive Claude Code, Codex CLI, and Gemini CLI
-as subprocesses and stream their output over SSE. Work is delivered by
-**triggers**: webhooks, GitHub events, schedules, or a manual run.
-
-**🗂 Organization model** — Products, projects, teams, agents, and predefined
-bots, wired together through one dashboard. Per-project context, accounts, and
-**Forge primitives** (plugins, skills, hooks, commands, rules) compose into each
-run.
-
-**🔁 The self-improving harness** — Durable per-run state with incremental
-checkpoints (crash recovery + `--resume`), an append-only **evidence ledger** of
-every tool call, **verification records** that gate side effects, **live per-run
-budget discipline** (soft warn → hard stop), and goal-loop re-entry. Provenance,
-auditability, and rollback are designed in. → [Architecture](docs/self-improving-harness-architecture.md)
-
-**💬 Dependable answers (agentic RAG)** — Leader-chat answers run through a
-planner → multi-source fanout → sufficient-context loop → grounded answer, with
-provenance-tagged extracted facts and a blind LLM-as-judge usefulness eval.
-Injection is gated on retrieval relevance **and** per-project corpus health, so
-the pipeline only runs where it measurably helps. → [Research report](docs/harness-1-integration.md)
-
-**🔐 Identity sidecar** — `ai-accounts` owns AI-backend accounts, credentials, and
-login flows on `:20001`. → [Integration](docs/ai-accounts/AGENTED-INTEGRATION.md)
-
-**🌍 Operator console** — Vue 3 dashboard, dark theme, full i18n
-(English · 한국어 · 日本語 · 中文).
-
-## Architecture
+Products and projects are the top of the model; teams and agents do the work;
+loops, memory, policies, and primitives are the machinery each run draws on.
+**Triggers** (webhooks, GitHub events, schedules, or a manual run) are just the
+delivery mechanism — the product is the autonomous-agent workflow they kick off.
 
 | Layer | Stack | Port |
 |---|---|---|
-| **Backend** | Litestar (gunicorn / UvicornWorker), raw SQLite, subprocess + SSE | `:20000` |
+| **Backend** | Litestar (gunicorn / UvicornWorker), raw SQLite (experimental Postgres), subprocess + SSE | `:20000` |
 | **Frontend** | Vue 3 + TypeScript operator console | `:3000` |
-| **Sidecar** | `ai-accounts` — AI-backend identity & credentials | `:20001` |
+| **Sidecar** | `ai-accounts` — AI-backend identity, credentials & login flows | `:20001` |
 | **Memory** | Tesserae typed knowledge graph + CodeGraph symbol index | — |
 
 ## Configuration
@@ -128,9 +145,9 @@ login flows on `:20001`. → [Integration](docs/ai-accounts/AGENTED-INTEGRATION.
 | Variable | Description | Default |
 |---|---|---|
 | `AGENTED_DISABLE_SIGNUP` | Close open self-registration (set after the first admin) | unset (open) |
-| `AGENTED_DB_PATH` | SQLite database path | `backend/agented.db` |
+| `DATABASE_URL` | Postgres URL to use the experimental PG adapter (unset ⇒ SQLite) | unset (SQLite) |
+| `AGENTED_SANDBOX` | Opt into OS-level harness sandboxing (bwrap / seatbelt) | unset (off) |
 | `AI_ACCOUNTS_API_KEY` | Token for the `ai-accounts` sidecar | reuse admin key |
-| `AGENTED_RAG_MIN_CORPUS` | Min durable corpus items before leader-chat RAG runs | `8` |
 
 Full environment reference and conventions live in [CLAUDE.md](CLAUDE.md).
 
@@ -148,6 +165,7 @@ cd frontend && npm run test:run  # frontend suite
 
 | Topic | Link |
 |---|---|
+| Changelog | [CHANGELOG.md](CHANGELOG.md) |
 | Self-improving harness — architecture | [docs/self-improving-harness-architecture.md](docs/self-improving-harness-architecture.md) |
 | Self-improving harness — tutorial | [docs/self-improving-harness-tutorial.md](docs/self-improving-harness-tutorial.md) |
 | Harness-1 integration (research) | [docs/harness-1-integration.md](docs/harness-1-integration.md) |
@@ -157,4 +175,4 @@ cd frontend && npm run test:run  # frontend suite
 | ai-accounts sidecar | [docs/ai-accounts/ARCHITECTURE.md](docs/ai-accounts/ARCHITECTURE.md) |
 | Internationalization | [docs/i18n.md](docs/i18n.md) |
 
-<div align="center"><sub>Built for harness engineering.</sub></div>
+<div align="center"><sub>Harness engineering for a one-person startup — and the teams that come after.</sub></div>
