@@ -709,6 +709,44 @@ function onSetupCompleted() {
         >{{ t('harnessSetup.chipFailed') }}</span>
       </div>
 
+      <!-- GRD autonomy — the three headline harness features, made first-class
+           and discoverable (they otherwise live behind the Planning command bar). -->
+      <section class="grd-autonomy" data-testid="grd-autonomy">
+        <div class="grd-autonomy__label">{{ t('grdAutonomy.label') }}</div>
+        <div class="grd-autonomy__cards">
+          <button
+            type="button"
+            class="grd-card"
+            data-testid="grd-card-autoresearch"
+            @click="router.push({ name: 'project-research', params: { projectId } })"
+          >
+            <svg class="grd-card__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 2v6L4.5 16A2 2 0 0 0 6.3 19h11.4a2 2 0 0 0 1.8-3L15 8V2"/><line x1="9" y1="2" x2="15" y2="2"/><line x1="7" y1="14" x2="17" y2="14"/></svg>
+            <span class="grd-card__title">{{ t('grdAutonomy.autoresearch') }}</span>
+            <span class="grd-card__desc">{{ t('grdAutonomy.autoresearchDesc') }}</span>
+          </button>
+          <button
+            type="button"
+            class="grd-card"
+            data-testid="grd-card-autopilot"
+            @click="router.push({ name: 'project-planning', params: { projectId }, query: { command: 'autopilot' } })"
+          >
+            <svg class="grd-card__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            <span class="grd-card__title">{{ t('grdAutonomy.autopilot') }}</span>
+            <span class="grd-card__desc">{{ t('grdAutonomy.autopilotDesc') }}</span>
+          </button>
+          <button
+            type="button"
+            class="grd-card"
+            data-testid="grd-card-harness-round"
+            @click="router.push({ name: 'project-harness', params: { projectId } })"
+          >
+            <svg class="grd-card__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            <span class="grd-card__title">{{ t('grdAutonomy.harnessRound') }}</span>
+            <span class="grd-card__desc">{{ t('grdAutonomy.harnessRoundDesc') }}</span>
+          </button>
+        </div>
+      </section>
+
       <!-- v0.8.0 — harness-setup step progress panel -->
       <div
         v-if="harnessSetupSteps.length > 0"
@@ -943,6 +981,15 @@ function onSetupCompleted() {
 .harness-setup-chip--running { background: rgba(0, 212, 255, 0.15); color: var(--accent-cyan, #00d4ff); }
 .harness-setup-chip--ready { background: rgba(34, 197, 94, 0.15); color: var(--accent-green, #22c55e); }
 .harness-setup-chip--failed { background: rgba(239, 68, 68, 0.15); color: var(--accent-red, #ef4444); }
+.grd-autonomy { margin-top: 20px; }
+.grd-autonomy__label { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 10px; }
+.grd-autonomy__cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.grd-card { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 16px; text-align: left; background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: 12px; cursor: pointer; transition: border-color 0.15s, transform 0.15s, background 0.15s; }
+.grd-card:hover { border-color: var(--accent-cyan); transform: translateY(-1px); background: var(--bg-tertiary); }
+.grd-card__icon { width: 22px; height: 22px; color: var(--accent-cyan); margin-bottom: 2px; }
+.grd-card__title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.grd-card__desc { font-size: 12px; line-height: 1.4; color: var(--text-tertiary); }
+
 .harness-setup-panel { margin-top: 12px; padding: 12px; border: 1px solid var(--border, rgba(255, 255, 255, 0.1)); border-radius: 8px; }
 .harness-setup-panel__title { margin: 0 0 8px; font-size: 0.85rem; color: var(--text-muted, #888); }
 .harness-setup-panel__steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }

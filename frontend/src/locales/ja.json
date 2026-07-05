@@ -9817,5 +9817,14 @@
     "loading": "読み込み中…",
     "empty": "この期間のアクティビティはありません。",
     "failed": "概要を作成できませんでした。"
+  },
+  "grdAutonomy": {
+    "label": "GRD 自律実行",
+    "autoresearch": "オートリサーチ",
+    "autoresearchDesc": "仮説 → 実験 → 測定 → 学習のループを判定まで実行。",
+    "autopilot": "オートパイロット",
+    "autopilotDesc": "並列 worktree でフェーズを計画・実行し、PR → レビュー → マージ。",
+    "harnessRound": "ハーネスラウンド",
+    "harnessRoundDesc": "セッション根拠から GRD プリミティブを進化 — eval ゲート、git で巻き戻し可能。"
   }
 }

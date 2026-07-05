@@ -9817,5 +9817,14 @@
     "loading": "불러오는 중…",
     "empty": "이 기간의 활동이 없습니다.",
     "failed": "요약을 만들지 못했습니다."
+  },
+  "grdAutonomy": {
+    "label": "GRD 자율 실행",
+    "autoresearch": "오토리서치",
+    "autoresearchDesc": "가설 → 실험 → 측정 → 학습 루프를 판정까지 실행.",
+    "autopilot": "오토파일럿",
+    "autopilotDesc": "병렬 worktree에서 페이즈를 계획·실행하고 PR → 리뷰 → 머지.",
+    "harnessRound": "하네스 라운드",
+    "harnessRoundDesc": "세션 근거로 GRD 프리미티브를 진화 — eval 게이트, git 되돌리기."
   }
 }

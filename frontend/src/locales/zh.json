@@ -9817,5 +9817,14 @@
     "loading": "加载中…",
     "empty": "该周期没有活动。",
     "failed": "无法生成摘要。"
+  },
+  "grdAutonomy": {
+    "label": "GRD 自主执行",
+    "autoresearch": "自动研究",
+    "autoresearchDesc": "运行 假设 → 实验 → 测量 → 学习 循环直至得出结论。",
+    "autopilot": "自动驾驶",
+    "autopilotDesc": "在并行 worktree 中规划并执行阶段，然后 PR → 评审 → 合并。",
+    "harnessRound": "Harness 轮次",
+    "harnessRoundDesc": "从会话证据演化 GRD 原语 —— 评估门控、可用 git 回退。"
   }
 }

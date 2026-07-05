@@ -9817,5 +9817,14 @@
     "loading": "Loading…",
     "empty": "No activity for this period.",
     "failed": "Couldn't build the summary."
+  },
+  "grdAutonomy": {
+    "label": "GRD Autonomy",
+    "autoresearch": "Autoresearch",
+    "autoresearchDesc": "Run the hypothesis → experiment → measure → learn loop to a verdict.",
+    "autopilot": "Autopilot",
+    "autopilotDesc": "Plan and execute phases in parallel worktrees, then PR → review → merge.",
+    "harnessRound": "Harness Round",
+    "harnessRoundDesc": "Evolve GRD primitives from session evidence — eval-gated, git-reversible."
   }
 }
