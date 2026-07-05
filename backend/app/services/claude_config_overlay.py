@@ -115,6 +115,56 @@ def _build_settings_json(user_settings_path: Optional[Path]) -> dict:
     return settings
 
 
+def build_hook_settings_arg(user_config_dir: str) -> Optional[str]:
+    """Build a minimal ``--settings`` JSON payload that installs ONLY our
+    PreToolUse permission hook, for AUTONOMOUS claude sessions.
+
+    Autonomous GRD/research/autopilot/harness sessions must keep
+    ``CLAUDE_CONFIG_DIR`` pointed at the REAL, daemon-backed account dir
+    (see the module docstring + the ``.credentials.json`` note above):
+    Claude Code refreshes its OAuth token via an auth daemon tied to the
+    config dir, and the temp ``/tmp`` overlay has no such daemon, so a
+    spawned ``claude`` there reads the stale file token, can't refresh it,
+    and dies "Not logged in · Please run /login". We therefore do NOT
+    build a temp overlay for autonomous sessions; instead we deliver the
+    same permission hook via the claude CLI ``--settings`` flag, which
+    performs a per-KEY MERGE over the real config dir's ``settings.json``
+    (auth daemon dir + hook simultaneously).
+
+    We reuse ``_build_settings_json`` so the hook contract has one source
+    of truth: it reads the REAL dir's ``settings.json`` first (preserving
+    and de-duping any PreToolUse hooks already there), then we ``json.dumps``
+    ONLY the ``{"hooks": ...}`` subset so ``--settings`` merges just the
+    hooks key and every other real-dir setting stays file-based.
+
+    Returns ``None`` if the user config dir is missing or the build fails —
+    the caller then spawns WITHOUT the flag (still authed against the real
+    dir, just with no hook), never blocking the session. ``-p`` mode
+    silently ignores invalid ``--settings`` JSON, so returning ``None`` on
+    failure (rather than passing garbage) is the safe degrade.
+    """
+    try:
+        user_dir = Path(os.path.expanduser(user_config_dir))
+        if not user_dir.exists():
+            logger.warning(
+                "claude_config_overlay: user config dir %s missing, "
+                "skipping --settings hook injection",
+                user_dir,
+            )
+            return None
+        settings = _build_settings_json(user_dir / "settings.json")
+        # Only ship the hooks subset — everything else stays file-based on
+        # the real dir. json.dumps of a validated dict is always valid JSON.
+        return json.dumps({"hooks": settings.get("hooks", {})}, ensure_ascii=False)
+    except Exception:
+        logger.warning(
+            "claude_config_overlay: failed to build --settings hook arg for %s",
+            user_config_dir,
+            exc_info=True,
+        )
+        return None
+
+
 def prepare_session_overlay(session_id: str, user_config_dir: str) -> Optional[str]:
     """Build the session-scoped overlay dir and return its path.
 

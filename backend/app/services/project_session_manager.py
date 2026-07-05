@@ -929,21 +929,72 @@ class ProjectSessionManager:
                     "Could not resolve CLAUDE_CONFIG_DIR from backend accounts", exc_info=True
                 )
 
-        # v0.7.69 — for non-yolo stream-json chat sessions, install a
-        # session-scoped overlay that adds our PreToolUse permission
-        # hook on top of the user's existing claude config. Symlinks
-        # everything else (plugins/, mcp.json, projects/, …) so the
-        # subprocess still sees the user's skills + MCP servers. The
-        # user's real ~/.claude is never mutated.
+        # v0.7.69 / auth-daemon fix — for non-yolo stream-json claude
+        # sessions, install our PreToolUse permission hook. HOW we do that
+        # splits on execution_mode, because the auth model differs:
+        #
+        #   INTERACTIVE (execution_mode == "interactive"): build the temp
+        #     /tmp overlay (prepare_session_overlay) and point
+        #     CLAUDE_CONFIG_DIR at it. Symlinks everything else (plugins/,
+        #     mcp.json, projects/, …) so the subprocess still sees the
+        #     user's skills + MCP servers, and the user's real ~/.claude is
+        #     never mutated. UNCHANGED — this preserves the web-panel
+        #     permission-prompt behavior exactly.
+        #
+        #   AUTONOMOUS (execution_mode != "interactive"): do NOT build the
+        #     temp overlay. Claude Code refreshes its OAuth token via an auth
+        #     DAEMON tied to the config dir; the /tmp overlay has no daemon,
+        #     so a spawned `claude` there reads the stale file token, can't
+        #     refresh it, and dies "Not logged in · Please run /login". So we
+        #     KEEP CLAUDE_CONFIG_DIR = the REAL daemon-backed account dir set
+        #     just above (line ~919) and instead deliver the SAME permission
+        #     hook via the claude CLI `--settings` flag, which per-KEY MERGES
+        #     over the real dir's settings.json (auth daemon dir + hook at
+        #     once). Governance is unaffected: the launch-time policy engine +
+        #     OS sandbox below run for every spawn regardless of this branch.
         if cmd and cmd[0] == "claude" and stream_json and not yolo_mode and user_config_dir:
-            try:
-                from .claude_config_overlay import prepare_session_overlay
+            if execution_mode == "interactive":
+                try:
+                    from .claude_config_overlay import prepare_session_overlay
 
-                overlay = prepare_session_overlay(session_id, user_config_dir)
-                if overlay:
+                    overlay = prepare_session_overlay(session_id, user_config_dir)
+                    if overlay:
+                        if env is None:
+                            env = {}
+                        env["CLAUDE_CONFIG_DIR"] = overlay
+                        env["AGENTED_PERMISSION_HOOK_ACTIVE"] = "1"
+                        env["AGENTED_PROJECT_ID"] = project_id
+                        env["AGENTED_SESSION_ID"] = session_id
+                        env["AGENTED_BACKEND_URL"] = os.environ.get(
+                            "AGENTED_BACKEND_URL", "http://127.0.0.1:20000"
+                        )
+                        api_key = _resolve_admin_api_key()
+                        if api_key:
+                            env["AGENTED_API_KEY"] = api_key
+                except Exception:
+                    logger.warning(
+                        "Failed to prepare claude config overlay for %s — "
+                        "interactive permission prompts will be inactive",
+                        session_id,
+                        exc_info=True,
+                    )
+            else:
+                # AUTONOMOUS: keep the real daemon-backed CLAUDE_CONFIG_DIR
+                # (already set above) and inject the hook via --settings.
+                try:
+                    from .claude_config_overlay import build_hook_settings_arg
+
+                    settings_arg = build_hook_settings_arg(user_config_dir)
+                    if settings_arg and "--settings" not in cmd:
+                        # Insert right after cmd[0] (mirrors the idempotent
+                        # --append-system-prompt guard in
+                        # context_renderers/claude.py). A failure to build
+                        # --settings must never block the spawn: the session
+                        # still runs authed against the real dir, just without
+                        # the hook.
+                        cmd[1:1] = ["--settings", settings_arg]
                     if env is None:
                         env = {}
-                    env["CLAUDE_CONFIG_DIR"] = overlay
                     env["AGENTED_PERMISSION_HOOK_ACTIVE"] = "1"
                     env["AGENTED_PROJECT_ID"] = project_id
                     env["AGENTED_SESSION_ID"] = session_id
@@ -953,13 +1004,13 @@ class ProjectSessionManager:
                     api_key = _resolve_admin_api_key()
                     if api_key:
                         env["AGENTED_API_KEY"] = api_key
-            except Exception:
-                logger.warning(
-                    "Failed to prepare claude config overlay for %s — "
-                    "interactive permission prompts will be inactive",
-                    session_id,
-                    exc_info=True,
-                )
+                except Exception:
+                    logger.warning(
+                        "Failed to inject --settings permission hook for %s — "
+                        "session runs authed but without the permission hook",
+                        session_id,
+                        exc_info=True,
+                    )
 
         # v0.7.71 — apply the Forge ContextBundle into whichever
         # claude overlay is in effect (the permission-hook overlay
@@ -971,7 +1022,14 @@ class ProjectSessionManager:
         # CLAUDE_CONFIG_DIR ahead of time; otherwise the bundle's
         # overlay-only portions (hooks / commands / MCP) silently
         # don't take effect, which matches the yolo philosophy.
-        if forge_bundle and cmd and cmd[0] == "claude":
+        # Auth-daemon fix guard: for AUTONOMOUS claude sessions
+        # CLAUDE_CONFIG_DIR is now the user's REAL config dir (no temp
+        # overlay), so an apply_forge_bundle here would mutate the operator's
+        # real ~/.claude. Restrict the bundle apply to interactive sessions,
+        # which still use a disposable /tmp overlay. (Current GRD handlers
+        # don't pass forge_bundle, so this is defense-in-depth against a
+        # future forge+autonomous combination.)
+        if forge_bundle and cmd and cmd[0] == "claude" and execution_mode == "interactive":
             overlay_path = (env or {}).get("CLAUDE_CONFIG_DIR")
             if overlay_path:
                 try:
