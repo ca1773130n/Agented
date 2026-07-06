@@ -933,15 +933,16 @@ class ProjectSessionManager:
         # sessions, install our PreToolUse permission hook. HOW we do that
         # splits on execution_mode, because the auth model differs:
         #
-        #   INTERACTIVE (execution_mode == "interactive"): build the temp
-        #     /tmp overlay (prepare_session_overlay) and point
-        #     CLAUDE_CONFIG_DIR at it. Symlinks everything else (plugins/,
-        #     mcp.json, projects/, …) so the subprocess still sees the
-        #     user's skills + MCP servers, and the user's real ~/.claude is
-        #     never mutated. UNCHANGED — this preserves the web-panel
-        #     permission-prompt behavior exactly.
+        #   INTERACTIVE **with a forge_bundle** (execution_mode ==
+        #     "interactive" and forge_bundle): build the temp /tmp overlay and
+        #     point CLAUDE_CONFIG_DIR at it — the ONLY reason for the disposable
+        #     overlay is to layer a per-session forge ContextBundle without
+        #     mutating ~/.claude. This overlay is daemon-less (so a spawned
+        #     claude there can hit "Not logged in", see below); acceptable only
+        #     because forge+interactive is currently unused.
         #
-        #   AUTONOMOUS (execution_mode != "interactive"): do NOT build the
+        #   AUTONOMOUS, or interactive WITHOUT a forge_bundle (the common case,
+        #     e.g. the conversation-fork): do NOT build the
         #     temp overlay. Claude Code refreshes its OAuth token via an auth
         #     DAEMON tied to the config dir; the /tmp overlay has no daemon,
         #     so a spawned `claude` there reads the stale file token, can't
@@ -953,7 +954,7 @@ class ProjectSessionManager:
         #     once). Governance is unaffected: the launch-time policy engine +
         #     OS sandbox below run for every spawn regardless of this branch.
         if cmd and cmd[0] == "claude" and stream_json and not yolo_mode and user_config_dir:
-            if execution_mode == "interactive":
+            if execution_mode == "interactive" and forge_bundle:
                 try:
                     from .claude_config_overlay import prepare_session_overlay
 
@@ -1031,7 +1032,11 @@ class ProjectSessionManager:
         # future forge+autonomous combination.)
         if forge_bundle and cmd and cmd[0] == "claude" and execution_mode == "interactive":
             overlay_path = (env or {}).get("CLAUDE_CONFIG_DIR")
-            if overlay_path:
+            # Only ever write a bundle into a DISPOSABLE /tmp overlay — never the
+            # operator's real config dir (which is CLAUDE_CONFIG_DIR for the
+            # daemon-backed auth path). With the interactive+forge branch above
+            # this holds, but guard explicitly so a bundle can't mutate ~/.claude.
+            if overlay_path and overlay_path.startswith("/tmp/agented-claude-overlay"):
                 try:
                     from .claude_config_overlay import apply_forge_bundle
 

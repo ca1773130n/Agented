@@ -119,9 +119,10 @@ def test_autonomous_settings_arg_idempotent(capture):
     assert capture["cmd"].count("--settings") == 1
 
 
-def test_interactive_keeps_overlay_unchanged(capture, monkeypatch):
-    """Interactive sessions still build the /tmp overlay and do NOT get
-    --settings auto-inserted."""
+def test_interactive_without_forge_uses_daemon_path(capture, monkeypatch):
+    """Interactive sessions WITHOUT a forge bundle (the common case, e.g. the
+    conversation-fork) now take the daemon-backed real-dir + --settings path —
+    NOT the daemon-less /tmp overlay — so they authenticate (auth-daemon fix)."""
     import app.services.claude_config_overlay as cco
 
     seen = {}
@@ -133,6 +134,27 @@ def test_interactive_keeps_overlay_unchanged(capture, monkeypatch):
     monkeypatch.setattr(cco, "prepare_session_overlay", _fake_overlay)
 
     _run(execution_mode="interactive")
+
+    assert seen.get("called") is None, "overlay must NOT be built for interactive-without-forge"
+    assert "--settings" in capture["cmd"]
+    assert not any("agented-claude-overlay" in d for d in capture["config_dirs"])
+
+
+def test_interactive_with_forge_uses_overlay(capture, monkeypatch):
+    """Interactive + a forge bundle still builds the disposable /tmp overlay (the
+    only reason for it), delivering the hook via the overlay, not --settings."""
+    import app.services.claude_config_overlay as cco
+
+    seen = {}
+
+    def _fake_overlay(session_id, user_config_dir):
+        seen["called"] = True
+        return f"/tmp/agented-claude-overlay-{session_id}"
+
+    monkeypatch.setattr(cco, "prepare_session_overlay", _fake_overlay)
+    monkeypatch.setattr(cco, "apply_forge_bundle", lambda *a, **k: None)
+
+    _run(execution_mode="interactive", forge_bundle={"overlay_files": {}})
 
     assert seen.get("called") is True
     assert "--settings" not in capture["cmd"]
