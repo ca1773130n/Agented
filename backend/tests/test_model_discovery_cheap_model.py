@@ -99,22 +99,22 @@ def test_none_is_not_cached_so_it_retries(monkeypatch):
 def test_best_model_prefers_intended_default_then_newest_flagship(monkeypatch):
     """best_model_for: the intended default (if the catalog serves it) → else the
     newest balanced flagship → else None. Never an arbitrary/stale first entry."""
-    # 1. Intended default in catalog → returned verbatim.
+    # 1. Intended default (claude-sonnet-4-5-20250929) served → returned even
+    #    though a newer sonnet-5 exists — the pin wins when it's routable.
     _patch_catalog(
         monkeypatch,
-        {"anthropic": ["claude-opus-4-20250514", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"]},
+        {"anthropic": ["claude-opus-4-20250514", "claude-sonnet-4-5-20250929", "claude-sonnet-5"]},
     )
-    assert ModelDiscoveryService.best_model_for("claude") == "claude-sonnet-4-6"
+    assert ModelDiscoveryService.best_model_for("claude") == "claude-sonnet-4-5-20250929"
 
     # 2. Intended default absent → newest flagship: undated sonnet-5 beats the
-    #    dated 4-x snapshots; haiku/opus are excluded/deprioritized.
+    #    dated 4-x snapshot; haiku/opus are excluded/deprioritized.
     _patch_catalog(
         monkeypatch,
         {
             "anthropic": [
                 "claude-opus-4-20250514",
                 "claude-sonnet-4-20250514",
-                "claude-sonnet-4-5-20250929",
                 "claude-sonnet-5",
                 "claude-haiku-4-5-20251001",
             ]

@@ -39,7 +39,7 @@ _cheap_model_cache: dict[str, str] = {}
 # if that id isn't served, fall back to the best current flagship (balanced
 # tier, newest, never a cheap/non-chat/stale id).
 _PREFERRED_DEFAULT = {
-    "claude": "claude-sonnet-4-6",
+    "claude": "claude-sonnet-4-5-20250929",
     "codex": "gpt-5.3-codex",
 }
 # Balanced-flagship tier for a DEFAULT, best first (spans providers).
