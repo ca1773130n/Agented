@@ -178,7 +178,7 @@ class CLIProxyChatService:
     def stream_chat_direct(
         cls,
         messages: list[dict],
-        model: str = "claude-sonnet-5",
+        model: str = "claude-sonnet-4-6",
         api_key: str | None = None,
     ) -> Generator[ChatDelta, None, None]:
         """Stream via LiteLLM directly without CLIProxyAPI.

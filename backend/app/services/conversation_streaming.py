@@ -228,7 +228,7 @@ def _get_default_model(backend_type: str) -> str:
 
     # Last-resort fallbacks — must be real model IDs that route correctly
     _FALLBACKS = {
-        "claude": "claude-sonnet-5",
+        "claude": "claude-sonnet-4-6",
         "codex": "gpt-5.3-codex",
         "gemini": "gemini-3-pro-preview",
         "opencode": "opencode/glm-4.7-free",
