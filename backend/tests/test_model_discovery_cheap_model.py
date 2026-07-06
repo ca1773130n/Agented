@@ -94,3 +94,34 @@ def test_none_is_not_cached_so_it_retries(monkeypatch):
     assert ModelDiscoveryService.cheap_model_for("codex") is None
     state["up"] = True
     assert ModelDiscoveryService.cheap_model_for("codex") == "gpt-5.4-mini"
+
+
+def test_best_model_prefers_intended_default_then_newest_flagship(monkeypatch):
+    """best_model_for: the intended default (if the catalog serves it) → else the
+    newest balanced flagship → else None. Never an arbitrary/stale first entry."""
+    # 1. Intended default in catalog → returned verbatim.
+    _patch_catalog(
+        monkeypatch,
+        {"anthropic": ["claude-opus-4-20250514", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"]},
+    )
+    assert ModelDiscoveryService.best_model_for("claude") == "claude-sonnet-4-6"
+
+    # 2. Intended default absent → newest flagship: undated sonnet-5 beats the
+    #    dated 4-x snapshots; haiku/opus are excluded/deprioritized.
+    _patch_catalog(
+        monkeypatch,
+        {
+            "anthropic": [
+                "claude-opus-4-20250514",
+                "claude-sonnet-4-20250514",
+                "claude-sonnet-4-5-20250929",
+                "claude-sonnet-5",
+                "claude-haiku-4-5-20251001",
+            ]
+        },
+    )
+    assert ModelDiscoveryService.best_model_for("claude") == "claude-sonnet-5"
+
+    # 3. Only a cheap model → None (caller falls back to its pinned default).
+    _patch_catalog(monkeypatch, {"anthropic": ["claude-haiku-4-5-20251001"]})
+    assert ModelDiscoveryService.best_model_for("claude") is None

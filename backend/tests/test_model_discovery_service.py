@@ -221,12 +221,32 @@ class TestGetDefaultModelId:
 
     @patch.object(
         ModelDiscoveryService,
-        "_discover_raw",
-        return_value=["claude-opus-4-6-20250514", "claude-sonnet-4-5-20250514"],
+        "_discover_models_via_cliproxy",
+        return_value=["claude-opus-4-20250514", "claude-sonnet-5"],
     )
-    def test_returns_first_for_claude(self, mock_raw):
-        result = ModelDiscoveryService.get_default_model_id("claude")
-        assert result == "claude-opus-4-6-20250514"
+    @patch.object(
+        ModelDiscoveryService,
+        "_discover_raw",
+        return_value=["claude-opus-4-20250514", "claude-sonnet-5"],
+    )
+    def test_prefers_best_flagship_for_claude(self, mock_raw, mock_cat):
+        # Prefers the best current flagship (sonnet-5) from the live catalog —
+        # NOT the first-discovered opus (the old raw[0] behavior).
+        assert ModelDiscoveryService.get_default_model_id("claude") == "claude-sonnet-5"
+
+    @patch.object(
+        ModelDiscoveryService,
+        "_discover_models_via_cliproxy",
+        return_value=None,  # catalog unavailable
+    )
+    @patch.object(
+        ModelDiscoveryService,
+        "_discover_raw",
+        return_value=["claude-opus-4-20250514", "claude-sonnet-4-5-20250514"],
+    )
+    def test_falls_back_to_first_when_no_catalog(self, mock_raw, mock_cat):
+        # No catalog → best_model_for is None → falls back to raw[0].
+        assert ModelDiscoveryService.get_default_model_id("claude") == "claude-opus-4-20250514"
 
     @patch.object(
         ModelDiscoveryService,

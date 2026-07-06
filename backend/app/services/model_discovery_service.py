@@ -32,6 +32,44 @@ _CHEAP_TIER_PRIORITY = ("haiku", "flash-lite", "mini", "flash", "lite", "spark")
 _CHEAP_EXCLUDE = ("image", "embed", "opus", "sonnet", "-pro", "-review", "tts", "whisper")
 _cheap_model_cache: dict[str, str] = {}
 
+# --- default (general-purpose) model resolution ------------------------------
+# get_default_model_id used to return the FIRST discovered id, which for claude/
+# codex was an arbitrary, often-stale entry (e.g. claude-opus-4-20250514). Prefer
+# the app's intended default per backend, VALIDATED against the live catalog;
+# if that id isn't served, fall back to the best current flagship (balanced
+# tier, newest, never a cheap/non-chat/stale id).
+_PREFERRED_DEFAULT = {
+    "claude": "claude-sonnet-4-6",
+    "codex": "gpt-5.3-codex",
+}
+# Balanced-flagship tier for a DEFAULT, best first (spans providers).
+_DEFAULT_TIER_PRIORITY = ("sonnet", "codex", "-pro", "opus", "gpt-5", "gemini")
+# Cheap tiers + non-chat models are never the general-purpose default.
+_DEFAULT_EXCLUDE = (
+    "image",
+    "embed",
+    "tts",
+    "whisper",
+    "-review",
+    "haiku",
+    "flash",
+    "mini",
+    "lite",
+    "spark",
+)
+
+
+def _default_model_rank(model_id: str) -> tuple:
+    """Rank a default candidate so the newest CURRENT flagship wins: prefer an
+    undated alias (claude-sonnet-4-6) over a pinned dated snapshot
+    (claude-sonnet-4-20250514), then higher version, then newer date."""
+    import re as _re
+
+    nums = [int(n) for n in _re.findall(r"\d+", model_id)]
+    date = next((n for n in nums if n >= 20000000), 0)
+    ver = tuple(n for n in nums if n < 20000000)
+    return (1 if date == 0 else 0, ver, date)
+
 
 class ModelDiscoveryService:
     """Discovers model lists from CLI tools and local config files."""
@@ -285,7 +323,10 @@ class ModelDiscoveryService:
             candidates = proxy_models if proxy_models else raw
             return max(candidates, key=cls._gemini_sort_key)
 
-        return raw[0]
+        # claude / codex: prefer the best current flagship from the live catalog
+        # (the intended default validated live, else the newest balanced tier) —
+        # NOT raw[0], which was an arbitrary, often-stale first-discovered id.
+        return cls.best_model_for(backend_type) or raw[0]
 
     @staticmethod
     def _gemini_sort_key(m: str) -> tuple:
@@ -338,6 +379,38 @@ class ModelDiscoveryService:
         if picked:
             _cheap_model_cache[backend_type] = picked  # cache successful picks only
         return picked
+
+    @classmethod
+    def best_model_for(cls, backend_type: str) -> Optional[str]:
+        """Resolve the best current DEFAULT (general-purpose) model id for
+        ``backend_type`` from the live CLIProxyAPI catalog: the app's intended
+        default if the catalog serves it, else the newest balanced flagship
+        (sonnet / gpt-5-codex / *-pro), excluding cheap / non-chat / stale ids.
+        Returns ``None`` when the catalog is unavailable — the caller falls back
+        to raw discovery. This is why a default no longer resolves to an
+        arbitrary first-discovered (often stale) opus."""
+        owned_by = _CHEAP_PROVIDER_BY_BACKEND.get(backend_type)
+        if not owned_by:
+            return None
+        try:
+            catalog = cls._discover_models_via_cliproxy(owned_by) or []
+        except Exception:  # noqa: BLE001 — discovery is best-effort
+            catalog = []
+        # 1. Prefer the intended default, but only if the catalog actually serves it.
+        preferred = _PREFERRED_DEFAULT.get(backend_type)
+        if preferred and preferred in catalog:
+            return preferred
+        # 2. Else the newest balanced flagship.
+        candidates = [
+            m
+            for m in catalog
+            if isinstance(m, str) and not any(x in m.lower() for x in _DEFAULT_EXCLUDE)
+        ]
+        for tier in _DEFAULT_TIER_PRIORITY:
+            tier_matches = [m for m in candidates if tier in m.lower()]
+            if tier_matches:
+                return max(tier_matches, key=_default_model_rank)
+        return None
 
     @classmethod
     def discover_models(cls, backend_type: str) -> list[str]:
