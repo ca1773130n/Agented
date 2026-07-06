@@ -74,7 +74,7 @@ GRD_COMMAND_MAP: Dict[str, str] = {
 # Per-backend-kind default model for the LLM fallback. NEVER a hardcoded
 # claude-only default — every supported kind resolves to its own small model.
 DEFAULT_MODELS: Dict[str, str] = {
-    "claude": "openai/claude-sonnet-4-20250514",
+    "claude": "openai/claude-haiku-4-5-20251001",
     "codex": "openai/gpt-4o-mini",
     # gemini backend = Google Antigravity; gemini-1.5 is long obsolete. LLM
     # classification is best-effort (graceful keyword fallback) if litellm can't

@@ -92,7 +92,11 @@ class SketchRoutingService:
 
     KEYWORD_CONFIDENCE_THRESHOLD = 0.6
     CACHE_SIMILARITY_THRESHOLD = 0.5
-    DEFAULT_LLM_MODEL = "openai/claude-sonnet-4-20250514"
+    # Pinned FALLBACK only — the live proxy catalog (cheap_model_for) is the
+    # primary source so this id can't go stale and 404. The bare/dated claude
+    # id must be current: "claude-sonnet-4-20250514" was retired and 404'd the
+    # proxy. openai/ prefix routes litellm through CLIProxy's OpenAI endpoint.
+    DEFAULT_LLM_MODEL = "openai/claude-haiku-4-5-20251001"
 
     @classmethod
     def classify(cls, sketch: dict) -> dict:
@@ -243,8 +247,18 @@ class SketchRoutingService:
             except Exception:
                 pass  # Intentionally silenced: failure is non-critical
 
-            # Try to get model from settings, fall back to default
+            # Resolve model: pinned default < live proxy catalog < operator
+            # setting. Preferring the live catalog guards against a stale id
+            # 404-ing (the cause of the NotFoundError this path used to raise).
             model = cls.DEFAULT_LLM_MODEL
+            try:
+                from .model_discovery_service import ModelDiscoveryService
+
+                live = ModelDiscoveryService.cheap_model_for("claude")
+                if live:
+                    model = f"openai/{live}"
+            except Exception:
+                pass  # Live catalog unavailable — keep the pinned default
             try:
                 from ..db.settings import get_setting
 
@@ -252,7 +266,7 @@ class SketchRoutingService:
                 if stored_model:
                     model = stored_model
             except Exception:
-                pass  # Use default if settings unavailable
+                pass  # Use resolved model if settings unavailable
 
             logger.info("Using LLM model %s for sketch classification", model)
 
