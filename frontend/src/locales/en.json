@@ -9402,7 +9402,11 @@
         "running": "Running",
         "completed": "Completed",
         "iterations": "Iterations"
-      }
+      },
+      "runFailed": "The research run failed",
+      "runFailedHint": "Check the session log below for details. \"Not logged in\" means the harness account needs a login.",
+      "exitCode": "exited with code {code}",
+      "dismiss": "Dismiss"
     },
     "harness": {
       "title": "Life-Harness",

@@ -9402,7 +9402,11 @@
         "running": "실행 중",
         "completed": "완료",
         "iterations": "반복"
-      }
+      },
+      "runFailed": "리서치 실행이 실패했습니다",
+      "runFailedHint": "자세한 내용은 아래 세션 로그를 확인하세요. \"Not logged in\"이면 하네스 계정 로그인이 필요합니다.",
+      "exitCode": "코드 {code}(으)로 종료됨",
+      "dismiss": "닫기"
     },
     "harness": {
       "title": "라이프 하니스",

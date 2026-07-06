@@ -9402,7 +9402,11 @@
         "running": "运行中",
         "completed": "已完成",
         "iterations": "迭代"
-      }
+      },
+      "runFailed": "研究运行失败",
+      "runFailedHint": "详情请查看下方的会话日志。\"Not logged in\" 表示 harness 账号需要登录。",
+      "exitCode": "以代码 {code} 退出",
+      "dismiss": "关闭"
     },
     "harness": {
       "title": "生命线束",

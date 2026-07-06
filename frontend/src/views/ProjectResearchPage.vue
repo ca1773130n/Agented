@@ -42,6 +42,25 @@ const deepReportList = ref<InstanceType<typeof DeepReportList> | null>(null);
 // Research session composable (SSE)
 const research = useResearchSession(projectId);
 
+// Surface a failed run — an SSE error, or a session that exited non-zero (e.g.
+// exit 1 when the harness account isn't logged in) — instead of silently
+// leaving the panels at zero. Dismissible; reset on the next submit.
+const dismissedFailure = ref(false);
+const runFailed = computed(
+  () =>
+    !dismissedFailure.value &&
+    (research.status.value === 'error' ||
+      (research.status.value === 'complete' &&
+        research.exitCode.value != null &&
+        research.exitCode.value !== 0)),
+);
+const failureReason = computed(() => {
+  if (research.error.value) return research.error.value;
+  if (research.exitCode.value != null && research.exitCode.value !== 0)
+    return t('surface.research.exitCode', { code: research.exitCode.value });
+  return '';
+});
+
 async function loadData() {
   try {
     const [projectData, threadsRes] = await Promise.all([
@@ -84,6 +103,7 @@ function handleSubmit(
   opts: { max_iterations?: number; no_gates?: boolean; deep?: boolean; ultracode?: boolean },
 ) {
   deepMode.value = !!opts.deep;
+  dismissedFailure.value = false;
   research.start(question, opts);
   showSessionPanel.value = true;
 }
@@ -115,6 +135,20 @@ watch(
     <template #default>
       <div class="research-page">
         <PageHeader :title="t('surface.research.title')" :subtitle="project?.name || undefined" />
+
+        <div v-if="runFailed" class="research-failure" role="alert" data-testid="research-failure">
+          <div class="research-failure__main">
+            <strong>{{ t('surface.research.runFailed') }}</strong>
+            <span v-if="failureReason" class="research-failure__reason">— {{ failureReason }}</span>
+          </div>
+          <p class="research-failure__hint">{{ t('surface.research.runFailedHint') }}</p>
+          <button
+            type="button"
+            class="research-failure__dismiss"
+            :aria-label="t('surface.research.dismiss')"
+            @click="dismissedFailure = true"
+          >×</button>
+        </div>
 
         <div class="research-layout" :class="{ 'session-open': showSessionPanel }">
           <div class="research-left">
@@ -170,6 +204,38 @@ watch(
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+.research-failure {
+  position: relative;
+  padding: 12px 40px 12px 14px;
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  border-radius: 10px;
+}
+.research-failure__main {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+.research-failure__reason {
+  color: var(--danger);
+  font-weight: 500;
+}
+.research-failure__hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.research-failure__dismiss {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
 }
 
 .research-layout {

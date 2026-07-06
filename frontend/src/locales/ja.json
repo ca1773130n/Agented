@@ -9402,7 +9402,11 @@
         "running": "実行中",
         "completed": "完了",
         "iterations": "反復"
-      }
+      },
+      "runFailed": "リサーチの実行に失敗しました",
+      "runFailedHint": "詳細は下のセッションログを確認してください。「Not logged in」の場合はハーネスアカウントのログインが必要です。",
+      "exitCode": "コード {code} で終了しました",
+      "dismiss": "閉じる"
     },
     "harness": {
       "title": "ライフハーネス",
