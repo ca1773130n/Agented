@@ -727,7 +727,7 @@ class TriggerService:
 
         trigger = get_trigger(trigger_id)
         backend_type = trigger.get("backend_type", "claude")
-        model = trigger.get("model") or "claude-sonnet-4"
+        model = trigger.get("model") or "claude-sonnet-5"
         allowed_tools = trigger.get("allowed_tools")
 
         # Build CLI command without executing
