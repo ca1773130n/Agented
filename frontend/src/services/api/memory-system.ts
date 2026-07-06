@@ -106,10 +106,17 @@ export const memorySystemApi = {
     ),
 
   // Daily/weekly "what you did" digest (markdown) via `tesserae summary`.
-  activitySummary: (period: 'day' | 'week', date?: string | null, project?: string | null) => {
+  // Cached by default; pass refresh=true (the Refresh button) to force a scan.
+  activitySummary: (
+    period: 'day' | 'week',
+    date?: string | null,
+    project?: string | null,
+    refresh = false,
+  ) => {
     const qs = new URLSearchParams({ period });
     if (date) qs.set('date', date);
     if (project) qs.set('project', project);
+    if (refresh) qs.set('refresh', 'true');
     return apiFetch<ActivitySummary>(`/admin/system/memory/activity-summary?${qs.toString()}`);
   },
 
@@ -119,10 +126,12 @@ export const memorySystemApi = {
     date?: string | null,
     project?: string | null,
     includeAgent = true,
+    refresh = false,
   ) => {
     const qs = new URLSearchParams({ period, include_agent: String(includeAgent) });
     if (date) qs.set('date', date);
     if (project) qs.set('project', project);
+    if (refresh) qs.set('refresh', 'true');
     return apiFetch<DecisionsResult>(`/admin/system/memory/decisions?${qs.toString()}`);
   },
 

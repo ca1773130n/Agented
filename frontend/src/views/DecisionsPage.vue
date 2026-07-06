@@ -47,11 +47,17 @@ function when(ts: string): string {
   }
 }
 
-async function load() {
+async function load(refresh = false) {
   loading.value = true;
   error.value = null;
   try {
-    const res = await memorySystemApi.decisions(period.value, date.value, null, includeAgent.value);
+    const res = await memorySystemApi.decisions(
+      period.value,
+      date.value,
+      null,
+      includeAgent.value,
+      refresh,
+    );
     decisions.value = res.decisions || [];
     if (!res.ok) error.value = res.reason || t('decisions.failed');
   } catch (e) {
@@ -96,13 +102,13 @@ onMounted(load);
         type="date"
         class="dc-date"
         :aria-label="t('decisions.dateLabel')"
-        @change="load"
+        @change="load()"
       />
       <label class="dc-check">
-        <input v-model="includeAgent" type="checkbox" @change="load" />
+        <input v-model="includeAgent" type="checkbox" @change="load()" />
         {{ t('decisions.includeAgent') }}
       </label>
-      <button type="button" class="dc-refresh" :disabled="loading" @click="load">
+      <button type="button" class="dc-refresh" :disabled="loading" @click="load(true)">
         {{ loading ? t('decisions.loading') : t('decisions.refresh') }}
       </button>
     </div>

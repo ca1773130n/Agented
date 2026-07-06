@@ -21,11 +21,11 @@ const markdown = ref('');
 const loading = ref(false);
 const error = ref<string | null>(null);
 
-async function load() {
+async function load(refresh = false) {
   loading.value = true;
   error.value = null;
   try {
-    const res = await memorySystemApi.activitySummary(period.value, date.value);
+    const res = await memorySystemApi.activitySummary(period.value, date.value, null, refresh);
     markdown.value = res.markdown || '';
     if (!res.ok) error.value = res.reason || t('activitySummary.failed');
   } catch (e) {
@@ -70,9 +70,9 @@ onMounted(load);
         type="date"
         class="as-date"
         :aria-label="t('activitySummary.dateLabel')"
-        @change="load"
+        @change="load()"
       />
-      <button type="button" class="as-refresh" :disabled="loading" @click="load">
+      <button type="button" class="as-refresh" :disabled="loading" @click="load(true)">
         {{ loading ? t('activitySummary.loading') : t('activitySummary.refresh') }}
       </button>
     </div>

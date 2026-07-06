@@ -99,10 +99,26 @@ def test_build_decisions_parses_json_array():
     payload = '[{"ts":"2026-07-05T00:00:00+00:00","source":"human","project":"p","question":"q","answer":"a","options":["a","b"]}]'
     fake = TesseraeOpResult(op="decisions", ok=True, stdout=payload, stderr="")
     with patch.object(ti, "_run_tesserae", return_value=fake):
-        res = ti.build_decisions(period="day", day="2026-07-05", include_agent=False)
+        # refresh=True bypasses the result cache so we exercise the parse.
+        res = ti.build_decisions(period="day", day="2026-07-05", include_agent=False, refresh=True)
     assert res["ok"] is True
     assert len(res["decisions"]) == 1
     assert res["decisions"][0]["source"] == "human"
+
+
+def test_build_activity_summary_caches_result(tmp_path, monkeypatch):
+    """A second call with the same params (no refresh) is served from cache —
+    the slow multi-project scan (`_run_tesserae`) runs only once."""
+    from app.services.tesserae_integration import TesseraeOpResult
+
+    monkeypatch.setattr(ti, "_TESSERAE_CACHE_DIR", tmp_path / "cache")
+    fake = TesseraeOpResult(op="summary", ok=True, stdout="# Activity summary — d\nbody", stderr="")
+    with patch.object(ti, "_run_tesserae", return_value=fake) as run:
+        r1 = ti.build_activity_summary(period="day", day="2020-01-01")  # past → immutable cache
+        r2 = ti.build_activity_summary(period="day", day="2020-01-01")
+        r3 = ti.build_activity_summary(period="day", day="2020-01-01", refresh=True)
+    assert r1["ok"] and r2 == r1
+    assert run.call_count == 2  # call 1 (miss) + call 3 (refresh); call 2 served from cache
 
 
 # ---------- session normalization -------------------------------------------

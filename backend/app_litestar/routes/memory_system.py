@@ -148,11 +148,15 @@ def get_activity_summary(
     period: str = "day",
     date: Optional[str] = None,
     project: Optional[str] = None,
+    refresh: bool = False,
 ) -> dict[str, Any]:
-    """Daily/weekly "what you did" digest via ``tesserae summary`` (markdown)."""
+    """Daily/weekly "what you did" digest via ``tesserae summary`` (markdown).
+
+    Cached by default (a past day is immutable, today/week use a short TTL);
+    ``refresh=true`` forces a fresh multi-project scan."""
     if period not in ("day", "week"):
         raise ValidationException(detail="period must be 'day' or 'week'")
-    return ti.build_activity_summary(period=period, day=date, project=project)
+    return ti.build_activity_summary(period=period, day=date, project=project, refresh=refresh)
 
 
 @get("/system/memory/decisions", sync_to_thread=True)
@@ -161,12 +165,16 @@ def get_decisions(
     date: Optional[str] = None,
     project: Optional[str] = None,
     include_agent: bool = True,
+    refresh: bool = False,
 ) -> dict[str, Any]:
     """Human (AskUserQuestion) + agent decisions across projects, in a time
-    window, via ``tesserae decisions --json`` (Tesserae 0.15.0)."""
+    window, via ``tesserae decisions --json`` (Tesserae 0.15.0). Cached by
+    default; ``refresh=true`` forces a fresh scan."""
     if period not in ("day", "week"):
         raise ValidationException(detail="period must be 'day' or 'week'")
-    return ti.build_decisions(period=period, day=date, project=project, include_agent=include_agent)
+    return ti.build_decisions(
+        period=period, day=date, project=project, include_agent=include_agent, refresh=refresh
+    )
 
 
 @get("/system/memory/tesserae/projects", sync_to_thread=True)

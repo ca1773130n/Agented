@@ -861,11 +861,58 @@ def _run_tesserae(
     )
 
 
+# ---------- summary / decisions result cache ---------------------------------
+# `tesserae summary|decisions` scans every registered project (10-60s). Cache the
+# result keyed by its inputs: a PAST single day is immutable → cached forever;
+# today/week/undated windows use a short TTL; `refresh=True` always regenerates.
+# A missing/corrupt entry just falls through to a fresh run.
+_TESSERAE_CACHE_DIR = Path.home() / ".cache" / "agented" / "tesserae"
+_TESSERAE_CACHE_TTL = 900  # seconds — mutable (today / week / since-until) windows
+
+
+def _tesserae_cache_file(key: str) -> Path:
+    import hashlib
+
+    return _TESSERAE_CACHE_DIR / (hashlib.sha256(key.encode()).hexdigest()[:20] + ".json")
+
+
+def _day_is_past(day: Optional[str]) -> bool:
+    if not day:
+        return False
+    try:
+        from datetime import date
+
+        return date.fromisoformat(day) < date.today()
+    except Exception:
+        return False
+
+
+def _read_tesserae_cache(key: str, immutable: bool) -> Optional[dict]:
+    try:
+        f = _tesserae_cache_file(key)
+        if not f.exists():
+            return None
+        if not immutable and (time.time() - f.stat().st_mtime) > _TESSERAE_CACHE_TTL:
+            return None
+        return json.loads(f.read_text()).get("result")
+    except Exception:
+        return None
+
+
+def _write_tesserae_cache(key: str, result: dict) -> None:
+    try:
+        _TESSERAE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        _tesserae_cache_file(key).write_text(json.dumps({"result": result}))
+    except Exception:
+        logger.debug("tesserae cache write failed", exc_info=True)
+
+
 def build_activity_summary(
     *,
     period: str = "day",
     day: Optional[str] = None,
     project: Optional[str] = None,
+    refresh: bool = False,
     timeout: int = 120,
 ) -> dict:
     """Run ``tesserae summary`` and return the markdown activity digest.
@@ -883,6 +930,11 @@ def build_activity_summary(
         return {"ok": False, "markdown": "", "reason": "invalid date (expected YYYY-MM-DD)"}
     if project is not None and not re.fullmatch(r"[A-Za-z0-9_.][A-Za-z0-9._-]{0,63}", project):
         return {"ok": False, "markdown": "", "reason": "invalid project id"}
+    cache_key = f"summary|{period}|{day}|{project}"
+    if not refresh:
+        cached = _read_tesserae_cache(cache_key, immutable=(period == "day" and _day_is_past(day)))
+        if cached is not None:
+            return cached
     args = ["summary", "--no-llm"]
     if period == "week":
         args += ["--week", day] if day else ["--week"]
@@ -902,7 +954,9 @@ def build_activity_summary(
     out = res.stdout or ""
     marker = out.find("# Activity summary")
     md = out[marker:] if marker >= 0 else out
-    return {"ok": True, "markdown": md.strip(), "reason": None}
+    result = {"ok": True, "markdown": md.strip(), "reason": None}
+    _write_tesserae_cache(cache_key, result)
+    return result
 
 
 def build_decisions(
@@ -911,6 +965,7 @@ def build_decisions(
     day: Optional[str] = None,
     project: Optional[str] = None,
     include_agent: bool = True,
+    refresh: bool = False,
     timeout: int = 120,
 ) -> dict:
     """Run ``tesserae decisions --json`` and return the structured decision list.
@@ -925,6 +980,11 @@ def build_decisions(
         return {"ok": False, "decisions": [], "reason": "invalid date (expected YYYY-MM-DD)"}
     if project is not None and not re.fullmatch(r"[A-Za-z0-9_.][A-Za-z0-9._-]{0,63}", project):
         return {"ok": False, "decisions": [], "reason": "invalid project id"}
+    cache_key = f"decisions|{period}|{day}|{project}|{include_agent}"
+    if not refresh:
+        cached = _read_tesserae_cache(cache_key, immutable=(period == "day" and _day_is_past(day)))
+        if cached is not None:
+            return cached
     args = ["decisions", "--json"]
     if period == "week":
         args += ["--week", day] if day else ["--week"]
@@ -949,7 +1009,9 @@ def build_decisions(
         decisions = json.loads(raw) if raw.strip() else []
     except (json.JSONDecodeError, ValueError):
         return {"ok": False, "decisions": [], "reason": "could not parse tesserae decisions JSON"}
-    return {"ok": True, "decisions": decisions, "reason": None}
+    result = {"ok": True, "decisions": decisions, "reason": None}
+    _write_tesserae_cache(cache_key, result)
+    return result
 
 
 def init_workspace(project_id: str) -> TesseraeOpResult:
