@@ -9360,7 +9360,19 @@
         "placeholder": "What do you want to investigate?",
         "submit": "Start research",
         "maxIterations": "Max iterations",
-        "noGates": "Skip gates"
+        "noGates": "Skip gates",
+        "modeLabel": "Mode",
+        "modeLoop": "Autoresearch loop",
+        "modeDeep": "Deep research",
+        "deepHelper": "Parallel, KG-grounded, adversarially-verified breadth pass — writes one cited report (not a hypothesis thread).",
+        "ultracode": "Ultracode (max effort)",
+        "ultracodeHelper": "Escalates every subagent to Opus/max — significantly costlier."
+      },
+      "deepReports": {
+        "title": "Deep research reports",
+        "empty": "No deep research reports yet. Run a Deep research to generate one.",
+        "viewReport": "View report",
+        "milestone": "Milestone"
       },
       "threads": {
         "title": "Threads",

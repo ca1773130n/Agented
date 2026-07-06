@@ -861,6 +861,15 @@ class GrdResearchSessionHandler(ExecutionTypeHandler):
         instead of starting a fresh one.
       * ``max_iterations`` (optional, int) — appends ``--max-iterations N``.
       * ``no_gates`` (optional, bool) — appends ``--no-gates``.
+      * ``deep`` (optional, bool) — FRESH-RUN ONLY. Swaps the prompt to
+        ``/grd:deep-research <question>`` (GRD 0.4.14 parallel KG-grounded,
+        adversarially-verified research). The ``--max-iterations`` /
+        ``--no-gates`` loop knobs are SKIPPED for a deep run (deep-research
+        ignores them). Ignored on a resume (``thread_id`` set) — deep has
+        no resume.
+      * ``ultracode`` (optional, bool) — deep-run only; appends the bare
+        ``ultracode`` keyword (escalates every subagent to Opus/max effort,
+        significantly costlier).
       * ``cwd`` (optional) — overrides the resolved project cwd.
     """
 
@@ -886,19 +895,32 @@ class GrdResearchSessionHandler(ExecutionTypeHandler):
         # non-operator sources, so JSON-encode it (escapes embedded
         # quotes/newlines/backslashes) rather than naive `"{question}"`
         # interpolation — this is the 19-04 prompt-injection hardening.
+        # ``deep`` is a fresh-run-only flag: a resume rides on the thread_id
+        # loop, deep-research has no resume concept.
+        deep = bool(session_config.get("deep")) and not thread_id
         if thread_id:
             prompt = f"/grd:research resume {json.dumps(thread_id)}"
+        elif deep:
+            # GRD 0.4.14 /grd:deep-research — parallel KG-grounded,
+            # adversarially-verified research. json.dumps keeps the 19-04
+            # injection hardening; ``ultracode`` is the bare keyword the
+            # command parses (deep-research.md §1).
+            prompt = f"/grd:deep-research {json.dumps(question)}"
+            if session_config.get("ultracode"):
+                prompt = f"{prompt} ultracode"
         else:
             prompt = f"/grd:research {json.dumps(question)}"
 
         # Optional loop knobs are appended to the prompt tail, only when
         # provided. ``--max-iterations N`` caps the loop; ``--no-gates``
-        # runs without human-verify checkpoints.
-        max_iterations = session_config.get("max_iterations")
-        if max_iterations is not None:
-            prompt = f"{prompt} --max-iterations {int(max_iterations)}"
-        if session_config.get("no_gates"):
-            prompt = f"{prompt} --no-gates"
+        # runs without human-verify checkpoints. Deep-research ignores both,
+        # so the tail is skipped entirely for a deep run.
+        if not deep:
+            max_iterations = session_config.get("max_iterations")
+            if max_iterations is not None:
+                prompt = f"{prompt} --max-iterations {int(max_iterations)}"
+            if session_config.get("no_gates"):
+                prompt = f"{prompt} --no-gates"
 
         cmd = [
             "claude",

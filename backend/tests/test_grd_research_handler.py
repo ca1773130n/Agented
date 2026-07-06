@@ -124,6 +124,54 @@ def test_optional_knobs_only_appended_when_provided(spy_psm):
     assert "--no-gates" not in prompt
 
 
+def test_deep_mode_swaps_to_deep_research_prompt(spy_psm):
+    # GRD 0.4.14 deep-research: the prompt becomes /grd:deep-research and the
+    # loop knobs are SKIPPED even when present (deep-research ignores them).
+    handler = GrdResearchSessionHandler()
+    handler.start(
+        {
+            "project_id": "p",
+            "question": "how do agents ground on a KG?",
+            "deep": True,
+            "max_iterations": 9,
+            "no_gates": True,
+        }
+    )
+    create = spy_psm["create"]
+    prompt = create["cmd"][-1]
+    assert prompt == '/grd:deep-research "how do agents ground on a KG?"'
+    assert "--max-iterations" not in prompt
+    assert "--no-gates" not in prompt
+    # auth path unchanged: autonomous + stream-json + non-interactive claude
+    assert create["execution_type"] == "grd_research"
+    assert create["execution_mode"] == "autonomous"
+    assert create["stream_json"] is True
+    assert create["use_pty"] is False
+
+
+def test_deep_ultracode_appends_bare_keyword(spy_psm):
+    handler = GrdResearchSessionHandler()
+    handler.start({"project_id": "p", "question": "q", "deep": True, "ultracode": True})
+    prompt = spy_psm["create"]["cmd"][-1]
+    assert prompt == '/grd:deep-research "q" ultracode'
+
+
+def test_deep_flag_ignored_on_resume(spy_psm):
+    # deep has no resume — a thread_id run stays a /grd:research resume.
+    handler = GrdResearchSessionHandler()
+    handler.start({"project_id": "p", "thread_id": "t-1", "deep": True})
+    prompt = spy_psm["create"]["cmd"][-1]
+    assert prompt == '/grd:research resume "t-1"'
+
+
+def test_non_deep_run_unchanged_regression(spy_psm):
+    handler = GrdResearchSessionHandler()
+    handler.start({"project_id": "p", "question": "go", "max_iterations": 3})
+    prompt = spy_psm["create"]["cmd"][-1]
+    assert prompt == '/grd:research "go" --max-iterations 3'
+    assert "deep-research" not in prompt
+
+
 def test_resume_uses_thread_id(spy_psm):
     handler = GrdResearchSessionHandler()
     # A resume run rides on thread_id, no question required.

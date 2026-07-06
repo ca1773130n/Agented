@@ -9360,7 +9360,19 @@
         "placeholder": "무엇을 조사하시겠습니까?",
         "submit": "리서치 시작",
         "maxIterations": "최대 반복 횟수",
-        "noGates": "게이트 건너뛰기"
+        "noGates": "게이트 건너뛰기",
+        "modeLabel": "모드",
+        "modeLoop": "오토리서치 루프",
+        "modeDeep": "딥 리서치",
+        "deepHelper": "병렬, KG 기반, 적대적으로 검증된 넓은 탐색 — 인용이 달린 보고서 하나를 작성합니다(가설 스레드가 아님).",
+        "ultracode": "Ultracode (최대 노력)",
+        "ultracodeHelper": "모든 서브에이전트를 Opus/최대로 승격 — 비용이 크게 증가합니다."
+      },
+      "deepReports": {
+        "title": "딥 리서치 보고서",
+        "empty": "아직 딥 리서치 보고서가 없습니다. 딥 리서치를 실행하여 생성하세요.",
+        "viewReport": "보고서 보기",
+        "milestone": "마일스톤"
       },
       "threads": {
         "title": "스레드",

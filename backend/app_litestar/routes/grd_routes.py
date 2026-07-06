@@ -1980,6 +1980,12 @@ def research_start(project_id: str, data: dict) -> dict[str, Any]:
         config["max_iterations"] = body["max_iterations"]
     if body.get("no_gates"):
         config["no_gates"] = True
+    # GRD 0.4.14 deep-research mode (fresh-run only). ``deep`` swaps the
+    # prompt to /grd:deep-research; ``ultracode`` escalates to Opus/max.
+    if body.get("deep"):
+        config["deep"] = True
+    if body.get("ultracode"):
+        config["ultracode"] = True
 
     result = handler.start(config)
     if "error" in result:
@@ -2032,6 +2038,28 @@ def research_read_thread(project_id: str, thread_id: str) -> dict[str, Any]:
     _ensure_project(project_id)
     cwd = _project_cwd(project_id)
     return GrdCliService.read_thread(cwd, thread_id)
+
+
+@get("/{project_id:str}/research/deep-reports", sync_to_thread=False)
+def research_list_deep_reports(project_id: str) -> dict[str, Any]:
+    """List the project's ``/grd:deep-research`` reports (a standalone dated
+    report per run under ``.planning/milestones/*/research/deep-research/``,
+    distinct from the autoresearch threads tree). Returns ``{"reports": []}``
+    until the first deep run has written one.
+    """
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    return {"reports": GrdCliService.list_deep_reports(cwd)}
+
+
+@get("/{project_id:str}/research/deep-reports/{name:str}", sync_to_thread=False)
+def research_read_deep_report(project_id: str, name: str) -> dict[str, Any]:
+    """Return one deep-research report's markdown by basename. ``name`` is
+    sanitized against path traversal (``markdown`` None when refused/absent).
+    """
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    return GrdCliService.read_deep_report(cwd, name)
 
 
 @get("/{project_id:str}/research/status", sync_to_thread=False)
@@ -2124,6 +2152,8 @@ grd_router = Router(
         research_resume,
         research_list_threads,
         research_read_thread,
+        research_list_deep_reports,
+        research_read_deep_report,
         research_status_route,
     ],
 )

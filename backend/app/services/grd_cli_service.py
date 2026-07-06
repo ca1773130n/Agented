@@ -524,6 +524,79 @@ class GrdCliService:
             "finding": cls._read_text(os.path.join(thread_path, "FINDING.md")),
         }
 
+    # -----------------------------------------------------------------
+    # Deep research (GRD 0.4.14 — /grd:deep-research)
+    #
+    # deep-research's artifact is structurally DISTINCT from the threads
+    # tree: it writes ONE standalone dated report to
+    # ``.planning/milestones/<milestone>/research/deep-research/<slug>-<date>.md``
+    # with no frontmatter / iteration / status and no thread dir. So these
+    # readers glob across ALL milestones (avoiding any "current milestone"
+    # resolution or CLI round-trip — a pure on-disk read, mirroring
+    # ``list_threads``) rather than reusing the thread reader.
+    # -----------------------------------------------------------------
+
+    _RESEARCH_DEEP_GLOB = os.path.join(
+        ".planning", "milestones", "*", "research", "deep-research", "*.md"
+    )
+
+    @classmethod
+    def list_deep_reports(cls, project_path: str) -> list[dict]:
+        """List every deep-research report on disk across ALL milestones.
+
+        Returns ``[]`` when no report exists (the ``deep-research/`` dir does
+        not exist until the first deep run — the absence is normal, mirroring
+        ``list_threads``). Each entry carries ``name`` (basename),
+        ``milestone`` (the milestone dir segment), ``path`` (relative to the
+        project), and ``modified`` (mtime), sorted newest-first.
+        """
+        import glob
+
+        pattern = os.path.join(project_path, cls._RESEARCH_DEEP_GLOB)
+        out: list[dict] = []
+        for match in glob.glob(pattern):
+            try:
+                mtime = os.path.getmtime(match)
+            except OSError:
+                mtime = 0.0
+            # ``.planning/milestones/<milestone>/research/deep-research/<name>``
+            rel = os.path.relpath(match, project_path)
+            parts = rel.split(os.sep)
+            milestone = parts[2] if len(parts) > 2 else ""
+            out.append(
+                {
+                    "name": os.path.basename(match),
+                    "milestone": milestone,
+                    "path": rel,
+                    "modified": mtime,
+                }
+            )
+        out.sort(key=lambda r: r["modified"], reverse=True)
+        return out
+
+    @classmethod
+    def read_deep_report(cls, project_path: str, name: str) -> dict:
+        """Return one deep-research report's markdown by basename.
+
+        The ``name`` comes from a URL path param, so it is sanitized against
+        path traversal: it MUST equal its own ``os.path.basename`` and carry
+        no separator / ``..``, otherwise the read is refused (``markdown``
+        None). The report is located by globbing the same all-milestones
+        pattern and matching the sanitized basename, so no milestone or path
+        input from the caller is trusted.
+        """
+        import glob
+
+        safe = os.path.basename(name)
+        if safe != name or os.sep in name or (os.altsep and os.altsep in name) or ".." in name:
+            return {"name": name, "markdown": None}
+
+        pattern = os.path.join(project_path, cls._RESEARCH_DEEP_GLOB)
+        for match in glob.glob(pattern):
+            if os.path.basename(match) == safe:
+                return {"name": name, "markdown": cls._read_text(match)}
+        return {"name": name, "markdown": None}
+
     @staticmethod
     def _read_text(path: str) -> Optional[str]:
         """Read a file, returning ``None`` when it is absent or unreadable."""

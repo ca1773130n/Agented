@@ -9360,7 +9360,19 @@
         "placeholder": "您想调查什么？",
         "submit": "开始研究",
         "maxIterations": "最大迭代次数",
-        "noGates": "跳过关卡"
+        "noGates": "跳过关卡",
+        "modeLabel": "模式",
+        "modeLoop": "自动研究循环",
+        "modeDeep": "深度研究",
+        "deepHelper": "并行、基于 KG、经对抗性验证的广度扫描 — 生成一份带引用的报告（而非假设线程）。",
+        "ultracode": "Ultracode (最大投入)",
+        "ultracodeHelper": "将每个子代理提升到 Opus/最大 — 成本显著增加。"
+      },
+      "deepReports": {
+        "title": "深度研究报告",
+        "empty": "暂无深度研究报告。运行一次深度研究以生成报告。",
+        "viewReport": "查看报告",
+        "milestone": "里程碑"
       },
       "threads": {
         "title": "线程",

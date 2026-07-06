@@ -9360,7 +9360,19 @@
         "placeholder": "何を調査しますか？",
         "submit": "リサーチを開始",
         "maxIterations": "最大反復回数",
-        "noGates": "ゲートをスキップ"
+        "noGates": "ゲートをスキップ",
+        "modeLabel": "モード",
+        "modeLoop": "オートリサーチループ",
+        "modeDeep": "ディープリサーチ",
+        "deepHelper": "並列・KGベース・敵対的に検証された広域探索 — 引用付きのレポートを1つ作成します（仮説スレッドではありません）。",
+        "ultracode": "Ultracode (最大努力)",
+        "ultracodeHelper": "すべてのサブエージェントをOpus/最大に引き上げます — コストが大幅に増加します。"
+      },
+      "deepReports": {
+        "title": "ディープリサーチレポート",
+        "empty": "まだディープリサーチレポートがありません。ディープリサーチを実行して生成してください。",
+        "viewReport": "レポートを表示",
+        "milestone": "マイルストーン"
       },
       "threads": {
         "title": "スレッド",

@@ -16,6 +16,7 @@ import ThreadList from '../components/grd/research/ThreadList.vue';
 import HypothesisLedger from '../components/grd/research/HypothesisLedger.vue';
 import ReportViewer from '../components/grd/research/ReportViewer.vue';
 import PortfolioRuns from '../components/grd/research/PortfolioRuns.vue';
+import DeepReportList from '../components/grd/research/DeepReportList.vue';
 
 const props = defineProps<{
   projectId?: string;
@@ -33,6 +34,10 @@ const threads = ref<ResearchThread[]>([]);
 const selectedThreadId = ref<string | null>(null);
 const selectedBundle = ref<ResearchThreadBundle | null>(null);
 const showSessionPanel = ref(false);
+// Deep-research mode hides the loop panels (thread/hypothesis/report/portfolio)
+// — deep-research's standalone report is incompatible with them.
+const deepMode = ref(false);
+const deepReportList = ref<InstanceType<typeof DeepReportList> | null>(null);
 
 // Research session composable (SSE)
 const research = useResearchSession(projectId);
@@ -74,7 +79,11 @@ async function selectThread(threadId: string) {
   }
 }
 
-function handleSubmit(question: string, opts: { max_iterations?: number; no_gates?: boolean }) {
+function handleSubmit(
+  question: string,
+  opts: { max_iterations?: number; no_gates?: boolean; deep?: boolean; ultracode?: boolean },
+) {
+  deepMode.value = !!opts.deep;
   research.start(question, opts);
   showSessionPanel.value = true;
 }
@@ -89,9 +98,13 @@ watch(
   () => research.status.value,
   (newStatus) => {
     if (newStatus === 'complete') {
-      loadThreads().then(() => {
-        if (selectedThreadId.value) selectThread(selectedThreadId.value);
-      });
+      if (deepMode.value) {
+        deepReportList.value?.refresh();
+      } else {
+        loadThreads().then(() => {
+          if (selectedThreadId.value) selectThread(selectedThreadId.value);
+        });
+      }
     }
   },
 );
@@ -105,17 +118,24 @@ watch(
 
         <div class="research-layout" :class="{ 'session-open': showSessionPanel }">
           <div class="research-left">
-            <QuestionIntake :status="research.status.value" @submit="handleSubmit" />
-            <PortfolioRuns :threads="threads" />
-            <ThreadList
-              :threads="threads"
-              :selected-id="selectedThreadId"
-              @select="selectThread"
+            <QuestionIntake
+              :status="research.status.value"
+              @submit="handleSubmit"
+              @mode-change="(deep) => (deepMode = deep)"
             />
-            <div class="research-detail">
-              <HypothesisLedger :hypotheses="selectedBundle?.hypotheses" />
-              <ReportViewer :finding="selectedBundle?.finding" />
-            </div>
+            <template v-if="!deepMode">
+              <PortfolioRuns :threads="threads" />
+              <ThreadList
+                :threads="threads"
+                :selected-id="selectedThreadId"
+                @select="selectThread"
+              />
+              <div class="research-detail">
+                <HypothesisLedger :hypotheses="selectedBundle?.hypotheses" />
+                <ReportViewer :finding="selectedBundle?.finding" />
+              </div>
+            </template>
+            <DeepReportList v-else ref="deepReportList" :project-id="projectId" />
           </div>
           <div v-if="showSessionPanel" class="research-right">
             <PlanningSessionPanel

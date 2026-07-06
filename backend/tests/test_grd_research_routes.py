@@ -211,6 +211,81 @@ def test_research_read_thread_reads_present_files(isolated_db, monkeypatch, tmp_
 
 
 # ---------------------------------------------------------------------------
+# POST /research/start — deep-research mode (GRD 0.4.14)
+# ---------------------------------------------------------------------------
+
+
+def test_research_start_forwards_deep_and_ultracode(isolated_db, monkeypatch):
+    _patch_project(monkeypatch)
+
+    class FakeHandler:
+        def start(self, config):
+            assert config["deep"] is True
+            assert config["ultracode"] is True
+            assert "max_iterations" not in config
+            return {"session_id": "sess-deep-1"}
+
+    monkeypatch.setattr(module, "get_handler", lambda kind: FakeHandler())
+
+    with _client() as c:
+        resp = c.post(
+            "/api/projects/p/research/start",
+            json={"question": "q", "deep": True, "ultracode": True},
+        )
+    assert resp.status_code == 201
+    assert resp.json() == {"session_id": "sess-deep-1"}
+
+
+# ---------------------------------------------------------------------------
+# GET /research/deep-reports — list + read (GRD 0.4.14)
+# ---------------------------------------------------------------------------
+
+
+def test_deep_reports_empty_when_dir_missing(isolated_db, monkeypatch, tmp_path):
+    _patch_project(monkeypatch)
+    _patch_cwd(monkeypatch, cwd=str(tmp_path))
+
+    with _client() as c:
+        resp = c.get("/api/projects/p/research/deep-reports")
+    assert resp.status_code == 200
+    assert resp.json() == {"reports": []}
+
+
+def test_deep_reports_lists_and_reads(isolated_db, monkeypatch, tmp_path):
+    _patch_project(monkeypatch)
+    _patch_cwd(monkeypatch, cwd=str(tmp_path))
+
+    deep_dir = tmp_path / ".planning" / "milestones" / "v0.11.0" / "research" / "deep-research"
+    deep_dir.mkdir(parents=True)
+    (deep_dir / "kg-grounding-2026-07-06.md").write_text("# Deep report\n\ncited body")
+
+    with _client() as c:
+        list_resp = c.get("/api/projects/p/research/deep-reports")
+        assert list_resp.status_code == 200
+        reports = list_resp.json()["reports"]
+        assert len(reports) == 1
+        r = reports[0]
+        assert r["name"] == "kg-grounding-2026-07-06.md"
+        assert r["milestone"] == "v0.11.0"
+        assert "modified" in r
+
+        read_resp = c.get("/api/projects/p/research/deep-reports/kg-grounding-2026-07-06.md")
+        assert read_resp.status_code == 200
+        body = read_resp.json()
+        assert body["name"] == "kg-grounding-2026-07-06.md"
+        assert body["markdown"] == "# Deep report\n\ncited body"
+
+
+def test_deep_report_read_missing_is_none_safe(isolated_db, monkeypatch, tmp_path):
+    _patch_project(monkeypatch)
+    _patch_cwd(monkeypatch, cwd=str(tmp_path))
+    with _client() as c:
+        resp = c.get("/api/projects/p/research/deep-reports/ghost.md")
+    assert resp.status_code == 200
+    assert resp.json() == {"name": "ghost.md", "markdown": None}
+
+
+# ---------------------------------------------------------------------------
 # GET /research/status — passthrough
 # ---------------------------------------------------------------------------
 

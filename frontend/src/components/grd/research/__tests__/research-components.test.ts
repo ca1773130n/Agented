@@ -13,6 +13,17 @@ import ReportViewer from '../ReportViewer.vue';
 import PortfolioRuns from '../PortfolioRuns.vue';
 import type { ResearchThread } from '../../../../services/api/research';
 
+const listDeepReports = vi.fn();
+const getDeepReport = vi.fn();
+vi.mock('../../../../services/api', () => ({
+  researchApi: {
+    listDeepReports: (...a: unknown[]) => listDeepReports(...a),
+    getDeepReport: (...a: unknown[]) => getDeepReport(...a),
+  },
+}));
+import DeepReportList from '../DeepReportList.vue';
+import { flushPromises } from '@vue/test-utils';
+
 function makeI18n() {
   return createI18n({
     legacy: false,
@@ -59,6 +70,33 @@ describe('QuestionIntake', () => {
       global: { plugins: [makeI18n()] },
     });
     expect((wrapper.find('button[type="submit"]').element as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('deep mode emits opts.deep and omits loop knobs; ultracode toggles', async () => {
+    const wrapper = mount(QuestionIntake, { global: { plugins: [makeI18n()] } });
+    // switch to Deep research (second segment button)
+    const segBtns = wrapper.findAll('.seg-btn');
+    await segBtns[1].trigger('click');
+    // loop knobs are hidden in deep mode
+    expect(wrapper.find('.intake-options').exists()).toBe(false);
+    // toggle ultracode
+    await wrapper.find('.intake-deep input[type="checkbox"]').setValue(true);
+    await wrapper.find('textarea').setValue('deep q');
+    await wrapper.find('form').trigger('submit');
+    const opts = wrapper.emitted('submit')![0][1] as Record<string, unknown>;
+    expect(opts.deep).toBe(true);
+    expect(opts.ultracode).toBe(true);
+    expect(opts.max_iterations).toBeUndefined();
+    expect(opts.no_gates).toBeUndefined();
+  });
+
+  it('loop mode remains the default and emits no deep flag (regression)', async () => {
+    const wrapper = mount(QuestionIntake, { global: { plugins: [makeI18n()] } });
+    expect(wrapper.find('.intake-options').exists()).toBe(true);
+    await wrapper.find('textarea').setValue('loop q');
+    await wrapper.find('form').trigger('submit');
+    const opts = wrapper.emitted('submit')![0][1] as Record<string, unknown>;
+    expect(opts.deep).toBeUndefined();
   });
 });
 
@@ -131,5 +169,44 @@ describe('PortfolioRuns', () => {
     // 2 total, 1 running, 1 completed, 7 iterations
     expect(text).toContain('2');
     expect(text).toContain('7');
+  });
+});
+
+describe('DeepReportList', () => {
+  beforeEach(() => {
+    listDeepReports.mockReset();
+    getDeepReport.mockReset();
+  });
+
+  it('renders report rows from listDeepReports and opens one on click', async () => {
+    listDeepReports.mockResolvedValue({
+      reports: [
+        { name: 'kg-2026-07-06.md', milestone: 'v0.11.0', path: 'p', modified: 1_700_000_000 },
+      ],
+    });
+    getDeepReport.mockResolvedValue({ name: 'kg-2026-07-06.md', markdown: '# Cited\n\nbody' });
+
+    const wrapper = mount(DeepReportList, {
+      props: { projectId: 'proj-1' },
+      global: { plugins: [makeI18n()] },
+    });
+    await flushPromises();
+    expect(wrapper.text()).toContain('kg-2026-07-06.md');
+    expect(wrapper.text()).toContain('v0.11.0');
+
+    await wrapper.find('.drl-row').trigger('click');
+    await flushPromises();
+    expect(getDeepReport).toHaveBeenCalledWith('proj-1', 'kg-2026-07-06.md');
+    expect(wrapper.find('.drl-body').html()).toContain('body');
+  });
+
+  it('shows the empty state when there are no reports', async () => {
+    listDeepReports.mockResolvedValue({ reports: [] });
+    const wrapper = mount(DeepReportList, {
+      props: { projectId: 'proj-1' },
+      global: { plugins: [makeI18n()] },
+    });
+    await flushPromises();
+    expect(wrapper.text()).toContain('No deep research reports yet.');
   });
 });

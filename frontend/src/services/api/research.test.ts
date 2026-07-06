@@ -66,6 +66,38 @@ describe('researchApi', () => {
     expect(apiFetch).toHaveBeenCalledWith('/api/projects/proj-1/research/threads/thread-9');
   });
 
+  it('startResearch includes deep/ultracode only when set', async () => {
+    (apiFetch as ReturnType<typeof vi.fn>).mockResolvedValue({ session_id: 'sess-d' });
+    await researchApi.startResearch('proj-1', 'q', { deep: true, ultracode: true });
+    expect(apiFetch).toHaveBeenCalledWith('/api/projects/proj-1/research/start', {
+      method: 'POST',
+      body: JSON.stringify({ question: 'q', deep: true, ultracode: true }),
+    });
+  });
+
+  it('startResearch omits deep/ultracode when unset', async () => {
+    (apiFetch as ReturnType<typeof vi.fn>).mockResolvedValue({ session_id: 'sess-l' });
+    await researchApi.startResearch('proj-1', 'q');
+    expect(apiFetch).toHaveBeenCalledWith('/api/projects/proj-1/research/start', {
+      method: 'POST',
+      body: JSON.stringify({ question: 'q' }),
+    });
+  });
+
+  it('listDeepReports GETs /research/deep-reports', async () => {
+    (apiFetch as ReturnType<typeof vi.fn>).mockResolvedValue({ reports: [] });
+    await researchApi.listDeepReports('proj-1');
+    expect(apiFetch).toHaveBeenCalledWith('/api/projects/proj-1/research/deep-reports');
+  });
+
+  it('getDeepReport GETs /research/deep-reports/{name} url-encoded', async () => {
+    (apiFetch as ReturnType<typeof vi.fn>).mockResolvedValue({ name: 'a b.md', markdown: null });
+    await researchApi.getDeepReport('proj-1', 'a b.md');
+    expect(apiFetch).toHaveBeenCalledWith(
+      '/api/projects/proj-1/research/deep-reports/a%20b.md',
+    );
+  });
+
   it('streamResearch opens the generic session-stream SSE URL', () => {
     researchApi.streamResearch('proj-1', 'sess-7');
     expect(createAuthenticatedEventSource).toHaveBeenCalledWith(

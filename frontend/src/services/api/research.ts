@@ -45,6 +45,29 @@ export interface ResearchThreadsResponse {
 export interface StartResearchOptions {
   max_iterations?: number;
   no_gates?: boolean;
+  /** GRD 0.4.14 deep-research mode (fresh-run only) — /grd:deep-research. */
+  deep?: boolean;
+  /** Deep-run only: escalate every subagent to Opus/max (costlier). */
+  ultracode?: boolean;
+}
+
+/** One /grd:deep-research report on disk (GET /research/deep-reports). */
+export interface DeepReportSummary {
+  name: string;
+  milestone: string;
+  path: string;
+  modified: number;
+}
+
+/** A single deep-research report's markdown (GET /research/deep-reports/{name}). */
+export interface DeepReport {
+  name: string;
+  markdown: string | null;
+}
+
+/** GET /research/deep-reports response envelope. */
+export interface DeepReportsResponse {
+  reports: DeepReportSummary[];
 }
 
 export const researchApi = {
@@ -60,6 +83,8 @@ export const researchApi = {
     const body: Record<string, unknown> = { question };
     if (opts?.max_iterations !== undefined) body.max_iterations = opts.max_iterations;
     if (opts?.no_gates !== undefined) body.no_gates = opts.no_gates;
+    if (opts?.deep) body.deep = true;
+    if (opts?.ultracode) body.ultracode = true;
     return apiFetch<StartResearchResponse>(
       `/api/projects/${projectId}/research/start`,
       { method: 'POST', body: JSON.stringify(body) },
@@ -93,6 +118,16 @@ export const researchApi = {
   getThread: (projectId: string, threadId: string) =>
     apiFetch<ResearchThreadBundle>(
       `/api/projects/${projectId}/research/threads/${threadId}`,
+    ),
+
+  /** GET /api/projects/{id}/research/deep-reports — the deep-research report list. */
+  listDeepReports: (projectId: string) =>
+    apiFetch<DeepReportsResponse>(`/api/projects/${projectId}/research/deep-reports`),
+
+  /** GET /api/projects/{id}/research/deep-reports/{name} — one report's markdown. */
+  getDeepReport: (projectId: string, name: string) =>
+    apiFetch<DeepReport>(
+      `/api/projects/${projectId}/research/deep-reports/${encodeURIComponent(name)}`,
     ),
 
   /**
