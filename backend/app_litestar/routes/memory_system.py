@@ -155,6 +155,20 @@ def get_activity_summary(
     return ti.build_activity_summary(period=period, day=date, project=project)
 
 
+@get("/system/memory/decisions", sync_to_thread=True)
+def get_decisions(
+    period: str = "day",
+    date: Optional[str] = None,
+    project: Optional[str] = None,
+    include_agent: bool = True,
+) -> dict[str, Any]:
+    """Human (AskUserQuestion) + agent decisions across projects, in a time
+    window, via ``tesserae decisions --json`` (Tesserae 0.15.0)."""
+    if period not in ("day", "week"):
+        raise ValidationException(detail="period must be 'day' or 'week'")
+    return ti.build_decisions(period=period, day=date, project=project, include_agent=include_agent)
+
+
 @get("/system/memory/tesserae/projects", sync_to_thread=True)
 def list_tesserae_projects() -> dict[str, Any]:
     """Per-project Tesserae state — for the Settings table."""
@@ -427,6 +441,7 @@ memory_system_router = Router(
     route_handlers=[
         list_memory_systems,
         get_activity_summary,
+        get_decisions,
         list_tesserae_projects,
         set_tesserae_for_project,
         set_tesserae_distill_for_project,

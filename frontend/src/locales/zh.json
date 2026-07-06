@@ -182,7 +182,8 @@
     "systemErrors": "系统错误",
     "failedToLoad": "{sections} 加载失败",
     "setup": "设置",
-    "activitySummary": "活动摘要"
+    "activitySummary": "活动摘要",
+    "decisions": "决策"
   },
   "apiKeyBanner": {
     "title": "需要 API 密钥",
@@ -9831,5 +9832,21 @@
     "autopilotDesc": "在并行 worktree 中规划并执行阶段，然后 PR → 评审 → 合并。",
     "harnessRound": "Harness 轮次",
     "harnessRoundDesc": "从会话证据演化 GRD 原语 —— 评估门控、可用 git 回退。"
+  },
+  "decisions": {
+    "title": "决策",
+    "subtitle": "在时间范围内，各项目的人类与智能体决策。",
+    "period": "周期",
+    "daily": "每日",
+    "weekly": "每周",
+    "dateLabel": "日期",
+    "includeAgent": "包含智能体决策",
+    "refresh": "刷新",
+    "loading": "加载中…",
+    "empty": "该周期没有决策。",
+    "failed": "无法加载决策。",
+    "human": "人类",
+    "agent": "智能体",
+    "alternatives": "其他选项"
   }
 }

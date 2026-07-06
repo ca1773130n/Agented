@@ -182,7 +182,8 @@
     "systemErrors": "시스템 오류",
     "failedToLoad": "{sections} 불러오기 실패",
     "setup": "설정",
-    "activitySummary": "활동 요약"
+    "activitySummary": "활동 요약",
+    "decisions": "의사결정"
   },
   "apiKeyBanner": {
     "title": "API 키 필요",
@@ -9831,5 +9832,21 @@
     "autopilotDesc": "병렬 worktree에서 페이즈를 계획·실행하고 PR → 리뷰 → 머지.",
     "harnessRound": "하네스 라운드",
     "harnessRoundDesc": "세션 근거로 GRD 프리미티브를 진화 — eval 게이트, git 되돌리기."
+  },
+  "decisions": {
+    "title": "의사결정",
+    "subtitle": "기간별로 모든 프로젝트의 사람·에이전트 의사결정을 한눈에.",
+    "period": "기간",
+    "daily": "일간",
+    "weekly": "주간",
+    "dateLabel": "날짜",
+    "includeAgent": "에이전트 결정 포함",
+    "refresh": "새로고침",
+    "loading": "불러오는 중…",
+    "empty": "이 기간의 의사결정이 없습니다.",
+    "failed": "의사결정을 불러오지 못했습니다.",
+    "human": "사람",
+    "agent": "에이전트",
+    "alternatives": "다른 선택지"
   }
 }

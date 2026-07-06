@@ -81,6 +81,24 @@ export interface ActivitySummary {
   reason: string | null;
 }
 
+export interface Decision {
+  ts: string;
+  source: 'human' | 'agent';
+  project: string;
+  session_id?: string;
+  question: string;
+  answer: string;
+  options?: string[];
+  header?: string;
+  rationale?: string;
+}
+
+export interface DecisionsResult {
+  ok: boolean;
+  decisions: Decision[];
+  reason: string | null;
+}
+
 export const memorySystemApi = {
   list: () =>
     apiFetch<{ memory_systems: MemorySystemSummary[] }>(
@@ -93,6 +111,19 @@ export const memorySystemApi = {
     if (date) qs.set('date', date);
     if (project) qs.set('project', project);
     return apiFetch<ActivitySummary>(`/admin/system/memory/activity-summary?${qs.toString()}`);
+  },
+
+  // Human (AskUserQuestion) + agent decisions across projects via `tesserae decisions`.
+  decisions: (
+    period: 'day' | 'week',
+    date?: string | null,
+    project?: string | null,
+    includeAgent = true,
+  ) => {
+    const qs = new URLSearchParams({ period, include_agent: String(includeAgent) });
+    if (date) qs.set('date', date);
+    if (project) qs.set('project', project);
+    return apiFetch<DecisionsResult>(`/admin/system/memory/decisions?${qs.toString()}`);
   },
 
   listTesseraeProjects: () =>

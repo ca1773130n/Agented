@@ -8,6 +8,12 @@ export const observabilityRoutes: RouteRecordRaw[] = [
     meta: { title: 'Activity Summary' },
   },
   {
+    path: '/decisions',
+    name: 'decisions',
+    component: () => import('../../views/DecisionsPage.vue'),
+    meta: { title: 'Decisions' },
+  },
+  {
     path: '/traces',
     name: 'traces-list',
     component: () => import('../../views/TracesPage.vue'),

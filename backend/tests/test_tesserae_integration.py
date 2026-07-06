@@ -84,6 +84,27 @@ def test_build_activity_summary_rejects_argv_flag_smuggling():
         run.assert_not_called()
 
 
+def test_build_decisions_rejects_argv_flag_smuggling():
+    """Same argv-injection guard on `tesserae decisions` inputs."""
+    with patch.object(ti, "_run_tesserae") as run:
+        assert ti.build_decisions(period="day", project="--json=/etc/passwd")["ok"] is False
+        assert ti.build_decisions(period="day", day="--week")["ok"] is False
+        run.assert_not_called()
+
+
+def test_build_decisions_parses_json_array():
+    """Structured --json output is parsed into a decisions list."""
+    from app.services.tesserae_integration import TesseraeOpResult
+
+    payload = '[{"ts":"2026-07-05T00:00:00+00:00","source":"human","project":"p","question":"q","answer":"a","options":["a","b"]}]'
+    fake = TesseraeOpResult(op="decisions", ok=True, stdout=payload, stderr="")
+    with patch.object(ti, "_run_tesserae", return_value=fake):
+        res = ti.build_decisions(period="day", day="2026-07-05", include_agent=False)
+    assert res["ok"] is True
+    assert len(res["decisions"]) == 1
+    assert res["decisions"][0]["source"] == "human"
+
+
 # ---------- session normalization -------------------------------------------
 
 

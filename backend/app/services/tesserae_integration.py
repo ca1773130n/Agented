@@ -905,6 +905,53 @@ def build_activity_summary(
     return {"ok": True, "markdown": md.strip(), "reason": None}
 
 
+def build_decisions(
+    *,
+    period: str = "day",
+    day: Optional[str] = None,
+    project: Optional[str] = None,
+    include_agent: bool = True,
+    timeout: int = 120,
+) -> dict:
+    """Run ``tesserae decisions --json`` and return the structured decision list.
+
+    ``period`` is ``"day"`` or ``"week"`` (Tesserae 0.15.0). Each decision is
+    ``{ts, source: "human"|"agent", project, question, answer, options[], header}``
+    — human ones extracted deterministically from Claude Code's AskUserQuestion
+    tool, agent ones LLM-mined (``include_agent=False`` → ``--no-llm``, human
+    only). Returns ``{"ok": bool, "decisions": list, "reason": str | None}``.
+    """
+    if day is not None and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+        return {"ok": False, "decisions": [], "reason": "invalid date (expected YYYY-MM-DD)"}
+    if project is not None and not re.fullmatch(r"[A-Za-z0-9_.][A-Za-z0-9._-]{0,63}", project):
+        return {"ok": False, "decisions": [], "reason": "invalid project id"}
+    args = ["decisions", "--json"]
+    if period == "week":
+        args += ["--week", day] if day else ["--week"]
+    elif day:
+        args += ["--day", day]
+    if project:
+        args += ["--project", project]
+    if not include_agent:
+        args.append("--no-llm")
+    res = _run_tesserae("decisions", args, cwd=Path.home(), timeout=timeout)
+    if not res.ok:
+        return {
+            "ok": False,
+            "decisions": [],
+            "reason": res.reason or (res.stderr or "").strip()[:400] or "tesserae decisions failed",
+        }
+    # stdout is a JSON array (possibly after a ``wrote <path>`` preamble).
+    out = res.stdout or ""
+    start = out.find("[")
+    raw = out[start:] if start >= 0 else out
+    try:
+        decisions = json.loads(raw) if raw.strip() else []
+    except (json.JSONDecodeError, ValueError):
+        return {"ok": False, "decisions": [], "reason": "could not parse tesserae decisions JSON"}
+    return {"ok": True, "decisions": decisions, "reason": None}
+
+
 def init_workspace(project_id: str) -> TesseraeOpResult:
     """Create the ``.tesserae/`` skeleton inside the project root.
 

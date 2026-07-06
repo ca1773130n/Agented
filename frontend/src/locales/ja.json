@@ -182,7 +182,8 @@
     "systemErrors": "システムエラー",
     "failedToLoad": "{sections} の読み込みに失敗しました",
     "setup": "セットアップ",
-    "activitySummary": "アクティビティ概要"
+    "activitySummary": "アクティビティ概要",
+    "decisions": "意思決定"
   },
   "apiKeyBanner": {
     "title": "API キーが必要です",
@@ -9831,5 +9832,21 @@
     "autopilotDesc": "並列 worktree でフェーズを計画・実行し、PR → レビュー → マージ。",
     "harnessRound": "ハーネスラウンド",
     "harnessRoundDesc": "セッション根拠から GRD プリミティブを進化 — eval ゲート、git で巻き戻し可能。"
+  },
+  "decisions": {
+    "title": "意思決定",
+    "subtitle": "期間内の全プロジェクトにおける人間・エージェントの意思決定。",
+    "period": "期間",
+    "daily": "日次",
+    "weekly": "週次",
+    "dateLabel": "日付",
+    "includeAgent": "エージェントの決定を含む",
+    "refresh": "更新",
+    "loading": "読み込み中…",
+    "empty": "この期間の意思決定はありません。",
+    "failed": "意思決定を読み込めませんでした。",
+    "human": "人間",
+    "agent": "エージェント",
+    "alternatives": "他の選択肢"
   }
 }

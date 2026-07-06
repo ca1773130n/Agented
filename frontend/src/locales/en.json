@@ -182,7 +182,8 @@
     "systemErrors": "System Errors",
     "failedToLoad": "{sections} failed to load",
     "setup": "Setup",
-    "activitySummary": "Activity Summary"
+    "activitySummary": "Activity Summary",
+    "decisions": "Decisions"
   },
   "apiKeyBanner": {
     "title": "API key required",
@@ -9831,5 +9832,21 @@
     "autopilotDesc": "Plan and execute phases in parallel worktrees, then PR → review → merge.",
     "harnessRound": "Harness Round",
     "harnessRoundDesc": "Evolve GRD primitives from session evidence — eval-gated, git-reversible."
+  },
+  "decisions": {
+    "title": "Decisions",
+    "subtitle": "Human and agent decisions across every project, in a time window.",
+    "period": "Period",
+    "daily": "Daily",
+    "weekly": "Weekly",
+    "dateLabel": "Date",
+    "includeAgent": "Include agent decisions",
+    "refresh": "Refresh",
+    "loading": "Loading…",
+    "empty": "No decisions for this period.",
+    "failed": "Couldn't load decisions.",
+    "human": "Human",
+    "agent": "Agent",
+    "alternatives": "Alternatives"
   }
 }
