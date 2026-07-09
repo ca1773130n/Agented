@@ -102,6 +102,13 @@ def ensure_user_admin(user_id: str) -> bool:
         # admin exists, so two concurrent first-signups can't both win the grant
         # (SQLite serializes the write; the loser's NOT EXISTS sees the winner's
         # committed row). rowcount tells us whether we were the one to grant it.
+        # ponytail: SQLite (the default) is race-free here. On Postgres under
+        # READ COMMITTED two truly-simultaneous first-ever signups could both
+        # pass NOT EXISTS and both be granted admin. Left as-is — PG is
+        # experimental, the window is a fresh single-operator install, and both
+        # racers are already admin (surfacing their keys adds no privilege). If
+        # PG first-signup concurrency ever matters, serialize with
+        # pg_advisory_xact_lock (or a partial unique index) around this insert.
         cur = conn.execute(
             "INSERT INTO user_roles (id, api_key, label, role, user_id) "
             "SELECT ?, ?, ?, 'admin', ? "

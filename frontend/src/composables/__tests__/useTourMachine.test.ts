@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createActor } from 'xstate'
 import { tourMachine, type TourEvent } from '../../machines/tourMachine'
+import { SCHEMA_VERSION } from '../useTourMachine'
 
 // Mock Vue lifecycle hooks BEFORE any other imports
 vi.mock('vue', async () => {
@@ -37,7 +38,7 @@ function getSnapshotAtState(events: Array<TourEvent>): unknown {
 function makePersistedData(
   snapshot: unknown,
   instanceId: string | null = 'test-uuid-1',
-  schemaVersion: number = 1,
+  schemaVersion: number = SCHEMA_VERSION,
 ) {
   return JSON.stringify({ schemaVersion, instanceId, snapshot })
 }
@@ -142,7 +143,7 @@ describe('useTourMachine', () => {
       const raw = localStorage.getItem(STORAGE_KEY)
       expect(raw).not.toBeNull()
       const parsed = JSON.parse(raw!)
-      expect(parsed.schemaVersion).toBe(1)
+      expect(parsed.schemaVersion).toBe(SCHEMA_VERSION)
       expect(parsed.instanceId).toBe('test-uuid-1')
     })
 
@@ -179,7 +180,7 @@ describe('useTourMachine', () => {
       const snapshot = getSnapshotAtState([{ type: 'START' }])
       localStorage.setItem(
         STORAGE_KEY,
-        makePersistedData(snapshot, 'test-uuid-1', 1),
+        makePersistedData(snapshot, 'test-uuid-1', SCHEMA_VERSION),
       )
       const { useTourMachine } = await import('../useTourMachine')
       const tour = useTourMachine()
@@ -196,7 +197,7 @@ describe('useTourMachine', () => {
       ])
       localStorage.setItem(
         STORAGE_KEY,
-        makePersistedData(snapshot, 'test-uuid-1', 1),
+        makePersistedData(snapshot, 'test-uuid-1', SCHEMA_VERSION),
       )
       const { useTourMachine } = await import('../useTourMachine')
       const tour = useTourMachine()
@@ -225,6 +226,27 @@ describe('useTourMachine', () => {
       })
       expect(tour.state.value).toBe('idle')
     })
+
+    it('discards a pre-v2 snapshot whose value is the removed backends state', async () => {
+      // Regression: before SCHEMA_VERSION was bumped to 2, a persisted
+      // `{ backends: 'claude' }` value (schema 1) passed the version check and
+      // failed to restore against the flattened machine, leaving the tour in a
+      // broken active-but-invalid state. The bump must discard it -> fresh idle.
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          schemaVersion: 1,
+          instanceId: 'test-uuid-1',
+          snapshot: { value: { backends: 'claude' }, status: 'active', context: {} },
+        }),
+      )
+      const { useTourMachine } = await import('../useTourMachine')
+      const tour = useTourMachine()
+      await vi.waitFor(() => {
+        expect(tour.state.value).not.toBeNull()
+      })
+      expect(tour.state.value).toBe('idle')
+    })
   })
 
   // -----------------------------------------------------------------------
@@ -236,7 +258,7 @@ describe('useTourMachine', () => {
       const snapshot = getSnapshotAtState([{ type: 'START' }])
       localStorage.setItem(
         STORAGE_KEY,
-        makePersistedData(snapshot, 'old-uuid', 1),
+        makePersistedData(snapshot, 'old-uuid', SCHEMA_VERSION),
       )
       // Server returns a different instance-id
       globalThis.fetch = vi.fn().mockResolvedValue({
@@ -263,7 +285,7 @@ describe('useTourMachine', () => {
       const snapshot = getSnapshotAtState([{ type: 'START' }, { type: 'NEXT' }])
       localStorage.setItem(
         STORAGE_KEY,
-        makePersistedData(snapshot, 'old-instance-uuid', 1),
+        makePersistedData(snapshot, 'old-instance-uuid', SCHEMA_VERSION),
       )
       // Backend is down — fetch fails
       globalThis.fetch = vi.fn().mockRejectedValue(
@@ -294,7 +316,7 @@ describe('useTourMachine', () => {
       const snapshot = getSnapshotAtState([{ type: 'START' }])
       localStorage.setItem(
         STORAGE_KEY,
-        makePersistedData(snapshot, 'test-uuid-1', 1),
+        makePersistedData(snapshot, 'test-uuid-1', SCHEMA_VERSION),
       )
       const { useTourMachine } = await import('../useTourMachine')
       const tour = useTourMachine()
@@ -669,7 +691,7 @@ describe('useTourMachine', () => {
       const snapshot = getSnapshotAtState([{ type: 'START' }])
       localStorage.setItem(
         STORAGE_KEY,
-        makePersistedData(snapshot, null, 1), // null instanceId
+        makePersistedData(snapshot, null, SCHEMA_VERSION), // null instanceId
       )
       const { useTourMachine } = await import('../useTourMachine')
       const tour = useTourMachine()
@@ -689,7 +711,7 @@ describe('useTourMachine', () => {
       const snapshot = getSnapshotAtState([{ type: 'START' }])
       localStorage.setItem(
         STORAGE_KEY,
-        makePersistedData(snapshot, 'some-local-id', 1),
+        makePersistedData(snapshot, 'some-local-id', SCHEMA_VERSION),
       )
       const { useTourMachine } = await import('../useTourMachine')
       const tour = useTourMachine()
@@ -711,7 +733,7 @@ describe('useTourMachine', () => {
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({
-          schemaVersion: 1,
+          schemaVersion: SCHEMA_VERSION,
           instanceId: 'test-uuid-1',
           // snapshot missing entirely
         }),
@@ -744,7 +766,7 @@ describe('useTourMachine', () => {
       ])
       localStorage.setItem(
         STORAGE_KEY,
-        makePersistedData(snapshot, 'test-uuid-1', 1),
+        makePersistedData(snapshot, 'test-uuid-1', SCHEMA_VERSION),
       )
       const { useTourMachine } = await import('../useTourMachine')
       const tour = useTourMachine()
@@ -767,7 +789,7 @@ describe('useTourMachine', () => {
       const snapshot = getSnapshotAtState([{ type: 'START' }])
       localStorage.setItem(
         STORAGE_KEY,
-        makePersistedData(snapshot, null, 1),
+        makePersistedData(snapshot, null, SCHEMA_VERSION),
       )
       const { useTourMachine } = await import('../useTourMachine')
       const tour = useTourMachine()
@@ -820,7 +842,7 @@ describe('useTourMachine', () => {
     it('handles persisted data with valid schema but null snapshot', async () => {
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ schemaVersion: 1, instanceId: 'test-uuid-1', snapshot: null }),
+        JSON.stringify({ schemaVersion: SCHEMA_VERSION, instanceId: 'test-uuid-1', snapshot: null }),
       )
       const { useTourMachine } = await import('../useTourMachine')
       const tour = useTourMachine()

@@ -8,6 +8,7 @@
 import { ref, computed, readonly } from 'vue';
 import {
   authApi,
+  clearApiKey,
   clearSessionToken,
   getSessionToken,
   setApiKey,
@@ -64,6 +65,11 @@ async function logout(): Promise<void> {
     // ignore — clearing local state is the source of truth
   }
   clearSessionToken();
+  // Also drop any stored X-API-Key. The onboarding first-admin signup stores
+  // the minted admin key there; since apiFetch sends X-API-Key AND the backend
+  // resolves it BEFORE the cookie session, leaving it behind would let the next
+  // user on this tab act with the admin key's privileges after logout.
+  clearApiKey();
   currentUser.value = null;
 }
 

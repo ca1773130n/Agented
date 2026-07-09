@@ -19,7 +19,11 @@ import { API_BASE } from '../services/api/client'
 // ---------------------------------------------------------------------------
 
 const STORAGE_KEY = 'agented-tour-machine-state'
-const SCHEMA_VERSION = 1
+// v2: the machine shape changed (the backends.{claude,codex,gemini,opencode}
+// compound state was removed). Bumping this discards pre-v2 persisted snapshots
+// whose `{ backends: '...' }` value no longer resolves against the flat machine
+// (createActor/start would otherwise throw "Child state 'backends' does not exist").
+export const SCHEMA_VERSION = 2
 
 // ---------------------------------------------------------------------------
 // Persistence types
