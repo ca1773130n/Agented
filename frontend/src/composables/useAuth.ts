@@ -57,6 +57,12 @@ async function signup(
 }
 
 async function logout(): Promise<void> {
+  // Drop any stored X-API-Key BEFORE the revoke call. The onboarding first-admin
+  // signup stores the minted admin key there, and the backend resolves X-API-Key
+  // BEFORE the cookie session — so if it were still present, the /logout request
+  // would be attributed to the key owner and revoke the wrong user's session
+  // (and, left behind, would let the next user on this tab act as admin).
+  clearApiKey();
   // Best-effort revoke; the cookie is sent automatically. Clear local state +
   // any legacy localStorage token regardless of server response.
   try {
@@ -65,11 +71,6 @@ async function logout(): Promise<void> {
     // ignore — clearing local state is the source of truth
   }
   clearSessionToken();
-  // Also drop any stored X-API-Key. The onboarding first-admin signup stores
-  // the minted admin key there; since apiFetch sends X-API-Key AND the backend
-  // resolves it BEFORE the cookie session, leaving it behind would let the next
-  // user on this tab act with the admin key's privileges after logout.
-  clearApiKey();
   currentUser.value = null;
 }
 

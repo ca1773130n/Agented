@@ -83,14 +83,21 @@ describe('useAuth', () => {
       expect(localStorage.getItem('agented-session-token')).toBe(null);
     });
 
-    it('clears a stored X-API-Key so admin privileges do not leak to the next user', async () => {
+    it('clears the X-API-Key BEFORE the revoke call so the right session is revoked', async () => {
       // The onboarding first-admin signup stores the minted admin key as
-      // X-API-Key; since the backend resolves X-API-Key before the cookie
-      // session, a leftover key would let the next user on this tab act as admin.
+      // X-API-Key; the backend resolves X-API-Key before the cookie session.
+      // The key must be cleared BEFORE authApi.logout() so /logout is attributed
+      // to the cookie session (the real user) — and so it never leaks to the
+      // next user on this tab.
       sessionStorage.setItem('agented-api-key', 'admin-key-xyz');
-      logoutMock.mockResolvedValue(undefined);
+      let keyAtRevoke: string | null = 'unset';
+      logoutMock.mockImplementation(() => {
+        keyAtRevoke = sessionStorage.getItem('agented-api-key');
+        return Promise.resolve(undefined);
+      });
       const { logout } = useAuth();
       await logout();
+      expect(keyAtRevoke).toBe(null);
       expect(sessionStorage.getItem('agented-api-key')).toBe(null);
     });
 
