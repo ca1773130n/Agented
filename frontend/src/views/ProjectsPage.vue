@@ -283,7 +283,10 @@ onMounted(() => {
         </div>
 
         <div class="project-actions">
-          <button class="btn btn-small btn-danger" @click.stop="confirmDelete(project)" :disabled="deletingId === project.id">
+          <!-- ponytail: button is inside a <router-link>; .stop alone leaves the native anchor
+               nav (router-link's own preventDefault never runs once propagation is stopped), so
+               clicking Delete hard-reloaded the page and killed the confirm modal. .prevent is mandatory. -->
+          <button class="btn btn-small btn-danger" @click.stop.prevent="confirmDelete(project)" :disabled="deletingId === project.id">
             <span v-if="deletingId === project.id" class="btn-spinner"></span>
             <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
