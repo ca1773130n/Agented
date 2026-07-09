@@ -275,6 +275,30 @@ def get_highest_role_for_user(user_id: str) -> Optional[str]:
     return best[0] if _ROLE_RANK.get(best[0], -1) >= 0 else None
 
 
+def get_admin_api_key(user_id: str) -> Optional[str]:
+    """Return the API key of the user's admin role row, if any.
+
+    Backs the onboarding signup flow: ``ensure_user_admin`` already mints a real
+    API key for the first operator (stored, never returned). Surfacing it lets
+    the SPA store it as its ``X-API-Key`` — the same credential the ai-accounts
+    sidecar accepts as its bearer for account discovery. Returns None when the
+    user holds no admin row with a key.
+    """
+    if not user_id:
+        return None
+    with get_connection() as conn:
+        # No ORDER BY: the bootstrap flow produces exactly one admin row per
+        # user, and `rowid` is SQLite-only (Postgres has no rowid — see
+        # insertion_tiebreak_col in connection.py). LIMIT 1 is the defensive cap.
+        row = conn.execute(
+            "SELECT api_key FROM user_roles "
+            "WHERE user_id = ? AND role = 'admin' AND api_key IS NOT NULL "
+            "LIMIT 1",
+            (user_id,),
+        ).fetchone()
+    return row[0] if row else None
+
+
 def get_user_role(role_id: str) -> Optional[dict]:
     """Get a single user role record by ID.
 

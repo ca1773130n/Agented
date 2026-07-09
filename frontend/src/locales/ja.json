@@ -200,7 +200,7 @@
     "headline": "あなただけの仮想スタートアップ、完全自律で動く",
     "subtitle": "自律AIエージェントで実際のプロダクトを作る、初のエンドツーエンドプラットフォームです。作るものを定義してエージェントチームを割り当てれば、アーキテクチャからQAまで、すべての部門が自走します。",
     "beginSetup": "セットアップを始める →",
-    "stepsHint": "8ステップ・約2分",
+    "stepsHint": "簡単なステップだけ・約2分",
     "generateKey": "Admin キーを生成",
     "generateKeyHeading": "Admin API キーを生成してください",
     "generateKeyExplanation": "このキーはAgentedインスタンスを保護します。再表示されないので、安全な場所に保管してください。",
@@ -223,6 +223,39 @@
       "engineering": "エンジニアリング",
       "harnessPlugins": "ハーネス & プラグイン",
       "harnessDesc": "本格的なハーネスエンジニアリング — 設定同期、GRDプランニング、MCPサーバー、マーケットプレイスプラグイン、カスタムスキルとフック。"
+    },
+    "signup": {
+      "heading": "オペレーターアカウントを作成",
+      "explanation": "この最初のアカウントが、あなたのAgentedインスタンスの管理者になります。今後はこのアカウントでサインインします。",
+      "emailLabel": "メールアドレス",
+      "emailPlaceholder": "you{'@'}example.com",
+      "passwordLabel": "パスワード",
+      "passwordPlaceholder": "8文字以上",
+      "nameLabel": "表示名（任意）",
+      "namePlaceholder": "何とお呼びすればよいですか？",
+      "submit": "アカウントを作成 →",
+      "submitting": "アカウントを作成中…",
+      "required": "メールアドレスとパスワードは必須です",
+      "passwordTooShort": "パスワードは8文字以上で入力してください",
+      "failed": "アカウントを作成できませんでした。もう一度お試しください。"
+    },
+    "discover": {
+      "heading": "AIアカウントを検出",
+      "explanation": "Agentedはこのマシンをスキャンして、すでにサインイン済みのAI CLI（Claude、Codex、OpenCode）を検出し、ワンステップでインポートできます。",
+      "detect": "アカウントを検出",
+      "detecting": "スキャン中…",
+      "detectFailed": "検出に失敗しました。アカウントサービスが実行中であることを確認してから、もう一度お試しください。",
+      "none": "このマシンに既存のアカウントは見つかりませんでした。下から手動で追加するか、後で設定から登録してください。",
+      "importAll": "{count}件のアカウントをインポート",
+      "importing": "インポート中…",
+      "rescan": "再スキャン",
+      "manualAdd": "別のアカウントを手動で追加（例：Gemini）",
+      "finish": "続ける →",
+      "status": {
+        "imported": "インポート済み",
+        "ready": "サインイン済み",
+        "loggedout": "サインインしていません"
+      }
     }
   },
   "tour": {

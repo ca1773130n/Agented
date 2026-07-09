@@ -21,7 +21,7 @@ from litestar.status_codes import HTTP_204_NO_CONTENT
 from msgspec import Struct
 
 from app.db.password_resets import consume_token, request_reset
-from app.db.rbac import ensure_user_admin, registration_open
+from app.db.rbac import ensure_user_admin, get_admin_api_key, registration_open
 from app.db.sessions import create_session, revoke_session, revoke_user_sessions
 from app.db.users import (
     authenticate,
@@ -127,7 +127,7 @@ def signup(data: SignupBody, request: Request) -> Any:
     # First real operator to register becomes admin, so a fresh self-hosted
     # install isn't locked out of /admin/* (the bootstrap API-key admin can't
     # be resolved from a session login). No-op once any user holds admin.
-    ensure_user_admin(user_id)
+    granted_admin = ensure_user_admin(user_id)
 
     user = get_user(user_id)
     session = create_session(user_id)
@@ -143,6 +143,14 @@ def signup(data: SignupBody, request: Request) -> Any:
             "display_name": user.get("display_name"),
         },
     }
+    # Onboarding first-admin: surface the API key ensure_user_admin just minted
+    # so the SPA can store it as X-API-Key. That key is also the bearer the
+    # ai-accounts sidecar accepts for account discovery/import — without it the
+    # signup-first onboarding could not call /api/v1/discovery.
+    if granted_admin:
+        key = get_admin_api_key(user_id)
+        if key:
+            payload["api_key"] = key
     return _session_response(payload, session["token"], request)
 
 

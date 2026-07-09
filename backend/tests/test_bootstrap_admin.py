@@ -14,6 +14,7 @@ from app.db.rbac import (
     backfill_bootstrap_admin,
     ensure_user_admin,
     generate_api_key,
+    get_admin_api_key,
     get_highest_role_for_user,
     registration_open,
     user_bound_admin_exists,
@@ -126,6 +127,31 @@ class TestSignupGrantsFirstOperatorAdmin:
 
         assert get_highest_role_for_user(uid1) == "admin"
         assert get_highest_role_for_user(uid2) is None
+
+    def test_first_signup_returns_admin_api_key_second_does_not(self, isolated_db):
+        # Onboarding relies on the first-admin signup surfacing its minted API
+        # key (stored, previously never returned) so the SPA can use it as
+        # X-API-Key AND as the ai-accounts sidecar bearer for discovery.
+        with _client(isolated_db) as ls:
+            r1 = ls.post(
+                "/api/auth/signup",
+                json={"email": "first@example.com", "password": "supersecret", "display_name": ""},
+            )
+            assert r1.status_code == 201
+            body1 = r1.json()
+            uid1 = body1["user"]["id"]
+            # The returned key must match the row ensure_user_admin persisted —
+            # i.e. it is a real user_roles key the sidecar will accept.
+            assert body1.get("api_key")
+            assert body1["api_key"] == get_admin_api_key(uid1)
+
+            r2 = ls.post(
+                "/api/auth/signup",
+                json={"email": "second@example.com", "password": "supersecret", "display_name": ""},
+            )
+            assert r2.status_code == 201
+            # Second (non-admin) signup grants no admin, so no key is surfaced.
+            assert "api_key" not in r2.json()
 
 
 class TestRegistrationGate:

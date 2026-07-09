@@ -368,7 +368,7 @@ describe('useTourMachine', () => {
       expect(tour.currentStep.value).toBe('welcome')
     })
 
-    it('currentStep returns backends.claude for compound state', async () => {
+    it('currentStep returns monitoring after workspace (flat flow)', async () => {
       const { useTourMachine } = await import('../useTourMachine')
       const tour = useTourMachine()
       await vi.waitFor(() => {
@@ -376,9 +376,9 @@ describe('useTourMachine', () => {
       })
       tour.startTour()
       tour.nextStep() // welcome -> workspace
-      tour.nextStep() // workspace -> backends.claude
+      tour.nextStep() // workspace -> monitoring
       await vi.waitFor(() => {
-        expect(tour.currentStep.value).toBe('backends.claude')
+        expect(tour.currentStep.value).toBe('monitoring')
       })
     })
 
@@ -736,11 +736,7 @@ describe('useTourMachine', () => {
       const snapshot = getSnapshotAtState([
         { type: 'START' },
         { type: 'NEXT' }, // welcome -> workspace
-        { type: 'NEXT' }, // workspace -> backends.claude
-        { type: 'NEXT' }, // claude -> codex
-        { type: 'NEXT' }, // codex -> gemini
-        { type: 'NEXT' }, // gemini -> opencode
-        { type: 'NEXT' }, // backends -> monitoring (parent handles NEXT from opencode)
+        { type: 'NEXT' }, // workspace -> monitoring
         { type: 'NEXT' }, // monitoring -> create_product
         { type: 'NEXT' }, // create_product -> create_project
         { type: 'NEXT' }, // create_project -> create_team

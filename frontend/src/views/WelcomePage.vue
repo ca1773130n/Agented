@@ -1,21 +1,23 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
-import { healthApi } from '../services/api';
-import { setApiKey } from '../services/api/client';
 import { resetAuthGuard } from '../router/guards';
+import { useAuth } from '../composables/useAuth';
 import { useTourMachine } from '../composables/useTourMachine';
+import { aiAccountsClient } from '../services/api/backend-management';
+import AccountLoginModal from '../components/monitoring/AccountLoginModal.vue';
 import { SUPPORTED_LOCALES, setLocale } from '../i18n';
 
 const router = useRouter();
 const { t, locale } = useI18n();
+const { signup } = useAuth();
+const tourMachine = useTourMachine();
 
 function onLocaleChange(e: Event) {
   const lang = (e.target as HTMLSelectElement).value as 'en' | 'ko' | 'ja' | 'zh';
   setLocale(lang);
 }
-const tourMachine = useTourMachine();
 
 // First-run page — clear any stale tour/key state from previous installs
 onMounted(() => {
@@ -24,52 +26,114 @@ onMounted(() => {
   localStorage.removeItem('agented-api-key');
 });
 
-type Phase = 'welcome' | 'keygen';
+type Phase = 'welcome' | 'signup' | 'discover';
 const phase = ref<Phase>('welcome');
-const generatedKey = ref('');
-const generating = ref(false);
-const error = ref('');
-const copied = ref(false);
 
 function beginSetup() {
   tourMachine.startTour(); // idle -> welcome
-  phase.value = 'keygen';
+  phase.value = 'signup';
 }
 
-async function generateKey() {
-  generating.value = true;
-  error.value = '';
+// --- Step 1: account signup (replaces the old admin-API-key mint) ----------
+const email = ref('');
+const password = ref('');
+const displayName = ref('');
+const signingUp = ref(false);
+const signupError = ref('');
+
+async function submitSignup() {
+  signupError.value = '';
+  if (!email.value.trim() || !password.value) {
+    signupError.value = t('welcome.signup.required');
+    return;
+  }
+  if (password.value.length < 8) {
+    signupError.value = t('welcome.signup.passwordTooShort');
+    return;
+  }
+  signingUp.value = true;
   try {
-    const result = await healthApi.setup('Admin');
-    generatedKey.value = result.api_key;
-  } catch (err) {
-    error.value = t('welcome.generateFailed');
+    // First registrant becomes admin; useAuth.signup stores the minted admin
+    // API key as X-API-Key (also the bearer the ai-accounts sidecar accepts
+    // for discovery). resetAuthGuard clears the "needs setup" gate.
+    await signup(email.value.trim(), password.value, displayName.value.trim() || undefined);
+    resetAuthGuard();
+    phase.value = 'discover';
+  } catch (e) {
+    signupError.value = e instanceof Error && e.message ? e.message : t('welcome.signup.failed');
   } finally {
-    generating.value = false;
+    signingUp.value = false;
   }
 }
 
-async function copyKey() {
+// --- Step 2: auto-detect & import existing AI accounts ---------------------
+interface DiscoveredItem {
+  kind: string;
+  path: string;
+  suggested_name: string;
+  is_logged_in: boolean;
+  error: string | null;
+  backend_id: string | null;
+}
+const detecting = ref(false);
+const detectRan = ref(false);
+const detectError = ref('');
+const discovered = ref<DiscoveredItem[]>([]);
+const importing = ref(false);
+const showManualLogin = ref(false);
+
+// Only logged-in, not-yet-imported configs are importable; already-imported
+// ones (backend_id set) are shown as done.
+const importable = computed(() => discovered.value.filter((i) => i.is_logged_in && !i.backend_id));
+
+async function detectAccounts() {
+  detecting.value = true;
+  detectError.value = '';
   try {
-    await navigator.clipboard.writeText(generatedKey.value);
-  } catch {
-    // Clipboard API may fail (non-HTTPS, no focus, etc.) — use fallback
-    const el = document.querySelector('.key-value') as HTMLElement | null;
-    if (el) {
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      const sel = window.getSelection();
-      sel?.removeAllRanges();
-      sel?.addRange(range);
-    }
+    const { items } = await aiAccountsClient.discoverConfigs();
+    discovered.value = items as DiscoveredItem[];
+    detectRan.value = true;
+  } catch (e) {
+    detectError.value = e instanceof Error && e.message ? e.message : t('welcome.discover.detectFailed');
+  } finally {
+    detecting.value = false;
   }
-  // Always show visual feedback — stays until user navigates away
-  copied.value = true;
 }
 
-function continueToApp() {
-  setApiKey(generatedKey.value);
-  resetAuthGuard(); // Clear the "needs setup" state so router guard allows navigation
+async function importAll() {
+  if (!importable.value.length || importing.value) return;
+  importing.value = true;
+  try {
+    for (const item of importable.value) {
+      try {
+        await aiAccountsClient.importDiscovered({
+          kind: item.kind,
+          path: item.path,
+          display_name: item.suggested_name,
+        });
+      } catch {
+        // Best-effort: keep importing the rest; the re-detect below reflects
+        // which ones actually landed (backend_id set) vs failed.
+      }
+    }
+    await detectAccounts();
+  } finally {
+    importing.value = false;
+  }
+}
+
+function itemStatus(item: DiscoveredItem): 'imported' | 'ready' | 'loggedout' {
+  if (item.backend_id) return 'imported';
+  return item.is_logged_in ? 'ready' : 'loggedout';
+}
+
+function finishOnboarding() {
+  resetAuthGuard();
+  // If the shared tour actor wasn't ready when beginSetup fired START (cold
+  // backend → the actor is briefly null and the event is dropped), the machine
+  // is still 'idle'. Start it now so the in-app tour actually begins, then
+  // advance welcome -> workspace.
+  if (tourMachine.currentStep.value === 'idle') tourMachine.startTour();
   tourMachine.nextStep(); // welcome -> workspace
   router.push({ path: '/settings', hash: '#general' });
 }
@@ -160,45 +224,114 @@ function continueToApp() {
       </div>
     </Transition>
 
-    <!-- Keygen phase -->
+    <!-- Signup phase (step 1) -->
     <Transition name="phase-fade">
-      <div v-if="phase === 'keygen'" key="keygen" class="keygen-content">
-        <div class="keygen-card">
-          <h2 class="keygen-heading">{{ t('welcome.generateKeyHeading') }}</h2>
-          <p class="keygen-explanation">{{ t('welcome.generateKeyExplanation') }}</p>
+      <div v-if="phase === 'signup'" key="signup" class="keygen-content">
+        <form class="keygen-card" @submit.prevent="submitSignup">
+          <h2 class="keygen-heading">{{ t('welcome.signup.heading') }}</h2>
+          <p class="keygen-explanation">{{ t('welcome.signup.explanation') }}</p>
 
-          <div v-if="!generatedKey && !error" class="keygen-action">
-            <button
-              data-test="generate-key-btn"
-              class="generate-btn"
-              :disabled="generating"
-              @click="generateKey"
-            >
-              <svg v-if="generating" class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <div class="form-field">
+            <label for="ob-email">{{ t('welcome.signup.emailLabel') }}</label>
+            <input id="ob-email" v-model="email" data-test="signup-email" type="email" autocomplete="email"
+              :placeholder="t('welcome.signup.emailPlaceholder')" />
+          </div>
+          <div class="form-field">
+            <label for="ob-password">{{ t('welcome.signup.passwordLabel') }}</label>
+            <input id="ob-password" v-model="password" data-test="signup-password" type="password" autocomplete="new-password"
+              :placeholder="t('welcome.signup.passwordPlaceholder')" />
+          </div>
+          <div class="form-field">
+            <label for="ob-name">{{ t('welcome.signup.nameLabel') }}</label>
+            <input id="ob-name" v-model="displayName" data-test="signup-name" type="text" autocomplete="name"
+              :placeholder="t('welcome.signup.namePlaceholder')" />
+          </div>
+
+          <p v-if="signupError" class="keygen-error" data-test="signup-error">{{ signupError }}</p>
+
+          <button data-test="signup-submit" class="continue-btn" type="submit" :disabled="signingUp">
+            <svg v-if="signingUp" class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+            </svg>
+            {{ signingUp ? t('welcome.signup.submitting') : t('welcome.signup.submit') }}
+          </button>
+        </form>
+      </div>
+    </Transition>
+
+    <!-- Discover phase (step 2) — auto-detect & import existing AI accounts -->
+    <Transition name="phase-fade">
+      <div v-if="phase === 'discover'" key="discover" class="keygen-content">
+        <div class="keygen-card discover-card">
+          <h2 class="keygen-heading">{{ t('welcome.discover.heading') }}</h2>
+          <p class="keygen-explanation">{{ t('welcome.discover.explanation') }}</p>
+
+          <div v-if="!detectRan" class="keygen-action">
+            <button data-test="detect-btn" class="generate-btn" :disabled="detecting" @click="detectAccounts">
+              <svg v-if="detecting" class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
               </svg>
-              {{ generating ? t('welcome.generating') : t('welcome.generateKey') }}
+              {{ detecting ? t('welcome.discover.detecting') : t('welcome.discover.detect') }}
             </button>
           </div>
 
-          <div v-if="error" class="keygen-error">
-            <p>{{ error }}</p>
-            <button data-test="generate-key-btn" class="generate-btn" @click="generateKey">{{ t('welcome.tryAgain') }}</button>
-          </div>
+          <p v-if="detectError" class="keygen-error" data-test="detect-error">{{ detectError }}</p>
 
-          <div v-if="generatedKey" class="keygen-result">
-            <div class="key-display">
-              <code class="key-value">{{ generatedKey }}</code>
-              <button class="copy-btn" :class="{ 'copy-btn--copied': copied }" @click="copyKey">
-                <svg v-if="copied" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg>
-                {{ copied ? t('welcome.copied') : t('welcome.copyKey') }}
-              </button>
-            </div>
-            <button data-test="continue-btn" class="continue-btn" @click="continueToApp">{{ t('welcome.continue') }}</button>
-          </div>
+          <template v-if="detectRan && !detecting">
+            <p v-if="discovered.length === 0" class="discover-empty" data-test="discover-empty">
+              {{ t('welcome.discover.none') }}
+            </p>
+            <ul v-else class="discover-list" data-test="discover-list">
+              <li v-for="item in discovered" :key="item.path" class="discover-item">
+                <div class="discover-item__main">
+                  <span class="discover-item__name">{{ item.suggested_name }}</span>
+                  <span class="discover-item__kind">{{ item.kind }}</span>
+                </div>
+                <span class="discover-item__status" :class="`is-${itemStatus(item)}`">
+                  {{ t(`welcome.discover.status.${itemStatus(item)}`) }}
+                </span>
+              </li>
+            </ul>
+
+            <button
+              v-if="importable.length"
+              data-test="import-all-btn"
+              class="generate-btn import-all-btn"
+              :disabled="importing"
+              @click="importAll"
+            >
+              <svg v-if="importing" class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+              </svg>
+              {{ importing ? t('welcome.discover.importing') : t('welcome.discover.importAll', { count: importable.length }) }}
+            </button>
+
+            <button data-test="rescan-btn" class="link-btn" :disabled="detecting || importing" @click="detectAccounts">
+              {{ t('welcome.discover.rescan') }}
+            </button>
+          </template>
+
+          <!-- Manual fallback: Gemini / Antigravity is not auto-discoverable -->
+          <button data-test="manual-add-btn" class="link-btn" @click="showManualLogin = true">
+            {{ t('welcome.discover.manualAdd') }}
+          </button>
+
+          <button data-test="finish-btn" class="continue-btn" @click="finishOnboarding">
+            {{ t('welcome.discover.finish') }}
+          </button>
         </div>
       </div>
     </Transition>
+
+    <AccountLoginModal
+      :open="showManualLogin"
+      backend-id="backend-gemini"
+      backend-type="gemini"
+      backend-name="Gemini (Antigravity)"
+      :proxy-only="true"
+      @close="showManualLogin = false"
+      @success="showManualLogin = false"
+    />
   </div>
 </template>
 
@@ -590,68 +723,6 @@ function continueToApp() {
   margin: 0 0 16px;
 }
 
-/* Key result */
-.keygen-result {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.key-display {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  padding: 14px 16px;
-}
-
-.key-value {
-  flex: 1;
-  font-family: 'SF Mono', 'Monaco', 'Cascadia Code', monospace;
-  font-size: 13px;
-  color: #e4e4e7;
-  word-break: break-all;
-}
-
-.copy-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 14px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #a1a1aa;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 150ms ease;
-  white-space: nowrap;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-}
-
-.copy-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fafafa;
-}
-
-.copy-btn--copied {
-  background: rgba(34, 197, 94, 0.15);
-  color: #4ade80;
-  border-color: rgba(34, 197, 94, 0.3);
-}
-
-.copy-btn--copied svg {
-  flex-shrink: 0;
-}
-
-.copy-btn--copied:hover {
-  background: rgba(34, 197, 94, 0.2);
-  color: #4ade80;
-}
-
 .continue-btn {
   width: 100%;
   padding: 14px;
@@ -669,6 +740,151 @@ function continueToApp() {
 .continue-btn:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 20px rgba(250, 250, 250, 0.15);
+}
+
+.continue-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.continue-btn .spin-icon {
+  margin-right: 6px;
+  vertical-align: -3px;
+}
+
+/* === Signup form fields === */
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+  text-align: left;
+}
+
+.form-field label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #a1a1aa;
+}
+
+.form-field input {
+  padding: 11px 14px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  color: #e4e4e7;
+  font-size: 14px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.form-field input:focus {
+  outline: none;
+  border-color: rgba(79, 70, 229, 0.6);
+}
+
+/* === Discover === */
+.discover-card {
+  max-width: 520px;
+}
+
+.discover-empty {
+  font-size: 13px;
+  color: #71717a;
+  text-align: center;
+  margin: 8px 0 20px;
+}
+
+.discover-list {
+  list-style: none;
+  margin: 0 0 20px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.discover-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+
+.discover-item__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.discover-item__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e4e4e7;
+  word-break: break-all;
+}
+
+.discover-item__kind {
+  font-size: 11px;
+  color: #71717a;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.discover-item__status {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 100px;
+  white-space: nowrap;
+}
+
+.discover-item__status.is-imported {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+}
+
+.discover-item__status.is-ready {
+  background: rgba(79, 70, 229, 0.15);
+  color: #a5b4fc;
+}
+
+.discover-item__status.is-loggedout {
+  background: rgba(255, 255, 255, 0.06);
+  color: #71717a;
+}
+
+.import-all-btn {
+  width: 100%;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.link-btn {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  color: #a1a1aa;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.link-btn:hover:not(:disabled) {
+  color: #e4e4e7;
+}
+
+.link-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* === Responsive === */

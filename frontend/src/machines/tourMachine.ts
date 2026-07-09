@@ -51,20 +51,19 @@ export const tourMachine = setup({
   },
 
   guards: {
-    isWorkspaceConfigured: () => false,
-    hasClaudeAccount: () => false,
-    hasAnyBackend: () => false,
-    isMonitoringConfigured: () => false,
+    // Only canSkipAll is wired to a transition (SKIP_ALL). The old per-step
+    // guards (isWorkspaceConfigured/hasClaudeAccount/hasAnyBackend/
+    // isMonitoringConfigured) were never referenced and went with the
+    // per-backend steps.
     canSkipAll: () => false,
   },
 
   actions: {
     markStepCompleted: assign({
       completedSteps: ({ context, self }) => {
-        // self.getSnapshot().value gives the current state value
-        const snapshot = self.getSnapshot()
-        const stateValue = snapshot.value
-        const step = typeof stateValue === 'string' ? stateValue : JSON.stringify(stateValue)
+        // The machine is flat (no compound states), so the state value is
+        // always a plain string step id.
+        const step = self.getSnapshot().value as string
         if (context.completedSteps.includes(step)) return context.completedSteps
         return [...context.completedSteps, step]
       },
@@ -107,62 +106,19 @@ export const tourMachine = setup({
       },
     },
 
+    // The per-backend register substeps (claude/codex/gemini/opencode) were
+    // retired: onboarding now auto-detects & imports existing accounts in the
+    // WelcomePage `discover` phase, so the tour skips straight to monitoring.
+    // (Git history holds the old `backends` compound state if it needs to
+    // return.)
     workspace: {
-      on: {
-        NEXT: {
-          target: 'backends',
-          actions: ['markStepCompleted'],
-        },
-        BACK: { target: 'welcome' },
-        SKIP: { target: 'backends' },
-      },
-    },
-
-    backends: {
-      initial: 'claude',
       on: {
         NEXT: {
           target: 'monitoring',
           actions: ['markStepCompleted'],
         },
-        BACK: { target: 'workspace' },
+        BACK: { target: 'welcome' },
         SKIP: { target: 'monitoring' },
-      },
-      states: {
-        claude: {
-          on: {
-            NEXT: {
-              target: 'codex',
-              actions: ['markStepCompleted'],
-            },
-            SKIP: { target: 'codex' },
-          },
-        },
-        codex: {
-          on: {
-            NEXT: {
-              target: 'gemini',
-              actions: ['markStepCompleted'],
-            },
-            BACK: { target: 'claude' },
-            SKIP: { target: 'gemini' },
-          },
-        },
-        gemini: {
-          on: {
-            NEXT: {
-              target: 'opencode',
-              actions: ['markStepCompleted'],
-            },
-            BACK: { target: 'codex' },
-            SKIP: { target: 'opencode' },
-          },
-        },
-        opencode: {
-          on: {
-            BACK: { target: 'gemini' },
-          },
-        },
       },
     },
 
@@ -172,7 +128,7 @@ export const tourMachine = setup({
           target: 'create_product',
           actions: ['markStepCompleted'],
         },
-        BACK: { target: 'backends' },
+        BACK: { target: 'workspace' },
         SKIP: { target: 'create_product' },
       },
     },

@@ -100,12 +100,10 @@ export async function fetchSetupStatus(
 export function setupStatusToCompleted(
   status: SetupStatus,
 ): Record<string, boolean> {
+  // The per-backend register steps were removed (accounts are now auto-detected
+  // in onboarding), so the completed-map no longer carries backends.* keys.
   return {
     workspace: status.has_workspace,
-    'backends.claude': status.has_claude_account,
-    'backends.codex': status.has_codex_account,
-    'backends.gemini': status.has_gemini_account,
-    'backends.opencode': status.has_opencode_account,
     monitoring: false, // read-only step, never auto-skipped
     create_product: status.has_first_product,
     create_project: false,
@@ -135,21 +133,12 @@ export function autoSkipCompletedSteps(
   }
 }
 
-function stateValueToKey(value: unknown): string | null {
-  if (typeof value === 'string') {
-    return value === 'idle' || value === 'welcome' || value === 'complete'
-      ? null
-      : value
-  }
-  if (value && typeof value === 'object') {
-    const keys = Object.keys(value as Record<string, unknown>)
-    if (keys.length > 0) {
-      const parent = keys[0]
-      const child = (value as Record<string, string>)[parent]
-      return `${parent}.${child}`
-    }
-  }
-  return null
+function stateValueToKey(value: string): string | null {
+  // Flat machine: value is always a string. idle/welcome/complete carry no
+  // completion key, so the walker has nothing to auto-skip there.
+  return value === 'idle' || value === 'welcome' || value === 'complete'
+    ? null
+    : value
 }
 
 async function fetchInstanceId(): Promise<string | null> {
@@ -331,17 +320,9 @@ export function useTourMachine() {
   })
 
   const currentStep: ComputedRef<string> = computed(() => {
+    // Flat machine: the state value is a string step id (or null before init).
     const val = state.value
-    if (!val) return 'idle'
-    if (typeof val === 'string') return val
-    // Compound state — e.g., { backends: 'claude' }
-    const keys = Object.keys(val as Record<string, unknown>)
-    if (keys.length > 0) {
-      const parent = keys[0]
-      const child = (val as Record<string, string>)[parent]
-      return `${parent}.${child}`
-    }
-    return 'unknown'
+    return typeof val === 'string' ? val : 'idle'
   })
 
   const canGoBack: ComputedRef<boolean> = computed(() => {
