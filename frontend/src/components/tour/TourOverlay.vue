@@ -188,7 +188,6 @@ function handleElementRetry() {
 // out "backend accounts, product/project creation" — the latter three
 // titles match the step definitions in `src/constants/tourSteps.ts`.
 const SIGNIFICANT_STEP_TITLES = [
-  'AI Backend Accounts',
   'Create Your First Product',
   'Create Your First Project',
   'Assign Teams to Project',

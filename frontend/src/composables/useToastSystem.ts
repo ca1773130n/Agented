@@ -47,39 +47,33 @@ export function useToastSystem(tour: TourMachine): UseToastSystem {
     }, duration ?? defaultDuration);
 
     // Auto-advance tour when a success toast matches the current step's trigger.
-    // Skip auto-advance for backend account steps — the AccountWizard controls advancement.
     if (type === 'success' && tour.isActive.value) {
       const step = tour.currentStep.value;
-      const isBackendStep = step.startsWith('backends.');
-      if (!isBackendStep) {
-        const meta = TOUR_STEP_MAP[step];
-        // Match against the LOCALIZED toast text first (resolve the step's
-        // i18n key in the active locale) so auto-advance works in ko/ja/zh —
-        // the raw English `autoAdvanceOnToast` only matched the en catalog,
-        // which silently wedged steps like "monitoring" for non-English
-        // operators. Fall back to the English literal for safety.
-        const localized = meta?.autoAdvanceI18nKey
-          ? (i18n.global.t(meta.autoAdvanceI18nKey) as string)
-          : null;
-        const matches =
-          (localized && message.includes(localized)) ||
-          (meta?.autoAdvanceOnToast ? message.includes(meta.autoAdvanceOnToast) : false);
-        if (meta && matches) {
-          // Capture the step that armed this timer and only advance if the
-          // tour is STILL on it when the timer fires. Without this guard a
-          // caller that ALSO advances explicitly (e.g. saveWorkspaceRoot
-          // calls tour.nextStep() right after this success toast) produced a
-          // DOUBLE advance — workspace→backends.claude (explicit) then
-          // backends.claude→backends.codex (this stale timer), silently
-          // skipping the Claude Code account step. Re-checking the step makes
-          // auto-advance idempotent w.r.t. explicit advances.
-          const armedStep = step;
-          setTimeout(() => {
-            if (tour.isActive.value && tour.currentStep.value === armedStep) {
-              tour.nextStep();
-            }
-          }, 800);
-        }
+      const meta = TOUR_STEP_MAP[step];
+      // Match against the LOCALIZED toast text first (resolve the step's
+      // i18n key in the active locale) so auto-advance works in ko/ja/zh —
+      // the raw English `autoAdvanceOnToast` only matched the en catalog,
+      // which silently wedged steps like "monitoring" for non-English
+      // operators. Fall back to the English literal for safety.
+      const localized = meta?.autoAdvanceI18nKey
+        ? (i18n.global.t(meta.autoAdvanceI18nKey) as string)
+        : null;
+      const matches =
+        (localized && message.includes(localized)) ||
+        (meta?.autoAdvanceOnToast ? message.includes(meta.autoAdvanceOnToast) : false);
+      if (meta && matches) {
+        // Capture the step that armed this timer and only advance if the tour
+        // is STILL on it when the timer fires. Without this guard a caller that
+        // ALSO advances explicitly (e.g. saveWorkspaceRoot calls tour.nextStep()
+        // right after this success toast) produced a DOUBLE advance, silently
+        // skipping a step. Re-checking the step makes auto-advance idempotent
+        // w.r.t. explicit advances.
+        const armedStep = step;
+        setTimeout(() => {
+          if (tour.isActive.value && tour.currentStep.value === armedStep) {
+            tour.nextStep();
+          }
+        }, 800);
       }
     }
   }

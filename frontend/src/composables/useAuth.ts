@@ -8,8 +8,10 @@
 import { ref, computed, readonly } from 'vue';
 import {
   authApi,
+  clearApiKey,
   clearSessionToken,
   getSessionToken,
+  setApiKey,
   type AuthUser,
 } from '../services/api';
 
@@ -43,6 +45,10 @@ async function signup(
     const result = await authApi.signup(email, password, displayName);
     // Session is in the HttpOnly cookie; not persisted to localStorage.
     currentUser.value = result.user;
+    // First-admin signup returns the minted admin API key — store it as
+    // X-API-Key so subsequent /admin/* calls AND the ai-accounts sidecar
+    // (account discovery) are both authorized. Absent for non-first signups.
+    if (result.api_key) setApiKey(result.api_key);
     return result.user;
   } catch (err) {
     lastError.value = err instanceof Error ? err.message : 'Signup failed';
@@ -51,6 +57,12 @@ async function signup(
 }
 
 async function logout(): Promise<void> {
+  // Drop any stored X-API-Key BEFORE the revoke call. The onboarding first-admin
+  // signup stores the minted admin key there, and the backend resolves X-API-Key
+  // BEFORE the cookie session — so if it were still present, the /logout request
+  // would be attributed to the key owner and revoke the wrong user's session
+  // (and, left behind, would let the next user on this tab act as admin).
+  clearApiKey();
   // Best-effort revoke; the cookie is sent automatically. Clear local state +
   // any legacy localStorage token regardless of server response.
   try {

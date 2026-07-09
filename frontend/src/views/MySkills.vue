@@ -223,7 +223,7 @@ onMounted(() => {
         <div class="skill-toggles">
           <label class="toggle-row">
             <span>{{ t('mySkills.enabled') }}</span>
-            <button class="toggle-btn" :class="{ active: skill.enabled }" role="switch" :aria-checked="!!skill.enabled" :aria-label="t('mySkills.enabled')" @click.stop="toggleEnabled(skill)">
+            <button class="toggle-btn" :class="{ active: skill.enabled }" role="switch" :aria-checked="!!skill.enabled" :aria-label="t('mySkills.enabled')" @click.stop.prevent="toggleEnabled(skill)">
               <span class="toggle-knob"></span>
             </button>
           </label>
@@ -232,14 +232,14 @@ onMounted(() => {
               <span>{{ t('mySkills.includeToHarness') }}</span>
               <span class="toggle-hint">{{ t('mySkills.includeToHarnessHint') }}</span>
             </div>
-            <button class="toggle-btn" :class="{ active: skill.selected_for_harness }" role="switch" :aria-checked="!!skill.selected_for_harness" :aria-label="t('mySkills.includeToHarness')" @click.stop="toggleHarness(skill)">
+            <button class="toggle-btn" :class="{ active: skill.selected_for_harness }" role="switch" :aria-checked="!!skill.selected_for_harness" :aria-label="t('mySkills.includeToHarness')" @click.stop.prevent="toggleHarness(skill)">
               <span class="toggle-knob"></span>
             </button>
           </label>
         </div>
 
         <div class="skill-actions">
-          <button class="btn btn-small btn-danger" @click.stop="removeSkill(skill)">
+          <button class="btn btn-small btn-danger" @click.stop.prevent="removeSkill(skill)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
             </svg>

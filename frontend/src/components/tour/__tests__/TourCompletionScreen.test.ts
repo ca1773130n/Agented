@@ -38,7 +38,7 @@ describe('TourCompletionScreen', () => {
 
     const skippedLabels = wrapper.findAll('.completion-list-item.skipped .list-label')
     const labels = skippedLabels.map(el => el.text())
-    expect(labels).toContain('Claude Code')
+    expect(labels).toContain('Token Monitoring')
     expect(labels).toContain('Workspace Directory')
     wrapper.unmount()
   })
@@ -58,10 +58,6 @@ describe('TourCompletionScreen', () => {
   it('does not show skipped section when all steps completed', () => {
     const allSteps = [
       'workspace',
-      'backends.claude',
-      'backends.codex',
-      'backends.gemini',
-      'backends.opencode',
       'monitoring',
       'create_product',
       'create_project',

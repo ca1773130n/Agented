@@ -458,18 +458,6 @@ describe('TourOverlay', () => {
         })
       }
 
-      it('"AI Backend Accounts" still triggers confirm', async () => {
-        const wrapper = mountWithStep({
-          id: 'backends.claude',
-          route: '/backends/backend-claude',
-          target: '[data-tour="add-account-btn"]',
-          title: 'AI Backend Accounts',
-          message: 'Register a Claude Code account.',
-          skippable: true,
-        })
-        await wrapper.find('.tour-skip-btn').trigger('click')
-        expect(wrapper.find('.tour-skip-confirm').exists()).toBe(true)
-      })
 
       it('"Create Your First Product" triggers confirm', async () => {
         const wrapper = mountWithStep({

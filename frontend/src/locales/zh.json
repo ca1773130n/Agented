@@ -200,7 +200,7 @@
     "headline": "你的虚拟初创公司，完全自主运转",
     "subtitle": "首个用自主 AI 智能体打造真实产品的端到端平台。定义要构建的内容，分配智能体团队，从架构到 QA，每个部门自动运转。",
     "beginSetup": "开始设置 →",
-    "stepsHint": "8 个步骤 · 约 2 分钟",
+    "stepsHint": "几个快速步骤 · 约 2 分钟",
     "generateKey": "生成 Admin 密钥",
     "generateKeyHeading": "生成你的 Admin API 密钥",
     "generateKeyExplanation": "此密钥用于保护你的 Agented 实例。请妥善保管 — 密钥不会再次显示。",
@@ -223,6 +223,39 @@
       "engineering": "工程能力",
       "harnessPlugins": "Harness 与插件",
       "harnessDesc": "完整的 Harness 工程能力 — 配置同步、GRD 规划、MCP 服务器、市场插件、自定义技能与钩子。"
+    },
+    "signup": {
+      "heading": "创建你的操作员账号",
+      "explanation": "这是第一个账号，将成为你 Agented 实例的管理员。此后你将使用它登录。",
+      "emailLabel": "邮箱",
+      "emailPlaceholder": "you{'@'}example.com",
+      "passwordLabel": "密码",
+      "passwordPlaceholder": "至少 8 个字符",
+      "nameLabel": "显示名称（可选）",
+      "namePlaceholder": "我们该如何称呼你？",
+      "submit": "创建账号 →",
+      "submitting": "正在创建账号…",
+      "required": "邮箱和密码为必填项",
+      "passwordTooShort": "密码至少需要 8 个字符",
+      "failed": "无法创建你的账号，请重试。"
+    },
+    "discover": {
+      "heading": "检测你的 AI 账号",
+      "explanation": "Agented 可以扫描本机上你已登录的 AI CLI（Claude、Codex、OpenCode），并一步导入它们。",
+      "detect": "检测我的账号",
+      "detecting": "正在扫描…",
+      "detectFailed": "检测失败。请确认账号服务正在运行，然后重试。",
+      "none": "本机未找到已有账号。可在下方手动添加一个，或稍后在设置中配置。",
+      "importAll": "导入 {count} 个账号",
+      "importing": "正在导入…",
+      "rescan": "重新扫描",
+      "manualAdd": "手动添加另一个账号（例如 Gemini）",
+      "finish": "继续 →",
+      "status": {
+        "imported": "已导入",
+        "ready": "已登录",
+        "loggedout": "未登录"
+      }
     }
   },
   "tour": {

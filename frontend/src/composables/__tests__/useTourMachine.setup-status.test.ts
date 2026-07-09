@@ -63,17 +63,14 @@ describe('setupStatusToCompleted', () => {
     const completed = setupStatusToCompleted({
       ...FRESH_PAYLOAD,
       has_workspace: true,
-      has_claude_account: true,
-      has_codex_account: true,
       has_first_product: true,
       has_harness_synced: true,
     })
     expect(completed.workspace).toBe(true)
-    expect(completed['backends.claude']).toBe(true)
-    expect(completed['backends.codex']).toBe(true)
-    expect(completed['backends.gemini']).toBe(false)
-    expect(completed['backends.opencode']).toBe(false)
     expect(completed.create_product).toBe(true)
+    // The per-backend register substeps were removed (accounts are now
+    // auto-detected in onboarding), so no backends.* keys are emitted.
+    expect(completed['backends.claude']).toBeUndefined()
   })
 
   it('always reports monitoring as not-complete (read-only step)', () => {
@@ -91,48 +88,15 @@ describe('autoSkipCompletedSteps — real machine walker', () => {
     return actor
   }
 
-  it('skips workspace when has_workspace=true', () => {
+  it('skips workspace when has_workspace=true, stops at monitoring', () => {
     const actor = freshActor()
     expect(actor.getSnapshot().value).toBe('workspace')
     autoSkipCompletedSteps(
       actor,
       setupStatusToCompleted({ ...FRESH_PAYLOAD, has_workspace: true }),
     )
-    expect(actor.getSnapshot().value).toEqual({ backends: 'claude' })
-    actor.stop()
-  })
-
-  it('walks past every backend substep when all have accounts', () => {
-    // Start on workspace=done so the walker enters the backends compound
-    // first, then continues skipping each substep.
-    const actor = freshActor()
-    autoSkipCompletedSteps(
-      actor,
-      setupStatusToCompleted({
-        ...FRESH_PAYLOAD,
-        has_workspace: true,
-        has_claude_account: true,
-        has_codex_account: true,
-        has_gemini_account: true,
-        has_opencode_account: true,
-      }),
-    )
+    // workspace is done → skip to monitoring, which is never auto-skipped.
     expect(actor.getSnapshot().value).toBe('monitoring')
-    actor.stop()
-  })
-
-  it('only skips the substeps whose backend has an account (granular)', () => {
-    const actor = freshActor()
-    autoSkipCompletedSteps(
-      actor,
-      setupStatusToCompleted({
-        ...FRESH_PAYLOAD,
-        has_workspace: true,
-        has_claude_account: true,
-      }),
-    )
-    // Stops on backends.codex (claude is done, codex is not).
-    expect(actor.getSnapshot().value).toEqual({ backends: 'codex' })
     actor.stop()
   })
 

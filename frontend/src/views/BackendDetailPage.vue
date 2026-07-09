@@ -495,17 +495,25 @@ function startAdvancingOverlay() {
   }, 15000);
 }
 
+// ponytail: the tour's per-backend register substeps were retired (onboarding
+// now auto-discovers accounts), so only advance if the tour is somehow still on
+// a backends.* step — which it no longer is. Guards against a stray tour jump
+// when a user completes a backend wizard mid-tour on a non-backend step.
 function onWizardSkip() {
   showAddModal.value = false;
   showToast?.(t('backendDetail.toast.skipped'), 'info');
-  startAdvancingOverlay();
-  tourMachine.nextStep();
+  if (tourMachine.currentStep.value.startsWith('backends')) {
+    startAdvancingOverlay();
+    tourMachine.nextStep();
+  }
 }
 
 function onWizardDone() {
   closeModal();
-  startAdvancingOverlay();
-  tourMachine.nextStep();
+  if (tourMachine.currentStep.value.startsWith('backends')) {
+    startAdvancingOverlay();
+    tourMachine.nextStep();
+  }
 }
 
 // Hold the overlay up until the new backend's page is FULLY visible.

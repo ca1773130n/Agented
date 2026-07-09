@@ -102,6 +102,13 @@ def ensure_user_admin(user_id: str) -> bool:
         # admin exists, so two concurrent first-signups can't both win the grant
         # (SQLite serializes the write; the loser's NOT EXISTS sees the winner's
         # committed row). rowcount tells us whether we were the one to grant it.
+        # ponytail: SQLite (the default) is race-free here. On Postgres under
+        # READ COMMITTED two truly-simultaneous first-ever signups could both
+        # pass NOT EXISTS and both be granted admin. Left as-is — PG is
+        # experimental, the window is a fresh single-operator install, and both
+        # racers are already admin (surfacing their keys adds no privilege). If
+        # PG first-signup concurrency ever matters, serialize with
+        # pg_advisory_xact_lock (or a partial unique index) around this insert.
         cur = conn.execute(
             "INSERT INTO user_roles (id, api_key, label, role, user_id) "
             "SELECT ?, ?, ?, 'admin', ? "
@@ -273,6 +280,30 @@ def get_highest_role_for_user(user_id: str) -> Optional[str]:
         return None
     best = max(rows, key=lambda r: _ROLE_RANK.get(r[0], -1))
     return best[0] if _ROLE_RANK.get(best[0], -1) >= 0 else None
+
+
+def get_admin_api_key(user_id: str) -> Optional[str]:
+    """Return the API key of the user's admin role row, if any.
+
+    Backs the onboarding signup flow: ``ensure_user_admin`` already mints a real
+    API key for the first operator (stored, never returned). Surfacing it lets
+    the SPA store it as its ``X-API-Key`` — the same credential the ai-accounts
+    sidecar accepts as its bearer for account discovery. Returns None when the
+    user holds no admin row with a key.
+    """
+    if not user_id:
+        return None
+    with get_connection() as conn:
+        # No ORDER BY: the bootstrap flow produces exactly one admin row per
+        # user, and `rowid` is SQLite-only (Postgres has no rowid — see
+        # insertion_tiebreak_col in connection.py). LIMIT 1 is the defensive cap.
+        row = conn.execute(
+            "SELECT api_key FROM user_roles "
+            "WHERE user_id = ? AND role = 'admin' AND api_key IS NOT NULL "
+            "LIMIT 1",
+            (user_id,),
+        ).fetchone()
+    return row[0] if row else None
 
 
 def get_user_role(role_id: str) -> Optional[dict]:

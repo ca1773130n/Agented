@@ -267,7 +267,7 @@ onMounted(() => {
           </div>
         </div>
 
-        <div class="agent-actions" @click.stop>
+        <div class="agent-actions" @click.stop.prevent>
           <button class="btn btn-small btn-success" @click="runAgent(agent)" :disabled="!agent.enabled || runningAgentId === agent.id">
             <span v-if="runningAgentId === agent.id" class="btn-spinner"></span>
             <svg v-else viewBox="0 0 24 24" fill="currentColor">

@@ -4,9 +4,14 @@
  * Tests the machine as a black box: createActor -> send events -> assert on
  * getSnapshot().value and .context. No Vue, no DOM, no mocks.
  *
- * Covers: all 9 states, forward/backward/skip navigation, SKIP_ALL guard,
- * RESTART reset, markStepCompleted action, clearProgress action, event
- * rejection in invalid states, and hierarchical backends substates.
+ * Covers all states, forward/backward/skip navigation, SKIP_ALL guard,
+ * RESTART reset, markStepCompleted action, clearProgress action, and event
+ * rejection in invalid states.
+ *
+ * NOTE: the per-backend register substeps (backends.claude/codex/gemini/
+ * opencode) were removed — onboarding now auto-detects accounts in the
+ * WelcomePage `discover` phase, so the machine is flat: welcome -> workspace
+ * -> monitoring -> create_product -> create_project -> create_team -> complete.
  */
 
 import { describe, it, expect, afterEach } from 'vitest'
@@ -41,11 +46,7 @@ function navigateTo(
 // Common event sequences
 const toWelcome = [{ type: 'START' }] as const
 const toWorkspace = [...toWelcome, { type: 'NEXT' }] as const
-const toBackendsClaude = [...toWorkspace, { type: 'NEXT' }] as const
-const toBackendsCodex = [...toBackendsClaude, { type: 'NEXT' }] as const
-const toBackendsGemini = [...toBackendsCodex, { type: 'NEXT' }] as const
-const toBackendsOpencode = [...toBackendsGemini, { type: 'NEXT' }] as const
-const toMonitoring = [...toBackendsOpencode, { type: 'NEXT' }] as const
+const toMonitoring = [...toWorkspace, { type: 'NEXT' }] as const
 const toCreateProduct = [...toMonitoring, { type: 'NEXT' }] as const
 const toCreateProject = [...toCreateProduct, { type: 'NEXT' }] as const
 const toCreateTeam = [...toCreateProject, { type: 'NEXT' }] as const
@@ -89,53 +90,14 @@ describe('forward navigation (NEXT)', () => {
     expect(snap.context.completedSteps).toContain('welcome')
   })
 
-  it('workspace -> NEXT -> backends.claude (marks workspace completed)', () => {
+  it('workspace -> NEXT -> monitoring (marks workspace completed)', () => {
     const actor = startActor()
     navigateTo(actor, [...toWorkspace])
     actor.send({ type: 'NEXT' })
 
     const snap = actor.getSnapshot()
-    expect(snap.value).toEqual({ backends: 'claude' })
-    expect(snap.context.completedSteps).toContain('workspace')
-  })
-
-  it('backends.claude -> NEXT -> backends.codex (marks claude completed)', () => {
-    const actor = startActor()
-    navigateTo(actor, [...toBackendsClaude])
-    actor.send({ type: 'NEXT' })
-
-    const snap = actor.getSnapshot()
-    expect(snap.value).toEqual({ backends: 'codex' })
-    expect(snap.context.completedSteps).toContain(
-      JSON.stringify({ backends: 'claude' })
-    )
-  })
-
-  it('backends.codex -> NEXT -> backends.gemini', () => {
-    const actor = startActor()
-    navigateTo(actor, [...toBackendsCodex])
-    actor.send({ type: 'NEXT' })
-    expect(actor.getSnapshot().value).toEqual({ backends: 'gemini' })
-  })
-
-  it('backends.gemini -> NEXT -> backends.opencode', () => {
-    const actor = startActor()
-    navigateTo(actor, [...toBackendsGemini])
-    actor.send({ type: 'NEXT' })
-    expect(actor.getSnapshot().value).toEqual({ backends: 'opencode' })
-  })
-
-  it('backends.opencode -> NEXT -> monitoring (parent handler fires)', () => {
-    const actor = startActor()
-    navigateTo(actor, [...toBackendsOpencode])
-    actor.send({ type: 'NEXT' })
-
-    const snap = actor.getSnapshot()
     expect(snap.value).toBe('monitoring')
-    // Parent backends NEXT handler runs markStepCompleted with current state
-    expect(snap.context.completedSteps).toContain(
-      JSON.stringify({ backends: 'opencode' })
-    )
+    expect(snap.context.completedSteps).toContain('workspace')
   })
 
   it('monitoring -> NEXT -> create_product (marks monitoring completed)', () => {
@@ -187,9 +149,6 @@ describe('forward navigation (NEXT)', () => {
     actor.send({ type: 'NEXT' })
     expect(actor.getSnapshot().value).toBe('complete')
 
-    // Regression: "Go to dashboard" sends RESTART. When complete was final
-    // the actor was stopped and ignored it, so App.vue's tourComplete stayed
-    // true and the popup never closed.
     actor.send({ type: 'RESTART' })
     const snap = actor.getSnapshot()
     expect(snap.value).toBe('idle')
@@ -213,10 +172,6 @@ describe('forward navigation (NEXT)', () => {
     expect(snap.context.completedSteps).toEqual([
       'welcome',
       'workspace',
-      JSON.stringify({ backends: 'claude' }),
-      JSON.stringify({ backends: 'codex' }),
-      JSON.stringify({ backends: 'gemini' }),
-      JSON.stringify({ backends: 'opencode' }),
       'monitoring',
       'create_product',
       'create_project',
@@ -237,32 +192,11 @@ describe('backward navigation (BACK)', () => {
     expect(actor.getSnapshot().value).toBe('welcome')
   })
 
-  it('backends.claude -> BACK -> workspace (parent handler)', () => {
+  it('monitoring -> BACK -> workspace', () => {
     const actor = startActor()
-    navigateTo(actor, [...toBackendsClaude])
+    navigateTo(actor, [...toMonitoring])
     actor.send({ type: 'BACK' })
     expect(actor.getSnapshot().value).toBe('workspace')
-  })
-
-  it('backends.codex -> BACK -> backends.claude', () => {
-    const actor = startActor()
-    navigateTo(actor, [...toBackendsCodex])
-    actor.send({ type: 'BACK' })
-    expect(actor.getSnapshot().value).toEqual({ backends: 'claude' })
-  })
-
-  it('backends.gemini -> BACK -> backends.codex', () => {
-    const actor = startActor()
-    navigateTo(actor, [...toBackendsGemini])
-    actor.send({ type: 'BACK' })
-    expect(actor.getSnapshot().value).toEqual({ backends: 'codex' })
-  })
-
-  it('backends.opencode -> BACK -> backends.gemini', () => {
-    const actor = startActor()
-    navigateTo(actor, [...toBackendsOpencode])
-    actor.send({ type: 'BACK' })
-    expect(actor.getSnapshot().value).toEqual({ backends: 'gemini' })
   })
 
   it('create_product -> BACK -> monitoring', () => {
@@ -272,11 +206,18 @@ describe('backward navigation (BACK)', () => {
     expect(actor.getSnapshot().value).toBe('monitoring')
   })
 
-  it('monitoring -> BACK -> backends (re-enters at initial child claude)', () => {
+  it('create_project -> BACK -> create_product', () => {
     const actor = startActor()
-    navigateTo(actor, [...toMonitoring])
+    navigateTo(actor, [...toCreateProject])
     actor.send({ type: 'BACK' })
-    expect(actor.getSnapshot().value).toEqual({ backends: 'claude' })
+    expect(actor.getSnapshot().value).toBe('create_product')
+  })
+
+  it('create_team -> BACK -> create_project', () => {
+    const actor = startActor()
+    navigateTo(actor, [...toCreateTeam])
+    actor.send({ type: 'BACK' })
+    expect(actor.getSnapshot().value).toBe('create_project')
   })
 
   it('idle: BACK event is ignored', () => {
@@ -316,43 +257,15 @@ describe('skip navigation (SKIP)', () => {
     expect(snap.context.completedSteps).toEqual([])
   })
 
-  it('workspace -> SKIP -> backends (no markStepCompleted)', () => {
+  it('workspace -> SKIP -> monitoring (no markStepCompleted)', () => {
     const actor = startActor()
     navigateTo(actor, [...toWelcome])
     actor.send({ type: 'SKIP' }) // skip welcome
     actor.send({ type: 'SKIP' }) // skip workspace
 
     const snap = actor.getSnapshot()
-    expect(snap.value).toEqual({ backends: 'claude' })
+    expect(snap.value).toBe('monitoring')
     expect(snap.context.completedSteps).toEqual([])
-  })
-
-  it('backends.claude -> SKIP -> backends.codex (no markStepCompleted)', () => {
-    const actor = startActor()
-    navigateTo(actor, [...toBackendsClaude])
-    actor.send({ type: 'SKIP' })
-    expect(actor.getSnapshot().value).toEqual({ backends: 'codex' })
-  })
-
-  it('backends.codex -> SKIP -> backends.gemini', () => {
-    const actor = startActor()
-    navigateTo(actor, [...toBackendsCodex])
-    actor.send({ type: 'SKIP' })
-    expect(actor.getSnapshot().value).toEqual({ backends: 'gemini' })
-  })
-
-  it('backends.gemini -> SKIP -> backends.opencode', () => {
-    const actor = startActor()
-    navigateTo(actor, [...toBackendsGemini])
-    actor.send({ type: 'SKIP' })
-    expect(actor.getSnapshot().value).toEqual({ backends: 'opencode' })
-  })
-
-  it('backends.opencode -> SKIP -> monitoring (parent SKIP handler)', () => {
-    const actor = startActor()
-    navigateTo(actor, [...toBackendsOpencode])
-    actor.send({ type: 'SKIP' })
-    expect(actor.getSnapshot().value).toBe('monitoring')
   })
 
   it('monitoring -> SKIP -> create_product', () => {
@@ -389,13 +302,8 @@ describe('skip navigation (SKIP)', () => {
   it('skip-all path results in empty completedSteps', () => {
     const actor = startActor()
     actor.send({ type: 'START' })
-    // Skip through every step
     actor.send({ type: 'SKIP' }) // welcome -> workspace
-    actor.send({ type: 'SKIP' }) // workspace -> backends.claude
-    actor.send({ type: 'SKIP' }) // claude -> codex
-    actor.send({ type: 'SKIP' }) // codex -> gemini
-    actor.send({ type: 'SKIP' }) // gemini -> opencode
-    actor.send({ type: 'SKIP' }) // opencode -> monitoring (parent)
+    actor.send({ type: 'SKIP' }) // workspace -> monitoring
     actor.send({ type: 'SKIP' }) // monitoring -> create_product
     actor.send({ type: 'SKIP' }) // create_product -> create_project
     actor.send({ type: 'SKIP' }) // create_project -> create_team
@@ -426,11 +334,11 @@ describe('SKIP_ALL global event', () => {
     expect(actor.getSnapshot().value).toBe('workspace')
   })
 
-  it('default: SKIP_ALL is blocked from backends.claude', () => {
+  it('default: SKIP_ALL is blocked from monitoring', () => {
     const actor = startActor()
-    navigateTo(actor, [...toBackendsClaude])
+    navigateTo(actor, [...toMonitoring])
     actor.send({ type: 'SKIP_ALL' })
-    expect(actor.getSnapshot().value).toEqual({ backends: 'claude' })
+    expect(actor.getSnapshot().value).toBe('monitoring')
   })
 
   it('default: SKIP_ALL is blocked from create_product', () => {
@@ -470,7 +378,7 @@ describe('SKIP_ALL global event', () => {
     expect(actor.getSnapshot().value).toBe('complete')
   })
 
-  it('with guard override: SKIP_ALL from backends.claude -> complete', () => {
+  it('with guard override: SKIP_ALL from monitoring -> complete', () => {
     const overridden = tourMachine.provide({
       guards: { canSkipAll: () => true },
     })
@@ -478,7 +386,7 @@ describe('SKIP_ALL global event', () => {
     actor.start()
     activeActor = actor
 
-    navigateTo(actor, [...toBackendsClaude])
+    navigateTo(actor, [...toMonitoring])
     actor.send({ type: 'SKIP_ALL' })
     expect(actor.getSnapshot().value).toBe('complete')
   })
@@ -526,9 +434,9 @@ describe('RESTART global event', () => {
     expect(snap.context.completedSteps).toEqual([])
   })
 
-  it('from backends.codex: RESTART -> idle with completedSteps cleared', () => {
+  it('from monitoring: RESTART -> idle with completedSteps cleared', () => {
     const actor = startActor()
-    navigateTo(actor, [...toBackendsCodex])
+    navigateTo(actor, [...toMonitoring])
     // Should have accumulated steps
     expect(actor.getSnapshot().context.completedSteps.length).toBeGreaterThan(0)
 
@@ -588,21 +496,18 @@ describe('markStepCompleted action', () => {
 
   it('accumulates steps through multiple NEXT transitions', () => {
     const actor = startActor()
-    navigateTo(actor, [...toBackendsCodex])
+    navigateTo(actor, [...toMonitoring])
 
     const steps = actor.getSnapshot().context.completedSteps
     expect(steps).toContain('welcome')
     expect(steps).toContain('workspace')
-    expect(steps).toContain(JSON.stringify({ backends: 'claude' }))
   })
 
   it('does not duplicate steps on revisit', () => {
     const actor = startActor()
-    // Go to workspace
     navigateTo(actor, [...toWorkspace])
     expect(actor.getSnapshot().context.completedSteps).toContain('welcome')
 
-    // Restart and go through welcome again
     actor.send({ type: 'RESTART' })
     actor.send({ type: 'START' })
     actor.send({ type: 'NEXT' }) // welcome -> workspace, marks 'welcome'
@@ -612,14 +517,15 @@ describe('markStepCompleted action', () => {
     expect(welcomeCount).toBe(1)
   })
 
-  it('serializes hierarchical state value as JSON string', () => {
+  it('re-marking an already-completed step is a no-op (dedup, no clear)', () => {
     const actor = startActor()
-    navigateTo(actor, [...toBackendsClaude])
-    actor.send({ type: 'NEXT' }) // claude -> codex
+    actor.send({ type: 'START' })
+    actor.send({ type: 'NEXT' }) // welcome -> workspace, marks 'welcome'
+    actor.send({ type: 'BACK' }) // workspace -> welcome (no mark)
+    actor.send({ type: 'NEXT' }) // welcome -> workspace again, re-marks 'welcome'
 
     const steps = actor.getSnapshot().context.completedSteps
-    // The step should be the JSON string of the compound state value
-    expect(steps).toContain(JSON.stringify({ backends: 'claude' }))
+    expect(steps.filter((s: string) => s === 'welcome')).toHaveLength(1)
   })
 })
 
@@ -711,8 +617,6 @@ describe('event rejection in invalid states', () => {
     const actor = startActor()
     navigateTo(actor, [...toComplete])
     actor.send({ type: 'RESTART' })
-    // Non-final state DOES process RESTART — this is the fix for the stuck
-    // completion popup.
     expect(actor.getSnapshot().value).toBe('idle')
     expect(actor.getSnapshot().status).toBe('active')
     expect(actor.getSnapshot().context.completedSteps).toEqual([])
@@ -723,77 +627,5 @@ describe('event rejection in invalid states', () => {
     navigateTo(actor, [...toWelcome])
     actor.send({ type: 'BACK' })
     expect(actor.getSnapshot().value).toBe('welcome')
-  })
-})
-
-// ---------------------------------------------------------------------------
-// 10. Hierarchical backends substates
-// ---------------------------------------------------------------------------
-
-describe('hierarchical backends substates', () => {
-  it('entering backends starts at initial child claude', () => {
-    const actor = startActor()
-    navigateTo(actor, [...toBackendsClaude])
-    expect(actor.getSnapshot().value).toEqual({ backends: 'claude' })
-  })
-
-  it('BACK from monitoring goes to backends at initial child claude', () => {
-    const actor = startActor()
-    navigateTo(actor, [...toMonitoring])
-    actor.send({ type: 'BACK' })
-    // Re-enters backends at initial child, not where user left
-    expect(actor.getSnapshot().value).toEqual({ backends: 'claude' })
-  })
-
-  it('all four backend substates are reachable', () => {
-    const actor = startActor()
-    navigateTo(actor, [...toBackendsClaude])
-    expect(actor.getSnapshot().value).toEqual({ backends: 'claude' })
-
-    actor.send({ type: 'NEXT' })
-    expect(actor.getSnapshot().value).toEqual({ backends: 'codex' })
-
-    actor.send({ type: 'NEXT' })
-    expect(actor.getSnapshot().value).toEqual({ backends: 'gemini' })
-
-    actor.send({ type: 'NEXT' })
-    expect(actor.getSnapshot().value).toEqual({ backends: 'opencode' })
-  })
-
-  it('opencode has no local NEXT handler; parent NEXT fires', () => {
-    const actor = startActor()
-    navigateTo(actor, [...toBackendsOpencode])
-    // opencode has no NEXT, so parent backends NEXT fires
-    actor.send({ type: 'NEXT' })
-    expect(actor.getSnapshot().value).toBe('monitoring')
-  })
-
-  it('opencode has no local SKIP handler; parent SKIP fires', () => {
-    const actor = startActor()
-    navigateTo(actor, [...toBackendsOpencode])
-    actor.send({ type: 'SKIP' })
-    expect(actor.getSnapshot().value).toBe('monitoring')
-  })
-
-  it('claude BACK uses parent handler to go to workspace', () => {
-    const actor = startActor()
-    navigateTo(actor, [...toBackendsClaude])
-    // claude has no BACK, parent backends BACK fires
-    actor.send({ type: 'BACK' })
-    expect(actor.getSnapshot().value).toBe('workspace')
-  })
-
-  it('navigating back and forth within backends preserves completedSteps', () => {
-    const actor = startActor()
-    navigateTo(actor, [...toBackendsCodex])
-    const stepsAtCodex = [...actor.getSnapshot().context.completedSteps]
-
-    actor.send({ type: 'BACK' }) // codex -> claude
-    actor.send({ type: 'NEXT' }) // claude -> codex (marks claude again, but dedup)
-
-    // completedSteps should not shrink; claude was already marked
-    expect(
-      actor.getSnapshot().context.completedSteps.length
-    ).toBeGreaterThanOrEqual(stepsAtCodex.length)
   })
 })

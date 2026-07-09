@@ -253,7 +253,7 @@ onMounted(() => {
         </div>
 
         <div class="product-actions">
-          <button class="btn btn-small btn-danger" @click.stop="confirmDelete(product)" :disabled="deletingId === product.id">
+          <button class="btn btn-small btn-danger" @click.stop.prevent="confirmDelete(product)" :disabled="deletingId === product.id">
             <span v-if="deletingId === product.id" class="btn-spinner"></span>
             <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>

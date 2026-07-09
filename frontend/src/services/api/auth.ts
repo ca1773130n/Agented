@@ -18,6 +18,12 @@ export interface LoginResponse {
   token: string;
   expires_at: string;
   user: AuthUser;
+  /**
+   * Present only on the first-admin signup (onboarding): the freshly minted
+   * admin API key. The SPA stores it as its X-API-Key — it is also the bearer
+   * the ai-accounts sidecar accepts for account discovery/import.
+   */
+  api_key?: string;
 }
 
 export const authApi = {

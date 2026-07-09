@@ -17,6 +17,12 @@ vi.mock('../../services/api', () => ({
     localStorage.removeItem('agented-session-token');
   }),
   getSessionToken: vi.fn(() => localStorage.getItem('agented-session-token')),
+  setApiKey: vi.fn((key: string) => {
+    sessionStorage.setItem('agented-api-key', key);
+  }),
+  clearApiKey: vi.fn(() => {
+    sessionStorage.removeItem('agented-api-key');
+  }),
 }));
 
 import { useAuth } from '../useAuth';
@@ -75,6 +81,24 @@ describe('useAuth', () => {
       await logout();
       expect(currentUser.value).toBe(null);
       expect(localStorage.getItem('agented-session-token')).toBe(null);
+    });
+
+    it('clears the X-API-Key BEFORE the revoke call so the right session is revoked', async () => {
+      // The onboarding first-admin signup stores the minted admin key as
+      // X-API-Key; the backend resolves X-API-Key before the cookie session.
+      // The key must be cleared BEFORE authApi.logout() so /logout is attributed
+      // to the cookie session (the real user) — and so it never leaks to the
+      // next user on this tab.
+      sessionStorage.setItem('agented-api-key', 'admin-key-xyz');
+      let keyAtRevoke: string | null = 'unset';
+      logoutMock.mockImplementation(() => {
+        keyAtRevoke = sessionStorage.getItem('agented-api-key');
+        return Promise.resolve(undefined);
+      });
+      const { logout } = useAuth();
+      await logout();
+      expect(keyAtRevoke).toBe(null);
+      expect(sessionStorage.getItem('agented-api-key')).toBe(null);
     });
 
     it('clears local state even if server logout fails', async () => {

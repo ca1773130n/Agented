@@ -200,7 +200,7 @@
     "headline": "Your virtual startup, fully autonomous",
     "subtitle": "The first end-to-end platform for building real products with autonomous AI agents. Define what to build, assign agent teams, and let them ship — from architecture to QA, every department runs itself.",
     "beginSetup": "Begin setup →",
-    "stepsHint": "8 steps · about 2 minutes",
+    "stepsHint": "A few quick steps · about 2 minutes",
     "generateKey": "Generate Admin Key",
     "generateKeyHeading": "Generate your admin API key",
     "generateKeyExplanation": "This key secures your Agented instance. Store it safely — it won't be shown again.",
@@ -223,6 +223,39 @@
       "engineering": "Engineering",
       "harnessPlugins": "Harness & Plugins",
       "harnessDesc": "Full harness engineering — config sync, GRD planning, MCP servers, marketplace plugins, custom skills and hooks."
+    },
+    "signup": {
+      "heading": "Create your operator account",
+      "explanation": "This first account becomes the admin for your Agented instance. You'll sign in with it from now on.",
+      "emailLabel": "Email",
+      "emailPlaceholder": "you{'@'}example.com",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "At least 8 characters",
+      "nameLabel": "Display name (optional)",
+      "namePlaceholder": "How should we address you?",
+      "submit": "Create account →",
+      "submitting": "Creating account…",
+      "required": "Email and password are required",
+      "passwordTooShort": "Password must be at least 8 characters",
+      "failed": "Could not create your account. Please try again."
+    },
+    "discover": {
+      "heading": "Detect your AI accounts",
+      "explanation": "Agented can scan this machine for AI CLIs you're already signed in to (Claude, Codex, OpenCode) and import them in one step.",
+      "detect": "Detect my accounts",
+      "detecting": "Scanning…",
+      "detectFailed": "Detection failed. Make sure the accounts service is running, then try again.",
+      "none": "No existing accounts found on this machine. Add one manually below, or set them up later in Settings.",
+      "importAll": "Import {count} account(s)",
+      "importing": "Importing…",
+      "rescan": "Scan again",
+      "manualAdd": "Add another account manually (e.g. Gemini)",
+      "finish": "Continue →",
+      "status": {
+        "imported": "Imported",
+        "ready": "Signed in",
+        "loggedout": "Not signed in"
+      }
     }
   },
   "tour": {

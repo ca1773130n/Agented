@@ -8,18 +8,9 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: mockPush }),
 }));
 
-vi.mock('../../composables/useToast', () => ({
-  useToast: () => vi.fn(),
-}));
-
-vi.mock('../../services/api', () => ({
-  healthApi: {
-    setup: vi.fn().mockResolvedValue({ api_key: 'test-key-abc123', role: 'admin' }),
-  },
-}));
-
-vi.mock('../../services/api/client', () => ({
-  setApiKey: vi.fn(),
+const mockSignup = vi.fn();
+vi.mock('../../composables/useAuth', () => ({
+  useAuth: () => ({ signup: mockSignup }),
 }));
 
 vi.mock('../../router/guards', () => ({
@@ -28,14 +19,13 @@ vi.mock('../../router/guards', () => ({
 
 const mockStartTour = vi.fn();
 const mockNextStep = vi.fn();
-
 vi.mock('../../composables/useTourMachine', () => ({
   useTourMachine: () => ({
     startTour: mockStartTour,
     nextStep: mockNextStep,
     state: { value: null },
     isActive: { value: false },
-    currentStep: { value: 'idle' },
+    currentStep: { value: 'welcome' },
     canGoBack: { value: false },
     canGoForward: { value: false },
     context: { value: { instanceId: null, schemaVersion: 1, completedSteps: [] } },
@@ -48,107 +38,126 @@ vi.mock('../../composables/useTourMachine', () => ({
   }),
 }));
 
-// Import mocked modules after vi.mock declarations
-import { healthApi } from '../../services/api';
-import { setApiKey } from '../../services/api/client';
+const mockDiscover = vi.fn();
+const mockImport = vi.fn();
+vi.mock('../../services/api/backend-management', () => ({
+  aiAccountsClient: {
+    discoverConfigs: (...a: unknown[]) => mockDiscover(...a),
+    importDiscovered: (...a: unknown[]) => mockImport(...a),
+  },
+}));
+
+import { resetAuthGuard } from '../../router/guards';
+
+const CLAUDE_ITEM = {
+  kind: 'claude',
+  path: '/Users/x/.claude',
+  suggested_name: 'claude (default)',
+  is_logged_in: true,
+  error: null,
+  backend_id: null as string | null,
+};
+
+function mountPage() {
+  return mount(WelcomePage, { global: { stubs: { AccountLoginModal: true } } });
+}
+
+async function advanceToDiscover(wrapper: ReturnType<typeof mountPage>) {
+  await wrapper.find('.cta-btn').trigger('click'); // welcome -> signup
+  await wrapper.find('[data-test="signup-email"]').setValue('a@b.com');
+  await wrapper.find('[data-test="signup-password"]').setValue('password123');
+  await wrapper.find('[data-test="signup-submit"]').trigger('submit');
+  await flushPromises();
+}
 
 describe('WelcomePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset default resolved value
-    vi.mocked(healthApi.setup).mockResolvedValue({
-      api_key: 'test-key-abc123',
-      role: 'admin',
-      role_id: 'role-abc',
-      label: 'Admin',
-      message: 'ok',
-    });
+    mockSignup.mockResolvedValue({ id: 'u1', email: 'a@b.com', display_name: null });
+    mockDiscover.mockResolvedValue({ items: [{ ...CLAUDE_ITEM }] });
+    mockImport.mockResolvedValue({ id: 'bkd-1', kind: 'claude' });
   });
 
   it('renders welcome view by default', () => {
-    const wrapper = mount(WelcomePage);
+    const wrapper = mountPage();
     expect(wrapper.text()).toContain('Your virtual startup');
     expect(wrapper.text()).toContain('Begin setup');
   });
 
-  it('transitions to key generation on Begin Setup click', async () => {
-    const wrapper = mount(WelcomePage);
+  it('transitions to the signup step on Begin Setup click', async () => {
+    const wrapper = mountPage();
     await wrapper.find('.cta-btn').trigger('click');
-    expect(wrapper.text()).toContain('Generate Admin Key');
+    expect(mockStartTour).toHaveBeenCalled();
+    expect(wrapper.find('[data-test="signup-email"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="signup-password"]').exists()).toBe(true);
   });
 
-  it('generates and displays API key', async () => {
-    const wrapper = mount(WelcomePage);
+  it('validates required fields before calling signup', async () => {
+    const wrapper = mountPage();
     await wrapper.find('.cta-btn').trigger('click');
-    await wrapper.find('[data-test="generate-key-btn"]').trigger('click');
+    await wrapper.find('[data-test="signup-submit"]').trigger('submit');
     await flushPromises();
-    expect(wrapper.text()).toContain('test-key-abc123');
+    expect(mockSignup).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-test="signup-error"]').exists()).toBe(true);
   });
 
-  it('shows continue button after key generation', async () => {
-    const wrapper = mount(WelcomePage);
-    await wrapper.find('.cta-btn').trigger('click');
-    await wrapper.find('[data-test="generate-key-btn"]').trigger('click');
-    await flushPromises();
-    expect(wrapper.find('[data-test="continue-btn"]').exists()).toBe(true);
+  it('signs up (display name omitted when blank) and moves to the discover step', async () => {
+    const wrapper = mountPage();
+    await advanceToDiscover(wrapper);
+    expect(mockSignup).toHaveBeenCalledWith('a@b.com', 'password123', undefined);
+    expect(resetAuthGuard).toHaveBeenCalled();
+    expect(wrapper.find('[data-test="detect-btn"]').exists()).toBe(true);
   });
 
-  it('stores API key and navigates on Continue click', async () => {
-    const wrapper = mount(WelcomePage);
+  it('surfaces the signup error and stays on the signup step on failure', async () => {
+    mockSignup.mockRejectedValueOnce(new Error('Email already registered'));
+    const wrapper = mountPage();
     await wrapper.find('.cta-btn').trigger('click');
-    await wrapper.find('[data-test="generate-key-btn"]').trigger('click');
+    await wrapper.find('[data-test="signup-email"]').setValue('a@b.com');
+    await wrapper.find('[data-test="signup-password"]').setValue('password123');
+    await wrapper.find('[data-test="signup-submit"]').trigger('submit');
     await flushPromises();
-    await wrapper.find('[data-test="continue-btn"]').trigger('click');
-    expect(setApiKey).toHaveBeenCalledWith('test-key-abc123');
+    expect(wrapper.find('[data-test="signup-error"]').text()).toContain('Email already registered');
+    expect(wrapper.find('[data-test="detect-btn"]').exists()).toBe(false);
+  });
+
+  it('detects accounts and lists them', async () => {
+    const wrapper = mountPage();
+    await advanceToDiscover(wrapper);
+    await wrapper.find('[data-test="detect-btn"]').trigger('click');
+    await flushPromises();
+    expect(mockDiscover).toHaveBeenCalled();
+    expect(wrapper.find('[data-test="discover-list"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain('claude (default)');
+  });
+
+  it('imports all logged-in, un-imported accounts', async () => {
+    const wrapper = mountPage();
+    await advanceToDiscover(wrapper);
+    await wrapper.find('[data-test="detect-btn"]').trigger('click');
+    await flushPromises();
+    await wrapper.find('[data-test="import-all-btn"]').trigger('click');
+    await flushPromises();
+    expect(mockImport).toHaveBeenCalledWith({
+      kind: 'claude',
+      path: '/Users/x/.claude',
+      display_name: 'claude (default)',
+    });
+  });
+
+  it('finishes onboarding: advances the tour and navigates to settings', async () => {
+    const wrapper = mountPage();
+    await advanceToDiscover(wrapper);
+    await wrapper.find('[data-test="finish-btn"]').trigger('click');
+    expect(mockNextStep).toHaveBeenCalled();
     expect(mockPush).toHaveBeenCalledWith({ path: '/settings', hash: '#general' });
   });
 
-  it('shows error state when key generation fails', async () => {
-    vi.mocked(healthApi.setup).mockRejectedValueOnce(new Error('Setup failed'));
-    const wrapper = mount(WelcomePage);
-    await wrapper.find('.cta-btn').trigger('click');
-    await wrapper.find('[data-test="generate-key-btn"]').trigger('click');
-    await flushPromises();
-    expect(wrapper.text()).toContain('Failed to generate');
-  });
-
-  it('OB-02: warning copy "won\'t be shown again" stays visible alongside the generated key', async () => {
-    const wrapper = mount(WelcomePage);
-    await wrapper.find('.cta-btn').trigger('click');
-    await wrapper.find('[data-test="generate-key-btn"]').trigger('click');
-    await flushPromises();
-    // Both the key and the warning must be visible at the same time so the
-    // user sees the "store it now" notice in context.
-    expect(wrapper.text()).toContain('test-key-abc123');
-    expect(wrapper.text().toLowerCase()).toMatch(/won.?t be shown again/);
-  });
-
-  it('OB-02: Copy button writes the generated key to the clipboard', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText },
-    });
-    const wrapper = mount(WelcomePage);
-    await wrapper.find('.cta-btn').trigger('click');
-    await wrapper.find('[data-test="generate-key-btn"]').trigger('click');
-    await flushPromises();
-    await wrapper.find('.copy-btn').trigger('click');
-    await flushPromises();
-    expect(writeText).toHaveBeenCalledWith('test-key-abc123');
-    expect(wrapper.text()).toContain('Copied');
-  });
-
-  it('OB-03: phase change wraps in a Vue Transition (phase-fade)', async () => {
-    const wrapper = mount(WelcomePage);
+  it('OB-03: signup phase wraps in a Vue Transition (phase-fade)', async () => {
+    const wrapper = mountPage();
     expect(wrapper.find('.welcome-content').exists()).toBe(true);
     await wrapper.find('.cta-btn').trigger('click');
     await flushPromises();
     expect(wrapper.find('.keygen-content').exists()).toBe(true);
-    // Total transition (enter 250ms + leave 150ms) must fit under OB-03's
-    // 500ms budget. Verify timings are encoded in the component's <style>.
-    const styleHtml = wrapper.html()
-    void styleHtml  // styles are scoped; presence of the class is enough.
-    expect(wrapper.html()).toContain('keygen-content')
-  })
+  });
 });
