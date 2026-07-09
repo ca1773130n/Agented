@@ -440,6 +440,7 @@ def test_ouroboros_uses_diff_aware_system_prompt(monkeypatch):
 # Hardened artifact-diff builder (Codex review of Loop 2)
 # -----------------------------------------------------------------
 
+import os  # noqa: E402
 import subprocess as _sp  # noqa: E402
 
 from app.services.goal_judge_service import _redact_secrets, build_artifact_diff  # noqa: E402
@@ -524,3 +525,51 @@ def test_judge_artifact_diff_skipped_for_check_only(tmp_path):
     assert _judge_artifact_diff(cwd, QualityGate(kind="test_pass"), "pytest", None) is None
     assert _judge_artifact_diff(cwd, QualityGate(kind="test_pass", rubric="r"), "pytest", None)
     assert _judge_artifact_diff(cwd, QualityGate(kind="llm_judge", rubric="r"), None, None)
+
+
+# -----------------------------------------------------------------
+# Codex round-2 hardening: symlink safety, redaction gaps, base-ref failure
+# -----------------------------------------------------------------
+
+
+def test_build_diff_does_not_follow_symlink_out_of_worktree(tmp_path):
+    # Codex B1 (blocker): an untracked symlink pointing outside the repo must NOT
+    # have its target content read into the judge prompt.
+    outside = tmp_path.parent / f"{tmp_path.name}_secret.txt"
+    outside.write_text("TOPSECRET_LEAKED_VALUE")
+    _git_repo(tmp_path)
+    (tmp_path / "seed").write_text("x")
+    _commit(tmp_path)
+    os.symlink(outside, tmp_path / "leak.txt")  # untracked symlink out of the repo
+    out = build_artifact_diff(str(tmp_path))
+    assert "TOPSECRET_LEAKED_VALUE" not in out
+    assert "leak.txt" in out  # name shown, content omitted
+
+
+def test_build_diff_none_when_base_ref_invalid(tmp_path):
+    # Codex B3: a failed `git diff <base>` is UNAVAILABLE, not a clean tree.
+    _git_repo(tmp_path)
+    (tmp_path / "seed").write_text("x")
+    _commit(tmp_path)
+    assert build_artifact_diff(str(tmp_path), "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef") is None
+
+
+def test_build_diff_redacts_sensitive_untracked_file(tmp_path):
+    # Codex B2: an untracked .env with a non-KEY=VALUE secret is redacted wholesale.
+    _git_repo(tmp_path)
+    (tmp_path / "seed").write_text("x")
+    _commit(tmp_path)
+    (tmp_path / ".env").write_text("WEIRD_FORMAT super-secret-line-no-equals")
+    out = build_artifact_diff(str(tmp_path))
+    assert "super-secret-line-no-equals" not in out
+    assert ".env" in out
+
+
+def test_redact_pem_and_quoted_secrets():
+    # Codex B2: PEM/OpenSSH private-key blocks and quoted JSON secrets.
+    pem = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXk=\n-----END OPENSSH PRIVATE KEY-----"
+    red = _redact_secrets(pem)
+    assert "b3BlbnNzaC1rZXk=" not in red
+    assert "«redacted-private-key»" in red
+    quoted = '+  "client_secret": "plain-generic-token-value"'
+    assert "plain-generic-token-value" not in _redact_secrets(quoted)

@@ -669,41 +669,80 @@ class GoalJudgeService:
 
 
 # Secret redaction for the artifact diff before it reaches the judge model.
-# KEY=VALUE / TOKEN: forms plus standalone high-entropy / provider-prefixed tokens.
+# KEY=VALUE / TOKEN: forms, quoted JSON/YAML secret values, PEM private-key blocks,
+# plus standalone high-entropy / provider-prefixed tokens.
 _SECRET_ASSIGN_RE = re.compile(
     r"(?im)^([+\- ]?\s*[\w.\-]*"
     r"(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|PASS|PWD|CREDENTIAL|AUTH)"
     r"[\w.\-]*\s*[=:]\s*)(\S.*)$"
 )
+# Quoted JSON/YAML secret values, e.g. "client_secret": "plain-token".
+_SECRET_QUOTED_RE = re.compile(
+    r'(?i)("(?:[\w.\-]*(?:secret|password|passwd|token|api[_\-]?key|client[_\-]?secret'
+    r'|access[_\-]?key|private[_\-]?key|credential|auth)[\w.\-]*)"\s*:\s*)"[^"]*"'
+)
+# PEM / OpenSSH private-key blocks (multiline).
+_PEM_BLOCK_RE = re.compile(
+    r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----"
+)
 _SECRET_TOKEN_RE = re.compile(
     r"\b(?:sk-[A-Za-z0-9]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}"
     r"|xox[baprs]-[A-Za-z0-9-]{10,}|eyJ[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,})\b"
+)
+# Sensitive file paths whose CONTENT is redacted wholesale rather than shown.
+_SENSITIVE_PATH_RE = re.compile(
+    r"(?i)(?:^|/)(?:\.env(?:\.[\w.-]+)?|\.netrc|\.pgpass|id_rsa|id_ed25519|id_ecdsa|id_dsa"
+    r"|credentials|secrets?)(?:$|/)|\.(?:pem|key|p12|pfx|keystore|jks|ppk|crt)$"
 )
 
 
 def _redact_secrets(text: str) -> str:
     """Strip secret-looking values from the diff before it is sent to the judge
-    model — an agent editing a tracked ``.env`` / credentials file must not
-    exfiltrate the secret into the (logged, third-party-served) judge prompt.
-    Conservative: keeps the KEY name and the change shape, redacts only the value.
+    model — an agent editing a tracked ``.env`` / credentials / key file must not
+    exfiltrate the secret into the (logged, provider-served) judge prompt.
+    Conservative: keeps the key NAME and the change shape, redacts only the value.
     """
     if not text:
         return text
+    text = _PEM_BLOCK_RE.sub("«redacted-private-key»", text)
     text = _SECRET_ASSIGN_RE.sub(lambda m: m.group(1) + "«redacted»", text)
+    text = _SECRET_QUOTED_RE.sub(lambda m: m.group(1) + '"«redacted»"', text)
     text = _SECRET_TOKEN_RE.sub("«redacted-secret»", text)
     return text
 
 
 def _read_untracked_content(root: str, rel: str, *, cap: int = 2048) -> Optional[str]:
     """Read a bounded, text-only preview of an untracked file so the judge sees
-    real CONTENT, not just a (game-able) filename. None for binary/unreadable."""
+    real CONTENT, not just a (game-able) filename. None for binary/unreadable/
+    symlinked. Sensitive-path files return a redaction marker instead of content.
+    """
     import os
 
+    if _SENSITIVE_PATH_RE.search(rel):
+        return "[redacted: sensitive file — content omitted]"
     path = os.path.join(root, rel)
+    # SECURITY: never follow a symlink out of the worktree — an agent could plant
+    # e.g. `leak.pem -> ~/.ssh/id_rsa` and read a file outside the repo. Reject
+    # symlinks AND anything resolving outside root; O_NOFOLLOW closes the TOCTOU gap.
     try:
-        with open(path, encoding="utf-8", errors="strict") as fh:
-            data = fh.read(cap + 1)
-    except (OSError, UnicodeDecodeError):
+        if os.path.islink(path):
+            return None
+        real_root = os.path.realpath(root)
+        real_path = os.path.realpath(path)
+        if real_path != real_root and os.path.commonpath([real_root, real_path]) != real_root:
+            return None
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except (OSError, ValueError):
+        return None
+    try:
+        raw = os.read(fd, cap + 1)
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
+    try:
+        data = raw.decode("utf-8", errors="strict")
+    except UnicodeDecodeError:
         return None
     return data[:cap] + "\n…[truncated]" if len(data) > cap else data
 
@@ -738,11 +777,15 @@ def build_artifact_diff(
         # being told nothing changed.
         return r.stdout if r.returncode == 0 else None
 
-    stat = _git(["diff", "--stat", ref])
     diff = _git(["diff", ref])
+    if diff is None:
+        # The PRIMARY signal (git diff vs base) failed — repo missing, bad base
+        # ref, etc. Treat the whole diff as UNAVAILABLE (return None → un-grounded)
+        # rather than letting a still-succeeding `ls-files` fabricate a clean /
+        # untracked-only artifact.
+        return None
+    stat = _git(["diff", "--stat", ref])
     untracked = _git(["ls-files", "--others", "--exclude-standard"])
-    if stat is None and diff is None and untracked is None:
-        return None  # git unavailable — do not fabricate a signal
 
     parts: list[str] = []
     if stat and stat.strip():
