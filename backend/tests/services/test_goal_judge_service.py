@@ -312,3 +312,109 @@ def test_verdict_dataclass_defaults():
     assert v.tokens_in == 0
     assert v.tokens_out == 0
     assert v.cost_usd == 0.0
+
+
+# -----------------------------------------------------------------
+# Composable graders — deterministic check AND rubric
+# -----------------------------------------------------------------
+
+from app.models.loop_spec import QualityGate  # noqa: E402
+
+
+def _rubric_gate(rubric="output must be well-formed"):
+    return QualityGate(kind="test_pass", rubric=rubric)
+
+
+def test_check_and_rubric_compose_both_met(monkeypatch):
+    # check passes (exit 0) AND rubric passes -> composite met.
+    body = {
+        "choices": [{"message": {"content": '{"met": true, "reason": "rubric ok"}'}}],
+        "usage": {"prompt_tokens": 3, "completion_tokens": 2},
+    }
+    _install_mock_proxy(monkeypatch, httpx.Response(200, json=body))
+    v = GoalJudgeService.judge("g", "t", check_cmd="true", quality_gate=_rubric_gate())
+    assert v.met is True
+    assert v.source == "composite"
+    assert "check:" in v.reason and "rubric:" in v.reason
+
+
+def test_check_passes_rubric_fails_is_not_met(monkeypatch):
+    # check passes but the rubric fails -> composite NOT met (the whole point:
+    # "tests pass AND rubric satisfied", not "tests pass so we're done").
+    body = {
+        "choices": [{"message": {"content": '{"met": false, "reason": "sloppy"}'}}],
+        "usage": {"prompt_tokens": 3, "completion_tokens": 2},
+    }
+    _install_mock_proxy(monkeypatch, httpx.Response(200, json=body))
+    v = GoalJudgeService.judge("g", "t", check_cmd="true", quality_gate=_rubric_gate())
+    assert v.met is False
+    assert v.source == "composite"
+    assert "sloppy" in v.reason
+
+
+def test_check_fails_skips_rubric(monkeypatch):
+    # A failing artifact-truth check short-circuits: the LLM rubric is NOT called
+    # (no point paying for it, and the check trace drives the next turn).
+    def explode(*a, **kw):
+        raise AssertionError("LLM must not be called when the check already failed")
+
+    monkeypatch.setattr(goal_judge_service.httpx, "post", explode)
+    v = GoalJudgeService.judge("g", "t", check_cmd="false", quality_gate=_rubric_gate())
+    assert v.met is False
+    assert v.source == "deterministic"
+    assert "exited 1" in v.reason
+
+
+# -----------------------------------------------------------------
+# Artifact-grounded LLM judge (reward-hacking guard)
+# -----------------------------------------------------------------
+
+
+def _capture_payload(monkeypatch):
+    captured: dict = {}
+
+    def capture_post(url, *, json, headers, timeout):
+        captured["system"] = json["messages"][0]["content"]
+        captured["user"] = json["messages"][1]["content"]
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": '{"met": false, "reason": "x"}'}}],
+                "usage": {},
+            },
+        )
+
+    monkeypatch.setattr(
+        goal_judge_service.CLIProxyManager,
+        "get_url_and_key",
+        classmethod(lambda cls: ("http://127.0.0.1:8317/v1", "k")),
+    )
+    monkeypatch.setattr(goal_judge_service.httpx, "post", capture_post)
+    return captured
+
+
+def test_llm_judge_includes_artifact_diff(monkeypatch):
+    captured = _capture_payload(monkeypatch)
+    GoalJudgeService.judge(
+        "add a function foo",
+        "I added foo, all good.",
+        backend_kind="claude",
+        artifact_diff="diff --git a/foo.py b/foo.py\n+def foo(): pass",
+    )
+    assert "def foo(): pass" in captured["user"]
+    # System prompt switches to the artifact-grounded variant.
+    assert "REAL changes" in captured["system"]
+
+
+def test_empty_artifact_diff_is_flagged_to_judge(monkeypatch):
+    # The reward-hacking case: agent claims success, changed nothing. The judge is
+    # explicitly told the tree is clean so it can rule not-met.
+    captured = _capture_payload(monkeypatch)
+    GoalJudgeService.judge(
+        "add a function foo",
+        "Done! foo is implemented and tests pass.",
+        backend_kind="claude",
+        artifact_diff="",
+    )
+    assert "no changes detected" in captured["user"]
+    assert "REAL changes" in captured["system"]

@@ -374,6 +374,9 @@ class _RunnerState:
     last_commit: Optional[str] = None
     # Pre-iteration HEAD for opt-in rollback-on-gate-fail; re-anchored each turn.
     rollback_anchor: Optional[str] = None
+    # HEAD when the loop started — the base for the artifact diff fed to the judge
+    # so it grades the loop's TOTAL change (committed + uncommitted), not prose.
+    loop_start_commit: Optional[str] = None
     # Separate cadence counter for the stale-check sanity layer so it no longer
     # resets ``not_met_streak`` (which the eval_refine stagnation breaker reads —
     # resetting it made stagnation unreachable when a check_cmd was configured).
@@ -685,6 +688,10 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
         # Anchor HEAD before the first body so a not-met iteration can be unwound.
         if iteration_rollback:
             state.rollback_anchor = loop_progress.head_commit(cwd or ".")
+        # Always record the loop-start commit (independent of rollback) so the
+        # judge can be handed the loop's real diff vs this base — the reward-hacking
+        # guard grades what changed, not what the agent claims.
+        state.loop_start_commit = loop_progress.head_commit(cwd or ".")
         _send_initial(
             live_id,
             goal,
@@ -753,6 +760,10 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                 metric_spec=metric_spec,
                 quality_gate=gate,
                 sandbox=sandbox,
+                # Reward-hacking guard: hand the judge the loop's REAL diff vs its
+                # starting commit so "met" reflects what changed, not what the
+                # agent narrated.
+                artifact_diff=_loop_diff(cwd, state.loop_start_commit),
                 # FIX 1: the stable operator session id is the policy session key
                 # for the deterministic-check launch gate (server-scope policies
                 # always apply; a session-scope DENY/ASK refuses to run the check).
@@ -1355,6 +1366,35 @@ def _build_resume_context(session_id: str, cwd: Optional[str] = None) -> str:
         repo_map or "",
     ]
     return "\n".join(p for p in parts if p)
+
+
+def _loop_diff(cwd: Optional[str], base: Optional[str], *, max_chars: int = 12 * 1024) -> str:
+    """The loop's real change vs its starting commit (committed + uncommitted) plus
+    untracked files — handed to the judge so it grades the artifact, not the agent's
+    self-narration. ``base`` None or git failure → diff vs HEAD (working-tree only).
+    Best-effort; returns "" (a meaningful "nothing changed" signal) on a clean tree.
+    """
+    import subprocess
+
+    root = cwd or "."
+    ref = base or "HEAD"
+
+    def _run(args: list[str]) -> str:
+        try:
+            return subprocess.run(
+                ["git", "-C", root, *args], capture_output=True, text=True, timeout=10
+            ).stdout
+        except Exception:
+            return ""
+
+    parts = []
+    diff = _run(["diff", ref])
+    if diff.strip():
+        parts.append(diff)
+    untracked = _run(["ls-files", "--others", "--exclude-standard"])
+    if untracked.strip():
+        parts.append("New untracked files:\n" + untracked.strip())
+    return ("\n".join(parts))[:max_chars]
 
 
 def _repo_map_context(cwd: Optional[str], *, max_files: int = 12) -> str:
