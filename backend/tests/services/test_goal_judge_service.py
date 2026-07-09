@@ -418,3 +418,109 @@ def test_empty_artifact_diff_is_flagged_to_judge(monkeypatch):
     )
     assert "no changes detected" in captured["user"]
     assert "REAL changes" in captured["system"]
+
+
+def test_ouroboros_uses_diff_aware_system_prompt(monkeypatch):
+    # Codex #6: the Ouroboros judge must switch to the diff-aware system prompt
+    # (empty/no-relevant diff -> not confirmed) when a diff is supplied.
+    captured = _capture_payload(monkeypatch)
+    GoalJudgeService.judge(
+        "prove the cache helps",
+        "**Hypothesis:** cache helps\n**Predicted outcome:** faster",
+        backend_kind="claude",
+        hypothesis="cache helps",
+        predicted_outcome="faster",
+        artifact_diff="diff --git a/c.py b/c.py\n+cache = {}",
+    )
+    assert "REAL changes" in captured["system"]
+    assert "cache = {}" in captured["user"]
+
+
+# -----------------------------------------------------------------
+# Hardened artifact-diff builder (Codex review of Loop 2)
+# -----------------------------------------------------------------
+
+import subprocess as _sp  # noqa: E402
+
+from app.services.goal_judge_service import _redact_secrets, build_artifact_diff  # noqa: E402
+
+
+def _git_repo(path):
+    for args in (["init", "-q"], ["config", "user.email", "t@t"], ["config", "user.name", "t"]):
+        _sp.run(["git", *args], cwd=path, check=True)
+
+
+def _commit(path, msg="c"):
+    _sp.run(["git", "add", "-A"], cwd=path, check=True)
+    _sp.run(["git", "commit", "-qm", msg], cwd=path, check=True)
+
+
+def test_build_diff_none_when_not_a_git_repo(tmp_path):
+    # Codex #2: a git failure must NOT be reported as a clean tree.
+    assert build_artifact_diff(str(tmp_path)) is None
+
+
+def test_build_diff_none_when_cwd_missing():
+    assert build_artifact_diff(None) is None
+
+
+def test_build_diff_empty_only_when_genuinely_clean(tmp_path):
+    _git_repo(tmp_path)
+    (tmp_path / "a.txt").write_text("seed")
+    _commit(tmp_path)
+    assert build_artifact_diff(str(tmp_path)) == ""
+
+
+def test_build_diff_includes_untracked_content_not_just_name(tmp_path):
+    # Codex #3: a suggestive filename alone must not stand in for real content.
+    _git_repo(tmp_path)
+    (tmp_path / "seed").write_text("x")
+    _commit(tmp_path)
+    (tmp_path / "feature.py").write_text("def real_impl():\n    return 42\n")
+    out = build_artifact_diff(str(tmp_path))
+    assert "feature.py" in out
+    assert "def real_impl():" in out
+
+
+def test_build_diff_redacts_secret_values(tmp_path):
+    # Codex #5: an edited tracked secret must not be forwarded to the judge model.
+    _git_repo(tmp_path)
+    (tmp_path / ".env").write_text("PLACEHOLDER=1\n")
+    _commit(tmp_path)
+    (tmp_path / ".env").write_text("API_KEY=sk-abcdefghij1234567890abcdefgh\n")
+    out = build_artifact_diff(str(tmp_path))
+    assert "sk-abcdefghij1234567890abcdefgh" not in out
+    assert "redacted" in out
+
+
+def test_build_diff_truncates_with_marker_and_stat_header(tmp_path):
+    # Codex #4: an over-cap diff carries a truncation marker + the full --stat scope.
+    _git_repo(tmp_path)
+    (tmp_path / "big.py").write_text("orig\n")
+    _commit(tmp_path)  # tracked, so a huge rewrite shows in `git diff --stat`
+    (tmp_path / "big.py").write_text("\n".join(f"line_{i} = {i}" for i in range(5000)))
+    out = build_artifact_diff(str(tmp_path), max_chars=2000)
+    assert "diff truncated" in out
+    assert "git diff --stat" in out
+
+
+def test_redact_secrets_unit():
+    assert "«redacted»" in _redact_secrets("+API_TOKEN=supersecretvalue123")
+    assert "supersecretvalue123" not in _redact_secrets("+API_TOKEN=supersecretvalue123")
+    assert "ghp_" not in _redact_secrets("token ghp_ABCDEFGHIJ1234567890abcd here")
+
+
+def test_judge_artifact_diff_skipped_for_check_only(tmp_path):
+    # Codex #1: a check-only loop must NOT compute the diff (the judge never reads
+    # it), but check+rubric or no-check MUST.
+    from app.models.loop_spec import QualityGate
+    from app.services.goal_loop_runner import _judge_artifact_diff
+
+    _git_repo(tmp_path)
+    (tmp_path / "seed").write_text("x")
+    _commit(tmp_path)
+    (tmp_path / "seed").write_text("changed")  # a real diff exists
+    cwd = str(tmp_path)
+    assert _judge_artifact_diff(cwd, QualityGate(kind="test_pass"), "pytest", None) is None
+    assert _judge_artifact_diff(cwd, QualityGate(kind="test_pass", rubric="r"), "pytest", None)
+    assert _judge_artifact_diff(cwd, QualityGate(kind="llm_judge", rubric="r"), None, None)

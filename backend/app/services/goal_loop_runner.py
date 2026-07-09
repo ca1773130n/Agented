@@ -34,7 +34,7 @@ from app.db import (
 from app.models.loop_spec import LoopSpec
 
 from . import loop_progress
-from .goal_judge_service import GoalJudgeService
+from .goal_judge_service import GoalJudgeService, build_artifact_diff
 from .project_session_manager import ProjectSessionManager
 
 # autoresearch_core.should_promote_dead_end is imported lazily inside
@@ -762,8 +762,9 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                 sandbox=sandbox,
                 # Reward-hacking guard: hand the judge the loop's REAL diff vs its
                 # starting commit so "met" reflects what changed, not what the
-                # agent narrated.
-                artifact_diff=_loop_diff(cwd, state.loop_start_commit),
+                # agent narrated. Computed lazily — skipped for check-only loops
+                # where the judge never reads it.
+                artifact_diff=_judge_artifact_diff(cwd, gate, check_cmd, state.loop_start_commit),
                 # FIX 1: the stable operator session id is the policy session key
                 # for the deterministic-check launch gate (server-scope policies
                 # always apply; a session-scope DENY/ASK refuses to run the check).
@@ -1368,33 +1369,17 @@ def _build_resume_context(session_id: str, cwd: Optional[str] = None) -> str:
     return "\n".join(p for p in parts if p)
 
 
-def _loop_diff(cwd: Optional[str], base: Optional[str], *, max_chars: int = 12 * 1024) -> str:
-    """The loop's real change vs its starting commit (committed + uncommitted) plus
-    untracked files — handed to the judge so it grades the artifact, not the agent's
-    self-narration. ``base`` None or git failure → diff vs HEAD (working-tree only).
-    Best-effort; returns "" (a meaningful "nothing changed" signal) on a clean tree.
+def _judge_artifact_diff(cwd: Optional[str], gate, check_cmd: Optional[str], base: Optional[str]):
+    """Compute the artifact diff for the judge ONLY when the LLM path will actually
+    consume it — i.e. there is no check_cmd (LLM/Ouroboros judges) or a rubric is
+    configured alongside the check. A check-only loop returns from ``judge`` on the
+    deterministic verdict without touching the diff, so skip the (up to two 10s) git
+    calls entirely there.
     """
-    import subprocess
-
-    root = cwd or "."
-    ref = base or "HEAD"
-
-    def _run(args: list[str]) -> str:
-        try:
-            return subprocess.run(
-                ["git", "-C", root, *args], capture_output=True, text=True, timeout=10
-            ).stdout
-        except Exception:
-            return ""
-
-    parts = []
-    diff = _run(["diff", ref])
-    if diff.strip():
-        parts.append(diff)
-    untracked = _run(["ls-files", "--others", "--exclude-standard"])
-    if untracked.strip():
-        parts.append("New untracked files:\n" + untracked.strip())
-    return ("\n".join(parts))[:max_chars]
+    rubric = getattr(gate, "rubric", None) if gate else None
+    if check_cmd and not rubric:
+        return None
+    return build_artifact_diff(cwd, base)
 
 
 def _repo_map_context(cwd: Optional[str], *, max_files: int = 12) -> str:
