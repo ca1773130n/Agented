@@ -146,7 +146,19 @@ def _gate_from_legacy(c: dict) -> Optional[QualityGate]:
             min_confidence=float(explicit.get("min_confidence") or 0.0),
         )
     if c.get("check_cmd"):
-        return QualityGate(kind="test_pass")
+        # Preserve any configured rubric alongside the deterministic check so the
+        # judge can compose them (tests pass AND rubric satisfied) instead of the
+        # rubric being silently dropped whenever a check command exists.
+        qg = c.get("quality_gate")
+        rubric = qg.get("rubric") if isinstance(qg, dict) else None
+        return QualityGate(
+            kind="test_pass",
+            rubric=rubric,
+            judge_version=(qg.get("judge_version") if isinstance(qg, dict) else None),
+            min_confidence=float(
+                (qg.get("min_confidence") or 0.0) if isinstance(qg, dict) else 0.0
+            ),
+        )
     ms = c.get("metric_spec")
     if isinstance(ms, dict):
         return QualityGate(

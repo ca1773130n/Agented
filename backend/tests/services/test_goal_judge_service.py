@@ -312,3 +312,309 @@ def test_verdict_dataclass_defaults():
     assert v.tokens_in == 0
     assert v.tokens_out == 0
     assert v.cost_usd == 0.0
+
+
+# -----------------------------------------------------------------
+# Composable graders — deterministic check AND rubric
+# -----------------------------------------------------------------
+
+from app.models.loop_spec import QualityGate  # noqa: E402
+
+
+def _rubric_gate(rubric="output must be well-formed"):
+    return QualityGate(kind="test_pass", rubric=rubric)
+
+
+def test_check_and_rubric_compose_both_met(monkeypatch):
+    # check passes (exit 0) AND rubric passes -> composite met.
+    body = {
+        "choices": [{"message": {"content": '{"met": true, "reason": "rubric ok"}'}}],
+        "usage": {"prompt_tokens": 3, "completion_tokens": 2},
+    }
+    _install_mock_proxy(monkeypatch, httpx.Response(200, json=body))
+    v = GoalJudgeService.judge("g", "t", check_cmd="true", quality_gate=_rubric_gate())
+    assert v.met is True
+    assert v.source == "composite"
+    assert "check:" in v.reason and "rubric:" in v.reason
+
+
+def test_check_passes_rubric_fails_is_not_met(monkeypatch):
+    # check passes but the rubric fails -> composite NOT met (the whole point:
+    # "tests pass AND rubric satisfied", not "tests pass so we're done").
+    body = {
+        "choices": [{"message": {"content": '{"met": false, "reason": "sloppy"}'}}],
+        "usage": {"prompt_tokens": 3, "completion_tokens": 2},
+    }
+    _install_mock_proxy(monkeypatch, httpx.Response(200, json=body))
+    v = GoalJudgeService.judge("g", "t", check_cmd="true", quality_gate=_rubric_gate())
+    assert v.met is False
+    assert v.source == "composite"
+    assert "sloppy" in v.reason
+
+
+def test_check_fails_skips_rubric(monkeypatch):
+    # A failing artifact-truth check short-circuits: the LLM rubric is NOT called
+    # (no point paying for it, and the check trace drives the next turn).
+    def explode(*a, **kw):
+        raise AssertionError("LLM must not be called when the check already failed")
+
+    monkeypatch.setattr(goal_judge_service.httpx, "post", explode)
+    v = GoalJudgeService.judge("g", "t", check_cmd="false", quality_gate=_rubric_gate())
+    assert v.met is False
+    assert v.source == "deterministic"
+    assert "exited 1" in v.reason
+
+
+# -----------------------------------------------------------------
+# Artifact-grounded LLM judge (reward-hacking guard)
+# -----------------------------------------------------------------
+
+
+def _capture_payload(monkeypatch):
+    captured: dict = {}
+
+    def capture_post(url, *, json, headers, timeout):
+        captured["system"] = json["messages"][0]["content"]
+        captured["user"] = json["messages"][1]["content"]
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": '{"met": false, "reason": "x"}'}}],
+                "usage": {},
+            },
+        )
+
+    monkeypatch.setattr(
+        goal_judge_service.CLIProxyManager,
+        "get_url_and_key",
+        classmethod(lambda cls: ("http://127.0.0.1:8317/v1", "k")),
+    )
+    monkeypatch.setattr(goal_judge_service.httpx, "post", capture_post)
+    return captured
+
+
+def test_llm_judge_includes_artifact_diff(monkeypatch):
+    captured = _capture_payload(monkeypatch)
+    GoalJudgeService.judge(
+        "add a function foo",
+        "I added foo, all good.",
+        backend_kind="claude",
+        artifact_diff="diff --git a/foo.py b/foo.py\n+def foo(): pass",
+    )
+    assert "def foo(): pass" in captured["user"]
+    # System prompt switches to the artifact-grounded variant.
+    assert "REAL changes" in captured["system"]
+
+
+def test_empty_artifact_diff_is_flagged_to_judge(monkeypatch):
+    # The reward-hacking case: agent claims success, changed nothing. The judge is
+    # explicitly told the tree is clean so it can rule not-met.
+    captured = _capture_payload(monkeypatch)
+    GoalJudgeService.judge(
+        "add a function foo",
+        "Done! foo is implemented and tests pass.",
+        backend_kind="claude",
+        artifact_diff="",
+    )
+    assert "no changes detected" in captured["user"]
+    assert "REAL changes" in captured["system"]
+
+
+def test_ouroboros_uses_diff_aware_system_prompt(monkeypatch):
+    # Codex #6: the Ouroboros judge must switch to the diff-aware system prompt
+    # (empty/no-relevant diff -> not confirmed) when a diff is supplied.
+    captured = _capture_payload(monkeypatch)
+    GoalJudgeService.judge(
+        "prove the cache helps",
+        "**Hypothesis:** cache helps\n**Predicted outcome:** faster",
+        backend_kind="claude",
+        hypothesis="cache helps",
+        predicted_outcome="faster",
+        artifact_diff="diff --git a/c.py b/c.py\n+cache = {}",
+    )
+    assert "REAL changes" in captured["system"]
+    assert "cache = {}" in captured["user"]
+
+
+# -----------------------------------------------------------------
+# Hardened artifact-diff builder (Codex review of Loop 2)
+# -----------------------------------------------------------------
+
+import os  # noqa: E402
+import subprocess as _sp  # noqa: E402
+
+from app.services.goal_judge_service import (  # noqa: E402
+    _redact_secrets,
+    _SENSITIVE_PATH_RE,
+    build_artifact_diff,
+)
+
+
+def _git_repo(path):
+    for args in (["init", "-q"], ["config", "user.email", "t@t"], ["config", "user.name", "t"]):
+        _sp.run(["git", *args], cwd=path, check=True)
+
+
+def _commit(path, msg="c"):
+    _sp.run(["git", "add", "-A"], cwd=path, check=True)
+    _sp.run(["git", "commit", "-qm", msg], cwd=path, check=True)
+
+
+def test_build_diff_none_when_not_a_git_repo(tmp_path):
+    # Codex #2: a git failure must NOT be reported as a clean tree.
+    assert build_artifact_diff(str(tmp_path)) is None
+
+
+def test_build_diff_none_when_cwd_missing():
+    assert build_artifact_diff(None) is None
+
+
+def test_build_diff_empty_only_when_genuinely_clean(tmp_path):
+    _git_repo(tmp_path)
+    (tmp_path / "a.txt").write_text("seed")
+    _commit(tmp_path)
+    assert build_artifact_diff(str(tmp_path)) == ""
+
+
+def test_build_diff_includes_untracked_content_not_just_name(tmp_path):
+    # Codex #3: a suggestive filename alone must not stand in for real content.
+    _git_repo(tmp_path)
+    (tmp_path / "seed").write_text("x")
+    _commit(tmp_path)
+    (tmp_path / "feature.py").write_text("def real_impl():\n    return 42\n")
+    out = build_artifact_diff(str(tmp_path))
+    assert "feature.py" in out
+    assert "def real_impl():" in out
+
+
+def test_build_diff_redacts_secret_values(tmp_path):
+    # Codex #5: an edited tracked secret must not be forwarded to the judge model.
+    _git_repo(tmp_path)
+    (tmp_path / ".env").write_text("PLACEHOLDER=1\n")
+    _commit(tmp_path)
+    (tmp_path / ".env").write_text("API_KEY=sk-abcdefghij1234567890abcdefgh\n")
+    out = build_artifact_diff(str(tmp_path))
+    assert "sk-abcdefghij1234567890abcdefgh" not in out
+    assert "redacted" in out
+
+
+def test_build_diff_truncates_with_marker_and_stat_header(tmp_path):
+    # Codex #4: an over-cap diff carries a truncation marker + the full --stat scope.
+    _git_repo(tmp_path)
+    (tmp_path / "big.py").write_text("orig\n")
+    _commit(tmp_path)  # tracked, so a huge rewrite shows in `git diff --stat`
+    (tmp_path / "big.py").write_text("\n".join(f"line_{i} = {i}" for i in range(5000)))
+    out = build_artifact_diff(str(tmp_path), max_chars=2000)
+    assert "diff truncated" in out
+    assert "git diff --stat" in out
+
+
+def test_redact_secrets_unit():
+    assert "«redacted»" in _redact_secrets("+API_TOKEN=supersecretvalue123")
+    assert "supersecretvalue123" not in _redact_secrets("+API_TOKEN=supersecretvalue123")
+    assert "ghp_" not in _redact_secrets("token ghp_ABCDEFGHIJ1234567890abcd here")
+
+
+def test_judge_artifact_diff_skipped_for_check_only(tmp_path):
+    # Codex #1: a check-only loop must NOT compute the diff (the judge never reads
+    # it), but check+rubric or no-check MUST.
+    from app.models.loop_spec import QualityGate
+    from app.services.goal_loop_runner import _judge_artifact_diff
+
+    _git_repo(tmp_path)
+    (tmp_path / "seed").write_text("x")
+    _commit(tmp_path)
+    (tmp_path / "seed").write_text("changed")  # a real diff exists
+    cwd = str(tmp_path)
+    assert _judge_artifact_diff(cwd, QualityGate(kind="test_pass"), "pytest", None) is None
+    assert _judge_artifact_diff(cwd, QualityGate(kind="test_pass", rubric="r"), "pytest", None)
+    assert _judge_artifact_diff(cwd, QualityGate(kind="llm_judge", rubric="r"), None, None)
+
+
+# -----------------------------------------------------------------
+# Codex round-2 hardening: symlink safety, redaction gaps, base-ref failure
+# -----------------------------------------------------------------
+
+
+def test_build_diff_does_not_follow_symlink_out_of_worktree(tmp_path):
+    # Codex B1 (blocker): an untracked symlink pointing outside the repo must NOT
+    # have its target content read into the judge prompt.
+    outside = tmp_path.parent / f"{tmp_path.name}_secret.txt"
+    outside.write_text("TOPSECRET_LEAKED_VALUE")
+    _git_repo(tmp_path)
+    (tmp_path / "seed").write_text("x")
+    _commit(tmp_path)
+    os.symlink(outside, tmp_path / "leak.txt")  # untracked symlink out of the repo
+    out = build_artifact_diff(str(tmp_path))
+    assert "TOPSECRET_LEAKED_VALUE" not in out
+    assert "leak.txt" in out  # name shown, content omitted
+
+
+def test_build_diff_none_when_base_ref_invalid(tmp_path):
+    # Codex B3: a failed `git diff <base>` is UNAVAILABLE, not a clean tree.
+    _git_repo(tmp_path)
+    (tmp_path / "seed").write_text("x")
+    _commit(tmp_path)
+    assert build_artifact_diff(str(tmp_path), "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef") is None
+
+
+def test_build_diff_redacts_sensitive_untracked_file(tmp_path):
+    # Codex B2: an untracked .env with a non-KEY=VALUE secret is redacted wholesale.
+    _git_repo(tmp_path)
+    (tmp_path / "seed").write_text("x")
+    _commit(tmp_path)
+    (tmp_path / ".env").write_text("WEIRD_FORMAT super-secret-line-no-equals")
+    out = build_artifact_diff(str(tmp_path))
+    assert "super-secret-line-no-equals" not in out
+    assert ".env" in out
+
+
+def test_redact_pem_and_quoted_secrets():
+    # Codex B2: PEM/OpenSSH private-key blocks and quoted JSON secrets.
+    pem = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXk=\n-----END OPENSSH PRIVATE KEY-----"
+    red = _redact_secrets(pem)
+    assert "b3BlbnNzaC1rZXk=" not in red
+    assert "«redacted-private-key»" in red
+    quoted = '+  "client_secret": "plain-generic-token-value"'
+    assert "plain-generic-token-value" not in _redact_secrets(quoted)
+
+
+def test_build_diff_redacts_tracked_sensitive_file_body(tmp_path):
+    # Symmetric with the untracked reader: a TRACKED sensitive file (.env) with an
+    # unusual, non-KEY=VALUE secret must have its whole diff body dropped, not just
+    # value-regex'd.
+    _git_repo(tmp_path)
+    (tmp_path / ".env").write_text("placeholder\n")
+    _commit(tmp_path)
+    (tmp_path / ".env").write_text("odd_format_secret_blob_no_equals_sign\n")
+    out = build_artifact_diff(str(tmp_path))
+    assert "odd_format_secret_blob_no_equals_sign" not in out
+    assert "redacted: sensitive file" in out
+    assert ".env" in out  # the file header/name still shows scope
+
+
+def test_build_diff_does_not_read_hardlinked_outside_file(tmp_path):
+    # Adversarial review: a hardlink is not a symlink and resolves UNDER the
+    # worktree; its out-of-worktree inode content must NOT be read.
+    outside = tmp_path.parent / f"{tmp_path.name}_hl_secret.txt"
+    outside.write_text("HARDLINK_LEAKED_VALUE")
+    _git_repo(tmp_path)
+    (tmp_path / "seed").write_text("x")
+    _commit(tmp_path)
+    try:
+        os.link(outside, tmp_path / "notes.txt")  # untracked hardlink, non-sensitive name
+    except OSError:
+        import pytest
+
+        pytest.skip("hardlinks unsupported on this filesystem")
+    out = build_artifact_diff(str(tmp_path))
+    assert "HARDLINK_LEAKED_VALUE" not in out
+    assert "notes.txt" in out  # name shown, content omitted
+
+
+def test_redact_url_creds_npm_and_npmrc():
+    # Adversarial review: connection-string password + npm token + .npmrc path.
+    assert "s3cr3tPass" not in _redact_secrets("DATABASE_URL=postgres://admin:s3cr3tPass@host/db")
+    assert "npm_" not in _redact_secrets("//registry.npmjs.org/:_authToken=npm_" + "A" * 36)
+    # .npmrc content is now redacted wholesale via the sensitive-path check.
+    assert _SENSITIVE_PATH_RE.search(".npmrc")

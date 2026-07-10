@@ -34,7 +34,7 @@ from app.db import (
 from app.models.loop_spec import LoopSpec
 
 from . import loop_progress
-from .goal_judge_service import GoalJudgeService
+from .goal_judge_service import GoalJudgeService, build_artifact_diff
 from .project_session_manager import ProjectSessionManager
 
 # autoresearch_core.should_promote_dead_end is imported lazily inside
@@ -374,6 +374,9 @@ class _RunnerState:
     last_commit: Optional[str] = None
     # Pre-iteration HEAD for opt-in rollback-on-gate-fail; re-anchored each turn.
     rollback_anchor: Optional[str] = None
+    # HEAD when the loop started — the base for the artifact diff fed to the judge
+    # so it grades the loop's TOTAL change (committed + uncommitted), not prose.
+    loop_start_commit: Optional[str] = None
     # Separate cadence counter for the stale-check sanity layer so it no longer
     # resets ``not_met_streak`` (which the eval_refine stagnation breaker reads —
     # resetting it made stagnation unreachable when a check_cmd was configured).
@@ -685,6 +688,10 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
         # Anchor HEAD before the first body so a not-met iteration can be unwound.
         if iteration_rollback:
             state.rollback_anchor = loop_progress.head_commit(cwd or ".")
+        # Always record the loop-start commit (independent of rollback) so the
+        # judge can be handed the loop's real diff vs this base — the reward-hacking
+        # guard grades what changed, not what the agent claims.
+        state.loop_start_commit = loop_progress.head_commit(cwd or ".")
         _send_initial(
             live_id,
             goal,
@@ -753,6 +760,11 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
                 metric_spec=metric_spec,
                 quality_gate=gate,
                 sandbox=sandbox,
+                # Reward-hacking guard: hand the judge the loop's REAL diff vs its
+                # starting commit so "met" reflects what changed, not what the
+                # agent narrated. Computed lazily — skipped for check-only loops
+                # where the judge never reads it.
+                artifact_diff=_judge_artifact_diff(cwd, gate, check_cmd, state.loop_start_commit),
                 # FIX 1: the stable operator session id is the policy session key
                 # for the deterministic-check launch gate (server-scope policies
                 # always apply; a session-scope DENY/ASK refuses to run the check).
@@ -1355,6 +1367,19 @@ def _build_resume_context(session_id: str, cwd: Optional[str] = None) -> str:
         repo_map or "",
     ]
     return "\n".join(p for p in parts if p)
+
+
+def _judge_artifact_diff(cwd: Optional[str], gate, check_cmd: Optional[str], base: Optional[str]):
+    """Compute the artifact diff for the judge ONLY when the LLM path will actually
+    consume it — i.e. there is no check_cmd (LLM/Ouroboros judges) or a rubric is
+    configured alongside the check. A check-only loop returns from ``judge`` on the
+    deterministic verdict without touching the diff, so skip the (up to two 10s) git
+    calls entirely there.
+    """
+    rubric = getattr(gate, "rubric", None) if gate else None
+    if check_cmd and not rubric:
+        return None
+    return build_artifact_diff(cwd, base)
 
 
 def _repo_map_context(cwd: Optional[str], *, max_files: int = 12) -> str:

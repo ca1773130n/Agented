@@ -240,7 +240,7 @@ def test_judge_dispatches_to_ouroboros_mode_when_hypothesis_supplied():
     """
     captured = {}
 
-    def fake_ouroboros(cls, goal, turn, h, p, backend, model):
+    def fake_ouroboros(cls, goal, turn, h, p, backend, model, **kw):
         captured["called"] = True
         return JudgeVerdict(
             met=False,
