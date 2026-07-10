@@ -1053,7 +1053,9 @@ def build_doctor(*, refresh: bool = False, timeout: int = 60) -> dict:
             report, _ = json.JSONDecoder().raw_decode(out[start:])
         except (json.JSONDecodeError, ValueError):
             report = None
-    if not isinstance(report, dict):
+    # Require the report's core field, not just any JSON object, so a non-report
+    # envelope (e.g. an ``{"error": ...}`` blob) isn't accepted + cached as healthy.
+    if not isinstance(report, dict) or "findings" not in report:
         return {
             "ok": False,
             "report": None,
