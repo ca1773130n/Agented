@@ -99,6 +99,45 @@ export interface DecisionsResult {
   reason: string | null;
 }
 
+// Tesserae 0.17 `doctor` — memory-graph health.
+export interface DoctorFinding {
+  check_id: string;
+  category: string;
+  severity: 'ok' | 'warn' | 'error' | string;
+  message: string;
+  suggestion: string | null;
+  fixable: boolean;
+}
+
+export interface DoctorReport {
+  project_root: string;
+  checked_at: string;
+  exit_code: number;
+  fixed: string[];
+  findings: DoctorFinding[];
+}
+
+export interface DoctorResult {
+  ok: boolean;
+  report: DoctorReport | null;
+  reason: string | null;
+}
+
+// Tesserae 0.16 `sessions list` — normalized harness session history.
+export interface HarnessSession {
+  date: string;
+  harness: string;
+  project: string;
+  title: string;
+  slug: string;
+}
+
+export interface SessionsResult {
+  ok: boolean;
+  sessions: HarnessSession[];
+  reason: string | null;
+}
+
 export const memorySystemApi = {
   list: () =>
     apiFetch<{ memory_systems: MemorySystemSummary[] }>(
@@ -112,10 +151,12 @@ export const memorySystemApi = {
     date?: string | null,
     project?: string | null,
     refresh = false,
+    maxTurns?: number | null,
   ) => {
     const qs = new URLSearchParams({ period });
     if (date) qs.set('date', date);
     if (project) qs.set('project', project);
+    if (maxTurns) qs.set('max_turns', String(maxTurns));
     if (refresh) qs.set('refresh', 'true');
     return apiFetch<ActivitySummary>(`/admin/system/memory/activity-summary?${qs.toString()}`);
   },
@@ -127,12 +168,29 @@ export const memorySystemApi = {
     project?: string | null,
     includeAgent = true,
     refresh = false,
+    maxTurns?: number | null,
   ) => {
     const qs = new URLSearchParams({ period, include_agent: String(includeAgent) });
     if (date) qs.set('date', date);
     if (project) qs.set('project', project);
+    if (maxTurns) qs.set('max_turns', String(maxTurns));
     if (refresh) qs.set('refresh', 'true');
     return apiFetch<DecisionsResult>(`/admin/system/memory/decisions?${qs.toString()}`);
+  },
+
+  // Tesserae 0.17 memory-graph health (init/graph/registry/staleness/locks).
+  doctor: (refresh = false) => {
+    const qs = refresh ? '?refresh=true' : '';
+    return apiFetch<DoctorResult>(`/admin/system/memory/doctor${qs}`);
+  },
+
+  // Tesserae 0.16 normalized harness session history.
+  sessions: (project?: string | null, limit?: number | null) => {
+    const qs = new URLSearchParams();
+    if (project) qs.set('project', project);
+    if (limit) qs.set('limit', String(limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return apiFetch<SessionsResult>(`/admin/system/memory/sessions${suffix}`);
   },
 
   listTesseraeProjects: () =>

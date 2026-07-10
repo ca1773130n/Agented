@@ -938,6 +938,34 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </template>
       </SidebarFlatLink>
 
+      <!-- Memory Health — Tesserae 0.17 `doctor` graph/registry/staleness checks -->
+      <SidebarFlatLink
+        :label="t('nav.memoryDoctor')"
+        :active="sidebarActive('memory-doctor')"
+        :collapsed-desktop="isCollapsedDesktop()"
+        @click="navTo('memory-doctor')"
+      >
+        <template #icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+          </svg>
+        </template>
+      </SidebarFlatLink>
+
+      <!-- Session History — Tesserae 0.16 normalized harness sessions -->
+      <SidebarFlatLink
+        :label="t('nav.memorySessions')"
+        :active="sidebarActive('memory-sessions')"
+        :collapsed-desktop="isCollapsedDesktop()"
+        @click="navTo('memory-sessions')"
+      >
+        <template #icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M3 3h18v4H3zM3 10h18v4H3zM3 17h18v4H3z"/>
+          </svg>
+        </template>
+      </SidebarFlatLink>
+
       <!-- Triggers History (expandable) -->
       <SidebarGroupToggle
         :label="t('nav.triggerHistory')"

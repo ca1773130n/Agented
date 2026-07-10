@@ -912,6 +912,7 @@ def build_activity_summary(
     period: str = "day",
     day: Optional[str] = None,
     project: Optional[str] = None,
+    max_turns: Optional[int] = None,
     refresh: bool = False,
     timeout: int = 120,
 ) -> dict:
@@ -930,7 +931,9 @@ def build_activity_summary(
         return {"ok": False, "markdown": "", "reason": "invalid date (expected YYYY-MM-DD)"}
     if project is not None and not re.fullmatch(r"[A-Za-z0-9_.][A-Za-z0-9._-]{0,63}", project):
         return {"ok": False, "markdown": "", "reason": "invalid project id"}
-    cache_key = f"summary|{period}|{day}|{project}"
+    if max_turns is not None and (not isinstance(max_turns, int) or max_turns <= 0):
+        return {"ok": False, "markdown": "", "reason": "invalid max_turns (expected positive int)"}
+    cache_key = f"summary|{period}|{day}|{project}|{max_turns}"
     if not refresh:
         cached = _read_tesserae_cache(cache_key, immutable=(period == "day" and _day_is_past(day)))
         if cached is not None:
@@ -942,6 +945,8 @@ def build_activity_summary(
         args += ["--day", day]
     if project:
         args += ["--project", project]
+    if max_turns is not None:
+        args += ["--max-turns", str(max_turns)]  # 0.16: bound per-session cost on big days
     res = _run_tesserae("summary", args, cwd=Path.home(), timeout=timeout)
     if not res.ok:
         return {
@@ -965,6 +970,7 @@ def build_decisions(
     day: Optional[str] = None,
     project: Optional[str] = None,
     include_agent: bool = True,
+    max_turns: Optional[int] = None,
     refresh: bool = False,
     timeout: int = 120,
 ) -> dict:
@@ -980,7 +986,9 @@ def build_decisions(
         return {"ok": False, "decisions": [], "reason": "invalid date (expected YYYY-MM-DD)"}
     if project is not None and not re.fullmatch(r"[A-Za-z0-9_.][A-Za-z0-9._-]{0,63}", project):
         return {"ok": False, "decisions": [], "reason": "invalid project id"}
-    cache_key = f"decisions|{period}|{day}|{project}|{include_agent}"
+    if max_turns is not None and (not isinstance(max_turns, int) or max_turns <= 0):
+        return {"ok": False, "decisions": [], "reason": "invalid max_turns (expected positive int)"}
+    cache_key = f"decisions|{period}|{day}|{project}|{include_agent}|{max_turns}"
     if not refresh:
         cached = _read_tesserae_cache(cache_key, immutable=(period == "day" and _day_is_past(day)))
         if cached is not None:
@@ -994,6 +1002,8 @@ def build_decisions(
         args += ["--project", project]
     if not include_agent:
         args.append("--no-llm")
+    if max_turns is not None:
+        args += ["--max-turns", str(max_turns)]  # 0.16: bound per-session cost on big days
     res = _run_tesserae("decisions", args, cwd=Path.home(), timeout=timeout)
     if not res.ok:
         return {
@@ -1012,6 +1022,80 @@ def build_decisions(
     result = {"ok": True, "decisions": decisions, "reason": None}
     _write_tesserae_cache(cache_key, result)
     return result
+
+
+# Repo root (…/Agented) — where this instance's own ``.tesserae`` graph lives, so
+# ``doctor`` / ``sessions`` run against Agented's memory rather than $HOME.
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def build_doctor(*, refresh: bool = False, timeout: int = 60) -> dict:
+    """Run ``tesserae doctor --json`` (0.17) and return the structured memory-health
+    report: ``{project_root, checked_at, exit_code, fixed[], findings[{check_id,
+    category, severity, message, suggestion, fixable}]}``.
+
+    ``doctor`` exits 1 when it FINDS issues — that is a healthy report, not a CLI
+    failure — so a parseable JSON body counts as success regardless of exit code.
+    Cached with the standard short TTL (graph health is mutable).
+    """
+    cache_key = "doctor"
+    if not refresh:
+        cached = _read_tesserae_cache(cache_key, immutable=False)
+        if cached is not None:
+            return cached
+    res = _run_tesserae("doctor", ["doctor", "--json"], cwd=_REPO_ROOT, timeout=timeout)
+    out = res.stdout or ""
+    start = out.find("{")
+    report = None
+    if start >= 0:
+        try:
+            # raw_decode tolerates any trailing text after the JSON object.
+            report, _ = json.JSONDecoder().raw_decode(out[start:])
+        except (json.JSONDecodeError, ValueError):
+            report = None
+    if not isinstance(report, dict):
+        return {
+            "ok": False,
+            "report": None,
+            "reason": res.reason or (res.stderr or "").strip()[:400] or "tesserae doctor failed",
+        }
+    result = {"ok": True, "report": report, "reason": None}
+    _write_tesserae_cache(cache_key, result)
+    return result
+
+
+def list_sessions(
+    *, project: Optional[str] = None, limit: Optional[int] = None, timeout: int = 60
+) -> dict:
+    """Run ``tesserae sessions list --json`` (0.16) and return the normalized session
+    list ``[{date, harness, project, title, slug}]``. ``limit`` caps the newest N.
+    """
+    if project is not None and not re.fullmatch(r"[A-Za-z0-9_.][A-Za-z0-9._-]{0,63}", project):
+        return {"ok": False, "sessions": [], "reason": "invalid project id"}
+    if limit is not None and (not isinstance(limit, int) or limit <= 0):
+        return {"ok": False, "sessions": [], "reason": "invalid limit"}
+    args = ["sessions", "list", "--json"]
+    if project:
+        args += ["--project", project]
+    res = _run_tesserae("sessions_list", args, cwd=_REPO_ROOT, timeout=timeout)
+    if not res.ok:
+        return {
+            "ok": False,
+            "sessions": [],
+            "reason": res.reason
+            or (res.stderr or "").strip()[:400]
+            or "tesserae sessions list failed",
+        }
+    out = res.stdout or ""
+    start = out.find("[")
+    raw = out[start:] if start >= 0 else out
+    try:
+        sessions = json.loads(raw) if raw.strip() else []
+    except (json.JSONDecodeError, ValueError):
+        return {"ok": False, "sessions": [], "reason": "could not parse tesserae sessions JSON"}
+    if limit and isinstance(sessions, list):
+        sessions = sessions[:limit]
+    return {"ok": True, "sessions": sessions, "reason": None}
 
 
 def init_workspace(project_id: str) -> TesseraeOpResult:

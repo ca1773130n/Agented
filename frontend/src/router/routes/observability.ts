@@ -14,6 +14,18 @@ export const observabilityRoutes: RouteRecordRaw[] = [
     meta: { title: 'Decisions' },
   },
   {
+    path: '/memory/doctor',
+    name: 'memory-doctor',
+    component: () => import('../../views/MemoryDoctorPage.vue'),
+    meta: { title: 'Memory Health' },
+  },
+  {
+    path: '/memory/sessions',
+    name: 'memory-sessions',
+    component: () => import('../../views/MemorySessionsPage.vue'),
+    meta: { title: 'Session History' },
+  },
+  {
     path: '/traces',
     name: 'traces-list',
     component: () => import('../../views/TracesPage.vue'),

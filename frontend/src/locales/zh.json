@@ -183,7 +183,9 @@
     "failedToLoad": "{sections} 加载失败",
     "setup": "设置",
     "activitySummary": "活动摘要",
-    "decisions": "决策"
+    "decisions": "决策",
+    "memoryDoctor": "内存健康",
+    "memorySessions": "会话历史"
   },
   "apiKeyBanner": {
     "title": "需要 API 密钥",
@@ -9897,5 +9899,25 @@
     "human": "人类",
     "agent": "智能体",
     "alternatives": "其他选项"
+  },
+  "memoryDoctor": {
+    "title": "内存健康",
+    "subtitle": "知识图谱健康检查 — 初始化、图、注册表、时效、锁 (Tesserae doctor)。",
+    "refresh": "刷新",
+    "loading": "正在运行健康检查…",
+    "empty": "未发现问题。",
+    "failed": "无法运行内存健康检查。",
+    "errors": "错误",
+    "warnings": "警告",
+    "ok": "正常",
+    "fixable": "可修复"
+  },
+  "memorySessions": {
+    "title": "会话历史",
+    "subtitle": "导入到本实例内存的智能体 harness 会话（最新在前，Tesserae）。",
+    "refresh": "刷新",
+    "loading": "正在加载会话…",
+    "empty": "未找到会话。",
+    "failed": "无法加载会话历史。"
   }
 }
