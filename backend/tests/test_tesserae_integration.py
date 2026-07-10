@@ -465,3 +465,26 @@ def test_max_turns_validation_rejects_nonpositive():
         assert ti.build_activity_summary(period="day", max_turns=0)["ok"] is False
         assert ti.build_decisions(period="day", max_turns=-3)["ok"] is False
         run.assert_not_called()
+
+
+def test_ask_tesserae_no_llm_by_default_llm_opt_in(isolated_db, tmp_path):
+    """Tesserae 0.18 made `ask` synthesize an LLM answer by default; the grounding
+    callers must keep the cheap ranked-retrieval path (--no-llm) unless they opt in."""
+    _seed_project_with_tesserae("proj-ask", root=tmp_path)
+    cap: dict = {}
+
+    class _R:
+        returncode = 0
+        stdout = "hits"
+        stderr = ""
+
+    def fake_run(cmd, **kw):
+        cap["cmd"] = cmd
+        return _R()
+
+    with patch.object(ti.subprocess, "run", fake_run):
+        assert ti.ask_tesserae("proj-ask", "q") == "hits"
+        assert "--no-llm" in cap["cmd"]  # default: cheap raw retrieval preserved
+        assert ti.ask_tesserae("proj-ask", "q", use_llm=True) == "hits"
+        assert "--no-llm" not in cap["cmd"]  # opt-in: new planned LLM answer
+        assert cap["cmd"][cap["cmd"].index("--") + 1] == "q"  # question after `--`
