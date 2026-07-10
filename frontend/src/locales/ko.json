@@ -183,7 +183,9 @@
     "failedToLoad": "{sections} 불러오기 실패",
     "setup": "설정",
     "activitySummary": "활동 요약",
-    "decisions": "의사결정"
+    "decisions": "의사결정",
+    "memoryDoctor": "메모리 상태",
+    "memorySessions": "세션 기록"
   },
   "apiKeyBanner": {
     "title": "API 키 필요",
@@ -9897,5 +9899,25 @@
     "human": "사람",
     "agent": "에이전트",
     "alternatives": "다른 선택지"
+  },
+  "memoryDoctor": {
+    "title": "메모리 상태",
+    "subtitle": "지식 그래프 상태 점검 — 초기화, 그래프, 레지스트리, 신선도, 잠금 (Tesserae doctor).",
+    "refresh": "새로고침",
+    "loading": "상태 점검 실행 중…",
+    "empty": "발견된 항목이 없습니다.",
+    "failed": "메모리 상태 점검을 실행할 수 없습니다.",
+    "errors": "오류",
+    "warnings": "경고",
+    "ok": "정상",
+    "fixable": "수정 가능"
+  },
+  "memorySessions": {
+    "title": "세션 기록",
+    "subtitle": "이 인스턴스 메모리로 가져온 에이전트 하네스 세션 (최신순, Tesserae).",
+    "refresh": "새로고침",
+    "loading": "세션 불러오는 중…",
+    "empty": "세션이 없습니다.",
+    "failed": "세션 기록을 불러올 수 없습니다."
   }
 }

@@ -28,6 +28,19 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+import re as _re
+
+_GRD_VERSION_SEG_RE = _re.compile(r"/grd/(\d+)\.(\d+)\.(\d+)")
+
+
+def _grd_path_version(path: str) -> tuple[int, int, int]:
+    """Parse the ``.../grd/<major.minor.patch>/...`` segment of a cached GRD
+    binary path into a comparable tuple (highest = newest). Returns (-1, -1, -1)
+    for paths without a version segment (npm/legacy layouts) so they lose the
+    semver comparison and fall back to the mtime tiebreak."""
+    m = _GRD_VERSION_SEG_RE.search(path)
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else (-1, -1, -1)
+
 
 # Valid PLAN.md status values (subset of GRD's PlanStatus enum that the
 # UI plumbs through). Kept here so callers in routes don't import the
@@ -140,7 +153,13 @@ class GrdCliService:
         for pattern in patterns:
             matches = glob_module.glob(pattern)
             if matches:
-                matches.sort(key=os.path.getmtime, reverse=True)
+                # Prefer the highest SEMVER (the `.../grd/<version>/bin` cache
+                # segment), falling back to mtime. mtime alone was fragile —
+                # touching an old version dir (or a clock skew) could regress the
+                # selection to a stale binary.
+                matches.sort(
+                    key=lambda p: (_grd_path_version(p), os.path.getmtime(p)), reverse=True
+                )
                 logger.info("GRD %s binary found via glob: %s", label, matches[0])
                 return matches[0], True, False
 

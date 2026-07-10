@@ -93,7 +93,7 @@ ensure_node() {
 # retrieval calls) on PATH,
 # installed with the `semantic` extra (model2vec) — WITHOUT it, retrieval degrades to
 # the hash-bucket stub. Best-effort: a missing/old Tesserae degrades the chat to ungrounded.
-TESSERAE_MIN="0.13.1"
+TESSERAE_MIN="0.17.0"
 # Portable "A >= B" for dotted versions — BSD/macOS `sort` lacks `-V`.
 _version_ge() {
     local a b IFS=.

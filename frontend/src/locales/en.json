@@ -183,7 +183,9 @@
     "failedToLoad": "{sections} failed to load",
     "setup": "Setup",
     "activitySummary": "Activity Summary",
-    "decisions": "Decisions"
+    "decisions": "Decisions",
+    "memoryDoctor": "Memory Health",
+    "memorySessions": "Session History"
   },
   "apiKeyBanner": {
     "title": "API key required",
@@ -9897,5 +9899,25 @@
     "human": "Human",
     "agent": "Agent",
     "alternatives": "Alternatives"
+  },
+  "memoryDoctor": {
+    "title": "Memory Health",
+    "subtitle": "Knowledge-graph health checks — init, graph, registry, staleness, locks (Tesserae doctor).",
+    "refresh": "Refresh",
+    "loading": "Running health checks…",
+    "empty": "No findings.",
+    "failed": "Could not run memory health checks.",
+    "errors": "errors",
+    "warnings": "warnings",
+    "ok": "ok",
+    "fixable": "fixable"
+  },
+  "memorySessions": {
+    "title": "Session History",
+    "subtitle": "Agent-harness sessions imported into this instance's memory, newest first (Tesserae).",
+    "refresh": "Refresh",
+    "loading": "Loading sessions…",
+    "empty": "No sessions found.",
+    "failed": "Could not load session history."
   }
 }

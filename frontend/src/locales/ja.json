@@ -183,7 +183,9 @@
     "failedToLoad": "{sections} の読み込みに失敗しました",
     "setup": "セットアップ",
     "activitySummary": "アクティビティ概要",
-    "decisions": "意思決定"
+    "decisions": "意思決定",
+    "memoryDoctor": "メモリ健全性",
+    "memorySessions": "セッション履歴"
   },
   "apiKeyBanner": {
     "title": "API キーが必要です",
@@ -9897,5 +9899,25 @@
     "human": "人間",
     "agent": "エージェント",
     "alternatives": "他の選択肢"
+  },
+  "memoryDoctor": {
+    "title": "メモリ健全性",
+    "subtitle": "ナレッジグラフの健全性チェック — 初期化・グラフ・レジストリ・鮮度・ロック (Tesserae doctor)。",
+    "refresh": "更新",
+    "loading": "健全性チェックを実行中…",
+    "empty": "検出項目はありません。",
+    "failed": "メモリ健全性チェックを実行できませんでした。",
+    "errors": "エラー",
+    "warnings": "警告",
+    "ok": "正常",
+    "fixable": "修正可能"
+  },
+  "memorySessions": {
+    "title": "セッション履歴",
+    "subtitle": "このインスタンスのメモリに取り込まれたエージェントハーネスのセッション（新しい順、Tesserae）。",
+    "refresh": "更新",
+    "loading": "セッションを読み込み中…",
+    "empty": "セッションがありません。",
+    "failed": "セッション履歴を読み込めませんでした。"
   }
 }

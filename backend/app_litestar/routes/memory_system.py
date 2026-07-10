@@ -148,15 +148,19 @@ def get_activity_summary(
     period: str = "day",
     date: Optional[str] = None,
     project: Optional[str] = None,
+    max_turns: Optional[int] = None,
     refresh: bool = False,
 ) -> dict[str, Any]:
     """Daily/weekly "what you did" digest via ``tesserae summary`` (markdown).
 
     Cached by default (a past day is immutable, today/week use a short TTL);
-    ``refresh=true`` forces a fresh multi-project scan."""
+    ``refresh=true`` forces a fresh multi-project scan. ``max_turns`` (Tesserae
+    0.16) bounds per-session scan cost on very large session days."""
     if period not in ("day", "week"):
         raise ValidationException(detail="period must be 'day' or 'week'")
-    return ti.build_activity_summary(period=period, day=date, project=project, refresh=refresh)
+    return ti.build_activity_summary(
+        period=period, day=date, project=project, max_turns=max_turns, refresh=refresh
+    )
 
 
 @get("/system/memory/decisions", sync_to_thread=True)
@@ -165,16 +169,40 @@ def get_decisions(
     date: Optional[str] = None,
     project: Optional[str] = None,
     include_agent: bool = True,
+    max_turns: Optional[int] = None,
     refresh: bool = False,
 ) -> dict[str, Any]:
     """Human (AskUserQuestion) + agent decisions across projects, in a time
     window, via ``tesserae decisions --json`` (Tesserae 0.15.0). Cached by
-    default; ``refresh=true`` forces a fresh scan."""
+    default; ``refresh=true`` forces a fresh scan. ``max_turns`` (0.16) caps
+    per-session cost."""
     if period not in ("day", "week"):
         raise ValidationException(detail="period must be 'day' or 'week'")
     return ti.build_decisions(
-        period=period, day=date, project=project, include_agent=include_agent, refresh=refresh
+        period=period,
+        day=date,
+        project=project,
+        include_agent=include_agent,
+        max_turns=max_turns,
+        refresh=refresh,
     )
+
+
+@get("/system/memory/doctor", sync_to_thread=True)
+def get_memory_doctor(refresh: bool = False) -> dict[str, Any]:
+    """Memory-graph health report via ``tesserae doctor --json`` (Tesserae 0.17):
+    init / graph-parse / registry / staleness / lock checks with severities. Cached
+    by default; ``refresh=true`` re-runs the checks."""
+    return ti.build_doctor(refresh=refresh)
+
+
+@get("/system/memory/sessions", sync_to_thread=True)
+def get_memory_sessions(
+    project: Optional[str] = None, limit: Optional[int] = None
+) -> dict[str, Any]:
+    """Normalized agent-harness session history via ``tesserae sessions list --json``
+    (Tesserae 0.16). ``limit`` caps to the newest N."""
+    return ti.list_sessions(project=project, limit=limit)
 
 
 @get("/system/memory/tesserae/projects", sync_to_thread=True)
@@ -450,6 +478,8 @@ memory_system_router = Router(
         list_memory_systems,
         get_activity_summary,
         get_decisions,
+        get_memory_doctor,
+        get_memory_sessions,
         list_tesserae_projects,
         set_tesserae_for_project,
         set_tesserae_distill_for_project,

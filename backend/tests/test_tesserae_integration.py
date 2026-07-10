@@ -390,3 +390,78 @@ def test_build_site_maps_to_serve_dry_run(isolated_db, tmp_path, monkeypatch):
 def test_run_tesserae_subcommand_helper_is_gone():
     # The dead helper that hardcoded the broken `project` prefix must stay gone.
     assert not hasattr(ti, "_run_tesserae_subcommand")
+
+
+# --- 0.17 doctor / 0.16 sessions / 0.16 max_turns wiring ---------------------
+
+
+def test_build_doctor_parses_report_even_on_nonzero_exit(monkeypatch):
+    """`tesserae doctor --json` exits 1 when it FINDS issues — a valid report,
+    not a CLI failure. build_doctor must parse stdout regardless of exit code."""
+    from app.services.tesserae_integration import TesseraeOpResult
+
+    report = {
+        "project_root": "/x",
+        "exit_code": 1,
+        "fixed": [],
+        "findings": [
+            {
+                "check_id": "graph_parse",
+                "category": "core",
+                "severity": "warn",
+                "message": "stale",
+                "suggestion": "recompile",
+                "fixable": True,
+            }
+        ],
+    }
+    # ok=False mimics the non-zero exit; stdout still carries the JSON.
+    fake = TesseraeOpResult(
+        op="doctor", ok=False, stdout=json.dumps(report), stderr="", reason="exit_1"
+    )
+    with patch.object(ti, "_run_tesserae", return_value=fake):
+        res = ti.build_doctor(refresh=True)
+    assert res["ok"] is True
+    assert len(res["report"]["findings"]) == 1
+    assert res["report"]["findings"][0]["severity"] == "warn"
+
+
+def test_build_doctor_fails_on_unparseable(monkeypatch):
+    from app.services.tesserae_integration import TesseraeOpResult
+
+    fake = TesseraeOpResult(
+        op="doctor", ok=False, stdout="tesserae: command not found", stderr="", reason="cli_missing"
+    )
+    with patch.object(ti, "_run_tesserae", return_value=fake):
+        res = ti.build_doctor(refresh=True)
+    assert res["ok"] is False
+    assert res["report"] is None
+
+
+def test_list_sessions_parses_array_and_caps_limit():
+    from app.services.tesserae_integration import TesseraeOpResult
+
+    rows = [
+        {"date": "2026-07-01", "harness": "codex", "project": "P", "title": "t1", "slug": "s1"},
+        {"date": "2026-07-01", "harness": "claude", "project": "P", "title": "t2", "slug": "s2"},
+    ]
+    fake = TesseraeOpResult(op="sessions_list", ok=True, stdout=json.dumps(rows), stderr="")
+    with patch.object(ti, "_run_tesserae", return_value=fake):
+        res = ti.list_sessions(limit=1)
+    assert res["ok"] is True
+    assert len(res["sessions"]) == 1  # capped
+    assert res["sessions"][0]["slug"] == "s1"
+
+
+def test_list_sessions_rejects_flag_smuggling_and_bad_limit():
+    with patch.object(ti, "_run_tesserae") as run:
+        assert ti.list_sessions(project="--json=/etc/passwd")["ok"] is False
+        assert ti.list_sessions(limit=0)["ok"] is False
+        run.assert_not_called()
+
+
+def test_max_turns_validation_rejects_nonpositive():
+    with patch.object(ti, "_run_tesserae") as run:
+        assert ti.build_activity_summary(period="day", max_turns=0)["ok"] is False
+        assert ti.build_decisions(period="day", max_turns=-3)["ok"] is False
+        run.assert_not_called()
