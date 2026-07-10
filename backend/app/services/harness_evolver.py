@@ -1647,24 +1647,66 @@ def _patched_summary(patch) -> str:
     return "\n".join(lines) or "(no entries)"
 
 
+def _trajectory_excerpt(session_kind: str, session_id: str, *, max_chars: int = 2000) -> str:
+    """Pull the REAL session trajectory (via the annotator's per-kind fetcher) and
+    return a bounded tail excerpt — where failures surface — so the eval judge grades
+    what actually happened, not just the incident metadata. Best-effort: "" on any
+    failure (the judge then sees "(trajectory unavailable)")."""
+    from app.services.harness_failure_annotator import _FETCHERS, parse_claude_stream
+
+    fetcher = _FETCHERS.get(session_kind)
+    if fetcher is None or not session_id:
+        return ""
+    try:
+        payload = fetcher(session_id)
+    except Exception:
+        return ""
+    if payload is None or not payload.text:
+        return ""
+    try:
+        events = parse_claude_stream(payload.text)
+    except Exception:
+        events = []
+    if not events:
+        return payload.text[-max_chars:]
+    lines: list[str] = []
+    for ev in events[-12:]:  # the tail is where the failure lands
+        frag = (ev.tool_error or ev.content_text or "").strip()
+        if not frag:
+            continue
+        who = ev.role + (f"/{ev.tool_name}" if ev.tool_name else "")
+        lines.append(f"[{who}] {frag[:200]}")
+    return "\n".join(lines)[-max_chars:]
+
+
 def _replay_samples_from_inputs(inputs: dict) -> list:
     from app.models.harness_evolution import ReplaySample
 
-    incidents = [
-        inc for t in (inputs.get("trajectories") or []) for inc in (t.get("incidents") or [])
-    ]
-    if not incidents:
+    trajectories = inputs.get("trajectories") or []
+    if not any(t.get("incidents") for t in trajectories):
         logger.debug("eval gate: no incidents in input window; replay judge skipped (static-only)")
     out = []
-    for inc in incidents[:8]:  # cap judge cost
-        out.append(
-            ReplaySample(
-                incident_kind=inc.get("kind", "unknown"),
-                layer=inc.get("layer", "general"),
-                evidence=inc.get("evidence") or {},
-                trajectory_excerpt="",
+    excerpt_cache: dict[tuple, str] = {}
+    for t in trajectories:
+        if len(out) >= 8:  # cap judge cost
+            break
+        session_kind = t.get("session_kind") or "trigger_execution"
+        session_id = t.get("session_id") or ""
+        key = (session_kind, session_id)
+        if key not in excerpt_cache:
+            excerpt_cache[key] = _trajectory_excerpt(session_kind, session_id)
+        excerpt = excerpt_cache[key]
+        for inc in t.get("incidents") or []:
+            if len(out) >= 8:
+                break
+            out.append(
+                ReplaySample(
+                    incident_kind=inc.get("kind", "unknown"),
+                    layer=inc.get("layer", "general"),
+                    evidence=inc.get("evidence") or {},
+                    trajectory_excerpt=excerpt,
+                )
             )
-        )
     return out
 
 

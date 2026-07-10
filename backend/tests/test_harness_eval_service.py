@@ -183,3 +183,74 @@ def test_passed_verdict_score_reflects_confidence():
     v = ev._verdict(checks)
     assert v.passed is True
     assert v.score > 0.5
+
+
+# --- Loop 4: trajectory-grounded, measured before/after eval gate -------------
+
+
+def test_parse_check_prevents_and_regression_shape():
+    # New comparative shape: prevents + introduces_new.
+    fixed = '{"name":"replay","prevents":true,"introduces_new":false,"confidence":0.9}'
+    c = ev._parse_check(fixed, "replay:x")
+    assert c.passed is True and c.introduces_new is False
+    # A regression fails even if it also prevents the sampled incident.
+    regress = '{"name":"replay","prevents":true,"introduces_new":true,"confidence":0.9}'
+    c2 = ev._parse_check(regress, "replay:x")
+    assert c2.passed is False and c2.introduces_new is True
+
+
+def test_verdict_requires_a_measured_fix_not_just_plausibility():
+    """The core Loop-4 change: a patch that is merely plausible but PREVENTS no real
+    incident (fix-rate 0) must NOT pass — the old gate rubber-stamped it."""
+    from app.models.harness_evolution import CheckResult
+
+    # Two replay checks, neither a fix (prevents=False → passed=False), no regression.
+    no_fix = [
+        CheckResult(name="static:ok", passed=True, confidence=1.0),
+        CheckResult(name="replay:a", passed=False, confidence=0.9),
+        CheckResult(name="replay:b", passed=False, confidence=0.9),
+    ]
+    assert ev._verdict(no_fix).passed is False  # delta == 0 → reject
+
+    with_fix = [
+        CheckResult(name="static:ok", passed=True, confidence=1.0),
+        CheckResult(name="replay:a", passed=True, confidence=0.9),  # a demonstrable fix
+        CheckResult(name="replay:b", passed=False, confidence=0.9),
+    ]
+    v = ev._verdict(with_fix)
+    assert v.passed is True
+    assert "fix_rate=" in (v.notes or "")
+
+
+def test_verdict_fails_closed_on_regression():
+    from app.models.harness_evolution import CheckResult
+
+    checks = [
+        CheckResult(name="replay:a", passed=True, confidence=0.9),  # fixes one
+        CheckResult(
+            name="replay:b", passed=False, introduces_new=True, confidence=0.9
+        ),  # but regresses
+    ]
+    v = ev._verdict(checks)
+    assert v.passed is False  # a confident regression fails the whole patch closed
+    assert "regression" in (v.notes or "")
+
+
+def test_replay_prompt_includes_the_trajectory():
+    """The judge must SEE the real trajectory, not just incident metadata."""
+    sample = ReplaySample(
+        incident_kind="h2_invalid_tool_call",
+        layer="h2",
+        evidence={"error": "x"},
+        trajectory_excerpt="[assistant/Bash] rm -rf / … permission denied",
+    )
+    seen = {}
+
+    def _capture(prompt, provider_kind):
+        seen["prompt"] = prompt
+        return '{"prevents":true,"introduces_new":false,"confidence":0.9}'
+
+    with patch.object(ev, "_run_judge", _capture):
+        ev._replay_checks([sample], patched_summary="p", provider_kind="anthropic")
+    assert "permission denied" in seen["prompt"]  # the real trajectory reached the judge
+    assert "untrusted DATA" in seen["prompt"]  # fenced as data (prompt-injection guard)
