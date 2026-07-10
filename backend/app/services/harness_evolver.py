@@ -1647,11 +1647,35 @@ def _patched_summary(patch) -> str:
     return "\n".join(lines) or "(no entries)"
 
 
+# Defang agent-controlled trajectory text before it enters the eval judge prompt.
+_FENCE_RE = re.compile(r"-{3,}")  # can't close the `---` untrusted-DATA fence
+_VERDICT_WORD_RE = re.compile(r"(?i)\b(prevents|introduces_new)\b")  # can't forge a verdict key
+_INJECT_PHRASE_RE = re.compile(  # classic "ignore previous instructions"
+    r"(?i)\b(?:ignore|disregard|override|forget)\b[^\n]{0,50}"
+    r"\b(?:above|previous|prior|instruction|prompt|rule|system)s?\b"
+)
+
+
+def _sanitize_excerpt(text: str) -> str:
+    """The trajectory is AGENT-CONTROLLED text going into the eval judge that
+    decides whether to auto-apply a harness patch. Neutralize the `---` fence
+    (so it can't break out of the DATA block), the verdict keys (so injected JSON
+    can't masquerade as the judge's answer), and classic injection phrases —
+    raising the bar against a crafted session steering the gate to `prevents:true`.
+    """
+    if not text:
+        return text
+    text = _FENCE_RE.sub(lambda m: "·" * len(m.group(0)), text)
+    text = _VERDICT_WORD_RE.sub(lambda m: m.group(1)[0] + "​" + m.group(1)[1:], text)
+    text = _INJECT_PHRASE_RE.sub("[redacted-injection]", text)
+    return text
+
+
 def _trajectory_excerpt(session_kind: str, session_id: str, *, max_chars: int = 2000) -> str:
     """Pull the REAL session trajectory (via the annotator's per-kind fetcher) and
-    return a bounded tail excerpt — where failures surface — so the eval judge grades
-    what actually happened, not just the incident metadata. Best-effort: "" on any
-    failure (the judge then sees "(trajectory unavailable)")."""
+    return a bounded, sanitized tail excerpt — where failures surface — so the eval
+    judge grades what actually happened, not just the incident metadata. Best-effort:
+    "" on any failure (the judge then sees "(trajectory unavailable)")."""
     from app.services.harness_failure_annotator import _FETCHERS, parse_claude_stream
 
     fetcher = _FETCHERS.get(session_kind)
@@ -1668,7 +1692,7 @@ def _trajectory_excerpt(session_kind: str, session_id: str, *, max_chars: int = 
     except Exception:
         events = []
     if not events:
-        return payload.text[-max_chars:]
+        return _sanitize_excerpt(payload.text[-max_chars:])
     lines: list[str] = []
     for ev in events[-12:]:  # the tail is where the failure lands
         frag = (ev.tool_error or ev.content_text or "").strip()
@@ -1676,7 +1700,7 @@ def _trajectory_excerpt(session_kind: str, session_id: str, *, max_chars: int = 
             continue
         who = ev.role + (f"/{ev.tool_name}" if ev.tool_name else "")
         lines.append(f"[{who}] {frag[:200]}")
-    return "\n".join(lines)[-max_chars:]
+    return _sanitize_excerpt("\n".join(lines)[-max_chars:])
 
 
 def _replay_samples_from_inputs(inputs: dict) -> list:
@@ -1690,6 +1714,9 @@ def _replay_samples_from_inputs(inputs: dict) -> list:
     for t in trajectories:
         if len(out) >= 8:  # cap judge cost
             break
+        incidents = t.get("incidents") or []
+        if not incidents:
+            continue  # no incidents → nothing to judge; skip the trajectory fetch
         session_kind = t.get("session_kind") or "trigger_execution"
         session_id = t.get("session_id") or ""
         key = (session_kind, session_id)

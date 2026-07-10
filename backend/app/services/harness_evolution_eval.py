@@ -128,9 +128,13 @@ def _parse_check(raw: str, name: str) -> CheckResult:
     if start != -1 and end != -1 and end > start:
         try:
             obj = json.loads(raw[start : end + 1])
+            # Asymmetric parse for a fail-closed safety gate: a REGRESSION is truthy
+            # on anything non-false (stringized "true"/1 still blocks), but a FIX
+            # requires a real boolean ``true`` — a stringized/ambiguous "prevents"
+            # (e.g. "false", "no") must NOT count as a fix.
             introduces_new = bool(obj.get("introduces_new"))
             # Back-compat: honor a legacy ``passed`` if the judge omits ``prevents``.
-            prevents = bool(obj.get("prevents", obj.get("passed", False)))
+            prevents = obj.get("prevents", obj.get("passed")) is True
             return CheckResult(
                 name=name,
                 # "fixed" = the patch prevents THIS real incident AND adds no new
@@ -187,9 +191,11 @@ def _verdict(checks: list[CheckResult]) -> EvalVerdict:
     # not a plausibility score. Fail CLOSED on any static break or any confident
     # regression; and, when there are incidents to measure, REQUIRE the patch to fix
     # at least one real incident (delta > 0) rather than merely "look plausible".
-    regressions = [
-        c for c in replay if c.introduces_new and c.confidence >= _REPLAY_CONFIDENCE_FLOOR
-    ]
+    # Asymmetric, fail-closed: a suspected REGRESSION blocks regardless of the
+    # judge's confidence (a wrongly-applied harness patch is far costlier than a
+    # missed improvement), while a FIX must clear the confidence floor to count
+    # toward the measured delta.
+    regressions = [c for c in replay if c.introduces_new]
     fixes = [c for c in replay if c.passed and c.confidence >= _REPLAY_CONFIDENCE_FLOOR]
     if replay:
         passed = bool(fixes) and not regressions and not static_failed

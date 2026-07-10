@@ -254,3 +254,28 @@ def test_replay_prompt_includes_the_trajectory():
         ev._replay_checks([sample], patched_summary="p", provider_kind="anthropic")
     assert "permission denied" in seen["prompt"]  # the real trajectory reached the judge
     assert "untrusted DATA" in seen["prompt"]  # fenced as data (prompt-injection guard)
+
+
+def test_verdict_regression_fails_closed_even_low_confidence():
+    """A safety gate: any SUSPECTED regression blocks, regardless of the judge's
+    confidence (asymmetric vs the fix confidence floor)."""
+    from app.models.harness_evolution import CheckResult
+
+    checks = [
+        CheckResult(name="replay:a", passed=True, confidence=0.95),  # confident fix
+        CheckResult(
+            name="replay:b", passed=False, introduces_new=True, confidence=0.3
+        ),  # low-conf regression
+    ]
+    assert ev._verdict(checks).passed is False
+
+
+def test_parse_check_stringized_prevents_is_not_a_fix():
+    """`prevents` must be a real boolean true — a stringized/ambiguous value fails
+    CLOSED (never counted as a fix)."""
+    assert ev._parse_check('{"prevents":"false","confidence":0.9}', "replay:x").passed is False
+    assert ev._parse_check('{"prevents":"true","confidence":0.9}', "replay:x").passed is False
+    assert ev._parse_check('{"prevents":true,"confidence":0.9}', "replay:x").passed is True
+    # ...but a stringized introduces_new still blocks (fail-closed on regressions).
+    c = ev._parse_check('{"prevents":true,"introduces_new":"true","confidence":0.9}', "replay:x")
+    assert c.introduces_new is True and c.passed is False
