@@ -443,7 +443,11 @@ def test_ouroboros_uses_diff_aware_system_prompt(monkeypatch):
 import os  # noqa: E402
 import subprocess as _sp  # noqa: E402
 
-from app.services.goal_judge_service import _redact_secrets, build_artifact_diff  # noqa: E402
+from app.services.goal_judge_service import (  # noqa: E402
+    _redact_secrets,
+    _SENSITIVE_PATH_RE,
+    build_artifact_diff,
+)
 
 
 def _git_repo(path):
@@ -573,3 +577,44 @@ def test_redact_pem_and_quoted_secrets():
     assert "«redacted-private-key»" in red
     quoted = '+  "client_secret": "plain-generic-token-value"'
     assert "plain-generic-token-value" not in _redact_secrets(quoted)
+
+
+def test_build_diff_redacts_tracked_sensitive_file_body(tmp_path):
+    # Symmetric with the untracked reader: a TRACKED sensitive file (.env) with an
+    # unusual, non-KEY=VALUE secret must have its whole diff body dropped, not just
+    # value-regex'd.
+    _git_repo(tmp_path)
+    (tmp_path / ".env").write_text("placeholder\n")
+    _commit(tmp_path)
+    (tmp_path / ".env").write_text("odd_format_secret_blob_no_equals_sign\n")
+    out = build_artifact_diff(str(tmp_path))
+    assert "odd_format_secret_blob_no_equals_sign" not in out
+    assert "redacted: sensitive file" in out
+    assert ".env" in out  # the file header/name still shows scope
+
+
+def test_build_diff_does_not_read_hardlinked_outside_file(tmp_path):
+    # Adversarial review: a hardlink is not a symlink and resolves UNDER the
+    # worktree; its out-of-worktree inode content must NOT be read.
+    outside = tmp_path.parent / f"{tmp_path.name}_hl_secret.txt"
+    outside.write_text("HARDLINK_LEAKED_VALUE")
+    _git_repo(tmp_path)
+    (tmp_path / "seed").write_text("x")
+    _commit(tmp_path)
+    try:
+        os.link(outside, tmp_path / "notes.txt")  # untracked hardlink, non-sensitive name
+    except OSError:
+        import pytest
+
+        pytest.skip("hardlinks unsupported on this filesystem")
+    out = build_artifact_diff(str(tmp_path))
+    assert "HARDLINK_LEAKED_VALUE" not in out
+    assert "notes.txt" in out  # name shown, content omitted
+
+
+def test_redact_url_creds_npm_and_npmrc():
+    # Adversarial review: connection-string password + npm token + .npmrc path.
+    assert "s3cr3tPass" not in _redact_secrets("DATABASE_URL=postgres://admin:s3cr3tPass@host/db")
+    assert "npm_" not in _redact_secrets("//registry.npmjs.org/:_authToken=npm_" + "A" * 36)
+    # .npmrc content is now redacted wholesale via the sensitive-path check.
+    assert _SENSITIVE_PATH_RE.search(".npmrc")

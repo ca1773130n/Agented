@@ -679,20 +679,25 @@ _SECRET_ASSIGN_RE = re.compile(
 # Quoted JSON/YAML secret values, e.g. "client_secret": "plain-token".
 _SECRET_QUOTED_RE = re.compile(
     r'(?i)("(?:[\w.\-]*(?:secret|password|passwd|token|api[_\-]?key|client[_\-]?secret'
-    r'|access[_\-]?key|private[_\-]?key|credential|auth)[\w.\-]*)"\s*:\s*)"[^"]*"'
+    r"|access[_\-]?key|private[_\-]?key|credential|auth|webhook|dsn|conn(?:ection)?[_\-]?str)"
+    r'[\w.\-]*)"\s*:\s*)"[^"]*"'
 )
 # PEM / OpenSSH private-key blocks (multiline).
 _PEM_BLOCK_RE = re.compile(
     r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----"
 )
 _SECRET_TOKEN_RE = re.compile(
-    r"\b(?:sk-[A-Za-z0-9]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}"
+    r"\b(?:sk-[A-Za-z0-9]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|npm_[A-Za-z0-9]{30,}"
     r"|xox[baprs]-[A-Za-z0-9-]{10,}|eyJ[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,})\b"
 )
+# Credentials embedded in a connection URL: scheme://user:PASSWORD@host.
+_SECRET_URLCRED_RE = re.compile(r"([a-z][\w+.\-]*://[^\s:/@]+:)([^\s/@]{2,})(@)", re.IGNORECASE)
 # Sensitive file paths whose CONTENT is redacted wholesale rather than shown.
+# Path-based omission is the robust defense — value regexes can never be exhaustive.
 _SENSITIVE_PATH_RE = re.compile(
-    r"(?i)(?:^|/)(?:\.env(?:\.[\w.-]+)?|\.netrc|\.pgpass|id_rsa|id_ed25519|id_ecdsa|id_dsa"
-    r"|credentials|secrets?)(?:$|/)|\.(?:pem|key|p12|pfx|keystore|jks|ppk|crt)$"
+    r"(?i)(?:^|/)(?:\.env(?:\.[\w.-]+)?|\.netrc|\.pgpass|\.npmrc|\.pypirc|\.dockercfg"
+    r"|\.docker/config\.json|\.git-credentials|\.htpasswd|id_rsa|id_ed25519|id_ecdsa|id_dsa"
+    r"|credentials|secrets?)(?:$|/)|\.(?:pem|key|p8|p12|pfx|keystore|jks|ppk|crt|asc)$"
 )
 
 
@@ -707,8 +712,28 @@ def _redact_secrets(text: str) -> str:
     text = _PEM_BLOCK_RE.sub("«redacted-private-key»", text)
     text = _SECRET_ASSIGN_RE.sub(lambda m: m.group(1) + "«redacted»", text)
     text = _SECRET_QUOTED_RE.sub(lambda m: m.group(1) + '"«redacted»"', text)
+    text = _SECRET_URLCRED_RE.sub(lambda m: m.group(1) + "«redacted»" + m.group(3), text)
     text = _SECRET_TOKEN_RE.sub("«redacted-secret»", text)
     return text
+
+
+def _redact_sensitive_diff_files(diff_text: str) -> str:
+    """Redact the whole hunk body of any git-diff section for a sensitive-path file
+    (``.env`` / ``*.pem`` / ``id_rsa`` / credentials / …). Symmetric with the
+    untracked reader: value-regex redaction only catches KNOWN secret shapes, so a
+    tracked secret file with an unusual format would otherwise leak — here we drop
+    the whole diff body and keep only the file header.
+    """
+    if not diff_text or "diff --git " not in diff_text:
+        return diff_text
+    out: list[str] = []
+    for sec in re.split(r"(?m)^(?=diff --git )", diff_text):
+        m = re.match(r"diff --git a/(\S+) b/(\S+)", sec)
+        if m and (_SENSITIVE_PATH_RE.search(m.group(1)) or _SENSITIVE_PATH_RE.search(m.group(2))):
+            out.append(sec.splitlines()[0] + "\n[redacted: sensitive file — diff omitted]\n")
+        else:
+            out.append(sec)
+    return "".join(out)
 
 
 def _read_untracked_content(root: str, rel: str, *, cap: int = 2048) -> Optional[str]:
@@ -735,6 +760,13 @@ def _read_untracked_content(root: str, rel: str, *, cap: int = 2048) -> Optional
     except (OSError, ValueError):
         return None
     try:
+        # HARDLINK guard: a hardlink is not a symlink and resolves UNDER the
+        # worktree, so realpath/O_NOFOLLOW don't catch `ln ~/.aws/credentials
+        # notes.txt`. A file an agent legitimately creates has st_nlink == 1;
+        # anything with extra links is a hardlink to an inode we can't vouch for —
+        # skip its content (the name still shows scope).
+        if os.fstat(fd).st_nlink > 1:
+            return None
         raw = os.read(fd, cap + 1)
     except OSError:
         return None
@@ -791,7 +823,9 @@ def build_artifact_diff(
     if stat and stat.strip():
         parts.append("Summary (git diff --stat):\n" + stat.strip())
     if diff and diff.strip():
-        parts.append(diff)
+        # Drop the hunk bodies of tracked sensitive-path files (symmetric with the
+        # untracked reader) before the value-regex pass runs on everything.
+        parts.append(_redact_sensitive_diff_files(diff))
     for name in (untracked or "").splitlines():
         name = name.strip()
         if not name:
