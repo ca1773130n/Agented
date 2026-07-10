@@ -12,6 +12,10 @@ class CheckResult(BaseModel):
     passed: bool
     detail: str = ""
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    # Replay-judge only: the patch plausibly introduces a NEW failure mode. A
+    # regression fails the eval CLOSED regardless of whether it also fixed the
+    # sampled incident (``passed`` = prevents AND not introduces_new).
+    introduces_new: bool = False
 
 
 class ReplaySample(BaseModel):

@@ -696,3 +696,52 @@ def test_rate_limit_does_not_reap_fresh_in_flight_round(
     blocked = evolver.run_evolution_round("proj-no-reap", dry_run=True)
     assert blocked.status == "aborted"
     assert "already" in (blocked.error or "")
+
+
+def test_replay_samples_populate_real_trajectory_excerpt():
+    """Loop 4: the eval-gate samples must carry the REAL session trajectory (via
+    the annotator fetcher), not a hardcoded empty string."""
+    from app.services import harness_evolver as he
+    from app.services.harness_failure_annotator import SessionPayload
+
+    payload = SessionPayload(
+        text="user: do X\nassistant: [tool_error] boom rm failed with permission denied",
+        backend_type="claude",
+        project_id=None,
+        outcome="failure",
+    )
+    inputs = {
+        "trajectories": [
+            {
+                "session_kind": "trigger_execution",
+                "session_id": "exec-1",
+                "incidents": [{"kind": "h2_invalid_tool_call", "layer": "h2", "evidence": {}}],
+            }
+        ]
+    }
+    with patch.dict(
+        "app.services.harness_failure_annotator._FETCHERS",
+        {"trigger_execution": lambda sid: payload},
+    ):
+        samples = he._replay_samples_from_inputs(inputs)
+    assert len(samples) == 1
+    assert samples[0].trajectory_excerpt  # not the old hardcoded ""
+    assert "boom rm failed" in samples[0].trajectory_excerpt
+
+
+def test_replay_excerpt_empty_when_no_fetcher():
+    """Best-effort: an unknown session kind yields "" (judge sees 'unavailable')."""
+    from app.services import harness_evolver as he
+
+    inputs = {
+        "trajectories": [
+            {
+                "session_kind": "no_such_kind",
+                "session_id": "s1",
+                "incidents": [{"kind": "x", "layer": "h2", "evidence": {}}],
+            }
+        ]
+    }
+    samples = he._replay_samples_from_inputs(inputs)
+    assert len(samples) == 1
+    assert samples[0].trajectory_excerpt == ""
