@@ -1692,7 +1692,10 @@ def _trajectory_excerpt(session_kind: str, session_id: str, *, max_chars: int = 
     except Exception:
         events = []
     if not events:
-        return _sanitize_excerpt(payload.text[-max_chars:])
+        # Sanitize a slightly-larger window, THEN take the final tail, so redaction
+        # growth (ZWSP inserts / "[redacted-injection]") can't push a downstream
+        # re-truncation to shave the most-recent tail where the failure lands.
+        return _sanitize_excerpt(payload.text[-(max_chars + 512) :])[-max_chars:]
     lines: list[str] = []
     for ev in events[-12:]:  # the tail is where the failure lands
         frag = (ev.tool_error or ev.content_text or "").strip()
@@ -1700,7 +1703,7 @@ def _trajectory_excerpt(session_kind: str, session_id: str, *, max_chars: int = 
             continue
         who = ev.role + (f"/{ev.tool_name}" if ev.tool_name else "")
         lines.append(f"[{who}] {frag[:200]}")
-    return _sanitize_excerpt("\n".join(lines)[-max_chars:])
+    return _sanitize_excerpt("\n".join(lines))[-max_chars:]
 
 
 def _replay_samples_from_inputs(inputs: dict) -> list:
