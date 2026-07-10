@@ -1453,25 +1453,27 @@ def ask_tesserae(
     question: str,
     *,
     top_k: int = 5,
+    use_llm: bool = False,
 ) -> Optional[str]:
     """Run ``tesserae ask`` for the project's compiled graph. Returns
     Codex-friendly markdown / text or ``None`` on any failure (so the
-    evolver workspace builder can fall back gracefully)."""
+    evolver workspace builder can fall back gracefully).
+
+    Tesserae 0.18 made ``ask`` synthesize a cited LLM answer BY DEFAULT (planned
+    retrieval). ``use_llm=False`` (default) appends ``--no-llm`` to keep the prior
+    cheap, deterministic ranked-retrieval behavior + cost for grounding callers
+    (chat answer pipeline, harness evolver, KG signals); set ``use_llm=True`` for
+    the new planned, cited LLM answer.
+    """
     root = get_tesserae_root(project_id)
     if root is None:
         return None
     # `--` terminates flag parsing so a user question starting with '-' can't be
     # smuggled in as a CLI flag (argv injection).
-    cmd = [
-        _TESSERAE_CMD,
-        "ask",
-        "--project",
-        str(root),
-        "--top-k",
-        str(top_k),
-        "--",
-        question,
-    ]
+    cmd = [_TESSERAE_CMD, "ask", "--project", str(root), "--top-k", str(top_k)]
+    if not use_llm:
+        cmd.append("--no-llm")  # 0.18: preserve cheap ranked-retrieval grounding
+    cmd += ["--", question]
     try:
         result = subprocess.run(
             cmd,
