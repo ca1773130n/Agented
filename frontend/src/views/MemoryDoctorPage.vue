@@ -68,20 +68,25 @@ async function load(refresh = false) {
   loading.value = true;
   error.value = null;
   lintError.value = null;
-  try {
-    const [doc, lnt] = await Promise.all([
-      memorySystemApi.doctor(refresh),
-      memorySystemApi.lint(refresh),
-    ]);
-    report.value = doc.report;
-    if (!doc.ok) error.value = doc.reason || t('memoryDoctor.failed');
-    lint.value = lnt.report;
-    if (!lnt.ok) lintError.value = lnt.reason || t('memoryDoctor.lint.failed');
-  } catch (e) {
-    error.value = (e as Error).message || t('memoryDoctor.failed');
-  } finally {
-    loading.value = false;
+  // allSettled, not all: doctor and lint are independent reports — one throwing
+  // at the HTTP layer must not blank the other section.
+  const [doc, lnt] = await Promise.allSettled([
+    memorySystemApi.doctor(refresh),
+    memorySystemApi.lint(refresh),
+  ]);
+  if (doc.status === 'fulfilled') {
+    report.value = doc.value.report;
+    if (!doc.value.ok) error.value = doc.value.reason || t('memoryDoctor.failed');
+  } else {
+    error.value = (doc.reason as Error)?.message || t('memoryDoctor.failed');
   }
+  if (lnt.status === 'fulfilled') {
+    lint.value = lnt.value.report;
+    if (!lnt.value.ok) lintError.value = lnt.value.reason || t('memoryDoctor.lint.failed');
+  } else {
+    lintError.value = (lnt.reason as Error)?.message || t('memoryDoctor.lint.failed');
+  }
+  loading.value = false;
 }
 
 onMounted(() => load());
@@ -138,9 +143,9 @@ onMounted(() => load());
         <div v-if="lintTotal === 0" class="doctor-state">{{ t('memoryDoctor.lint.clean') }}</div>
         <template v-else>
           <div class="doctor-counts">
-            <span class="doctor-pill doctor-pill--error">{{ lint.by_severity.error || 0 }} {{ t('memoryDoctor.errors') }}</span>
-            <span class="doctor-pill doctor-pill--warn">{{ lint.by_severity.warning || 0 }} {{ t('memoryDoctor.warnings') }}</span>
-            <span class="doctor-pill doctor-pill--ok">{{ lint.by_severity.info || 0 }} {{ t('memoryDoctor.lint.info') }}</span>
+            <span class="doctor-pill doctor-pill--error">{{ (lint.by_severity || {}).error || 0 }} {{ t('memoryDoctor.errors') }}</span>
+            <span class="doctor-pill doctor-pill--warn">{{ (lint.by_severity || {}).warning || 0 }} {{ t('memoryDoctor.warnings') }}</span>
+            <span class="doctor-pill doctor-pill--ok">{{ (lint.by_severity || {}).info || 0 }} {{ t('memoryDoctor.lint.info') }}</span>
           </div>
 
           <div class="lint-codes">
