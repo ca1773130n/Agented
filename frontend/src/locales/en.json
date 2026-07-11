@@ -1430,7 +1430,8 @@
       "loginCompleted": "API proxy login completed",
       "openDeviceLogin": "Open Device Login Page",
       "openOauthLogin": "Open OAuth Login Page",
-      "waitingSignIn": "Waiting for sign-in to complete..."
+      "waitingSignIn": "Waiting for sign-in to complete...",
+      "failed": "Re-authentication failed."
     }
   },
   "backendConnect": {
@@ -3375,7 +3376,9 @@
       "unreachable": "Proxy unreachable",
       "disabled": "Disabled",
       "unknown": "Unknown"
-    }
+    },
+    "toastCompleteSignIn": "Finish signing in in the opened tab — this page will update when the account is added.",
+    "toastLoginSkipped": "Login skipped — no account was added."
   },
   "agentCapabilityMatrix": {
     "featureName": "Agent capability matrix",

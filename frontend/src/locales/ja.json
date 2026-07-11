@@ -1430,7 +1430,8 @@
       "loginCompleted": "API proxy ログイン完了",
       "openDeviceLogin": "デバイスログインページを開く",
       "openOauthLogin": "OAuth ログインページを開く",
-      "waitingSignIn": "サインインの完了を待っています..."
+      "waitingSignIn": "サインインの完了を待っています...",
+      "failed": "再認証に失敗しました。"
     }
   },
   "backendConnect": {
@@ -3375,7 +3376,9 @@
       "unreachable": "プロキシに接続できません",
       "disabled": "無効",
       "unknown": "不明"
-    }
+    },
+    "toastCompleteSignIn": "開いたタブでサインインを完了してください — アカウントが追加されるとこのページが更新されます。",
+    "toastLoginSkipped": "ログインをスキップしました — アカウントは追加されていません。"
   },
   "agentCapabilityMatrix": {
     "featureName": "エージェント機能マトリックス",
