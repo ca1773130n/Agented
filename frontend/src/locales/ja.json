@@ -5996,7 +5996,11 @@
     "deployHarnessError": "ハーネスのデプロイに失敗しました",
     "teamStarted": "チームの実行を開始しました",
     "runTeamError": "チームの実行に失敗しました",
-    "setupCompleted": "セットアップが正常に完了しました"
+    "setupCompleted": "セットアップが正常に完了しました",
+    "toast": {
+      "loadSessionsFailed": "アクティブセッションの読み込みに失敗しました",
+      "loadInstancesFailed": "プロジェクトインスタンスの読み込みに失敗しました"
+    }
   },
   "projectHealthScorecard": {
     "title": "プロジェクト健全性スコアカード",

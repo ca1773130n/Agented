@@ -34,7 +34,13 @@ function makeEntityValidator(fetchFn: (id: string) => Promise<unknown>): (id: st
       if (import.meta.env.DEV) {
         console.warn(`[Router Guard] Entity validation failed for id="${id}":`, err);
       }
-      return false;
+      // Only a definitive 404 means the entity doesn't exist → not-found. A
+      // transient/auth/network error must NOT masquerade as 404 (that turns a
+      // backend hiccup into a dead-end "Not Found" for a VALID id) — re-throw
+      // so the guard's fail-open catch lets the component load + surface it.
+      const status = (err as { status?: number })?.status;
+      if (status === 404) return false;
+      throw err;
     }
   };
 }

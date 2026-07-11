@@ -5996,7 +5996,11 @@
     "deployHarnessError": "部署工具集失败",
     "teamStarted": "团队执行已启动",
     "runTeamError": "运行团队失败",
-    "setupCompleted": "设置成功完成"
+    "setupCompleted": "设置成功完成",
+    "toast": {
+      "loadSessionsFailed": "加载活动会话失败",
+      "loadInstancesFailed": "加载项目实例失败"
+    }
   },
   "projectHealthScorecard": {
     "title": "项目健康评分卡",

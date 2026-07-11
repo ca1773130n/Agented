@@ -247,6 +247,8 @@ async function loadData() {
   loadHarnessSetupStatus();
   loadActiveSessions();
   loadSaActivityStatus();
+  // Guard: loadData can run again on reload — don't orphan the prior 7s interval.
+  if (activityPollInterval) clearInterval(activityPollInterval);
   activityPollInterval = setInterval(loadSaActivityStatus, 7000);
   loadProjectInstances();
   return project.value;
@@ -306,7 +308,11 @@ async function loadActiveSessions() {
       }
     }
     activeSessions.value = sessionInfos;
-  } catch { activeSessions.value = []; }
+  } catch {
+    // A fetch failure must not read as "no active sessions".
+    activeSessions.value = [];
+    showToast(t('projectDashboard.toast.loadSessionsFailed'), 'error');
+  }
   finally { isLoadingSessions.value = false; }
 }
 
@@ -317,6 +323,7 @@ async function loadProjectInstances() {
     projectInstances.value = data.instances || [];
   } catch {
     projectInstances.value = [];
+    showToast(t('projectDashboard.toast.loadInstancesFailed'), 'error');
   } finally {
     isLoadingInstances.value = false;
   }

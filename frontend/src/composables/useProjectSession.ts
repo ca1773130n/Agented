@@ -485,6 +485,12 @@ export function useProjectSession(projectId: Ref<string>) {
         }
       },
     },
+    // A successful (re)connect clears the strike count, so the 3-strike give-up
+    // trips only on CONSECUTIVE failures — otherwise a healthy long-running
+    // stream that reconnects a few times over its life is force-closed.
+    onOpen: () => {
+      errorCount = 0;
+    },
     onError: () => {
       errorCount++;
       if (errorCount >= 3) {

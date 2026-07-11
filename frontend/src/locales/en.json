@@ -5996,7 +5996,11 @@
     "deployHarnessError": "Failed to deploy harness",
     "teamStarted": "Team execution started",
     "runTeamError": "Failed to run team",
-    "setupCompleted": "Setup completed successfully"
+    "setupCompleted": "Setup completed successfully",
+    "toast": {
+      "loadSessionsFailed": "Failed to load active sessions",
+      "loadInstancesFailed": "Failed to load project instances"
+    }
   },
   "projectHealthScorecard": {
     "title": "Project Health Scorecard",
