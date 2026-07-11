@@ -9922,7 +9922,16 @@
     "errors": "错误",
     "warnings": "警告",
     "ok": "正常",
-    "fixable": "可修复"
+    "fixable": "可修复",
+    "lint": {
+      "title": "图谱检查",
+      "subtitle": "图谱质量——无支撑的主张、孤立/失效链接、Wiki 漂移、陈旧项。",
+      "failed": "运行图谱检查失败",
+      "clean": "无检查发现——图谱是干净的。",
+      "info": "信息",
+      "autoFixable": "可自动修复",
+      "truncated": "显示 {total} 项中的 {shown} 项。"
+    }
   },
   "memorySessions": {
     "title": "会话历史",
