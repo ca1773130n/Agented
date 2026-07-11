@@ -395,13 +395,19 @@ def test_workflow_node_popen_scrubs_llm_key(monkeypatch):
     assert "ANTHROPIC_API_KEY" not in env
 
 
-def test_setup_service_popen_passes_scrubbed_env(monkeypatch):
-    """SetupExecutionService.Popen must pass the scrubbed env too (#11)."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", POISON)
-    monkeypatch.setenv("AGENTED_SERVER_NO_LLM_KEYS", "1")
-    # The Popen line now imports config + passes env=config.subprocess_env();
-    # verify the source wires env= (behavioral pin without spinning a real setup run).
+def test_all_harness_spawners_route_through_subprocess_env():
+    """Bug-class guard (#11): every service that spawns a harness/inference
+    subprocess must route its env through config.subprocess_env, else a
+    server-baked LLM key leaks past AGENTED_SERVER_NO_LLM_KEYS. Source-pins the
+    complete set found in the sweep (workflow node covered by the behavioral
+    test above)."""
     from pathlib import Path
 
-    src = Path("app/services/setup_execution_service.py").read_text()
-    assert "env=config.subprocess_env()" in src
+    for rel in (
+        "app/services/setup_execution_service.py",
+        "app/services/base_generation_service.py",
+        "app/services/replay_service.py",
+        "app/services/model_discovery_service.py",
+    ):
+        src = Path(rel).read_text()
+        assert "subprocess_env(" in src, f"{rel} spawns without config.subprocess_env"
