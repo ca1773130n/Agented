@@ -9933,6 +9933,17 @@
       "info": "情報",
       "autoFixable": "自動修正可能",
       "truncated": "{total}件中{shown}件を表示。"
+    },
+    "backend": {
+      "label": "LLM バックエンド",
+      "live": "稼働中",
+      "down": "到達不可"
+    },
+    "engine": {
+      "button": "統合リフレッシュ",
+      "running": "リフレッシュ中…",
+      "done": "リフレッシュ完了",
+      "failed": "リフレッシュ失敗"
     }
   },
   "memorySessions": {

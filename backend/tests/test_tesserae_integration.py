@@ -608,6 +608,63 @@ def test_run_research_async_job_lifecycle():
     assert job["result"]["report_md"] == "# R"
 
 
+def test_config_status_parses_provider_and_liveness():
+    from app.services.tesserae_integration import TesseraeOpResult
+
+    text = (
+        "Tesserae LLM backend (resolved for .):\n"
+        "  provider   : codex   [~/.tesserae/config.json]\n"
+        "  codex_home : /Users/x/.codex   [env CODEX_HOME]\n"
+        "  effort     : medium   [default]\n\n"
+        "  liveness   : ✓ OK (backend responded)\n"
+    )
+    fake = TesseraeOpResult(op="config", ok=True, stdout=text, stderr="")
+    with patch.object(ti, "_run_tesserae", return_value=fake):
+        res = ti.config_status()
+    assert res["ok"] is True
+    assert res["provider"] == "codex"
+    assert res["effort"] == "medium"
+    assert res["liveness_ok"] is True
+    assert res["source"] == "~/.tesserae/config.json"
+
+
+def test_config_status_marks_dead_backend():
+    from app.services.tesserae_integration import TesseraeOpResult
+
+    text = "  provider   : claude\n  liveness   : ✗ FAILED (no response)\n"
+    fake = TesseraeOpResult(op="config", ok=True, stdout=text, stderr="")
+    with patch.object(ti, "_run_tesserae", return_value=fake):
+        res = ti.config_status()
+    assert res["liveness_ok"] is False
+
+
+def test_config_status_empty_output_is_failure():
+    from app.services.tesserae_integration import TesseraeOpResult
+
+    fake = TesseraeOpResult(op="config", ok=False, stdout="", stderr="cli missing", reason="cli_missing")
+    with patch.object(ti, "_run_tesserae", return_value=fake):
+        assert ti.config_status()["ok"] is False
+
+
+def test_engine_refresh_async_job_lifecycle():
+    import time as _t
+
+    from app.services.tesserae_integration import TesseraeOpResult
+
+    fake = TesseraeOpResult(op="engine", ok=True, stdout="drained", stderr="")
+    with patch.object(ti, "_run_tesserae", return_value=fake):
+        job_id = ti.engine_refresh_async()
+        assert job_id.startswith("tess-engine-")
+        for _ in range(50):
+            job = ti.get_op_job(job_id)
+            if job and job["status"] != "running":
+                break
+            _t.sleep(0.02)
+    job = ti.get_op_job(job_id)
+    assert job["status"] == "completed"
+    assert job["op"] == "engine-refresh"
+
+
 def test_list_sessions_parses_array_and_caps_limit():
     from app.services.tesserae_integration import TesseraeOpResult
 

@@ -4,7 +4,7 @@
  * staleness / lock checks for this instance's knowledge graph, grouped by
  * severity. Sibling of ActivitySummaryPage / DecisionsPage.
  */
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { memorySystemApi } from '../services/api/memory-system';
@@ -13,6 +13,7 @@ import type {
   DoctorReport,
   LintFinding,
   LintReport,
+  MemoryConfig,
 } from '../services/api/memory-system';
 
 const { t } = useI18n();
@@ -25,6 +26,15 @@ const error = ref<string | null>(null);
 const lint = ref<LintReport | null>(null);
 const lintError = ref<string | null>(null);
 const LINT_CAP = 50; // don't render 500+ dangling-link rows; surface the count instead
+
+// Tesserae `config status` — resolved LLM backend + liveness (loaded alongside).
+const config = ref<MemoryConfig | null>(null);
+
+// Tesserae `engine --all --once` — operator-triggered coalesced recompile.
+const engineRunning = ref(false);
+const engineMsg = ref<string | null>(null);
+let enginePoll: ReturnType<typeof setInterval> | null = null;
+let alive = true;
 
 const SEV_ORDER: Record<string, number> = { error: 0, warn: 1, ok: 2 };
 const LINT_SEV_ORDER: Record<string, number> = { error: 0, warning: 1, info: 2 };
@@ -68,11 +78,12 @@ async function load(refresh = false) {
   loading.value = true;
   error.value = null;
   lintError.value = null;
-  // allSettled, not all: doctor and lint are independent reports — one throwing
-  // at the HTTP layer must not blank the other section.
-  const [doc, lnt] = await Promise.allSettled([
+  // allSettled, not all: doctor / lint / config are independent — one throwing at
+  // the HTTP layer must not blank the others.
+  const [doc, lnt, cfg] = await Promise.allSettled([
     memorySystemApi.doctor(refresh),
     memorySystemApi.lint(refresh),
+    memorySystemApi.config(),
   ]);
   if (doc.status === 'fulfilled') {
     report.value = doc.value.report;
@@ -86,10 +97,45 @@ async function load(refresh = false) {
   } else {
     lintError.value = (lnt.reason as Error)?.message || t('memoryDoctor.lint.failed');
   }
+  config.value = cfg.status === 'fulfilled' ? cfg.value : null;
   loading.value = false;
 }
 
+function stopEnginePoll() {
+  if (enginePoll) { clearInterval(enginePoll); enginePoll = null; }
+}
+
+async function runEngineRefresh() {
+  if (engineRunning.value) return;
+  engineRunning.value = true;
+  engineMsg.value = t('memoryDoctor.engine.running');
+  try {
+    const { job_id } = await memorySystemApi.engineRefresh();
+    if (!alive) { stopEnginePoll(); return; }
+    enginePoll = setInterval(async () => {
+      try {
+        const job = await memorySystemApi.tesseraeJobStatus(job_id);
+        if (job.status === 'running') return;
+        stopEnginePoll();
+        engineRunning.value = false;
+        engineMsg.value =
+          job.status === 'completed' && job.result?.ok
+            ? t('memoryDoctor.engine.done')
+            : job.result?.reason || t('memoryDoctor.engine.failed');
+      } catch (e) {
+        stopEnginePoll();
+        engineRunning.value = false;
+        engineMsg.value = (e as Error).message || t('memoryDoctor.engine.failed');
+      }
+    }, 3000);
+  } catch (e) {
+    engineRunning.value = false;
+    engineMsg.value = (e as Error).message || t('memoryDoctor.engine.failed');
+  }
+}
+
 onMounted(() => load());
+onUnmounted(() => { alive = false; stopEnginePoll(); });
 </script>
 
 <template>
@@ -101,6 +147,26 @@ onMounted(() => load());
         </button>
       </template>
     </PageHeader>
+
+    <!-- Backend & Engine — Tesserae `config status` liveness + `engine --once` refresh -->
+    <div class="backend-bar">
+      <div v-if="config" class="backend-info">
+        <span class="backend-label">{{ t('memoryDoctor.backend.label') }}</span>
+        <span class="backend-provider">{{ config.provider || '—' }}</span>
+        <span v-if="config.effort" class="backend-effort">{{ config.effort }}</span>
+        <span
+          v-if="config.liveness_ok !== null"
+          class="backend-live"
+          :class="config.liveness_ok ? 'backend-live--ok' : 'backend-live--down'"
+        >{{ config.liveness_ok ? t('memoryDoctor.backend.live') : t('memoryDoctor.backend.down') }}</span>
+      </div>
+      <div class="backend-engine">
+        <span v-if="engineMsg" class="backend-engine__msg">{{ engineMsg }}</span>
+        <button class="doctor-refresh" :disabled="engineRunning" @click="runEngineRefresh">
+          {{ engineRunning ? t('memoryDoctor.engine.running') : t('memoryDoctor.engine.button') }}
+        </button>
+      </div>
+    </div>
 
     <div v-if="loading" class="doctor-state">{{ t('memoryDoctor.loading') }}</div>
     <div v-else-if="error" class="doctor-state doctor-state--error">{{ error }}</div>
@@ -343,5 +409,65 @@ onMounted(() => load());
   color: var(--text-secondary, #71717a);
   text-align: center;
   margin-top: 12px;
+}
+.backend-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 16px 0 4px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: var(--bg-tertiary, #1a1a24);
+}
+.backend-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.backend-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-secondary, #71717a);
+}
+.backend-provider {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #e4e4e7);
+  font-family: var(--font-mono, monospace);
+}
+.backend-effort {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary, #a1a1aa);
+}
+.backend-live {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 100px;
+}
+.backend-live--ok {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+}
+.backend-live--down {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+.backend-engine {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.backend-engine__msg {
+  font-size: 12px;
+  color: var(--text-secondary, #a1a1aa);
 }
 </style>

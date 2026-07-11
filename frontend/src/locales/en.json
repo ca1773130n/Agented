@@ -9933,6 +9933,17 @@
       "info": "info",
       "autoFixable": "auto-fixable",
       "truncated": "Showing {shown} of {total} findings."
+    },
+    "backend": {
+      "label": "LLM backend",
+      "live": "live",
+      "down": "unreachable"
+    },
+    "engine": {
+      "button": "Coalesced refresh",
+      "running": "Refreshing…",
+      "done": "Refresh complete",
+      "failed": "Refresh failed"
     }
   },
   "memorySessions": {

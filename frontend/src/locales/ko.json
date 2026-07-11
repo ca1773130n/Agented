@@ -9933,6 +9933,17 @@
       "info": "정보",
       "autoFixable": "자동 수정 가능",
       "truncated": "{total}개 중 {shown}개 표시."
+    },
+    "backend": {
+      "label": "LLM 백엔드",
+      "live": "정상",
+      "down": "연결 불가"
+    },
+    "engine": {
+      "button": "통합 새로고침",
+      "running": "새로고침 중…",
+      "done": "새로고침 완료",
+      "failed": "새로고침 실패"
     }
   },
   "memorySessions": {

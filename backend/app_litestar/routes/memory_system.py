@@ -205,6 +205,24 @@ def get_memory_lint(refresh: bool = False) -> dict[str, Any]:
     return ti.build_lint(refresh=refresh)
 
 
+@get("/system/memory/config", sync_to_thread=True)
+def get_memory_config() -> dict[str, Any]:
+    """Resolved Tesserae LLM backend + a live liveness ping via ``tesserae config
+    status``: provider / effort / source / liveness_ok — ops visibility for the
+    Memory surface."""
+    return ti.config_status()
+
+
+@post("/system/memory/engine-refresh", sync_to_thread=True)
+def engine_refresh() -> dict[str, Any]:
+    """Kick off ``tesserae engine --all --once`` — one COALESCED recompile drain
+    across every registered project (additive to Agented's own scheduler; ``--once``
+    so there's no long-lived daemon to babysit). Dispatched async; poll the jobs
+    endpoint."""
+    job_id = ti.engine_refresh_async()
+    return {"job_id": job_id, "op": "engine-refresh", "status": "running"}
+
+
 @post("/system/memory/research", sync_to_thread=True)
 def start_research(data: dict[str, Any]) -> dict[str, Any]:
     """Kick off ``tesserae research`` — the agentic plan→search→reflect→synthesize
@@ -533,6 +551,8 @@ memory_system_router = Router(
         get_memory_lint,
         get_graph_status,
         query_graph,
+        get_memory_config,
+        engine_refresh,
         start_research,
         get_memory_sessions,
         list_tesserae_projects,
