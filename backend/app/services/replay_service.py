@@ -139,6 +139,8 @@ class ReplayService:
                 )
                 return
 
+            from app import config
+
             process = subprocess.Popen(
                 cmd,
                 cwd=PROJECT_ROOT,
@@ -147,6 +149,9 @@ class ReplayService:
                 text=True,
                 bufsize=1,
                 start_new_session=True,
+                # SECURITY: scrub server LLM keys under AGENTED_SERVER_NO_LLM_KEYS
+                # (replays a harness → real inference). Shared env-isolation layer.
+                env=config.subprocess_env(),
             )
 
             ProcessManager.register(execution_id, process, trigger_id)

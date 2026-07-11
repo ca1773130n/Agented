@@ -68,6 +68,8 @@ class BaseGenerationService(ABC):
             cmd, _sandboxed = apply_sandbox_and_enforce(
                 cmd, project_root, session_id="", backend="claude", net=True
             )
+            from app import config
+
             process = subprocess.Popen(
                 cmd,
                 cwd=project_root,
@@ -75,6 +77,10 @@ class BaseGenerationService(ABC):
                 stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1,
+                # SECURITY: scrub server LLM keys under AGENTED_SERVER_NO_LLM_KEYS
+                # (this spawns the claude harness → real inference). Same shared
+                # env-isolation layer every other spawner uses.
+                env=config.subprocess_env(),
             )
         except PolicyDenied as exc:
             reason = (getattr(exc, "verdict", None) or {}).get("reason") or "policy denied"

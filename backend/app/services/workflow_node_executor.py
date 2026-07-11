@@ -41,6 +41,8 @@ def _run_in_process_group(
     and nothing is ever spawned; an ASK blocks the node until resolved (fail
     closed on timeout). Server-scope policies (scope_id IS NULL) always apply.
     """
+    from app import config
+
     from .policy_service import PolicyService
 
     PolicyService.enforce_launch(
@@ -56,6 +58,10 @@ def _run_in_process_group(
         text=True,
         cwd=cwd,
         start_new_session=True,
+        # SECURITY: scrub the server env (same as every other spawner) so a
+        # workflow command/script node can't inherit a server-baked LLM key when
+        # AGENTED_SERVER_NO_LLM_KEYS is set. (4th-leak / env-isolation.)
+        env=config.subprocess_env(),
     )
     try:
         stdout, stderr = proc.communicate(timeout=timeout)

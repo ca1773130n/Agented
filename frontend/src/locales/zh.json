@@ -242,7 +242,8 @@
       "submitting": "正在创建账号…",
       "required": "邮箱和密码为必填项",
       "passwordTooShort": "密码至少需要 8 个字符",
-      "failed": "无法创建你的账号，请重试。"
+      "failed": "无法创建你的账号，请重试。",
+      "disabled": "自助注册已禁用（AGENTED_DISABLE_SIGNUP）。取消设置以创建第一个管理员账户，然后重新启用。"
     },
     "discover": {
       "heading": "检测你的 AI 账号",
@@ -260,7 +261,8 @@
         "imported": "已导入",
         "ready": "已登录",
         "loggedout": "未登录"
-      }
+      },
+      "importPartial": "{total} 个账户中有 {failed} 个无法导入。"
     }
   },
   "tour": {
@@ -4513,8 +4515,8 @@
   },
   "forgotPassword": {
     "title": "重置密码",
-    "prompt": "输入您的邮箱，我们将发送重置链接。",
-    "sent": "如果该邮箱在我们的系统中，重置链接即将送达。请查看您的收件箱（以及开发模式下的服务器日志）。",
+    "prompt": "输入你的邮箱。在此自托管安装（无邮件服务器）中，重置链接会写入服务器上的文件。",
+    "sent": "如果该邮箱已注册，重置链接已写入服务器重置令牌目录（agented-reset-tokens/ 或 $AGENTED_RESET_TOKEN_DIR）下的 0600 文件。在服务器上打开它以继续。",
     "email": "邮箱",
     "sending": "发送中…",
     "sendLink": "发送重置链接",

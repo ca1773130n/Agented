@@ -242,7 +242,8 @@
       "submitting": "Creating account…",
       "required": "Email and password are required",
       "passwordTooShort": "Password must be at least 8 characters",
-      "failed": "Could not create your account. Please try again."
+      "failed": "Could not create your account. Please try again.",
+      "disabled": "Self-registration is disabled (AGENTED_DISABLE_SIGNUP). Unset it to create the first admin account, then re-enable it."
     },
     "discover": {
       "heading": "Detect your AI accounts",
@@ -260,7 +261,8 @@
         "imported": "Imported",
         "ready": "Signed in",
         "loggedout": "Not signed in"
-      }
+      },
+      "importPartial": "{failed} of {total} account(s) could not be imported."
     }
   },
   "tour": {
@@ -4513,8 +4515,8 @@
   },
   "forgotPassword": {
     "title": "Reset your password",
-    "prompt": "Enter your email and we'll send a reset link.",
-    "sent": "If that email is in our system, a reset link is on its way. Check your inbox (and your server logs in dev mode).",
+    "prompt": "Enter your email. On this self-hosted install (no email server), the reset link is written to a file on the server.",
+    "sent": "If that email is registered, a reset link was written to a 0600 file under the server's reset-token directory (agented-reset-tokens/, or $AGENTED_RESET_TOKEN_DIR). Open it on the server to continue.",
     "email": "Email",
     "sending": "Sending…",
     "sendLink": "Send reset link",

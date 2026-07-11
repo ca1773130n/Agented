@@ -81,6 +81,8 @@ class SetupExecutionService:
         )
 
         # Launch subprocess
+        from app import config
+
         process = subprocess.Popen(
             cmd_list,
             stdin=subprocess.PIPE,
@@ -90,6 +92,9 @@ class SetupExecutionService:
             cwd=working_dir,
             bufsize=1,
             preexec_fn=os.setsid,
+            # SECURITY: scrub the server env so a setup subprocess can't inherit a
+            # server-baked LLM key under AGENTED_SERVER_NO_LLM_KEYS (env-isolation).
+            env=config.subprocess_env(),
         )
 
         # Register with ProcessManager (trigger_id not applicable, use execution_id)
