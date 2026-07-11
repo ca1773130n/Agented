@@ -111,6 +111,19 @@ export interface LifeHarnessRound {
   [key: string]: unknown;
 }
 
+/** GRD 0.4.16 `gd harness conversion` — the Loop-4 Tier-1 effectiveness audit
+ *  (did recorded lessons actually convert into file/gate/prompt changes?). */
+export interface HarnessConversionResult {
+  conversion_rate: number | null;
+  lessons_total: number | null;
+  lessons_converted: number | null;
+  median_latency_rounds: number | null;
+  rounds_applied: number | null;
+  harness_policy: { count?: number; recurring_count?: number };
+  top_unconverted: Array<Record<string, unknown>>;
+  raw: Record<string, unknown>;
+}
+
 // ─── Group B shapes ───
 export interface AutonomyConfigResponse {
   project_id: string;
@@ -288,6 +301,13 @@ export const grdHarnessApi = {
   harnessStatus: (projectId: string) =>
     apiFetch<{ success: boolean; rounds: unknown[]; error?: string | null }>(
       `/api/projects/${projectId}/grd/harness/status`,
+    ),
+
+  /** GRD 0.4.16 `gd harness conversion` — deterministic effectiveness audit
+   *  (Loop-4 Tier-1): did recorded lessons convert into real harness changes? */
+  harnessConversion: (projectId: string) =>
+    apiFetch<HarnessConversionResult>(
+      `/api/projects/${projectId}/grd/harness-conversion`,
     ),
 
   // ═══════════════════════════ Group B — /admin/* (admin-gated) ═══════════════════════════

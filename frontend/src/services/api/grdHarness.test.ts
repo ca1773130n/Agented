@@ -250,4 +250,9 @@ describe('grdHarnessApi — life-harness rounds', () => {
     await grdHarnessApi.harnessStatus('p1');
     expect(mock()).toHaveBeenCalledWith('/api/projects/p1/grd/harness/status');
   });
+
+  it('harnessConversion GETs the Tier-1 audit route', async () => {
+    await grdHarnessApi.harnessConversion('p1');
+    expect(mock()).toHaveBeenCalledWith('/api/projects/p1/grd/harness-conversion');
+  });
 });

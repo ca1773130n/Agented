@@ -9459,6 +9459,18 @@
         "saved": "Autonomy policy saved",
         "saveFailed": "Failed to save autonomy policy"
       },
+      "conversion": {
+        "title": "Conversion audit",
+        "hint": "Deterministic — did recorded lessons become real changes?",
+        "loading": "Loading conversion audit…",
+        "unavailable": "Conversion audit unavailable (GRD life-harness not set up for this project)",
+        "rate": "Conversion rate",
+        "lessons": "Lessons converted",
+        "latency": "Median latency (rounds)",
+        "recurring": "Recurring failures",
+        "topUnconverted": "Top unconverted lessons",
+        "allConverted": "Every recorded lesson converted."
+      },
       "rounds": {
         "title": "Evolution rounds",
         "detailTitle": "Round detail",

@@ -9459,6 +9459,18 @@
         "saved": "자율성 정책이 저장되었습니다",
         "saveFailed": "자율성 정책 저장 실패"
       },
+      "conversion": {
+        "title": "전환 감사",
+        "hint": "결정론적 — 기록된 교훈이 실제 변경으로 이어졌는가?",
+        "loading": "전환 감사 로딩 중…",
+        "unavailable": "전환 감사를 사용할 수 없음 (이 프로젝트에 GRD 라이프-하니스가 설정되지 않음)",
+        "rate": "전환율",
+        "lessons": "전환된 교훈",
+        "latency": "중앙값 지연 (라운드)",
+        "recurring": "반복되는 실패",
+        "topUnconverted": "전환되지 않은 상위 교훈",
+        "allConverted": "기록된 모든 교훈이 전환되었습니다."
+      },
       "rounds": {
         "title": "진화 라운드",
         "detailTitle": "라운드 상세",

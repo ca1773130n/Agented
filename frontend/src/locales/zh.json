@@ -9459,6 +9459,18 @@
         "saved": "已保存自治策略",
         "saveFailed": "保存自治策略失败"
       },
+      "conversion": {
+        "title": "转化审计",
+        "hint": "确定性——记录的经验是否变成了真实的改动？",
+        "loading": "正在加载转化审计…",
+        "unavailable": "转化审计不可用（此项目未设置 GRD 生命体线束）",
+        "rate": "转化率",
+        "lessons": "已转化的经验",
+        "latency": "中位延迟（轮次）",
+        "recurring": "重复出现的失败",
+        "topUnconverted": "未转化的主要经验",
+        "allConverted": "所有记录的经验均已转化。"
+      },
       "rounds": {
         "title": "演化轮次",
         "detailTitle": "轮次详情",
