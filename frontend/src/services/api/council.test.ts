@@ -35,6 +35,20 @@ describe('councilApi.convene', () => {
     expect(JSON.parse(init.body)).toEqual({ question: 'q', options: ['a', 'b'], context: '', rounds: 1 });
   });
 
+  it('clamps rounds to the server 0-5 int range (blank/out-of-range → default)', async () => {
+    // Fresh response per call — a ReadableStream can only be read once.
+    (fetch as ReturnType<typeof vi.fn>).mockImplementation(() => Promise.resolve(streamResponse([])));
+    // '' (a cleared number input) is not finite → default 1
+    await councilApi.convene(
+      { question: 'q', options: ['a', 'b'], rounds: '' as unknown as number },
+      { onEvent: () => {} },
+    );
+    expect(JSON.parse((fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body).rounds).toBe(1);
+    // 9 (manual over-max entry) → clamped to 5
+    await councilApi.convene({ question: 'q', options: ['a', 'b'], rounds: 9 }, { onEvent: () => {} });
+    expect(JSON.parse((fetch as ReturnType<typeof vi.fn>).mock.calls[1][1].body).rounds).toBe(5);
+  });
+
   it('parses each SSE frame into a CouncilEvent and fires onDone', async () => {
     (fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
       streamResponse([

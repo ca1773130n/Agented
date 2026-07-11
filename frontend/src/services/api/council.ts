@@ -64,7 +64,11 @@ export const councilApi = {
           question: req.question,
           options: req.options,
           context: req.context ?? '',
-          rounds: req.rounds ?? 1,
+          // Clamp to the server's ge=0/le=5 int range so a blank/out-of-range
+          // input degrades to the default 1 instead of a msgspec 400.
+          rounds: Number.isFinite(req.rounds)
+            ? Math.max(0, Math.min(5, Math.trunc(req.rounds as number)))
+            : 1,
         }),
         signal: handlers.signal,
       });
