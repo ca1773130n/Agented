@@ -7,7 +7,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
-import { memorySystemApi } from '../services/api/memory-system';
+import { memorySystemApi, friendlyMemoryReason } from '../services/api/memory-system';
 import type {
   DoctorFinding,
   DoctorReport,
@@ -87,13 +87,13 @@ async function load(refresh = false) {
   ]);
   if (doc.status === 'fulfilled') {
     report.value = doc.value.report;
-    if (!doc.value.ok) error.value = doc.value.reason || t('memoryDoctor.failed');
+    if (!doc.value.ok) error.value = friendlyMemoryReason(doc.value.reason, t) || t('memoryDoctor.failed');
   } else {
     error.value = (doc.reason as Error)?.message || t('memoryDoctor.failed');
   }
   if (lnt.status === 'fulfilled') {
     lint.value = lnt.value.report;
-    if (!lnt.value.ok) lintError.value = lnt.value.reason || t('memoryDoctor.lint.failed');
+    if (!lnt.value.ok) lintError.value = friendlyMemoryReason(lnt.value.reason, t) || t('memoryDoctor.lint.failed');
   } else {
     lintError.value = (lnt.reason as Error)?.message || t('memoryDoctor.lint.failed');
   }
@@ -121,7 +121,7 @@ async function runEngineRefresh() {
         engineMsg.value =
           job.status === 'completed' && job.result?.ok
             ? t('memoryDoctor.engine.done')
-            : job.result?.reason || t('memoryDoctor.engine.failed');
+            : friendlyMemoryReason(job.result?.reason, t) || t('memoryDoctor.engine.failed');
       } catch (e) {
         stopEnginePoll();
         engineRunning.value = false;

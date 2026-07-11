@@ -166,7 +166,10 @@ async function loadAgents() {
     const data = await agentApi.list();
     agents.value = data.agents || [];
   } catch {
+    // Surface the failure — an empty leader/agent dropdown otherwise reads as
+    // "no agents exist" rather than "the fetch failed".
     agents.value = [];
+    showToast(t('teams.toast.loadAgentsFailed'), 'error');
   }
 }
 

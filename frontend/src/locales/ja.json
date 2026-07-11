@@ -3922,7 +3922,8 @@
       "keyDeleted": "メモリキー「{key}」を削除しました",
       "deleteFailed": "メモリエントリの削除に失敗しました",
       "allCleared": "{bot} のすべてのメモリをクリアしました",
-      "clearFailed": "メモリのクリアに失敗しました"
+      "clearFailed": "メモリのクリアに失敗しました",
+      "loadFailed": "メモリの読み込みに失敗しました"
     }
   },
   "botOutputWebhookForwarding": {
@@ -5828,7 +5829,8 @@
     "toasts": {
       "loadProjectsFailed": "プロジェクトの読み込みに失敗しました",
       "projectCreated": "プロジェクトを作成して割り当てました",
-      "projectAdded": "プロジェクトを製品に追加しました"
+      "projectAdded": "プロジェクトを製品に追加しました",
+      "loadDashboardFailed": "ダッシュボードデータの読み込みに失敗しました"
     },
     "errors": {
       "createProject": "プロジェクトの作成に失敗しました",
@@ -7781,7 +7783,8 @@
       "creationFailed": "チームの作成に失敗しました",
       "createdWithIssues": "チームは作成されましたが、{count} 件のステップを適用できませんでした — チームを確認し、不足分を追加してください",
       "createdFromGenerated": "生成された構成からチームを作成しました",
-      "saveGeneratedFailed": "生成されたチームの保存に失敗しました"
+      "saveGeneratedFailed": "生成されたチームの保存に失敗しました",
+      "loadAgentsFailed": "エージェントの読み込みに失敗しました"
     }
   },
   "teamsSummaryDashboard": {
@@ -10008,5 +10011,12 @@
     "estCalls": "≈ モデル呼び出し {n} 回",
     "estHint": "5レンズのパネル ×（意見1回 + 反論ラウンド）+ 議長1回。すべてアカウントで消費されます。",
     "singleAccountNote": "アカウント1つ — 討論はペルソナの多様性のみで単一モデルです。クロスモデル議論には2つ目のアカウントを追加してください。"
+  },
+  "memoryCommon": {
+    "reasonCliMissing": "Tesserae がインストールされていません — メモリ機能を使うには tesserae CLI をインストールしてください。",
+    "reasonTimeout": "メモリ操作がタイムアウトしました。",
+    "reasonExit": "tesserae コマンドが失敗しました。CLI と設定を確認してください。",
+    "reasonDisabled": "このプロジェクトで Tesserae が有効になっていません。",
+    "reasonNoPaths": "取り込むソースが見つかりませんでした。"
   }
 }

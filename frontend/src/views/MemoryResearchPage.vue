@@ -10,7 +10,7 @@ import { ref, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import MarkdownContent from '../components/base/MarkdownContent.vue';
-import { memorySystemApi } from '../services/api/memory-system';
+import { memorySystemApi, friendlyMemoryReason } from '../services/api/memory-system';
 
 const { t } = useI18n();
 
@@ -59,7 +59,7 @@ async function poll(jobId: string) {
     if (job.status === 'completed' && job.result?.ok) {
       report.value = job.result.report_md || '';
     } else {
-      error.value = job.result?.reason || t('memoryResearch.failed');
+      error.value = friendlyMemoryReason(job.result?.reason, t) || t('memoryResearch.failed');
     }
   } catch (e) {
     running.value = false;

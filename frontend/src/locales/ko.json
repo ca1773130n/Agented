@@ -3922,7 +3922,8 @@
       "keyDeleted": "메모리 키 \"{key}\"가 삭제되었습니다",
       "deleteFailed": "메모리 항목 삭제에 실패했습니다",
       "allCleared": "{bot}의 모든 메모리가 지워졌습니다",
-      "clearFailed": "메모리 지우기에 실패했습니다"
+      "clearFailed": "메모리 지우기에 실패했습니다",
+      "loadFailed": "메모리 로드 실패"
     }
   },
   "botOutputWebhookForwarding": {
@@ -5828,7 +5829,8 @@
     "toasts": {
       "loadProjectsFailed": "프로젝트를 불러오지 못했습니다",
       "projectCreated": "프로젝트가 생성되고 할당되었습니다",
-      "projectAdded": "프로젝트가 제품에 추가되었습니다"
+      "projectAdded": "프로젝트가 제품에 추가되었습니다",
+      "loadDashboardFailed": "대시보드 데이터 로드 실패"
     },
     "errors": {
       "createProject": "프로젝트 생성에 실패했습니다",
@@ -7781,7 +7783,8 @@
       "creationFailed": "팀 생성에 실패했습니다",
       "createdWithIssues": "팀이 생성되었지만 {count}개 단계를 적용하지 못했습니다 — 팀을 확인하고 누락된 항목을 추가하세요",
       "createdFromGenerated": "생성된 구성으로 팀이 생성되었습니다",
-      "saveGeneratedFailed": "생성된 팀 저장에 실패했습니다"
+      "saveGeneratedFailed": "생성된 팀 저장에 실패했습니다",
+      "loadAgentsFailed": "에이전트 로드 실패"
     }
   },
   "teamsSummaryDashboard": {
@@ -10008,5 +10011,12 @@
     "estCalls": "≈ 모델 호출 {n}회",
     "estHint": "5개 관점 패널 × (입장 1회 + 반박 라운드) + 의장 1회. 모두 계정에서 소비됩니다.",
     "singleAccountNote": "계정 1개 — 토론은 페르소나 다양성만 있고 단일 모델입니다. 교차 모델 논쟁을 위해 계정을 추가하세요."
+  },
+  "memoryCommon": {
+    "reasonCliMissing": "Tesserae가 설치되지 않았습니다 — 메모리 기능을 사용하려면 tesserae CLI를 설치하세요.",
+    "reasonTimeout": "메모리 작업이 시간 초과되었습니다.",
+    "reasonExit": "tesserae 명령이 실패했습니다. CLI와 설정을 확인하세요.",
+    "reasonDisabled": "이 프로젝트에 Tesserae가 활성화되지 않았습니다.",
+    "reasonNoPaths": "수집할 소스를 찾을 수 없습니다."
   }
 }

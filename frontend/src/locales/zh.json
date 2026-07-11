@@ -3922,7 +3922,8 @@
       "keyDeleted": "内存键“{key}”已删除",
       "deleteFailed": "删除内存条目失败",
       "allCleared": "已清除 {bot} 的所有内存",
-      "clearFailed": "清除内存失败"
+      "clearFailed": "清除内存失败",
+      "loadFailed": "加载记忆失败"
     }
   },
   "botOutputWebhookForwarding": {
@@ -5828,7 +5829,8 @@
     "toasts": {
       "loadProjectsFailed": "加载项目失败",
       "projectCreated": "项目已创建并分配",
-      "projectAdded": "项目已添加到产品"
+      "projectAdded": "项目已添加到产品",
+      "loadDashboardFailed": "加载仪表板数据失败"
     },
     "errors": {
       "createProject": "创建项目失败",
@@ -7781,7 +7783,8 @@
       "creationFailed": "团队创建失败",
       "createdWithIssues": "团队已创建，但有 {count} 个步骤未能应用 — 请检查团队并补充缺失项",
       "createdFromGenerated": "已根据生成的配置创建团队",
-      "saveGeneratedFailed": "保存生成的团队失败"
+      "saveGeneratedFailed": "保存生成的团队失败",
+      "loadAgentsFailed": "加载智能体失败"
     }
   },
   "teamsSummaryDashboard": {
@@ -10008,5 +10011,12 @@
     "estCalls": "≈ {n} 次模型调用",
     "estHint": "5 视角小组 ×（1 次立场 + 反驳轮次）+ 1 次主席。全部计入你的账户。",
     "singleAccountNote": "仅一个账户——辩论具有角色多样性但为单一模型。添加第二个账户以进行跨模型辩论。"
+  },
+  "memoryCommon": {
+    "reasonCliMissing": "未安装 Tesserae——安装 tesserae CLI 以启用记忆功能。",
+    "reasonTimeout": "记忆操作超时。",
+    "reasonExit": "tesserae 命令失败。请检查 CLI 及其配置。",
+    "reasonDisabled": "此项目未启用 Tesserae。",
+    "reasonNoPaths": "未找到可摄取的来源。"
   }
 }

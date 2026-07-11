@@ -84,8 +84,10 @@ async function loadDashboard() {
   try {
     dashboardData.value = await productApi.getDashboard(productId.value);
   } catch {
-    // Dashboard data is supplementary; don't block the page on failure
+    // Dashboard data is supplementary; don't block the page — but don't let the
+    // panels vanish silently either.
     dashboardData.value = null;
+    showToast(t('productDashboard.toasts.loadDashboardFailed'), 'error');
   } finally {
     isDashboardLoading.value = false;
   }
