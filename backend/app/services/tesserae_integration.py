@@ -1318,8 +1318,10 @@ def config_status(*, timeout: int = _TESSERAE_CONFIG_TIMEOUT) -> dict:
     m = re.search(r"liveness\s*:\s*(.+)", out)
     if m:
         line = m.group(1)
-        # "✓ OK (backend responded)" vs "✗ …" / "FAILED". Treat ✓/OK as live.
-        liveness_ok = ("✓" in line) or bool(re.search(r"\bOK\b", line, re.IGNORECASE))
+        # "✓ OK (backend responded)" vs "✗ FAILED …". A ✗ on the line always means
+        # down, even if the failure text happens to contain "OK".
+        live_mark = ("✓" in line) or bool(re.search(r"\bOK\b", line, re.IGNORECASE))
+        liveness_ok = live_mark and ("✗" not in line)
     return {
         "ok": True,
         "provider": provider,
@@ -1338,8 +1340,6 @@ def engine_refresh_async() -> str:
     auto-compile scheduler); ``--once`` avoids running a supervised long-lived
     daemon Agented would have to babysit. Returns a ``job_id`` polled via
     :func:`get_op_job` (shared job store)."""
-    import secrets
-
     job_id = f"tess-engine-{secrets.token_hex(6)}"
     with _op_jobs_lock:
         _op_jobs[job_id] = {
