@@ -53,8 +53,12 @@ async function search() {
 }
 
 function scorePct(score: number): number {
-  // Retrieval scores are already ~0..1; clamp for the bar width.
-  return Math.max(0, Math.min(100, Math.round(score * 100)));
+  // Retrieval scores are already ~0..1; clamp for the bar width. Coerce a
+  // missing/NaN score to 0 so a malformed hit can't break the whole render.
+  return Math.max(0, Math.min(100, Math.round((score || 0) * 100)));
+}
+function scoreLabel(score: number): string {
+  return (score ?? 0).toFixed(2);
 }
 
 onMounted(loadStatus);
@@ -108,7 +112,7 @@ onMounted(loadStatus);
           <div class="kg-hit__head">
             <span class="kg-hit__title">{{ h.title }}</span>
             <span class="kg-hit__kind">{{ h.kind }}</span>
-            <span class="kg-hit__score">{{ h.score.toFixed(2) }}</span>
+            <span class="kg-hit__score">{{ scoreLabel(h.score) }}</span>
           </div>
           <div class="kg-hit__bar"><span :style="{ width: scorePct(h.score) + '%' }" /></div>
           <div v-if="h.excerpt" class="kg-hit__excerpt">{{ h.excerpt }}</div>
