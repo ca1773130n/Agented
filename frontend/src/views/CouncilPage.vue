@@ -30,10 +30,25 @@ const canConvene = computed(
 );
 const validOptions = computed(() => options.value.map((o) => o.trim()).filter(Boolean));
 
+// The panel is a fixed 5-lens roster (ai-accounts _ROLES); each member makes
+// 1 position + `rounds` rebuttal calls, plus 1 chairman verdict. Surface the
+// estimate so the operator sees the LLM cost before convening — it all lands on
+// one account in the single-account case.
+const PANEL_SIZE = 5;
+const estCalls = computed(() => {
+  const r = Number.isFinite(rounds.value) ? Math.max(0, Math.min(5, Math.trunc(rounds.value))) : 1;
+  return PANEL_SIZE * (1 + r) + 1;
+});
+
 // Derived views over the streamed events.
 const roster = computed(() => {
   const start = events.value.find((e) => e.kind === 'council_start');
   return (start?.payload?.members as Array<Record<string, unknown>>) ?? [];
+});
+// All lenses on one account → the debate is persona-diverse but single-model.
+const singleAccount = computed(() => {
+  const labels = new Set(roster.value.map((m) => m.account_label as string));
+  return roster.value.length > 0 && labels.size === 1;
 });
 const debate = computed(() =>
   events.value.filter((e) => e.kind === 'position' || e.kind === 'rebuttal' || e.kind === 'member_error'),
@@ -151,6 +166,7 @@ onUnmounted(() => controller?.abort());
           {{ t('council.convene') }}
         </button>
         <button v-else class="council-stop" type="button" @click="stop">{{ t('council.stop') }}</button>
+        <span class="council-est" :title="t('council.estHint')">{{ t('council.estCalls', { n: estCalls }) }}</span>
       </div>
     </form>
 
@@ -165,6 +181,7 @@ onUnmounted(() => controller?.abort());
       </span>
       <span v-if="running" class="council-spinner" />
     </div>
+    <div v-if="singleAccount" class="council-note">{{ t('council.singleAccountNote') }}</div>
 
     <!-- Debate transcript -->
     <div v-if="debate.length" class="council-debate">
@@ -260,7 +277,17 @@ onUnmounted(() => controller?.abort());
 .council-row { display: flex; gap: 12px; }
 .council-col { display: flex; flex-direction: column; gap: 8px; }
 .council-col--grow { flex: 1; }
-.council-actions { margin-top: 12px; }
+.council-actions { margin-top: 12px; display: flex; align-items: center; gap: 12px; }
+.council-est { font-size: 12px; color: var(--text-secondary, #71717a); }
+.council-note {
+  font-size: 12px;
+  color: var(--text-secondary, #a1a1aa);
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(234, 179, 8, 0.25);
+  background: rgba(234, 179, 8, 0.08);
+}
 .council-convene, .council-stop {
   padding: 10px 22px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
 }
