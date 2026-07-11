@@ -1273,7 +1273,13 @@ def run_research_async(
             with _op_jobs_lock:
                 _op_jobs[job_id]["status"] = "failed"
                 _op_jobs[job_id]["finished_at"] = _now_iso()
-                _op_jobs[job_id]["result"] = {"ok": False, "reason": str(exc)[:200]}
+                # Keep the full ResearchResult shape so the frontend type holds.
+                _op_jobs[job_id]["result"] = {
+                    "ok": False,
+                    "query": query,
+                    "report_md": "",
+                    "reason": str(exc)[:200],
+                }
 
     threading.Thread(target=_runner, daemon=True).start()
     return job_id

@@ -22,6 +22,7 @@ const elapsed = ref(0);
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let clockTimer: ReturnType<typeof setInterval> | null = null;
+let alive = true; // guards against setting a timer after unmount (in-flight await)
 
 function stopTimers() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
@@ -38,6 +39,8 @@ async function investigate() {
   clockTimer = setInterval(() => (elapsed.value += 1), 1000);
   try {
     const { job_id } = await memorySystemApi.startResearch(q);
+    // If the component unmounted during the await, don't start an orphaned poller.
+    if (!alive) { stopTimers(); return; }
     pollTimer = setInterval(() => poll(job_id), 3000);
   } catch (e) {
     error.value = (e as Error).message || t('memoryResearch.failed');
@@ -65,7 +68,7 @@ async function poll(jobId: string) {
   }
 }
 
-onUnmounted(stopTimers);
+onUnmounted(() => { alive = false; stopTimers(); });
 </script>
 
 <template>
