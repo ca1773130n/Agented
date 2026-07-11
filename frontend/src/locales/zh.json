@@ -10001,6 +10001,9 @@
     "decision": "决定",
     "confidence": "{p}% 置信度",
     "dissent": "异议",
-    "decidedBy": "由 {by} 决定"
+    "decidedBy": "由 {by} 决定",
+    "estCalls": "≈ {n} 次模型调用",
+    "estHint": "5 视角小组 ×（1 次立场 + 反驳轮次）+ 1 次主席。全部计入你的账户。",
+    "singleAccountNote": "仅一个账户——辩论具有角色多样性但为单一模型。添加第二个账户以进行跨模型辩论。"
   }
 }

@@ -10001,6 +10001,9 @@
     "decision": "Decision",
     "confidence": "{p}% confidence",
     "dissent": "Dissent",
-    "decidedBy": "decided by {by}"
+    "decidedBy": "decided by {by}",
+    "estCalls": "≈ {n} model calls",
+    "estHint": "5-lens panel × (1 position + rebuttal rounds) + 1 chair. All land on your accounts.",
+    "singleAccountNote": "One account — the debate is persona-diverse but single-model. Add a second account for cross-model argument."
   }
 }
