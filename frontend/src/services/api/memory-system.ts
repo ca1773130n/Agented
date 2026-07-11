@@ -183,6 +183,23 @@ export interface GraphQueryResult {
   reason: string | null;
 }
 
+// Tesserae `research` — agentic plan→search→reflect→synthesize report (async job).
+export interface ResearchResult {
+  ok: boolean;
+  query: string;
+  report_md: string;
+  reason: string | null;
+}
+
+export interface ResearchJob {
+  job_id: string;
+  op: string;
+  status: 'running' | 'completed' | 'failed';
+  started_at?: string;
+  finished_at?: string;
+  result?: ResearchResult | null;
+}
+
 // Tesserae 0.16 `sessions list` — normalized harness session history.
 export interface HarnessSession {
   date: string;
@@ -260,6 +277,19 @@ export const memorySystemApi = {
     if (kind) qs.set('kind', kind);
     return apiFetch<GraphQueryResult>(`/admin/system/memory/graph/query?${qs.toString()}`);
   },
+
+  // Tesserae `research` — kick off the agentic loop (async); poll researchJob(jobId).
+  startResearch: (query: string) =>
+    apiFetch<{ job_id: string; op: string; status: string }>(
+      '/admin/system/memory/research',
+      { method: 'POST', body: JSON.stringify({ query }) },
+    ),
+
+  // Poll a research job (shares the tesserae jobs store; result carries report_md).
+  researchJob: (jobId: string) =>
+    apiFetch<ResearchJob>(
+      `/admin/system/memory/tesserae/jobs/${encodeURIComponent(jobId)}`,
+    ),
 
   // Tesserae 0.16 normalized harness session history.
   sessions: (project?: string | null, limit?: number | null) => {

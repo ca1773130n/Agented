@@ -186,6 +186,7 @@
     "decisions": "决策",
     "memoryDoctor": "内存健康",
     "knowledgeGraph": "知识图谱",
+    "memoryResearch": "记忆研究",
     "memorySessions": "会话历史"
   },
   "apiKeyBanner": {
@@ -9956,5 +9957,14 @@
     "searching": "搜索中…",
     "search": "搜索",
     "noHits": "该查询没有结果。"
+  },
+  "memoryResearch": {
+    "title": "记忆研究",
+    "subtitle": "跨知识图谱调查一个问题——Tesserae 的智能体式 规划→检索→反思→综合 循环（较慢，基于 LLM）。",
+    "placeholder": "例如：loop-4 回放层是如何界定范围的？",
+    "investigate": "调查",
+    "running": "研究中…",
+    "workingFor": "研究中…（{s} 秒）——智能体循环可能需要几分钟。",
+    "failed": "研究失败"
   }
 }

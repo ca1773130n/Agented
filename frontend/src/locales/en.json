@@ -186,6 +186,7 @@
     "decisions": "Decisions",
     "memoryDoctor": "Memory Health",
     "knowledgeGraph": "Knowledge Graph",
+    "memoryResearch": "Memory Research",
     "memorySessions": "Session History"
   },
   "apiKeyBanner": {
@@ -9956,5 +9957,14 @@
     "searching": "Searching…",
     "search": "Search",
     "noHits": "No hits for that query."
+  },
+  "memoryResearch": {
+    "title": "Memory Research",
+    "subtitle": "Investigate a question across the knowledge graph — Tesserae's agentic plan→search→reflect→synthesize loop (slow, LLM-backed).",
+    "placeholder": "e.g. how did the loop-4 replay tiers get scoped?",
+    "investigate": "Investigate",
+    "running": "Researching…",
+    "workingFor": "Researching… ({s}s) — the agentic loop can take a few minutes.",
+    "failed": "Research failed"
   }
 }

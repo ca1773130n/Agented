@@ -361,3 +361,36 @@ def test_graph_query_handler_passes_args_through(isolated_db):
         out = query_graph_route.fn(q="loop", top_k=5, kind="papers")
     qg.assert_called_once_with("loop", top_k=5, kind="papers")
     assert out["hits"][0]["node_id"] == "n1"
+
+
+def test_start_research_handler_dispatches_async(isolated_db):
+    from app_litestar.routes.memory_system import start_research
+
+    with patch("app.services.tesserae_integration.run_research_async", return_value="tess-research-abc") as rr:
+        out = start_research.fn(
+            data={"query": "why deferred?", "breadth": 4, "depth": 2, "max_iters": 6, "top_k": 5}
+        )
+    rr.assert_called_once_with("why deferred?", breadth=4, depth=2, max_iters=6, top_k=5)
+    assert out["job_id"] == "tess-research-abc"
+    assert out["status"] == "running"
+
+
+def test_start_research_handler_requires_query(isolated_db):
+    from litestar.exceptions import ValidationException
+
+    from app_litestar.routes.memory_system import start_research
+
+    with patch("app.services.tesserae_integration.run_research_async") as rr:
+        for bad in ({}, {"query": ""}, {"query": "   "}, {"query": 5}):
+            try:
+                start_research.fn(data=bad)
+                raise AssertionError(f"expected ValidationException for {bad}")
+            except ValidationException:
+                pass
+        # non-int knob rejected too
+        try:
+            start_research.fn(data={"query": "q", "breadth": "big"})
+            raise AssertionError("expected ValidationException for non-int breadth")
+        except ValidationException:
+            pass
+        rr.assert_not_called()

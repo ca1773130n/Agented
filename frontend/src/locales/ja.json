@@ -186,6 +186,7 @@
     "decisions": "意思決定",
     "memoryDoctor": "メモリ健全性",
     "knowledgeGraph": "ナレッジグラフ",
+    "memoryResearch": "メモリリサーチ",
     "memorySessions": "セッション履歴"
   },
   "apiKeyBanner": {
@@ -9956,5 +9957,14 @@
     "searching": "検索中…",
     "search": "検索",
     "noHits": "そのクエリに該当する結果はありません。"
+  },
+  "memoryResearch": {
+    "title": "メモリリサーチ",
+    "subtitle": "ナレッジグラフ全体で質問を調査 — Tesserae のエージェント型 計画→検索→内省→統合 ループ（低速、LLM ベース）。",
+    "placeholder": "例: loop-4 リプレイ層はどのようにスコープされましたか？",
+    "investigate": "調査",
+    "running": "リサーチ中…",
+    "workingFor": "リサーチ中…（{s}秒）— エージェントループは数分かかることがあります。",
+    "failed": "リサーチに失敗しました"
   }
 }

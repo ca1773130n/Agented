@@ -548,6 +548,66 @@ def test_query_graph_rejects_argv_flag_smuggling_and_bounds():
         run.assert_not_called()
 
 
+def test_run_research_rejects_argv_and_bounds():
+    """`query` becomes CLI argv; a leading-dash value or out-of-range knob must be
+    rejected before the (slow, costly) subprocess runs."""
+    with patch.object(ti, "_run_tesserae") as run:
+        assert ti.run_research("")["ok"] is False  # empty
+        assert ti.run_research("--output=/etc/passwd")["ok"] is False  # flag smuggle
+        assert ti.run_research("x", breadth=99)["ok"] is False  # over cap
+        assert ti.run_research("x", depth=0)["ok"] is False  # bad bound
+        assert ti.run_research("x", top_k=99)["ok"] is False  # over cap
+        run.assert_not_called()
+
+
+def test_run_research_reads_report_from_output_path():
+    """Happy path: the runner passes `--output <tmp>`, then reads that file back as
+    the report markdown (so it doesn't have to guess the slug)."""
+    from app.services.tesserae_integration import TesseraeOpResult
+
+    def _fake_run(op, args, *, cwd, timeout):
+        # args carries `--output <path>`; write the report there like the real CLI.
+        out = args[args.index("--output") + 1]
+        Path(out).write_text("# Research report\n\nfindings", encoding="utf-8")
+        return TesseraeOpResult(op="research", ok=True, stdout="wrote report", stderr="")
+
+    with patch.object(ti, "_run_tesserae", side_effect=_fake_run):
+        res = ti.run_research("how do loops work?", breadth=2, depth=1)
+    assert res["ok"] is True
+    assert "# Research report" in res["report_md"]
+
+
+def test_run_research_fails_when_no_report_produced():
+    from app.services.tesserae_integration import TesseraeOpResult
+
+    fake = TesseraeOpResult(op="research", ok=False, stdout="", stderr="no LLM backend")
+    with patch.object(ti, "_run_tesserae", return_value=fake):
+        res = ti.run_research("q")
+    assert res["ok"] is False
+    assert res["report_md"] == ""
+
+
+def test_run_research_async_job_lifecycle():
+    """The async wrapper stores a running job, runs run_research in a thread, and
+    marks it completed with the report in the job result."""
+    import time as _t
+
+    with patch.object(
+        ti, "run_research", return_value={"ok": True, "query": "q", "report_md": "# R", "reason": None}
+    ):
+        job_id = ti.run_research_async("q")
+        assert job_id.startswith("tess-research-")
+        # poll the in-memory job store until the daemon thread finishes
+        for _ in range(50):
+            job = ti.get_op_job(job_id)
+            if job and job["status"] != "running":
+                break
+            _t.sleep(0.02)
+    job = ti.get_op_job(job_id)
+    assert job["status"] == "completed"
+    assert job["result"]["report_md"] == "# R"
+
+
 def test_list_sessions_parses_array_and_caps_limit():
     from app.services.tesserae_integration import TesseraeOpResult
 

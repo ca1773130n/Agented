@@ -205,6 +205,32 @@ def get_memory_lint(refresh: bool = False) -> dict[str, Any]:
     return ti.build_lint(refresh=refresh)
 
 
+@post("/system/memory/research", sync_to_thread=True)
+def start_research(data: dict[str, Any]) -> dict[str, Any]:
+    """Kick off ``tesserae research`` — the agentic plan→search→reflect→synthesize
+    loop over the compiled graph. SLOW + LLM-backed, so dispatched async: returns a
+    ``job_id`` the caller polls via the jobs endpoint (result carries the report
+    markdown). Body: ``{query, breadth?, depth?, max_iters?, top_k?}``."""
+    query = (data or {}).get("query")
+    if not isinstance(query, str) or not query.strip():
+        raise ValidationException(detail="query is required")
+
+    def _int(name: str, default: int) -> int:
+        val = (data or {}).get(name, default)
+        if not isinstance(val, int) or isinstance(val, bool):
+            raise ValidationException(detail=f"{name} must be an integer")
+        return val
+
+    job_id = ti.run_research_async(
+        query,
+        breadth=_int("breadth", 3),
+        depth=_int("depth", 2),
+        max_iters=_int("max_iters", 6),
+        top_k=_int("top_k", 5),
+    )
+    return {"job_id": job_id, "op": "research", "status": "running"}
+
+
 @get("/system/memory/graph/status", sync_to_thread=True)
 def get_graph_status() -> dict[str, Any]:
     """Compiled knowledge-graph OVERVIEW via ``tesserae status --json``:
@@ -507,6 +533,7 @@ memory_system_router = Router(
         get_memory_lint,
         get_graph_status,
         query_graph,
+        start_research,
         get_memory_sessions,
         list_tesserae_projects,
         set_tesserae_for_project,
