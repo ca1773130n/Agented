@@ -18,10 +18,12 @@ from app_litestar.main import create_app
 
 
 @pytest.fixture
-def client(isolated_db):
-    import os
-
-    os.environ["AGENTED_LITESTAR_SKIP_STARTUP"] = "1"
+def client(isolated_db, monkeypatch):
+    # An inherited real AGENTED_API_KEY in the shell env makes the ApiKey
+    # middleware reject the fixture's dummy "test-key" (401 on every route).
+    # Drop it so bootstrap-auth against the empty user_roles table applies.
+    monkeypatch.delenv("AGENTED_API_KEY", raising=False)
+    monkeypatch.setenv("AGENTED_LITESTAR_SKIP_STARTUP", "1")
     app = create_app()
     with TestClient(app=app) as c:
         c.headers.update({"X-API-Key": "test-key"})
