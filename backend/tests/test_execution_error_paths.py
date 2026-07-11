@@ -729,3 +729,35 @@ class TestRestorePendingRetries:
         assert "trg-test01" in ExecutionService._pending_retries
         # Cleanup
         ExecutionService._retry_timers["trg-test01"].cancel()
+
+
+class TestPrelaunchFailureRecord:
+    """Audit #2: a failure BEFORE start_execution (clone/render/build) must still
+    persist a FAILED execution row — otherwise the operator gets a green 'started'
+    toast and an empty history (a silent dead end)."""
+
+    def test_clone_failure_persists_failed_record(self, isolated_db):
+        patches = _standard_patches()
+        with (
+            patches["paths"],
+            patches["log_svc"] as mock_log_svc,
+            patches["audit"],
+            patches["budget"],
+            patches["pm"],
+            patches["github"],
+            patches["which"],
+            patch.object(
+                ExecutionService, "_clone_repos", side_effect=RuntimeError("clone failed: auth")
+            ),
+        ):
+            mock_log_svc.start_execution.return_value = "exec-prelaunch"
+            trigger = _make_trigger()
+            ExecutionService.run_trigger(trigger, "msg")
+
+        # A FAILED row was persisted via the pre-launch helper (start + finish FAILED),
+        # even though the main start_execution (post-build) never ran.
+        assert mock_log_svc.start_execution.called
+        assert mock_log_svc.start_execution.call_args[1]["prompt"] == "(failed before launch)"
+        finish = mock_log_svc.finish_execution.call_args
+        assert finish[1]["status"] == ExecutionState.FAILED
+        assert "clone failed" in finish[1]["error_message"]

@@ -697,6 +697,41 @@ class ExecutionService:
         return wrapped, sandboxed
 
     @classmethod
+    def _record_prelaunch_failure(
+        cls,
+        *,
+        preallocated_execution_id: Optional[str],
+        trigger: dict,
+        trigger_id: str,
+        trigger_type: str,
+        account_id: Optional[int],
+        error_msg: str,
+    ) -> Optional[str]:
+        """Persist a FAILED execution row for a failure that happened BEFORE
+        ``start_execution`` ran (clone / render / build_command). Without this a
+        pre-launch failure leaves NO record at all — the operator gets a green
+        'started' toast and an empty execution history (a silent dead end). Records
+        it as FAILED so it surfaces in history. Best-effort; never raises."""
+        try:
+            eid = ExecutionLogService.start_execution(
+                trigger_id=trigger_id,
+                trigger_type=trigger_type,
+                prompt="(failed before launch)",
+                backend_type=trigger.get("backend_type", "claude"),
+                command="",
+                trigger_config_snapshot=json.dumps(trigger, default=str),
+                account_id=account_id,
+                execution_id=preallocated_execution_id,
+            )
+            ExecutionLogService.finish_execution(
+                execution_id=eid, status=ExecutionState.FAILED, error_message=error_msg
+            )
+            return eid
+        except Exception:
+            logger.warning("could not persist pre-launch failure record", exc_info=True)
+            return None
+
+    @classmethod
     def run_trigger(
         cls,
         trigger: dict,
@@ -1169,6 +1204,15 @@ class ExecutionService:
                 ExecutionLogService.finish_execution(
                     execution_id=execution_id, status=ExecutionState.FAILED, error_message=error_msg
                 )
+            else:
+                cls._record_prelaunch_failure(
+                    preallocated_execution_id=preallocated_execution_id,
+                    trigger=trigger,
+                    trigger_id=trigger_id,
+                    trigger_type=trigger_type,
+                    account_id=account_id,
+                    error_msg=error_msg,
+                )
         except Exception as e:
             from .policy_service import PolicyDenied
 
@@ -1184,6 +1228,17 @@ class ExecutionService:
             if execution_id:
                 ExecutionLogService.finish_execution(
                     execution_id=execution_id, status=ExecutionState.FAILED, error_message=error_msg
+                )
+            else:
+                # Pre-launch failure (clone/render/build) — persist a FAILED row so
+                # the run isn't a silent dead end with nothing in history.
+                cls._record_prelaunch_failure(
+                    preallocated_execution_id=preallocated_execution_id,
+                    trigger=trigger,
+                    trigger_id=trigger_id,
+                    trigger_type=trigger_type,
+                    account_id=account_id,
+                    error_msg=error_msg,
                 )
         finally:
             # Phase 24: tear down the per-run egress proxy (best-effort).
