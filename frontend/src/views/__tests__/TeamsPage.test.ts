@@ -169,4 +169,34 @@ describe('TeamsPage', () => {
     expect(mockShowToast).toHaveBeenCalledWith(expect.any(String), 'success')
     expect(mockShowToast).not.toHaveBeenCalledWith(expect.any(String), 'error')
   })
+
+  it('saves the topology TYPE without an empty config (no spurious "not saved")', async () => {
+    // A fresh team has no members, so the default empty `{}` config would 400 on
+    // the coordinator/workers validator. The create flow must send the topology
+    // type ONLY (no topology_config) so it's stored without the config-validation
+    // error — regression for "Team created but topology could not be saved".
+    const { teamApi } = await import('../../services/api')
+    vi.mocked(teamApi.create).mockResolvedValue({ team: { id: 'team-new' } } as never)
+    vi.mocked(teamApi.updateTopology).mockResolvedValue({} as never)
+
+    const wrapper = mount(TeamsPage, {
+      global: { provide: { showToast: mockShowToast }, stubs: { teleport: true } },
+    })
+    await flushPromises()
+
+    // Open the create modal (header button), fill the name, submit.
+    await wrapper.find('button.btn-primary').trigger('click')
+    await flushPromises()
+    await wrapper.find('.modal-overlay input.form-input').setValue('Fresh Team')
+    await wrapper.find('.modal-footer .btn-primary').trigger('click')
+    await flushPromises()
+
+    // topology TYPE saved, but WITHOUT topology_config (the empty default).
+    expect(teamApi.updateTopology).toHaveBeenCalledTimes(1)
+    const [, payload] = vi.mocked(teamApi.updateTopology).mock.calls[0]
+    expect(payload).toEqual({ topology: 'coordinator' })
+    expect(payload).not.toHaveProperty('topology_config')
+    // No "topology could not be saved" info toast.
+    expect(mockShowToast).not.toHaveBeenCalledWith(expect.any(String), 'info')
+  })
 })
