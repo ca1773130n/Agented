@@ -75,6 +75,8 @@ export type { SuperAgentActivityStatus } from './super-agents';
 export { workflowApi, workflowExecutionApi, workflowConversationApi } from './workflows';
 export { sketchApi } from './sketches';
 export type { RetrievalDetails, RetrievalSource, RetrievalStats, RetrievalFederation } from './sketches';
+export { councilApi } from './council';
+export type { CouncilRequest, CouncilEvent, CouncilHandlers } from './council';
 export { grdApi } from './grd';
 export { competitorIntelApi, lookalikeApi } from './competitor-intel';
 export type {

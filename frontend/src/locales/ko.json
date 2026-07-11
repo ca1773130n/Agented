@@ -167,6 +167,7 @@
     "designARule": "규칙 설계",
     "tokenUsage": "토큰 사용량",
     "allBackends": "모든 백엔드",
+    "council": "카운슬",
     "aiCost": "AI 비용",
     "traces": "트레이스",
     "slackNotifications": "Slack 알림",
@@ -9977,5 +9978,29 @@
     "running": "리서치 중…",
     "workingFor": "리서치 중… ({s}초) — 에이전트 루프는 몇 분 걸릴 수 있습니다.",
     "failed": "리서치 실패"
+  },
+  "council": {
+    "title": "카운슬",
+    "subtitle": "AI 계정들의 토론 패널을 소집하여 질문을 결정합니다.",
+    "question": "질문",
+    "questionPlaceholder": "예: 어떤 캐싱 전략을 채택해야 할까요?",
+    "options": "선택지",
+    "optionPlaceholder": "선택지 {n}",
+    "addOption": "선택지 추가",
+    "removeOption": "제거",
+    "rounds": "반박 라운드",
+    "context": "컨텍스트 (선택)",
+    "contextPlaceholder": "패널이 고려할 배경 정보…",
+    "convene": "카운슬 소집",
+    "stop": "중지",
+    "panel": "패널",
+    "member": "구성원",
+    "round": "반박 {n}",
+    "votedOption": "#{n} 투표",
+    "votes": "투표",
+    "decision": "결정",
+    "confidence": "신뢰도 {p}%",
+    "dissent": "반대 의견",
+    "decidedBy": "{by}에 의해 결정"
   }
 }

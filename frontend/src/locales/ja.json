@@ -167,6 +167,7 @@
     "designARule": "ルールを設計",
     "tokenUsage": "トークン使用量",
     "allBackends": "すべてのバックエンド",
+    "council": "カウンシル",
     "aiCost": "AI コスト",
     "traces": "トレース",
     "slackNotifications": "Slack 通知",
@@ -9977,5 +9978,29 @@
     "running": "リサーチ中…",
     "workingFor": "リサーチ中…（{s}秒）— エージェントループは数分かかることがあります。",
     "failed": "リサーチに失敗しました"
+  },
+  "council": {
+    "title": "カウンシル",
+    "subtitle": "AI アカウントの討論パネルを招集して質問を決定します。",
+    "question": "質問",
+    "questionPlaceholder": "例：どのキャッシュ戦略を採用すべきか？",
+    "options": "選択肢",
+    "optionPlaceholder": "選択肢 {n}",
+    "addOption": "選択肢を追加",
+    "removeOption": "削除",
+    "rounds": "反論ラウンド",
+    "context": "コンテキスト（任意）",
+    "contextPlaceholder": "パネルが考慮すべき背景…",
+    "convene": "カウンシルを招集",
+    "stop": "停止",
+    "panel": "パネル",
+    "member": "メンバー",
+    "round": "反論 {n}",
+    "votedOption": "#{n} に投票",
+    "votes": "投票",
+    "decision": "決定",
+    "confidence": "信頼度 {p}%",
+    "dissent": "反対意見",
+    "decidedBy": "{by} による決定"
   }
 }
