@@ -61,6 +61,7 @@ _TESSERAE_INIT_TIMEOUT = 30  # init — instant
 _TESSERAE_INGEST_TIMEOUT = 180  # ingest — walks markdown files
 _TESSERAE_COMPILE_TIMEOUT = 600  # compile — extractor over all sources (5-10 min)
 _TESSERAE_BUILD_SITE_TIMEOUT = 300  # build-site — static gen
+_TESSERAE_RESEARCH_TIMEOUT = 900  # research — agentic plan→search→reflect→synthesize loop
 _TESSERAE_DEFAULT_INGEST_PATHS = (
     "README.md",
     "CLAUDE.md",
@@ -1177,6 +1178,111 @@ def query_graph(
         }
     hits = parsed.get("hits") or []
     return {"ok": True, "question": parsed.get("question", question), "hits": hits, "reason": None}
+
+
+def run_research(
+    query: str,
+    *,
+    breadth: int = 3,
+    depth: int = 2,
+    max_iters: int = 6,
+    top_k: int = 5,
+    timeout: int = _TESSERAE_RESEARCH_TIMEOUT,
+) -> dict:
+    """Run ``tesserae research`` (the agentic plan→search→reflect→synthesize loop)
+    over the compiled graph and return the synthesized report markdown.
+
+    SLOW + LLM-backed (minutes) — call via :func:`run_research_async`, not inline in
+    a request handler. Writes the report to a temp ``--output`` path we then read back
+    (so we don't have to guess the slug). Returns
+    ``{ok, query, report_md, reason}``.
+
+    ``query`` becomes CLI argv, so it is guarded against flag-smuggling; the numeric
+    knobs are bounded to keep the loop (and its LLM cost) sane.
+    """
+    if not query or not query.strip():
+        return {"ok": False, "query": query, "report_md": "", "reason": "empty query"}
+    if query.lstrip().startswith("-"):
+        return {"ok": False, "query": query, "report_md": "", "reason": "invalid query"}
+    bounds = {"breadth": (breadth, 8), "depth": (depth, 5), "max_iters": (max_iters, 12), "top_k": (top_k, 20)}
+    for name, (val, cap) in bounds.items():
+        if not isinstance(val, int) or val <= 0 or val > cap:
+            return {"ok": False, "query": query, "report_md": "", "reason": f"invalid {name} (1-{cap})"}
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="agented-research-") as tmp:
+        out_path = Path(tmp) / "report.md"
+        args = [
+            "research", query,
+            "--output", str(out_path),
+            "--breadth", str(breadth),
+            "--depth", str(depth),
+            "--max-iters", str(max_iters),
+            "--top-k", str(top_k),
+        ]
+        res = _run_tesserae("research", args, cwd=_REPO_ROOT, timeout=timeout)
+        report_md = ""
+        if out_path.is_file():
+            report_md = out_path.read_text(encoding="utf-8", errors="replace")
+    if not res.ok and not report_md:
+        return {
+            "ok": False,
+            "query": query,
+            "report_md": "",
+            "reason": res.reason or (res.stderr or "").strip()[:400] or "tesserae research failed",
+        }
+    if not report_md:
+        return {"ok": False, "query": query, "report_md": "", "reason": "research produced no report"}
+    return {"ok": True, "query": query, "report_md": report_md, "reason": None}
+
+
+def run_research_async(
+    query: str,
+    *,
+    breadth: int = 3,
+    depth: int = 2,
+    max_iters: int = 6,
+    top_k: int = 5,
+) -> str:
+    """Kick off :func:`run_research` in a daemon thread and return a ``job_id`` the
+    caller polls via :func:`get_op_job` (same job store as compile/build-site)."""
+    import secrets
+
+    job_id = f"tess-research-{secrets.token_hex(6)}"
+    with _op_jobs_lock:
+        _op_jobs[job_id] = {
+            "job_id": job_id,
+            "project_id": None,
+            "op": "research",
+            "status": "running",
+            "started_at": _now_iso(),
+            "result": None,
+        }
+
+    def _runner():
+        try:
+            result = run_research(
+                query, breadth=breadth, depth=depth, max_iters=max_iters, top_k=top_k
+            )
+            with _op_jobs_lock:
+                _op_jobs[job_id]["status"] = "completed" if result["ok"] else "failed"
+                _op_jobs[job_id]["finished_at"] = _now_iso()
+                _op_jobs[job_id]["result"] = result
+        except Exception as exc:  # defensive: a runner thread must never crash silently
+            logger.warning("tesserae research job failed", exc_info=True)
+            with _op_jobs_lock:
+                _op_jobs[job_id]["status"] = "failed"
+                _op_jobs[job_id]["finished_at"] = _now_iso()
+                # Keep the full ResearchResult shape so the frontend type holds.
+                _op_jobs[job_id]["result"] = {
+                    "ok": False,
+                    "query": query,
+                    "report_md": "",
+                    "reason": str(exc)[:200],
+                }
+
+    threading.Thread(target=_runner, daemon=True).start()
+    return job_id
 
 
 def list_sessions(

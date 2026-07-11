@@ -186,6 +186,7 @@
     "decisions": "의사결정",
     "memoryDoctor": "메모리 상태",
     "knowledgeGraph": "지식 그래프",
+    "memoryResearch": "메모리 리서치",
     "memorySessions": "세션 기록"
   },
   "apiKeyBanner": {
@@ -9956,5 +9957,14 @@
     "searching": "검색 중…",
     "search": "검색",
     "noHits": "해당 쿼리에 대한 결과가 없습니다."
+  },
+  "memoryResearch": {
+    "title": "메모리 리서치",
+    "subtitle": "지식 그래프 전반에 걸쳐 질문을 조사 — Tesserae의 에이전트형 계획→검색→성찰→종합 루프 (느림, LLM 기반).",
+    "placeholder": "예: loop-4 리플레이 계층은 어떻게 범위가 정해졌나요?",
+    "investigate": "조사",
+    "running": "리서치 중…",
+    "workingFor": "리서치 중… ({s}초) — 에이전트 루프는 몇 분 걸릴 수 있습니다.",
+    "failed": "리서치 실패"
   }
 }

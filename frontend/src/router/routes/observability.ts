@@ -26,6 +26,12 @@ export const observabilityRoutes: RouteRecordRaw[] = [
     meta: { title: 'Knowledge Graph' },
   },
   {
+    path: '/memory/research',
+    name: 'memory-research',
+    component: () => import('../../views/MemoryResearchPage.vue'),
+    meta: { title: 'Memory Research' },
+  },
+  {
     path: '/memory/sessions',
     name: 'memory-sessions',
     component: () => import('../../views/MemorySessionsPage.vue'),

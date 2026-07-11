@@ -969,6 +969,22 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </template>
       </SidebarFlatLink>
 
+      <!-- Memory Research — Tesserae agentic `research` loop over the graph -->
+      <SidebarFlatLink
+        :label="t('nav.memoryResearch')"
+        :active="sidebarActive('memory-research')"
+        :collapsed-desktop="isCollapsedDesktop()"
+        @click="navTo('memory-research')"
+      >
+        <template #icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="11" cy="11" r="7"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            <path d="M11 8v6M8 11h6"/>
+          </svg>
+        </template>
+      </SidebarFlatLink>
+
       <!-- Session History — Tesserae 0.16 normalized harness sessions -->
       <SidebarFlatLink
         :label="t('nav.memorySessions')"
