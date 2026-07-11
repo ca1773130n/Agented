@@ -15,6 +15,13 @@ export const aiBackendRoutes: RouteRecordRaw[] = [
     props: true,
     meta: { title: 'Backend Detail', requiresEntity: 'backendId' },
   },
+  // Council — a debating panel of your AI accounts decides (ai-accounts 0.4.5+)
+  {
+    path: '/council',
+    name: 'council',
+    component: () => import('../../views/CouncilPage.vue'),
+    meta: { title: 'Council' },
+  },
   // Usage history
   {
     path: '/history/usage',

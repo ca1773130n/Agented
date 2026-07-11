@@ -167,6 +167,7 @@
     "designARule": "设计规则",
     "tokenUsage": "令牌用量",
     "allBackends": "所有后端",
+    "council": "评议会",
     "aiCost": "AI 成本",
     "traces": "追踪",
     "slackNotifications": "Slack 通知",
@@ -9977,5 +9978,29 @@
     "running": "研究中…",
     "workingFor": "研究中…（{s} 秒）——智能体循环可能需要几分钟。",
     "failed": "研究失败"
+  },
+  "council": {
+    "title": "评议会",
+    "subtitle": "召集你的 AI 账户组成辩论小组来决定一个问题。",
+    "question": "问题",
+    "questionPlaceholder": "例如：我们应该采用哪种缓存策略？",
+    "options": "选项",
+    "optionPlaceholder": "选项 {n}",
+    "addOption": "添加选项",
+    "removeOption": "移除",
+    "rounds": "反驳轮次",
+    "context": "背景（可选）",
+    "contextPlaceholder": "小组应权衡的任何背景…",
+    "convene": "召集评议会",
+    "stop": "停止",
+    "panel": "小组",
+    "member": "成员",
+    "round": "反驳 {n}",
+    "votedOption": "投票 #{n}",
+    "votes": "投票",
+    "decision": "决定",
+    "confidence": "{p}% 置信度",
+    "dissent": "异议",
+    "decidedBy": "由 {by} 决定"
   }
 }

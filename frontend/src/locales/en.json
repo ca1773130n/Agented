@@ -167,6 +167,7 @@
     "designARule": "Design a Rule",
     "tokenUsage": "Token Usage",
     "allBackends": "All Backends",
+    "council": "Council",
     "aiCost": "AI Cost",
     "traces": "Traces",
     "slackNotifications": "Slack Notifications",
@@ -9977,5 +9978,29 @@
     "running": "Researching…",
     "workingFor": "Researching… ({s}s) — the agentic loop can take a few minutes.",
     "failed": "Research failed"
+  },
+  "council": {
+    "title": "Council",
+    "subtitle": "Convene a debating panel of your AI accounts to decide a question.",
+    "question": "Question",
+    "questionPlaceholder": "e.g. Which caching strategy should we adopt?",
+    "options": "Options",
+    "optionPlaceholder": "Option {n}",
+    "addOption": "Add option",
+    "removeOption": "Remove",
+    "rounds": "Rebuttal rounds",
+    "context": "Context (optional)",
+    "contextPlaceholder": "Any background the panel should weigh…",
+    "convene": "Convene council",
+    "stop": "Stop",
+    "panel": "Panel",
+    "member": "member",
+    "round": "rebuttal {n}",
+    "votedOption": "voted #{n}",
+    "votes": "Votes",
+    "decision": "Decision",
+    "confidence": "{p}% confidence",
+    "dissent": "Dissent",
+    "decidedBy": "decided by {by}"
   }
 }

@@ -13,9 +13,9 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@ai-accounts/ts-core": "^0.4.3",
-    "@ai-accounts/vue-headless": "^0.4.3",
-    "@ai-accounts/vue-styled": "^0.4.3",
+    "@ai-accounts/ts-core": "^0.4.8",
+    "@ai-accounts/vue-headless": "^0.4.8",
+    "@ai-accounts/vue-styled": "^0.4.8",
     "@dagrejs/dagre": "^2.0.4",
     "@floating-ui/vue": "^1.1.11",
     "@fontsource/geist-mono": "^5.2.8",

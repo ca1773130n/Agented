@@ -125,7 +125,7 @@ function autoExpandForRoute() {
   if (['workflows', 'workflow-builder', 'workflow-playground'].includes(name)) {
     expandedSections.value.workflows = true;
   }
-  if (['ai-backends', 'backend-detail', 'service-health'].includes(name)) {
+  if (['ai-backends', 'backend-detail', 'service-health', 'council'].includes(name)) {
     expandedSections.value.aiBackends = true;
   }
   // Auto-expand only for sidebar-visible Triggers children; URL-only
@@ -1125,6 +1125,9 @@ function handleSidebarKeydown(e: KeyboardEvent) {
       <div v-show="expandedSections.aiBackends" class="nav-submenu" role="region" :aria-label="t('nav.aiBackends')">
         <button type="button" class="submenu-item" :class="{ active: sidebarActive('ai-backends') }" :aria-current="sidebarActive('ai-backends') ? 'page' : undefined" @click="navTo('ai-backends')">
           {{ t('nav.allBackends') }}
+        </button>
+        <button type="button" class="submenu-item" :class="{ active: sidebarActive('council') }" :aria-current="sidebarActive('council') ? 'page' : undefined" @click="navTo('council')">
+          {{ t('nav.council') }}
         </button>
         <button v-for="b in props.sidebarBackends" :key="b.id" type="button" class="submenu-item"
           :class="{ active: currentRouteName === 'backend-detail' && route.params.backendId === b.id }"
