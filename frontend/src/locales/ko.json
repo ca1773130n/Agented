@@ -5994,7 +5994,11 @@
     "deployHarnessError": "하니스 배포에 실패했습니다",
     "teamStarted": "팀 실행이 시작되었습니다",
     "runTeamError": "팀 실행에 실패했습니다",
-    "setupCompleted": "설정이 성공적으로 완료되었습니다"
+    "setupCompleted": "설정이 성공적으로 완료되었습니다",
+    "toast": {
+      "loadSessionsFailed": "활성 세션 로드 실패",
+      "loadInstancesFailed": "프로젝트 인스턴스 로드 실패"
+    }
   },
   "projectHealthScorecard": {
     "title": "프로젝트 상태 스코어카드",

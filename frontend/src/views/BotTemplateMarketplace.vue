@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { BotTemplate } from '../services/api';
 import { botTemplateApi, triggerApi, ApiError } from '../services/api';
@@ -71,8 +71,14 @@ async function deployTemplate(template: BotTemplate) {
   }
 }
 
+// Abort the in-flight generation stream on a new run or component unmount so the
+// fetch/reader isn't orphaned (leaked connection + refs written on a dead view).
+let genAbort: AbortController | null = null;
+
 async function generateFromDescription() {
   if (nlDescription.value.length < 10) return;
+  if (genAbort) genAbort.abort();
+  genAbort = new AbortController();
   isGenerating.value = true;
   streamOutput.value = '';
   generatedConfig.value = null;
@@ -86,6 +92,7 @@ async function generateFromDescription() {
       method: 'POST',
       headers,
       body: JSON.stringify({ description: nlDescription.value }),
+      signal: genAbort.signal,
     });
 
     if (!response.ok) {
@@ -132,8 +139,11 @@ async function generateFromDescription() {
       }
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : t('botTemplateMarketplace.toast.generationFailed');
-    showToast(message, 'error');
+    // An intentional abort (new run / unmount) is not a failure — don't toast it.
+    if ((err as Error)?.name !== 'AbortError') {
+      const message = err instanceof Error ? err.message : t('botTemplateMarketplace.toast.generationFailed');
+      showToast(message, 'error');
+    }
   } finally {
     isGenerating.value = false;
   }
@@ -168,6 +178,7 @@ async function deployGeneratedBot() {
 }
 
 onMounted(loadTemplates);
+onUnmounted(() => genAbort?.abort());
 </script>
 
 <template>
