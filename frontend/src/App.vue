@@ -104,9 +104,7 @@ function handleTourDone() {
  *  can be re-launched from Settings → Setup Guide → Restart Setup Guide. */
 function handleTourDismiss() {
   if (typeof window !== 'undefined') {
-    const ok = window.confirm(
-      'Exit the setup tour? You can restart it from Settings → Setup Guide.',
-    );
+    const ok = window.confirm(t('tour.dismissConfirm'));
     if (!ok) return;
   }
   tour.restartTour();
