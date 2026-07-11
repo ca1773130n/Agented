@@ -494,6 +494,60 @@ def test_build_lint_rejects_non_report_envelope(monkeypatch):
     assert res["ok"] is False
 
 
+def test_graph_status_parses_overview():
+    from app.services.tesserae_integration import TesseraeOpResult
+
+    payload = (
+        '{"project":"/x","nodes":4042,"edges":13401,"graph_corrupt":false,'
+        '"sessions":977,"last_compile":"2026-07-07T16:05:42","vault":"/v","site":"/s"}'
+    )
+    fake = TesseraeOpResult(op="status", ok=True, stdout=payload, stderr="")
+    with patch.object(ti, "_run_tesserae", return_value=fake):
+        res = ti.graph_status()
+    assert res["ok"] is True
+    assert res["status"]["nodes"] == 4042
+    assert res["status"]["edges"] == 13401
+
+
+def test_graph_status_rejects_non_status_envelope():
+    """A JSON object without `nodes` (e.g. an error blob) must not be accepted."""
+    from app.services.tesserae_integration import TesseraeOpResult
+
+    fake = TesseraeOpResult(op="status", ok=False, stdout='{"error":"no graph"}', stderr="")
+    with patch.object(ti, "_run_tesserae", return_value=fake):
+        assert ti.graph_status()["ok"] is False
+
+
+def test_query_graph_parses_hits():
+    from app.services.tesserae_integration import TesseraeOpResult
+
+    payload = (
+        '{"question":"loop","hits":[{"title":"Core Loop","kind":"sources","href":"h",'
+        '"score":0.83,"excerpt":"e","page_path":"/p","node_id":"sources:core","arxiv_id":null}]}'
+    )
+    fake = TesseraeOpResult(op="query", ok=True, stdout=payload, stderr="")
+    with patch.object(ti, "_run_tesserae", return_value=fake) as run:
+        res = ti.query_graph("loop", top_k=5)
+    assert res["ok"] is True
+    assert len(res["hits"]) == 1
+    assert res["hits"][0]["node_id"] == "sources:core"
+    # argv carries the guarded positional + bounds
+    args = run.call_args[0][1]
+    assert args[:2] == ["query", "loop"] and "--json" in args and "5" in args
+
+
+def test_query_graph_rejects_argv_flag_smuggling_and_bounds():
+    """`question`/`kind` become CLI argv; a leading-dash value or an out-of-range
+    top_k must be rejected before the subprocess runs."""
+    with patch.object(ti, "_run_tesserae") as run:
+        assert ti.query_graph("")["ok"] is False  # empty
+        assert ti.query_graph("--json=/etc/passwd")["ok"] is False  # flag smuggle
+        assert ti.query_graph("x", top_k=0)["ok"] is False  # bad bound
+        assert ti.query_graph("x", top_k=999)["ok"] is False  # over cap
+        assert ti.query_graph("x", kind="--evil")["ok"] is False  # kind smuggle
+        run.assert_not_called()
+
+
 def test_list_sessions_parses_array_and_caps_limit():
     from app.services.tesserae_integration import TesseraeOpResult
 

@@ -185,6 +185,7 @@
     "activitySummary": "활동 요약",
     "decisions": "의사결정",
     "memoryDoctor": "메모리 상태",
+    "knowledgeGraph": "지식 그래프",
     "memorySessions": "세션 기록"
   },
   "apiKeyBanner": {
@@ -9940,5 +9941,20 @@
     "loading": "세션 불러오는 중…",
     "empty": "세션이 없습니다.",
     "failed": "세션 기록을 불러올 수 없습니다."
+  },
+  "knowledgeGraph": {
+    "title": "지식 그래프",
+    "subtitle": "Tesserae가 아는 것을 탐색 — 컴파일된 그래프 검색 (원시 검색, LLM 없음).",
+    "statusFailed": "그래프 상태 로드 실패",
+    "searchFailed": "검색 실패",
+    "nodes": "노드",
+    "edges": "엣지",
+    "sessions": "세션",
+    "lastCompile": "마지막 컴파일",
+    "corrupt": "그래프 손상",
+    "searchPlaceholder": "지식 그래프 검색…",
+    "searching": "검색 중…",
+    "search": "검색",
+    "noHits": "해당 쿼리에 대한 결과가 없습니다."
   }
 }

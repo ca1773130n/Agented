@@ -185,6 +185,7 @@
     "activitySummary": "アクティビティ概要",
     "decisions": "意思決定",
     "memoryDoctor": "メモリ健全性",
+    "knowledgeGraph": "ナレッジグラフ",
     "memorySessions": "セッション履歴"
   },
   "apiKeyBanner": {
@@ -9940,5 +9941,20 @@
     "loading": "セッションを読み込み中…",
     "empty": "セッションがありません。",
     "failed": "セッション履歴を読み込めませんでした。"
+  },
+  "knowledgeGraph": {
+    "title": "ナレッジグラフ",
+    "subtitle": "Tesserae が知っていることを閲覧 — コンパイル済みグラフを検索（生の検索、LLM なし）。",
+    "statusFailed": "グラフステータスの読み込みに失敗しました",
+    "searchFailed": "検索に失敗しました",
+    "nodes": "ノード",
+    "edges": "エッジ",
+    "sessions": "セッション",
+    "lastCompile": "最終コンパイル",
+    "corrupt": "グラフ破損",
+    "searchPlaceholder": "ナレッジグラフを検索…",
+    "searching": "検索中…",
+    "search": "検索",
+    "noHits": "そのクエリに該当する結果はありません。"
   }
 }

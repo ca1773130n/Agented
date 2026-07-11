@@ -1104,6 +1104,81 @@ def build_lint(*, refresh: bool = False, timeout: int = 60) -> dict:
     return result
 
 
+def graph_status(*, timeout: int = 30) -> dict:
+    """Run ``tesserae status --json`` and return the compiled-graph OVERVIEW
+    ``{project, nodes, edges, graph_corrupt, sessions, last_compile, vault, site}``
+    — the "what does Tesserae know" at-a-glance. NOT cached (cheap, and the operator
+    wants the live count). Returns ``{ok, status, reason}``.
+    """
+    res = _run_tesserae("status", ["status", "--json"], cwd=_REPO_ROOT, timeout=timeout)
+    out = res.stdout or ""
+    start = out.find("{")
+    status = None
+    if start >= 0:
+        try:
+            status, _ = json.JSONDecoder().raw_decode(out[start:])
+        except (json.JSONDecodeError, ValueError):
+            status = None
+    if not isinstance(status, dict) or "nodes" not in status:
+        return {
+            "ok": False,
+            "status": None,
+            "reason": res.reason or (res.stderr or "").strip()[:400] or "tesserae status failed",
+        }
+    return {"ok": True, "status": status, "reason": None}
+
+
+def query_graph(
+    question: str, *, top_k: int = 8, kind: Optional[str] = None, timeout: int = 60
+) -> dict:
+    """Run ``tesserae query --json`` (raw BM25/semantic retrieval, NO LLM) and return
+    the ranked hits ``[{title, kind, href, score, excerpt, page_path, node_id,
+    arxiv_id}]`` — the browsable "search the knowledge graph" surface. Returns
+    ``{ok, question, hits, reason}``.
+
+    ``question``/``kind`` become CLI argv, so both are guarded against flag-smuggling
+    (a leading ``-`` would be read as a flag); ``top_k`` is bound to a sane range.
+    """
+    if not question or not question.strip():
+        return {"ok": False, "question": question, "hits": [], "reason": "empty question"}
+    if question.lstrip().startswith("-"):
+        return {"ok": False, "question": question, "hits": [], "reason": "invalid question"}
+    if not isinstance(top_k, int) or top_k <= 0 or top_k > 50:
+        return {"ok": False, "question": question, "hits": [], "reason": "invalid top_k (1-50)"}
+    # First char must be alnum/underscore so a value like "--evil" can't smuggle a
+    # flag through the `--kind` argv slot.
+    if kind is not None and not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_-]{0,39}", kind):
+        return {"ok": False, "question": question, "hits": [], "reason": "invalid kind"}
+    args = ["query", question, "--json", "--top-k", str(top_k)]
+    if kind:
+        args += ["--kind", kind]
+    res = _run_tesserae("query", args, cwd=_REPO_ROOT, timeout=timeout)
+    if not res.ok:
+        return {
+            "ok": False,
+            "question": question,
+            "hits": [],
+            "reason": res.reason or (res.stderr or "").strip()[:400] or "tesserae query failed",
+        }
+    out = res.stdout or ""
+    start = out.find("{")
+    parsed = None
+    if start >= 0:
+        try:
+            parsed, _ = json.JSONDecoder().raw_decode(out[start:])
+        except (json.JSONDecodeError, ValueError):
+            parsed = None
+    if not isinstance(parsed, dict) or "hits" not in parsed:
+        return {
+            "ok": False,
+            "question": question,
+            "hits": [],
+            "reason": "could not parse tesserae query JSON",
+        }
+    hits = parsed.get("hits") or []
+    return {"ok": True, "question": parsed.get("question", question), "hits": hits, "reason": None}
+
+
 def list_sessions(
     *, project: Optional[str] = None, limit: Optional[int] = None, timeout: int = 60
 ) -> dict:
