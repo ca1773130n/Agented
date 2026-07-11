@@ -194,19 +194,18 @@ async function createTeam() {
       color: newTeam.value.color || undefined,
       leader_id: newTeam.value.leader_id || undefined,
     });
-    // If topology was selected, save it after team creation. A fresh team has
-    // no members yet, so topology configs that reference member agents
-    // (coordinator/workers, sequential order, …) can't be valid — sending the
-    // default empty `{}` would 400 on the config validator ("topology could not
-    // be saved"). Save the topology TYPE only when the config is empty/default;
+    // Save the topology TYPE only — never a config — at create time. A brand-new
+    // team has no members, and every config-bearing topology references member
+    // agent_ids (coordinator/workers, sequential order, parallel agents, …), so
+    // NO valid config is possible yet: the picker's default `{}` and its
+    // freshly-selected stubs (e.g. `{"coordinator":"","workers":[]}`) both 400 on
+    // the backend validator ("topology could not be saved"). Sending the type
+    // alone stores it cleanly (the validator only runs when a config is present);
     // the detailed config is set later from the team page once members exist.
     if (selectedTopology.value && result.team?.id) {
-      const cfg = (topologyConfig.value || '').trim();
-      const hasConfig = cfg !== '' && cfg !== '{}';
       try {
         await teamApi.updateTopology(result.team.id, {
           topology: selectedTopology.value,
-          ...(hasConfig ? { topology_config: cfg } : {}),
         });
       } catch {
         showToast(t('teams.toast.topologyNotSaved'), 'info');
