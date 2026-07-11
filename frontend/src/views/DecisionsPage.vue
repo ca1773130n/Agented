@@ -138,7 +138,7 @@ onMounted(load);
         </div>
       </section>
     </div>
-    <div v-else class="dc-state">{{ t('decisions.empty') }}</div>
+    <div v-else-if="!error" class="dc-state">{{ t('decisions.empty') }}</div>
   </div>
 </template>
 

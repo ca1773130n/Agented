@@ -9,7 +9,7 @@
 import { ref, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
-import { memorySystemApi } from '../services/api/memory-system';
+import { memorySystemApi, friendlyMemoryReason } from '../services/api/memory-system';
 import type { GraphStatus, GraphHit } from '../services/api/memory-system';
 
 const { t } = useI18n();
@@ -28,7 +28,7 @@ async function loadStatus() {
   try {
     const res = await memorySystemApi.graphStatus();
     status.value = res.status;
-    if (!res.ok) statusError.value = res.reason || t('knowledgeGraph.statusFailed');
+    if (!res.ok) statusError.value = friendlyMemoryReason(res.reason, t) || t('knowledgeGraph.statusFailed');
   } catch (e) {
     statusError.value = (e as Error).message || t('knowledgeGraph.statusFailed');
   }
@@ -43,7 +43,7 @@ async function search() {
   try {
     const res = await memorySystemApi.graphQuery(question, topK.value);
     hits.value = res.hits;
-    if (!res.ok) searchError.value = res.reason || t('knowledgeGraph.searchFailed');
+    if (!res.ok) searchError.value = friendlyMemoryReason(res.reason, t) || t('knowledgeGraph.searchFailed');
   } catch (e) {
     searchError.value = (e as Error).message || t('knowledgeGraph.searchFailed');
     hits.value = [];

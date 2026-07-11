@@ -83,7 +83,7 @@ onMounted(load);
     <div v-else-if="markdown" class="as-body">
       <MarkdownContent :content="markdown" />
     </div>
-    <div v-else class="as-state">{{ t('activitySummary.empty') }}</div>
+    <div v-else-if="!error" class="as-state">{{ t('activitySummary.empty') }}</div>
   </div>
 </template>
 

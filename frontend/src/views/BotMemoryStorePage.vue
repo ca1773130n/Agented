@@ -70,7 +70,8 @@ async function loadBotList() {
       await loadBotMemory(bots.value[0].botId);
     }
   } catch {
-    // No memory entries yet — leave list empty
+    // A fetch failure must not read as "no memory entries yet" (an empty page).
+    showToast(t('botMemoryStore.toast.loadFailed'), 'error');
   }
 }
 

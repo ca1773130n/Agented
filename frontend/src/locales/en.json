@@ -3922,7 +3922,8 @@
       "keyDeleted": "Memory key \"{key}\" deleted",
       "deleteFailed": "Failed to delete memory entry",
       "allCleared": "All memory cleared for {bot}",
-      "clearFailed": "Failed to clear memory"
+      "clearFailed": "Failed to clear memory",
+      "loadFailed": "Failed to load memory"
     }
   },
   "botOutputWebhookForwarding": {
@@ -5828,7 +5829,8 @@
     "toasts": {
       "loadProjectsFailed": "Failed to load projects",
       "projectCreated": "Project created and assigned",
-      "projectAdded": "Project added to product"
+      "projectAdded": "Project added to product",
+      "loadDashboardFailed": "Failed to load dashboard data"
     },
     "errors": {
       "createProject": "Failed to create project",
@@ -7781,7 +7783,8 @@
       "creationFailed": "Team creation failed",
       "createdWithIssues": "Team created, but {count} step(s) couldn't be applied — review the team and add what's missing",
       "createdFromGenerated": "Team created from generated configuration",
-      "saveGeneratedFailed": "Failed to save generated team"
+      "saveGeneratedFailed": "Failed to save generated team",
+      "loadAgentsFailed": "Failed to load agents"
     }
   },
   "teamsSummaryDashboard": {
@@ -10008,5 +10011,12 @@
     "estCalls": "≈ {n} model calls",
     "estHint": "5-lens panel × (1 position + rebuttal rounds) + 1 chair. All land on your accounts.",
     "singleAccountNote": "One account — the debate is persona-diverse but single-model. Add a second account for cross-model argument."
+  },
+  "memoryCommon": {
+    "reasonCliMissing": "Tesserae is not installed — install the tesserae CLI to enable memory features.",
+    "reasonTimeout": "The memory operation timed out.",
+    "reasonExit": "The tesserae command failed. Check the CLI and its configuration.",
+    "reasonDisabled": "Tesserae is not enabled for this project.",
+    "reasonNoPaths": "No sources to ingest were found."
   }
 }

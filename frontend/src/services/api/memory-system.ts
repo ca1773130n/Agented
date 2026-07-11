@@ -8,6 +8,25 @@
 
 import { apiFetch } from './client';
 
+/**
+ * Map a raw backend `reason` token (from `_run_tesserae`: cli_missing / exit_N /
+ * timeout_after_Ns / tesserae_disabled / no_paths_to_ingest) to operator-friendly
+ * copy. Unknown tokens pass through unchanged (better than nothing). Pass vue-i18n's
+ * `t` so the copy is localized.
+ */
+export function friendlyMemoryReason(
+  reason: string | null | undefined,
+  t: (key: string) => string,
+): string | null {
+  if (!reason) return null;
+  if (reason === 'cli_missing') return t('memoryCommon.reasonCliMissing');
+  if (reason.startsWith('timeout_after_')) return t('memoryCommon.reasonTimeout');
+  if (reason.startsWith('exit_')) return t('memoryCommon.reasonExit');
+  if (reason === 'tesserae_disabled') return t('memoryCommon.reasonDisabled');
+  if (reason === 'no_paths_to_ingest') return t('memoryCommon.reasonNoPaths');
+  return reason;
+}
+
 export interface MemorySystemCliStatus {
   installed: boolean;
   version: string | null;
