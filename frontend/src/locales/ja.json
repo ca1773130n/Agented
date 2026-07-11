@@ -9922,7 +9922,16 @@
     "errors": "エラー",
     "warnings": "警告",
     "ok": "正常",
-    "fixable": "修正可能"
+    "fixable": "修正可能",
+    "lint": {
+      "title": "グラフリント",
+      "subtitle": "グラフ品質 — 根拠のない主張、孤立/リンク切れ、Wiki ドリフト、陳腐化。",
+      "failed": "グラフリントの実行に失敗しました",
+      "clean": "リント検出なし — グラフはクリーンです。",
+      "info": "情報",
+      "autoFixable": "自動修正可能",
+      "truncated": "{total}件中{shown}件を表示。"
+    }
   },
   "memorySessions": {
     "title": "セッション履歴",

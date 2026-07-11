@@ -438,6 +438,62 @@ def test_build_doctor_fails_on_unparseable(monkeypatch):
     assert res["report"] is None
 
 
+def test_build_lint_parses_report_even_on_nonzero_exit(monkeypatch):
+    """`tesserae lint --json` exits non-zero when it FINDS issues — a valid report,
+    not a CLI failure. build_lint must parse stdout regardless of exit code, and a
+    leading stderr note (e.g. the 0.19 cognee-removal diagnostic) must not matter."""
+    from app.services.tesserae_integration import TesseraeOpResult
+
+    report = {
+        "findings": [
+            {
+                "severity": "warning",
+                "code": "GRAPH_WIKI_DRIFT",
+                "message": "wiki page drifted from graph",
+                "node_id": "n-1",
+                "path": "/x/wiki.md",
+                "suggested_fix": "recompile",
+                "auto_fixable": False,
+            }
+        ],
+        "by_code": {"GRAPH_WIKI_DRIFT": 1},
+        "by_severity": {"info": 0, "warning": 1, "error": 0},
+    }
+    fake = TesseraeOpResult(
+        op="lint", ok=False, stdout=json.dumps(report), stderr="note: cognee removed", reason="exit_1"
+    )
+    with patch.object(ti, "_run_tesserae", return_value=fake):
+        res = ti.build_lint(refresh=True)
+    assert res["ok"] is True
+    assert res["report"]["by_severity"]["warning"] == 1
+    assert res["report"]["findings"][0]["code"] == "GRAPH_WIKI_DRIFT"
+
+
+def test_build_lint_fails_on_unparseable(monkeypatch):
+    from app.services.tesserae_integration import TesseraeOpResult
+
+    fake = TesseraeOpResult(
+        op="lint", ok=False, stdout="tesserae: command not found", stderr="", reason="cli_missing"
+    )
+    with patch.object(ti, "_run_tesserae", return_value=fake):
+        res = ti.build_lint(refresh=True)
+    assert res["ok"] is False
+    assert res["report"] is None
+
+
+def test_build_lint_rejects_non_report_envelope(monkeypatch):
+    """A JSON object WITHOUT ``findings`` (e.g. an error blob) must not be accepted
+    + cached as a clean lint."""
+    from app.services.tesserae_integration import TesseraeOpResult
+
+    fake = TesseraeOpResult(
+        op="lint", ok=False, stdout='{"error": "no graph"}', stderr="", reason="err"
+    )
+    with patch.object(ti, "_run_tesserae", return_value=fake):
+        res = ti.build_lint(refresh=True)
+    assert res["ok"] is False
+
+
 def test_list_sessions_parses_array_and_caps_limit():
     from app.services.tesserae_integration import TesseraeOpResult
 

@@ -123,6 +123,29 @@ export interface DoctorResult {
   reason: string | null;
 }
 
+// Tesserae `lint` — graph-QUALITY report (distinct from doctor's operational health).
+export interface LintFinding {
+  severity: 'info' | 'warning' | 'error' | string;
+  code: string;
+  message: string;
+  node_id: string | null;
+  path: string | null;
+  suggested_fix: string | null;
+  auto_fixable: boolean;
+}
+
+export interface LintReport {
+  findings: LintFinding[];
+  by_code: Record<string, number>;
+  by_severity: Record<string, number>;
+}
+
+export interface LintResult {
+  ok: boolean;
+  report: LintReport | null;
+  reason: string | null;
+}
+
 // Tesserae 0.16 `sessions list` — normalized harness session history.
 export interface HarnessSession {
   date: string;
@@ -182,6 +205,12 @@ export const memorySystemApi = {
   doctor: (refresh = false) => {
     const qs = refresh ? '?refresh=true' : '';
     return apiFetch<DoctorResult>(`/admin/system/memory/doctor${qs}`);
+  },
+
+  // Tesserae `lint` — graph QUALITY (unsupported claims, orphans, wiki drift, staleness).
+  lint: (refresh = false) => {
+    const qs = refresh ? '?refresh=true' : '';
+    return apiFetch<LintResult>(`/admin/system/memory/lint${qs}`);
   },
 
   // Tesserae 0.16 normalized harness session history.

@@ -8,7 +8,12 @@ import { ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { memorySystemApi } from '../services/api/memory-system';
-import type { DoctorFinding, DoctorReport } from '../services/api/memory-system';
+import type {
+  DoctorFinding,
+  DoctorReport,
+  LintFinding,
+  LintReport,
+} from '../services/api/memory-system';
 
 const { t } = useI18n();
 
@@ -16,7 +21,13 @@ const report = ref<DoctorReport | null>(null);
 const loading = ref(false);
 const error = ref<string | null>(null);
 
+// Tesserae `lint` — graph QUALITY (loaded alongside doctor; shared Refresh).
+const lint = ref<LintReport | null>(null);
+const lintError = ref<string | null>(null);
+const LINT_CAP = 50; // don't render 500+ dangling-link rows; surface the count instead
+
 const SEV_ORDER: Record<string, number> = { error: 0, warn: 1, ok: 2 };
+const LINT_SEV_ORDER: Record<string, number> = { error: 0, warning: 1, info: 2 };
 
 const findings = computed<DoctorFinding[]>(() =>
   [...(report.value?.findings || [])].sort(
@@ -30,24 +41,52 @@ const counts = computed(() => {
   return c;
 });
 
+const lintFindings = computed<LintFinding[]>(() =>
+  [...(lint.value?.findings || [])].sort(
+    (a, b) => (LINT_SEV_ORDER[a.severity] ?? 3) - (LINT_SEV_ORDER[b.severity] ?? 3),
+  ),
+);
+const lintTotal = computed(() => lint.value?.findings.length ?? 0);
+const lintShown = computed(() => Math.min(lintTotal.value, LINT_CAP));
+// Ordered [code, count] pairs, most frequent first, for the breakdown pills.
+const lintByCode = computed(() =>
+  Object.entries(lint.value?.by_code || {}).sort((a, b) => b[1] - a[1]),
+);
+
 function sevMod(s: string): string {
   if (s === 'error') return 'error';
   if (s === 'warn') return 'warn';
+  return 'ok';
+}
+function lintSevMod(s: string): string {
+  if (s === 'error') return 'error';
+  if (s === 'warning') return 'warn';
   return 'ok';
 }
 
 async function load(refresh = false) {
   loading.value = true;
   error.value = null;
-  try {
-    const res = await memorySystemApi.doctor(refresh);
-    report.value = res.report;
-    if (!res.ok) error.value = res.reason || t('memoryDoctor.failed');
-  } catch (e) {
-    error.value = (e as Error).message || t('memoryDoctor.failed');
-  } finally {
-    loading.value = false;
+  lintError.value = null;
+  // allSettled, not all: doctor and lint are independent reports — one throwing
+  // at the HTTP layer must not blank the other section.
+  const [doc, lnt] = await Promise.allSettled([
+    memorySystemApi.doctor(refresh),
+    memorySystemApi.lint(refresh),
+  ]);
+  if (doc.status === 'fulfilled') {
+    report.value = doc.value.report;
+    if (!doc.value.ok) error.value = doc.value.reason || t('memoryDoctor.failed');
+  } else {
+    error.value = (doc.reason as Error)?.message || t('memoryDoctor.failed');
   }
+  if (lnt.status === 'fulfilled') {
+    lint.value = lnt.value.report;
+    if (!lnt.value.ok) lintError.value = lnt.value.reason || t('memoryDoctor.lint.failed');
+  } else {
+    lintError.value = (lnt.reason as Error)?.message || t('memoryDoctor.lint.failed');
+  }
+  loading.value = false;
 }
 
 onMounted(() => load());
@@ -93,6 +132,50 @@ onMounted(() => load());
     </template>
 
     <div v-else class="doctor-state">{{ t('memoryDoctor.empty') }}</div>
+
+    <!-- Graph lint — QUALITY (unsupported claims, orphans, wiki drift, staleness) -->
+    <section v-if="!loading" class="lint-section">
+      <h2 class="lint-title">{{ t('memoryDoctor.lint.title') }}</h2>
+      <p class="lint-subtitle">{{ t('memoryDoctor.lint.subtitle') }}</p>
+
+      <div v-if="lintError" class="doctor-state doctor-state--error">{{ lintError }}</div>
+      <template v-else-if="lint">
+        <div v-if="lintTotal === 0" class="doctor-state">{{ t('memoryDoctor.lint.clean') }}</div>
+        <template v-else>
+          <div class="doctor-counts">
+            <span class="doctor-pill doctor-pill--error">{{ (lint.by_severity || {}).error || 0 }} {{ t('memoryDoctor.errors') }}</span>
+            <span class="doctor-pill doctor-pill--warn">{{ (lint.by_severity || {}).warning || 0 }} {{ t('memoryDoctor.warnings') }}</span>
+            <span class="doctor-pill doctor-pill--ok">{{ (lint.by_severity || {}).info || 0 }} {{ t('memoryDoctor.lint.info') }}</span>
+          </div>
+
+          <div class="lint-codes">
+            <span v-for="[code, n] in lintByCode" :key="code" class="lint-code-pill">
+              {{ code }} <b>{{ n }}</b>
+            </span>
+          </div>
+
+          <ul class="doctor-findings">
+            <li
+              v-for="(f, i) in lintFindings.slice(0, LINT_CAP)"
+              :key="`${f.code}-${i}`"
+              class="doctor-finding"
+              :class="`doctor-finding--${lintSevMod(f.severity)}`"
+            >
+              <div class="doctor-finding__head">
+                <span class="doctor-finding__id">{{ f.code }}</span>
+                <span v-if="f.auto_fixable" class="doctor-finding__fixable">{{ t('memoryDoctor.lint.autoFixable') }}</span>
+              </div>
+              <div class="doctor-finding__msg">{{ f.message }}</div>
+              <div v-if="f.suggested_fix" class="doctor-finding__suggestion">{{ f.suggested_fix }}</div>
+              <div v-if="f.path" class="lint-path" :title="f.path">{{ f.path }}</div>
+            </li>
+          </ul>
+          <p v-if="lintTotal > LINT_CAP" class="lint-truncated">
+            {{ t('memoryDoctor.lint.truncated', { shown: lintShown, total: lintTotal }) }}
+          </p>
+        </template>
+      </template>
+    </section>
   </div>
 </template>
 
@@ -212,5 +295,53 @@ onMounted(() => load());
   font-size: 12px;
   color: var(--text-secondary, #a1a1aa);
   margin-top: 4px;
+}
+.lint-section {
+  margin-top: 36px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 24px;
+}
+.lint-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary, #e4e4e7);
+  margin: 0;
+}
+.lint-subtitle {
+  font-size: 12px;
+  color: var(--text-secondary, #a1a1aa);
+  margin: 4px 0 12px;
+}
+.lint-codes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.lint-code-pill {
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary, #a1a1aa);
+  font-family: var(--font-mono, monospace);
+}
+.lint-code-pill b {
+  color: var(--text-primary, #e4e4e7);
+}
+.lint-path {
+  font-size: 11px;
+  color: var(--text-secondary, #71717a);
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, monospace);
+}
+.lint-truncated {
+  font-size: 12px;
+  color: var(--text-secondary, #71717a);
+  text-align: center;
+  margin-top: 12px;
 }
 </style>

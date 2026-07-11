@@ -196,6 +196,15 @@ def get_memory_doctor(refresh: bool = False) -> dict[str, Any]:
     return ti.build_doctor(refresh=refresh)
 
 
+@get("/system/memory/lint", sync_to_thread=True)
+def get_memory_lint(refresh: bool = False) -> dict[str, Any]:
+    """Graph-QUALITY report via ``tesserae lint --json`` (distinct from doctor's
+    operational health): unsupported claims, orphan/dangling links, wiki drift,
+    staleness — each with a severity + code + suggested fix. Cached by default;
+    ``refresh=true`` re-runs the lint."""
+    return ti.build_lint(refresh=refresh)
+
+
 @get("/system/memory/sessions", sync_to_thread=True)
 def get_memory_sessions(
     project: Optional[str] = None, limit: Optional[int] = None
@@ -479,6 +488,7 @@ memory_system_router = Router(
         get_activity_summary,
         get_decisions,
         get_memory_doctor,
+        get_memory_lint,
         get_memory_sessions,
         list_tesserae_projects,
         set_tesserae_for_project,

@@ -314,3 +314,30 @@ def test_compile_rejects_disabled_project(client):
 def test_job_status_404_unknown_job(client):
     r = client.get("/admin/system/memory/tesserae/jobs/tess-bogus-aabbccdd")
     assert r.status_code == 404
+
+
+# ---------- GET /admin/system/memory/lint --------------------------------
+# NOTE: the HTTP layer of this file shares a pre-existing env-dependent 401 (a
+# provided-but-unseeded X-API-Key is rejected locally), so the lint handler is
+# pinned via a direct call — the route is a 1-line passthrough to build_lint,
+# whose parsing is covered in test_tesserae_integration.py.
+
+
+def test_get_memory_lint_handler_passes_through(isolated_db):
+    from app_litestar.routes.memory_system import get_memory_lint
+
+    fake = {
+        "ok": True,
+        "report": {
+            "findings": [{"severity": "warning", "code": "GRAPH_WIKI_DRIFT", "message": "d"}],
+            "by_code": {"GRAPH_WIKI_DRIFT": 1},
+            "by_severity": {"info": 0, "warning": 1, "error": 0},
+        },
+        "reason": None,
+    }
+    # get_memory_lint is a Litestar route handler; call the wrapped fn directly.
+    handler = get_memory_lint.fn
+    with patch("app.services.tesserae_integration.build_lint", return_value=fake) as bl:
+        out = handler(refresh=True)
+    bl.assert_called_once_with(refresh=True)
+    assert out["report"]["by_severity"]["warning"] == 1

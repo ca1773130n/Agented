@@ -1066,6 +1066,44 @@ def build_doctor(*, refresh: bool = False, timeout: int = 60) -> dict:
     return result
 
 
+def build_lint(*, refresh: bool = False, timeout: int = 60) -> dict:
+    """Run ``tesserae lint --json`` and return the graph-QUALITY report (distinct from
+    ``doctor``'s operational health): ``{findings[{severity, code, message, node_id,
+    path, suggested_fix, auto_fixable}], by_code{}, by_severity{}}`` — unsupported
+    claims, orphan/dangling links, wiki drift, staleness.
+
+    Like ``doctor``, ``lint`` exits non-zero when it FINDS issues (that is a healthy
+    report, not a CLI failure), so a parseable JSON body counts as success regardless
+    of exit code. Cached with the standard short TTL (graph quality is mutable).
+    """
+    cache_key = "lint"
+    if not refresh:
+        cached = _read_tesserae_cache(cache_key, immutable=False)
+        if cached is not None:
+            return cached
+    res = _run_tesserae("lint", ["lint", "--json"], cwd=_REPO_ROOT, timeout=timeout)
+    out = res.stdout or ""
+    start = out.find("{")
+    report = None
+    if start >= 0:
+        try:
+            # raw_decode tolerates any trailing text after the JSON object.
+            report, _ = json.JSONDecoder().raw_decode(out[start:])
+        except (json.JSONDecodeError, ValueError):
+            report = None
+    # Require the report's core field so a non-report envelope (e.g. an
+    # ``{"error": ...}`` blob) isn't accepted + cached as a clean lint.
+    if not isinstance(report, dict) or "findings" not in report:
+        return {
+            "ok": False,
+            "report": None,
+            "reason": res.reason or (res.stderr or "").strip()[:400] or "tesserae lint failed",
+        }
+    result = {"ok": True, "report": report, "reason": None}
+    _write_tesserae_cache(cache_key, result)
+    return result
+
+
 def list_sessions(
     *, project: Optional[str] = None, limit: Optional[int] = None, timeout: int = 60
 ) -> dict:

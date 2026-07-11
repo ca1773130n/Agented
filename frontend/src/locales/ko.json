@@ -9922,7 +9922,16 @@
     "errors": "오류",
     "warnings": "경고",
     "ok": "정상",
-    "fixable": "수정 가능"
+    "fixable": "수정 가능",
+    "lint": {
+      "title": "그래프 린트",
+      "subtitle": "그래프 품질 — 근거 없는 주장, 고아/끊어진 링크, 위키 드리프트, 오래된 항목.",
+      "failed": "그래프 린트 실행 실패",
+      "clean": "린트 발견 항목 없음 — 그래프가 깨끗합니다.",
+      "info": "정보",
+      "autoFixable": "자동 수정 가능",
+      "truncated": "{total}개 중 {shown}개 표시."
+    }
   },
   "memorySessions": {
     "title": "세션 기록",

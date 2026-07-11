@@ -9922,7 +9922,16 @@
     "errors": "errors",
     "warnings": "warnings",
     "ok": "ok",
-    "fixable": "fixable"
+    "fixable": "fixable",
+    "lint": {
+      "title": "Graph Lint",
+      "subtitle": "Graph quality — unsupported claims, orphan/dangling links, wiki drift, staleness.",
+      "failed": "Failed to run graph lint",
+      "clean": "No lint findings — the graph is clean.",
+      "info": "info",
+      "autoFixable": "auto-fixable",
+      "truncated": "Showing {shown} of {total} findings."
+    }
   },
   "memorySessions": {
     "title": "Session History",
