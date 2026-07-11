@@ -93,7 +93,12 @@ ensure_node() {
 # retrieval calls) on PATH,
 # installed with the `semantic` extra (model2vec) — WITHOUT it, retrieval degrades to
 # the hash-bucket stub. Best-effort: a missing/old Tesserae degrades the chat to ungrounded.
-TESSERAE_MIN="0.18.0"
+# 0.18 made `ask` LLM-synthesize by default (`--no-llm` = ranked hits) + added `doctor`
+# and daily session-chunks. 0.19 is a backend-EOL cleanup: the `cognee`/`understand-anything`
+# backends are removed (typed ResearchGraph + LLM planner have been the default since 0.18,
+# already wired) — Agented never selected a tesserae backend, and the removal note prints to
+# STDERR, so `doctor --json`/`ask` stdout parsing is unaffected. Pure pin bump.
+TESSERAE_MIN="0.19.0"
 # Portable "A >= B" for dotted versions — BSD/macOS `sort` lacks `-V`.
 _version_ge() {
     local a b IFS=.
