@@ -181,6 +181,37 @@ def grd_think(project_id: str) -> dict[str, Any]:
     return result["data"] or {}
 
 
+@get("/{project_id:str}/grd/harness-conversion", sync_to_thread=False)
+def grd_harness_conversion(project_id: str) -> dict[str, Any]:
+    """GRD 0.4.16 — ``gd harness conversion``: a DETERMINISTIC effectiveness audit
+    of the life-harness (did recorded lessons actually convert to file/gate/prompt
+    changes, and did recurring failures stop?). The Loop-4 Tier-1 signal — cheap,
+    no LLM, no re-run. Returns the audit verbatim under ``raw`` plus a few
+    normalized headline fields the frontend renders directly.
+    """
+    _ensure_project(project_id)
+    cwd = _project_cwd(project_id)
+    result = GrdCliService.harness_conversion(cwd)
+    if not result["success"]:
+        from litestar.exceptions import HTTPException
+
+        raise HTTPException(
+            status_code=503,
+            detail=result.get("error") or "gd harness conversion unavailable",
+        )
+    data = result.get("data") or {}
+    return {
+        "conversion_rate": data.get("conversion_rate"),
+        "lessons_total": data.get("lessons_total"),
+        "lessons_converted": data.get("lessons_converted"),
+        "median_latency_rounds": data.get("median_latency_rounds"),
+        "rounds_applied": data.get("rounds_applied"),
+        "harness_policy": data.get("harness_policy") or {},
+        "top_unconverted": data.get("top_unconverted") or [],
+        "raw": data,
+    }
+
+
 @post("/{project_id:str}/grd/dead-ends", status_code=201, sync_to_thread=False)
 def grd_add_dead_end(project_id: str, data: dict) -> dict[str, Any]:
     """v0.7.84 — append an entry to ``.planning/DEAD-ENDS.md``.
@@ -2080,6 +2111,7 @@ grd_router = Router(
         # v0.7.84 — Ouroboros surface (GRD v0.3.24)
         grd_health,
         grd_think,
+        grd_harness_conversion,
         grd_add_dead_end,
         grd_promote_dead_ends,
         grd_genome,

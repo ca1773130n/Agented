@@ -481,6 +481,78 @@ def test_answer_question_rejected_when_not_stream_json(isolated_db, monkeypatch)
     assert resp.status_code == 400
 
 
+def test_harness_conversion_unknown_project_404(isolated_db):
+    with _client() as c:
+        resp = c.get("/api/projects/missing/grd/harness-conversion")
+    assert resp.status_code == 404
+
+
+def test_harness_conversion_normalizes_audit(isolated_db, monkeypatch):
+    """v0.10.x Loop-4 Tier-1 — the route surfaces `gd harness conversion`'s
+    deterministic audit under `raw` plus a few normalized headline fields."""
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO projects (id, name, local_path, created_at, updated_at) "
+            "VALUES ('proj-conv', 'conv-test', '/tmp', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+        )
+        conn.commit()
+
+    from app.services.grd_cli_service import GrdCliService
+
+    audit = {
+        "conversion_rate": 0.5,
+        "lessons_total": 4,
+        "lessons_converted": 2,
+        "median_latency_rounds": 3,
+        "rounds_applied": 1,
+        "harness_policy": {"count": 2, "recurring_count": 1},
+        "top_unconverted": [{"lesson": "retry on flaky net"}],
+    }
+    monkeypatch.setattr(
+        GrdCliService,
+        "harness_conversion",
+        classmethod(lambda cls, cwd: {"success": True, "data": audit, "error": None}),
+    )
+
+    with _client() as c:
+        resp = c.get("/api/projects/proj-conv/grd/harness-conversion")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["conversion_rate"] == 0.5
+    assert body["lessons_converted"] == 2
+    assert body["harness_policy"]["recurring_count"] == 1
+    assert body["top_unconverted"][0]["lesson"] == "retry on flaky net"
+    assert body["raw"] == audit
+
+
+def test_harness_conversion_503_when_gd_unavailable(isolated_db, monkeypatch):
+    """gd binary missing / <0.4.16 → 503, not a 500 crash."""
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO projects (id, name, local_path, created_at, updated_at) "
+            "VALUES ('proj-conv2', 'conv-test2', '/tmp', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+        )
+        conn.commit()
+
+    from app.services.grd_cli_service import GrdCliService
+
+    monkeypatch.setattr(
+        GrdCliService,
+        "harness_conversion",
+        classmethod(
+            lambda cls, cwd: {"success": False, "data": None, "error": "gd binary not available"}
+        ),
+    )
+
+    with _client() as c:
+        resp = c.get("/api/projects/proj-conv2/grd/harness-conversion")
+    assert resp.status_code == 503
+
+
 def test_create_ralph_session_unknown_project_404(isolated_db):
     with _client() as c:
         resp = c.post("/api/projects/missing/sessions/ralph", json={})

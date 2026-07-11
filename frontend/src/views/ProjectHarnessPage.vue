@@ -14,6 +14,7 @@ import type { Project } from '../services/api';
 import PageHeader from '../components/base/PageHeader.vue';
 import EntityLayout from '../layouts/EntityLayout.vue';
 import AutonomyEditor from '../components/grd/harness/AutonomyEditor.vue';
+import ConversionAudit from '../components/grd/harness/ConversionAudit.vue';
 import HarnessPanelHost from '../components/grd/harness/HarnessPanelHost.vue';
 import RoundList from '../components/grd/harness/RoundList.vue';
 import RoundDetail from '../components/grd/harness/RoundDetail.vue';
@@ -48,6 +49,8 @@ function onRoundChanged() {
         />
 
         <AutonomyEditor :project-id="projectId" />
+
+        <ConversionAudit :project-id="projectId" />
 
         <HarnessPanelHost :project-id="projectId" />
 

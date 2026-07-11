@@ -373,6 +373,28 @@ class GrdCliService:
         return cls.run_gd_json(project_path, "think")
 
     @classmethod
+    def harness_conversion(cls, project_path: str) -> dict:
+        """GRD 0.4.16 — ``gd harness conversion --json``: a DETERMINISTIC
+        self-improvement effectiveness audit (no LLM, no re-run). Measures
+        trial-to-behavior conversion (did a recorded lesson change a concrete
+        file/config in a later round, and with what latency) and
+        trial-to-harness-behavior conversion (did recurring failures change
+        gates/prompts/scheduler policy). Parsed shape: ``rounds_total/live/
+        applied``, ``lessons_total/converted``, ``conversion_rate``,
+        ``median_latency_rounds``, ``harness_policy{count,recurring_count}``,
+        ``events[]``, ``dead_ends{}``, ``top_unconverted[]``.
+
+        Falls back to ``{success: False}`` when ``gd`` (0.4.16+) is missing.
+        """
+        if not cls._gd_available:
+            return {
+                "success": False,
+                "data": None,
+                "error": "gd binary not available (0.4.16+ required for harness conversion)",
+            }
+        return cls.run_gd_json(project_path, "harness", "conversion")
+
+    @classmethod
     def add_dead_end(
         cls,
         project_path: str,
