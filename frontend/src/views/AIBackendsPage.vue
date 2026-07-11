@@ -40,7 +40,7 @@
         <button
           class="btn btn-primary add-account-btn"
           :disabled="isAddingAccount"
-          @click="addProxyAccount"
+          @click="addProxyAccount()"
         >
           <svg v-if="!isAddingAccount" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
             <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
@@ -76,16 +76,16 @@
         <li v-for="a in proxyAuthAttention" :key="a.type + a.email">
           <span class="proxy-auth-acct">{{ a.type }} · {{ a.email || t('aIBackends.none') }}</span>
           <span class="proxy-auth-state" :class="a.auth_state">{{ t(`aIBackends.authState.${a.auth_state}`) }}</span>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline proxy-auth-reauth"
+            :disabled="isAddingAccount"
+            @click="addProxyAccount(a.type)"
+          >
+            {{ t('aIBackends.proxyReauth') }}
+          </button>
         </li>
       </ul>
-      <button
-        type="button"
-        class="btn btn-sm btn-outline"
-        :disabled="isAddingAccount"
-        @click="addProxyAccount"
-      >
-        {{ isAddingAccount ? t('aIBackends.toastOpeningOauth') : t('aIBackends.proxyReauth') }}
-      </button>
     </div>
 
     <LoadingState v-if="isLoading" :message="t('aIBackends.loadingBackends')" />
@@ -343,7 +343,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { backendManagementApi, listGroupedBackends, type AIBackend, type BackendCapabilities } from '../services/api';
 import PageLayout from '../components/base/PageLayout.vue';
@@ -463,16 +463,53 @@ async function onOnboardDone(_backendId: string) {
   loadProxyAuth();
 }
 
-async function addProxyAccount() {
-  if (isAddingAccount.value) return;
-  isAddingAccount.value = true;
-  showToast(t('aIBackends.toastOpeningOauth'), 'info');
-  try {
-    const result = await backendManagementApi.proxyLogin();
-    if (result.status === 'completed') {
+// Poll for a newly-added proxy account after the operator finishes the OAuth
+// tab, then refresh. Bounded + cleaned up on unmount (no orphaned interval).
+let proxyPoll: ReturnType<typeof setInterval> | null = null;
+function stopProxyPoll() {
+  if (proxyPoll) { clearInterval(proxyPoll); proxyPoll = null; }
+}
+async function proxyAccountCount(): Promise<number> {
+  try { return (await backendManagementApi.proxyStatus()).account_count || 0; }
+  catch { return 0; }
+}
+function startProxyPoll(before: number) {
+  stopProxyPoll();
+  let attempts = 0;
+  proxyPoll = setInterval(async () => {
+    attempts++;
+    if (attempts > 60) { stopProxyPoll(); return; }
+    if ((await proxyAccountCount()) > before) {
+      stopProxyPoll();
       showToast(t('aIBackends.toastAccountAdded'), 'success');
       await loadBackends(true);
       loadProxyAuth();
+    }
+  }, 2000);
+}
+
+// The sidecar's cliproxyLoginBegin returns status 'started' | 'imported' |
+// 'skipped' | 'error' — NEVER 'completed'. 'started'+oauth_url is the normal
+// OAuth path (open the tab + poll); 'imported' is an already-CLI-logged-in
+// success; 'skipped' is benign; only 'error' is a failure. `backendType`
+// lets the re-auth banner re-login the FLAGGED account's provider instead of
+// always defaulting to claude.
+async function addProxyAccount(backendType?: string) {
+  if (isAddingAccount.value) return;
+  isAddingAccount.value = true;
+  try {
+    const result = await backendManagementApi.proxyLogin(backendType);
+    if (result.status === 'imported') {
+      showToast(t('aIBackends.toastAccountAdded'), 'success');
+      await loadBackends(true);
+      loadProxyAuth();
+    } else if (result.status === 'started' && result.oauth_url) {
+      const before = await proxyAccountCount();
+      window.open(result.oauth_url, '_blank', 'noopener');
+      showToast(t('aIBackends.toastCompleteSignIn'), 'info');
+      startProxyPoll(before);
+    } else if (result.status === 'skipped') {
+      showToast(result.message || t('aIBackends.toastLoginSkipped'), 'info');
     } else {
       showToast(result.message || t('aIBackends.toastLoginFailed'), 'error');
     }
@@ -482,6 +519,8 @@ async function addProxyAccount() {
     isAddingAccount.value = false;
   }
 }
+
+onUnmounted(stopProxyPoll);
 
 const isUpgradingCliproxy = ref(false);
 

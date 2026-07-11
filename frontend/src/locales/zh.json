@@ -1430,7 +1430,8 @@
       "loginCompleted": "API proxy 登录完成",
       "openDeviceLogin": "打开设备登录页面",
       "openOauthLogin": "打开 OAuth 登录页面",
-      "waitingSignIn": "等待登录完成..."
+      "waitingSignIn": "等待登录完成...",
+      "failed": "重新认证失败。"
     }
   },
   "backendConnect": {
@@ -3375,7 +3376,9 @@
       "unreachable": "无法连接代理",
       "disabled": "已禁用",
       "unknown": "未知"
-    }
+    },
+    "toastCompleteSignIn": "在打开的标签页中完成登录——添加账户后此页面将更新。",
+    "toastLoginSkipped": "已跳过登录——未添加账户。"
   },
   "agentCapabilityMatrix": {
     "featureName": "代理能力矩阵",

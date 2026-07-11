@@ -1430,7 +1430,8 @@
       "loginCompleted": "API proxy 로그인 완료",
       "openDeviceLogin": "기기 로그인 페이지 열기",
       "openOauthLogin": "OAuth 로그인 페이지 열기",
-      "waitingSignIn": "로그인 완료를 기다리는 중..."
+      "waitingSignIn": "로그인 완료를 기다리는 중...",
+      "failed": "재인증에 실패했습니다."
     }
   },
   "backendConnect": {
@@ -3375,7 +3376,9 @@
       "unreachable": "프록시 연결 불가",
       "disabled": "비활성화",
       "unknown": "알 수 없음"
-    }
+    },
+    "toastCompleteSignIn": "열린 탭에서 로그인을 완료하세요 — 계정이 추가되면 이 페이지가 업데이트됩니다.",
+    "toastLoginSkipped": "로그인을 건너뛰었습니다 — 추가된 계정이 없습니다."
   },
   "agentCapabilityMatrix": {
     "featureName": "에이전트 기능 매트릭스",

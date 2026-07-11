@@ -47,7 +47,7 @@ const userResponse = ref('');
 const sendingResponse = ref(false);
 
 // Proxy login state
-const proxyStatus = ref<'idle' | 'running' | 'device_auth' | 'success' | 'skipped'>('idle');
+const proxyStatus = ref<'idle' | 'running' | 'device_auth' | 'success' | 'skipped' | 'error'>('idle');
 const proxyMessage = ref('');
 const proxyDeviceCode = ref('');
 const proxyOAuthUrl = ref('');
@@ -201,12 +201,17 @@ async function runProxyLogin() {
       proxyMessage.value = t('accountLoginModal.proxy.signInWith', { provider });
       // Poll — the browser redirect completes the login on localhost directly
       pollForNewAccount(beforeCount);
+    } else if (res.status === 'error') {
+      // A real failure — must NOT read as a benign skip (which would let the
+      // lone "Done" button emit a green success on a failed re-auth).
+      proxyStatus.value = 'error';
+      proxyMessage.value = res.message || t('accountLoginModal.proxy.failed');
     } else {
       proxyStatus.value = 'skipped';
       proxyMessage.value = res.message || t('accountLoginModal.proxy.skipped');
     }
   } catch {
-    proxyStatus.value = 'skipped';
+    proxyStatus.value = 'error';
     proxyMessage.value = t('accountLoginModal.proxy.notAvailable');
   }
 }
@@ -362,9 +367,16 @@ onUnmounted(() => {
           <div v-else-if="proxyStatus === 'skipped'" class="proxy-section proxy-skip">
             <span>{{ proxyMessage }}</span>
           </div>
+          <div v-else-if="proxyStatus === 'error'" class="proxy-section proxy-error">
+            <span>{{ proxyMessage }}</span>
+          </div>
 
           <div class="modal-actions">
-            <button class="btn btn-primary" @click="handleDone">{{ t('common.done') }}</button>
+            <template v-if="proxyStatus === 'error'">
+              <button class="btn btn-secondary" @click="handleClose">{{ t('common.close') }}</button>
+              <button class="btn btn-primary" @click="runProxyLogin">{{ t('common.retry') }}</button>
+            </template>
+            <button v-else class="btn btn-primary" @click="handleDone">{{ t('common.done') }}</button>
           </div>
         </template>
 
