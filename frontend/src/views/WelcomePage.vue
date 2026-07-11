@@ -6,6 +6,7 @@ import { resetAuthGuard } from '../router/guards';
 import { useAuth } from '../composables/useAuth';
 import { useTourMachine } from '../composables/useTourMachine';
 import { aiAccountsClient } from '../services/api/backend-management';
+import { healthApi } from '../services/api/system';
 import AccountLoginModal from '../components/monitoring/AccountLoginModal.vue';
 import { SUPPORTED_LOCALES, setLocale } from '../i18n';
 
@@ -19,11 +20,20 @@ function onLocaleChange(e: Event) {
   setLocale(lang);
 }
 
+// Self-registration gate: open by default, but if AGENTED_DISABLE_SIGNUP was set
+// BEFORE the first admin exists, the signup form would just 403 — so surface an
+// explanatory state instead of a form that can't work.
+const signupEnabled = ref(true);
+
 // First-run page — clear any stale tour/key state from previous installs
 onMounted(() => {
   localStorage.removeItem('agented-tour-state');
   localStorage.removeItem('agented-tour-machine-state');
   localStorage.removeItem('agented-api-key');
+  healthApi
+    .authStatus()
+    .then((s: { signup_enabled?: boolean }) => { signupEnabled.value = s.signup_enabled !== false; })
+    .catch(() => { /* leave open; the signup call itself will surface a 403 */ });
 });
 
 type Phase = 'welcome' | 'signup' | 'discover';
@@ -100,9 +110,13 @@ async function detectAccounts() {
   }
 }
 
+const importError = ref('');
 async function importAll() {
   if (!importable.value.length || importing.value) return;
   importing.value = true;
+  importError.value = '';
+  const total = importable.value.length;
+  let failed = 0;
   try {
     for (const item of importable.value) {
       try {
@@ -112,9 +126,13 @@ async function importAll() {
           display_name: item.suggested_name,
         });
       } catch {
-        // Best-effort: keep importing the rest; the re-detect below reflects
-        // which ones actually landed (backend_id set) vs failed.
+        // Best-effort: keep importing the rest, but COUNT the failures so the
+        // operator isn't left wondering why some accounts stayed unimported.
+        failed++;
       }
+    }
+    if (failed > 0) {
+      importError.value = t('welcome.discover.importPartial', { failed, total });
     }
     await detectAccounts();
   } finally {
@@ -230,6 +248,7 @@ function finishOnboarding() {
         <form class="keygen-card" @submit.prevent="submitSignup">
           <h2 class="keygen-heading">{{ t('welcome.signup.heading') }}</h2>
           <p class="keygen-explanation">{{ t('welcome.signup.explanation') }}</p>
+          <p v-if="!signupEnabled" class="keygen-error" data-test="signup-disabled">{{ t('welcome.signup.disabled') }}</p>
 
           <div class="form-field">
             <label for="ob-email">{{ t('welcome.signup.emailLabel') }}</label>
@@ -249,7 +268,7 @@ function finishOnboarding() {
 
           <p v-if="signupError" class="keygen-error" data-test="signup-error">{{ signupError }}</p>
 
-          <button data-test="signup-submit" class="continue-btn" type="submit" :disabled="signingUp">
+          <button data-test="signup-submit" class="continue-btn" type="submit" :disabled="signingUp || !signupEnabled">
             <svg v-if="signingUp" class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
             </svg>
@@ -276,6 +295,7 @@ function finishOnboarding() {
           </div>
 
           <p v-if="detectError" class="keygen-error" data-test="detect-error">{{ detectError }}</p>
+          <p v-if="importError" class="keygen-error" data-test="import-error">{{ importError }}</p>
 
           <template v-if="detectRan && !detecting">
             <p v-if="discovered.length === 0" class="discover-empty" data-test="discover-empty">

@@ -366,3 +366,42 @@ def test_grep_guard_no_new_unguarded_llm_key_reads():
         "Unguarded raw LLM-key env read(s) found; route them through "
         f"config.env_llm_key: {offenders}"
     )
+
+
+# --- Audit #11: workflow command/script + setup subprocess spawners must scrub ---
+
+
+def test_workflow_node_popen_scrubs_llm_key(monkeypatch):
+    """A workflow command/script node's subprocess must NOT inherit a server-baked
+    LLM key when AGENTED_SERVER_NO_LLM_KEYS is set (env-isolation bypass, #11)."""
+    from unittest.mock import MagicMock, patch
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", POISON)
+    monkeypatch.setenv("AGENTED_SERVER_NO_LLM_KEYS", "1")
+
+    fake = MagicMock()
+    fake.communicate.return_value = ("", "")
+    fake.returncode = 0
+    with (
+        patch("app.services.workflow_node_executor.subprocess.Popen", return_value=fake) as popen,
+        patch("app.services.policy_service.PolicyService.enforce_launch"),
+    ):
+        from app.services.workflow_node_executor import _run_in_process_group
+
+        _run_in_process_group(["true"], timeout=5)
+
+    env = popen.call_args[1].get("env")
+    assert env is not None, "workflow node Popen must pass a scrubbed env, not inherit"
+    assert "ANTHROPIC_API_KEY" not in env
+
+
+def test_setup_service_popen_passes_scrubbed_env(monkeypatch):
+    """SetupExecutionService.Popen must pass the scrubbed env too (#11)."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", POISON)
+    monkeypatch.setenv("AGENTED_SERVER_NO_LLM_KEYS", "1")
+    # The Popen line now imports config + passes env=config.subprocess_env();
+    # verify the source wires env= (behavioral pin without spinning a real setup run).
+    from pathlib import Path
+
+    src = Path("app/services/setup_execution_service.py").read_text()
+    assert "env=config.subprocess_env()" in src
