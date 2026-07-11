@@ -394,3 +394,23 @@ def test_start_research_handler_requires_query(isolated_db):
         except ValidationException:
             pass
         rr.assert_not_called()
+
+
+def test_config_handler_passes_through(isolated_db):
+    from app_litestar.routes.memory_system import get_memory_config
+
+    fake = {"ok": True, "provider": "codex", "effort": "medium", "liveness_ok": True, "source": "x", "reason": None}
+    with patch("app.services.tesserae_integration.config_status", return_value=fake) as cs:
+        out = get_memory_config.fn()
+    cs.assert_called_once_with()
+    assert out["provider"] == "codex" and out["liveness_ok"] is True
+
+
+def test_engine_refresh_handler_dispatches_async(isolated_db):
+    from app_litestar.routes.memory_system import engine_refresh
+
+    with patch("app.services.tesserae_integration.engine_refresh_async", return_value="tess-engine-xyz") as er:
+        out = engine_refresh.fn()
+    er.assert_called_once_with()
+    assert out["job_id"] == "tess-engine-xyz"
+    assert out["op"] == "engine-refresh"

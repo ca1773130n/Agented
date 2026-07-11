@@ -123,6 +123,16 @@ export interface DoctorResult {
   reason: string | null;
 }
 
+// Tesserae `config status` — resolved LLM backend + liveness ping.
+export interface MemoryConfig {
+  ok: boolean;
+  provider: string | null;
+  effort: string | null;
+  liveness_ok: boolean | null;
+  source: string | null;
+  reason: string | null;
+}
+
 // Tesserae `lint` — graph-QUALITY report (distinct from doctor's operational health).
 export interface LintFinding {
   severity: 'info' | 'warning' | 'error' | string;
@@ -277,6 +287,17 @@ export const memorySystemApi = {
     if (kind) qs.set('kind', kind);
     return apiFetch<GraphQueryResult>(`/admin/system/memory/graph/query?${qs.toString()}`);
   },
+
+  // Tesserae `config status` — resolved LLM backend + liveness ping.
+  config: () =>
+    apiFetch<MemoryConfig>('/admin/system/memory/config'),
+
+  // Tesserae `engine --all --once` — coalesced recompile drain (async job).
+  engineRefresh: () =>
+    apiFetch<{ job_id: string; op: string; status: string }>(
+      '/admin/system/memory/engine-refresh',
+      { method: 'POST' },
+    ),
 
   // Tesserae `research` — kick off the agentic loop (async); poll researchJob(jobId).
   startResearch: (query: string) =>

@@ -62,6 +62,8 @@ _TESSERAE_INGEST_TIMEOUT = 180  # ingest — walks markdown files
 _TESSERAE_COMPILE_TIMEOUT = 600  # compile — extractor over all sources (5-10 min)
 _TESSERAE_BUILD_SITE_TIMEOUT = 300  # build-site — static gen
 _TESSERAE_RESEARCH_TIMEOUT = 900  # research — agentic plan→search→reflect→synthesize loop
+_TESSERAE_CONFIG_TIMEOUT = 30  # config status — resolves + pings the LLM backend
+_TESSERAE_ENGINE_TIMEOUT = 900  # engine --all --once — coalesced fleet recompile drain
 _TESSERAE_DEFAULT_INGEST_PATHS = (
     "README.md",
     "CLAUDE.md",
@@ -1280,6 +1282,93 @@ def run_research_async(
                     "report_md": "",
                     "reason": str(exc)[:200],
                 }
+
+    threading.Thread(target=_runner, daemon=True).start()
+    return job_id
+
+
+def config_status(*, timeout: int = _TESSERAE_CONFIG_TIMEOUT) -> dict:
+    """Run ``tesserae config status`` and parse the RESOLVED LLM backend + a live
+    liveness ping. Returns ``{ok, provider, effort, liveness_ok, source, reason}``.
+
+    ``config status`` prints human text (no ``--json``), so we parse the two lines
+    we care about defensively — a format drift degrades to ``provider=None`` /
+    ``liveness_ok=None`` rather than raising.
+    """
+    res = _run_tesserae("config", ["config", "status"], cwd=_REPO_ROOT, timeout=timeout)
+    out = res.stdout or ""
+    if not out.strip():
+        return {
+            "ok": False,
+            "provider": None,
+            "effort": None,
+            "liveness_ok": None,
+            "source": None,
+            "reason": res.reason or (res.stderr or "").strip()[:400] or "tesserae config failed",
+        }
+    provider = effort = source = None
+    liveness_ok: Optional[bool] = None
+    m = re.search(r"provider\s*:\s*(\S+)(?:\s+\[([^\]]+)\])?", out)
+    if m:
+        provider = m.group(1)
+        source = m.group(2)
+    m = re.search(r"effort\s*:\s*(\S+)", out)
+    if m:
+        effort = m.group(1)
+    m = re.search(r"liveness\s*:\s*(.+)", out)
+    if m:
+        line = m.group(1)
+        # "✓ OK (backend responded)" vs "✗ FAILED …". A ✗ on the line always means
+        # down, even if the failure text happens to contain "OK".
+        live_mark = ("✓" in line) or bool(re.search(r"\bOK\b", line, re.IGNORECASE))
+        liveness_ok = live_mark and ("✗" not in line)
+    return {
+        "ok": True,
+        "provider": provider,
+        "effort": effort,
+        "liveness_ok": liveness_ok,
+        "source": source,
+        "reason": None,
+    }
+
+
+def engine_refresh_async() -> str:
+    """Kick off ``tesserae engine --all --once`` — one deterministic, COALESCED drain
+    cycle across every registered project (watch → coalesce → recompile, then exit).
+
+    This is an ADDITIVE operator action (it does NOT replace Agented's own
+    auto-compile scheduler); ``--once`` avoids running a supervised long-lived
+    daemon Agented would have to babysit. Returns a ``job_id`` polled via
+    :func:`get_op_job` (shared job store)."""
+    job_id = f"tess-engine-{secrets.token_hex(6)}"
+    with _op_jobs_lock:
+        _op_jobs[job_id] = {
+            "job_id": job_id,
+            "project_id": None,
+            "op": "engine-refresh",
+            "status": "running",
+            "started_at": _now_iso(),
+            "result": None,
+        }
+
+    def _runner():
+        try:
+            res = _run_tesserae(
+                "engine",
+                ["engine", "--all", "--once"],
+                cwd=_REPO_ROOT,
+                timeout=_TESSERAE_ENGINE_TIMEOUT,
+            )
+            with _op_jobs_lock:
+                _op_jobs[job_id]["status"] = "completed" if res.ok else "failed"
+                _op_jobs[job_id]["finished_at"] = _now_iso()
+                _op_jobs[job_id]["result"] = res.to_dict()
+        except Exception as exc:  # a runner thread must never crash silently
+            logger.warning("tesserae engine refresh failed", exc_info=True)
+            with _op_jobs_lock:
+                _op_jobs[job_id]["status"] = "failed"
+                _op_jobs[job_id]["finished_at"] = _now_iso()
+                _op_jobs[job_id]["result"] = {"op": "engine-refresh", "ok": False, "reason": str(exc)[:200]}
 
     threading.Thread(target=_runner, daemon=True).start()
     return job_id

@@ -9933,6 +9933,17 @@
       "info": "信息",
       "autoFixable": "可自动修复",
       "truncated": "显示 {total} 项中的 {shown} 项。"
+    },
+    "backend": {
+      "label": "LLM 后端",
+      "live": "在线",
+      "down": "无法连接"
+    },
+    "engine": {
+      "button": "合并刷新",
+      "running": "刷新中…",
+      "done": "刷新完成",
+      "failed": "刷新失败"
     }
   },
   "memorySessions": {
