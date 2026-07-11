@@ -99,8 +99,10 @@ ensure_node() {
 # already wired) — Agented never selected a tesserae backend, and the removal note prints to
 # STDERR, so `doctor --json`/`ask` stdout parsing is unaffected. 0.19.1 is a pidlock bugfix
 # (locale-proof daemon identity — live daemons no longer misread as stale; transparent to the
-# `doctor` lock-check + `engine --once` refresh Agented wires). Pure pin bump.
-TESSERAE_MIN="0.19.1"
+# `doctor` lock-check + `engine --once` refresh Agented wires). 0.20.0 adds MCP `query` +
+# `doctor_run` tools (closes the CLI/MCP gap) — MCP-only, and Agented consumes the CLI (already
+# wires `query`→KG explorer, `doctor`→Memory Health), so the CLI surface is unchanged. Pure pin bump.
+TESSERAE_MIN="0.20.0"
 # Portable "A >= B" for dotted versions — BSD/macOS `sort` lacks `-V`.
 _version_ge() {
     local a b IFS=.
