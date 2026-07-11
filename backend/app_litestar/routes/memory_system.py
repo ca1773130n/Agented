@@ -205,6 +205,22 @@ def get_memory_lint(refresh: bool = False) -> dict[str, Any]:
     return ti.build_lint(refresh=refresh)
 
 
+@get("/system/memory/graph/status", sync_to_thread=True)
+def get_graph_status() -> dict[str, Any]:
+    """Compiled knowledge-graph OVERVIEW via ``tesserae status --json``:
+    node/edge/session counts + last-compile time — the "what does Tesserae know"
+    header for the KG explorer."""
+    return ti.graph_status()
+
+
+@get("/system/memory/graph/query", sync_to_thread=True)
+def query_graph(q: str, top_k: int = 8, kind: Optional[str] = None) -> dict[str, Any]:
+    """Search the knowledge graph via ``tesserae query --json`` (raw BM25/semantic
+    retrieval, NO LLM): ranked hits with title/kind/score/excerpt/node_id. ``kind``
+    optionally restricts to one wiki kind; ``top_k`` caps hits (1-50)."""
+    return ti.query_graph(q, top_k=top_k, kind=kind)
+
+
 @get("/system/memory/sessions", sync_to_thread=True)
 def get_memory_sessions(
     project: Optional[str] = None, limit: Optional[int] = None
@@ -489,6 +505,8 @@ memory_system_router = Router(
         get_decisions,
         get_memory_doctor,
         get_memory_lint,
+        get_graph_status,
+        query_graph,
         get_memory_sessions,
         list_tesserae_projects,
         set_tesserae_for_project,

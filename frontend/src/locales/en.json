@@ -185,6 +185,7 @@
     "activitySummary": "Activity Summary",
     "decisions": "Decisions",
     "memoryDoctor": "Memory Health",
+    "knowledgeGraph": "Knowledge Graph",
     "memorySessions": "Session History"
   },
   "apiKeyBanner": {
@@ -9940,5 +9941,20 @@
     "loading": "Loading sessions…",
     "empty": "No sessions found.",
     "failed": "Could not load session history."
+  },
+  "knowledgeGraph": {
+    "title": "Knowledge Graph",
+    "subtitle": "Browse what Tesserae knows — search the compiled graph (raw retrieval, no LLM).",
+    "statusFailed": "Failed to load graph status",
+    "searchFailed": "Search failed",
+    "nodes": "nodes",
+    "edges": "edges",
+    "sessions": "sessions",
+    "lastCompile": "last compile",
+    "corrupt": "graph corrupt",
+    "searchPlaceholder": "Search the knowledge graph…",
+    "searching": "Searching…",
+    "search": "Search",
+    "noHits": "No hits for that query."
   }
 }

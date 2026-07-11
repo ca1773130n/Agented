@@ -146,6 +146,43 @@ export interface LintResult {
   reason: string | null;
 }
 
+// Tesserae `status` — compiled knowledge-graph overview.
+export interface GraphStatus {
+  project: string;
+  nodes: number;
+  edges: number;
+  graph_corrupt: boolean;
+  sessions: number;
+  last_compile: string | null;
+  vault: string | null;
+  site: string | null;
+}
+
+export interface GraphStatusResult {
+  ok: boolean;
+  status: GraphStatus | null;
+  reason: string | null;
+}
+
+// Tesserae `query` — raw BM25/semantic retrieval hits (NO LLM synthesis).
+export interface GraphHit {
+  title: string;
+  kind: string;
+  href: string | null;
+  score: number;
+  excerpt: string | null;
+  page_path: string | null;
+  node_id: string | null;
+  arxiv_id?: string | null;
+}
+
+export interface GraphQueryResult {
+  ok: boolean;
+  question: string;
+  hits: GraphHit[];
+  reason: string | null;
+}
+
 // Tesserae 0.16 `sessions list` — normalized harness session history.
 export interface HarnessSession {
   date: string;
@@ -211,6 +248,17 @@ export const memorySystemApi = {
   lint: (refresh = false) => {
     const qs = refresh ? '?refresh=true' : '';
     return apiFetch<LintResult>(`/admin/system/memory/lint${qs}`);
+  },
+
+  // Tesserae `status` — compiled knowledge-graph overview (node/edge/session counts).
+  graphStatus: () =>
+    apiFetch<GraphStatusResult>('/admin/system/memory/graph/status'),
+
+  // Tesserae `query` — raw retrieval search over the knowledge graph (NO LLM).
+  graphQuery: (q: string, topK = 8, kind?: string | null) => {
+    const qs = new URLSearchParams({ q, top_k: String(topK) });
+    if (kind) qs.set('kind', kind);
+    return apiFetch<GraphQueryResult>(`/admin/system/memory/graph/query?${qs.toString()}`);
   },
 
   // Tesserae 0.16 normalized harness session history.

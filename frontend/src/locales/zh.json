@@ -185,6 +185,7 @@
     "activitySummary": "活动摘要",
     "decisions": "决策",
     "memoryDoctor": "内存健康",
+    "knowledgeGraph": "知识图谱",
     "memorySessions": "会话历史"
   },
   "apiKeyBanner": {
@@ -9940,5 +9941,20 @@
     "loading": "正在加载会话…",
     "empty": "未找到会话。",
     "failed": "无法加载会话历史。"
+  },
+  "knowledgeGraph": {
+    "title": "知识图谱",
+    "subtitle": "浏览 Tesserae 所知的内容——搜索已编译图谱（原始检索，无 LLM）。",
+    "statusFailed": "加载图谱状态失败",
+    "searchFailed": "搜索失败",
+    "nodes": "节点",
+    "edges": "边",
+    "sessions": "会话",
+    "lastCompile": "上次编译",
+    "corrupt": "图谱损坏",
+    "searchPlaceholder": "搜索知识图谱…",
+    "searching": "搜索中…",
+    "search": "搜索",
+    "noHits": "该查询没有结果。"
   }
 }

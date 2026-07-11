@@ -341,3 +341,23 @@ def test_get_memory_lint_handler_passes_through(isolated_db):
         out = handler(refresh=True)
     bl.assert_called_once_with(refresh=True)
     assert out["report"]["by_severity"]["warning"] == 1
+
+
+def test_graph_status_handler_passes_through(isolated_db):
+    from app_litestar.routes.memory_system import get_graph_status
+
+    fake = {"ok": True, "status": {"nodes": 42, "edges": 7}, "reason": None}
+    with patch("app.services.tesserae_integration.graph_status", return_value=fake) as gs:
+        out = get_graph_status.fn()
+    gs.assert_called_once_with()
+    assert out["status"]["nodes"] == 42
+
+
+def test_graph_query_handler_passes_args_through(isolated_db):
+    from app_litestar.routes.memory_system import query_graph as query_graph_route
+
+    fake = {"ok": True, "question": "loop", "hits": [{"node_id": "n1"}], "reason": None}
+    with patch("app.services.tesserae_integration.query_graph", return_value=fake) as qg:
+        out = query_graph_route.fn(q="loop", top_k=5, kind="papers")
+    qg.assert_called_once_with("loop", top_k=5, kind="papers")
+    assert out["hits"][0]["node_id"] == "n1"
