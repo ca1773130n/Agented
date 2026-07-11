@@ -97,8 +97,10 @@ ensure_node() {
 # and daily session-chunks. 0.19 is a backend-EOL cleanup: the `cognee`/`understand-anything`
 # backends are removed (typed ResearchGraph + LLM planner have been the default since 0.18,
 # already wired) — Agented never selected a tesserae backend, and the removal note prints to
-# STDERR, so `doctor --json`/`ask` stdout parsing is unaffected. Pure pin bump.
-TESSERAE_MIN="0.19.0"
+# STDERR, so `doctor --json`/`ask` stdout parsing is unaffected. 0.19.1 is a pidlock bugfix
+# (locale-proof daemon identity — live daemons no longer misread as stale; transparent to the
+# `doctor` lock-check + `engine --once` refresh Agented wires). Pure pin bump.
+TESSERAE_MIN="0.19.1"
 # Portable "A >= B" for dotted versions — BSD/macOS `sort` lacks `-V`.
 _version_ge() {
     local a b IFS=.
