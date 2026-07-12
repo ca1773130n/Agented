@@ -18,6 +18,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 
 // Mutable route shape so individual tests can drive the watcher.
 const routeQuery = ref<{ tour?: string }>({});
+const routeFullPath = ref('/login');
 
 const replaceMock = vi.fn();
 const pushMock = vi.fn();
@@ -27,11 +28,21 @@ vi.mock('vue-router', () => ({
     get query() {
       return routeQuery.value;
     },
+    get fullPath() {
+      return routeFullPath.value;
+    },
   }),
   useRouter: () => ({
     push: pushMock,
     replace: replaceMock,
   }),
+}));
+
+// getApiKey (from the api client) — drives the "hide the stale banner at once
+// when a key is already present" branch of the navigation watcher.
+const getApiKeyReturn = ref<string | null>(null);
+vi.mock('../../services/api/client', () => ({
+  getApiKey: () => getApiKeyReturn.value,
 }));
 
 // Health API: pretend the user is fully authenticated to skip the
@@ -88,6 +99,7 @@ interface Harness {
 
 function mountHost(opts: MountOpts = {}): { wrapper: ReturnType<typeof mount>; harness: Harness } {
   routeQuery.value = opts.initialQuery ?? {};
+  routeFullPath.value = '/login';
   const tour = makeTour(opts.tourActive ?? false);
   const loadSidebarData = vi.fn();
   const harness = {
@@ -174,5 +186,51 @@ describe('useAppBoot — ?tour=start watcher', () => {
     await flushPromises();
 
     expect(harness.tour.startTour).not.toHaveBeenCalled();
+  });
+});
+
+describe('useAppBoot — stale api-key banner on navigation', () => {
+  beforeEach(() => {
+    replaceMock.mockClear();
+    pushMock.mockClear();
+    getApiKeyReturn.value = null;
+    routeQuery.value = {};
+  });
+
+  // Regression: signing in on /login (the guard's redirect target) never fires
+  // the banner's own @authenticated reset, so the pre-auth "API key required"
+  // banner used to carry into the app — forcing a SECOND key entry on the main
+  // page. Navigating with a key present must hide it and load the sidebar.
+  it('hides the stale banner and loads the sidebar when navigating in with a key', async () => {
+    getApiKeyReturn.value = 'a-valid-key';
+    const { harness } = mountHost();
+    await flushPromises();
+
+    // Simulate the stale banner left over from the pre-auth boot.
+    harness.showApiKeyBanner.value = true;
+    harness.loadSidebarData.mockClear();
+
+    // Navigate /login -> / (what goNext does after api-key sign-in).
+    routeFullPath.value = '/';
+    await flushPromises();
+
+    expect(harness.showApiKeyBanner.value).toBe(false);
+    expect(harness.loadSidebarData).toHaveBeenCalled();
+  });
+
+  it('does not re-check auth on navigation when no banner is showing', async () => {
+    const { healthApi } = await import('../../services/api');
+    const { harness } = mountHost();
+    await flushPromises();
+
+    vi.mocked(healthApi.authStatus).mockClear();
+    harness.loadSidebarData.mockClear();
+
+    routeFullPath.value = '/projects';
+    await flushPromises();
+
+    // Banner was never up, so the watcher must be a no-op (no extra authStatus).
+    expect(healthApi.authStatus).not.toHaveBeenCalled();
+    expect(harness.loadSidebarData).not.toHaveBeenCalled();
   });
 });
