@@ -62,6 +62,29 @@ def test_unknown_team_404(isolated_db):
     assert resp.status_code == 404
 
 
+def test_update_and_remove_member(isolated_db):
+    """Regression for err-c5d3nq class: handlers passed team_id to db fns that don't take it."""
+    from app.db.teams import add_team_member, create_team
+
+    create_user_role("admin-key-tm5", "Admin", "admin")
+    team_id = create_team("Crew5")
+    member_id = add_team_member(team_id, name="Worker")
+    headers = {"X-API-Key": "admin-key-tm5"}
+    with _client() as c:
+        resp = c.put(
+            f"/admin/teams/{team_id}/members/{member_id}",
+            headers=headers,
+            json={"role": "lead"},
+        )
+        assert resp.status_code == 200, resp.text
+
+        resp = c.delete(f"/admin/teams/{team_id}/members/{member_id}", headers=headers)
+        assert resp.status_code == 200, resp.text
+
+        resp = c.get(f"/admin/teams/{team_id}/members", headers=headers)
+    assert resp.json() == {"members": []}
+
+
 def test_list_team_members_works_for_unknown_team(isolated_db):
     """Stub returns empty members list when team has none — endpoint
     should not 500."""
