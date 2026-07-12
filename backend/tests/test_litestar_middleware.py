@@ -67,26 +67,26 @@ def test_security_headers_added(isolated_db):
     assert "default-src 'self'" in resp.headers["content-security-policy"]
 
 
-def test_schema_path_csp_allows_swagger_cdn(isolated_db):
-    """The /schema/* docs page renders Swagger from the pinned jsdelivr CDN — its
-    CSP must whitelist that origin for script/style/img or the page renders blank
-    (`SwaggerUIBundle is not defined`). Regression for the "/docs 404 + blank
-    swagger" report."""
+def test_schema_path_csp_is_self_only_with_inline(isolated_db):
+    """Swagger UI is served from same-origin vendored assets, so the /schema/* CSP
+    needs NO external origin — only 'unsafe-inline' for the inline SwaggerUIBundle
+    init script. Regression for the "/docs 404 + blank swagger" report and its
+    self-hosting follow-up (no CDN)."""
     with _client() as c:
         resp = c.get("/schema/openapi.json")
     csp = resp.headers["content-security-policy"]
-    assert "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net" in csp
-    assert "img-src 'self' data: https://cdn.jsdelivr.net" in csp
+    assert "https://" not in csp  # no CDN / external origin whitelisted
+    assert "script-src 'self' 'unsafe-inline'" in csp
 
 
-def test_app_path_csp_stays_strict_no_cdn(isolated_db):
-    """The CDN allowance is scoped to /schema/* only — ordinary app paths keep the
-    strict self-only script-src with no external origin."""
+def test_app_path_csp_stays_strict(isolated_db):
+    """Ordinary app paths keep the strict script-src 'self' — no 'unsafe-inline'
+    and no external origin (the /schema inline relaxation must not leak out)."""
     with _client() as c:
         resp = c.get("/health/liveness")
     csp = resp.headers["content-security-policy"]
-    assert "cdn.jsdelivr.net" not in csp
-    assert "script-src 'self'" in csp
+    assert "https://" not in csp
+    assert "script-src 'self';" in csp  # exactly 'self', no unsafe-inline
 
 
 def test_hsts_only_when_force_https(isolated_db):

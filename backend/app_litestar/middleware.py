@@ -411,23 +411,18 @@ _CSP = "; ".join(
         "connect-src 'self'",
     ]
 )
-# Relaxed CSP scoped to Swagger UI under /schema/* (and the /docs alias). Litestar
-# renders Swagger from a pinned jsdelivr bundle (swagger-ui-dist), so the schema
-# page needs inline scripts AND that CDN origin for script/style/img — without it
-# `SwaggerUIBundle is not defined` and the page renders blank. Scope is limited to
-# /schema/*; the app's strict `_CSP` (self-only, no CDN) is unchanged. The docs
-# open in a new tab (target=_blank rel=noopener), whose per-tab sessionStorage is
-# empty, so the CDN script can't reach the operator's X-API-Key.
-# ponytail: CDN-loaded swagger is the Litestar default; self-hosting the ~1.5 MB
-# swagger-ui-dist assets would drop the external origin entirely — do that if the
-# CDN dependency ever becomes unacceptable.
-_CDN = "https://cdn.jsdelivr.net"
+# Relaxed CSP scoped to Swagger UI under /schema/* (and the /docs alias). Swagger's
+# assets are served SAME-ORIGIN (vendored swagger-ui-dist under /schema-assets/, see
+# main._openapi_config) — no CDN origin is whitelisted. The only relaxation vs the
+# app default `_CSP` is 'unsafe-inline' for script/style, which the Swagger page's
+# inline init script (`SwaggerUIBundle({...})`) and inline styles require. img-src
+# keeps `data:` for the data-URI favicon.
 _CSP_SCHEMA = "; ".join(
     [
         "default-src 'self'",
-        f"script-src 'self' 'unsafe-inline' {_CDN}",
-        f"style-src 'self' 'unsafe-inline' {_CDN}",
-        f"img-src 'self' data: {_CDN}",
+        "script-src 'self' 'unsafe-inline'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data:",
         "connect-src 'self'",
     ]
 )

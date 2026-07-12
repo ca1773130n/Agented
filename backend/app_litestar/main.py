@@ -8,10 +8,14 @@ exception handlers that took over from Flask in wave 80.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from litestar import Litestar
 from litestar.config.cors import CORSConfig
 from litestar.di import Provide
+from litestar.openapi import OpenAPIConfig
+from litestar.openapi.plugins import JsonRenderPlugin, SwaggerRenderPlugin, YamlRenderPlugin
+from litestar.static_files import create_static_files_router
 
 from .auth import provide_caller
 from .exception_handlers import build_exception_handlers
@@ -211,10 +215,37 @@ def _cors_config() -> CORSConfig:
     )
 
 
+# Swagger UI is served from same-origin vendored assets (backend/app_litestar/
+# static/swagger/, pinned swagger-ui-dist 5.18.2) instead of Litestar's default
+# jsdelivr CDN — so the API docs page needs NO external origin and the app's CSP
+# stays self-only (no CDN whitelist). The assets live under /schema-assets/, which
+# is auto-public + self-CSP'd via the existing "/schema" prefix rules. Favicon is a
+# data: URI to avoid the CDN-hosted Litestar badge (blocked by img-src otherwise).
+_SWAGGER_ASSETS_DIR = Path(__file__).parent / "static" / "swagger"
+
+
+def _openapi_config() -> OpenAPIConfig:
+    return OpenAPIConfig(
+        title="Agented API",
+        version="1.0.0",
+        render_plugins=[
+            SwaggerRenderPlugin(
+                js_url="/schema-assets/swagger-ui-bundle.js",
+                css_url="/schema-assets/swagger-ui.css",
+                standalone_preset_js_url="/schema-assets/swagger-ui-standalone-preset.js",
+                favicon="<link rel='icon' href='data:,'>",
+            ),
+            JsonRenderPlugin(),
+            YamlRenderPlugin(),
+        ],
+    )
+
+
 def create_app() -> Litestar:
     """Build the Litestar application instance."""
     return Litestar(
         cors_config=_cors_config(),
+        openapi_config=_openapi_config(),
         # Global request body-size cap (DoS / memory exhaustion, 07-routes M3).
         # Bulk/import endpoints otherwise accept an arbitrarily large body.
         # Default 10 MiB; override via AGENTED_MAX_BODY_BYTES.
@@ -254,6 +285,11 @@ def create_app() -> Litestar:
         on_startup=[on_startup],
         on_shutdown=[on_shutdown],
         route_handlers=[
+            # Same-origin Swagger UI assets (see _openapi_config). Public via the
+            # "/schema" auth-bypass prefix; no external CDN.
+            create_static_files_router(
+                path="/schema-assets", directories=[_SWAGGER_ASSETS_DIR]
+            ),
             health_router,
             rbac_router,
             auth_router,
