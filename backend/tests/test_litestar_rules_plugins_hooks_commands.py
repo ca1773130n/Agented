@@ -63,6 +63,40 @@ def test_create_plugin_requires_body(isolated_db):
     assert resp.status_code == 400
 
 
+def test_plugin_crud_roundtrip(isolated_db):
+    """Regression for err-c5d3nq: handlers passed kwargs the db layer doesn't accept."""
+    with _client() as c:
+        resp = c.post(
+            "/admin/plugins/",
+            json={"name": "p1", "description": "d", "status": "active", "author": "a"},
+        )
+        assert resp.status_code == 201, resp.text
+        plugin = resp.json()["plugin"]
+        assert plugin["status"] == "active"
+        pid = plugin["id"]
+
+        resp = c.put(f"/admin/plugins/{pid}", json={"description": "d2", "status": "draft"})
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["status"] == "draft"
+
+        resp = c.post(
+            f"/admin/plugins/{pid}/components",
+            json={"name": "hook1", "type": "hook", "content": "echo hi"},
+        )
+        assert resp.status_code == 201, resp.text
+        cid = resp.json()["id"]
+
+        resp = c.put(
+            f"/admin/plugins/{pid}/components/{cid}",
+            json={"name": "hook2", "type": "command", "content": "echo bye"},
+        )
+        assert resp.status_code == 200, resp.text
+
+        comps = c.get(f"/admin/plugins/{pid}/components").json()["components"]
+        assert comps[0]["name"] == "hook2"
+        assert comps[0]["type"] == "command"
+
+
 # Hooks
 def test_list_hooks(isolated_db):
     with _client() as c:

@@ -20,6 +20,21 @@ const recoveryKey = ref(0);
 onErrorCaptured((err: Error, _instance, info: string) => {
   hasError.value = true;
   errorMessage.value = `${err.message} (in ${info})`;
+  // Returning false stops propagation to the global errorHandler, which is the
+  // only path into the system-error capture API — so report from here too,
+  // otherwise the original error is invisible to error capture / autofix and
+  // only downstream artifacts (e.g. corrupted-patch crashes) get recorded.
+  try {
+    import('../../services/api/system').then(({ systemErrorApi }) => {
+      systemErrorApi.reportError({
+        source: 'frontend',
+        category: 'frontend_error',
+        message: err instanceof Error ? err.message : String(err),
+        stack_trace: err instanceof Error ? err.stack : undefined,
+        context_json: JSON.stringify({ component: info, boundary: 'ErrorBoundary', url: window.location.href }),
+      }).catch(() => {});
+    }).catch(() => {});
+  } catch { /* reporting is best-effort */ }
   return false;
 });
 
