@@ -9,6 +9,7 @@
 import { onMounted, onUnmounted, ref, watch, type Ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { setupApi, healthApi } from '../services/api';
+import { getApiKey } from '../services/api/client';
 import { useAuth } from './useAuth';
 import { prefetchTourRoutes, type useTourMachine } from './useTourMachine';
 
@@ -50,6 +51,9 @@ export function useAppBoot(opts: UseAppBootOptions): UseAppBoot {
         showApiKeyBanner.value = true;
         return false;
       }
+      // Authenticated (or auth not required): make sure any stale banner is
+      // cleared — checkAuthStatus is authoritative for banner visibility.
+      showApiKeyBanner.value = false;
       return true;
     } catch {
       return false;
@@ -93,6 +97,27 @@ export function useAppBoot(opts: UseAppBootOptions): UseAppBoot {
       // Bundle install failed — will retry on next launch
     }
   }
+
+  // The api-key banner is decided ONCE at boot (checkAuthStatus in onMounted).
+  // A user who signs in on the /login page — where the guard sends unauthenticated
+  // visitors — never triggers the banner's own @authenticated reset, so without
+  // this the stale "API key required" banner from the pre-auth boot carries into
+  // the app: the double-prompt (enter the key on /login AND again on the banner).
+  // When we navigate while the banner is still up, re-verify auth: hide it at once
+  // if a key is now present (no flash), then confirm and load the sidebar data the
+  // pre-auth boot skipped.
+  watch(
+    () => route.fullPath,
+    async () => {
+      if (!showApiKeyBanner.value) return;
+      if (getApiKey()) showApiKeyBanner.value = false;
+      const ok = await checkAuthStatus();
+      if (ok) {
+        loadSidebarData();
+        beginTourIfRequested();
+      }
+    },
+  );
 
   // Watch for ?tour=start query param (set by WelcomePage after key generation)
   watch(
