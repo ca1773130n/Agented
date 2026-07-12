@@ -100,7 +100,17 @@ def readiness(request: Request) -> dict[str, Any]:
     else:
         health["components"]["startup"] = {"status": "ok"}
 
-    if health["status"] != "ok":
+    # Readiness answers "can this instance serve requests?" — so gate the 503 on
+    # CORE dependencies only (the database). A degraded OPTIONAL subsystem
+    # (cli_proxy needs re-auth / cliproxyapi not up, or non-fatal startup
+    # warnings) is surfaced in the body as status="degraded" but must NOT fail
+    # readiness: a 503 here would pull a fully-functional instance out of
+    # load-balancer rotation and make readiness pollers log a continuous stream
+    # of errors — for a subsystem that only affects AI-account operations. The
+    # frontend health indicator then reads status="degraded" from the 200 body
+    # (instead of mis-rendering the 503 as a phantom database error).
+    core_ok = health["components"].get("database", {}).get("status") == "ok"
+    if not core_ok:
         raise HTTPException(status_code=503, detail=health)
     return health
 
