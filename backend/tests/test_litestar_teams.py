@@ -63,25 +63,27 @@ def test_unknown_team_404(isolated_db):
 
 
 def test_update_and_remove_member(isolated_db):
-    """Regression for err-c5d3nq class: handlers passed team_id to db fns that don't take it."""
+    """Regression for err-c5d3nq class: handlers passed team_id to db fns that don't take it.
+
+    No keys are created, so ``provide_caller`` resolves the bootstrap admin and no
+    ``X-API-Key`` header is needed — the point is exercising the update/remove route
+    -> db-fn signatures, not auth.
+    """
     from app.db.teams import add_team_member, create_team
 
-    create_user_role("admin-key-tm5", "Admin", "admin")
     team_id = create_team("Crew5")
     member_id = add_team_member(team_id, name="Worker")
-    headers = {"X-API-Key": "admin-key-tm5"}
     with _client() as c:
         resp = c.put(
             f"/admin/teams/{team_id}/members/{member_id}",
-            headers=headers,
             json={"role": "lead"},
         )
         assert resp.status_code == 200, resp.text
 
-        resp = c.delete(f"/admin/teams/{team_id}/members/{member_id}", headers=headers)
+        resp = c.delete(f"/admin/teams/{team_id}/members/{member_id}")
         assert resp.status_code == 200, resp.text
 
-        resp = c.get(f"/admin/teams/{team_id}/members", headers=headers)
+        resp = c.get(f"/admin/teams/{team_id}/members")
     assert resp.json() == {"members": []}
 
 
