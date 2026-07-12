@@ -455,7 +455,8 @@ def update_member_endpoint(
     del authorized
     from app.database import update_team_member
 
-    if not update_team_member(team_id=team_id, member_id=member_id, role=data.role):
+    del team_id  # member ids are global; db update_team_member takes no team scope
+    if not update_team_member(member_id=member_id, role=data.role):
         raise NotFoundException(detail="Member not found")
     return {"message": "Member updated"}
 
@@ -470,7 +471,8 @@ def remove_member_endpoint(team_id: str, member_id: int, authorized: Caller) -> 
     del authorized
     from app.database import remove_team_member
 
-    if not remove_team_member(team_id=team_id, member_id=member_id):
+    del team_id  # member ids are global; db remove_team_member takes no team scope
+    if not remove_team_member(member_id=member_id):
         raise NotFoundException(detail="Member not found")
     return {"message": "Member removed"}
 

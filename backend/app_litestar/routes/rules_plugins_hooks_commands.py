@@ -269,10 +269,8 @@ def create_plugin(data: dict, caller: Caller) -> dict[str, Any]:
         name=data.get("name", ""),
         version=data.get("version", "1.0.0"),
         description=data.get("description"),
+        status=data.get("status", "draft"),
         author=data.get("author"),
-        repository_url=data.get("repository_url"),
-        config=data.get("config"),
-        project_id=data.get("project_id"),
     )
     if not plugin_id:
         raise HTTPException(status_code=500, detail="Failed to create plugin")
@@ -296,9 +294,8 @@ def update_plugin_endpoint(plugin_id: str, data: dict, caller: Caller) -> dict[s
         name=data.get("name"),
         version=data.get("version"),
         description=data.get("description"),
+        status=data.get("status"),
         author=data.get("author"),
-        repository_url=data.get("repository_url"),
-        config=data.get("config"),
     ):
         raise NotFoundException(detail="Plugin not found or no changes")
     return get_plugin(plugin_id)
@@ -326,10 +323,9 @@ def create_component(plugin_id: str, data: dict, caller: Caller) -> dict[str, An
         raise ClientException(detail="JSON body required")
     cid = add_plugin_component(
         plugin_id=plugin_id,
-        component_type=data.get("component_type", ""),
+        component_type=data.get("type") or data.get("component_type", ""),
         name=data.get("name", ""),
-        config=data.get("config"),
-        enabled=data.get("enabled", 1),
+        content=data.get("content"),
     )
     if not cid:
         raise HTTPException(status_code=500, detail="Failed to create component")
@@ -343,10 +339,9 @@ def update_component(
     del caller, plugin_id
     if not update_plugin_component(
         component_id,
-        component_type=data.get("component_type"),
+        component_type=data.get("type") or data.get("component_type"),
         name=data.get("name"),
-        config=data.get("config"),
-        enabled=data.get("enabled"),
+        content=data.get("content"),
     ):
         raise NotFoundException(detail="Component not found")
     return {"message": "Component updated"}
