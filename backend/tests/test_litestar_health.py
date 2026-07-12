@@ -214,8 +214,36 @@ class TestReadiness:
         assert body["status"] == "ok"
         assert "components" not in body
 
-    @pytest.mark.skip(
-        reason="Authenticated readiness depends on Flask app context for ProcessManager + cli proxy; covered indirectly by Flask integration tests."
-    )
-    def test_authenticated_full_response(self, isolated_db):
-        pass
+    def test_degraded_cliproxy_is_ready_200_not_503(self, isolated_db, monkeypatch):
+        """Readiness gates the 503 on CORE deps (database) only. A degraded
+        OPTIONAL cli_proxy (accounts need re-auth) returns 200 with
+        status="degraded" — NOT 503, which would pull a functional instance from
+        LB rotation and spam readiness pollers (which then mis-render it as a
+        phantom DB error)."""
+        from app.services.cliproxy_manager import CLIProxyManager
+
+        create_user_role("rk", "Lbl", "admin")
+        monkeypatch.setattr(CLIProxyManager, "is_healthy", staticmethod(lambda: False))
+        with _client(isolated_db) as c:
+            resp = c.get("/health/readiness", headers={"X-API-Key": "rk"})
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["status"] == "degraded"
+        assert body["components"]["cli_proxy"]["status"] == "degraded"
+        assert body["components"]["database"]["status"] == "ok"  # core dep fine
+
+    def test_database_down_is_503(self, isolated_db, monkeypatch):
+        """A CORE dependency failure (database) DOES fail readiness with 503."""
+        import app_litestar.routes.health as h
+        from app.services.cliproxy_manager import CLIProxyManager
+
+        monkeypatch.setattr(h, "_is_authenticated_request", lambda req: True)
+        monkeypatch.setattr(CLIProxyManager, "is_healthy", staticmethod(lambda: True))
+
+        def _boom(*a, **k):
+            raise RuntimeError("db down")
+
+        monkeypatch.setattr("app.database.get_connection", _boom)
+        with _client(isolated_db) as c:
+            resp = c.get("/health/readiness", headers={"X-API-Key": "x"})
+        assert resp.status_code == 503
