@@ -67,6 +67,28 @@ def test_security_headers_added(isolated_db):
     assert "default-src 'self'" in resp.headers["content-security-policy"]
 
 
+def test_schema_path_csp_allows_swagger_cdn(isolated_db):
+    """The /schema/* docs page renders Swagger from the pinned jsdelivr CDN — its
+    CSP must whitelist that origin for script/style/img or the page renders blank
+    (`SwaggerUIBundle is not defined`). Regression for the "/docs 404 + blank
+    swagger" report."""
+    with _client() as c:
+        resp = c.get("/schema/openapi.json")
+    csp = resp.headers["content-security-policy"]
+    assert "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net" in csp
+    assert "img-src 'self' data: https://cdn.jsdelivr.net" in csp
+
+
+def test_app_path_csp_stays_strict_no_cdn(isolated_db):
+    """The CDN allowance is scoped to /schema/* only — ordinary app paths keep the
+    strict self-only script-src with no external origin."""
+    with _client() as c:
+        resp = c.get("/health/liveness")
+    csp = resp.headers["content-security-policy"]
+    assert "cdn.jsdelivr.net" not in csp
+    assert "script-src 'self'" in csp
+
+
 def test_hsts_only_when_force_https(isolated_db):
     with _client(force_https=True) as c:
         resp = c.get("/health/liveness")
