@@ -247,7 +247,6 @@ onUnmounted(() => { alive = false; stopEnginePoll(); });
 
 <style scoped>
 .doctor-page {
-  padding: 24px;
   max-width: 920px;
 }
 .doctor-refresh {
@@ -269,7 +268,7 @@ onUnmounted(() => { alive = false; stopEnginePoll(); });
   color: var(--text-secondary, #a1a1aa);
 }
 .doctor-state--error {
-  color: #ef4444;
+  color: var(--danger);
 }
 .doctor-counts {
   display: flex;
@@ -285,16 +284,16 @@ onUnmounted(() => { alive = false; stopEnginePoll(); });
   border-radius: 100px;
 }
 .doctor-pill--error {
-  background: rgba(239, 68, 68, 0.15);
-  color: #f87171;
+  background: var(--accent-crimson-dim);
+  color: var(--danger);
 }
 .doctor-pill--warn {
-  background: rgba(234, 179, 8, 0.15);
-  color: #eab308;
+  background: var(--accent-amber-dim);
+  color: var(--warning);
 }
 .doctor-pill--ok {
-  background: rgba(34, 197, 94, 0.12);
-  color: #4ade80;
+  background: var(--accent-emerald-dim);
+  color: var(--success);
 }
 .doctor-root {
   margin-left: auto;
@@ -320,13 +319,13 @@ onUnmounted(() => { alive = false; stopEnginePoll(); });
   padding: 12px 14px;
 }
 .doctor-finding--error {
-  border-left-color: #ef4444;
+  border-left-color: var(--danger);
 }
 .doctor-finding--warn {
-  border-left-color: #eab308;
+  border-left-color: var(--warning);
 }
 .doctor-finding--ok {
-  border-left-color: #22c55e;
+  border-left-color: var(--success);
 }
 .doctor-finding__head {
   display: flex;
@@ -349,8 +348,8 @@ onUnmounted(() => { alive = false; stopEnginePoll(); });
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 100px;
-  background: rgba(79, 70, 229, 0.15);
-  color: #a5b4fc;
+  background: var(--accent-violet-dim);
+  color: var(--accent-violet);
 }
 .doctor-finding__msg {
   font-size: 13px;
@@ -454,12 +453,12 @@ onUnmounted(() => { alive = false; stopEnginePoll(); });
   border-radius: 100px;
 }
 .backend-live--ok {
-  background: rgba(34, 197, 94, 0.15);
-  color: #4ade80;
+  background: var(--accent-emerald-dim);
+  color: var(--success);
 }
 .backend-live--down {
-  background: rgba(239, 68, 68, 0.15);
-  color: #f87171;
+  background: var(--accent-crimson-dim);
+  color: var(--danger);
 }
 .backend-engine {
   display: flex;

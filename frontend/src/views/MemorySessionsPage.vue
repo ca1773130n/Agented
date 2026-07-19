@@ -75,12 +75,11 @@ onMounted(() => load());
 
 <style scoped>
 .sessions-page {
-  padding: 24px;
   max-width: 920px;
 }
 .sessions-refresh {
   padding: 6px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
   background: transparent;
   color: var(--text-primary, #e4e4e7);
@@ -97,7 +96,7 @@ onMounted(() => load());
   color: var(--text-secondary, #a1a1aa);
 }
 .sessions-state--error {
-  color: #ef4444;
+  color: var(--danger);
 }
 .sessions-groups {
   display: flex;

@@ -134,7 +134,6 @@ onMounted(loadStatus);
 
 <style scoped>
 .kg-page {
-  padding: 24px;
   max-width: 920px;
 }
 .kg-state {
@@ -143,7 +142,7 @@ onMounted(loadStatus);
   color: var(--text-secondary, #a1a1aa);
 }
 .kg-state--error {
-  color: #ef4444;
+  color: var(--danger);
 }
 .kg-overview {
   display: flex;
@@ -182,10 +181,10 @@ onMounted(loadStatus);
 .kg-corrupt {
   font-size: 12px;
   font-weight: 600;
-  color: #f87171;
+  color: var(--accent-crimson);
   padding: 4px 10px;
   border-radius: 100px;
-  background: rgba(239, 68, 68, 0.15);
+  background: var(--accent-crimson-dim);
 }
 .kg-search {
   display: flex;
@@ -195,7 +194,7 @@ onMounted(loadStatus);
 .kg-search__input {
   flex: 1;
   padding: 9px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
   background: var(--bg-secondary, #12121a);
   color: var(--text-primary, #e4e4e7);
@@ -204,7 +203,7 @@ onMounted(loadStatus);
 .kg-search__topk {
   width: 64px;
   padding: 9px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
   background: var(--bg-secondary, #12121a);
   color: var(--text-primary, #e4e4e7);
@@ -212,10 +211,10 @@ onMounted(loadStatus);
 }
 .kg-search__btn {
   padding: 9px 18px;
-  border: 1px solid rgba(79, 70, 229, 0.5);
+  border: 1px solid var(--accent-violet);
   border-radius: 8px;
-  background: rgba(79, 70, 229, 0.15);
-  color: #a5b4fc;
+  background: var(--accent-violet-dim);
+  color: var(--accent-violet);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -233,7 +232,7 @@ onMounted(loadStatus);
   gap: 10px;
 }
 .kg-hit {
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
   padding: 12px 14px;
 }
@@ -272,7 +271,7 @@ onMounted(loadStatus);
 .kg-hit__bar span {
   display: block;
   height: 100%;
-  background: #6366f1;
+  background: var(--accent-violet);
 }
 .kg-hit__excerpt {
   font-size: 13px;
@@ -291,7 +290,7 @@ onMounted(loadStatus);
 }
 .kg-hit__arxiv {
   font-size: 11px;
-  color: #a5b4fc;
+  color: var(--accent-violet);
   text-decoration: none;
 }
 </style>

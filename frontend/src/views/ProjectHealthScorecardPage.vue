@@ -651,7 +651,7 @@ function formatLastUpdated(iso: string): string {
 
 .bot-code {
   font-size: 0.78rem;
-  font-family: 'Geist Mono', monospace;
+  font-family: var(--font-mono);
   color: var(--accent-cyan);
   background: var(--bg-tertiary);
   padding: 2px 7px;

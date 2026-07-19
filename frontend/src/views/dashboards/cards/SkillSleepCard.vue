@@ -140,6 +140,24 @@ onMounted(reload);
 </template>
 
 <style scoped>
+.lane-card {
+  padding: 20px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.lane-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.lane-card__title { font-size: 16px; font-weight: 600; margin: 0; color: var(--text-primary); }
+.lane-card__subtitle { font-size: 12px; color: var(--text-tertiary); margin: 4px 0 0; }
 .skill-sleep-card {
   min-height: 120px;
 }
@@ -154,7 +172,7 @@ onMounted(reload);
   display: flex;
   align-items: center;
   gap: 12px;
-  background: var(--bg-card-inner, rgba(255, 255, 255, 0.04));
+  background: var(--bg-tertiary);
   border-radius: 8px;
   padding: 8px 12px;
   font-size: 0.85rem;
@@ -189,7 +207,7 @@ onMounted(reload);
 }
 
 .delta--up {
-  color: var(--accent-green, #4ade80);
+  color: var(--accent-emerald);
 }
 
 .delta--down {
