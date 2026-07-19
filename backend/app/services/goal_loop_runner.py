@@ -748,28 +748,47 @@ def _run(state: _RunnerState, cwd: Optional[str]) -> None:
             hypothesis, predicted_outcome = (
                 _extract_hypothesis(turn_text) if ouroboros else (None, None)
             )
-            verdict = GoalJudgeService.judge(
-                goal,
-                turn_text,
-                check_cmd=check_cmd,
-                cwd=cwd,
-                backend_kind=backend_kind,
-                model_override=model_override,
-                hypothesis=hypothesis,
-                predicted_outcome=predicted_outcome,
-                metric_spec=metric_spec,
-                quality_gate=gate,
-                sandbox=sandbox,
-                # Reward-hacking guard: hand the judge the loop's REAL diff vs its
-                # starting commit so "met" reflects what changed, not what the
-                # agent narrated. Computed lazily — skipped for check-only loops
-                # where the judge never reads it.
-                artifact_diff=_judge_artifact_diff(cwd, gate, check_cmd, state.loop_start_commit),
-                # FIX 1: the stable operator session id is the policy session key
-                # for the deterministic-check launch gate (server-scope policies
-                # always apply; a session-scope DENY/ASK refuses to run the check).
-                session_id=session_id,
-            )
+            try:
+                verdict = GoalJudgeService.judge(
+                    goal,
+                    turn_text,
+                    check_cmd=check_cmd,
+                    cwd=cwd,
+                    backend_kind=backend_kind,
+                    model_override=model_override,
+                    hypothesis=hypothesis,
+                    predicted_outcome=predicted_outcome,
+                    metric_spec=metric_spec,
+                    quality_gate=gate,
+                    sandbox=sandbox,
+                    # Reward-hacking guard: hand the judge the loop's REAL diff vs its
+                    # starting commit so "met" reflects what changed, not what the
+                    # agent narrated. Computed lazily — skipped for check-only loops
+                    # where the judge never reads it.
+                    artifact_diff=_judge_artifact_diff(
+                        cwd, gate, check_cmd, state.loop_start_commit
+                    ),
+                    # FIX 1: the stable operator session id is the policy session key
+                    # for the deterministic-check launch gate (server-scope policies
+                    # always apply; a session-scope DENY/ASK refuses to run the check).
+                    session_id=session_id,
+                )
+            except Exception as judge_exc:
+                # Don't orphan the iteration row in 'pending' if judging crashes —
+                # finalize it as failed (accounted for) before the error propagates
+                # and tears the runner down.
+                logger.exception(
+                    "goal_loop: session %s iteration %s judging failed",
+                    session_id,
+                    iteration_no,
+                )
+                record_goal_loop_iteration_complete(
+                    row_id,
+                    verdict="not_met",
+                    judge_source="error",
+                    judge_reason=f"iteration judging failed: {judge_exc}",
+                )
+                raise
 
             # If the operator clicked Stop while the judge was
             # running, abort before we record a misleading
