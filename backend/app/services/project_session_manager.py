@@ -27,7 +27,7 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
-from queue import Empty, Queue
+from queue import Empty, Full, Queue
 from typing import Dict, Generator, List, Optional
 
 from .. import config
@@ -826,6 +826,9 @@ class ProjectSessionManager:
     # (workers=1) process — mirrors the other class-level in-memory registries.
     _pending_policy_asks: Dict[str, dict] = {}
     _lock = threading.Lock()
+    # Cap per-subscriber SSE/raw queues so a stalled client (backgrounded tab,
+    # slow link) can't grow its queue unbounded and OOM the single worker.
+    _SUBSCRIBER_QUEUE_MAXSIZE = 2000
 
     @classmethod
     def create_session(
@@ -1631,13 +1634,13 @@ class ProjectSessionManager:
         with cls._lock:
             if session_id in cls._subscribers:
                 for q in cls._subscribers[session_id]:
-                    q.put(None)  # Signal end of stream
+                    cls._offer(q, None)  # Signal end of stream
                 del cls._subscribers[session_id]
             # v0.7.74 — raw consumers get the ``__end__`` sentinel
             # so they can break their drain loop and unsubscribe.
             if session_id in cls._raw_subscribers:
                 for q in cls._raw_subscribers[session_id]:
-                    q.put(("__end__", {"status": status, "exit_code": exit_code}))
+                    cls._offer(q, ("__end__", {"status": status, "exit_code": exit_code}))
                 del cls._raw_subscribers[session_id]
 
         logger.info(f"Session {session_id} exited (status={status}, exit_code={exit_code})")
@@ -1945,7 +1948,7 @@ class ProjectSessionManager:
         Yields:
             SSE-formatted event strings.
         """
-        queue: Queue = Queue()
+        queue: Queue = Queue(maxsize=cls._SUBSCRIBER_QUEUE_MAXSIZE)
 
         with cls._lock:
             # Step 1: Register subscriber FIRST to avoid missing lines
@@ -2029,6 +2032,21 @@ class ProjectSessionManager:
                     except ValueError:
                         pass  # Intentionally silenced: invalid value handled gracefully
 
+    @staticmethod
+    def _offer(q: Queue, item) -> None:
+        """Non-blocking enqueue with drop-oldest backpressure (single-worker OOM
+        guard). A stalled subscriber's bounded queue drops its oldest buffered
+        event to make room; the ring buffer / persisted log covers replay, and the
+        terminal ``None``/``__end__`` sentinel always gets in (drop frees a slot)."""
+        try:
+            q.put_nowait(item)
+        except Full:
+            try:
+                q.get_nowait()
+                q.put_nowait(item)
+            except (Empty, Full):
+                pass
+
     @classmethod
     def _broadcast(cls, session_id: str, event_type: str, data: dict) -> None:
         """Broadcast an SSE event to all subscribers for a session.
@@ -2046,9 +2064,9 @@ class ProjectSessionManager:
         message = cls._format_sse(event_type, data)
         with cls._lock:
             for q in cls._subscribers.get(session_id, []):
-                q.put(message)
+                cls._offer(q, message)
             for q in cls._raw_subscribers.get(session_id, []):
-                q.put((event_type, data))
+                cls._offer(q, (event_type, data))
 
     @classmethod
     def register_and_broadcast_policy_ask(cls, session_id: str, payload: dict) -> None:
@@ -2076,9 +2094,9 @@ class ProjectSessionManager:
         with cls._lock:
             cls._pending_policy_asks[session_id] = payload
             for q in cls._subscribers.get(session_id, []):
-                q.put(message)
+                cls._offer(q, message)
             for q in cls._raw_subscribers.get(session_id, []):
-                q.put(("policy_ask", payload))
+                cls._offer(q, ("policy_ask", payload))
 
     @classmethod
     def clear_pending_policy_ask(cls, session_id: str) -> None:
@@ -2101,7 +2119,7 @@ class ProjectSessionManager:
         events emitted after they registered. Goal-loop runners
         register before the first turn, so they catch everything.
         """
-        queue: Queue = Queue()
+        queue: Queue = Queue(maxsize=cls._SUBSCRIBER_QUEUE_MAXSIZE)
         with cls._lock:
             cls._raw_subscribers.setdefault(session_id, []).append(queue)
         return queue
