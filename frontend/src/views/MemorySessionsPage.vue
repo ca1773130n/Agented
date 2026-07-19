@@ -4,17 +4,25 @@
  * sessions (Claude Code / Codex …) imported into this instance's memory,
  * grouped by day. Sibling of ActivitySummaryPage / DecisionsPage.
  */
-import { ref, computed, onMounted } from 'vue';
+import { computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
-import { memorySystemApi } from '../services/api/memory-system';
-import type { HarnessSession } from '../services/api/memory-system';
+import { useMemoryJob } from '../composables/useMemoryJob';
+import type { HarnessSession, SessionsResult } from '../services/api/memory-system';
 
 const { t } = useI18n();
 
-const sessions = ref<HarnessSession[]>([]);
-const loading = ref(false);
-const error = ref<string | null>(null);
+// Runs as a BACKGROUND job — the operator can leave the page; results persist
+// to the query-history store and are shown instantly on the next visit.
+const { result, error: jobError, running, run, showLatest } = useMemoryJob<SessionsResult>('sessions');
+
+const sessions = computed<HarnessSession[]>(() => result.value?.sessions || []);
+// Surface either a transport/job error, or a completed-but-not-ok reason.
+const error = computed<string | null>(() => {
+  if (jobError.value) return jobError.value;
+  if (result.value && !result.value.ok) return result.value.reason || t('memorySessions.failed');
+  return null;
+});
 
 // Group by date, newest day first (the CLI already returns newest-first).
 const groups = computed(() => {
@@ -27,34 +35,27 @@ const groups = computed(() => {
   return [...map.entries()].map(([date, items]) => ({ date, items }));
 });
 
-async function load() {
-  loading.value = true;
-  error.value = null;
-  try {
-    const res = await memorySystemApi.sessions(null, 200);
-    sessions.value = res.sessions || [];
-    if (!res.ok) error.value = res.reason || t('memorySessions.failed');
-  } catch (e) {
-    error.value = (e as Error).message || t('memorySessions.failed');
-  } finally {
-    loading.value = false;
-  }
+function refresh() {
+  run({ limit: 200 });
 }
 
-onMounted(() => load());
+onMounted(() => showLatest());
 </script>
 
 <template>
   <div class="sessions-page">
     <PageHeader :title="t('memorySessions.title')" :subtitle="t('memorySessions.subtitle')">
       <template #actions>
-        <button class="sessions-refresh" :disabled="loading" @click="load()">
-          {{ t('memorySessions.refresh') }}
+        <button class="sessions-refresh" :disabled="running" @click="refresh()">
+          {{ running ? t('memoryJob.running') : t('memorySessions.refresh') }}
         </button>
       </template>
     </PageHeader>
 
-    <div v-if="loading" class="sessions-state">{{ t('memorySessions.loading') }}</div>
+    <div v-if="running" class="sessions-state">
+      {{ t('memorySessions.loading') }}
+      <p class="sessions-bg-note">{{ t('memoryJob.background') }}</p>
+    </div>
     <div v-else-if="error" class="sessions-state sessions-state--error">{{ error }}</div>
     <div v-else-if="sessions.length === 0" class="sessions-state">{{ t('memorySessions.empty') }}</div>
 
@@ -97,6 +98,11 @@ onMounted(() => load());
 }
 .sessions-state--error {
   color: var(--danger);
+}
+.sessions-bg-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--text-tertiary, #71717a);
 }
 .sessions-groups {
   display: flex;

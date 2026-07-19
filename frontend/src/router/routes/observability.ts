@@ -38,6 +38,12 @@ export const observabilityRoutes: RouteRecordRaw[] = [
     meta: { title: 'Session History' },
   },
   {
+    path: '/memory/history',
+    name: 'memory-history',
+    component: () => import('../../views/MemoryQueryHistoryPage.vue'),
+    meta: { title: 'Query History' },
+  },
+  {
     path: '/traces',
     name: 'traces-list',
     component: () => import('../../views/TracesPage.vue'),

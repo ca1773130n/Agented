@@ -188,7 +188,8 @@
     "memoryDoctor": "Memory Health",
     "knowledgeGraph": "Knowledge Graph",
     "memoryResearch": "Memory Research",
-    "memorySessions": "Session History"
+    "memorySessions": "Session History",
+    "memoryHistory": "Query History"
   },
   "apiKeyBanner": {
     "title": "API key required",
@@ -10041,6 +10042,44 @@
     "running": "Researching…",
     "workingFor": "Researching… ({s}s) — the agentic loop can take a few minutes.",
     "failed": "Research failed"
+  },
+  "memoryJob": {
+    "running": "Running…",
+    "background": "Running in the background — you can leave this page; results appear in History.",
+    "status": {
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed"
+    }
+  },
+  "memoryHistory": {
+    "title": "Query History",
+    "subtitle": "Past memory & observability queries run as background jobs. Click a row to read its full result.",
+    "refresh": "Refresh",
+    "loading": "Loading query history…",
+    "failed": "Failed to load query history",
+    "detailLoading": "Loading result…",
+    "detailFailed": "Failed to load result",
+    "emptyTitle": "No queries yet",
+    "emptyDescription": "Run a memory or observability query and it will appear here.",
+    "metaStatus": "Status",
+    "metaStarted": "Started",
+    "metaFinished": "Finished",
+    "relNow": "just now",
+    "relMinutes": "{n}m ago",
+    "relHours": "{n}h ago",
+    "relDays": "{n}d ago",
+    "kind": {
+      "doctor": "Doctor",
+      "lint": "Lint",
+      "config": "Config",
+      "graph_status": "Graph Status",
+      "activity_summary": "Activity Summary",
+      "decisions": "Decisions",
+      "graph_query": "Graph Query",
+      "sessions": "Sessions",
+      "research": "Research"
+    }
   },
   "council": {
     "title": "Council",

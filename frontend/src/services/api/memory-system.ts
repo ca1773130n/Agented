@@ -295,6 +295,42 @@ export interface NodeDetail {
   neighbors: NodeNeighbor[];
 }
 
+// --- Background memory/observability queries (v1) ---
+// Any memory/observability query can be dispatched as a background job the
+// operator can navigate away from; results land in the query-history store.
+export type MemoryQueryKind =
+  | 'doctor'
+  | 'lint'
+  | 'config'
+  | 'graph_status'
+  | 'activity_summary'
+  | 'decisions'
+  | 'graph_query'
+  | 'sessions'
+  | 'research';
+
+// A row in the jobs list (NO result blob — cheap to enumerate).
+export interface MemoryJobSummary {
+  job_id: string;
+  kind: string;
+  label: string;
+  project_id: string | null;
+  status: 'running' | 'completed' | 'failed';
+  created_at: string;
+  finished_at: string | null;
+  error: string | null;
+}
+
+// One job WITH its result (the kind-specific payload the old sync endpoint returned).
+export interface MemoryJob {
+  job_id: string;
+  op: string;
+  status: 'running' | 'completed' | 'failed';
+  started_at?: string;
+  finished_at?: string;
+  result: unknown;
+}
+
 export const memorySystemApi = {
   list: () =>
     apiFetch<{ memory_systems: MemorySystemSummary[] }>(
@@ -494,6 +530,30 @@ export const memorySystemApi = {
 
   tesseraeJobStatus: (jobId: string) =>
     apiFetch<TesseraeAsyncJob>(
+      `/admin/system/memory/tesserae/jobs/${encodeURIComponent(jobId)}`,
+    ),
+
+  // --- Background memory/observability queries ---
+
+  // Dispatch a memory/observability query as a background job; poll getMemoryJob.
+  runMemoryQuery: (kind: MemoryQueryKind, params?: Record<string, unknown> | null) =>
+    apiFetch<{ job_id: string; kind: string; status: 'running' }>(
+      '/admin/system/memory/query',
+      { method: 'POST', body: JSON.stringify({ kind, params: params ?? null }) },
+    ),
+
+  // List past query jobs (newest first, NO result blob). Optional kind filter.
+  listMemoryJobs: (kind?: MemoryQueryKind | null, limit?: number | null) => {
+    const qs = new URLSearchParams();
+    if (kind) qs.set('kind', kind);
+    if (limit) qs.set('limit', String(limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return apiFetch<{ jobs: MemoryJobSummary[] }>(`/admin/system/memory/jobs${suffix}`);
+  },
+
+  // Read one job WITH its result (shares the tesserae jobs store).
+  getMemoryJob: (jobId: string) =>
+    apiFetch<MemoryJob>(
       `/admin/system/memory/tesserae/jobs/${encodeURIComponent(jobId)}`,
     ),
 };

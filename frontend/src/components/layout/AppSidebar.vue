@@ -999,6 +999,21 @@ function handleSidebarKeydown(e: KeyboardEvent) {
         </template>
       </SidebarFlatLink>
 
+      <!-- Query History — read-later log of background memory/observability jobs -->
+      <SidebarFlatLink
+        :label="t('nav.memoryHistory')"
+        :active="sidebarActive('memory-history')"
+        :collapsed-desktop="isCollapsedDesktop()"
+        @click="navTo('memory-history')"
+      >
+        <template #icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="9"/>
+            <polyline points="12 7 12 12 15 14"/>
+          </svg>
+        </template>
+      </SidebarFlatLink>
+
       <!-- Triggers History (expandable) -->
       <SidebarGroupToggle
         :label="t('nav.triggerHistory')"

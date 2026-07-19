@@ -3,11 +3,12 @@
  * Activity Summary — daily / weekly "what you did" digest across every
  * registered project, rendered from Tesserae's `tesserae summary` markdown.
  */
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import MarkdownContent from '../components/base/MarkdownContent.vue';
-import { memorySystemApi } from '../services/api/memory-system';
+import { useMemoryJob } from '../composables/useMemoryJob';
+import type { ActivitySummary } from '../services/api/memory-system';
 
 const { t } = useI18n();
 
@@ -17,22 +18,18 @@ const today = new Date();
 const date = ref(
   `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`,
 );
-const markdown = ref('');
-const loading = ref(false);
-const error = ref<string | null>(null);
 
-async function load(refresh = false) {
-  loading.value = true;
-  error.value = null;
-  try {
-    const res = await memorySystemApi.activitySummary(period.value, date.value, null, refresh);
-    markdown.value = res.markdown || '';
-    if (!res.ok) error.value = res.reason || t('activitySummary.failed');
-  } catch (e) {
-    error.value = (e as Error).message || t('activitySummary.failed');
-  } finally {
-    loading.value = false;
-  }
+// Runs as a BACKGROUND job — the operator can leave the page.
+const { result, error: jobError, running, run, showLatest } = useMemoryJob<ActivitySummary>('activity_summary');
+const markdown = computed(() => result.value?.markdown || '');
+const error = computed<string | null>(() => {
+  if (jobError.value) return jobError.value;
+  if (result.value && !result.value.ok) return result.value.reason || t('activitySummary.failed');
+  return null;
+});
+
+function load() {
+  run({ period: period.value, date: date.value });
 }
 
 function setPeriod(p: 'day' | 'week') {
@@ -41,7 +38,9 @@ function setPeriod(p: 'day' | 'week') {
   load();
 }
 
-onMounted(load);
+// Instant last result on mount (read-later); the operator refreshes for the
+// current period/date via the controls.
+onMounted(() => showLatest());
 </script>
 
 <template>
@@ -72,14 +71,17 @@ onMounted(load);
         :aria-label="t('activitySummary.dateLabel')"
         @change="load()"
       />
-      <button type="button" class="as-refresh" :disabled="loading" @click="load(true)">
-        {{ loading ? t('activitySummary.loading') : t('activitySummary.refresh') }}
+      <button type="button" class="as-refresh" :disabled="running" @click="load()">
+        {{ running ? t('memoryJob.running') : t('activitySummary.refresh') }}
       </button>
     </div>
 
     <p v-if="error" class="as-error">{{ error }}</p>
 
-    <div v-if="loading && !markdown" class="as-state">{{ t('activitySummary.loading') }}</div>
+    <div v-if="running && !markdown" class="as-state">
+      {{ t('activitySummary.loading') }}
+      <span class="as-bg-note">{{ t('memoryJob.background') }}</span>
+    </div>
     <div v-else-if="markdown" class="as-body">
       <MarkdownContent :content="markdown" />
     </div>
@@ -152,6 +154,13 @@ onMounted(load);
   padding: 32px 0;
   color: var(--text-tertiary);
   font-size: 13px;
+}
+
+.as-bg-note {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 
 .as-body {
