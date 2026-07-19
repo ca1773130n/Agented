@@ -570,21 +570,27 @@ class PluginConversationService:
             # surfacing it.
             try:
                 row = get_plugin_conversation(conv_id)
-                if row:
-                    owner = row.get("user_id")
-                    if (
-                        owner != caller_user_id
-                    ):  # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
-                        return error_response(
-                            "NOT_FOUND",
-                            "Conversation not found",
-                            HTTPStatus.NOT_FOUND,
-                        )
-                    upsert_plugin_conversation(conv_id, row["messages"], status="abandoned")
-                    return {"message": "Conversation abandoned"}, HTTPStatus.OK
             except Exception:
-                pass
-            return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
+                logger.exception("abandon: DB read failed for %s", conv_id)
+                return error_response(
+                    "INTERNAL", "Failed to look up conversation", HTTPStatus.INTERNAL_SERVER_ERROR
+                )
+            if not row:
+                return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
+            owner = row.get("user_id")
+            # v0.7.83 (codex WARN 2) — NULL owner only matches NULL caller
+            if owner != caller_user_id:
+                return error_response("NOT_FOUND", "Conversation not found", HTTPStatus.NOT_FOUND)
+            try:
+                upsert_plugin_conversation(conv_id, row["messages"], status="abandoned")
+            except Exception:
+                # A write failure is a 500 — do NOT mask it as "not found", which
+                # hid the failure and left the row un-abandoned (it kept surfacing).
+                logger.exception("abandon: upsert failed for %s", conv_id)
+                return error_response(
+                    "INTERNAL", "Failed to abandon conversation", HTTPStatus.INTERNAL_SERVER_ERROR
+                )
+            return {"message": "Conversation abandoned"}, HTTPStatus.OK
 
         owner_err = cls._check_owner(conv_id, caller_user_id)
         if owner_err is not None:
