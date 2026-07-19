@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { executionApi } from '../services/api';
@@ -138,6 +138,15 @@ onMounted(async () => {
 function goTo(idx: number) {
   currentFrame.value = Math.max(0, Math.min(frames.value.length - 1, idx));
 }
+
+// Stop playback when the view unmounts — otherwise the interval keeps firing
+// (and mutating refs) after navigation.
+onUnmounted(() => {
+  if (playInterval.value) {
+    clearInterval(playInterval.value);
+    playInterval.value = null;
+  }
+});
 
 function togglePlay() {
   if (isPlaying.value) {
