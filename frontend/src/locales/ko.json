@@ -4439,6 +4439,7 @@
     "title": "발견 항목 추세 분석",
     "subtitle": "코드베이스가 시간이 지남에 따라 개선되는지 악화되는지 추적하세요",
     "loading": "발견 항목 추세를 불러오는 중...",
+    "loadFailed": "발견 항목 추세를 불러오지 못했습니다.",
     "allBots": "모든 봇",
     "noChange": "변화 없음",
     "deltaVsStart": "기간 시작 대비 {delta}",
@@ -5261,7 +5262,7 @@
     "triggerInfo": "이 트리거가 실행되면 아래 경로에 따라 일치하는 각 레포의 봇으로 페이로드가 라우팅됩니다.",
     "fanOutPaths": "팬아웃 경로",
     "pathsCount": "{count}개 경로",
-    "repoUrlPlaceholder": "GitHub URL (https://github.com/org/repo) 또는 로컬 경로",
+    "repoUrlPlaceholder": "GitHub URL (https://github.com/org/repo 또는 엔터프라이즈 URL) 또는 로컬 경로",
     "adding": "추가 중...",
     "loadingPaths": "경로 불러오는 중...",
     "noPaths": "{trigger}에 구성된 경로가 없습니다. 위에서 레포를 추가하세요.",
@@ -5824,7 +5825,7 @@
       "descriptionLabel": "설명",
       "descriptionPlaceholder": "선택적 설명...",
       "repoLabel": "GitHub 레포지토리",
-      "repoPlaceholder": "예: org/repo",
+      "repoPlaceholder": "org/repo 또는 https://github.company.com/org/repo",
       "adding": "추가 중...",
       "creating": "생성 중...",
       "createAndAssign": "생성 및 할당"
@@ -6219,7 +6220,7 @@
     "productSelectLabel": "제품",
     "noProduct": "제품 없음",
     "githubRepoLabel": "GitHub 저장소 *",
-    "githubRepoPlaceholder": "예: org/repo",
+    "githubRepoPlaceholder": "org/repo 또는 https://github.company.com/org/repo",
     "hideLocalPath": "로컬 경로 숨기기",
     "orUseLocalPath": "또는 로컬 경로 사용",
     "localPathLabel": "로컬 경로",
@@ -6801,6 +6802,36 @@
       "added": "시크릿이 안전하게 추가되었습니다",
       "deleted": "시크릿 \"{name}\"이(가) 삭제되었습니다",
       "copiedRef": "참조 복사됨: {ref}"
+    },
+    "github": {
+      "title": "GitHub 호스트 토큰",
+      "help": "Git 호스트당 하나의 토큰으로, 해당 호스트에서 프로젝트 저장소의 클론·풀·푸시와 gh CLI 호출에 사용됩니다 — 예: GitHub Enterprise 호스트. 토큰 값은 쓰기 전용이며 다시 읽을 수 없습니다.",
+      "hostsCount": "호스트 {count}개",
+      "emptyList": "저장된 호스트 토큰이 없습니다. 아래에서 추가하세요.",
+      "updatedLabel": "업데이트 {date}",
+      "saveToken": "토큰 저장",
+      "fields": {
+        "host": "Git 호스트",
+        "token": "토큰"
+      },
+      "hints": {
+        "host": "호스트 이름만 입력하세요 (예: github.acme.com)",
+        "token": "저장 시 암호화됩니다"
+      },
+      "placeholders": {
+        "token": "토큰 입력..."
+      },
+      "errors": {
+        "load": "GitHub 호스트 토큰을 불러오지 못했습니다",
+        "save": "토큰을 저장하지 못했습니다",
+        "delete": "토큰을 삭제하지 못했습니다"
+      },
+      "toasts": {
+        "hostRequired": "호스트가 필요합니다",
+        "tokenRequired": "토큰이 필요합니다",
+        "saved": "\"{host}\"의 토큰이 저장되었습니다",
+        "deleted": "\"{host}\"의 토큰이 삭제되었습니다"
+      }
     }
   },
   "sessionEvents": {

@@ -4439,6 +4439,7 @@
     "title": "Findings Trend Analysis",
     "subtitle": "Track whether your codebase is improving or degrading over time",
     "loading": "Loading findings trend...",
+    "loadFailed": "Failed to load findings trend.",
     "allBots": "All bots",
     "noChange": "No change",
     "deltaVsStart": "{delta} vs period start",
@@ -5261,7 +5262,7 @@
     "triggerInfo": "When this trigger fires, the payload will be routed to each matching repo's bot based on the paths below.",
     "fanOutPaths": "Fan-Out Paths",
     "pathsCount": "{count} paths",
-    "repoUrlPlaceholder": "GitHub URL (https://github.com/org/repo) or local path",
+    "repoUrlPlaceholder": "GitHub URL (https://github.com/org/repo or enterprise URL) or local path",
     "adding": "Adding...",
     "loadingPaths": "Loading paths...",
     "noPaths": "No paths configured for {trigger}. Add a repository above.",
@@ -5824,7 +5825,7 @@
       "descriptionLabel": "Description",
       "descriptionPlaceholder": "Optional description...",
       "repoLabel": "GitHub Repository",
-      "repoPlaceholder": "e.g., org/repo",
+      "repoPlaceholder": "org/repo or https://github.company.com/org/repo",
       "adding": "Adding...",
       "creating": "Creating...",
       "createAndAssign": "Create & Assign"
@@ -6219,7 +6220,7 @@
     "productSelectLabel": "Product",
     "noProduct": "No product",
     "githubRepoLabel": "GitHub Repository *",
-    "githubRepoPlaceholder": "e.g., org/repo",
+    "githubRepoPlaceholder": "org/repo or https://github.company.com/org/repo",
     "hideLocalPath": "Hide local path",
     "orUseLocalPath": "or use a local path",
     "localPathLabel": "Local Path",
@@ -6801,6 +6802,36 @@
       "added": "Secret added securely",
       "deleted": "Secret \"{name}\" deleted",
       "copiedRef": "Copied reference: {ref}"
+    },
+    "github": {
+      "title": "GitHub host tokens",
+      "help": "One token per git host, used for cloning, pulling and pushing project repos and for gh CLI calls on that host — e.g. a GitHub Enterprise host. Token values are write-only and can never be read back.",
+      "hostsCount": "{count} hosts",
+      "emptyList": "No host tokens stored yet. Add one below.",
+      "updatedLabel": "Updated {date}",
+      "saveToken": "Save Token",
+      "fields": {
+        "host": "Git Host",
+        "token": "Token"
+      },
+      "hints": {
+        "host": "Hostname only, e.g. github.acme.com",
+        "token": "Stored encrypted at rest"
+      },
+      "placeholders": {
+        "token": "Enter token..."
+      },
+      "errors": {
+        "load": "Failed to load GitHub host tokens",
+        "save": "Failed to save token",
+        "delete": "Failed to delete token"
+      },
+      "toasts": {
+        "hostRequired": "Host is required",
+        "tokenRequired": "Token is required",
+        "saved": "Token for \"{host}\" saved",
+        "deleted": "Token for \"{host}\" deleted"
+      }
     }
   },
   "sessionEvents": {

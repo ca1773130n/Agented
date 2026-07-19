@@ -4439,6 +4439,7 @@
     "title": "検出項目トレンド分析",
     "subtitle": "コードベースが時間とともに改善しているか悪化しているかを追跡します",
     "loading": "検出項目トレンドを読み込み中...",
+    "loadFailed": "検出項目トレンドの読み込みに失敗しました。",
     "allBots": "すべてのボット",
     "noChange": "変化なし",
     "deltaVsStart": "期間開始比 {delta}",
@@ -5261,7 +5262,7 @@
     "triggerInfo": "このトリガーが発火すると、以下のパスに基づいて一致する各リポのボットにペイロードがルーティングされます。",
     "fanOutPaths": "ファンアウトパス",
     "pathsCount": "{count} 件のパス",
-    "repoUrlPlaceholder": "GitHub URL (https://github.com/org/repo) またはローカルパス",
+    "repoUrlPlaceholder": "GitHub URL (https://github.com/org/repo またはエンタープライズ URL) またはローカルパス",
     "adding": "追加中...",
     "loadingPaths": "パスを読み込み中...",
     "noPaths": "{trigger} に構成されたパスがありません。上からリポを追加してください。",
@@ -5824,7 +5825,7 @@
       "descriptionLabel": "説明",
       "descriptionPlaceholder": "任意の説明...",
       "repoLabel": "GitHub リポジトリ",
-      "repoPlaceholder": "例: org/repo",
+      "repoPlaceholder": "org/repo または https://github.company.com/org/repo",
       "adding": "追加中...",
       "creating": "作成中...",
       "createAndAssign": "作成して割り当て"
@@ -6219,7 +6220,7 @@
     "productSelectLabel": "製品",
     "noProduct": "製品なし",
     "githubRepoLabel": "GitHub リポジトリ *",
-    "githubRepoPlaceholder": "例: org/repo",
+    "githubRepoPlaceholder": "org/repo または https://github.company.com/org/repo",
     "hideLocalPath": "ローカルパスを非表示",
     "orUseLocalPath": "またはローカルパスを使用",
     "localPathLabel": "ローカルパス",
@@ -6801,6 +6802,36 @@
       "added": "シークレットを安全に追加しました",
       "deleted": "シークレット「{name}」を削除しました",
       "copiedRef": "参照をコピーしました: {ref}"
+    },
+    "github": {
+      "title": "GitHub ホストトークン",
+      "help": "Git ホストごとに 1 つのトークンで、そのホストでのプロジェクトリポジトリのクローン・プル・プッシュや gh CLI 呼び出しに使用されます — 例: GitHub Enterprise ホスト。トークン値は書き込み専用で、後から読み取ることはできません。",
+      "hostsCount": "{count} 件のホスト",
+      "emptyList": "保存されたホストトークンはありません。下から追加してください。",
+      "updatedLabel": "更新 {date}",
+      "saveToken": "トークンを保存",
+      "fields": {
+        "host": "Git ホスト",
+        "token": "トークン"
+      },
+      "hints": {
+        "host": "ホスト名のみ（例: github.acme.com）",
+        "token": "保存時に暗号化されます"
+      },
+      "placeholders": {
+        "token": "トークンを入力..."
+      },
+      "errors": {
+        "load": "GitHub ホストトークンの読み込みに失敗しました",
+        "save": "トークンの保存に失敗しました",
+        "delete": "トークンの削除に失敗しました"
+      },
+      "toasts": {
+        "hostRequired": "ホストが必要です",
+        "tokenRequired": "トークンが必要です",
+        "saved": "「{host}」のトークンを保存しました",
+        "deleted": "「{host}」のトークンを削除しました"
+      }
     }
   },
   "sessionEvents": {

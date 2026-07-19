@@ -29,9 +29,11 @@ interface TrendPoint {
 const findings = ref<Finding[]>([]);
 const trendPoints = ref<TrendPoint[]>([]);
 const availableBots = ref<string[]>([]);
+const loadError = ref<string | null>(null);
 
 async function loadData() {
   try {
+    loadError.value = null;
     const params = new URLSearchParams({ period: selectedPeriod.value, bot: selectedBot.value });
     const res = await fetch(`/admin/analytics/findings-trend?${params}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -40,30 +42,12 @@ async function loadData() {
     trendPoints.value = data.trend ?? [];
     availableBots.value = data.bots ?? [];
   } catch {
-    // Generate demo data
-    const bots = ['bot-security', 'bot-pr-review', 'bot-dep-check'];
-    availableBots.value = bots;
-
-    const points: TrendPoint[] = [];
-    const days = selectedPeriod.value === '7d' ? 7 : selectedPeriod.value === '30d' ? 30 : 90;
-    let baseCrit = 12, baseHigh = 34, baseMed = 67, baseLow = 120;
-    for (let i = days; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      baseCrit = Math.max(0, baseCrit + Math.round((Math.random() - 0.55) * 3));
-      baseHigh = Math.max(0, baseHigh + Math.round((Math.random() - 0.52) * 5));
-      baseMed = Math.max(0, baseMed + Math.round((Math.random() - 0.51) * 7));
-      baseLow = Math.max(0, baseLow + Math.round((Math.random() - 0.5) * 10));
-      points.push({
-        date: d.toISOString().slice(0, 10),
-        critical: baseCrit,
-        high: baseHigh,
-        medium: baseMed,
-        low: baseLow,
-        total: baseCrit + baseHigh + baseMed + baseLow,
-      });
-    }
-    trendPoints.value = points;
+    // Don't fabricate trend data on failure — surface an honest error state
+    // (the backend findings-trend route may not exist yet).
+    findings.value = [];
+    trendPoints.value = [];
+    availableBots.value = [];
+    loadError.value = t('findingsTrendAnalysis.loadFailed');
   } finally {
     isLoading.value = false;
   }
@@ -113,6 +97,8 @@ onMounted(loadData);
   <div class="findings-trend-page">
 
     <LoadingState v-if="isLoading" :message="t('findingsTrendAnalysis.loading')" />
+
+    <div v-else-if="loadError" class="error-state" role="alert">{{ loadError }}</div>
 
     <template v-else>
       <!-- Controls -->

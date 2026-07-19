@@ -70,10 +70,8 @@ async function loadData() {
     if (data.schema) schemaText.value = JSON.stringify(data.schema, null, 2);
     samples.value = data.samples ?? [];
   } catch {
-    samples.value = [
-      { execution_id: 'exec-abc123', bot_id: 'bot-security', schema_valid: true, captured_at: '2026-03-06T10:00:00Z', excerpt: '{"findings": [{"severity": "high", ...}], "summary": "2 findings"}' },
-      { execution_id: 'exec-def456', bot_id: 'bot-security', schema_valid: false, captured_at: '2026-03-05T18:30:00Z', excerpt: '{"error": "output not structured"}' },
-    ];
+    // Don't fabricate sample rows on failure — show the honest empty state.
+    samples.value = [];
   } finally {
     isLoading.value = false;
   }

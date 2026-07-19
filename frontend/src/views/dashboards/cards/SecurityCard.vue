@@ -4,7 +4,7 @@
   Run Scan / Resolve modals it always shipped with.
 -->
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import type { AuditRecord, AuditStats, ProjectInfo, Trigger } from '../../../services/api';
@@ -138,10 +138,19 @@ function getStatusBadgeText(): string {
   return t('securityCard.noData');
 }
 
+const reloadTimer = ref<ReturnType<typeof setTimeout> | null>(null);
+
 function onScanComplete() {
   showRunScanModal.value = false;
-  setTimeout(loadData, 5000);
+  if (reloadTimer.value) clearTimeout(reloadTimer.value);
+  // Reload after the scan settles — but clear on unmount so a post-scan navigate
+  // doesn't fire loadData() (setState) on a dead component.
+  reloadTimer.value = setTimeout(loadData, 5000);
 }
+
+onUnmounted(() => {
+  if (reloadTimer.value) clearTimeout(reloadTimer.value);
+});
 
 function onResolveComplete() {
   showResolveModal.value = false;
