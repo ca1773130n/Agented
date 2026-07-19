@@ -81,6 +81,9 @@ class BaseGenerationService(ABC):
                 # (this spawns the claude harness → real inference). Same shared
                 # env-isolation layer every other spawner uses.
                 env=config.subprocess_env(),
+                # Own process group so a timeout / SSE-disconnect can kill the whole
+                # tree (child + tool grandchildren), not just the direct child.
+                start_new_session=True,
             )
         except PolicyDenied as exc:
             reason = (getattr(exc, "verdict", None) or {}).get("reason") or "policy denied"
@@ -90,6 +93,67 @@ class BaseGenerationService(ABC):
             yield sse("error", {"error": "Claude CLI not found. Please install it first."})
             return
 
+        # Drain the CLI stream with a timeout AND guaranteed cleanup. Without
+        # this, an SSE client disconnect (GeneratorExit raised at a `yield`) or a
+        # hung child left the claude process, its two reader threads, and its
+        # pipes leaked — and the class's SUBPROCESS_TIMEOUT was never enforced
+        # (process.wait() had no timeout). The reader loop lives in
+        # ``_pump_claude_stream``; here we own lifecycle: a watchdog Timer kills
+        # the process group on timeout, and the finally tears down an
+        # incomplete run (abandoned generator / exception).
+        from .conversation_streaming import _terminate_proc_group
+
+        result_text = ""
+        completed = False
+        timed_out = threading.Event()
+
+        def _on_timeout() -> None:
+            timed_out.set()
+            _terminate_proc_group(process)
+
+        timer = threading.Timer(cls.SUBPROCESS_TIMEOUT, _on_timeout)
+        timer.start()
+        try:
+            result_text = yield from cls._pump_claude_stream(process, sse)
+            completed = True
+        finally:
+            timer.cancel()
+            if not completed:
+                _terminate_proc_group(process)
+                for _stream in (process.stdout, process.stderr):
+                    try:
+                        if _stream is not None:
+                            _stream.close()
+                    except OSError:
+                        pass
+
+        if timed_out.is_set():
+            yield sse("error", {"error": "Generation timed out. Please try again."})
+            return
+
+        if not result_text:
+            yield sse("error", {"error": "Claude returned empty output. Please try again."})
+            return
+
+        # Phase 4: Parse and validate
+        yield sse("phase", {"message": "Parsing AI response..."})
+
+        try:
+            config = cls._parse_json(result_text)
+        except RuntimeError as e:
+            yield sse("error", {"error": str(e)})
+            return
+
+        yield sse("phase", {"message": "Validating..."})
+        config, warnings = cls._validate(config)
+
+        yield sse("result", {"config": config, "warnings": warnings})
+
+    @classmethod
+    def _pump_claude_stream(cls, process, sse) -> Generator[str, None, str]:
+        """Drain the claude CLI stdout/stderr, yielding SSE events; return the
+        accumulated result text. Extracted from ``generate_streaming`` so the
+        caller can wrap it in timeout + cleanup without re-indenting the loop."""
         # Read stdout and stderr concurrently via threads + queue
         line_queue: Queue = Queue()
 
@@ -208,24 +272,7 @@ class BaseGenerationService(ABC):
         stdout_thread.join(timeout=5)
         stderr_thread.join(timeout=5)
         process.wait()
-
-        if not result_text:
-            yield sse("error", {"error": "Claude returned empty output. Please try again."})
-            return
-
-        # Phase 4: Parse and validate
-        yield sse("phase", {"message": "Parsing AI response..."})
-
-        try:
-            config = cls._parse_json(result_text)
-        except RuntimeError as e:
-            yield sse("error", {"error": str(e)})
-            return
-
-        yield sse("phase", {"message": "Validating..."})
-        config, warnings = cls._validate(config)
-
-        yield sse("result", {"config": config, "warnings": warnings})
+        return result_text
 
     @classmethod
     @abstractmethod
