@@ -2031,6 +2031,11 @@ def research_start(project_id: str, data: dict) -> dict[str, Any]:
 def research_resume(project_id: str, thread_id: str, data: dict) -> dict[str, Any]:
     """Resume an existing research thread by spawning a fresh
     ``grd_research`` session pinned to ``/grd:research resume <thread_id>``.
+
+    Body ``answers`` (GRD 0.5.0 interactive checkpoints) resolves a paused thread's
+    ``pendingCheckpoint``: ``[{question_id, label, text?}]`` — one per question,
+    ``label`` = the chosen option, ``text`` = optional freeform. Forwarded as a
+    temp ``--answers`` file so the resume clears the checkpoint before its gates.
     Returns ``{"session_id": ...}``.
     """
     _ensure_project(project_id)
@@ -2042,6 +2047,8 @@ def research_resume(project_id: str, thread_id: str, data: dict) -> dict[str, An
         config["max_iterations"] = body["max_iterations"]
     if body.get("no_gates"):
         config["no_gates"] = True
+    if isinstance(body.get("answers"), list) and body["answers"]:
+        config["answers"] = body["answers"]
 
     result = handler.start(config)
     if "error" in result:

@@ -61,6 +61,8 @@ export function useResearchSession(projectId: Ref<string>) {
 
   /**
    * Resume an existing research thread (the thread carries its own question).
+   * ``opts.answers`` (GRD 0.5.0) resolves a pending checkpoint — one entry per
+   * checkpoint question — and is forwarded to ``researchApi.resumeThread``.
    */
   async function resume(thread: string, opts?: StartResearchOptions) {
     try {

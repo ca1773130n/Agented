@@ -15,7 +15,7 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from .goal_loop_runner import get_runner_state, start_runner, stop_runner
 from .project_session_manager import ProjectSessionManager
@@ -891,6 +891,32 @@ class GrdResearchSessionHandler(ExecutionTypeHandler):
 
             cwd = ProjectWorkspaceService.resolve_working_directory(project_id)
 
+        # GRD 0.5.0 interactive checkpoints: when the operator answers a paused
+        # thread's pendingCheckpoint from Agented, write the answers to a temp JSON
+        # file keyed by question id ({"<qid>": {"label", "text"?}}) and pass
+        # `--answers <path>` to `gd research resume`. Answers can carry freeform
+        # operator text, so they go through a FILE, never argv (19-04 hardening).
+        answers_path: Optional[str] = None
+        raw_answers = session_config.get("answers") if thread_id else None
+        if isinstance(raw_answers, list) and raw_answers:
+            mapping: dict[str, dict] = {}
+            for a in raw_answers:
+                if not isinstance(a, dict):
+                    continue
+                qid = a.get("question_id") or a.get("questionId")
+                if not qid or a.get("label") is None:
+                    continue
+                entry: dict[str, Any] = {"label": a["label"]}
+                if a.get("text"):
+                    entry["text"] = str(a["text"])
+                mapping[str(qid)] = entry
+            if mapping:
+                import tempfile
+
+                fd, answers_path = tempfile.mkstemp(prefix="gd-answers-", suffix=".json")
+                with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                    json.dump(mapping, fh)
+
         # Build the /grd:research prompt. The question can arrive from
         # non-operator sources, so JSON-encode it (escapes embedded
         # quotes/newlines/backslashes) rather than naive `"{question}"`
@@ -900,6 +926,10 @@ class GrdResearchSessionHandler(ExecutionTypeHandler):
         deep = bool(session_config.get("deep")) and not thread_id
         if thread_id:
             prompt = f"/grd:research resume {json.dumps(thread_id)}"
+            if answers_path:
+                # gd research resume <id> --answers <file> — resolves the paused
+                # pendingCheckpoint before the loop re-enters its gates.
+                prompt = f"{prompt} --answers {json.dumps(answers_path)}"
         elif deep:
             # GRD 0.4.14 /grd:deep-research — parallel KG-grounded,
             # adversarially-verified research. json.dumps keeps the 19-04

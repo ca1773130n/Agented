@@ -10114,5 +10114,24 @@
     "reasonExit": "The tesserae command failed. Check the CLI and its configuration.",
     "reasonDisabled": "Tesserae is not enabled for this project.",
     "reasonNoPaths": "No sources to ingest were found."
+  },
+  "researchCheckpoint": {
+    "pausedBadge": "Paused — awaiting decision",
+    "point": {
+      "seed": "Seed the research",
+      "hypothesize": "Hypothesis review",
+      "design": "Experiment design",
+      "decide": "Decision point"
+    },
+    "recommended": "Recommended",
+    "freeformLabel": "Your notes",
+    "freeformPlaceholder": "Add your guidance…",
+    "required": "This answer is required",
+    "submit": "Resume with these answers",
+    "resume": "Resume thread",
+    "loading": "Loading checkpoint…",
+    "loadErrorTitle": "Could not load checkpoint",
+    "loadError": "Failed to load the pending checkpoint for this thread.",
+    "pausedNoCheckpoint": "This thread is paused but has no pending decision. You can resume it directly."
   }
 }

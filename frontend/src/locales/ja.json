@@ -10114,5 +10114,24 @@
     "reasonExit": "tesserae コマンドが失敗しました。CLI と設定を確認してください。",
     "reasonDisabled": "このプロジェクトで Tesserae が有効になっていません。",
     "reasonNoPaths": "取り込むソースが見つかりませんでした。"
+  },
+  "researchCheckpoint": {
+    "pausedBadge": "一時停止 — 判断待ち",
+    "point": {
+      "seed": "リサーチの起点設定",
+      "hypothesize": "仮説レビュー",
+      "design": "実験設計",
+      "decide": "判断ポイント"
+    },
+    "recommended": "推奨",
+    "freeformLabel": "メモ",
+    "freeformPlaceholder": "指示を入力してください…",
+    "required": "この回答は必須です",
+    "submit": "この回答で再開",
+    "resume": "スレッドを再開",
+    "loading": "チェックポイントを読み込み中…",
+    "loadErrorTitle": "チェックポイントを読み込めません",
+    "loadError": "このスレッドの保留中チェックポイントの読み込みに失敗しました。",
+    "pausedNoCheckpoint": "このスレッドは一時停止中ですが、保留中の判断はありません。そのまま再開できます。"
   }
 }
