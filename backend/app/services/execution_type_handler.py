@@ -873,6 +873,32 @@ class GrdResearchSessionHandler(ExecutionTypeHandler):
       * ``cwd`` (optional) — overrides the resolved project cwd.
     """
 
+    @staticmethod
+    def _ensure_interactive_config(cwd: str, interactive: dict) -> None:
+        """Merge ``research_gates.interactive`` into ``<cwd>/.planning/config.json``
+        so GRD 0.5.0's ``readInteractiveConfig`` picks up the steering posture.
+        Preserves every other config key; only sets the interactive knobs we manage.
+        A missing/corrupt file starts fresh; a write failure PROPAGATES (the operator
+        asked for a steering mode we couldn't set up — better to surface than to
+        silently degrade an attended run to no-op)."""
+        cfg_dir = os.path.join(cwd, ".planning")
+        cfg_path = os.path.join(cfg_dir, "config.json")
+        try:
+            with open(cfg_path, encoding="utf-8") as fh:
+                data = json.load(fh)
+            if not isinstance(data, dict):
+                data = {}
+        except (FileNotFoundError, json.JSONDecodeError):
+            data = {}
+        gates = data.get("research_gates")
+        if not isinstance(gates, dict):
+            gates = data["research_gates"] = {}
+        existing = gates.get("interactive")
+        gates["interactive"] = {**(existing if isinstance(existing, dict) else {}), **interactive}
+        os.makedirs(cfg_dir, exist_ok=True)
+        with open(cfg_path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, indent=2)
+
     def start(self, session_config: dict) -> dict:
         thread_id = (session_config.get("thread_id") or "").strip()
         question = (session_config.get("question") or "").strip()
@@ -961,13 +987,34 @@ class GrdResearchSessionHandler(ExecutionTypeHandler):
             prompt,
         ]
 
-        # GRD 0.5.0 interactive checkpoints (research_gates.interactive, SEED/
-        # HYPOTHESIZE/DESIGN/DECIDE) would PAUSE the loop awaiting a human answer —
-        # impossible in a headless autonomous `claude -p` run, so it would hang.
-        # GRD_AUTOPILOT=1 makes gd resolve checkpoints to their recommended defaults
-        # instead of pausing. Attended sessions leave it unset so a human can steer.
-        execution_mode = session_config.get("execution_mode", "autonomous")
-        research_env = {"GRD_AUTOPILOT": "1"} if execution_mode == "autonomous" else None
+        # GRD 0.5.0 interactive steering posture. The checkpoint mechanism
+        # (research_gates.interactive, SEED/HYPOTHESIZE/DESIGN/DECIDE) is inert
+        # unless `enabled` is written into <cwd>/.planning/config.json, so the
+        # posture both writes that config and sets the env. Three operator choices:
+        #   autopilot (default) — headless; gd resolves each gate to its
+        #     recommended default (GRD_AUTOPILOT=1). No config, never hangs.
+        #   panel — headless, but each gate is resolved by GRD's multi-backend AI
+        #     discussion panel (interactive.enabled + fallback=panel); degrade-safe
+        #     to recommended defaults. GRD_AUTOPILOT keeps the run from ever pausing.
+        #   attended — a human steers: the loop PAUSES at each gate (enabled=true,
+        #     no GRD_AUTOPILOT); Agented surfaces it via /research/status
+        #     pendingCheckpoint + resume --answers.
+        steering = session_config.get("research_steering")
+        if steering not in ("autopilot", "panel", "attended"):
+            # Back-compat: derive from the legacy execution_mode flag.
+            legacy = session_config.get("execution_mode", "autonomous")
+            steering = "autopilot" if legacy == "autonomous" else "attended"
+        if steering == "attended":
+            execution_mode = "attended"
+            research_env = None
+            self._ensure_interactive_config(cwd, {"enabled": True})
+        elif steering == "panel":
+            execution_mode = "autonomous"
+            research_env = {"GRD_AUTOPILOT": "1"}
+            self._ensure_interactive_config(cwd, {"enabled": True, "fallback": "panel"})
+        else:  # autopilot
+            execution_mode = "autonomous"
+            research_env = {"GRD_AUTOPILOT": "1"}
 
         session_id = ProjectSessionManager.create_session(
             project_id=project_id,

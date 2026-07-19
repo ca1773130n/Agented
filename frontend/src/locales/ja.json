@@ -10115,6 +10115,15 @@
     "reasonDisabled": "このプロジェクトで Tesserae が有効になっていません。",
     "reasonNoPaths": "取り込むソースが見つかりませんでした。"
   },
+  "researchSteering": {
+    "label": "進め方",
+    "autopilotLabel": "オートパイロット",
+    "autopilotHelp": "無人実行 — 各チェックポイントで GRD が推奨のデフォルトを選択します。",
+    "panelLabel": "AI パネル",
+    "panelHelp": "無人実行 — マルチバックエンドの AI パネルが各チェックポイントを判断します。",
+    "attendedLabel": "有人",
+    "attendedHelp": "各チェックポイントで停止し、自分で舵取りできます。"
+  },
   "researchCheckpoint": {
     "pausedBadge": "一時停止 — 判断待ち",
     "point": {

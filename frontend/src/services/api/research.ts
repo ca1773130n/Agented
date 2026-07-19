@@ -104,6 +104,14 @@ export interface StartResearchOptions {
   /** Deep-run only: escalate every subagent to Opus/max (costlier). */
   ultracode?: boolean;
   /**
+   * GRD 0.5.0 checkpoint steering posture (fresh-run only). One of three:
+   * ``autopilot`` (default) — headless, GRD resolves each checkpoint to its
+   * recommended default; ``panel`` — headless, GRD's multi-backend AI panel
+   * decides each SEED/HYPOTHESIZE/DESIGN/DECIDE gate (degrade-safe); ``attended``
+   * — the loop PAUSES at each gate for a human (surfaced via CheckpointPanel).
+   */
+  research_steering?: 'autopilot' | 'panel' | 'attended';
+  /**
    * Resume-only: answers that resolve a pending checkpoint (GRD 0.5.0). One
    * entry per checkpoint question; forwarded as ``--answers`` to ``gd research
    * resume``. Ignored by ``startResearch``.
@@ -145,6 +153,7 @@ export const researchApi = {
     if (opts?.no_gates !== undefined) body.no_gates = opts.no_gates;
     if (opts?.deep) body.deep = true;
     if (opts?.ultracode) body.ultracode = true;
+    if (opts?.research_steering) body.research_steering = opts.research_steering;
     return apiFetch<StartResearchResponse>(
       `/api/projects/${projectId}/research/start`,
       { method: 'POST', body: JSON.stringify(body) },

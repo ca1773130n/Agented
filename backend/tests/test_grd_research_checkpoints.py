@@ -70,3 +70,48 @@ def test_autonomous_run_sets_autopilot_attended_does_not(monkeypatch, tmp_path):
         {"project_id": "p", "question": "q", "cwd": str(tmp_path), "execution_mode": "attended"}
     )
     assert captured.get("env") is None
+
+
+def _interactive(tmp_path):
+    p = tmp_path / ".planning" / "config.json"
+    return json.loads(p.read_text())["research_gates"]["interactive"] if p.exists() else None
+
+
+def test_steering_autopilot_writes_no_config(monkeypatch, tmp_path):
+    captured = _mock_session(monkeypatch)
+    GrdResearchSessionHandler().start(
+        {"project_id": "p", "question": "q", "cwd": str(tmp_path), "research_steering": "autopilot"}
+    )
+    assert captured.get("env") == {"GRD_AUTOPILOT": "1"}
+    assert _interactive(tmp_path) is None  # autopilot never touches config
+
+
+def test_steering_panel_enables_interactive_with_panel_fallback(monkeypatch, tmp_path):
+    captured = _mock_session(monkeypatch)
+    GrdResearchSessionHandler().start(
+        {"project_id": "p", "question": "q", "cwd": str(tmp_path), "research_steering": "panel"}
+    )
+    # panel is still headless (never hangs) but resolves each gate via the AI panel
+    assert captured.get("env") == {"GRD_AUTOPILOT": "1"}
+    assert _interactive(tmp_path) == {"enabled": True, "fallback": "panel"}
+
+
+def test_steering_attended_enables_pause_and_no_autopilot(monkeypatch, tmp_path):
+    captured = _mock_session(monkeypatch)
+    GrdResearchSessionHandler().start(
+        {"project_id": "p", "question": "q", "cwd": str(tmp_path), "research_steering": "attended"}
+    )
+    assert captured.get("env") is None  # a human can steer → no autopilot
+    assert _interactive(tmp_path) == {"enabled": True}
+
+
+def test_ensure_interactive_config_preserves_existing_keys(tmp_path):
+    cfg = tmp_path / ".planning" / "config.json"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text(json.dumps({"foo": 1, "research_gates": {"execute": True, "interactive": {"seed": True}}}))
+    GrdResearchSessionHandler._ensure_interactive_config(str(tmp_path), {"enabled": True, "fallback": "panel"})
+    data = json.loads(cfg.read_text())
+    assert data["foo"] == 1  # unrelated top-level key preserved
+    assert data["research_gates"]["execute"] is True  # sibling gate preserved
+    # existing interactive knob preserved, ours merged on top
+    assert data["research_gates"]["interactive"] == {"seed": True, "enabled": True, "fallback": "panel"}
