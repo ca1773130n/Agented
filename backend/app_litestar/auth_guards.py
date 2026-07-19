@@ -38,6 +38,13 @@ ROLE_REQUIRED: list[tuple[str, str, str]] = [
     ("PUT", "/admin/secrets", "admin"),
     ("PATCH", "/admin/secrets", "admin"),
     ("DELETE", "/admin/secrets", "admin"),
+    # Per-host GitHub tokens are vault secrets behind a friendlier surface —
+    # same admin-for-every-method posture as /admin/secrets, same reason.
+    ("GET", "/admin/github-credentials", "admin"),
+    ("POST", "/admin/github-credentials", "admin"),
+    ("PUT", "/admin/github-credentials", "admin"),
+    ("PATCH", "/admin/github-credentials", "admin"),
+    ("DELETE", "/admin/github-credentials", "admin"),
     # Policy / governance engine: admin for every method. Listed before the
     # generic /admin/ rows (first-match-wins) so a missing per-route guard can
     # never downgrade policy reads/writes to editor/viewer. Defence-in-depth

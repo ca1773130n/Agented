@@ -5,8 +5,8 @@ import PageHeader from '../components/base/PageHeader.vue';
 import LoadingState from '../components/base/LoadingState.vue';
 import EmptyState from '../components/base/EmptyState.vue';
 import { useToast } from '../composables/useToast';
-import { secretsApi, ApiError } from '../services/api';
-import type { SecretMetadata } from '../services/api';
+import { secretsApi, githubCredentialsApi, ApiError } from '../services/api';
+import type { SecretMetadata, GithubHostToken } from '../services/api';
 const showToast = useToast();
 const { t } = useI18n();
 
@@ -26,6 +26,12 @@ const copiedId = ref<string | null>(null);
 const revealedValues = ref<Record<string, string>>({});
 const revealingId = ref<string | null>(null);
 
+const githubHosts = ref<GithubHostToken[]>([]);
+const newGithubHost = ref('');
+const newGithubToken = ref('');
+const isSavingGithubToken = ref(false);
+const deletingGithubHost = ref<string | null>(null);
+
 async function loadSecrets() {
   isLoading.value = true;
   loadError.value = null;
@@ -38,6 +44,7 @@ async function loadSecrets() {
     }
     const data = await secretsApi.list();
     secrets.value = data.secrets;
+    await loadGithubHosts();
   } catch (err) {
     const message = err instanceof ApiError ? err.message : t('secretsVault.errors.load');
     loadError.value = message;
@@ -73,6 +80,55 @@ async function handleAdd() {
     showToast(message, 'error');
   } finally {
     isAdding.value = false;
+  }
+}
+
+async function loadGithubHosts() {
+  try {
+    const data = await githubCredentialsApi.list();
+    githubHosts.value = data.hosts;
+  } catch (err) {
+    const message = err instanceof ApiError ? err.message : t('secretsVault.github.errors.load');
+    showToast(message, 'error');
+  }
+}
+
+async function handleSaveGithubToken() {
+  const host = newGithubHost.value.trim();
+  if (!host) {
+    showToast(t('secretsVault.github.toasts.hostRequired'), 'info');
+    return;
+  }
+  if (!newGithubToken.value) {
+    showToast(t('secretsVault.github.toasts.tokenRequired'), 'info');
+    return;
+  }
+  isSavingGithubToken.value = true;
+  try {
+    await githubCredentialsApi.set(host, newGithubToken.value);
+    newGithubHost.value = '';
+    newGithubToken.value = '';
+    showToast(t('secretsVault.github.toasts.saved', { host }), 'success');
+    await loadGithubHosts();
+  } catch (err) {
+    const message = err instanceof ApiError ? err.message : t('secretsVault.github.errors.save');
+    showToast(message, 'error');
+  } finally {
+    isSavingGithubToken.value = false;
+  }
+}
+
+async function handleDeleteGithubHost(host: string) {
+  deletingGithubHost.value = host;
+  try {
+    await githubCredentialsApi.delete(host);
+    githubHosts.value = githubHosts.value.filter(h => h.host !== host);
+    showToast(t('secretsVault.github.toasts.deleted', { host }), 'success');
+  } catch (err) {
+    const message = err instanceof ApiError ? err.message : t('secretsVault.github.errors.delete');
+    showToast(message, 'error');
+  } finally {
+    deletingGithubHost.value = null;
   }
 }
 
@@ -304,6 +360,68 @@ onMounted(loadSecrets);
           </div>
         </div>
       </div>
+
+      <div class="card github-tokens-card">
+        <div class="card-header">
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
+              <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+            </svg>
+            {{ t('secretsVault.github.title') }}
+          </h3>
+          <span class="card-badge">{{ t('secretsVault.github.hostsCount', { count: githubHosts.length }) }}</span>
+        </div>
+        <p class="github-help">{{ t('secretsVault.github.help') }}</p>
+        <EmptyState v-if="githubHosts.length === 0" :title="t('secretsVault.github.emptyList')" />
+        <div v-else class="secrets-list">
+          <div v-for="h in githubHosts" :key="h.host" class="secret-row github-host-row">
+            <div class="secret-info">
+              <div class="secret-name-row">
+                <span class="secret-name">{{ h.host }}</span>
+              </div>
+              <div class="secret-meta">
+                <span>{{ t('secretsVault.github.updatedLabel', { date: formatDate(h.updated_at) }) }}</span>
+                <template v-if="h.last_accessed_at">
+                  <span class="meta-sep">&middot;</span>
+                  <span>{{ t('secretsVault.lastAccessedLabel', { date: formatDate(h.last_accessed_at) }) }}</span>
+                </template>
+              </div>
+            </div>
+            <div class="secret-actions">
+              <button
+                class="btn btn-sm btn-delete"
+                :disabled="deletingGithubHost === h.host"
+                @click="handleDeleteGithubHost(h.host)"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
+                  <polyline points="3 6 5 6 21 6"/>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                </svg>
+                {{ deletingGithubHost === h.host ? '...' : t('common.delete') }}
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="form-body github-token-form">
+          <div class="form-row">
+            <div class="field-group">
+              <label class="field-label">{{ t('secretsVault.github.fields.host') }}</label>
+              <input v-model="newGithubHost" type="text" class="text-input" placeholder="github.acme.com" />
+              <span class="field-hint">{{ t('secretsVault.github.hints.host') }}</span>
+            </div>
+            <div class="field-group">
+              <label class="field-label">{{ t('secretsVault.github.fields.token') }}</label>
+              <input v-model="newGithubToken" type="password" class="text-input" :placeholder="t('secretsVault.github.placeholders.token')" autocomplete="new-password" />
+              <span class="field-hint">{{ t('secretsVault.github.hints.token') }}</span>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" :disabled="isSavingGithubToken || !newGithubHost.trim() || !newGithubToken" @click="handleSaveGithubToken">
+              {{ isSavingGithubToken ? t('secretsVault.saving') : t('secretsVault.github.saveToken') }}
+            </button>
+          </div>
+        </div>
+      </div>
     </template>
   </div>
 </template>
@@ -444,6 +562,21 @@ onMounted(loadSecrets);
 .secrets-list {
   display: flex;
   flex-direction: column;
+}
+
+.github-help {
+  padding: 14px 24px 0;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+}
+
+.github-host-row {
+  grid-template-columns: 1fr auto;
+}
+
+.github-token-form {
+  border-top: 1px solid var(--border-subtle);
 }
 
 .secret-row {

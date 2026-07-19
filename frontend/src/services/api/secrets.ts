@@ -25,6 +25,13 @@ export interface RevealedSecret {
   value: string;
 }
 
+export interface GithubHostToken {
+  host: string;
+  created_at: string;
+  updated_at: string;
+  last_accessed_at: string | null;
+}
+
 export const secretsApi = {
   getStatus: () =>
     apiFetch<VaultStatus>('/admin/secrets/status'),
@@ -56,4 +63,21 @@ export const secretsApi = {
     apiFetch<RevealedSecret>(`/admin/secrets/${secretId}/reveal`, {
       method: 'POST',
     }),
+};
+
+export const githubCredentialsApi = {
+  list: () =>
+    apiFetch<{ hosts: GithubHostToken[] }>('/admin/github-credentials/'),
+
+  set: (host: string, token: string) =>
+    apiFetch<GithubHostToken>(`/admin/github-credentials/${encodeURIComponent(host)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ token }),
+    }),
+
+  delete: (host: string) =>
+    apiFetch<{ message: string; host: string }>(
+      `/admin/github-credentials/${encodeURIComponent(host)}`,
+      { method: 'DELETE' },
+    ),
 };

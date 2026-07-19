@@ -242,7 +242,7 @@ onMounted(loadData);
           </div>
           <div class="form-group">
             <label>{{ t('botSandbox.field.repoUrl') }}</label>
-            <input v-model="form.repo_url" type="text" class="form-input" placeholder="https://github.com/org/repo" />
+            <input v-model="form.repo_url" type="text" class="form-input" placeholder="https://github.com/org/repo or enterprise URL" />
           </div>
           <div class="form-group">
             <label>{{ t('botSandbox.field.branch') }}</label>

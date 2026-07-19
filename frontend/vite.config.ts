@@ -404,6 +404,13 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks(id) {
+            // CSS modules must NEVER be pinned to a JS chunk: main.ts imports
+            // only @ai-accounts/vue-styled/styles.css, and pinning that CSS id
+            // to the 'ai-accounts-vue-styled' JS chunk made the ENTRY statically
+            // depend on the whole ~1.1 MB package at boot.
+            if (id.endsWith('.css')) {
+              return undefined
+            }
             // file: deps from sibling ai-accounts repo come in via
             // node_modules/@ai-accounts/*. Split each so the largest
             // (vue-styled, ~1MB) doesn't bloat any single chunk.
@@ -418,8 +425,8 @@ export default defineConfig(({ mode }) => {
             }
 
             if (id.includes('node_modules')) {
-              // v0.6.0 perf: split the big vendors so vendor-core
-              // doesn't grow past ~1 MB on its own.
+              // v0.6.0 perf: split the big vendors into named cache-stable
+              // chunks.
               if (id.includes('chart.js') || id.includes('chartjs-adapter-date-fns') || id.includes('date-fns')) {
                 return 'vendor-chart'
               }
@@ -447,8 +454,13 @@ export default defineConfig(({ mode }) => {
               if (id.includes('/lodash')) {
                 return 'vendor-lodash'
               }
-              // All remaining node_modules in a single vendor chunk.
-              return 'vendor-core'
+              // Everything else: let rollup chunk by the import graph. The old
+              // blanket `return 'vendor-core'` glued every remaining
+              // node_module — including libraries used only by lazy pages —
+              // into ONE 2.6 MB chunk that the entry imported at boot (it
+              // needed vue-i18n from it, so it got xstate, driver.js,
+              // html-to-image, sortable, ... with it).
+              return undefined
             }
           }
         }

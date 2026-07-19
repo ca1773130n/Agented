@@ -32,6 +32,7 @@ from .middleware import (
 )
 from .routes.admin_misc import admin_misc_router
 from .routes.admin_tooling import (
+    github_credentials_router,
     gitops_router,
     secrets_router,
     settings_router,
@@ -287,9 +288,7 @@ def create_app() -> Litestar:
         route_handlers=[
             # Same-origin Swagger UI assets (see _openapi_config). Public via the
             # "/schema" auth-bypass prefix; no external CDN.
-            create_static_files_router(
-                path="/schema-assets", directories=[_SWAGGER_ASSETS_DIR]
-            ),
+            create_static_files_router(path="/schema-assets", directories=[_SWAGGER_ASSETS_DIR]),
             health_router,
             rbac_router,
             auth_router,
@@ -339,6 +338,7 @@ def create_app() -> Litestar:
             settings_router,
             system_router,
             secrets_router,
+            github_credentials_router,
             gitops_router,
             version_pins_router,
             retention_router,

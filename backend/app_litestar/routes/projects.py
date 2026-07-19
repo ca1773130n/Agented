@@ -217,16 +217,31 @@ def update_project_endpoint(project_id: str, data: dict, caller: Caller) -> dict
     _assert_project_access(project_id, caller)
     if not data:
         raise ClientException(detail="JSON body required")
+
+    # Create-path parity: a pasted full URL (or host-prefixed slug) carries its
+    # host — extract it so a GitHub Enterprise URL doesn't leave github_host
+    # stale. A bare 'owner/repo' slug keeps the stored host untouched.
+    github_repo = data.get("github_repo")
+    github_host = data.get("github_host")
+    if github_repo:
+        raw = github_repo.strip()
+        has_host = raw.startswith(("http://", "https://")) or (
+            "/" in raw and "." in raw.split("/")[0]
+        )
+        if has_host and not github_host:
+            github_host = ProjectWorkspaceService._extract_github_host(raw)
+        github_repo = ProjectWorkspaceService._normalize_github_repo(raw)
+
     if not update_project(
         project_id,
         name=data.get("name"),
         description=data.get("description"),
         status=data.get("status"),
         product_id=data.get("product_id"),
-        github_repo=data.get("github_repo"),
+        github_repo=github_repo,
         owner_team_id=data.get("owner_team_id"),
         local_path=data.get("local_path"),
-        github_host=data.get("github_host"),
+        github_host=github_host,
         manager_super_agent_id=data.get("manager_super_agent_id"),
     ):
         raise NotFoundException(detail="Project not found or no changes made")

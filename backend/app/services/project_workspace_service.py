@@ -20,14 +20,28 @@ class ProjectWorkspaceService:
     """Resolves the working directory for a project's team execution."""
 
     @staticmethod
+    def _rewrite_ssh_forms(raw: str) -> str:
+        """Collapse ssh remote forms to 'host/path' so the url/host helpers
+        below see one shape: 'git@host:owner/repo.git' and
+        'ssh://git@host/owner/repo' both become 'host/owner/repo(.git)'.
+        GHE repo pages default to the SSH clone URL, so pasted input is
+        often scp-style."""
+        import re
+
+        raw = re.sub(r"^git@([^:/]+):", r"\1/", raw)
+        raw = re.sub(r"^ssh://(?:[^@/]+@)?", "", raw)
+        return raw
+
+    @staticmethod
     def _normalize_github_repo(raw: str) -> str:
         """Extract 'owner/repo' from various GitHub URL formats.
 
         Accepts: 'owner/repo', 'https://github.com/owner/repo',
-        'https://github.acme.com/owner/repo.git', 'github.com/owner/repo', etc.
+        'https://github.acme.com/owner/repo.git', 'github.com/owner/repo',
+        'git@github.acme.com:owner/repo.git', etc.
         Returns the bare 'owner/repo' slug.
         """
-        repo = raw.strip().rstrip("/")
+        repo = ProjectWorkspaceService._rewrite_ssh_forms(raw.strip()).rstrip("/")
         # Strip .git suffix
         if repo.endswith(".git"):
             repo = repo[:-4]
@@ -44,14 +58,14 @@ class ProjectWorkspaceService:
 
     @staticmethod
     def _extract_github_host(raw: str) -> str:
-        """Extract the GitHub host from a URL.
+        """Extract the GitHub host from a URL (https, ssh, or bare form).
 
         Returns the host (e.g. 'github.com' or 'github.acme.com').
         Defaults to 'github.com' if no host can be extracted.
         """
         import re
 
-        raw = raw.strip()
+        raw = ProjectWorkspaceService._rewrite_ssh_forms(raw.strip())
         match = re.match(r"https?://([^/]+)", raw)
         if match:
             return match.group(1)
@@ -59,6 +73,33 @@ class ProjectWorkspaceService:
         if "/" in raw and "." in raw.split("/")[0]:
             return raw.split("/")[0]
         return "github.com"
+
+    @staticmethod
+    def _git_auth(project: dict) -> tuple[list, dict | None]:
+        """(git -c args, subprocess env) injecting the vault-stored token for
+        the project's github_host into plain-git clone/pull.
+
+        The token rides an env var read by a one-shot credential helper — it
+        never appears in argv, in .git/config, or in the origin URL. Returns
+        ([], None) when no token is stored, keeping ambient auth (the server's
+        credential helper / gh login) byte-for-byte unchanged.
+        """
+        try:
+            from .github_credentials_service import GithubCredentialsService
+
+            token = GithubCredentialsService.stored_token_for_host(
+                project.get("github_host") or "github.com", accessor="project_workspace"
+            )
+        except Exception:
+            logger.warning("GitHub token lookup failed; falling back to ambient git auth")
+            token = None
+        if not token:
+            return [], None
+        helper = '!f() { echo "username=x-access-token"; echo "password=${AGENTED_GIT_TOKEN}"; }; f'
+        # First -c clears inherited helpers so the stored token wins (and a
+        # broken keychain helper can't hang the clone with a prompt).
+        args = ["-c", "credential.helper=", "-c", f"credential.helper={helper}"]
+        return args, {**os.environ, "AGENTED_GIT_TOKEN": token}
 
     @staticmethod
     def _get_clone_dir(project: dict) -> str | None:
@@ -117,11 +158,13 @@ class ProjectWorkspaceService:
             repo_url = f"https://{github_host}/{ProjectWorkspaceService._normalize_github_repo(github_repo)}.git"
             os.makedirs(os.path.dirname(clone_dir), exist_ok=True)
             logger.info(f"Cloning {repo_url} to {clone_dir}")
+            auth_args, auth_env = ProjectWorkspaceService._git_auth(project)
             result = subprocess.run(
-                ["git", "clone", repo_url, clone_dir],
+                ["git", *auth_args, "clone", repo_url, clone_dir],
                 capture_output=True,
                 text=True,
                 timeout=120,
+                env=auth_env,
             )
             if result.returncode != 0:
                 raise ValueError(f"Failed to clone {repo_url}: {result.stderr.strip()}")
@@ -174,11 +217,13 @@ class ProjectWorkspaceService:
                 repo_url = f"https://{github_host}/{ProjectWorkspaceService._normalize_github_repo(project['github_repo'])}.git"
                 os.makedirs(os.path.dirname(clone_dir), exist_ok=True)
                 logger.info(f"[clone_async] Cloning {repo_url} to {clone_dir}")
+                auth_args, auth_env = ProjectWorkspaceService._git_auth(project)
                 result = subprocess.run(
-                    ["git", "clone", repo_url, clone_dir],
+                    ["git", *auth_args, "clone", repo_url, clone_dir],
                     capture_output=True,
                     text=True,
                     timeout=300,
+                    env=auth_env,
                 )
                 if result.returncode != 0:
                     update_project_clone_status(
@@ -219,12 +264,14 @@ class ProjectWorkspaceService:
                 return {"status": "error", "error": "Clone directory not found"}
 
         try:
+            auth_args, auth_env = ProjectWorkspaceService._git_auth(project)
             result = subprocess.run(
-                ["git", "pull", "--ff-only"],
+                ["git", *auth_args, "pull", "--ff-only"],
                 cwd=clone_dir,
                 capture_output=True,
                 text=True,
                 timeout=120,
+                env=auth_env,
             )
             if result.returncode != 0:
                 error_msg = result.stderr.strip()

@@ -1597,12 +1597,9 @@ def _migrate_176_policies(conn) -> None:
         """
     )
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_policies_scope "
-        "ON policies(scope, scope_id, enabled)"
+        "CREATE INDEX IF NOT EXISTS idx_policies_scope ON policies(scope, scope_id, enabled)"
     )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_policies_kind ON policies(kind, enabled)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_policies_kind ON policies(kind, enabled)")
 
 
 def _migrate_168_grd_genome_suggestions(conn) -> None:

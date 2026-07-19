@@ -43,7 +43,10 @@ from .execution_runner import (
     budget_monitor,
     build_subprocess_env,
     clone_repos,
+    derive_run_github_hosts,
     fetch_pr_diff,
+    gh_pin_env_additions,
+    ghe_host_to_pin,
     stream_pipe,
 )
 from .github_service import GitHubService
@@ -593,13 +596,20 @@ class ExecutionService:
         )
 
     @classmethod
-    def _egress_allowlist_from_env(cls) -> set:
+    def _egress_allowlist_from_env(cls, extra_hosts: Optional[set] = None) -> set:
         """Per-run egress allowlist. ``AGENTED_EGRESS_ALLOWLIST`` (comma-separated)
-        overrides; otherwise a conservative required set. Empty ⇒ deny-by-default."""
+        overrides; otherwise a conservative required set. Empty ⇒ deny-by-default.
+
+        ``extra_hosts``: the run's GitHub Enterprise hosts (from project rows /
+        trigger repo URLs — operator-configured, so as trusted as the default
+        set). Without them every sandboxed GHE run's git/API traffic is denied.
+        """
         raw = os.environ.get("AGENTED_EGRESS_ALLOWLIST")
         if raw is not None:
-            return {h.strip() for h in raw.split(",") if h.strip()}
-        return {"github.com", "api.github.com", "api.anthropic.com"}
+            base = {h.strip() for h in raw.split(",") if h.strip()}
+        else:
+            base = {"github.com", "api.github.com", "api.anthropic.com"}
+        return base | (extra_hosts or set())
 
     @classmethod
     def _start_egress_proxy_or_fail_closed(
@@ -609,6 +619,7 @@ class ExecutionService:
         policy_session_id: str,
         env_overrides: dict,
         proc_env: Optional[dict],
+        extra_hosts: Optional[set] = None,
     ) -> tuple:
         """Start the deny-by-default egress proxy for this run, or FAIL CLOSED.
 
@@ -630,7 +641,7 @@ class ExecutionService:
             from .egress_proxy import ThreadedEgressProxy
 
             egress_handle = ThreadedEgressProxy(
-                cls._egress_allowlist_from_env(), session_id=policy_session_id
+                cls._egress_allowlist_from_env(extra_hosts), session_id=policy_session_id
             ).start()
             proxy_url = egress_handle.url
             # Defense-in-depth (24-fix, BLOCKER 2): even though ``start()`` now raises
@@ -765,6 +776,23 @@ class ExecutionService:
             path_entries = get_paths_for_trigger_detailed(trigger_id)
 
             effective_paths = cls._clone_repos(path_entries, cloned_dirs, github_repo_map)
+
+            # GitHub Enterprise: collect every git host this run touches. All
+            # repos on one enterprise host ⇒ pin gh CLI inside the harness via
+            # GH_HOST (a mixed run must NOT pin — GH_HOST is a hard remote
+            # filter that breaks gh inside the run's github.com clones). The
+            # GHE hosts also extend the sandbox egress allowlist below.
+            run_hosts = derive_run_github_hosts(github_repo_map, path_entries)
+            ghe_hosts = {h for h in run_hosts if h != "github.com"}
+            pin_host = ghe_host_to_pin(run_hosts)
+            if pin_host and "GH_HOST" not in (env_overrides or {}):
+                # Explicit caller overrides still win over the pin additions.
+                env_overrides = {**gh_pin_env_additions(pin_host), **(env_overrides or {})}
+            elif ghe_hosts and not pin_host:
+                logger.warning(
+                    "Mixed git hosts in one run; not pinning GH_HOST: %s",
+                    sorted(run_hosts),
+                )
 
             paths_str = ", ".join(effective_paths) if effective_paths else "no paths configured"
 
@@ -980,6 +1008,7 @@ class ExecutionService:
                 policy_session_id=policy_session_id,
                 env_overrides=env_overrides,
                 proc_env=proc_env,
+                extra_hosts=ghe_hosts,
             )
 
             # Stackable policy gate (23-03) + OS sandbox (24-03): wrap the command in

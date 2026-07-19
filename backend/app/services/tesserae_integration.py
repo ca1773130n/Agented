@@ -1206,21 +1206,37 @@ def run_research(
         return {"ok": False, "query": query, "report_md": "", "reason": "empty query"}
     if query.lstrip().startswith("-"):
         return {"ok": False, "query": query, "report_md": "", "reason": "invalid query"}
-    bounds = {"breadth": (breadth, 8), "depth": (depth, 5), "max_iters": (max_iters, 12), "top_k": (top_k, 20)}
+    bounds = {
+        "breadth": (breadth, 8),
+        "depth": (depth, 5),
+        "max_iters": (max_iters, 12),
+        "top_k": (top_k, 20),
+    }
     for name, (val, cap) in bounds.items():
         if not isinstance(val, int) or val <= 0 or val > cap:
-            return {"ok": False, "query": query, "report_md": "", "reason": f"invalid {name} (1-{cap})"}
+            return {
+                "ok": False,
+                "query": query,
+                "report_md": "",
+                "reason": f"invalid {name} (1-{cap})",
+            }
     import tempfile
 
     with tempfile.TemporaryDirectory(prefix="agented-research-") as tmp:
         out_path = Path(tmp) / "report.md"
         args = [
-            "research", query,
-            "--output", str(out_path),
-            "--breadth", str(breadth),
-            "--depth", str(depth),
-            "--max-iters", str(max_iters),
-            "--top-k", str(top_k),
+            "research",
+            query,
+            "--output",
+            str(out_path),
+            "--breadth",
+            str(breadth),
+            "--depth",
+            str(depth),
+            "--max-iters",
+            str(max_iters),
+            "--top-k",
+            str(top_k),
         ]
         res = _run_tesserae("research", args, cwd=_REPO_ROOT, timeout=timeout)
         report_md = ""
@@ -1234,7 +1250,12 @@ def run_research(
             "reason": res.reason or (res.stderr or "").strip()[:400] or "tesserae research failed",
         }
     if not report_md:
-        return {"ok": False, "query": query, "report_md": "", "reason": "research produced no report"}
+        return {
+            "ok": False,
+            "query": query,
+            "report_md": "",
+            "reason": "research produced no report",
+        }
     return {"ok": True, "query": query, "report_md": report_md, "reason": None}
 
 
@@ -1368,7 +1389,11 @@ def engine_refresh_async() -> str:
             with _op_jobs_lock:
                 _op_jobs[job_id]["status"] = "failed"
                 _op_jobs[job_id]["finished_at"] = _now_iso()
-                _op_jobs[job_id]["result"] = {"op": "engine-refresh", "ok": False, "reason": str(exc)[:200]}
+                _op_jobs[job_id]["result"] = {
+                    "op": "engine-refresh",
+                    "ok": False,
+                    "reason": str(exc)[:200],
+                }
 
     threading.Thread(target=_runner, daemon=True).start()
     return job_id

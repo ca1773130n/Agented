@@ -77,7 +77,8 @@ async function addRepo() {
   isAdding.value = true;
   try {
     // Determine if it looks like a GitHub URL or a local path
-    if (url.includes('github.com') || url.match(/^[\w-]+\/[\w.-]+$/)) {
+    // (any http(s)/git@ URL counts as a repo URL — covers GitHub Enterprise hosts)
+    if (/^(https?:\/\/|git@)/.test(url) || url.includes('github.com') || url.match(/^[\w-]+\/[\w.-]+$/)) {
       await triggerApi.addGitHubRepo(selectedTriggerId.value, url);
     } else {
       await triggerApi.addPath(selectedTriggerId.value, url);

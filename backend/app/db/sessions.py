@@ -29,7 +29,18 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_LIFETIME = dt.timedelta(days=14)
 DEFAULT_IDLE_LIFETIME = dt.timedelta(minutes=30)
-ROTATION_GRACE_WINDOW = dt.timedelta(seconds=5)
+# Old-token grace after a rotation. Must comfortably exceed the slowest
+# realistic in-flight request: a page-load burst fires dozens of parallel
+# requests all carrying the pre-rotation cookie, and any of them landing
+# after the window is a hard 401 → silent logout (the bug behind "it keeps
+# asking me to sign in"). 5s was far too tight for that.
+ROTATION_GRACE_WINDOW = dt.timedelta(seconds=60)
+
+# Rotate at most this often. Per-REQUEST rotation gave no extra security
+# (the grace window keeps the old token alive anyway) but cost a full
+# sessions-table scan + UPDATE + session_events INSERT on every authed
+# request, and multiplied the cookie-desync races during request bursts.
+ROTATION_MIN_INTERVAL = dt.timedelta(minutes=15)
 
 # v0.6.0 round-2: pre-computed sentinel for the timing-floor compare
 # on a 0-row miss. 43 chars matches the secrets.token_urlsafe(32)
@@ -228,7 +239,10 @@ def rotate_session(token: str) -> Optional[dict]:
     token is preserved in `rotated_from_token` for the grace window.
 
     Returns the updated row, or None if `token` doesn't match an active
-    session. Uses a compare-and-swap UPDATE so two concurrent rotations
+    session OR the session was rotated more recently than
+    ROTATION_MIN_INTERVAL (rotation is throttled — per-request rotation
+    only multiplied DB writes and cookie-desync races during request
+    bursts). Uses a compare-and-swap UPDATE so two concurrent rotations
     of the same token produce a single canonical new token: the loser
     reloads and returns the winner's row instead of issuing a stale
     second rotation.
@@ -237,6 +251,7 @@ def rotate_session(token: str) -> Optional[dict]:
     if not token:
         return None
     now = _utcnow().isoformat()
+    rotation_due_cutoff = (_utcnow() - ROTATION_MIN_INTERVAL).isoformat()
     new_token = _generate_token()
     with get_connection() as conn:
         conn.row_factory = _row_to_dict
@@ -245,6 +260,8 @@ def rotate_session(token: str) -> Optional[dict]:
         for row in rows:
             if not hmac.compare_digest(row["token"], token):
                 continue
+            if (row.get("rotated_at") or "") > rotation_due_cutoff:
+                return None  # rotated recently — skip; grace window covers stragglers
             old_token = row["token"]
             cursor = conn.execute(
                 """UPDATE sessions

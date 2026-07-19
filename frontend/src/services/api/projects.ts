@@ -111,6 +111,7 @@ export const projectApi = {
     status: string;
     product_id: string;
     github_repo: string;
+    github_host: string;
     owner_team_id: string;
     local_path: string;
     manager_super_agent_id: string;

@@ -198,7 +198,7 @@ onMounted(loadRepos);
             </div>
             <div class="field">
               <label class="field-label">{{ t('gitOpsSync.form.repoUrl') }} <span class="required">*</span></label>
-              <input v-model="newRepoUrl" type="text" class="input" placeholder="https://github.com/org/repo.git" />
+              <input v-model="newRepoUrl" type="text" class="input" placeholder="https://github.com/org/repo.git or enterprise URL" />
             </div>
           </div>
           <div class="field-row">

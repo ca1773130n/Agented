@@ -23,7 +23,6 @@ import { TOUR_STEP_MAP, TOTAL_TOUR_STEPS } from './constants/tourSteps';
 import AppShell from './components/layout/AppShell.vue';
 import AppToastHost from './components/layout/AppToastHost.vue';
 import ErrorBoundary from './components/base/ErrorBoundary.vue';
-import { registerGenericTools } from './webmcp/generic-tools';
 import { useSidebarCollapse } from './composables/useSidebarCollapse';
 import { useSidebarData } from './composables/useSidebarData';
 import { useHealthPolling } from './composables/useHealthPolling';
@@ -138,8 +137,9 @@ watch(tourActive, (active) => {
   document.body.classList.toggle('tour-active', active);
 });
 
-// Register WebMCP generic verification tools (app-lifetime, no-ops in non-Canary browsers)
-registerGenericTools();
+// WebMCP generic verification tools are registered in main.ts AFTER mount,
+// once the deferred @mcp-b/global polyfill (which installs
+// navigator.modelContext) has loaded — keeping that ~440 KB off the boot path.
 
 // Global Vue error handler — report unhandled errors to the system error API
 const appInstance = getCurrentInstance()?.appContext.app;
