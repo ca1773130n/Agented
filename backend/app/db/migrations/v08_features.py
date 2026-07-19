@@ -69,8 +69,39 @@ def _migrate_179_oidc_identities(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_oidc_identities_user ON oidc_identities(user_id)")
 
 
+def _migrate_180_memory_query_jobs(conn):
+    """Persistent history of observability/memory queries so the operator can read
+    past results later, and so every query can run as a background job the operator
+    can navigate away from. Backs the in-memory _op_jobs store (which is lost on
+    restart)."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS memory_query_jobs (
+            id TEXT PRIMARY KEY,
+            kind TEXT NOT NULL,
+            label TEXT,
+            params_json TEXT,
+            project_id TEXT,
+            status TEXT NOT NULL DEFAULT 'running',
+            result_json TEXT,
+            error TEXT,
+            created_at TEXT NOT NULL,
+            finished_at TEXT
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memory_query_jobs_created "
+        "ON memory_query_jobs(created_at DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memory_query_jobs_kind ON memory_query_jobs(kind)"
+    )
+
+
 V08_MIGRATIONS = [
     (177, "session_share_tokens", _migrate_177_session_share_tokens),
     (178, "project_session_owner", _migrate_178_project_session_owner),
     (179, "oidc_identities", _migrate_179_oidc_identities),
+    (180, "memory_query_jobs", _migrate_180_memory_query_jobs),
 ]
