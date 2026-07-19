@@ -110,26 +110,35 @@ function buildFlow(nodes: GraphNode[], edges: GraphEdge[]) {
     const h = hop.has(n.id) ? Math.min(hop.get(n.id) as number, 2) : 2;
     (rings.get(h) ?? rings.set(h, []).get(h)!).push(n);
   }
-  const radii: Record<number, number> = { 0: 0, 1: 220, 2: 420 };
+  // Ring radius SCALES with how many nodes sit on it (each node reserves ~RING_SLOT
+  // px of arc), so a busy ring spreads out instead of overlapping — long labels are
+  // also clamped (full name lives in the detail panel), keeping nodes compact.
+  const RING_SLOT = 180;
+  const baseRadii: Record<number, number> = { 0: 0, 1: 240, 2: 480 };
+  const ringRadius = (h: number, count: number) =>
+    h === 0 ? 0 : Math.max(baseRadii[h] ?? 520, (count * RING_SLOT) / (Math.PI * 2));
 
   const degs = nodes.map((n) => n.degree);
   const minD = degs.length ? Math.min(...degs) : 0;
   const maxD = degs.length ? Math.max(...degs) : 1;
   const range = Math.max(1, maxD - minD);
+  const clampLabel = (s: string) => (s.length > 40 ? s.slice(0, 39).trimEnd() + '…' : s);
 
   const built: FlowNode[] = [];
   for (const [h, group] of rings) {
-    const r = radii[h] ?? 420;
+    const r = ringRadius(h, group.length);
     group.forEach((n, i) => {
-      const angle = (i / Math.max(1, group.length)) * Math.PI * 2;
+      // stagger alternate rings by half a slot so outer nodes don't line up
+      // radially behind inner ones.
+      const angle = ((i + (h % 2) * 0.5) / Math.max(1, group.length)) * Math.PI * 2;
       const x = h === 0 ? 0 : Math.cos(angle) * r;
       const y = h === 0 ? 0 : Math.sin(angle) * r;
       const accent = accentFor(n.type);
-      const size = 92 + Math.round(((n.degree - minD) / range) * 76);
+      const size = 96 + Math.round(((n.degree - minD) / range) * 64);
       built.push({
         id: n.id,
         position: { x, y },
-        data: { label: n.name, type: n.type, degree: n.degree },
+        data: { label: clampLabel(n.name), type: n.type, degree: n.degree },
         class: n.center ? 'kg-node kg-node--center' : 'kg-node',
         style: {
           background: `var(--accent-${accent}-dim)`,
@@ -170,7 +179,7 @@ async function loadOverview() {
   loading.value = true;
   loadError.value = null;
   try {
-    const res = await memorySystemApi.graphOverview();
+    const res = await memorySystemApi.graphOverview(null, 30);
     totalNodes.value = res.total_nodes;
     totalEdges.value = res.total_edges;
     truncated.value = false;
@@ -194,7 +203,7 @@ async function focusNode(nodeId: string, opts: { skipSubgraph?: boolean } = {}) 
   selectedId.value = nodeId;
   if (!opts.skipSubgraph) {
     try {
-      const sg = await memorySystemApi.graphSubgraph(nodeId);
+      const sg = await memorySystemApi.graphSubgraph(nodeId, null, 1, 40);
       truncated.value = sg.truncated;
       buildFlow(sg.nodes, sg.edges);
     } catch (e) {
@@ -544,6 +553,13 @@ onMounted(loadOverview);
   cursor: pointer;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
   transition: box-shadow var(--transition-fast), transform var(--transition-fast);
+  line-height: 1.3;
+  /* Keep labels to 3 lines so a node never grows tall enough to overlap its ring. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .kg-flow :deep(.vue-flow__node.kg-node:hover) {
   transform: translateY(-1px);
