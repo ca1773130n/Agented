@@ -33,13 +33,18 @@ export const skillSleepApi = {
       },
     ),
 
-  /** Run one autonomous round: Reflect → [rank] → gate → measure → stage. */
+  /**
+   * Kick off one autonomous round (Reflect → [rank] → gate → measure → stage)
+   * in the BACKGROUND. Returns a `job_id` immediately — a round takes minutes
+   * (up to a 600s codex Reflect), so it must not block the request. Poll
+   * `roundStatus` for the verdict; the operator can leave the page meanwhile.
+   */
   runRound: (
     projectId: string,
     skillName: string,
     body: { n?: number; seed?: number; measure?: boolean; edit_budget?: number } = {},
   ) =>
-    apiFetch<SkillSleepVerdict>(
+    apiFetch<{ job_id: string }>(
       `/admin/projects/${encodeURIComponent(projectId)}/skills/${encodeURIComponent(skillName)}/sleep/round`,
       {
         method: 'POST',
@@ -50,6 +55,12 @@ export const skillSleepApi = {
           ...(body.edit_budget !== undefined ? { edit_budget: body.edit_budget } : {}),
         }),
       },
+    ),
+
+  /** Poll a background round: `{status: running|done|error, verdict?, error?}`. */
+  roundStatus: (projectId: string, skillName: string, jobId: string) =>
+    apiFetch<{ status: 'running' | 'done' | 'error'; verdict?: SkillSleepVerdict; error?: string }>(
+      `/admin/projects/${encodeURIComponent(projectId)}/skills/${encodeURIComponent(skillName)}/sleep/round/${encodeURIComponent(jobId)}`,
     ),
 
   /** List this project's Skill-Sleep runs (most recent first). */

@@ -35,6 +35,7 @@ import logging
 import math
 import re
 import secrets
+import threading
 from datetime import datetime, timedelta
 from typing import Callable, Optional
 
@@ -1057,3 +1058,72 @@ class SkillSleepScheduler:
                     {"project_id": project_id, "skill": skill_name, "reason": "error"}
                 )
         return results
+
+
+# ---------------------------------------------------------------------------
+# Background round runner
+#
+# A Skill-Sleep round runs Reflect (a codex subprocess with a 600s timeout, or
+# the in-process LLM seam) plus ~6-12 sequential judge calls — minutes of work.
+# Running it inline on the request would block a UvicornWorker thread for that
+# whole time (the frontend's 30s fetch aborts long before, but the server keeps
+# churning), and repeated rounds starve the request pool until the whole app
+# stops responding. So the round runs on a DEDICATED daemon thread (separate
+# from the request pool) and the route returns a job_id the UI polls; the
+# operator can leave the page and the result still lands in the runs table.
+# ---------------------------------------------------------------------------
+
+_ROUND_JOBS: dict[str, dict] = {}
+_ROUND_JOBS_LOCK = threading.Lock()
+# ponytail: cap the in-memory registry; the oldest job is evicted past this.
+# Jobs are tiny status dicts and the durable result is the persisted run row,
+# so eviction only loses the transient verdict of a very old poll.
+_ROUND_JOBS_MAX = 100
+
+
+def _round_now_iso() -> str:
+    return datetime.now(tz=None).astimezone().isoformat()
+
+
+def start_round_async(project_id: str, skill_name: str, **opts: object) -> str:
+    """Kick off one Skill-Sleep round on a daemon thread; return a job_id to
+    poll via :func:`get_round_job`. Never blocks the caller."""
+    job_id = f"ssround-{secrets.token_hex(6)}"
+    with _ROUND_JOBS_LOCK:
+        if len(_ROUND_JOBS) >= _ROUND_JOBS_MAX:
+            oldest = min(_ROUND_JOBS, key=lambda k: _ROUND_JOBS[k]["started_at"])
+            _ROUND_JOBS.pop(oldest, None)
+        _ROUND_JOBS[job_id] = {
+            "job_id": job_id,
+            "status": "running",
+            "project_id": project_id,
+            "skill_name": skill_name,
+            "started_at": _round_now_iso(),
+            "finished_at": None,
+            "verdict": None,
+            "error": None,
+        }
+
+    def _work() -> None:
+        try:
+            verdict = SkillSleepGate.run_skill_sleep_round(project_id, skill_name, **opts)
+            update = {"status": "done", "verdict": verdict}
+        except SkillNotInProjectError as e:
+            update = {"status": "error", "error": str(e)}
+        except Exception as e:  # noqa: BLE001 — a background round must never crash silently
+            logger.warning("skill-sleep round job %s failed", job_id, exc_info=True)
+            update = {"status": "error", "error": str(e)}
+        with _ROUND_JOBS_LOCK:
+            job = _ROUND_JOBS.get(job_id)
+            if job is not None:
+                job.update(update, finished_at=_round_now_iso())
+
+    threading.Thread(target=_work, name=f"skill-sleep-{job_id}", daemon=True).start()
+    return job_id
+
+
+def get_round_job(job_id: str) -> Optional[dict]:
+    """Snapshot of a background round job, or None if unknown/evicted."""
+    with _ROUND_JOBS_LOCK:
+        job = _ROUND_JOBS.get(job_id)
+        return dict(job) if job else None
