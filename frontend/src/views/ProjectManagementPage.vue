@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue';
+import { useUrlTab } from '../composables/useUrlTab';
 import { useRoute, useRouter } from 'vue-router';
 import type { Project, GrdMilestone, GrdPhase, GrdPlan, ConversationMessage, AuthenticatedEventSource } from '../services/api';
 import { projectApi, grdApi } from '../services/api';
@@ -29,7 +30,7 @@ const { t } = useI18n();
 // Sessions tab opens by default — it's the live work surface
 // (chat panel + active claude session). Kanban is reference state
 // and reads fine on demand. v0.7.52.
-const activeTab = ref<'kanban' | 'sessions'>('sessions');
+const activeTab = useUrlTab(['kanban', 'sessions'] as const, 'sessions');
 const project = ref<Project | null>(null);
 const milestones = ref<GrdMilestone[]>([]);
 const phases = ref<GrdPhase[]>([]);

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useUrlTab } from '../composables/useUrlTab';
 import { useRoute } from 'vue-router';
 import type { Plugin, PluginComponent } from '../services/api';
 import { pluginApi, ApiError } from '../services/api';
@@ -25,7 +26,7 @@ const showToast = useToast();
 
 const plugin = ref<Plugin | null>(null);
 const isSaving = ref(false);
-const activeTab = ref<'overview' | 'skills' | 'commands' | 'hooks' | 'agents'>('overview');
+const activeTab = useUrlTab(['overview', 'skills', 'commands', 'hooks', 'agents'] as const, 'overview');
 
 // Edit states
 const isEditingInfo = ref(false);

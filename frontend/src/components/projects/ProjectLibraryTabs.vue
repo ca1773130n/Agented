@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
+import { useUrlTab } from '../../composables/useUrlTab';
 import { useI18n } from 'vue-i18n';
 import type { Agent, ProjectSkill, Hook, Command, Rule, ProjectInstallation } from '../../services/api';
 import { useToast } from '../../composables/useToast';
@@ -32,7 +33,7 @@ const emit = defineEmits<{
 
 const showToast = useToast();
 
-const activeLibraryTab = ref<LibraryTab>('agents');
+const activeLibraryTab = useUrlTab<LibraryTab>(['agents', 'skills', 'hooks', 'commands', 'rules'], 'agents', 'lib');
 
 // Bulk selection state
 const selectedItems = ref<Set<string>>(new Set());

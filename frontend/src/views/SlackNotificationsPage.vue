@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useUrlTab } from '../composables/useUrlTab';
 import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
@@ -45,7 +46,7 @@ const logs = ref<NotificationLog[]>([]);
 const selectedChannel = ref<NotificationChannel | null>(null);
 const isTestingSend = ref(false);
 const isSaving = ref(false);
-const activeTab = ref<'config' | 'logs'>('config');
+const activeTab = useUrlTab(['config', 'logs'] as const, 'config');
 
 function integrationToChannel(int: Integration): NotificationChannel {
   const config = int.config || {};
