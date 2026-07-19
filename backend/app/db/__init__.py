@@ -248,6 +248,7 @@ from .grd import (  # noqa: F401
     get_milestones_by_project,
     get_phases_by_milestone,
     get_plans_by_phase,
+    get_plans_by_project,
     get_project_phase,
     get_project_plan,
     get_project_session,

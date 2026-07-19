@@ -1401,26 +1401,38 @@ def list_sessions(
         return {"ok": False, "sessions": [], "reason": "invalid project id"}
     if limit is not None and (not isinstance(limit, int) or limit <= 0):
         return {"ok": False, "sessions": [], "reason": "invalid limit"}
-    args = ["sessions", "list", "--json"]
-    if project:
-        args += ["--project", project]
-    res = _run_tesserae("sessions_list", args, cwd=_REPO_ROOT, timeout=timeout)
-    if not res.ok:
-        return {
-            "ok": False,
-            "sessions": [],
-            "reason": res.reason
-            or (res.stderr or "").strip()[:400]
-            or "tesserae sessions list failed",
-        }
-    out = res.stdout or ""
-    start = out.find("[")
-    raw = out[start:] if start >= 0 else out
-    try:
-        sessions = json.loads(raw) if raw.strip() else []
-    except (json.JSONDecodeError, ValueError):
-        return {"ok": False, "sessions": [], "reason": "could not parse tesserae sessions JSON"}
-    if limit and isinstance(sessions, list):
+    # Cache the FULL enumerated list per project (~30s). `tesserae sessions list`
+    # has no --limit flag, so it enumerates + serializes the ENTIRE session history
+    # on every call; the limit is applied in Python below, so every page size shares
+    # one subprocess and repeat loads skip it entirely.
+    cache_key = f"sessions_list_{project or '__all__'}"
+    cached = _read_tesserae_cache(cache_key, immutable=False, ttl=30)
+    if cached is not None:
+        sessions = cached.get("sessions") or []
+    else:
+        args = ["sessions", "list", "--json"]
+        if project:
+            args += ["--project", project]
+        res = _run_tesserae("sessions_list", args, cwd=_REPO_ROOT, timeout=timeout)
+        if not res.ok:
+            return {
+                "ok": False,
+                "sessions": [],
+                "reason": res.reason
+                or (res.stderr or "").strip()[:400]
+                or "tesserae sessions list failed",
+            }
+        out = res.stdout or ""
+        start = out.find("[")
+        raw = out[start:] if start >= 0 else out
+        try:
+            sessions = json.loads(raw) if raw.strip() else []
+        except (json.JSONDecodeError, ValueError):
+            return {"ok": False, "sessions": [], "reason": "could not parse tesserae sessions JSON"}
+        if not isinstance(sessions, list):
+            sessions = []
+        _write_tesserae_cache(cache_key, {"sessions": sessions})
+    if limit:
         sessions = sessions[:limit]
     return {"ok": True, "sessions": sessions, "reason": None}
 
