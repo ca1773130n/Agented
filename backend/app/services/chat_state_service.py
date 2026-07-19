@@ -11,7 +11,7 @@ import datetime
 import json
 import logging
 import threading
-from queue import Empty, Queue
+from queue import Empty, Full, Queue
 from typing import Dict, Generator, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -32,6 +32,21 @@ class ChatStateService:
     #               "status": str, "created_at": str}}
     _sessions: Dict[str, dict] = {}
     _lock = threading.Lock()
+    # Cap per-subscriber queues so a stalled SSE client can't OOM the worker.
+    _SUBSCRIBER_QUEUE_MAXSIZE = 2000
+
+    @staticmethod
+    def _offer(q: Queue, item) -> None:
+        """Non-blocking enqueue with drop-oldest backpressure (single-worker OOM
+        guard). Terminal ``None`` poison-pills always get in — dropping frees a slot."""
+        try:
+            q.put_nowait(item)
+        except Full:
+            try:
+                q.get_nowait()
+                q.put_nowait(item)
+            except (Empty, Full):
+                pass
 
     @classmethod
     def init_session(cls, session_id: str) -> None:
@@ -57,7 +72,7 @@ class ChatStateService:
                 return
             # Poison-pill all subscriber queues so generators exit cleanly
             for q in session["subscribers"]:
-                q.put(None)
+                cls._offer(q, None)
             logger.info("ChatStateService: removed session %s", session_id)
 
     @classmethod
@@ -91,7 +106,7 @@ class ChatStateService:
 
             # Deliver to all subscribers
             for q in session["subscribers"]:
-                q.put(sse_str)
+                cls._offer(q, sse_str)
 
     @classmethod
     def push_status(cls, session_id: str, status: str) -> None:
@@ -122,7 +137,7 @@ class ChatStateService:
             last_seq: The last sequence number seen by the client (for reconnection).
             heartbeat_timeout: Seconds to wait before sending a heartbeat (default 30).
         """
-        queue: Queue = Queue()
+        queue: Queue = Queue(maxsize=cls._SUBSCRIBER_QUEUE_MAXSIZE)
         replay_events: List[str] = []
         session_found = False
 
@@ -219,5 +234,5 @@ class ChatStateService:
         with cls._lock:
             for session in cls._sessions.values():
                 for q in session["subscribers"]:
-                    q.put(None)
+                    cls._offer(q, None)
             cls._sessions = {}
