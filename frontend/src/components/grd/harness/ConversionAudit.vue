@@ -98,9 +98,9 @@ defineExpose({ load });
 .card-body { padding: 1rem 1.25rem; }
 .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .metric { display: flex; flex-direction: column; gap: 2px; padding: 0.75rem; background: var(--bg-tertiary, #1a1a24); border-radius: 6px; }
-.metric .value { font-size: 1.25rem; font-weight: 600; color: var(--text-primary, #fff); font-family: monospace; }
+.metric .value { font-size: 1.25rem; font-weight: 600; color: var(--text-primary, #fff); font-family: var(--font-mono); }
 .metric .label { font-size: 0.72rem; color: var(--text-tertiary, #888); }
-.metric.warn .value { color: var(--color-warning, #e0a030); }
+.metric.warn .value { color: var(--warning); }
 .unconverted { margin-top: 1rem; }
 .unconverted .sub { font-size: 0.78rem; color: var(--text-secondary, #aaa); }
 .unconverted ul { margin: 0.4rem 0 0; padding-left: 1.1rem; }
