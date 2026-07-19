@@ -368,14 +368,25 @@ class ProjectInstallService:
         """
         settings_path = os.path.join(workspace, ".claude", "settings.json")
 
-        # Read existing settings
+        # Read existing settings. If the file EXISTS but is unparseable, ABORT —
+        # do not silently reset to {}, because this method then overwrites the
+        # file, which would clobber the operator's entire real settings.json
+        # (e.g. one left truncated by a prior interrupted write, or hand-edited
+        # with comments/trailing commas).
         settings = {}
         if os.path.isfile(settings_path):
             try:
                 with open(settings_path, "r") as f:
                     settings = json.load(f)
-            except (json.JSONDecodeError, IOError):
-                settings = {}
+            except (json.JSONDecodeError, OSError) as e:
+                raise ValueError(
+                    f"Refusing to modify unparseable {settings_path}: {e}. "
+                    "Fix or remove the file, then retry the install."
+                ) from e
+            if not isinstance(settings, dict):
+                raise ValueError(
+                    f"Refusing to modify {settings_path}: top-level JSON is not an object."
+                )
 
         # Ensure hooks section exists
         if "hooks" not in settings:
@@ -408,7 +419,11 @@ class ProjectInstallService:
             if not settings["hooks"]:
                 del settings["hooks"]
 
-        # Write back
+        # Write back atomically (temp file + os.replace) so a crash / disk-full
+        # mid-write cannot truncate the operator's settings.json into the
+        # unparseable state the read guard above now refuses to touch.
         os.makedirs(os.path.dirname(settings_path), exist_ok=True)
-        with open(settings_path, "w") as f:
+        tmp_path = f"{settings_path}.tmp"
+        with open(tmp_path, "w") as f:
             json.dump(settings, f, indent=2)
+        os.replace(tmp_path, settings_path)

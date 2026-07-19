@@ -243,8 +243,11 @@ def get_logs(lines: int = 200) -> dict[str, Any]:
             content = f.read().decode("utf-8", errors="replace")
             all_lines = content.splitlines()
         return {"lines": all_lines[-lines:]}
-    except Exception:  # noqa: BLE001
-        return {"lines": []}
+    except Exception as e:  # noqa: BLE001
+        # Don't hide an IO/permission failure as an empty log — surface it so the
+        # operator can tell "log is empty" from "log couldn't be read".
+        logger.warning("log viewer: failed to read %s: %s", log_file, e, exc_info=True)
+        return {"lines": [], "error": "Could not read log file"}
 
 
 system_router = Router(
@@ -411,6 +414,60 @@ secrets_router = Router(
         reveal_secret,
         update_secret,
         delete_secret,
+    ],
+)
+
+
+# ===========================================================================
+# /admin/github-credentials/* (3) — per-host GitHub tokens (vault-backed)
+# ===========================================================================
+
+
+@get("/", sync_to_thread=False)
+def list_github_credentials() -> dict[str, Any]:
+    _ensure_vault_configured()
+    from app.services.github_credentials_service import GithubCredentialsService
+
+    return {"hosts": GithubCredentialsService.list_hosts()}
+
+
+@put("/{host:str}", sync_to_thread=False)
+def set_github_credential(host: str, data: dict, request: Request) -> dict[str, Any]:
+    _ensure_vault_configured()
+    token = (data or {}).get("token")
+    if not token:
+        raise ClientException(detail="token is required")
+    from app.services.github_credentials_service import GithubCredentialsService
+
+    principal = (request.scope.get("state") or {}).get("principal") or {}
+    actor = principal.get("user_id") or "api"
+    try:
+        return GithubCredentialsService.set_token(host, token, actor=actor)
+    except ValueError as exc:
+        raise ClientException(detail=str(exc)) from None
+
+
+@delete("/{host:str}", status_code=200, sync_to_thread=False)
+def delete_github_credential(host: str) -> dict[str, Any]:
+    _ensure_vault_configured()
+    from app.services.github_credentials_service import GithubCredentialsService
+
+    if not GithubCredentialsService.delete_token(host):
+        raise NotFoundException(detail="No token stored for this host")
+    return {"message": "Token deleted", "host": host}
+
+
+github_credentials_router = Router(
+    path="/admin/github-credentials",
+    # Same posture as the secrets vault it wraps: this surface is
+    # write/delete-only (values never returned HERE — the tokens live in the
+    # secrets table, so the generic admin-only /admin/secrets reveal still
+    # applies to them), admin-gated at the router and in ROLE_REQUIRED.
+    guards=[requires_role("admin")],
+    route_handlers=[
+        list_github_credentials,
+        set_github_credential,
+        delete_github_credential,
     ],
 )
 
