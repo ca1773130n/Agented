@@ -252,7 +252,11 @@ class SetupBundleService:
 
             config_dir = os.path.expanduser(config_path)
             account_name = account.get("account_name", "unknown")
-            env = _scoped_cli_install_env(config_dir)
+            from app import config
+
+            # NO_LLM_KEYS: strip server-baked inference keys from the claude
+            # subprocess env (flag-gated no-op when unset).
+            env = config.subprocess_env(_scoped_cli_install_env(config_dir))
             installed = []
 
             # Register the bundle marketplace in this account's config so the

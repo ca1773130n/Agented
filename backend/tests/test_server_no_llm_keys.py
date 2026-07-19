@@ -408,6 +408,15 @@ def test_all_harness_spawners_route_through_subprocess_env():
         "app/services/base_generation_service.py",
         "app/services/replay_service.py",
         "app/services/model_discovery_service.py",
+        # Hardening-audit sweep round 2: harness/CLI spawners the first sweep
+        # missed (inference: backend_test, skill_sleep; account/plugin/probe:
+        # backend_cli usage, harness_plugin_installer, setup_service, detection).
+        "app/services/backend_test_service.py",
+        "app/services/skill_sleep_service.py",
+        "app/services/backend_cli_service.py",
+        "app/services/harness_plugin_installer.py",
+        "app/services/setup_service.py",
+        "app/services/backend_detection_service.py",
     ):
         src = Path(rel).read_text()
         assert "subprocess_env(" in src, f"{rel} spawns without config.subprocess_env"
