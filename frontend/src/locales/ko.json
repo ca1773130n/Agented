@@ -10005,7 +10005,7 @@
   },
   "knowledgeGraph": {
     "title": "지식 그래프",
-    "subtitle": "Tesserae가 아는 것을 탐색 — 컴파일된 그래프 검색 (원시 검색, LLM 없음).",
+    "subtitle": "Tesserae가 컴파일한 그래프를 탐색하세요 — 노드를 검색하거나 클릭해 이웃을 따라가 보세요.",
     "statusFailed": "그래프 상태 로드 실패",
     "searchFailed": "검색 실패",
     "nodes": "노드",
@@ -10016,7 +10016,22 @@
     "searchPlaceholder": "지식 그래프 검색…",
     "searching": "검색 중…",
     "search": "검색",
-    "noHits": "해당 쿼리에 대한 결과가 없습니다."
+    "noHits": "해당 쿼리에 대한 결과가 없습니다.",
+    "loading": "그래프를 불러오는 중…",
+    "overviewFailed": "그래프를 불러오지 못했습니다",
+    "subgraphFailed": "해당 노드의 이웃을 불러오지 못했습니다",
+    "detailFailed": "노드 상세 정보를 불러오지 못했습니다",
+    "degree": "연결도 {n}",
+    "searchNoResults": "검색과 일치하는 노드가 없습니다.",
+    "graphEmptyTitle": "아직 그래프가 없습니다",
+    "graphEmptyBody": "아직 지식 그래프로 컴파일된 내용이 없습니다.",
+    "truncated": "일부만 표시 중 — 이 이웃은 잘렸습니다.",
+    "legendTitle": "유형",
+    "panelClose": "패널 닫기",
+    "panelNoDescription": "설명이 없습니다.",
+    "panelAliases": "별칭",
+    "panelSource": "출처",
+    "panelNeighbors": "이웃"
   },
   "memoryResearch": {
     "title": "메모리 리서치",

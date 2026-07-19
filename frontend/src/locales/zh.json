@@ -10005,7 +10005,7 @@
   },
   "knowledgeGraph": {
     "title": "知识图谱",
-    "subtitle": "浏览 Tesserae 所知的内容——搜索已编译图谱（原始检索，无 LLM）。",
+    "subtitle": "浏览 Tesserae 编译的图谱 — 搜索或点击节点以遍历其邻域。",
     "statusFailed": "加载图谱状态失败",
     "searchFailed": "搜索失败",
     "nodes": "节点",
@@ -10016,7 +10016,22 @@
     "searchPlaceholder": "搜索知识图谱…",
     "searching": "搜索中…",
     "search": "搜索",
-    "noHits": "该查询没有结果。"
+    "noHits": "该查询没有结果。",
+    "loading": "正在加载图谱…",
+    "overviewFailed": "加载图谱失败",
+    "subgraphFailed": "加载该节点的邻域失败",
+    "detailFailed": "加载节点详情失败",
+    "degree": "度 {n}",
+    "searchNoResults": "没有匹配的节点。",
+    "graphEmptyTitle": "暂无图谱",
+    "graphEmptyBody": "尚未编译任何内容到知识图谱中。",
+    "truncated": "仅显示部分 — 此邻域已被截断。",
+    "legendTitle": "类型",
+    "panelClose": "关闭面板",
+    "panelNoDescription": "暂无描述。",
+    "panelAliases": "别名",
+    "panelSource": "来源",
+    "panelNeighbors": "邻居"
   },
   "memoryResearch": {
     "title": "记忆研究",

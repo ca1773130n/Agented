@@ -10005,7 +10005,7 @@
   },
   "knowledgeGraph": {
     "title": "Knowledge Graph",
-    "subtitle": "Browse what Tesserae knows — search the compiled graph (raw retrieval, no LLM).",
+    "subtitle": "Explore Tesserae's compiled graph — search or click a node to walk its neighborhood.",
     "statusFailed": "Failed to load graph status",
     "searchFailed": "Search failed",
     "nodes": "nodes",
@@ -10016,7 +10016,22 @@
     "searchPlaceholder": "Search the knowledge graph…",
     "searching": "Searching…",
     "search": "Search",
-    "noHits": "No hits for that query."
+    "noHits": "No hits for that query.",
+    "loading": "Loading the graph…",
+    "overviewFailed": "Failed to load the graph",
+    "subgraphFailed": "Failed to load that node's neighborhood",
+    "detailFailed": "Failed to load node detail",
+    "degree": "degree {n}",
+    "searchNoResults": "No nodes match that search.",
+    "graphEmptyTitle": "No graph yet",
+    "graphEmptyBody": "Nothing has been compiled into the knowledge graph yet.",
+    "truncated": "Showing a subset — this neighborhood was truncated.",
+    "legendTitle": "Types",
+    "panelClose": "Close panel",
+    "panelNoDescription": "No description.",
+    "panelAliases": "Aliases",
+    "panelSource": "Source",
+    "panelNeighbors": "Neighbors"
   },
   "memoryResearch": {
     "title": "Memory Research",
