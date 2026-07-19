@@ -34,6 +34,7 @@ from app.database import (
     get_milestones_by_project,
     get_phases_by_milestone,
     get_plans_by_phase,
+    get_plans_by_project,
     get_project,
     get_project_plan,
     get_project_sync_states,
@@ -458,10 +459,8 @@ def list_plans(project_id: str, phase_id: Optional[str] = None) -> dict[str, Any
     if phase_id:
         plans = get_plans_by_phase(phase_id)
     else:
-        plans = []
-        for ms in get_milestones_by_project(project_id):
-            for phase in get_phases_by_milestone(ms["id"]):
-                plans.extend(get_plans_by_phase(phase["id"]))
+        # Single JOIN across milestones→phases→plans (was an N×M+1 fan-out).
+        plans = get_plans_by_project(project_id)
     return {"plans": plans}
 
 
