@@ -931,6 +931,14 @@ class GrdResearchSessionHandler(ExecutionTypeHandler):
             prompt,
         ]
 
+        # GRD 0.5.0 interactive checkpoints (research_gates.interactive, SEED/
+        # HYPOTHESIZE/DESIGN/DECIDE) would PAUSE the loop awaiting a human answer —
+        # impossible in a headless autonomous `claude -p` run, so it would hang.
+        # GRD_AUTOPILOT=1 makes gd resolve checkpoints to their recommended defaults
+        # instead of pausing. Attended sessions leave it unset so a human can steer.
+        execution_mode = session_config.get("execution_mode", "autonomous")
+        research_env = {"GRD_AUTOPILOT": "1"} if execution_mode == "autonomous" else None
+
         session_id = ProjectSessionManager.create_session(
             project_id=project_id,
             cmd=cmd,
@@ -940,7 +948,8 @@ class GrdResearchSessionHandler(ExecutionTypeHandler):
             agent_id=session_config.get("agent_id"),
             worktree_path=session_config.get("worktree_path"),
             execution_type="grd_research",
-            execution_mode=session_config.get("execution_mode", "autonomous"),
+            execution_mode=execution_mode,
+            env=research_env,
             stream_json=True,
             use_pty=False,
             yolo_mode=session_config.get("yolo_mode", False),
