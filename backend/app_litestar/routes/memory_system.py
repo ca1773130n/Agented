@@ -553,9 +553,88 @@ def tesserae_job_status(job_id: str) -> dict[str, Any]:
     return job
 
 
+# --- Persistent async query dispatcher + history (leave-the-page + read-later) ---
+
+_MEMORY_QUERY_KINDS = {
+    "doctor": lambda p: ti.build_doctor(refresh=True),
+    "lint": lambda p: ti.build_lint(refresh=True),
+    "config": lambda p: ti.config_status(),
+    "graph_status": lambda p: ti.graph_status(),
+    "activity_summary": lambda p: ti.build_activity_summary(
+        period=p.get("period", "day"),
+        day=p.get("date"),
+        project=p.get("project"),
+        max_turns=p.get("max_turns"),
+        refresh=True,
+    ),
+    "decisions": lambda p: ti.build_decisions(
+        period=p.get("period", "day"),
+        day=p.get("date"),
+        project=p.get("project"),
+        include_agent=p.get("include_agent", True),
+        max_turns=p.get("max_turns"),
+        refresh=True,
+    ),
+    "graph_query": lambda p: ti.query_graph(
+        str(p.get("q", "")), top_k=int(p.get("top_k", 8)), kind=p.get("kind")
+    ),
+    "sessions": lambda p: ti.list_sessions(project=p.get("project"), limit=p.get("limit")),
+}
+
+
+def _memory_job_label(kind: str, params: dict) -> str:
+    if kind == "graph_query":
+        return str(params.get("q", ""))[:120]
+    if kind in ("activity_summary", "decisions"):
+        return f"{params.get('period', 'day')} · {params.get('project') or 'all projects'}"
+    if kind == "sessions" and params.get("project"):
+        return str(params["project"])
+    return kind
+
+
+@post("/system/memory/query", sync_to_thread=False)
+def run_memory_query(data: dict[str, Any]) -> dict[str, Any]:
+    """Run a memory/observability query as a PERSISTED BACKGROUND job so the operator
+    can navigate away and read the result (and past results) later. Body
+    ``{kind, params?}``; returns ``{job_id, kind, status}``. Poll via
+    ``/system/memory/tesserae/jobs/{job_id}``; list history via ``/system/memory/jobs``.
+    """
+    kind = (data or {}).get("kind")
+    params = (data or {}).get("params") or {}
+    if not isinstance(params, dict):
+        raise ValidationException(detail="params must be an object")
+    if kind == "research":
+        return start_research(params)  # typed launcher (validates ints + persists)
+    fn_factory = _MEMORY_QUERY_KINDS.get(kind)
+    if fn_factory is None:
+        raise ValidationException(
+            detail=f"unknown memory query kind: {kind!r} "
+            f"(expected one of {sorted(_MEMORY_QUERY_KINDS) + ['research']})"
+        )
+    job_id = ti.run_memory_job(
+        kind,
+        lambda: fn_factory(params),
+        label=_memory_job_label(kind, params),
+        params=params,
+        project=params.get("project"),
+    )
+    return {"job_id": job_id, "kind": kind, "status": "running"}
+
+
+@get("/system/memory/jobs", sync_to_thread=True)
+def list_memory_jobs(kind: Optional[str] = None, limit: int = 50) -> dict[str, Any]:
+    """History of memory queries, newest first, WITHOUT result blobs (read one via the
+    poll endpoint ``/system/memory/tesserae/jobs/{job_id}``). Optional ``kind`` filter."""
+    from app.db import memory_jobs
+
+    return {"jobs": memory_jobs.list_jobs(kind=kind, limit=limit)}
+
+
 memory_system_router = Router(
     path="/admin",
     route_handlers=[
+        run_memory_query,
+        list_memory_jobs,
         list_memory_systems,
         get_activity_summary,
         get_decisions,
