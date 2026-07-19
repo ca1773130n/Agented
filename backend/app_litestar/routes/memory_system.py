@@ -37,7 +37,17 @@ from app.services.project_workspace_service import ProjectWorkspaceService
 # ---------------------------------------------------------------------------
 
 
+# The tesserae CLI version is stable for the process lifetime, but the
+# memory-systems list endpoint spawned `tesserae --version` on EVERY page load —
+# a per-load subprocess that showed up as a navigation delay. Cache the installed
+# result process-wide (a fresh install is still picked up: the "not installed"
+# branch below never populates the cache).
+_cli_status_cache: dict[str, Any] = {}
+
+
 def _tesserae_cli_status() -> dict[str, Any]:
+    if _cli_status_cache:
+        return _cli_status_cache
     cli_path = shutil.which("tesserae")
     if not cli_path:
         return {"installed": False, "version": None, "path": None}
@@ -59,7 +69,9 @@ def _tesserae_cli_status() -> dict[str, Any]:
             version = first
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
-    return {"installed": True, "version": version, "path": cli_path}
+    result = {"installed": True, "version": version, "path": cli_path}
+    _cli_status_cache.update(result)
+    return result
 
 
 def _tesserae_per_project_state() -> list[dict[str, Any]]:
