@@ -263,7 +263,10 @@ function onKeyDown(event: KeyboardEvent) {
         m => m.agent_id === node.id || m.super_agent_id === node.id
       )
       if (member && props.team) {
-        teamApi.removeMember(props.team.id, member.id).catch(() => {})
+        teamApi.removeMember(props.team.id, member.id).catch(() => {
+          showToast(t('teamCanvas.toast.memberRemoveFailed'), 'error')
+          emit('members-changed') // re-sync from server; local canvas may have diverged
+        })
       }
     }
     removeNodes(selNodes.map(n => n.id))
@@ -454,7 +457,10 @@ function handleDeleteSelected() {
         m => m.agent_id === node.id || m.super_agent_id === node.id
       )
       if (member && props.team) {
-        teamApi.removeMember(props.team.id, member.id).catch(() => {})
+        teamApi.removeMember(props.team.id, member.id).catch(() => {
+          showToast(t('teamCanvas.toast.memberRemoveFailed'), 'error')
+          emit('members-changed') // re-sync from server; local canvas may have diverged
+        })
       }
     }
     removeNodes(selNodes.map(n => n.id))

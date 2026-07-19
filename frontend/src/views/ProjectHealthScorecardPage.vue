@@ -21,12 +21,14 @@ const maxHistory = computed(() => Math.max(...weeklyHistory.value, 1));
 const categories = ref<HealthCategory[]>([]);
 const signals = ref<HealthSignal[]>([]);
 const recommendations = ref<HealthRecommendation[]>([]);
+const loadError = ref<string | null>(null);
 const lastUpdated = ref('');
 const loading = ref(false);
 
 async function loadScorecard(projectId: string) {
   if (!projectId) return;
   loading.value = true;
+  loadError.value = null;
   try {
     const data = await projectHealthApi.getScorecard(projectId);
     overallScore.value = data.overall_score;
@@ -38,6 +40,8 @@ async function loadScorecard(projectId: string) {
     lastUpdated.value = data.last_updated;
   } catch (err) {
     console.error('Failed to load health scorecard:', err);
+    // Surface an honest error instead of rendering a fabricated all-zero scorecard.
+    loadError.value = t('projectHealthScorecard.loadFailed');
     overallScore.value = 0;
     trendDelta.value = 0;
     weeklyHistory.value = [];
@@ -151,6 +155,8 @@ function formatLastUpdated(iso: string): string {
       :title="t('projectHealthScorecard.title')"
       :subtitle="t('projectHealthScorecard.subtitle')"
     />
+
+    <div v-if="loadError" class="error-state" role="alert">{{ loadError }}</div>
 
     <!-- Project Selector -->
     <div class="selector-bar">

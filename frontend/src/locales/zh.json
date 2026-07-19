@@ -1107,6 +1107,7 @@
     },
     "toast": {
       "superAgentAddFailed": "向团队添加SuperAgent失败",
+      "memberRemoveFailed": "移除团队成员失败",
       "agentAddFailed": "向团队添加智能体失败",
       "agentRemoved": "已从团队中移除智能体",
       "agentRemoveFailed": "移除智能体失败",
@@ -2767,6 +2768,8 @@
     "forkToRunHint": "将此对话分叉到一个独立的运行中",
     "forkingRun": "正在分叉…",
     "forkRunSuccess": "已分叉到新运行 {id}",
+    "createFailed": "创建分支失败",
+    "forkRunFailed": "分叉运行失败",
     "branchNamePlaceholder": "分支名称（可选）"
   },
   "chunkResults": {
@@ -6008,6 +6011,7 @@
   },
   "projectHealthScorecard": {
     "title": "项目健康评分卡",
+    "loadFailed": "加载评分卡失败",
     "subtitle": "将机器人信号聚合为单一健康分数，提供趋势跟踪和下钻分析。",
     "projectLabel": "项目",
     "lastUpdated": "最后更新: {value}",

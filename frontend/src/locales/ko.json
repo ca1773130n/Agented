@@ -1107,6 +1107,7 @@
     },
     "toast": {
       "superAgentAddFailed": "팀에 SuperAgent 추가에 실패했습니다",
+      "memberRemoveFailed": "팀 구성원 제거에 실패했습니다",
       "agentAddFailed": "팀에 에이전트 추가에 실패했습니다",
       "agentRemoved": "팀에서 에이전트가 제거되었습니다",
       "agentRemoveFailed": "에이전트 제거에 실패했습니다",
@@ -2767,6 +2768,8 @@
     "forkToRunHint": "이 대화를 별도의 독립 실행으로 포크합니다",
     "forkingRun": "포크 중…",
     "forkRunSuccess": "새 실행 {id}(으)로 포크됨",
+    "createFailed": "브랜치 생성에 실패했습니다",
+    "forkRunFailed": "실행 포크에 실패했습니다",
     "branchNamePlaceholder": "브랜치 이름 (선택)"
   },
   "chunkResults": {
@@ -6008,6 +6011,7 @@
   },
   "projectHealthScorecard": {
     "title": "프로젝트 상태 스코어카드",
+    "loadFailed": "스코어카드를 불러오지 못했습니다",
     "subtitle": "봇 신호를 단일 상태 점수로 집계하고 추세 추적과 드릴다운을 제공합니다.",
     "projectLabel": "프로젝트",
     "lastUpdated": "마지막 업데이트: {value}",
