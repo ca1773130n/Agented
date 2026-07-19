@@ -890,12 +890,14 @@ def _day_is_past(day: Optional[str]) -> bool:
         return False
 
 
-def _read_tesserae_cache(key: str, immutable: bool) -> Optional[dict]:
+def _read_tesserae_cache(
+    key: str, immutable: bool, ttl: int = _TESSERAE_CACHE_TTL
+) -> Optional[dict]:
     try:
         f = _tesserae_cache_file(key)
         if not f.exists():
             return None
-        if not immutable and (time.time() - f.stat().st_mtime) > _TESSERAE_CACHE_TTL:
+        if not immutable and (time.time() - f.stat().st_mtime) > ttl:
             return None
         return json.loads(f.read_text()).get("result")
     except Exception:
@@ -1110,9 +1112,13 @@ def build_lint(*, refresh: bool = False, timeout: int = 60) -> dict:
 def graph_status(*, timeout: int = 30) -> dict:
     """Run ``tesserae status --json`` and return the compiled-graph OVERVIEW
     ``{project, nodes, edges, graph_corrupt, sessions, last_compile, vault, site}``
-    — the "what does Tesserae know" at-a-glance. NOT cached (cheap, and the operator
-    wants the live count). Returns ``{ok, status, reason}``.
+    — the "what does Tesserae know" at-a-glance. Cached ~30s (the subprocess ran on
+    every KG page load — a visible delay); stale-by-30s is fine for at-a-glance
+    counts. Returns ``{ok, status, reason}``.
     """
+    cached = _read_tesserae_cache("graph_status", immutable=False, ttl=30)
+    if cached is not None:
+        return cached
     res = _run_tesserae("status", ["status", "--json"], cwd=_REPO_ROOT, timeout=timeout)
     out = res.stdout or ""
     start = out.find("{")
@@ -1128,7 +1134,9 @@ def graph_status(*, timeout: int = 30) -> dict:
             "status": None,
             "reason": res.reason or (res.stderr or "").strip()[:400] or "tesserae status failed",
         }
-    return {"ok": True, "status": status, "reason": None}
+    result = {"ok": True, "status": status, "reason": None}
+    _write_tesserae_cache("graph_status", result)
+    return result
 
 
 def query_graph(
@@ -1294,7 +1302,14 @@ def config_status(*, timeout: int = _TESSERAE_CONFIG_TIMEOUT) -> dict:
     ``config status`` prints human text (no ``--json``), so we parse the two lines
     we care about defensively — a format drift degrades to ``provider=None`` /
     ``liveness_ok=None`` rather than raising.
+
+    Cached ~60s: this runs a live LLM liveness ping subprocess and several
+    observability pages hit it on every load — an uncached subprocess-per-load
+    was a visible navigation delay.
     """
+    cached = _read_tesserae_cache("config_status", immutable=False, ttl=60)
+    if cached is not None:
+        return cached
     res = _run_tesserae("config", ["config", "status"], cwd=_REPO_ROOT, timeout=timeout)
     out = res.stdout or ""
     if not out.strip():
@@ -1322,7 +1337,7 @@ def config_status(*, timeout: int = _TESSERAE_CONFIG_TIMEOUT) -> dict:
         # down, even if the failure text happens to contain "OK".
         live_mark = ("✓" in line) or bool(re.search(r"\bOK\b", line, re.IGNORECASE))
         liveness_ok = live_mark and ("✗" not in line)
-    return {
+    result = {
         "ok": True,
         "provider": provider,
         "effort": effort,
@@ -1330,6 +1345,8 @@ def config_status(*, timeout: int = _TESSERAE_CONFIG_TIMEOUT) -> dict:
         "source": source,
         "reason": None,
     }
+    _write_tesserae_cache("config_status", result)
+    return result
 
 
 def engine_refresh_async() -> str:
