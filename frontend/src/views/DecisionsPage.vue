@@ -7,8 +7,8 @@
 import { ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
-import { memorySystemApi } from '../services/api/memory-system';
-import type { Decision } from '../services/api/memory-system';
+import { useMemoryJob } from '../composables/useMemoryJob';
+import type { Decision, DecisionsResult } from '../services/api/memory-system';
 
 const { t } = useI18n();
 
@@ -20,9 +20,15 @@ const date = ref(
 // Default OFF: deterministic human (AskUserQuestion) decisions load fast and
 // need no LLM; the user opts into the slower LLM agent-decision mining.
 const includeAgent = ref(false);
-const decisions = ref<Decision[]>([]);
-const loading = ref(false);
-const error = ref<string | null>(null);
+
+// Runs as a BACKGROUND job — the operator can leave the page.
+const { result, error: jobError, running, run, showLatest } = useMemoryJob<DecisionsResult>('decisions');
+const decisions = computed<Decision[]>(() => result.value?.decisions || []);
+const error = computed<string | null>(() => {
+  if (jobError.value) return jobError.value;
+  if (result.value && !result.value.ok) return result.value.reason || t('decisions.failed');
+  return null;
+});
 
 // Group by project, preserving order of first appearance.
 const groups = computed(() => {
@@ -47,24 +53,8 @@ function when(ts: string): string {
   }
 }
 
-async function load(refresh = false) {
-  loading.value = true;
-  error.value = null;
-  try {
-    const res = await memorySystemApi.decisions(
-      period.value,
-      date.value,
-      null,
-      includeAgent.value,
-      refresh,
-    );
-    decisions.value = res.decisions || [];
-    if (!res.ok) error.value = res.reason || t('decisions.failed');
-  } catch (e) {
-    error.value = (e as Error).message || t('decisions.failed');
-  } finally {
-    loading.value = false;
-  }
+function load() {
+  run({ period: period.value, date: date.value, include_agent: includeAgent.value });
 }
 
 function setPeriod(p: 'day' | 'week') {
@@ -73,7 +63,8 @@ function setPeriod(p: 'day' | 'week') {
   load();
 }
 
-onMounted(load);
+// Instant last result on mount (read-later); refresh for the current filters.
+onMounted(() => showLatest());
 </script>
 
 <template>
@@ -108,14 +99,17 @@ onMounted(load);
         <input v-model="includeAgent" type="checkbox" @change="load()" />
         {{ t('decisions.includeAgent') }}
       </label>
-      <button type="button" class="dc-refresh" :disabled="loading" @click="load(true)">
-        {{ loading ? t('decisions.loading') : t('decisions.refresh') }}
+      <button type="button" class="dc-refresh" :disabled="running" @click="load()">
+        {{ running ? t('memoryJob.running') : t('decisions.refresh') }}
       </button>
     </div>
 
     <p v-if="error" class="dc-error">{{ error }}</p>
 
-    <div v-if="loading && !decisions.length" class="dc-state">{{ t('decisions.loading') }}</div>
+    <div v-if="running && !decisions.length" class="dc-state">
+      {{ t('decisions.loading') }}
+      <span class="dc-bg-note">{{ t('memoryJob.background') }}</span>
+    </div>
     <div v-else-if="groups.length" class="dc-groups">
       <section v-for="g in groups" :key="g.project" class="dc-group">
         <h2 class="dc-group__title">{{ g.project }}</h2>
@@ -216,6 +210,13 @@ onMounted(load);
   padding: 32px 0;
   color: var(--text-tertiary);
   font-size: 13px;
+}
+
+.dc-bg-note {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 
 .dc-groups {

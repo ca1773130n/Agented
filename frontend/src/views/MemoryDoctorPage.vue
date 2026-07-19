@@ -8,9 +8,10 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { memorySystemApi, friendlyMemoryReason } from '../services/api/memory-system';
+import { useMemoryJob } from '../composables/useMemoryJob';
 import type {
   DoctorFinding,
-  DoctorReport,
+  DoctorResult,
   LintFinding,
   LintReport,
   MemoryConfig,
@@ -18,9 +19,27 @@ import type {
 
 const { t } = useI18n();
 
-const report = ref<DoctorReport | null>(null);
-const loading = ref(false);
-const error = ref<string | null>(null);
+// Doctor runs as a BACKGROUND job (it can be slow); lint + config stay sync
+// (fast, independent). The operator can leave the page mid-doctor-run.
+const {
+  result: doctorResult,
+  error: doctorJobError,
+  running: doctorLoading,
+  run: runDoctor,
+  showLatest: showLatestDoctor,
+} = useMemoryJob<DoctorResult>('doctor');
+
+const report = computed(() => doctorResult.value?.report ?? null);
+const error = computed<string | null>(() => {
+  if (doctorJobError.value) return doctorJobError.value;
+  if (doctorResult.value && !doctorResult.value.ok) {
+    return friendlyMemoryReason(doctorResult.value.reason, t) || t('memoryDoctor.failed');
+  }
+  return null;
+});
+
+// Lint + config load synchronously alongside the doctor job.
+const lintLoading = ref(false);
 
 // Tesserae `lint` — graph QUALITY (loaded alongside doctor; shared Refresh).
 const lint = ref<LintReport | null>(null);
@@ -74,23 +93,15 @@ function lintSevMod(s: string): string {
   return 'ok';
 }
 
-async function load(refresh = false) {
-  loading.value = true;
-  error.value = null;
+// Lint + config only (sync). allSettled: independent — one HTTP failure must
+// not blank the other.
+async function loadLintConfig(refresh = false) {
+  lintLoading.value = true;
   lintError.value = null;
-  // allSettled, not all: doctor / lint / config are independent — one throwing at
-  // the HTTP layer must not blank the others.
-  const [doc, lnt, cfg] = await Promise.allSettled([
-    memorySystemApi.doctor(refresh),
+  const [lnt, cfg] = await Promise.allSettled([
     memorySystemApi.lint(refresh),
     memorySystemApi.config(),
   ]);
-  if (doc.status === 'fulfilled') {
-    report.value = doc.value.report;
-    if (!doc.value.ok) error.value = friendlyMemoryReason(doc.value.reason, t) || t('memoryDoctor.failed');
-  } else {
-    error.value = (doc.reason as Error)?.message || t('memoryDoctor.failed');
-  }
   if (lnt.status === 'fulfilled') {
     lint.value = lnt.value.report;
     if (!lnt.value.ok) lintError.value = friendlyMemoryReason(lnt.value.reason, t) || t('memoryDoctor.lint.failed');
@@ -98,7 +109,13 @@ async function load(refresh = false) {
     lintError.value = (lnt.reason as Error)?.message || t('memoryDoctor.lint.failed');
   }
   config.value = cfg.status === 'fulfilled' ? cfg.value : null;
-  loading.value = false;
+  lintLoading.value = false;
+}
+
+// Kick the doctor background job + refresh lint/config together.
+function refresh() {
+  runDoctor();
+  loadLintConfig(true);
 }
 
 function stopEnginePoll() {
@@ -134,7 +151,10 @@ async function runEngineRefresh() {
   }
 }
 
-onMounted(() => load());
+onMounted(() => {
+  showLatestDoctor(); // instant last doctor result (read-later)
+  loadLintConfig();
+});
 onUnmounted(() => { alive = false; stopEnginePoll(); });
 </script>
 
@@ -142,8 +162,8 @@ onUnmounted(() => { alive = false; stopEnginePoll(); });
   <div class="doctor-page">
     <PageHeader :title="t('memoryDoctor.title')" :subtitle="t('memoryDoctor.subtitle')">
       <template #actions>
-        <button class="doctor-refresh" :disabled="loading" @click="load(true)">
-          {{ t('memoryDoctor.refresh') }}
+        <button class="doctor-refresh" :disabled="doctorLoading || lintLoading" @click="refresh()">
+          {{ doctorLoading ? t('memoryJob.running') : t('memoryDoctor.refresh') }}
         </button>
       </template>
     </PageHeader>
@@ -168,7 +188,10 @@ onUnmounted(() => { alive = false; stopEnginePoll(); });
       </div>
     </div>
 
-    <div v-if="loading" class="doctor-state">{{ t('memoryDoctor.loading') }}</div>
+    <div v-if="doctorLoading && !report" class="doctor-state">
+      {{ t('memoryDoctor.loading') }}
+      <p class="doctor-bg-note">{{ t('memoryJob.background') }}</p>
+    </div>
     <div v-else-if="error" class="doctor-state doctor-state--error">{{ error }}</div>
 
     <template v-else-if="report">
@@ -200,7 +223,7 @@ onUnmounted(() => { alive = false; stopEnginePoll(); });
     <div v-else class="doctor-state">{{ t('memoryDoctor.empty') }}</div>
 
     <!-- Graph lint — QUALITY (unsupported claims, orphans, wiki drift, staleness) -->
-    <section v-if="!loading" class="lint-section">
+    <section v-if="!lintLoading" class="lint-section">
       <h2 class="lint-title">{{ t('memoryDoctor.lint.title') }}</h2>
       <p class="lint-subtitle">{{ t('memoryDoctor.lint.subtitle') }}</p>
 
@@ -269,6 +292,11 @@ onUnmounted(() => { alive = false; stopEnginePoll(); });
 }
 .doctor-state--error {
   color: var(--danger);
+}
+.doctor-bg-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary, #71717a);
 }
 .doctor-counts {
   display: flex;

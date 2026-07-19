@@ -188,7 +188,8 @@
     "memoryDoctor": "메모리 상태",
     "knowledgeGraph": "지식 그래프",
     "memoryResearch": "메모리 리서치",
-    "memorySessions": "세션 기록"
+    "memorySessions": "세션 기록",
+    "memoryHistory": "쿼리 기록"
   },
   "apiKeyBanner": {
     "title": "API 키 필요",
@@ -10041,6 +10042,44 @@
     "running": "리서치 중…",
     "workingFor": "리서치 중… ({s}초) — 에이전트 루프는 몇 분 걸릴 수 있습니다.",
     "failed": "리서치 실패"
+  },
+  "memoryJob": {
+    "running": "실행 중…",
+    "background": "백그라운드에서 실행 중입니다 — 이 페이지를 떠나도 됩니다. 결과는 기록에 표시됩니다.",
+    "status": {
+      "running": "실행 중",
+      "completed": "완료됨",
+      "failed": "실패"
+    }
+  },
+  "memoryHistory": {
+    "title": "쿼리 기록",
+    "subtitle": "백그라운드 작업으로 실행된 지난 메모리 및 관측 쿼리입니다. 행을 클릭하면 전체 결과를 볼 수 있습니다.",
+    "refresh": "새로고침",
+    "loading": "쿼리 기록을 불러오는 중…",
+    "failed": "쿼리 기록을 불러오지 못했습니다",
+    "detailLoading": "결과를 불러오는 중…",
+    "detailFailed": "결과를 불러오지 못했습니다",
+    "emptyTitle": "아직 쿼리가 없습니다",
+    "emptyDescription": "메모리 또는 관측 쿼리를 실행하면 여기에 표시됩니다.",
+    "metaStatus": "상태",
+    "metaStarted": "시작",
+    "metaFinished": "완료",
+    "relNow": "방금 전",
+    "relMinutes": "{n}분 전",
+    "relHours": "{n}시간 전",
+    "relDays": "{n}일 전",
+    "kind": {
+      "doctor": "닥터",
+      "lint": "린트",
+      "config": "설정",
+      "graph_status": "그래프 상태",
+      "activity_summary": "활동 요약",
+      "decisions": "결정",
+      "graph_query": "그래프 쿼리",
+      "sessions": "세션",
+      "research": "리서치"
+    }
   },
   "council": {
     "title": "카운슬",

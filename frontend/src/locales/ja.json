@@ -188,7 +188,8 @@
     "memoryDoctor": "メモリ健全性",
     "knowledgeGraph": "ナレッジグラフ",
     "memoryResearch": "メモリリサーチ",
-    "memorySessions": "セッション履歴"
+    "memorySessions": "セッション履歴",
+    "memoryHistory": "クエリ履歴"
   },
   "apiKeyBanner": {
     "title": "API キーが必要です",
@@ -10041,6 +10042,44 @@
     "running": "リサーチ中…",
     "workingFor": "リサーチ中…（{s}秒）— エージェントループは数分かかることがあります。",
     "failed": "リサーチに失敗しました"
+  },
+  "memoryJob": {
+    "running": "実行中…",
+    "background": "バックグラウンドで実行中です — このページを離れても構いません。結果は履歴に表示されます。",
+    "status": {
+      "running": "実行中",
+      "completed": "完了",
+      "failed": "失敗"
+    }
+  },
+  "memoryHistory": {
+    "title": "クエリ履歴",
+    "subtitle": "バックグラウンドジョブとして実行された過去のメモリ・可観測性クエリです。行をクリックすると結果全体を表示します。",
+    "refresh": "更新",
+    "loading": "クエリ履歴を読み込み中…",
+    "failed": "クエリ履歴の読み込みに失敗しました",
+    "detailLoading": "結果を読み込み中…",
+    "detailFailed": "結果の読み込みに失敗しました",
+    "emptyTitle": "まだクエリがありません",
+    "emptyDescription": "メモリまたは可観測性クエリを実行すると、ここに表示されます。",
+    "metaStatus": "ステータス",
+    "metaStarted": "開始",
+    "metaFinished": "終了",
+    "relNow": "たった今",
+    "relMinutes": "{n}分前",
+    "relHours": "{n}時間前",
+    "relDays": "{n}日前",
+    "kind": {
+      "doctor": "ドクター",
+      "lint": "リント",
+      "config": "設定",
+      "graph_status": "グラフステータス",
+      "activity_summary": "アクティビティサマリー",
+      "decisions": "決定",
+      "graph_query": "グラフクエリ",
+      "sessions": "セッション",
+      "research": "リサーチ"
+    }
   },
   "council": {
     "title": "カウンシル",
