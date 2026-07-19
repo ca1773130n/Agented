@@ -46,16 +46,21 @@ const hoveredMessageIndex = ref<number | null>(null);
 const canForkRun = computed(() => !!props.projectId && !!props.sessionId);
 const forkingRunIndex = ref<number | null>(null);
 const forkedRunSessionId = ref<string | null>(null);
+const branchError = ref<string | null>(null);
 
 async function handleForkRun(messageIndex: number) {
   if (!props.projectId || !props.sessionId || forkingRunIndex.value !== null) return;
   forkingRunIndex.value = messageIndex;
   forkedRunSessionId.value = null;
+  branchError.value = null;
   try {
     const result = await forkRun(props.projectId, props.sessionId, messageIndex);
     if (result?.session_id) {
       forkedRunSessionId.value = result.session_id;
       emit('forked-run', { sessionId: result.session_id, branchId: result.branch_id });
+    } else {
+      // forkRun returns null on failure — surface it instead of failing silently.
+      branchError.value = t('branchNavigator.forkRunFailed');
     }
   } finally {
     forkingRunIndex.value = null;
@@ -69,7 +74,13 @@ function handleFork(messageIndex: number) {
 
 async function submitFork() {
   if (forkingAtIndex.value === null) return;
-  await createBranch(forkingAtIndex.value, newBranchName.value || undefined);
+  branchError.value = null;
+  const ok = await createBranch(forkingAtIndex.value, newBranchName.value || undefined);
+  if (!ok) {
+    // Keep the dialog open and show the error instead of silently closing.
+    branchError.value = t('branchNavigator.createFailed');
+    return;
+  }
   forkingAtIndex.value = null;
   newBranchName.value = '';
 }
@@ -257,6 +268,7 @@ loadBranches();
               <button class="fork-submit" @click="submitFork">{{ t('common.create') }}</button>
               <button class="fork-cancel" @click="cancelFork">{{ t('common.cancel') }}</button>
             </div>
+            <div v-if="branchError" class="branch-error" role="alert">{{ branchError }}</div>
           </div>
         </div>
       </div>

@@ -1107,6 +1107,7 @@
     },
     "toast": {
       "superAgentAddFailed": "チームへのSuperAgentの追加に失敗しました",
+      "memberRemoveFailed": "チームメンバーの削除に失敗しました",
       "agentAddFailed": "チームへのエージェントの追加に失敗しました",
       "agentRemoved": "チームからエージェントを削除しました",
       "agentRemoveFailed": "エージェントの削除に失敗しました",
@@ -2767,6 +2768,8 @@
     "forkToRunHint": "この会話を独立した別の実行にフォークします",
     "forkingRun": "フォーク中…",
     "forkRunSuccess": "新しい実行 {id} にフォークしました",
+    "createFailed": "ブランチの作成に失敗しました",
+    "forkRunFailed": "実行のフォークに失敗しました",
     "branchNamePlaceholder": "ブランチ名（任意）"
   },
   "chunkResults": {
@@ -6008,6 +6011,7 @@
   },
   "projectHealthScorecard": {
     "title": "プロジェクト健全性スコアカード",
+    "loadFailed": "スコアカードの読み込みに失敗しました",
     "subtitle": "ボットの信号を単一の健全性スコアに集約し、傾向の追跡とドリルダウンを提供します。",
     "projectLabel": "プロジェクト",
     "lastUpdated": "最終更新: {value}",

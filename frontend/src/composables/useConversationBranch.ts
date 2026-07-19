@@ -57,8 +57,8 @@ export function useConversationBranch(conversationId: Ref<string>) {
   }
 
   /** Create a new branch forking from a specific message index. */
-  async function createBranch(forkMessageIndex: number, name?: string) {
-    if (!conversationId.value) return;
+  async function createBranch(forkMessageIndex: number, name?: string): Promise<boolean> {
+    if (!conversationId.value) return false;
     isLoading.value = true;
     try {
       const newBranch = await branchApi.createBranch(conversationId.value, {
@@ -71,8 +71,11 @@ export function useConversationBranch(conversationId: Ref<string>) {
       if (newBranch?.id) {
         await selectBranch(newBranch.id);
       }
+      return true;
     } catch {
-      // Branch creation failed
+      // Signal failure to the caller so it can surface an error and keep the
+      // fork dialog open (was a silent empty catch).
+      return false;
     } finally {
       isLoading.value = false;
     }

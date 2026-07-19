@@ -1107,6 +1107,7 @@
     },
     "toast": {
       "superAgentAddFailed": "Failed to add SuperAgent to team",
+      "memberRemoveFailed": "Failed to remove team member",
       "agentAddFailed": "Failed to add agent to team",
       "agentRemoved": "Agent removed from team",
       "agentRemoveFailed": "Failed to remove agent",
@@ -2767,6 +2768,8 @@
     "forkToRunHint": "Fork this conversation onto a separate independent run",
     "forkingRun": "Forking…",
     "forkRunSuccess": "Forked to new run {id}",
+    "createFailed": "Failed to create branch",
+    "forkRunFailed": "Failed to fork run",
     "branchNamePlaceholder": "Branch name (optional)"
   },
   "chunkResults": {
@@ -6008,6 +6011,7 @@
   },
   "projectHealthScorecard": {
     "title": "Project Health Scorecard",
+    "loadFailed": "Failed to load the scorecard",
     "subtitle": "Aggregate bot signals into a single health score with trend tracking and drill-down.",
     "projectLabel": "Project",
     "lastUpdated": "Last updated: {value}",
