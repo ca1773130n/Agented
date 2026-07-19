@@ -1595,11 +1595,29 @@ def build_site(project_id: str) -> TesseraeOpResult:
     )
 
 
+def _agent_distill_op(project_id: str) -> TesseraeOpResult:
+    """Async-op wrapper for the super-agent layered-memory distill pass (registry
+    sync + ``tesserae distill --all``). Local import avoids a circular dependency
+    (super_agent_memory imports this module)."""
+    from app.services.super_agent_memory import distill_super_agents
+
+    started = _now_iso()
+    res = distill_super_agents(project_id)
+    return TesseraeOpResult(
+        op="agent-distill",
+        ok=bool(res.get("ok")),
+        reason=res.get("reason", ""),
+        started_at=started,
+        finished_at=_now_iso(),
+    )
+
+
 _OP_DISPATCH = {
     "init": init_workspace,
     "ingest": ingest_paths,
     "compile": compile_workspace,
     "build-site": build_site,
+    "agent-distill": _agent_distill_op,
     "sessions-import": lambda pid: TesseraeOpResult(
         op="sessions-import",
         ok=(export_sessions_to_tesserae(pid).get("imported", 0) > 0),

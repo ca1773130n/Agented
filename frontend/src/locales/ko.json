@@ -7385,6 +7385,22 @@
       "testDemo": "테스트 완료 (데모 모드) — 스키마가 유효해 보입니다"
     }
   },
+  "superAgentMemory": {
+    "title": "계층형 메모리",
+    "distilledRunbook": "정제된 런북",
+    "reportsTo": "보고 대상",
+    "directReports": "직속 하위 에이전트",
+    "sessions": "세션",
+    "emptyRunbook": "아직 정제된 메모리가 없습니다 — 정제를 실행하세요",
+    "distillNow": "지금 정제",
+    "distilling": "정제 중…",
+    "selectProject": "에이전트 메모리를 보려면 프로젝트를 선택하세요",
+    "selectProjectOption": "프로젝트 선택…",
+    "loading": "불러오는 중…",
+    "retry": "다시 시도",
+    "noParent": "관리자 없음",
+    "noReports": "직속 하위 에이전트 없음"
+  },
   "superAgentInspector": {
     "title": "슈퍼 에이전트 인스펙터",
     "loading": "불러오는 중…",

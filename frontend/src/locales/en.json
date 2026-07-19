@@ -7385,6 +7385,22 @@
       "testDemo": "Test completed (demo mode) — schema looks valid"
     }
   },
+  "superAgentMemory": {
+    "title": "Layered Memory",
+    "distilledRunbook": "Distilled runbook",
+    "reportsTo": "Reports to",
+    "directReports": "Direct reports",
+    "sessions": "sessions",
+    "emptyRunbook": "No distilled memory yet — run distill",
+    "distillNow": "Distill now",
+    "distilling": "Distilling…",
+    "selectProject": "Select a project to view agent memory",
+    "selectProjectOption": "Select a project…",
+    "loading": "Loading…",
+    "retry": "Retry",
+    "noParent": "No manager",
+    "noReports": "No direct reports"
+  },
   "superAgentInspector": {
     "title": "Super-Agent Inspector",
     "loading": "Loading…",

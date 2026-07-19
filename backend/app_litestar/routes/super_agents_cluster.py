@@ -836,9 +836,42 @@ def list_ouroboros_runs(
     }
 
 
+# ===========================================================================
+# /admin/super-agents/{id}/memory — Tesserae 0.21.0 layered agent memory
+# ===========================================================================
+
+
+@get("/{super_agent_id:str}/memory", sync_to_thread=False)
+def super_agent_memory_endpoint(super_agent_id: str, project_id: str) -> dict[str, Any]:
+    """This super-agent's distilled runbook (L1) for a project, plus the project's
+    Tesserae agent org (parent/reports + session counts) for the org panel."""
+    from app.services import super_agent_memory as sam
+
+    if get_super_agent(super_agent_id) is None:
+        raise NotFoundException(detail="SuperAgent not found")
+    return {
+        "memory": sam.read_agent_memory(project_id, super_agent_id),
+        "org": sam.agent_org(project_id) or [],
+    }
+
+
+@post("/{super_agent_id:str}/memory/distill", sync_to_thread=False)
+def super_agent_memory_distill_endpoint(super_agent_id: str, project_id: str) -> dict[str, Any]:
+    """Sync the project's agent-org registry from its super-agents and kick off the
+    Tesserae distill pass (L1 runbooks + L2' manager rollups) as a background op.
+    Gated on the project distill toggle. Returns a job_id to poll."""
+    from app.services.tesserae_integration import run_op_async
+
+    if get_super_agent(super_agent_id) is None:
+        raise NotFoundException(detail="SuperAgent not found")
+    return {"job_id": run_op_async(project_id, "agent-distill")}
+
+
 super_agents_router = Router(
     path="/admin/super-agents",
     route_handlers=[
+        super_agent_memory_endpoint,
+        super_agent_memory_distill_endpoint,
         list_super_agents,
         super_agent_activity_status,
         create_super_agent,

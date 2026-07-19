@@ -7385,6 +7385,22 @@
       "testDemo": "テスト完了 (デモモード) — スキーマは有効に見えます"
     }
   },
+  "superAgentMemory": {
+    "title": "階層型メモリ",
+    "distilledRunbook": "蒸留されたランブック",
+    "reportsTo": "報告先",
+    "directReports": "直属のエージェント",
+    "sessions": "セッション",
+    "emptyRunbook": "まだ蒸留されたメモリがありません — 蒸留を実行してください",
+    "distillNow": "今すぐ蒸留",
+    "distilling": "蒸留中…",
+    "selectProject": "エージェントメモリを表示するにはプロジェクトを選択してください",
+    "selectProjectOption": "プロジェクトを選択…",
+    "loading": "読み込み中…",
+    "retry": "再試行",
+    "noParent": "マネージャーなし",
+    "noReports": "直属のエージェントなし"
+  },
   "superAgentInspector": {
     "title": "スーパーエージェントインスペクター",
     "loading": "読み込み中…",

@@ -105,7 +105,14 @@ ensure_node() {
 # 0.20.1 drops the 300-turn session-import cap; 0.20.2 reads full session history in chunks
 # (the model no longer truncates long conversations). Both are session-history bug fixes —
 # no new CLI surface, so nothing new to wire; pure pin bump so fresh installs get the fixes.
-TESSERAE_MIN="0.20.2"
+# 0.21.0 lands the per-agent layered-KG / AgentRunbook distillation (Event/Runbook/Gotcha
+# layers) + manager-rollup / growth loop. It adds NO new operator CLI verb (no `agents`
+# subcommand — verified against tesserae/cli.py); the surface is the `compile --distill`
+# toggle + `context --multi-pool` retrieval, which Agented ALREADY wires end-to-end (migration
+# 166 `projects.tesserae_distill_enabled` → `--distill` at tesserae_integration.py, distill
+# toggle UI). This floor bump ensures the distillation Agented already invokes runs against the
+# version where the agent layer actually shipped (pre-0.21 `--distill` had no agent substrate).
+TESSERAE_MIN="0.21.0"
 # Portable "A >= B" for dotted versions — BSD/macOS `sort` lacks `-V`.
 _version_ge() {
     local a b IFS=.
