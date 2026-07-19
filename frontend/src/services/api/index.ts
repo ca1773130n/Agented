@@ -94,6 +94,11 @@ export type {
   StartResearchResponse,
   ResearchThreadsResponse,
   StartResearchOptions,
+  ResearchStatus,
+  PendingCheckpoint,
+  CheckpointQuestion,
+  CheckpointOption,
+  CheckpointAnswer,
 } from './research';
 export { grdHarnessApi } from './grdHarness';
 export type {

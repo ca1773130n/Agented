@@ -48,7 +48,13 @@ void props;
         >
           <td class="tl-question">{{ thread.question }}</td>
           <td>
-            <span class="tl-status" :data-status="thread.status">{{ statusLabel(thread.status) }}</span>
+            <span
+              v-if="thread.status === 'paused'"
+              class="tl-status tl-status--paused"
+              data-status="paused"
+              data-testid="tl-paused-badge"
+            >{{ t('researchCheckpoint.pausedBadge') }}</span>
+            <span v-else class="tl-status" :data-status="thread.status">{{ statusLabel(thread.status) }}</span>
           </td>
           <td class="tl-iter">{{ thread.iteration }} / {{ thread.max_iterations }}</td>
         </tr>
@@ -97,6 +103,12 @@ void props;
   border-radius: 10px;
   background: var(--bg-tertiary);
   font-size: 0.75rem;
+}
+.tl-status--paused {
+  color: var(--text-on-accent, #fff);
+  background: var(--accent-color, var(--accent-cyan));
+  font-weight: 600;
+  white-space: nowrap;
 }
 .tl-iter {
   white-space: nowrap;

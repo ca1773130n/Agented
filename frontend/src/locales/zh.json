@@ -10114,5 +10114,24 @@
     "reasonExit": "tesserae 命令失败。请检查 CLI 及其配置。",
     "reasonDisabled": "此项目未启用 Tesserae。",
     "reasonNoPaths": "未找到可摄取的来源。"
+  },
+  "researchCheckpoint": {
+    "pausedBadge": "已暂停 — 等待决策",
+    "point": {
+      "seed": "研究起点设定",
+      "hypothesize": "假设审查",
+      "design": "实验设计",
+      "decide": "决策节点"
+    },
+    "recommended": "推荐",
+    "freeformLabel": "备注",
+    "freeformPlaceholder": "输入你的指引…",
+    "required": "此回答为必填项",
+    "submit": "使用这些回答继续",
+    "resume": "继续线程",
+    "loading": "正在加载检查点…",
+    "loadErrorTitle": "无法加载检查点",
+    "loadError": "加载此线程的待处理检查点失败。",
+    "pausedNoCheckpoint": "此线程已暂停但没有待处理的决策。你可以直接继续。"
   }
 }

@@ -37,6 +37,60 @@ export interface StartResearchResponse {
   session_id: string;
 }
 
+/** One selectable option on a checkpoint question (GRD 0.5.0 interactive gates). */
+export interface CheckpointOption {
+  label: string;
+  description?: string;
+  /** The option the loop recommends — pre-selected in the UI. */
+  recommended?: boolean;
+}
+
+/** A single human-decision question raised at a research checkpoint. */
+export interface CheckpointQuestion {
+  id: string;
+  ask: string;
+  /** When true the answer needs free-text (the ``text`` field), not just a label. */
+  freeform?: boolean;
+  options: CheckpointOption[];
+}
+
+/**
+ * The pending human-decision gate a PAUSED thread is waiting on (GRD 0.5.0).
+ * Absent/null when the thread is not paused at a checkpoint.
+ */
+export interface PendingCheckpoint {
+  point: 'seed' | 'hypothesize' | 'design' | 'decide';
+  type?: string;
+  round?: number;
+  context?: string;
+  questions: CheckpointQuestion[];
+}
+
+/** One resolved answer sent back to ``resume`` to clear a checkpoint question. */
+export interface CheckpointAnswer {
+  question_id: string;
+  /** The chosen option's ``label``. */
+  label: string;
+  /** Optional free-text — required when the question is ``freeform``. */
+  text?: string;
+}
+
+/**
+ * ``gd research status`` JSON for a thread. Loosely typed (the CLI owns the
+ * full shape); the field the checkpoint UI keys off is ``pendingCheckpoint``,
+ * present only when the thread is paused awaiting a human decision.
+ */
+export interface ResearchStatus {
+  id?: string;
+  status?: string;
+  question?: string;
+  iteration?: number;
+  max_iterations?: number;
+  /** The awaiting-decision gate, or null/absent when not paused. */
+  pendingCheckpoint?: PendingCheckpoint | null;
+  [key: string]: unknown;
+}
+
 export interface ResearchThreadsResponse {
   threads: ResearchThread[];
 }
@@ -49,6 +103,12 @@ export interface StartResearchOptions {
   deep?: boolean;
   /** Deep-run only: escalate every subagent to Opus/max (costlier). */
   ultracode?: boolean;
+  /**
+   * Resume-only: answers that resolve a pending checkpoint (GRD 0.5.0). One
+   * entry per checkpoint question; forwarded as ``--answers`` to ``gd research
+   * resume``. Ignored by ``startResearch``.
+   */
+  answers?: CheckpointAnswer[];
 }
 
 /** One /grd:deep-research report on disk (GET /research/deep-reports). */
@@ -104,11 +164,22 @@ export const researchApi = {
     const body: Record<string, unknown> = {};
     if (opts?.max_iterations !== undefined) body.max_iterations = opts.max_iterations;
     if (opts?.no_gates !== undefined) body.no_gates = opts.no_gates;
+    if (opts?.answers !== undefined) body.answers = opts.answers;
     return apiFetch<StartResearchResponse>(
       `/api/projects/${projectId}/research/${threadId}/resume`,
       { method: 'POST', body: JSON.stringify(body) },
     );
   },
+
+  /**
+   * GET /api/projects/{id}/research/status?thread_id={id} — the ``gd research
+   * status`` JSON for one thread. A PAUSED thread carries ``pendingCheckpoint``
+   * (the human-decision gate to resolve); it is null/absent otherwise.
+   */
+  getStatus: (projectId: string, threadId: string) =>
+    apiFetch<ResearchStatus>(
+      `/api/projects/${projectId}/research/status?thread_id=${encodeURIComponent(threadId)}`,
+    ),
 
   /** GET /api/projects/{id}/research/threads — the thread browser / portfolio. */
   listThreads: (projectId: string) =>
