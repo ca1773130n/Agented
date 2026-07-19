@@ -206,13 +206,21 @@ Diagnose the root cause, apply a fix if possible, and report what you did.
         update_fix_attempt(fix_attempt_id, FixStatus.RUNNING.value, agent_session_id=session_id)
 
         def on_complete():
+            # The Tier-2 agent only *investigates* and may apply an uncommitted
+            # fix; the stream finishing — even with empty output — does NOT prove
+            # the error was resolved. Do not silently self-heal the error to FIXED
+            # (that hid still-recurring errors from the operator's dashboard).
+            # Record that the investigation ran and leave the error INVESTIGATING
+            # so it stays visible for operator review. Tier-1, by contrast, marks
+            # FIXED only when its fix fn returns success (verified). A future
+            # enhancement could re-run the failing check here to auto-verify.
             update_fix_attempt(
                 fix_attempt_id,
                 FixStatus.SUCCESS.value,
-                "Agent investigation completed",
+                "Agent investigation completed — fix (if any) is unverified; needs review",
                 _now(),
             )
-            update_system_error_status(error_id, ErrorStatus.FIXED.value)
+            update_system_error_status(error_id, ErrorStatus.INVESTIGATING.value)
 
         def on_error(err_msg):
             update_fix_attempt(
