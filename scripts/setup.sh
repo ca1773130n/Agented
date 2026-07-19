@@ -101,8 +101,11 @@ ensure_node() {
 # (locale-proof daemon identity — live daemons no longer misread as stale; transparent to the
 # `doctor` lock-check + `engine --once` refresh Agented wires). 0.20.0 adds MCP `query` +
 # `doctor_run` tools (closes the CLI/MCP gap) — MCP-only, and Agented consumes the CLI (already
-# wires `query`→KG explorer, `doctor`→Memory Health), so the CLI surface is unchanged. Pure pin bump.
-TESSERAE_MIN="0.20.0"
+# wires `query`→KG explorer, `doctor`→Memory Health), so the CLI surface is unchanged.
+# 0.20.1 drops the 300-turn session-import cap; 0.20.2 reads full session history in chunks
+# (the model no longer truncates long conversations). Both are session-history bug fixes —
+# no new CLI surface, so nothing new to wire; pure pin bump so fresh installs get the fixes.
+TESSERAE_MIN="0.20.2"
 # Portable "A >= B" for dotted versions — BSD/macOS `sort` lacks `-V`.
 _version_ge() {
     local a b IFS=.
