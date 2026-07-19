@@ -7385,6 +7385,22 @@
       "testDemo": "测试完成 (演示模式) — 架构看起来有效"
     }
   },
+  "superAgentMemory": {
+    "title": "分层记忆",
+    "distilledRunbook": "提炼的运行手册",
+    "reportsTo": "汇报给",
+    "directReports": "直接下属",
+    "sessions": "会话",
+    "emptyRunbook": "尚无提炼的记忆 — 请运行提炼",
+    "distillNow": "立即提炼",
+    "distilling": "提炼中…",
+    "selectProject": "选择一个项目以查看智能体记忆",
+    "selectProjectOption": "选择项目…",
+    "loading": "加载中…",
+    "retry": "重试",
+    "noParent": "无管理者",
+    "noReports": "无直接下属"
+  },
   "superAgentInspector": {
     "title": "超级智能体检查器",
     "loading": "加载中…",

@@ -21,6 +21,58 @@ export interface SuperAgentActivityStatus {
   is_streaming: boolean;
 }
 
+/**
+ * Layered Memory (Tesserae 0.21.0) — a super-agent's own layered
+ * knowledge graph. `notes` are the distilled L1 runbook entries; `org`
+ * (returned alongside) is the whole project agent org used to place this
+ * SA relative to its parent + direct reports.
+ */
+export interface SuperAgentMemoryNote {
+  title: string;
+  body: string;
+}
+
+export interface SuperAgentMemory {
+  /** Tesserae agent key for this SA, e.g. `claude:unknown:<sa_id>`. */
+  key: string;
+  notes: SuperAgentMemoryNote[];
+  /** Flattened runbook text (fallback rendering when notes are absent). */
+  text: string;
+}
+
+/** One agent in the project's Tesserae org (for parent/report placement). */
+export interface AgentOrgRow {
+  key: string;
+  label: string;
+  parent: string;
+  sessions: number;
+  registered: boolean;
+}
+
+export interface SuperAgentMemoryResponse {
+  memory: SuperAgentMemory;
+  org: AgentOrgRow[];
+}
+
+/**
+ * Fetch this super-agent's layered memory (distilled L1 runbook) plus
+ * the project agent org used to render its org position.
+ */
+export const getSuperAgentMemory = (superAgentId: string, projectId: string) =>
+  apiFetch<SuperAgentMemoryResponse>(
+    `/admin/super-agents/${superAgentId}/memory?project_id=${encodeURIComponent(projectId)}`,
+  );
+
+/**
+ * Kick off a fire-and-forget background op that rebuilds this SA's
+ * L1 runbook + L2' manager rollup. Returns the async job id.
+ */
+export const distillSuperAgentMemory = (superAgentId: string, projectId: string) =>
+  apiFetch<{ job_id: string }>(
+    `/admin/super-agents/${superAgentId}/memory/distill?project_id=${encodeURIComponent(projectId)}`,
+    { method: 'POST' },
+  );
+
 export const superAgentApi = {
   list: () => apiFetch<{ super_agents: SuperAgent[] }>('/admin/super-agents'),
   /** Per-SA activity snapshot keyed by super_agent_id. SAs with no
