@@ -498,15 +498,15 @@ class GrdCliService:
     @classmethod
     def research_status(cls, project_path: str, thread_id: Optional[str] = None) -> dict:
         """``gd research status [thread_id]`` — JSON snapshot of the
-        active/most-recent research loop. Returns ``{"error": ...}`` when
-        the ``gd`` binary isn't available (status is a v0.8.0-only command,
-        no legacy fallback exists).
+        active/most-recent research loop (in gd 0.5.0 the status JSON also carries
+        a paused thread's ``pendingCheckpoint``). Returns ``{"error": ...}`` when
+        the ``gd`` binary isn't available (no legacy fallback exists).
         """
         if not cls._gd_available:
             return {
                 "success": False,
                 "data": None,
-                "error": "gd binary not available (v0.8.0+ required for research)",
+                "error": "gd binary not available (gd 0.5.0+ required for research)",
             }
         args = ["research", "status"]
         if thread_id:
