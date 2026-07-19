@@ -85,7 +85,13 @@ def detect_backend(backend_type: str) -> Tuple[bool, Optional[str], Optional[str
         return False, None, None
 
     # Strip nesting-detection vars so CLIs like claude don't refuse to start
-    env = {k: v for k, v in os.environ.items() if k not in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT")}
+    from app import config
+
+    # NO_LLM_KEYS: keep server-baked inference keys out of the harness CLI env,
+    # even for non-inference probes/installs (flag-gated no-op when unset).
+    env = config.subprocess_env(
+        {k: v for k, v in os.environ.items() if k not in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT")}
+    )
 
     try:
         result = subprocess.run(
@@ -129,7 +135,13 @@ def install_cli(backend_type: str, timeout: int = 180) -> dict:
     if not cmd:
         return {"success": False, "version": None, "error": f"Unknown backend type: {backend_type}"}
 
-    env = {k: v for k, v in os.environ.items() if k not in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT")}
+    from app import config
+
+    # NO_LLM_KEYS: keep server-baked inference keys out of the harness CLI env,
+    # even for non-inference probes/installs (flag-gated no-op when unset).
+    env = config.subprocess_env(
+        {k: v for k, v in os.environ.items() if k not in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT")}
+    )
 
     try:
         result = subprocess.run(

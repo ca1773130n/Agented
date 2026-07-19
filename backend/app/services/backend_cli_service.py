@@ -1423,7 +1423,11 @@ class BackendCLIService:
             }
 
         cmd_list = commands["usage"]
-        env = {k: v for k, v in os.environ.items() if k not in _ENV_STRIP}
+        from app import config
+
+        # NO_LLM_KEYS: don't hand a server-baked inference key to the backend CLI
+        # (flag-gated no-op when unset).
+        env = config.subprocess_env({k: v for k, v in os.environ.items() if k not in _ENV_STRIP})
         try:
             result = subprocess.run(
                 cmd_list,

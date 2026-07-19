@@ -22,7 +22,11 @@ class HarnessPluginInstaller:
         exit previously went unnoticed, leaving provisioning silently broken.
         """
         expanded = os.path.expanduser(config_path)
-        env = {**os.environ, "CLAUDE_CONFIG_DIR": expanded}
+        from app import config
+
+        # NO_LLM_KEYS: strip server-baked inference keys from the claude subprocess
+        # env (flag-gated no-op when unset).
+        env = config.subprocess_env({**os.environ, "CLAUDE_CONFIG_DIR": expanded})
 
         # Step 1: Add marketplace (idempotent — if already added, claude handles it)
         result = subprocess.run(

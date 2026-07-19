@@ -315,7 +315,11 @@ def _run_codex_reflect(prompt: str, *, config_dir: Optional[str], timeout: int =
         else:
             cmd = list(template)
             stdin_input = instruction.encode("utf-8")
-        env = dict(os.environ)
+        from app import config
+
+        # NO_LLM_KEYS: strip server-baked inference keys before spawning the codex
+        # reflect child (flag-gated no-op when unset). CODEX_HOME is set after.
+        env = config.subprocess_env(dict(os.environ)) or {}
         if config_dir:  # "" → leave ambient CODEX_HOME (default vault)
             env["CODEX_HOME"] = config_dir
         try:

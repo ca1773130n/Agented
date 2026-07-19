@@ -220,6 +220,8 @@ class BackendTestService:
 
         working_dir = get_playground_working_dir()
 
+        from app import config
+
         process = subprocess.Popen(
             cmd,
             cwd=working_dir,
@@ -227,7 +229,9 @@ class BackendTestService:
             stderr=subprocess.PIPE,
             text=True,
             bufsize=1,
-            env=os.environ.copy(),
+            # NO_LLM_KEYS: strip server-baked inference keys from the backend-test
+            # child (flag-gated no-op when unset).
+            env=config.subprocess_env(os.environ.copy()),
         )
 
         def _read_stdout() -> None:
