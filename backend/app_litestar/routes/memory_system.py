@@ -29,6 +29,7 @@ from litestar.exceptions import NotFoundException, ValidationException
 
 from app.db.connection import get_connection
 from app.db.projects import get_project
+from app.services import memory_graph
 from app.services import tesserae_integration as ti
 from app.services.project_workspace_service import ProjectWorkspaceService
 
@@ -553,6 +554,64 @@ def tesserae_job_status(job_id: str) -> dict[str, Any]:
     return job
 
 
+# --- Browsable knowledge graph (nodes/edges from the compiled graph.json) --------
+
+
+def _resolve_graph_root(project: Optional[str]) -> str:
+    """Filesystem root whose ``.tesserae/graph.json`` to browse — a project's
+    Tesserae root when given + enabled, else Agented's own repo root."""
+    if project:
+        root = ti.get_tesserae_root(project)
+        if root:
+            return str(root)
+    return str(ti._REPO_ROOT)
+
+
+@get("/system/memory/graph/overview", sync_to_thread=True)
+def graph_overview(project: Optional[str] = None, max_nodes: int = 50) -> dict[str, Any]:
+    """A connected landing subgraph around the most-connected node (so the graph
+    view is never empty) + the graph's total node/edge counts."""
+    return memory_graph.overview(
+        _resolve_graph_root(project), max_nodes=max(10, min(int(max_nodes), 150))
+    )
+
+
+@get("/system/memory/graph/nodes", sync_to_thread=True)
+def graph_search_nodes(
+    q: str, project: Optional[str] = None, limit: int = 25
+) -> dict[str, Any]:
+    """Search graph NODES by name/alias/description — ranked, clickable results
+    (each has id/name/type/degree) that open a focused subgraph."""
+    return {
+        "nodes": memory_graph.search_nodes(
+            _resolve_graph_root(project), q, limit=max(1, min(int(limit), 100))
+        )
+    }
+
+
+@get("/system/memory/graph/subgraph", sync_to_thread=True)
+def graph_subgraph(
+    node_id: str, project: Optional[str] = None, hops: int = 1, max_nodes: int = 60
+) -> dict[str, Any]:
+    """The node + its N-hop neighborhood (nodes + connecting edges) for visualization.
+    ``node_id`` is a query param (ids contain ':')."""
+    return memory_graph.subgraph(
+        _resolve_graph_root(project),
+        node_id,
+        hops=max(1, min(int(hops), 3)),
+        max_nodes=max(10, min(int(max_nodes), 200)),
+    )
+
+
+@get("/system/memory/graph/node", sync_to_thread=True)
+def graph_node_detail(node_id: str, project: Optional[str] = None) -> dict[str, Any]:
+    """Full detail for one node: description, aliases, source, and typed neighbors."""
+    detail = memory_graph.node_detail(_resolve_graph_root(project), node_id)
+    if detail is None:
+        raise NotFoundException(detail=f"node not found: {node_id}")
+    return detail
+
+
 # --- Persistent async query dispatcher + history (leave-the-page + read-later) ---
 
 _MEMORY_QUERY_KINDS = {
@@ -642,6 +701,10 @@ memory_system_router = Router(
         get_memory_lint,
         get_graph_status,
         query_graph,
+        graph_overview,
+        graph_search_nodes,
+        graph_subgraph,
+        graph_node_detail,
         get_memory_config,
         engine_refresh,
         start_research,

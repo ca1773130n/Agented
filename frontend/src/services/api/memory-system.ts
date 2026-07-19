@@ -244,6 +244,57 @@ export interface SessionsResult {
   reason: string | null;
 }
 
+// Tesserae interactive graph explorer — browsable nodes/edges (positions are
+// computed in the frontend; the backend emits no coordinates).
+export interface GraphNode {
+  id: string;
+  name: string;
+  type: string;
+  degree: number;
+  center: boolean;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  type: string;
+  evidence: string | null;
+}
+
+export interface GraphOverview {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  total_nodes: number;
+  total_edges: number;
+  seed: string | null;
+}
+
+export interface Subgraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  center: string;
+  truncated: boolean;
+}
+
+export interface NodeNeighbor {
+  id: string;
+  name: string;
+  type: string;
+  edge_type: string;
+  direction: string;
+}
+
+export interface NodeDetail {
+  id: string;
+  name: string;
+  type: string;
+  degree: number;
+  description: string | null;
+  aliases: string[];
+  source_path: string | null;
+  neighbors: NodeNeighbor[];
+}
+
 export const memorySystemApi = {
   list: () =>
     apiFetch<{ memory_systems: MemorySystemSummary[] }>(
@@ -299,6 +350,41 @@ export const memorySystemApi = {
   // Tesserae `status` — compiled knowledge-graph overview (node/edge/session counts).
   graphStatus: () =>
     apiFetch<GraphStatusResult>('/admin/system/memory/graph/status'),
+
+  // --- Interactive graph explorer (browsable nodes/edges) ---
+
+  // A connected landing subgraph (never empty) + total node/edge counts.
+  graphOverview: (project?: string | null, maxNodes = 50) => {
+    const qs = new URLSearchParams({ max_nodes: String(maxNodes) });
+    if (project) qs.set('project', project);
+    return apiFetch<GraphOverview>(`/admin/system/memory/graph/overview?${qs.toString()}`);
+  },
+
+  // Ranked node search (name/alias/description) — clickable hits.
+  graphSearchNodes: (q: string, project?: string | null, limit = 25) => {
+    const qs = new URLSearchParams({ q, limit: String(limit) });
+    if (project) qs.set('project', project);
+    return apiFetch<{ nodes: GraphNode[] }>(`/admin/system/memory/graph/nodes?${qs.toString()}`);
+  },
+
+  // A node's N-hop neighborhood (nodes + connecting edges). nodeId is a query
+  // param (ids contain ':'); URLSearchParams URL-encodes it.
+  graphSubgraph: (nodeId: string, project?: string | null, hops = 1, maxNodes = 60) => {
+    const qs = new URLSearchParams({
+      node_id: nodeId,
+      hops: String(hops),
+      max_nodes: String(maxNodes),
+    });
+    if (project) qs.set('project', project);
+    return apiFetch<Subgraph>(`/admin/system/memory/graph/subgraph?${qs.toString()}`);
+  },
+
+  // Full detail for one node: description, aliases, source, typed neighbors.
+  graphNodeDetail: (nodeId: string, project?: string | null) => {
+    const qs = new URLSearchParams({ node_id: nodeId });
+    if (project) qs.set('project', project);
+    return apiFetch<NodeDetail>(`/admin/system/memory/graph/node?${qs.toString()}`);
+  },
 
   // Tesserae `query` — raw retrieval search over the knowledge graph (NO LLM).
   graphQuery: (q: string, topK = 8, kind?: string | null) => {

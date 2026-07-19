@@ -10005,7 +10005,7 @@
   },
   "knowledgeGraph": {
     "title": "ナレッジグラフ",
-    "subtitle": "Tesserae が知っていることを閲覧 — コンパイル済みグラフを検索（生の検索、LLM なし）。",
+    "subtitle": "Tesserae がコンパイルしたグラフを探索 — ノードを検索またはクリックして近傍をたどります。",
     "statusFailed": "グラフステータスの読み込みに失敗しました",
     "searchFailed": "検索に失敗しました",
     "nodes": "ノード",
@@ -10016,7 +10016,22 @@
     "searchPlaceholder": "ナレッジグラフを検索…",
     "searching": "検索中…",
     "search": "検索",
-    "noHits": "そのクエリに該当する結果はありません。"
+    "noHits": "そのクエリに該当する結果はありません。",
+    "loading": "グラフを読み込み中…",
+    "overviewFailed": "グラフの読み込みに失敗しました",
+    "subgraphFailed": "そのノードの近傍の読み込みに失敗しました",
+    "detailFailed": "ノードの詳細の読み込みに失敗しました",
+    "degree": "次数 {n}",
+    "searchNoResults": "検索に一致するノードはありません。",
+    "graphEmptyTitle": "まだグラフがありません",
+    "graphEmptyBody": "ナレッジグラフにコンパイルされたものはまだありません。",
+    "truncated": "一部のみ表示 — この近傍は省略されています。",
+    "legendTitle": "タイプ",
+    "panelClose": "パネルを閉じる",
+    "panelNoDescription": "説明はありません。",
+    "panelAliases": "エイリアス",
+    "panelSource": "ソース",
+    "panelNeighbors": "近傍"
   },
   "memoryResearch": {
     "title": "メモリリサーチ",
