@@ -10115,6 +10115,15 @@
     "reasonDisabled": "Tesserae is not enabled for this project.",
     "reasonNoPaths": "No sources to ingest were found."
   },
+  "researchSteering": {
+    "label": "Steering",
+    "autopilotLabel": "Autopilot",
+    "autopilotHelp": "Headless — GRD picks the recommended default at each checkpoint.",
+    "panelLabel": "AI panel",
+    "panelHelp": "Headless — a multi-backend AI panel decides each checkpoint.",
+    "attendedLabel": "Attended",
+    "attendedHelp": "Pause at each checkpoint so you can steer."
+  },
   "researchCheckpoint": {
     "pausedBadge": "Paused — awaiting decision",
     "point": {

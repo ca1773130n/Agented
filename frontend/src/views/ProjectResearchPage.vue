@@ -159,7 +159,13 @@ function resumeWithoutAnswers() {
 
 function handleSubmit(
   question: string,
-  opts: { max_iterations?: number; no_gates?: boolean; deep?: boolean; ultracode?: boolean },
+  opts: {
+    max_iterations?: number;
+    no_gates?: boolean;
+    deep?: boolean;
+    ultracode?: boolean;
+    research_steering?: 'autopilot' | 'panel' | 'attended';
+  },
 ) {
   deepMode.value = !!opts.deep;
   dismissedFailure.value = false;

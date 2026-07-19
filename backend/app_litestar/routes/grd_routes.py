@@ -1997,6 +1997,10 @@ def research_start(project_id: str, data: dict) -> dict[str, Any]:
     """Start a fresh ``gd research`` loop as a streamed ``grd_research``
     session. Returns ``{"session_id": ...}``; stream it via the generic
     ``/sessions/{session_id}/output`` SSE route.
+
+    Body ``research_steering`` (GRD 0.5.0) picks how checkpoints resolve:
+    ``autopilot`` (default, headless recommended defaults), ``panel`` (headless
+    multi-backend AI panel), or ``attended`` (loop pauses for a human).
     """
     _ensure_project(project_id)
     body = data or {}
@@ -2016,6 +2020,12 @@ def research_start(project_id: str, data: dict) -> dict[str, Any]:
         config["deep"] = True
     if body.get("ultracode"):
         config["ultracode"] = True
+    # GRD 0.5.0 interactive steering posture (autopilot | panel | attended).
+    # autopilot = headless recommended defaults (default); panel = headless
+    # multi-backend AI resolves each gate; attended = loop pauses for a human
+    # (surfaced via /research/status pendingCheckpoint + resume --answers).
+    if body.get("research_steering") in ("autopilot", "panel", "attended"):
+        config["research_steering"] = body["research_steering"]
 
     result = handler.start(config)
     if "error" in result:

@@ -10115,6 +10115,15 @@
     "reasonDisabled": "此项目未启用 Tesserae。",
     "reasonNoPaths": "未找到可摄取的来源。"
   },
+  "researchSteering": {
+    "label": "推进方式",
+    "autopilotLabel": "自动驾驶",
+    "autopilotHelp": "无人值守 — 在每个检查点由 GRD 选择推荐的默认项。",
+    "panelLabel": "AI 讨论组",
+    "panelHelp": "无人值守 — 由多后端 AI 讨论组决定每个检查点。",
+    "attendedLabel": "人工参与",
+    "attendedHelp": "在每个检查点暂停，让你亲自把控方向。"
+  },
   "researchCheckpoint": {
     "pausedBadge": "已暂停 — 等待决策",
     "point": {
