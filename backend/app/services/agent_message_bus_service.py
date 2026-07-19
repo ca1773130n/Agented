@@ -190,11 +190,15 @@ class AgentMessageBusService:
                 except Full:
                     # Backpressure: a stalled-but-connected SSE client must not
                     # grow the queue without bound (single-worker OOM). Drop the
-                    # oldest event to make room; the message remains durable in
-                    # the DB and is re-delivered via pending prompt injection.
+                    # oldest event to make room — but REVERT that evicted message
+                    # to 'pending' so it IS re-delivered via pending prompt
+                    # injection. Its row was already marked 'delivered' on enqueue
+                    # (below), so without this the evicted inter-agent message
+                    # would be lost forever (contra the durability claim).
                     try:
-                        q.get_nowait()
+                        dropped = q.get_nowait()
                         q.put_nowait(event)
+                        cls._repend_dropped_event(dropped)
                     except (Empty, Full):
                         logger.warning(
                             "message bus: dropping event for slow subscriber %s", agent_id
@@ -243,6 +247,26 @@ class AgentMessageBusService:
     def _format_sse(event_type: str, data: dict) -> str:
         """Format data as an SSE message."""
         return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+
+    @staticmethod
+    def _repend_dropped_event(sse_str: str) -> None:
+        """Revert a 'message' event evicted by backpressure back to 'pending' so
+        the pending prompt-injection path re-delivers it (it was marked 'delivered'
+        on enqueue). Best-effort — a keepalive or unparseable frame is ignored."""
+        for line in sse_str.splitlines():
+            if line.startswith("data:"):
+                try:
+                    mid = json.loads(line[5:].strip()).get("message_id")
+                except (ValueError, TypeError):
+                    return
+                if mid:
+                    try:
+                        update_message_status(mid, "pending")
+                    except Exception:
+                        logger.warning(
+                            "message bus: failed to re-pend dropped message %s", mid
+                        )
+                return
 
     @classmethod
     def _background_worker(cls) -> None:
