@@ -154,4 +154,32 @@ describe('SkillSleepRoundControl', () => {
     await flushPromises();
     expect(mockStatus.mock.calls.length).toBe(callsBefore); // no further polls
   });
+
+  it('does NOT reschedule when unmounted while a poll request is in flight', async () => {
+    // Regression (codex Medium): the timer clears itself before awaiting, so
+    // onBeforeUnmount has nothing to cancel — the `stopped` guard must prevent
+    // the resolved request from scheduling another poll after unmount.
+    let resolveStatus!: (v: { status: string }) => void;
+    mockStatus.mockReturnValueOnce(
+      new Promise((res) => {
+        resolveStatus = res;
+      }),
+    );
+    const w = mountControl();
+    await w.find('[data-testid="ss-round-skill"]').setValue('deploy');
+    await w.find('[data-testid="ss-round-run"]').trigger('click');
+    await flushPromises();
+    await vi.advanceTimersByTimeAsync(3000); // poll fires → roundStatus in flight (pending)
+    await flushPromises();
+
+    w.unmount(); // unmount WHILE the request is pending
+    wrappers = wrappers.filter((x) => x !== w);
+    resolveStatus({ status: 'running' }); // would normally schedule another poll
+    await flushPromises();
+    const callsAfter = mockStatus.mock.calls.length;
+
+    await vi.advanceTimersByTimeAsync(9000);
+    await flushPromises();
+    expect(mockStatus.mock.calls.length).toBe(callsAfter); // no reschedule after unmount
+  });
 });
