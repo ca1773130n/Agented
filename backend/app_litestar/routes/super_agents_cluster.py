@@ -841,15 +841,22 @@ def list_ouroboros_runs(
 # ===========================================================================
 
 
-def _assert_project_access(project_id: str, caller: Caller) -> None:
-    """Enforce per-object ownership on the project a memory/distill call targets
-    (IDOR). Without this, any caller could read another project's agent memory or
-    trigger its distill by passing an arbitrary ``project_id``. 404 (not 403) so
-    the endpoint doesn't leak which project ids exist."""
+def _guard_memory_access(super_agent_id: str, project_id: str, caller: Caller) -> None:
+    """Guard the memory/distill routes (IDOR + enumeration). Returns an
+    IDENTICAL 404 whether the super-agent doesn't exist, the project doesn't
+    exist, or the caller can't access the project — so an authenticated caller
+    can't diff responses to enumerate super-agent or project ids. Checking
+    project existence AND access closes the ``can_access``-passes-nonexistent
+    oracle (denied-existing → 404, nonexistent → also 404)."""
     from app.db.owned_entities import can_access
+    from app.db.projects import get_project
 
-    if not can_access("projects", project_id, caller.user_id, caller.role):
-        raise NotFoundException(detail="Project not found")
+    if (
+        get_super_agent(super_agent_id) is None
+        or get_project(project_id) is None
+        or not can_access("projects", project_id, caller.user_id, caller.role)
+    ):
+        raise NotFoundException(detail="Not found")
 
 
 @get("/{super_agent_id:str}/memory", sync_to_thread=False)
@@ -860,9 +867,7 @@ def super_agent_memory_endpoint(
     Tesserae agent org (parent/reports + session counts) for the org panel."""
     from app.services import super_agent_memory as sam
 
-    if get_super_agent(super_agent_id) is None:
-        raise NotFoundException(detail="SuperAgent not found")
-    _assert_project_access(project_id, caller)
+    _guard_memory_access(super_agent_id, project_id, caller)
     return {
         "memory": sam.read_agent_memory(project_id, super_agent_id),
         "org": sam.agent_org(project_id) or [],
@@ -879,9 +884,7 @@ def super_agent_memory_distill_endpoint(
     clicks don't spawn overlapping distill subprocesses. Returns a job_id to poll."""
     from app.services.tesserae_integration import run_op_async
 
-    if get_super_agent(super_agent_id) is None:
-        raise NotFoundException(detail="SuperAgent not found")
-    _assert_project_access(project_id, caller)
+    _guard_memory_access(super_agent_id, project_id, caller)
     return {"job_id": run_op_async(project_id, "agent-distill", coalesce=True)}
 
 

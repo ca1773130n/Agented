@@ -49,7 +49,8 @@ _MEMORY_ARTIFACT_MAX_BYTES = 512 * 1024
 # Super-agent ids are server-generated ``super-<suffix>``; enforce that shape
 # before the id becomes a filesystem path component (defense-in-depth against a
 # malformed/poisoned persisted id escaping the agents dir with ``..``/``/``/NUL).
-_SAFE_SA_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+# ``fullmatch`` (not ``$``, which permits a trailing newline) anchors the whole id.
+_SAFE_SA_ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
 
 
 def agent_key(super_agent_id: str) -> str:
@@ -58,7 +59,7 @@ def agent_key(super_agent_id: str) -> str:
 
     Rejects an id that isn't a plain ``[A-Za-z0-9_-]`` token — the key becomes a
     path component, so a ``/``/``..``/NUL id must never reach the filesystem."""
-    if not _SAFE_SA_ID.match(super_agent_id or ""):
+    if not _SAFE_SA_ID.fullmatch(super_agent_id or ""):
         raise ValueError(f"unsafe super_agent_id: {super_agent_id!r}")
     return f"claude:unknown:{super_agent_id}"
 

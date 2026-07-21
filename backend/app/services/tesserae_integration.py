@@ -1640,6 +1640,9 @@ def run_op_async(project_id: str, op: str, *, coalesce: bool = False) -> str:
         raise ValueError(f"unknown tesserae op: {op}")
     import secrets
 
+    job_id = f"tess-{op}-{secrets.token_hex(6)}"
+    # Coalesce check AND registration happen in ONE critical section — splitting
+    # them lets two near-simultaneous callers both pass the scan and both spawn.
     with _op_jobs_lock:
         if coalesce:
             for existing_id, job in _op_jobs.items():
@@ -1649,9 +1652,6 @@ def run_op_async(project_id: str, op: str, *, coalesce: bool = False) -> str:
                     and job.get("status") == "running"
                 ):
                     return existing_id
-
-    job_id = f"tess-{op}-{secrets.token_hex(6)}"
-    with _op_jobs_lock:
         _op_jobs[job_id] = {
             "job_id": job_id,
             "project_id": project_id,

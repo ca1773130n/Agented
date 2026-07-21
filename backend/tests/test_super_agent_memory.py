@@ -42,7 +42,9 @@ def test_agent_key_is_deterministic():
     assert sam.agent_key("super-abc") == "claude:unknown:super-abc"
 
 
-@pytest.mark.parametrize("bad", ["../etc/passwd", "a/b", "a\\b", "x\x00y", "", "with space"])
+@pytest.mark.parametrize(
+    "bad", ["../etc/passwd", "a/b", "a\\b", "x\x00y", "", "with space", "super-x\n", "\nsuper-x"]
+)
 def test_agent_key_rejects_unsafe_ids(bad):
     # codex Low: the id becomes a path component — a `/`/`..`/NUL id must never
     # reach the filesystem.
