@@ -887,12 +887,19 @@ class GrdResearchSessionHandler(ExecutionTypeHandler):
         A missing file starts fresh; failures propagate (the operator asked for a
         steering mode we couldn't set up)."""
         import fcntl
+        import hashlib
         import tempfile
 
         cfg_dir = os.path.join(cwd, ".planning")
         cfg_path = os.path.join(cfg_dir, "config.json")
         os.makedirs(cfg_dir, exist_ok=True)
-        lock_path = os.path.join(cfg_dir, ".config.json.lock")
+        # Keep the lock file OUT of the project worktree (a tracked .planning/
+        # would otherwise gain an untracked .lock after any research start). Key
+        # it by the config path so concurrent starts on the same project share it.
+        lock_path = os.path.join(
+            tempfile.gettempdir(),
+            "agented-grd-cfg-" + hashlib.sha1(cfg_path.encode()).hexdigest() + ".lock",
+        )
         with open(lock_path, "w") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             try:
@@ -1042,13 +1049,14 @@ class GrdResearchSessionHandler(ExecutionTypeHandler):
         else:  # autopilot
             execution_mode = "autonomous"
             research_env = {"GRD_AUTOPILOT": "1"}
-            # Explicitly DISABLE interactive steering. .planning/config.json
-            # persists across runs, so a prior `panel` run would leave
-            # enabled+fallback=panel behind — GRD_AUTOPILOT alone makes the run
-            # unattended but the panel would still engage (enabled && !attended &&
-            # fallback==='panel'), silently spending panel answers instead of the
-            # recommended defaults autopilot promises. Pin enabled=false.
-            self._ensure_interactive_config(cwd, {"enabled": False})
+            # Neutralize ONLY the panel fallback, not `enabled`. GRD_AUTOPILOT
+            # already makes the run unattended and resolve to recommended defaults
+            # for every posture EXCEPT a lingering `fallback:"panel"` (panel
+            # engages on enabled && !attended && fallback==='panel'). Pinning
+            # fallback:"recommended" defeats a stale panel from a prior run while
+            # leaving `enabled` untouched — so we don't clobber a config an
+            # operator set for their own attended/manual GRD use.
+            self._ensure_interactive_config(cwd, {"fallback": "recommended"})
 
         session_id = ProjectSessionManager.create_session(
             project_id=project_id,
