@@ -878,26 +878,53 @@ class GrdResearchSessionHandler(ExecutionTypeHandler):
         """Merge ``research_gates.interactive`` into ``<cwd>/.planning/config.json``
         so GRD 0.5.0's ``readInteractiveConfig`` picks up the steering posture.
         Preserves every other config key; only sets the interactive knobs we manage.
-        A missing/corrupt file starts fresh; a write failure PROPAGATES (the operator
-        asked for a steering mode we couldn't set up — better to surface than to
-        silently degrade an attended run to no-op)."""
+
+        Hardened (codex review): an exclusive flock serializes the read-modify-write
+        against concurrent research starts on the same project; the write is atomic
+        (temp file + ``os.replace``) so a reader never sees a torn file; and a
+        MALFORMED existing config FAILS CLOSED (raises) rather than being silently
+        overwritten with only our block — that would destroy unrelated config keys.
+        A missing file starts fresh; failures propagate (the operator asked for a
+        steering mode we couldn't set up)."""
+        import fcntl
+        import tempfile
+
         cfg_dir = os.path.join(cwd, ".planning")
         cfg_path = os.path.join(cfg_dir, "config.json")
-        try:
-            with open(cfg_path, encoding="utf-8") as fh:
-                data = json.load(fh)
-            if not isinstance(data, dict):
-                data = {}
-        except (FileNotFoundError, json.JSONDecodeError):
-            data = {}
-        gates = data.get("research_gates")
-        if not isinstance(gates, dict):
-            gates = data["research_gates"] = {}
-        existing = gates.get("interactive")
-        gates["interactive"] = {**(existing if isinstance(existing, dict) else {}), **interactive}
         os.makedirs(cfg_dir, exist_ok=True)
-        with open(cfg_path, "w", encoding="utf-8") as fh:
-            json.dump(data, fh, indent=2)
+        lock_path = os.path.join(cfg_dir, ".config.json.lock")
+        with open(lock_path, "w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            try:
+                with open(cfg_path, encoding="utf-8") as fh:
+                    data = json.load(fh)
+                if not isinstance(data, dict):
+                    data = {}
+            except FileNotFoundError:
+                data = {}
+            except json.JSONDecodeError as e:
+                # Fail closed: overwriting a corrupt-but-present config with just
+                # our interactive block would silently drop every other key.
+                raise ValueError(f"cannot update malformed {cfg_path}: {e}") from e
+            gates = data.get("research_gates")
+            if not isinstance(gates, dict):
+                gates = data["research_gates"] = {}
+            existing = gates.get("interactive")
+            gates["interactive"] = {
+                **(existing if isinstance(existing, dict) else {}),
+                **interactive,
+            }
+            fd, tmp = tempfile.mkstemp(dir=cfg_dir, prefix=".config-", suffix=".json")
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                    json.dump(data, fh, indent=2)
+                os.replace(tmp, cfg_path)  # atomic — no torn read by a concurrent gd
+            except Exception:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+                raise
 
     def start(self, session_config: dict) -> dict:
         thread_id = (session_config.get("thread_id") or "").strip()
@@ -1015,6 +1042,13 @@ class GrdResearchSessionHandler(ExecutionTypeHandler):
         else:  # autopilot
             execution_mode = "autonomous"
             research_env = {"GRD_AUTOPILOT": "1"}
+            # Explicitly DISABLE interactive steering. .planning/config.json
+            # persists across runs, so a prior `panel` run would leave
+            # enabled+fallback=panel behind — GRD_AUTOPILOT alone makes the run
+            # unattended but the panel would still engage (enabled && !attended &&
+            # fallback==='panel'), silently spending panel answers instead of the
+            # recommended defaults autopilot promises. Pin enabled=false.
+            self._ensure_interactive_config(cwd, {"enabled": False})
 
         session_id = ProjectSessionManager.create_session(
             project_id=project_id,

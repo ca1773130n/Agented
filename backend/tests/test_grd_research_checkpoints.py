@@ -4,6 +4,8 @@ GRD_AUTOPILOT for unattended runs."""
 import json
 import re
 
+import pytest
+
 from app.services import execution_type_handler as eth
 from app.services.execution_type_handler import GrdResearchSessionHandler
 
@@ -77,13 +79,36 @@ def _interactive(tmp_path):
     return json.loads(p.read_text())["research_gates"]["interactive"] if p.exists() else None
 
 
-def test_steering_autopilot_writes_no_config(monkeypatch, tmp_path):
+def test_steering_autopilot_disables_interactive(monkeypatch, tmp_path):
     captured = _mock_session(monkeypatch)
     GrdResearchSessionHandler().start(
         {"project_id": "p", "question": "q", "cwd": str(tmp_path), "research_steering": "autopilot"}
     )
     assert captured.get("env") == {"GRD_AUTOPILOT": "1"}
-    assert _interactive(tmp_path) is None  # autopilot never touches config
+    # autopilot pins enabled=false so it can't inherit a prior panel run
+    assert _interactive(tmp_path) == {"enabled": False}
+
+
+def test_autopilot_clears_stale_panel_config(monkeypatch, tmp_path):
+    # codex Medium: a prior `panel` run leaves enabled+fallback=panel behind;
+    # a later autopilot run must override it, not silently engage the panel.
+    _mock_session(monkeypatch)
+    h = GrdResearchSessionHandler()
+    h.start({"project_id": "p", "question": "q", "cwd": str(tmp_path), "research_steering": "panel"})
+    assert _interactive(tmp_path) == {"enabled": True, "fallback": "panel"}
+    h.start({"project_id": "p", "question": "q", "cwd": str(tmp_path), "research_steering": "autopilot"})
+    # fallback persists as a key but enabled=false disables the panel entirely
+    assert _interactive(tmp_path)["enabled"] is False
+
+
+def test_ensure_interactive_config_fails_closed_on_malformed(tmp_path):
+    cfg = tmp_path / ".planning" / "config.json"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text("{ not valid json ")
+    with pytest.raises(ValueError):
+        GrdResearchSessionHandler._ensure_interactive_config(str(tmp_path), {"enabled": True})
+    # the corrupt file is left intact, NOT overwritten with just our block
+    assert cfg.read_text() == "{ not valid json "
 
 
 def test_steering_panel_enables_interactive_with_panel_fallback(monkeypatch, tmp_path):
