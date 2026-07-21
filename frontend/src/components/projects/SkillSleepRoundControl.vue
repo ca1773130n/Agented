@@ -66,6 +66,9 @@ function describe(v: SkillSleepVerdict): { line: string; cls: 'ok' | 'neutral' |
 // still finishes and persists its run).
 const POLL_MS = 3000;
 let pollTimer: ReturnType<typeof setTimeout> | null = null;
+// Set on unmount so a poll whose request is already in flight doesn't reschedule
+// itself or mutate refs after the component is gone.
+let stopped = false;
 
 function stopPolling() {
   if (pollTimer !== null) {
@@ -73,7 +76,10 @@ function stopPolling() {
     pollTimer = null;
   }
 }
-onBeforeUnmount(stopPolling);
+onBeforeUnmount(() => {
+  stopped = true;
+  stopPolling();
+});
 
 function finishWith(verdict: SkillSleepVerdict) {
   const d = describe(verdict);
@@ -91,11 +97,14 @@ function failWith(message: string) {
 }
 
 function pollJob(jobId: string) {
+  if (stopped) return;
   stopPolling();
   pollTimer = setTimeout(async () => {
     pollTimer = null;
+    if (stopped) return;
     try {
       const job = await skillSleepApi.roundStatus(props.projectId, selectedSkill.value, jobId);
+      if (stopped) return; // unmounted while this poll request was in flight
       if (job.status === 'running') {
         pollJob(jobId);
       } else if (job.status === 'done' && job.verdict) {
@@ -104,6 +113,7 @@ function pollJob(jobId: string) {
         failWith(job.error || t('skillSleep.roundFailed'));
       }
     } catch (err) {
+      if (stopped) return;
       failWith(err instanceof ApiError ? err.message : t('skillSleep.roundError'));
     }
   }, POLL_MS);

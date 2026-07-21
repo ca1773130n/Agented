@@ -1075,24 +1075,47 @@ class SkillSleepScheduler:
 
 _ROUND_JOBS: dict[str, dict] = {}
 _ROUND_JOBS_LOCK = threading.Lock()
-# ponytail: cap the in-memory registry; the oldest job is evicted past this.
-# Jobs are tiny status dicts and the durable result is the persisted run row,
-# so eviction only loses the transient verdict of a very old poll.
-_ROUND_JOBS_MAX = 100
+# Retain at most this many FINISHED jobs for late polls. A RUNNING job is never
+# evicted — dropping it would make an in-flight round unobservable (its status
+# would 404 and its verdict would be lost on completion). The durable result is
+# still the persisted run row; eviction only loses an old finished job's poll.
+_ROUND_JOBS_MAX_TERMINAL = 100
+# Bound simultaneously-running rounds so a burst of triggers can't spawn an
+# unbounded number of minutes-long daemon threads (each round is heavy).
+_MAX_CONCURRENT_ROUNDS = 8
+
+
+class RoundBusyError(RuntimeError):
+    """Too many Skill-Sleep rounds are already running to start another."""
 
 
 def _round_now_iso() -> str:
     return datetime.now(tz=None).astimezone().isoformat()
 
 
+def _round_terminal(job: dict) -> bool:
+    return job["status"] != "running"
+
+
 def start_round_async(project_id: str, skill_name: str, **opts: object) -> str:
     """Kick off one Skill-Sleep round on a daemon thread; return a job_id to
-    poll via :func:`get_round_job`. Never blocks the caller."""
+    poll via :func:`get_round_job`. Never blocks the caller. Raises
+    :class:`RoundBusyError` when too many rounds are already in flight."""
     job_id = f"ssround-{secrets.token_hex(6)}"
     with _ROUND_JOBS_LOCK:
-        if len(_ROUND_JOBS) >= _ROUND_JOBS_MAX:
-            oldest = min(_ROUND_JOBS, key=lambda k: _ROUND_JOBS[k]["started_at"])
-            _ROUND_JOBS.pop(oldest, None)
+        running = sum(1 for j in _ROUND_JOBS.values() if not _round_terminal(j))
+        if running >= _MAX_CONCURRENT_ROUNDS:
+            raise RoundBusyError(
+                f"{running} skill-sleep rounds already running; try again shortly"
+            )
+        # Prune the oldest FINISHED jobs past the retention cap — never a
+        # running one (that would orphan an in-flight round mid-poll).
+        finished = sorted(
+            (k for k, j in _ROUND_JOBS.items() if _round_terminal(j)),
+            key=lambda k: _ROUND_JOBS[k]["started_at"],
+        )
+        while len(finished) >= _ROUND_JOBS_MAX_TERMINAL:
+            _ROUND_JOBS.pop(finished.pop(0), None)
         _ROUND_JOBS[job_id] = {
             "job_id": job_id,
             "status": "running",

@@ -5,6 +5,8 @@ returns immediately with a job_id; the verdict lands via get_round_job."""
 import threading
 import time
 
+import pytest
+
 from app.services import skill_sleep_service as sss
 
 
@@ -59,8 +61,8 @@ def test_get_round_job_unknown_is_none():
     assert sss.get_round_job("ssround-doesnotexist") is None
 
 
-def test_round_jobs_registry_is_bounded(monkeypatch):
-    monkeypatch.setattr(sss, "_ROUND_JOBS_MAX", 5)
+def test_finished_jobs_registry_is_bounded(monkeypatch):
+    monkeypatch.setattr(sss, "_ROUND_JOBS_MAX_TERMINAL", 5)
     monkeypatch.setattr(
         sss.SkillSleepGate,
         "run_skill_sleep_round",
@@ -70,4 +72,40 @@ def test_round_jobs_registry_is_bounded(monkeypatch):
     for jid in ids:
         _wait(jid)
     with sss._ROUND_JOBS_LOCK:
-        assert len(sss._ROUND_JOBS) <= 5  # oldest evicted, no unbounded growth
+        assert len(sss._ROUND_JOBS) <= 5  # oldest FINISHED evicted, no unbounded growth
+
+
+def test_running_job_is_never_evicted(monkeypatch):
+    # Regression (codex High): a still-running job must not be evicted by the
+    # retention cap — else its status 404s mid-run and its verdict is dropped.
+    monkeypatch.setattr(sss, "_ROUND_JOBS_MAX_TERMINAL", 2)
+    monkeypatch.setattr(sss, "_MAX_CONCURRENT_ROUNDS", 50)
+    release = threading.Event()
+    monkeypatch.setattr(
+        sss.SkillSleepGate,
+        "run_skill_sleep_round",
+        staticmethod(lambda *a, **k: (release.wait(3.0), {"status": "no_candidate"})[1]),
+    )
+    live = [sss.start_round_async("p", f"live{i}") for i in range(3)]  # 3 running, cap is 2 finished
+    # all three are still running (blocked on the event) → all observable
+    for jid in live:
+        job = sss.get_round_job(jid)
+        assert job is not None and job["status"] == "running"
+    release.set()
+    for jid in live:
+        _wait(jid)
+
+
+def test_concurrency_cap_raises_round_busy(monkeypatch):
+    monkeypatch.setattr(sss, "_MAX_CONCURRENT_ROUNDS", 2)
+    release = threading.Event()
+    monkeypatch.setattr(
+        sss.SkillSleepGate,
+        "run_skill_sleep_round",
+        staticmethod(lambda *a, **k: (release.wait(3.0), {"status": "no_candidate"})[1]),
+    )
+    sss.start_round_async("p", "a")
+    sss.start_round_async("p", "b")
+    with pytest.raises(sss.RoundBusyError):
+        sss.start_round_async("p", "c")  # 2 already running → busy
+    release.set()

@@ -452,17 +452,21 @@ def skill_sleep_round(
     """
     _assert_project_access(project_id, caller)
     body = data or {}
-    from app.services.skill_sleep_service import start_round_async
+    from app.services.skill_sleep_service import RoundBusyError, start_round_async
 
     edit_budget = body.get("edit_budget")
-    job_id = start_round_async(
-        project_id,
-        skill_name,
-        n=int(body.get("n", 6)),
-        seed=int(body.get("seed", 0)),
-        measure=bool(body.get("measure", True)),
-        edit_budget=int(edit_budget) if edit_budget is not None else None,
-    )
+    try:
+        job_id = start_round_async(
+            project_id,
+            skill_name,
+            n=int(body.get("n", 6)),
+            seed=int(body.get("seed", 0)),
+            measure=bool(body.get("measure", True)),
+            edit_budget=int(edit_budget) if edit_budget is not None else None,
+        )
+    except RoundBusyError as e:
+        # Bound on concurrent heavy rounds hit — tell the client to retry later.
+        raise HTTPException(status_code=429, detail=str(e)) from e
     return {"job_id": job_id}
 
 
