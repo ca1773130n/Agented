@@ -498,10 +498,17 @@ class SuperAgentSessionService:
         if inst_project_id:
             try:
                 from .super_agent_memory import read_agent_memory
+                from .taint import wrap_tainted
 
                 mem = read_agent_memory(inst_project_id, effective_sa_id)
                 if mem["text"]:
-                    parts.append(f"## Distilled Memory (Tesserae)\n\n{mem['text']}\n")
+                    # Distilled notes are derived from session transcripts, which
+                    # can contain adversarial/poisoned text — fence them as
+                    # untrusted DATA (nonce-tagged, do-not-follow preamble) so a
+                    # note can't smuggle instructions into the system prompt.
+                    parts.append(
+                        f"## Distilled Memory (Tesserae)\n\n{wrap_tainted(mem['text'])}\n"
+                    )
             except Exception:
                 logger.debug("tesserae agent memory injection skipped", exc_info=True)
 

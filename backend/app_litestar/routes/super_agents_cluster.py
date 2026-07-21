@@ -841,14 +841,33 @@ def list_ouroboros_runs(
 # ===========================================================================
 
 
+def _guard_memory_access(super_agent_id: str, project_id: str, caller: Caller) -> None:
+    """Guard the memory/distill routes (IDOR + enumeration). Returns an
+    IDENTICAL 404 whether the super-agent doesn't exist, the project doesn't
+    exist, or the caller can't access the project — so an authenticated caller
+    can't diff responses to enumerate super-agent or project ids. Checking
+    project existence AND access closes the ``can_access``-passes-nonexistent
+    oracle (denied-existing → 404, nonexistent → also 404)."""
+    from app.db.owned_entities import can_access
+    from app.db.projects import get_project
+
+    if (
+        get_super_agent(super_agent_id) is None
+        or get_project(project_id) is None
+        or not can_access("projects", project_id, caller.user_id, caller.role)
+    ):
+        raise NotFoundException(detail="Not found")
+
+
 @get("/{super_agent_id:str}/memory", sync_to_thread=False)
-def super_agent_memory_endpoint(super_agent_id: str, project_id: str) -> dict[str, Any]:
+def super_agent_memory_endpoint(
+    super_agent_id: str, project_id: str, caller: Caller
+) -> dict[str, Any]:
     """This super-agent's distilled runbook (L1) for a project, plus the project's
     Tesserae agent org (parent/reports + session counts) for the org panel."""
     from app.services import super_agent_memory as sam
 
-    if get_super_agent(super_agent_id) is None:
-        raise NotFoundException(detail="SuperAgent not found")
+    _guard_memory_access(super_agent_id, project_id, caller)
     return {
         "memory": sam.read_agent_memory(project_id, super_agent_id),
         "org": sam.agent_org(project_id) or [],
@@ -856,15 +875,17 @@ def super_agent_memory_endpoint(super_agent_id: str, project_id: str) -> dict[st
 
 
 @post("/{super_agent_id:str}/memory/distill", sync_to_thread=False)
-def super_agent_memory_distill_endpoint(super_agent_id: str, project_id: str) -> dict[str, Any]:
+def super_agent_memory_distill_endpoint(
+    super_agent_id: str, project_id: str, caller: Caller
+) -> dict[str, Any]:
     """Sync the project's agent-org registry from its super-agents and kick off the
     Tesserae distill pass (L1 runbooks + L2' manager rollups) as a background op.
-    Gated on the project distill toggle. Returns a job_id to poll."""
+    Gated on the project distill toggle. Coalesced per (project, op) so repeated
+    clicks don't spawn overlapping distill subprocesses. Returns a job_id to poll."""
     from app.services.tesserae_integration import run_op_async
 
-    if get_super_agent(super_agent_id) is None:
-        raise NotFoundException(detail="SuperAgent not found")
-    return {"job_id": run_op_async(project_id, "agent-distill")}
+    _guard_memory_access(super_agent_id, project_id, caller)
+    return {"job_id": run_op_async(project_id, "agent-distill", coalesce=True)}
 
 
 super_agents_router = Router(

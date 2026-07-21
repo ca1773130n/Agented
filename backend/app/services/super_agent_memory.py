@@ -27,6 +27,7 @@ the export ever sets ``harness=backend_type`` or a real config-root, update
 
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 from typing import Any, Optional
@@ -42,11 +43,24 @@ from .tesserae_integration import (
 
 # L1 node types worth surfacing to an agent's own context.
 _MEMORY_NODE_TYPES = ("DistilledNote", "ExpertiseProfile")
+# A distilled L1 artifact is designed for a single ~48k read; refuse anything
+# wildly larger before loading it (defends the harness prompt budget + memory).
+_MEMORY_ARTIFACT_MAX_BYTES = 512 * 1024
+# Super-agent ids are server-generated ``super-<suffix>``; enforce that shape
+# before the id becomes a filesystem path component (defense-in-depth against a
+# malformed/poisoned persisted id escaping the agents dir with ``..``/``/``/NUL).
+# ``fullmatch`` (not ``$``, which permits a trailing newline) anchors the whole id.
+_SAFE_SA_ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
 
 
 def agent_key(super_agent_id: str) -> str:
     """Tesserae agent identity for an Agented super-agent. See module docstring
-    for why the harness/account components are pinned to ``claude:unknown``."""
+    for why the harness/account components are pinned to ``claude:unknown``.
+
+    Rejects an id that isn't a plain ``[A-Za-z0-9_-]`` token — the key becomes a
+    path component, so a ``/``/``..``/NUL id must never reach the filesystem."""
+    if not _SAFE_SA_ID.fullmatch(super_agent_id or ""):
+        raise ValueError(f"unsafe super_agent_id: {super_agent_id!r}")
     return f"claude:unknown:{super_agent_id}"
 
 
@@ -76,14 +90,35 @@ def sync_agent_registry(project_id: str) -> Optional[Path]:
     if not sas:
         return None
     present = {s["id"] for s in sas}
+    parent_of = {s["id"]: s.get("parent_super_agent_id") for s in sas}
+
+    def _acyclic_parent(sa_id: str) -> Optional[str]:
+        """The super-agent's parent id, but only if it's present in this project
+        and the chain doesn't loop back — ``parent_super_agent_id`` has just an
+        existence FK, so A→B→A cycles are possible and would make Tesserae reject
+        the whole registry. Nodes in a cycle report to org:root instead."""
+        seen: set[str] = set()
+        cur = parent_of.get(sa_id)
+        while cur is not None and cur in present:
+            if cur == sa_id or cur in seen:
+                return None  # cycle reachable from this edge → break it
+            seen.add(cur)
+            cur = parent_of.get(cur)
+        direct = parent_of.get(sa_id)
+        return direct if direct in present else None
+
     agents: dict[str, dict] = {}
     for s in sas:
-        parent_id = s.get("parent_super_agent_id")
-        # A registry parent MUST be a declared agent (the loader fails loud on an
-        # unknown parent), so only link to a parent that also ran in this project;
-        # otherwise report to org:root.
-        parent = agent_key(parent_id) if parent_id in present else "org:root"
-        agents[agent_key(s["id"])] = {
+        try:
+            key = agent_key(s["id"])
+        except ValueError:
+            logger.warning("sync_agent_registry: skipping unsafe super_agent_id %r", s["id"])
+            continue
+        parent_id = _acyclic_parent(s["id"])
+        # A registry parent MUST be a declared, acyclic agent (the loader fails
+        # loud on unknown parents and cycles), else report to org:root.
+        parent = agent_key(parent_id) if parent_id else "org:root"
+        agents[key] = {
             "label": s.get("name") or s["id"],
             "parent": parent,
             "match": [{"label": s["id"]}],
@@ -140,28 +175,42 @@ def read_agent_memory(
     root = get_tesserae_root(project_id)
     if root is None:
         return {"key": None, "notes": [], "text": ""}
-    key = agent_key(super_agent_id)
-    art = root / ".tesserae" / "agents" / key / "distilled.graph.json"
     try:
-        data = json.loads(art.read_text())
-    except (FileNotFoundError, json.JSONDecodeError):
+        key = agent_key(super_agent_id)
+    except ValueError:
+        logger.warning("read_agent_memory: unsafe super_agent_id %r", super_agent_id)
+        return {"key": None, "notes": [], "text": ""}
+    agents_root = (root / ".tesserae" / "agents").resolve()
+    art = (agents_root / key / "distilled.graph.json").resolve()
+    # Belt-and-suspenders: the resolved artifact path must stay under the agents
+    # dir (the key was already token-validated, but never trust a path built from
+    # a persisted id without a containment check).
+    if os.path.commonpath([str(agents_root), str(art)]) != str(agents_root):
+        logger.warning("read_agent_memory: path escapes agents dir for %r", super_agent_id)
         return {"key": key, "notes": [], "text": ""}
+    try:
+        if art.stat().st_size > _MEMORY_ARTIFACT_MAX_BYTES:
+            logger.warning("read_agent_memory: artifact over size cap for %s", key)
+            return {"key": key, "notes": [], "text": ""}
+        data = json.loads(art.read_text())
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {"key": key, "notes": [], "text": ""}
+    # Cap BOTH the notes list and the rendered text as we collect — a runaway
+    # artifact must not blow the harness prompt budget or return every node.
     notes: list[dict[str, str]] = []
+    lines: list[str] = []
+    total = 0
     for n in data.get("nodes", []):
         if n.get("type") not in _MEMORY_NODE_TYPES:
             continue
         title = (n.get("name") or "").strip()
         body = (n.get("description") or "").strip()
-        if title or body:
-            notes.append({"title": title, "body": body})
-    # Distilled memory is designed for one read, but cap defensively so a
-    # runaway artifact can't blow the harness prompt budget.
-    lines: list[str] = []
-    total = 0
-    for note in notes:
-        chunk = f"**{note['title']}**\n{note['body']}".strip()
+        if not (title or body):
+            continue
+        chunk = f"**{title}**\n{body}".strip()
         if total + len(chunk) > max_chars:
             break
+        notes.append({"title": title, "body": body})
         lines.append(chunk)
         total += len(chunk)
     return {"key": key, "notes": notes, "text": "\n\n".join(lines)}
