@@ -4,6 +4,8 @@ GRD_AUTOPILOT for unattended runs."""
 import json
 import re
 
+import pytest
+
 from app.services import execution_type_handler as eth
 from app.services.execution_type_handler import GrdResearchSessionHandler
 
@@ -77,13 +79,45 @@ def _interactive(tmp_path):
     return json.loads(p.read_text())["research_gates"]["interactive"] if p.exists() else None
 
 
-def test_steering_autopilot_writes_no_config(monkeypatch, tmp_path):
+def test_steering_autopilot_neutralizes_panel_fallback(monkeypatch, tmp_path):
     captured = _mock_session(monkeypatch)
     GrdResearchSessionHandler().start(
         {"project_id": "p", "question": "q", "cwd": str(tmp_path), "research_steering": "autopilot"}
     )
     assert captured.get("env") == {"GRD_AUTOPILOT": "1"}
-    assert _interactive(tmp_path) is None  # autopilot never touches config
+    # autopilot pins fallback=recommended so a stale panel can't engage
+    assert _interactive(tmp_path) == {"fallback": "recommended"}
+
+
+def test_autopilot_clears_stale_panel_but_preserves_enabled(monkeypatch, tmp_path):
+    # codex: a prior `panel` run leaves enabled+fallback=panel behind; autopilot
+    # must defeat the panel (fallback→recommended) WITHOUT clobbering `enabled`
+    # (which an operator may have set for their own attended/manual GRD use).
+    _mock_session(monkeypatch)
+    h = GrdResearchSessionHandler()
+    h.start({"project_id": "p", "question": "q", "cwd": str(tmp_path), "research_steering": "panel"})
+    assert _interactive(tmp_path) == {"enabled": True, "fallback": "panel"}
+    h.start({"project_id": "p", "question": "q", "cwd": str(tmp_path), "research_steering": "autopilot"})
+    ic = _interactive(tmp_path)
+    assert ic["fallback"] == "recommended"  # panel defeated
+    assert ic["enabled"] is True  # not clobbered
+
+
+def test_ensure_interactive_config_lock_not_in_worktree(tmp_path):
+    # codex Low: the lock file must not land in the (possibly tracked) .planning/.
+    GrdResearchSessionHandler._ensure_interactive_config(str(tmp_path), {"fallback": "recommended"})
+    planning = tmp_path / ".planning"
+    assert not any(p.name.endswith(".lock") for p in planning.iterdir())
+
+
+def test_ensure_interactive_config_fails_closed_on_malformed(tmp_path):
+    cfg = tmp_path / ".planning" / "config.json"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text("{ not valid json ")
+    with pytest.raises(ValueError):
+        GrdResearchSessionHandler._ensure_interactive_config(str(tmp_path), {"enabled": True})
+    # the corrupt file is left intact, NOT overwritten with just our block
+    assert cfg.read_text() == "{ not valid json "
 
 
 def test_steering_panel_enables_interactive_with_panel_fallback(monkeypatch, tmp_path):
