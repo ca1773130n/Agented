@@ -888,20 +888,29 @@ class GrdResearchSessionHandler(ExecutionTypeHandler):
         steering mode we couldn't set up)."""
         import fcntl
         import hashlib
+        import stat
         import tempfile
 
         cfg_dir = os.path.join(cwd, ".planning")
         cfg_path = os.path.join(cfg_dir, "config.json")
         os.makedirs(cfg_dir, exist_ok=True)
         # Keep the lock file OUT of the project worktree (a tracked .planning/
-        # would otherwise gain an untracked .lock after any research start). Key
-        # it by the config path so concurrent starts on the same project share it.
+        # would otherwise gain an untracked .lock after any research start), but
+        # its temp-dir name is PREDICTABLE (a hash of cfg_path), so guard against a
+        # symlink/temp-file attack on a shared host: (1) a per-uid, 0700, we-own-it
+        # lock dir an attacker can't plant files in, and (2) O_NOFOLLOW|0600 on the
+        # lock file so a pre-placed symlink is refused rather than followed+truncated.
+        lock_root = os.path.join(tempfile.gettempdir(), f"agented-grd-{os.getuid()}")
+        os.makedirs(lock_root, mode=0o700, exist_ok=True)
+        st = os.lstat(lock_root)
+        if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid() or (st.st_mode & 0o077):
+            raise ValueError(f"refusing unsafe lock dir {lock_root}")
         lock_path = os.path.join(
-            tempfile.gettempdir(),
-            "agented-grd-cfg-" + hashlib.sha1(cfg_path.encode()).hexdigest() + ".lock",
+            lock_root, hashlib.sha1(cfg_path.encode()).hexdigest() + ".lock"
         )
-        with open(lock_path, "w") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
+        lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
             try:
                 with open(cfg_path, encoding="utf-8") as fh:
                     data = json.load(fh)
@@ -932,6 +941,8 @@ class GrdResearchSessionHandler(ExecutionTypeHandler):
                 except OSError:
                     pass
                 raise
+        finally:
+            os.close(lock_fd)
 
     def start(self, session_config: dict) -> dict:
         thread_id = (session_config.get("thread_id") or "").strip()

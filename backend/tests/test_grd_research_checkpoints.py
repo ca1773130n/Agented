@@ -110,6 +110,29 @@ def test_ensure_interactive_config_lock_not_in_worktree(tmp_path):
     assert not any(p.name.endswith(".lock") for p in planning.iterdir())
 
 
+def test_ensure_interactive_config_refuses_symlinked_lock(tmp_path, monkeypatch):
+    # security review: the lock path in /tmp is predictable (hash of cfg_path);
+    # a pre-placed symlink must be REFUSED (O_NOFOLLOW), not followed + truncated.
+    import hashlib
+    import os
+    import tempfile
+
+    tmpdir = tmp_path / "tmp"
+    tmpdir.mkdir()
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmpdir))
+    cwd = tmp_path / "proj"
+    cfg_path = os.path.join(str(cwd), ".planning", "config.json")
+    lock_root = tmpdir / f"agented-grd-{os.getuid()}"
+    lock_root.mkdir(mode=0o700)
+    victim = tmp_path / "victim.txt"
+    victim.write_text("precious")
+    (lock_root / (hashlib.sha1(cfg_path.encode()).hexdigest() + ".lock")).symlink_to(victim)
+
+    with pytest.raises(OSError):  # O_NOFOLLOW → ELOOP on the planted symlink
+        GrdResearchSessionHandler._ensure_interactive_config(str(cwd), {"fallback": "recommended"})
+    assert victim.read_text() == "precious"  # not truncated
+
+
 def test_ensure_interactive_config_fails_closed_on_malformed(tmp_path):
     cfg = tmp_path / ".planning" / "config.json"
     cfg.parent.mkdir(parents=True)
