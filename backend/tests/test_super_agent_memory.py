@@ -42,6 +42,45 @@ def test_agent_key_is_deterministic():
     assert sam.agent_key("super-abc") == "claude:unknown:super-abc"
 
 
+@pytest.mark.parametrize("bad", ["../etc/passwd", "a/b", "a\\b", "x\x00y", "", "with space"])
+def test_agent_key_rejects_unsafe_ids(bad):
+    # codex Low: the id becomes a path component — a `/`/`..`/NUL id must never
+    # reach the filesystem.
+    with pytest.raises(ValueError):
+        sam.agent_key(bad)
+
+
+def test_read_agent_memory_unsafe_id_is_empty(tmp_path, monkeypatch):
+    monkeypatch.setattr(sam, "get_tesserae_root", lambda pid: tmp_path)
+    mem = sam.read_agent_memory("proj-1", "../../../etc/passwd")
+    assert mem["notes"] == [] and mem["text"] == "" and mem["key"] is None
+
+
+def test_read_agent_memory_rejects_oversize_artifact(tmp_path, monkeypatch):
+    root = tmp_path / "ws"
+    monkeypatch.setattr(sam, "get_tesserae_root", lambda pid: root)
+    monkeypatch.setattr(sam, "_MEMORY_ARTIFACT_MAX_BYTES", 100)
+    art = root / ".tesserae" / "agents" / sam.agent_key("super-x") / "distilled.graph.json"
+    art.parent.mkdir(parents=True)
+    art.write_text(json.dumps({"nodes": [{"type": "DistilledNote", "name": "n", "description": "z" * 500}]}))
+    mem = sam.read_agent_memory("proj-1", "super-x")
+    assert mem["notes"] == []  # over the byte cap → not read
+
+
+def test_read_agent_memory_caps_notes_list(tmp_path, monkeypatch):
+    root = tmp_path / "ws"
+    monkeypatch.setattr(sam, "get_tesserae_root", lambda pid: root)
+    key = sam.agent_key("super-big")
+    art = root / ".tesserae" / "agents" / key / "distilled.graph.json"
+    art.parent.mkdir(parents=True)
+    big = "z" * 5000
+    art.write_text(json.dumps({"nodes": [{"type": "DistilledNote", "name": f"n{i}", "description": big} for i in range(10)]}))
+    mem = sam.read_agent_memory("proj-1", "super-big", max_chars=6000)
+    # codex Medium: notes list must be capped alongside text, not return all 10
+    assert len(mem["notes"]) < 10
+    assert len("\n\n".join(f"{n['title']}{n['body']}" for n in mem["notes"])) <= 6100
+
+
 def test_sync_registry_maps_hierarchy_and_label_rules(project_with_super_agents):
     root = project_with_super_agents
     path = sam.sync_agent_registry("proj-1")
@@ -86,6 +125,42 @@ def test_sync_registry_parent_absent_from_project_falls_back_to_root(
     # unknown-to-this-project parent would make the registry fail to load, so we
     # must fall back to org:root rather than reference a non-declared agent
     assert reg["agents"]["claude:unknown:super-child"]["parent"] == "org:root"
+
+
+def test_sync_registry_breaks_parent_cycle(isolated_db, tmp_path, monkeypatch):
+    # codex Medium: parent_super_agent_id has only an existence FK, so A→B→A is
+    # possible; a cyclic registry makes Tesserae reject the whole file. Cyclic
+    # nodes must fall back to org:root.
+    root = tmp_path / "ws"
+    root.mkdir()
+    monkeypatch.setattr(sam, "get_tesserae_root", lambda pid: root)
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name) VALUES (?,?)", ("proj-1", "P1"))
+        # Insert without the cycle first (FK), then close the loop via UPDATE.
+        conn.execute("INSERT INTO super_agents (id, name) VALUES (?,?)", ("super-a", "A"))
+        conn.execute(
+            "INSERT INTO super_agents (id, name, parent_super_agent_id) VALUES (?,?,?)",
+            ("super-b", "B", "super-a"),
+        )
+        conn.execute(
+            "UPDATE super_agents SET parent_super_agent_id=? WHERE id=?", ("super-b", "super-a")
+        )
+        for sid, sa in (("s1", "super-a"), ("s2", "super-b")):
+            conn.execute(
+                "INSERT INTO super_agent_sessions (id, super_agent_id, project_id) VALUES (?,?,?)",
+                (sid, sa, "proj-1"),
+            )
+        conn.commit()
+    reg = json.loads(sam.sync_agent_registry("proj-1").read_text())
+    parents = {k: v["parent"] for k, v in reg["agents"].items()}
+    # the cycle is broken — not both pointing at each other
+    assert "org:root" in parents.values()
+    assert not (
+        parents["claude:unknown:super-a"] == "claude:unknown:super-b"
+        and parents["claude:unknown:super-b"] == "claude:unknown:super-a"
+    )
 
 
 def test_sync_registry_no_super_agents_returns_none(isolated_db, tmp_path, monkeypatch):

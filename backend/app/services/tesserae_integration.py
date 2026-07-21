@@ -1628,13 +1628,27 @@ _OP_DISPATCH = {
 }
 
 
-def run_op_async(project_id: str, op: str) -> str:
+def run_op_async(project_id: str, op: str, *, coalesce: bool = False) -> str:
     """Run a Tesserae op in a daemon thread, return a job_id the
     caller can poll. Used for long ops (compile, build-site) so the
-    HTTP handler returns immediately."""
+    HTTP handler returns immediately.
+
+    ``coalesce=True`` returns the id of an already-running job for the same
+    (project_id, op) instead of starting another — used for heavy ops like
+    agent-distill so a burst of triggers can't spawn overlapping subprocesses."""
     if op not in _OP_DISPATCH:
         raise ValueError(f"unknown tesserae op: {op}")
     import secrets
+
+    with _op_jobs_lock:
+        if coalesce:
+            for existing_id, job in _op_jobs.items():
+                if (
+                    job.get("project_id") == project_id
+                    and job.get("op") == op
+                    and job.get("status") == "running"
+                ):
+                    return existing_id
 
     job_id = f"tess-{op}-{secrets.token_hex(6)}"
     with _op_jobs_lock:
