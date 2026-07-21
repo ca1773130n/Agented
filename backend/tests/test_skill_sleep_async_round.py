@@ -96,6 +96,33 @@ def test_running_job_is_never_evicted(monkeypatch):
         _wait(jid)
 
 
+def test_terminal_cap_holds_after_concurrent_burst_completes(monkeypatch):
+    # Regression (codex): prune ran only on start, so a burst of concurrent rounds
+    # finishing could leave cap + (concurrency-1) terminal jobs. Prune-on-completion
+    # must keep the finished count at the cap even after they all finish at once.
+    monkeypatch.setattr(sss, "_ROUND_JOBS_MAX_TERMINAL", 3)
+    monkeypatch.setattr(sss, "_MAX_CONCURRENT_ROUNDS", 5)
+    # 3 already-finished jobs
+    monkeypatch.setattr(
+        sss.SkillSleepGate, "run_skill_sleep_round",
+        staticmethod(lambda *a, **k: {"status": "no_candidate"}),
+    )
+    for i in range(3):
+        _wait(sss.start_round_async("p", f"done{i}"))
+    # now 5 concurrent rounds, all blocked, then released together
+    release = threading.Event()
+    monkeypatch.setattr(
+        sss.SkillSleepGate, "run_skill_sleep_round",
+        staticmethod(lambda *a, **k: (release.wait(3.0), {"status": "no_candidate"})[1]),
+    )
+    burst = [sss.start_round_async("p", f"burst{i}") for i in range(5)]
+    release.set()
+    for jid in burst:
+        _wait(jid)
+    with sss._ROUND_JOBS_LOCK:
+        assert len(sss._ROUND_JOBS) <= 3  # pruned on completion, not 3+5
+
+
 def test_concurrency_cap_raises_round_busy(monkeypatch):
     monkeypatch.setattr(sss, "_MAX_CONCURRENT_ROUNDS", 2)
     release = threading.Event()

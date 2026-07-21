@@ -1097,6 +1097,19 @@ def _round_terminal(job: dict) -> bool:
     return job["status"] != "running"
 
 
+def _prune_terminal_locked() -> None:
+    """Evict the oldest FINISHED jobs down to the retention cap. Never evicts a
+    running job (that would orphan an in-flight round mid-poll). Caller MUST hold
+    ``_ROUND_JOBS_LOCK``. Runs on both start and completion so the terminal count
+    stays at the cap rather than drifting up to +_MAX_CONCURRENT_ROUNDS."""
+    finished = sorted(
+        (k for k, j in _ROUND_JOBS.items() if _round_terminal(j)),
+        key=lambda k: _ROUND_JOBS[k]["started_at"],
+    )
+    while len(finished) > _ROUND_JOBS_MAX_TERMINAL:
+        _ROUND_JOBS.pop(finished.pop(0), None)
+
+
 def start_round_async(project_id: str, skill_name: str, **opts: object) -> str:
     """Kick off one Skill-Sleep round on a daemon thread; return a job_id to
     poll via :func:`get_round_job`. Never blocks the caller. Raises
@@ -1108,14 +1121,7 @@ def start_round_async(project_id: str, skill_name: str, **opts: object) -> str:
             raise RoundBusyError(
                 f"{running} skill-sleep rounds already running; try again shortly"
             )
-        # Prune the oldest FINISHED jobs past the retention cap — never a
-        # running one (that would orphan an in-flight round mid-poll).
-        finished = sorted(
-            (k for k, j in _ROUND_JOBS.items() if _round_terminal(j)),
-            key=lambda k: _ROUND_JOBS[k]["started_at"],
-        )
-        while len(finished) >= _ROUND_JOBS_MAX_TERMINAL:
-            _ROUND_JOBS.pop(finished.pop(0), None)
+        _prune_terminal_locked()
         _ROUND_JOBS[job_id] = {
             "job_id": job_id,
             "status": "running",
@@ -1140,6 +1146,9 @@ def start_round_async(project_id: str, skill_name: str, **opts: object) -> str:
             job = _ROUND_JOBS.get(job_id)
             if job is not None:
                 job.update(update, finished_at=_round_now_iso())
+                # This job just became terminal — prune so the finished-job count
+                # holds at the cap instead of drifting up as rounds complete.
+                _prune_terminal_locked()
 
     threading.Thread(target=_work, name=f"skill-sleep-{job_id}", daemon=True).start()
     return job_id
