@@ -902,47 +902,54 @@ class GrdResearchSessionHandler(ExecutionTypeHandler):
         # lock file so a pre-placed symlink is refused rather than followed+truncated.
         lock_root = os.path.join(tempfile.gettempdir(), f"agented-grd-{os.getuid()}")
         os.makedirs(lock_root, mode=0o700, exist_ok=True)
-        st = os.lstat(lock_root)
-        if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid() or (st.st_mode & 0o077):
-            raise ValueError(f"refusing unsafe lock dir {lock_root}")
-        lock_path = os.path.join(
-            lock_root, hashlib.sha1(cfg_path.encode()).hexdigest() + ".lock"
-        )
-        lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        lock_dir_fd = os.open(lock_root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
-            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+            st = os.fstat(lock_dir_fd)
+            if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid() or (st.st_mode & 0o077):
+                raise ValueError(f"refusing unsafe lock dir {lock_root}")
+            lock_name = hashlib.sha1(cfg_path.encode()).hexdigest() + ".lock"
+            lock_fd = os.open(
+                lock_name,
+                os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW,
+                0o600,
+                dir_fd=lock_dir_fd,
+            )
             try:
-                with open(cfg_path, encoding="utf-8") as fh:
-                    data = json.load(fh)
-                if not isinstance(data, dict):
-                    data = {}
-            except FileNotFoundError:
-                data = {}
-            except json.JSONDecodeError as e:
-                # Fail closed: overwriting a corrupt-but-present config with just
-                # our interactive block would silently drop every other key.
-                raise ValueError(f"cannot update malformed {cfg_path}: {e}") from e
-            gates = data.get("research_gates")
-            if not isinstance(gates, dict):
-                gates = data["research_gates"] = {}
-            existing = gates.get("interactive")
-            gates["interactive"] = {
-                **(existing if isinstance(existing, dict) else {}),
-                **interactive,
-            }
-            fd, tmp = tempfile.mkstemp(dir=cfg_dir, prefix=".config-", suffix=".json")
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                    json.dump(data, fh, indent=2)
-                os.replace(tmp, cfg_path)  # atomic — no torn read by a concurrent gd
-            except Exception:
+                fcntl.flock(lock_fd, fcntl.LOCK_EX)
                 try:
-                    os.unlink(tmp)
-                except OSError:
-                    pass
-                raise
+                    with open(cfg_path, encoding="utf-8") as fh:
+                        data = json.load(fh)
+                    if not isinstance(data, dict):
+                        data = {}
+                except FileNotFoundError:
+                    data = {}
+                except json.JSONDecodeError as e:
+                    # Fail closed: overwriting a corrupt-but-present config with just
+                    # our interactive block would silently drop every other key.
+                    raise ValueError(f"cannot update malformed {cfg_path}: {e}") from e
+                gates = data.get("research_gates")
+                if not isinstance(gates, dict):
+                    gates = data["research_gates"] = {}
+                existing = gates.get("interactive")
+                gates["interactive"] = {
+                    **(existing if isinstance(existing, dict) else {}),
+                    **interactive,
+                }
+                fd, tmp = tempfile.mkstemp(dir=cfg_dir, prefix=".config-", suffix=".json")
+                try:
+                    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                        json.dump(data, fh, indent=2)
+                    os.replace(tmp, cfg_path)  # atomic — no torn read by a concurrent gd
+                except Exception:
+                    try:
+                        os.unlink(tmp)
+                    except OSError:
+                        pass
+                    raise
+            finally:
+                os.close(lock_fd)
         finally:
-            os.close(lock_fd)
+            os.close(lock_dir_fd)
 
     def start(self, session_config: dict) -> dict:
         thread_id = (session_config.get("thread_id") or "").strip()

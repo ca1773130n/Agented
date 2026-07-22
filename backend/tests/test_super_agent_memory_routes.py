@@ -46,6 +46,23 @@ def test_distill_route_uniform_404(monkeypatch):
     assert exc.value.detail == "Not found"
 
 
+def test_guard_runs_all_checks_even_when_first_fails(monkeypatch):
+    # codex (timing oracle): the guard must NOT short-circuit — SA-missing,
+    # project-missing, and project-denied must each do the SAME work (query count)
+    # so latency can't distinguish them. Assert all three are invoked even when
+    # the super-agent is already missing.
+    calls = []
+    monkeypatch.setattr(sac, "get_super_agent", lambda sid: calls.append("sa") or None)
+    monkeypatch.setattr("app.db.projects.get_project", lambda pid: calls.append("proj") or {"id": pid})
+    monkeypatch.setattr(
+        "app.db.owned_entities.can_access",
+        lambda t, e, u, r: calls.append("access") or True,
+    )
+    with pytest.raises(NotFoundException):
+        sac.super_agent_memory_endpoint.fn("missing", "proj", _caller())
+    assert calls == ["sa", "proj", "access"]  # all three, no short-circuit
+
+
 def test_memory_route_allows_when_authorized(monkeypatch):
     _patch(monkeypatch)  # sa + project exist, access granted
     from app.services import super_agent_memory as sam

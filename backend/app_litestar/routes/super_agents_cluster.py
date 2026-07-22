@@ -851,11 +851,14 @@ def _guard_memory_access(super_agent_id: str, project_id: str, caller: Caller) -
     from app.db.owned_entities import can_access
     from app.db.projects import get_project
 
-    if (
-        get_super_agent(super_agent_id) is None
-        or get_project(project_id) is None
-        or not can_access("projects", project_id, caller.user_id, caller.role)
-    ):
+    # Evaluate ALL three checks unconditionally (no `or` short-circuit) so the
+    # query count / latency is identical for every failure mode — otherwise
+    # SA-missing (1 query) vs project-missing (2) vs project-denied (3) is a
+    # timing oracle to enumerate ids even though the 404 body is already uniform.
+    sa_missing = get_super_agent(super_agent_id) is None
+    project_missing = get_project(project_id) is None
+    access_denied = not can_access("projects", project_id, caller.user_id, caller.role)
+    if sa_missing or project_missing or access_denied:
         raise NotFoundException(detail="Not found")
 
 
