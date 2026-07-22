@@ -179,6 +179,17 @@ onUnmounted(() => { alive = false; stopEnginePoll(); });
           class="backend-live"
           :class="config.liveness_ok ? 'backend-live--ok' : 'backend-live--down'"
         >{{ config.liveness_ok ? t('memoryDoctor.backend.live') : t('memoryDoctor.backend.down') }}</span>
+        <!-- Tesserae 0.23/0.24 sleep-cycle (consolidate + LRU forget + associate) -->
+        <span
+          v-if="config.consolidation"
+          class="backend-live"
+          :class="config.consolidation.running ? 'backend-live--ok' : 'backend-live--down'"
+          :title="t('memoryDoctor.consolidation.title', { idle: config.consolidation.idle_seconds })"
+        >{{ config.consolidation.enabled
+            ? (config.consolidation.running
+                ? t('memoryDoctor.consolidation.on')
+                : t('memoryDoctor.consolidation.stopped'))
+            : t('memoryDoctor.consolidation.off') }}</span>
       </div>
       <div class="backend-engine">
         <span v-if="engineMsg" class="backend-engine__msg">{{ engineMsg }}</span>

@@ -30,6 +30,18 @@ export interface SuperAgentActivityStatus {
 export interface SuperAgentMemoryNote {
   title: string;
   body: string;
+  /** L0 evidence node ids this note distilled — each drillable via `agents drill`. */
+  refs?: string[];
+}
+
+/** Result of `agents drill` — a distilled note escalated back to raw L0 evidence. */
+export interface SuperAgentDrillResult {
+  ok: boolean;
+  key?: string;
+  node_id?: string;
+  /** Untrusted evidence text (render as text, never HTML). */
+  text?: string;
+  reason?: string;
 }
 
 export interface SuperAgentMemory {
@@ -71,6 +83,21 @@ export const distillSuperAgentMemory = (superAgentId: string, projectId: string)
   apiFetch<{ job_id: string }>(
     `/admin/super-agents/${superAgentId}/memory/distill?project_id=${encodeURIComponent(projectId)}`,
     { method: 'POST' },
+  );
+
+/**
+ * Audit-escalate a distilled note's evidence ref (`nodeId`) back to its raw L0
+ * source via `agents drill` (Tesserae 0.22). Returned text is untrusted DATA.
+ */
+export const drillSuperAgentMemory = (
+  superAgentId: string,
+  projectId: string,
+  nodeId: string,
+) =>
+  apiFetch<SuperAgentDrillResult>(
+    `/admin/super-agents/${superAgentId}/memory/drill?project_id=${encodeURIComponent(
+      projectId,
+    )}&node_id=${encodeURIComponent(nodeId)}`,
   );
 
 export const superAgentApi = {

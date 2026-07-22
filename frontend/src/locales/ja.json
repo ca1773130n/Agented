@@ -7394,6 +7394,8 @@
     "emptyRunbook": "まだ蒸留されたメモリがありません — 蒸留を実行してください",
     "distillNow": "今すぐ蒸留",
     "distilling": "蒸留中…",
+    "drilling": "追跡中…",
+    "drillFailed": "証拠を取得できません",
     "selectProject": "エージェントメモリを表示するにはプロジェクトを選択してください",
     "selectProjectOption": "プロジェクトを選択…",
     "loading": "読み込み中…",
@@ -10010,6 +10012,12 @@
       "running": "リフレッシュ中…",
       "done": "リフレッシュ完了",
       "failed": "リフレッシュ失敗"
+    },
+    "consolidation": {
+      "title": "メモリ統合 — アイドル・スリープサイクル（{idle}秒）",
+      "on": "統合中",
+      "stopped": "統合停止",
+      "off": "統合オフ"
     }
   },
   "memorySessions": {

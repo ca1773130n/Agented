@@ -222,8 +222,18 @@ def get_memory_lint(refresh: bool = False) -> dict[str, Any]:
 def get_memory_config() -> dict[str, Any]:
     """Resolved Tesserae LLM backend + a live liveness ping via ``tesserae config
     status``: provider / effort / source / liveness_ok — ops visibility for the
-    Memory surface."""
-    return ti.config_status()
+    Memory surface. Also carries the 0.23/0.24 ``consolidation`` sleep-cycle
+    status (enabled / running / cadence) from Agented's own daemon supervisor —
+    Tesserae's CLI exposes no consolidation-status field, so this is the honest
+    source, not a parsed indicator."""
+    result = dict(ti.config_status())  # copy — config_status caches its dict
+    try:
+        from app.services.tesserae_engine_daemon import TesseraeEngineDaemon
+
+        result["consolidation"] = TesseraeEngineDaemon.status()
+    except Exception:  # surfacing status must never break the config read
+        result["consolidation"] = None
+    return result
 
 
 @post("/system/memory/engine-refresh", sync_to_thread=True)

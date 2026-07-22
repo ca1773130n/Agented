@@ -197,7 +197,7 @@ def read_agent_memory(
         return {"key": key, "notes": [], "text": ""}
     # Cap BOTH the notes list and the rendered text as we collect — a runaway
     # artifact must not blow the harness prompt budget or return every node.
-    notes: list[dict[str, str]] = []
+    notes: list[dict[str, Any]] = []
     lines: list[str] = []
     total = 0
     for n in data.get("nodes", []):
@@ -210,7 +210,16 @@ def read_agent_memory(
         chunk = f"**{title}**\n{body}".strip()
         if total + len(chunk) > max_chars:
             break
-        notes.append({"title": title, "body": body})
+        # The L0 evidence a distilled note cites — each drillable back to raw
+        # source via `agents drill` (0.22). Bounded: a note can cite many refs,
+        # but the panel drills one at a time.
+        md = n.get("metadata") or {}
+        refs = [
+            r["node_id"]
+            for r in (md.get("member_refs") or [])
+            if isinstance(r, dict) and isinstance(r.get("node_id"), str)
+        ][:6]
+        notes.append({"title": title, "body": body, "refs": refs})
         lines.append(chunk)
         total += len(chunk)
     return {"key": key, "notes": notes, "text": "\n\n".join(lines)}
@@ -240,3 +249,59 @@ def agent_org(project_id: str, *, timeout: int = 30) -> Optional[list[dict[str, 
     except json.JSONDecodeError:
         return None
     return data if isinstance(data, list) else None
+
+
+# A tesserae graph node id (``member_refs[].node_id``) is a plain token. Validate
+# it before it becomes a CLI positional; combined with the ``--`` terminator
+# below, a ``--flag``-shaped id can never smuggle a CLI option.
+_SAFE_NODE_ID = re.compile(r"[A-Za-z0-9:._-]{1,256}")
+_DRILL_MAX_CHARS = 8000
+
+
+def agent_drill(
+    project_id: str, super_agent_id: str, node_id: str, *, timeout: int = 30
+) -> dict[str, Any]:
+    """Audit-escalate a distilled note back to its raw L0 evidence via
+    ``tesserae agents drill`` (Tesserae 0.22): given a ``member_refs[].node_id``
+    from this super-agent's distilled memory, resolve it against L0 and report
+    the underlying evidence + status (alive / changed / absorbed / gone).
+
+    Bounded, best-effort text (the CLI has no ``--json``). ``ok=False`` with a
+    reason on any failure — never raises, never 500s the panel."""
+    root = get_tesserae_root(project_id)
+    if root is None:
+        return {"ok": False, "reason": "tesserae_disabled"}
+    try:
+        key = agent_key(super_agent_id)
+    except ValueError:
+        return {"ok": False, "reason": "unsafe_super_agent_id"}
+    if not _SAFE_NODE_ID.fullmatch(node_id or ""):
+        return {"ok": False, "reason": "unsafe_node_id"}
+    try:
+        proc = subprocess.run(
+            # Flags BEFORE the ``--`` terminator; node_id after it, so a
+            # ``--flag``-shaped id can never smuggle a CLI option (the argv-guard
+            # class already hardened elsewhere in this codebase).
+            [
+                _TESSERAE_CMD, "agents", "drill",
+                "--agent", key, "--project", str(root),
+                "--", node_id,
+            ],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return {"ok": False, "reason": "cli_unavailable"}
+    if proc.returncode != 0:
+        return {"ok": False, "reason": (proc.stderr or "").strip()[:200] or "drill_failed"}
+    # Drilled content derives from adversarial transcripts (raw L0 evidence) —
+    # bound it and treat it as untrusted DATA; a caller injecting it into a
+    # prompt must wrap_tainted, and the panel must render it as text, never HTML.
+    return {
+        "ok": True,
+        "key": key,
+        "node_id": node_id,
+        "text": (proc.stdout or "")[:_DRILL_MAX_CHARS],
+    }
