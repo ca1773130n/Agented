@@ -7394,6 +7394,8 @@
     "emptyRunbook": "No distilled memory yet — run distill",
     "distillNow": "Distill now",
     "distilling": "Distilling…",
+    "drilling": "Drilling…",
+    "drillFailed": "Evidence unavailable",
     "selectProject": "Select a project to view agent memory",
     "selectProjectOption": "Select a project…",
     "loading": "Loading…",
@@ -10010,6 +10012,12 @@
       "running": "Refreshing…",
       "done": "Refresh complete",
       "failed": "Refresh failed"
+    },
+    "consolidation": {
+      "title": "Memory consolidation — idle sleep cycle ({idle}s)",
+      "on": "consolidating",
+      "stopped": "consolidation stopped",
+      "off": "consolidation off"
     }
   },
   "memorySessions": {

@@ -877,6 +877,20 @@ def super_agent_memory_endpoint(
     }
 
 
+@get("/{super_agent_id:str}/memory/drill", sync_to_thread=False)
+def super_agent_memory_drill_endpoint(
+    super_agent_id: str, project_id: str, node_id: str, caller: Caller
+) -> dict[str, Any]:
+    """Audit-escalate a distilled note (``node_id``) back to its raw L0 evidence
+    via ``tesserae agents drill`` (Tesserae 0.22). Same uniform-404 IDOR guard as
+    the memory read; ``node_id`` is token-validated + flag-smuggle-guarded in
+    ``agent_drill``, and its returned text is untrusted DATA (render as text)."""
+    from app.services import super_agent_memory as sam
+
+    _guard_memory_access(super_agent_id, project_id, caller)
+    return sam.agent_drill(project_id, super_agent_id, node_id)
+
+
 @post("/{super_agent_id:str}/memory/distill", sync_to_thread=False)
 def super_agent_memory_distill_endpoint(
     super_agent_id: str, project_id: str, caller: Caller
@@ -895,6 +909,7 @@ super_agents_router = Router(
     path="/admin/super-agents",
     route_handlers=[
         super_agent_memory_endpoint,
+        super_agent_memory_drill_endpoint,
         super_agent_memory_distill_endpoint,
         list_super_agents,
         super_agent_activity_status,

@@ -216,3 +216,77 @@ def test_read_agent_memory_bounds_output(tmp_path, monkeypatch):
     )
     mem = sam.read_agent_memory("proj-1", "super-big", max_chars=6000)
     assert len(mem["text"]) <= 6100  # a couple notes, not all ten
+
+
+# --- Tesserae 0.22 `agents drill` audit escalation ---------------------------
+
+
+def test_read_agent_memory_extracts_member_refs(project_with_super_agents):
+    root = project_with_super_agents
+    key = sam.agent_key("super-lead")
+    art = root / ".tesserae" / "agents" / key / "distilled.graph.json"
+    art.parent.mkdir(parents=True, exist_ok=True)
+    art.write_text(
+        json.dumps(
+            {
+                "nodes": [
+                    {
+                        "type": "DistilledNote",
+                        "name": "Gotcha",
+                        "description": "watch the lock",
+                        "metadata": {
+                            "member_refs": [
+                                {"node_id": "SessionInsight:f1", "content_hash": "h1"},
+                                {"node_id": "SessionInsight:f2", "content_hash": "h2"},
+                                {"content_hash": "no-node-id"},  # skipped
+                            ]
+                        },
+                    }
+                ]
+            }
+        )
+    )
+    mem = sam.read_agent_memory("proj-1", "super-lead")
+    assert mem["notes"][0]["refs"] == ["SessionInsight:f1", "SessionInsight:f2"]
+
+
+def test_agent_drill_rejects_flag_shaped_node_id(project_with_super_agents, monkeypatch):
+    """A `--flag`-shaped node_id must be rejected BEFORE any subprocess runs."""
+    def _boom(*a, **k):
+        raise AssertionError("subprocess must not run for an unsafe node_id")
+
+    monkeypatch.setattr(sam.subprocess, "run", _boom)
+    res = sam.agent_drill("proj-1", "super-lead", "--output=/etc/passwd")
+    assert res == {"ok": False, "reason": "unsafe_node_id"}
+
+
+def test_agent_drill_puts_node_id_after_separator(project_with_super_agents, monkeypatch):
+    """Flags BEFORE `--`, node_id AFTER — so a valid-token id can never land in
+    flag position and smuggle a CLI option."""
+    captured: dict = {}
+
+    class _P:
+        returncode = 0
+        stdout = "L0 evidence here"
+        stderr = ""
+
+    def _run(argv, **k):
+        captured["argv"] = argv
+        return _P()
+
+    monkeypatch.setattr(sam.subprocess, "run", _run)
+    res = sam.agent_drill("proj-1", "super-lead", "SessionInsight:f1")
+    argv = captured["argv"]
+    assert "--" in argv
+    assert argv.index("--") < argv.index("SessionInsight:f1")
+    assert argv[argv.index("--") + 1] == "SessionInsight:f1"
+    assert "--agent" in argv and sam.agent_key("super-lead") in argv
+    assert res["ok"] is True and res["text"] == "L0 evidence here"
+
+
+def test_agent_drill_disabled_without_root(monkeypatch):
+    monkeypatch.setattr(sam, "get_tesserae_root", lambda pid: None)
+    assert sam.agent_drill("proj-x", "super-lead", "SessionInsight:f1") == {
+        "ok": False,
+        "reason": "tesserae_disabled",
+    }

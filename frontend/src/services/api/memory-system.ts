@@ -143,6 +143,15 @@ export interface DoctorResult {
 }
 
 // Tesserae `config status` — resolved LLM backend + liveness ping.
+// Tesserae 0.23/0.24 "sleep cycle" status — sourced from Agented's own
+// `engine --all --consolidate` daemon supervisor (the CLI exposes no such field).
+export interface ConsolidationStatus {
+  enabled: boolean;
+  running: boolean;
+  idle_seconds: number;
+  consolidate_every: number;
+}
+
 export interface MemoryConfig {
   ok: boolean;
   provider: string | null;
@@ -150,6 +159,7 @@ export interface MemoryConfig {
   liveness_ok: boolean | null;
   source: string | null;
   reason: string | null;
+  consolidation?: ConsolidationStatus | null;
 }
 
 // Tesserae `lint` — graph-QUALITY report (distinct from doctor's operational health).

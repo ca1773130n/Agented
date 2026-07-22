@@ -7394,6 +7394,8 @@
     "emptyRunbook": "尚无提炼的记忆 — 请运行提炼",
     "distillNow": "立即提炼",
     "distilling": "提炼中…",
+    "drilling": "追溯中…",
+    "drillFailed": "无法获取证据",
     "selectProject": "选择一个项目以查看智能体记忆",
     "selectProjectOption": "选择项目…",
     "loading": "加载中…",
@@ -10010,6 +10012,12 @@
       "running": "刷新中…",
       "done": "刷新完成",
       "failed": "刷新失败"
+    },
+    "consolidation": {
+      "title": "记忆整合 — 空闲睡眠周期（{idle}秒）",
+      "on": "整合中",
+      "stopped": "整合已停止",
+      "off": "整合关闭"
     }
   },
   "memorySessions": {

@@ -17,10 +17,12 @@ import { useI18n } from 'vue-i18n';
 import {
   getSuperAgentMemory,
   distillSuperAgentMemory,
+  drillSuperAgentMemory,
   projectApi,
 } from '../../services/api';
 import type {
   SuperAgentMemory,
+  SuperAgentDrillResult,
   AgentOrgRow,
   Project,
 } from '../../services/api';
@@ -41,6 +43,49 @@ const error = ref<string | null>(null);
 
 const distilling = ref(false);
 const distillNote = ref<string | null>(null);
+
+// node_id → drilled L0 evidence (or 'loading'). One shared map across all notes;
+// clicking a ref toggles its evidence open/closed (Tesserae 0.22 `agents drill`).
+const drills = ref<Record<string, SuperAgentDrillResult | 'loading'>>({});
+
+function drillText(nodeId: string): string {
+  const d = drills.value[nodeId];
+  if (!d || d === 'loading') return '';
+  return d.ok ? d.text ?? '' : t('superAgentMemory.drillFailed');
+}
+
+async function drill(nodeId: string) {
+  if (!hasProject.value) return;
+  const cur = drills.value[nodeId];
+  if (cur === 'loading') return;
+  if (cur) {
+    // Already open → toggle closed.
+    const next = { ...drills.value };
+    delete next[nodeId];
+    drills.value = next;
+    return;
+  }
+  // Capture the context this drill was issued for; a switch mid-flight clears
+  // `drills` (the watch), so we must NOT repopulate it with the prior
+  // project's/agent's evidence — wrong provenance in an audit view. Mirrors
+  // the stale-response guard in load().
+  const requestedProject = selectedProjectId.value;
+  const requestedSa = props.superAgentId;
+  const stale = () =>
+    requestedProject !== selectedProjectId.value || requestedSa !== props.superAgentId;
+  drills.value = { ...drills.value, [nodeId]: 'loading' };
+  try {
+    const res = await drillSuperAgentMemory(requestedSa, requestedProject, nodeId);
+    if (stale()) return;
+    drills.value = { ...drills.value, [nodeId]: res };
+  } catch (e: unknown) {
+    if (stale()) return;
+    drills.value = {
+      ...drills.value,
+      [nodeId]: { ok: false, reason: e instanceof Error ? e.message : String(e) },
+    };
+  }
+}
 
 const projects = ref<Project[]>([]);
 const projectsLoading = ref(false);
@@ -120,6 +165,7 @@ watch(
     memory.value = null;
     org.value = [];
     distillNote.value = null;
+    drills.value = {};
     if (hasProject.value) load();
   },
 );
@@ -231,6 +277,28 @@ onMounted(() => {
             >
               <h4 class="sa-memory__note-title">{{ note.title }}</h4>
               <p class="sa-memory__note-body">{{ note.body }}</p>
+              <!-- L0 evidence drill-down (Tesserae 0.22 `agents drill`). -->
+              <div
+                v-if="note.refs && note.refs.length"
+                class="sa-memory__refs"
+                :data-testid="`sa-memory-refs-${i}`"
+              >
+                <div v-for="ref in note.refs" :key="ref" class="sa-memory__ref-row">
+                  <button
+                    type="button"
+                    class="sa-memory__ref"
+                    :disabled="drills[ref] === 'loading'"
+                    @click="drill(ref)"
+                  >
+                    {{ drills[ref] === 'loading' ? t('superAgentMemory.drilling') : ref }}
+                  </button>
+                  <!-- Untrusted evidence text — {{ }} escapes it; never v-html. -->
+                  <pre
+                    v-if="drills[ref] && drills[ref] !== 'loading'"
+                    class="sa-memory__drill"
+                  >{{ drillText(ref) }}</pre>
+                </div>
+              </div>
             </li>
           </ol>
         </section>
@@ -404,5 +472,43 @@ onMounted(() => {
   color: var(--text-secondary, rgba(255, 255, 255, 0.7));
   white-space: pre-wrap;
   word-break: break-word;
+}
+.sa-memory__refs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.sa-memory__ref {
+  align-self: flex-start;
+  background: transparent;
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.1));
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--text-tertiary, rgba(255, 255, 255, 0.5));
+  cursor: pointer;
+}
+.sa-memory__ref:hover:not(:disabled) {
+  color: var(--accent-violet, #8855ff);
+  border-color: var(--accent-violet, #8855ff);
+}
+.sa-memory__ref:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.sa-memory__drill {
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  background: var(--bg-secondary, #1a1a20);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.1));
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.7));
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
 }
 </style>

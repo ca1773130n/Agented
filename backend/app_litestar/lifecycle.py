@@ -443,6 +443,23 @@ def _register_cleanup_handlers() -> None:
             exc_info=True,
         )
 
+    # Tesserae 0.23/0.24 "sleep cycle": a long-lived `engine --all --consolidate`
+    # daemon that compresses agent memory, forgets-by-disuse (LRU), and discovers
+    # cross-agent connections during idle. Gated on AGENTED_TESSERAE_CONSOLIDATE
+    # (default on); no-op under AGENTED_LITESTAR_SKIP_STARTUP since this whole
+    # function is skipped there.
+    try:
+        from app.services.tesserae_engine_daemon import TesseraeEngineDaemon
+
+        if TesseraeEngineDaemon.start():
+            atexit.register(TesseraeEngineDaemon.stop)
+    except Exception as exc:
+        logger.warning(
+            "Tesserae consolidation daemon init failed; sleep cycle disabled: %s",
+            exc,
+            exc_info=True,
+        )
+
 
 def on_startup(app: Any) -> None:
     """Litestar `on_startup` hook — runs once when the app boots."""
