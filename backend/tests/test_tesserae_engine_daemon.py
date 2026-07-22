@@ -2,6 +2,9 @@
 shape, and env/argv it spawns. No real `tesserae` process is started (Popen is
 stubbed); this locks the Agented-side supervision contract."""
 
+import time
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 
 from app.services import tesserae_engine_daemon as ted
@@ -69,3 +72,32 @@ def test_start_spawns_consolidate_with_distill_env(monkeypatch):
     assert captured["cmd"][1:4] == ["engine", "--all", "--consolidate"]
     assert captured["env"]["TESSERAE_AGENT_DISTILL"] == "1"
     assert ted.TesseraeEngineDaemon.status()["running"] is True
+
+
+def test_concurrent_start_spawns_single_daemon(monkeypatch):
+    monkeypatch.setenv("AGENTED_TESSERAE_CONSOLIDATE", "1")
+    monkeypatch.setattr(
+        ted.TesseraeEngineDaemon,
+        "kill_orphans",
+        classmethod(lambda cls: time.sleep(0.02)),
+    )
+    spawned = 0
+
+    class _Proc:
+        pid = 4242
+
+        def poll(self):
+            return None
+
+    def _popen(*_args, **_kwargs):
+        nonlocal spawned
+        spawned += 1
+        return _Proc()
+
+    monkeypatch.setattr(ted.subprocess, "Popen", _popen)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(lambda _: ted.TesseraeEngineDaemon.start(), range(8)))
+
+    assert results == [True] * 8
+    assert spawned == 1

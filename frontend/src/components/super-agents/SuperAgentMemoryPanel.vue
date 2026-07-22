@@ -65,11 +65,21 @@ async function drill(nodeId: string) {
     drills.value = next;
     return;
   }
+  // Capture the context this drill was issued for; a switch mid-flight clears
+  // `drills` (the watch), so we must NOT repopulate it with the prior
+  // project's/agent's evidence — wrong provenance in an audit view. Mirrors
+  // the stale-response guard in load().
+  const requestedProject = selectedProjectId.value;
+  const requestedSa = props.superAgentId;
+  const stale = () =>
+    requestedProject !== selectedProjectId.value || requestedSa !== props.superAgentId;
   drills.value = { ...drills.value, [nodeId]: 'loading' };
   try {
-    const res = await drillSuperAgentMemory(props.superAgentId, selectedProjectId.value, nodeId);
+    const res = await drillSuperAgentMemory(requestedSa, requestedProject, nodeId);
+    if (stale()) return;
     drills.value = { ...drills.value, [nodeId]: res };
   } catch (e: unknown) {
+    if (stale()) return;
     drills.value = {
       ...drills.value,
       [nodeId]: { ok: false, reason: e instanceof Error ? e.message : String(e) },

@@ -73,23 +73,24 @@ class TesseraeEngineDaemon:
         with cls._lock:
             if cls._process is not None and cls._process.poll() is None:
                 return True
-        cls.kill_orphans()
-        # ``TESSERAE_AGENT_DISTILL=1`` is the same opt-in gate ``distill`` uses;
-        # without it consolidation no-ops. The LLM backend resolves from the
-        # harness config dir (CLAUDE_CONFIG_DIR), never a raw inference key, so
-        # honouring AGENTED_SERVER_NO_LLM_KEYS (scrub) stays correct here.
-        env = config.subprocess_env(os.environ.copy()) or os.environ.copy()
-        env["TESSERAE_AGENT_DISTILL"] = "1"
-        cmd = [
-            _TESSERAE_CMD,
-            *_ENGINE_ARGS,
-            "--consolidate-idle",
-            str(_IDLE_SECONDS),
-            "--consolidate-every",
-            str(_CONSOLIDATE_EVERY),
-        ]
-        try:
-            with cls._lock:
+            cls.kill_orphans()
+            # ``TESSERAE_AGENT_DISTILL=1`` is the same opt-in gate ``distill`` uses;
+            # without it consolidation no-ops. The LLM backend resolves from the
+            # harness config dir (CLAUDE_CONFIG_DIR), never a raw inference key, so
+            # honouring AGENTED_SERVER_NO_LLM_KEYS (scrub) stays correct here.
+            env = config.subprocess_env(os.environ.copy())
+            if env is None:
+                env = os.environ.copy()
+            env["TESSERAE_AGENT_DISTILL"] = "1"
+            cmd = [
+                _TESSERAE_CMD,
+                *_ENGINE_ARGS,
+                "--consolidate-idle",
+                str(_IDLE_SECONDS),
+                "--consolidate-every",
+                str(_CONSOLIDATE_EVERY),
+            ]
+            try:
                 cls._process = subprocess.Popen(
                     cmd,
                     cwd=str(_REPO_ROOT),
@@ -98,18 +99,17 @@ class TesseraeEngineDaemon:
                     start_new_session=True,
                     env=env,
                 )
-            logger.info(
-                "Tesserae consolidation daemon started (pid=%d)", cls._process.pid
-            )
-            return True
-        except FileNotFoundError:
-            logger.warning("tesserae binary not found — consolidation daemon not started")
-            return False
-        except Exception as exc:  # noqa: BLE001 — start failure must not crash boot
-            logger.warning("Failed to start tesserae consolidation daemon: %s", exc)
-            with cls._lock:
+                logger.info(
+                    "Tesserae consolidation daemon started (pid=%d)", cls._process.pid
+                )
+                return True
+            except FileNotFoundError:
+                logger.warning("tesserae binary not found — consolidation daemon not started")
+                return False
+            except Exception as exc:  # noqa: BLE001 — start failure must not crash boot
+                logger.warning("Failed to start tesserae consolidation daemon: %s", exc)
                 cls._process = None
-            return False
+                return False
 
     @classmethod
     def stop(cls) -> None:
