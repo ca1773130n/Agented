@@ -618,6 +618,7 @@ class ModelDiscoveryService:
 
         # Build env with account-specific config dir if available
         from app import config as _cfg
+
         env = _cfg.subprocess_env({**os.environ, "CLAUDECODE": "", "CLAUDE_CODE_ENTRYPOINT": ""})
         for gemini_home in cls._get_gemini_config_dirs():
             if (gemini_home / ".gemini" / "oauth_creds.json").exists():
@@ -912,6 +913,7 @@ class ModelDiscoveryService:
 
         # Env without nesting-detection vars so claude doesn't refuse to start
         from app import config as _cfg
+
         env = _cfg.subprocess_env({**os.environ, "CLAUDECODE": "", "CLAUDE_CODE_ENTRYPOINT": ""})
 
         from app.services.policy_service import PolicyDenied, PolicyService

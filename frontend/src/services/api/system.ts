@@ -13,21 +13,47 @@ import type {
   BundleInstallResponse,
 } from './types';
 
+interface AuthStatusResponse {
+  auth_required: boolean;
+  authenticated: boolean;
+  needs_setup?: boolean;
+  signup_enabled?: boolean;
+  // Phase 25 (25-04): configured OIDC SSO providers (empty/absent → no SSO).
+  oidc_providers?: string[];
+}
+
+// Single-flight + short TTL for /health/auth-status: app boot, router guards,
+// and several views all probe it — a cold page load fired 5+ identical
+// requests within milliseconds. One in-flight promise is shared and the
+// result reused briefly; auth STATE changes (login/logout) call
+// invalidateAuthStatus() so the next probe is fresh.
+const AUTH_STATUS_TTL_MS = 5000;
+let authStatusCache: { at: number; promise: Promise<AuthStatusResponse> } | null = null;
+
+export function invalidateAuthStatus(): void {
+  authStatusCache = null;
+}
+
 // Health API
 export const healthApi = {
   liveness: () => fetch(`${API_BASE}/health/liveness`).then(r => r.ok),
   readiness: () => apiFetch<HealthStatus>(`/health/readiness`),
 
-  /** Check whether the backend requires API key authentication. Public endpoint. */
-  authStatus: () =>
-    apiFetch<{
-      auth_required: boolean;
-      authenticated: boolean;
-      needs_setup?: boolean;
-      signup_enabled?: boolean;
-      // Phase 25 (25-04): configured OIDC SSO providers (empty/absent → no SSO).
-      oidc_providers?: string[];
-    }>('/health/auth-status'),
+  /** Check whether the backend requires API key authentication. Public endpoint.
+   *  Deduplicated: concurrent callers share one request; cached ~5s. */
+  authStatus: (): Promise<AuthStatusResponse> => {
+    const now = Date.now();
+    if (authStatusCache && now - authStatusCache.at < AUTH_STATUS_TTL_MS) {
+      return authStatusCache.promise;
+    }
+    const promise = apiFetch<AuthStatusResponse>('/health/auth-status').catch((err) => {
+      // Never cache a failure — the next caller should retry.
+      if (authStatusCache?.promise === promise) authStatusCache = null;
+      throw err;
+    });
+    authStatusCache = { at: now, promise };
+    return promise;
+  },
 
   /** Verify an API key without storing it. Public endpoint. */
   verifyKey: (apiKey: string) =>

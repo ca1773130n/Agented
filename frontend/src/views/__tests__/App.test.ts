@@ -363,9 +363,12 @@ describe('App.vue toast provide/inject', () => {
 });
 
 describe('App.vue calls lifecycle hooks', () => {
-  it('calls registerGenericTools on setup', async () => {
+  it('does NOT register WebMCP tools during setup (deferred to main.ts post-mount)', async () => {
+    // WebMCP registration moved to main.ts after mount so the ~440 KB
+    // @mcp-b/global polyfill stays off the boot path. App.vue must not
+    // pull it in synchronously.
     await mountApp();
-    expect(mockRegisterGenericTools).toHaveBeenCalled();
+    expect(mockRegisterGenericTools).not.toHaveBeenCalled();
   });
 
   it('calls startPolling on mount with 10s interval', async () => {

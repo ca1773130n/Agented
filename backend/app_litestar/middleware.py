@@ -251,10 +251,17 @@ class ApiKeyMiddleware(ASGIMiddleware):
             if session:
                 principal_user_id = session["user_id"]
                 principal_role = get_highest_role_for_user(principal_user_id)
-                # Rotate — issue a new token; emit X-New-Session-Token.
-                rotated = _rotate_session(bearer)
-                if rotated:
-                    rotated_token = rotated["token"]
+                if not hmac.compare_digest(session["token"], bearer):
+                    # Grace-window hit: the client still holds the PREVIOUS
+                    # token (it missed the rotation response). Resync it to
+                    # the current token — re-rotating here would strand it
+                    # for good once the grace window closes.
+                    rotated_token = session["token"]
+                else:
+                    # Rotate — issue a new token; emit X-New-Session-Token.
+                    rotated = _rotate_session(bearer)
+                    if rotated:
+                        rotated_token = rotated["token"]
             else:
                 await self._unauthorized(send)
                 return
@@ -294,12 +301,22 @@ class ApiKeyMiddleware(ASGIMiddleware):
                 return
             principal_user_id = session["user_id"]
             principal_role = get_highest_role_for_user(principal_user_id)
-            rotated = _rotate_session(cookie_token)
-            if rotated:
-                rotated_cookie_token = rotated["token"]
-                # Keep the same CSRF token across rotation (it's an independent
-                # secret); refresh its Max-Age. Mint one if somehow absent.
+            if not hmac.compare_digest(session["token"], cookie_token):
+                # Grace-window hit: the browser still holds the PREVIOUS
+                # token (a page-load burst applied Set-Cookie responses out
+                # of order, or the rotation response was lost). Resync the
+                # cookie to the current token — re-rotating would strand
+                # the browser on a dead token when the grace window closes,
+                # silently logging the user out.
+                rotated_cookie_token = session["token"]
                 csrf_token_to_set = cookies.get(CSRF_COOKIE) or generate_csrf_token()
+            else:
+                rotated = _rotate_session(cookie_token)
+                if rotated:
+                    rotated_cookie_token = rotated["token"]
+                    # Keep the same CSRF token across rotation (it's an independent
+                    # secret); refresh its Max-Age. Mint one if somehow absent.
+                    csrf_token_to_set = cookies.get(CSRF_COOKIE) or generate_csrf_token()
 
         # 4) Coarse role check.
         needed = required_role(method, path)

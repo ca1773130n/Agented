@@ -365,6 +365,7 @@ def clone_repos(path_entries: list, cloned_dirs: list, github_repo_map: dict) ->
     """
     effective_paths = []
     for entry in path_entries:
+        local_path = entry.get("local_project_path") or ""
         if entry["path_type"] == "github":
             repo_url = entry["github_repo_url"]
             logger.info("Cloning GitHub repo: %s", repo_url)
@@ -372,9 +373,83 @@ def clone_repos(path_entries: list, cloned_dirs: list, github_repo_map: dict) ->
             cloned_dirs.append(clone_dir)
             effective_paths.append(clone_dir)
             github_repo_map[clone_dir] = repo_url
+        elif local_path.startswith("project://"):
+            # A project ref stores only a placeholder; resolve it through the
+            # workspace service, which clones from the project's github_host
+            # (GHE-aware). Deliberately NOT added to cloned_dirs OR
+            # github_repo_map: the workspace is persistent (or even the
+            # operator's local_path checkout) — it must never be temp-dir
+            # cleaned up, and never enter the auto-resolve PR flow, which
+            # branch-switches, sweep-commits, and pushes whatever dir the map
+            # contains.
+            project_id = local_path[len("project://") :]
+            try:
+                from .project_workspace_service import ProjectWorkspaceService
+
+                effective_paths.append(
+                    ProjectWorkspaceService.resolve_working_directory(project_id)
+                )
+            except ValueError as e:
+                logger.warning("Could not resolve project path %s: %s", local_path, e)
         else:
             effective_paths.append(entry["local_project_path"])
     return effective_paths
+
+
+def derive_run_github_hosts(github_repo_map: dict, path_entries: list) -> set:
+    """Every git host this run touches (github.com included), lowercased.
+
+    Sources: temp-clone repo URLs (github_repo_map) + the github_host of any
+    project:// path entry. Feeds the GH_HOST pin decision and the sandbox
+    egress allowlist.
+    """
+    hosts = set()
+    for repo_url in github_repo_map.values():
+        try:
+            _owner, _repo, host = GitHubService.parse_repo_url_with_host(repo_url)
+            hosts.add(host)
+        except ValueError:
+            pass
+    for entry in path_entries or []:
+        local_path = str(entry.get("local_project_path") or "")
+        if local_path.startswith("project://"):
+            from ..database import get_project
+
+            project = get_project(local_path[len("project://") :])
+            if project and project.get("github_repo"):
+                hosts.add((project.get("github_host") or "github.com").lower())
+    return hosts
+
+
+def ghe_host_to_pin(run_hosts: set) -> Optional[str]:
+    """GH_HOST value to pin for a run, or None.
+
+    Pin only when EVERY repo in the run lives on one enterprise host — gh
+    treats GH_HOST as a hard remote filter, so pinning on a mixed run breaks
+    every gh command inside the run's github.com clones.
+    """
+    if len(run_hosts) == 1:
+        host = next(iter(run_hosts))
+        if host != "github.com":
+            return host
+    return None
+
+
+def gh_pin_env_additions(pin_host: str) -> dict:
+    """Env additions for a run pinned to one enterprise host: GH_HOST plus the
+    host's vault-stored token (if any) under the var gh reads for that host
+    class — so gh/git inside the harness authenticate without the operator
+    having run `gh auth login --hostname` on the server."""
+    additions = {"GH_HOST": pin_host}
+    try:
+        from .github_credentials_service import GithubCredentialsService, gh_env_token_var
+
+        token = GithubCredentialsService.stored_token_for_host(pin_host, accessor="execution")
+        if token:
+            additions[gh_env_token_var(pin_host)] = token
+    except Exception as e:
+        logger.warning("GitHub token lookup failed for pinned host %s: %s", pin_host, e)
+    return additions
 
 
 def build_subprocess_env(env_overrides: dict, proxy_url: Optional[str] = None) -> Optional[dict]:
@@ -442,6 +517,19 @@ def fetch_pr_diff(event: dict) -> Optional[str]:
     ghe_host = os.environ.get("AGENTED_GITHUB_HOST")
     if ghe_host:
         allowed_hosts.add(ghe_host.lower())
+    # Any GitHub Enterprise host configured on a project row is operator
+    # intent — trust it the same as the env var (supports multiple GHE hosts
+    # without AGENTED_GITHUB_HOST).
+    try:
+        from ..database import get_connection
+
+        with get_connection() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT github_host FROM projects WHERE github_host IS NOT NULL"
+            ).fetchall()
+        allowed_hosts.update(str(r["github_host"]).lower() for r in rows if r["github_host"])
+    except Exception as e:
+        logger.debug("Could not load project github_hosts for PR-diff allowlist: %s", e)
     if parsed.scheme != "https" or (parsed.hostname or "").lower() not in allowed_hosts:
         logger.warning("Refusing to fetch PR diff from untrusted URL: %s", pr_url)
         return None

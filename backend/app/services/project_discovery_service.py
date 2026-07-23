@@ -179,6 +179,33 @@ def _short_remote(url: Optional[str]) -> Optional[str]:
     return s or None
 
 
+def _split_short_remote(sr: Optional[str]) -> tuple[str, Optional[str]]:
+    """Split a ``host/owner/repo`` short remote into (host, 'owner/repo').
+
+    Host-less input (a bare slug) defaults the host to github.com.
+    """
+    if sr and "/" in sr and "." in sr.split("/")[0]:
+        host, _, slug = sr.partition("/")
+        return host, slug
+    return "github.com", sr
+
+
+def _project_remote_key(p: dict) -> Optional[str]:
+    """Comparable ``host/owner/repo`` key for an existing project row.
+
+    New-style rows store a bare 'owner/repo' slug + github_host; legacy rows
+    stored the host inside github_repo. Both collapse to the same key shape
+    as ``_short_remote(remote_url)`` so dedup keeps working across styles.
+    """
+    sr = _short_remote(p.get("github_repo"))
+    if not sr:
+        return None
+    if "." in sr.split("/")[0]:
+        return sr  # legacy host-prefixed github_repo
+    host = (p.get("github_host") or "github.com").lower()
+    return f"{host}/{sr}"
+
+
 class ProjectDiscoveryService:
     """Scan / dedup / import entry points for the discovery feature."""
 
@@ -209,7 +236,7 @@ class ProjectDiscoveryService:
         }
         remote_to_id = {}
         for p in existing:
-            sr = _short_remote(p.get("github_repo"))
+            sr = _project_remote_key(p)
             if sr:
                 remote_to_id[sr] = p["id"]
         for r in repos:
@@ -235,7 +262,7 @@ class ProjectDiscoveryService:
         }
         remote_ids = {}
         for p in existing:
-            sr = _short_remote(p.get("github_repo"))
+            sr = _project_remote_key(p)
             if sr:
                 remote_ids[sr] = p["id"]
 
@@ -255,12 +282,17 @@ class ProjectDiscoveryService:
                 skipped.append({"name": name, "reason": "already imported"})
                 continue
             try:
+                # Store the bare slug + explicit host (GHE-aware): a host baked
+                # into github_repo would be stripped at clone time while
+                # github_host stayed at its 'github.com' default — wrong host.
+                host, slug = _split_short_remote(sr)
                 pid = db_create_project(
                     name=name,
-                    github_repo=sr,
+                    github_repo=slug,
                     local_path=local_path,
                     owner_team_id=owner_team_id,
                     product_id=product_id,
+                    github_host=host if slug else None,
                     user_id=user_id,
                 )
             except Exception:

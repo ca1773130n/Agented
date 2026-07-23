@@ -10,8 +10,14 @@
  */
 
 import { shallowRef, computed, onUnmounted, type ComputedRef } from 'vue'
-import { createActor, type Actor, type SnapshotFrom } from 'xstate'
-import { tourMachine, type TourContext, type TourEvent } from '../machines/tourMachine'
+// xstate and the machine definition are imported for TYPES ONLY (erased at
+// build) — the runtime values (createActor, tourMachine) are pulled via a
+// dynamic import inside initActor(). That keeps xstate (~37 KB / 12 KB gzipped)
+// out of the synchronous boot chunk: it becomes its own chunk fetched only when
+// the tour actor first initializes, instead of being parsed with the main
+// bundle on every page load.
+import type { Actor, SnapshotFrom } from 'xstate'
+import type { TourContext, TourEvent, TourMachine } from '../machines/tourMachine'
 import { API_BASE } from '../services/api/client'
 
 // ---------------------------------------------------------------------------
@@ -52,7 +58,7 @@ function loadPersistedData(): PersistedTourData | null {
 }
 
 function persistSnapshot(
-  actor: Actor<typeof tourMachine>,
+  actor: Actor<TourMachine>,
   instanceId: string | null,
 ): void {
   try {
@@ -125,7 +131,7 @@ export function setupStatusToCompleted(
  * "completing one substep advances past it".
  */
 export function autoSkipCompletedSteps(
-  actor: Actor<typeof tourMachine>,
+  actor: Actor<TourMachine>,
   completed: Record<string, boolean>,
 ): void {
   for (let safety = 0; safety < 12; safety++) {
@@ -173,13 +179,19 @@ async function fetchInstanceId(): Promise<string | null> {
 // Singleton actor management
 // ---------------------------------------------------------------------------
 
-let sharedActor: Actor<typeof tourMachine> | null = null
+let sharedActor: Actor<TourMachine> | null = null
 let sharedInstanceId: string | null = null
 let subscriberCount = 0
 let initPromise: Promise<void> | null = null
 
 async function initActor(): Promise<void> {
   if (sharedActor) return
+
+  // Runtime xstate lives here, behind a dynamic import, so the ~37 KB library
+  // is a lazily-fetched chunk instead of boot-chunk weight. Loaded in parallel
+  // with the guard prefetch below (the actor isn't needed until both resolve).
+  const xstateImport = import('xstate')
+  const machineImport = import('../machines/tourMachine')
 
   const persisted = loadPersistedData()
   // Fetch instance-id and setup-status in parallel — both are public,
@@ -216,10 +228,13 @@ async function initActor(): Promise<void> {
 
   sharedInstanceId = remoteInstanceId
 
+  const { createActor } = await xstateImport
+  const { tourMachine } = await machineImport
+
   if (shouldRestore && persisted?.snapshot) {
     try {
       sharedActor = createActor(tourMachine, {
-        snapshot: persisted.snapshot as SnapshotFrom<typeof tourMachine>,
+        snapshot: persisted.snapshot as SnapshotFrom<TourMachine>,
       })
     } catch {
       // Snapshot may be incompatible — start fresh
@@ -261,7 +276,7 @@ export function useTourMachine() {
   }
 
   // Reactive snapshot reference
-  const snapshot = shallowRef<SnapshotFrom<typeof tourMachine> | null>(
+  const snapshot = shallowRef<SnapshotFrom<TourMachine> | null>(
     sharedActor?.getSnapshot() ?? null,
   )
 
@@ -304,7 +319,7 @@ export function useTourMachine() {
   // Computed properties
   // -------------------------------------------------------------------------
 
-  const state: ComputedRef<SnapshotFrom<typeof tourMachine>['value'] | null> = computed(
+  const state: ComputedRef<SnapshotFrom<TourMachine>['value'] | null> = computed(
     () => snapshot.value?.value ?? null,
   )
 

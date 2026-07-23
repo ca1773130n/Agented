@@ -1,4 +1,3 @@
-import '@mcp-b/global'
 // [08.L2] Self-host Geist / Geist Mono via @fontsource instead of the Google
 // Fonts CDN — removes a third-party request + privacy/availability dependency.
 import '@fontsource/geist-sans/400.css'
@@ -108,4 +107,19 @@ if (import.meta.env.DEV) {
 }
 
 // Load non-English locale before mounting, then wait for router
-loadInitialLocale().then(() => router.isReady()).then(() => app.mount('#app'))
+loadInitialLocale()
+  .then(() => router.isReady())
+  .then(() => app.mount('#app'))
+  .then(() => {
+    // WebMCP is an agent-automation surface, never first-paint critical.
+    // Defer the ~440 KB @mcp-b/global polyfill (it installs
+    // navigator.modelContext as an import side effect) until AFTER mount so it
+    // stays off the boot path. App.vue's registerGenericTools() no-ops when the
+    // polyfill isn't present yet; we (re)register here once it's installed.
+    import('@mcp-b/global')
+      .then(() => import('./webmcp/generic-tools'))
+      .then(({ registerGenericTools }) => registerGenericTools())
+      .catch(() => {
+        /* WebMCP is optional; never block the app if it fails to load. */
+      })
+  })

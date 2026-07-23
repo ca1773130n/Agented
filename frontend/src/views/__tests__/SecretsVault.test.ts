@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import SecretsVault from '../SecretsVault.vue'
-import type { SecretMetadata, VaultStatus, RevealedSecret } from '../../services/api'
+import type { SecretMetadata, VaultStatus, RevealedSecret, GithubHostToken } from '../../services/api'
 
 // SecretsVault does not use vue-router (no useRouter/useRoute import), so no
 // vue-router mock is needed here.
@@ -36,6 +36,15 @@ const revealedSecret = {
   value: 'ghp_supersecretvalue',
 } as unknown as RevealedSecret
 
+const mockGithubHosts = [
+  {
+    host: 'ghe.acme.com',
+    created_at: '2026-01-03T00:00:00Z',
+    updated_at: '2026-01-04T00:00:00Z',
+    last_accessed_at: null,
+  },
+] as unknown as GithubHostToken[]
+
 vi.mock('../../services/api', () => ({
   secretsApi: {
     getStatus: vi.fn(),
@@ -43,6 +52,11 @@ vi.mock('../../services/api', () => ({
     create: vi.fn(),
     delete: vi.fn(),
     reveal: vi.fn(),
+  },
+  githubCredentialsApi: {
+    list: vi.fn(),
+    set: vi.fn(),
+    delete: vi.fn(),
   },
   ApiError: class extends Error {
     status: number
@@ -64,11 +78,12 @@ describe('SecretsVault', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks()
-    const { secretsApi } = await import('../../services/api')
+    const { secretsApi, githubCredentialsApi } = await import('../../services/api')
     vi.mocked(secretsApi.getStatus).mockResolvedValue(configuredStatus)
     vi.mocked(secretsApi.list).mockResolvedValue({ secrets: mockSecrets })
     vi.mocked(secretsApi.delete).mockResolvedValue({ message: 'Deleted' })
     vi.mocked(secretsApi.reveal).mockResolvedValue(revealedSecret)
+    vi.mocked(githubCredentialsApi.list).mockResolvedValue({ hosts: [] })
   })
 
   it('renders the loading state initially', async () => {
@@ -193,5 +208,54 @@ describe('SecretsVault', () => {
     // Row is removed from the list after a successful delete.
     expect(wrapper.findAll('.secret-row').length).toBe(1)
     expect(wrapper.text()).not.toContain('GITHUB_TOKEN')
+  })
+
+  it('renders stored GitHub host tokens in the GitHub section', async () => {
+    const { githubCredentialsApi } = await import('../../services/api')
+    vi.mocked(githubCredentialsApi.list).mockResolvedValue({ hosts: mockGithubHosts })
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    expect(wrapper.find('.github-tokens-card').exists()).toBe(true)
+    expect(wrapper.findAll('.github-host-row').length).toBe(1)
+    expect(wrapper.text()).toContain('ghe.acme.com')
+  })
+
+  it('saves a GitHub host token via githubCredentialsApi.set and refreshes the list', async () => {
+    const { githubCredentialsApi } = await import('../../services/api')
+    vi.mocked(githubCredentialsApi.set).mockResolvedValue(mockGithubHosts[0])
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    const form = wrapper.find('.github-token-form')
+    await form.find('input[type="text"]').setValue('ghe.acme.com')
+    await form.find('input[type="password"]').setValue('ghp_newtoken')
+    // Refresh returns the newly stored host.
+    vi.mocked(githubCredentialsApi.list).mockResolvedValue({ hosts: mockGithubHosts })
+    await form.find('.btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(githubCredentialsApi.set).toHaveBeenCalledWith('ghe.acme.com', 'ghp_newtoken')
+    // list() called once on mount and once after the save.
+    expect(githubCredentialsApi.list).toHaveBeenCalledTimes(2)
+    expect(wrapper.findAll('.github-host-row').length).toBe(1)
+    expect(wrapper.text()).toContain('ghe.acme.com')
+  })
+
+  it('deletes a GitHub host token via githubCredentialsApi.delete', async () => {
+    const { githubCredentialsApi } = await import('../../services/api')
+    vi.mocked(githubCredentialsApi.list).mockResolvedValue({ hosts: mockGithubHosts })
+    vi.mocked(githubCredentialsApi.delete).mockResolvedValue({
+      message: 'Token deleted',
+      host: 'ghe.acme.com',
+    })
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    await wrapper.find('.github-host-row .btn-delete').trigger('click')
+    await flushPromises()
+
+    expect(githubCredentialsApi.delete).toHaveBeenCalledWith('ghe.acme.com')
+    expect(wrapper.find('.github-host-row').exists()).toBe(false)
   })
 })

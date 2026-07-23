@@ -126,6 +126,7 @@ describe('ProjectResearchPage', () => {
     await wrapper.find('textarea').setValue('new question');
     await wrapper.find('form').trigger('submit');
 
-    expect(mockStart).toHaveBeenCalledWith('new question', {});
+    // QuestionIntake always forwards its steering mode; 'autopilot' is the default.
+    expect(mockStart).toHaveBeenCalledWith('new question', { research_steering: 'autopilot' });
   });
 });

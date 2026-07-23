@@ -167,11 +167,13 @@ class TestGraceWindowReplayDefense:
         old = s["token"]
         rotate_session(old)
 
-        # Backdate rotated_at to >5s ago. last_used_at is freshly NOW
-        # because rotate_session also touched it. Pre-fix code checked
+        # Backdate rotated_at past the grace window. last_used_at is freshly
+        # NOW because rotate_session also touched it. Pre-fix code checked
         # last_used_at > grace_cutoff → still in window. Post-fix
         # checks rotated_at > grace_cutoff → out of window.
-        past = (dt.datetime.utcnow() - dt.timedelta(seconds=10)).isoformat()
+        from app.db.sessions import ROTATION_GRACE_WINDOW
+
+        past = (dt.datetime.utcnow() - ROTATION_GRACE_WINDOW - dt.timedelta(seconds=5)).isoformat()
         with get_connection() as conn:
             conn.execute(
                 "UPDATE sessions SET rotated_at = ? WHERE id = ?",
@@ -198,3 +200,66 @@ class TestRotateOldTokenReturnsNone:
         first = rotate_session(old)
         assert first is not None
         assert rotate_session(old) is None
+
+
+class TestRotationThrottle:
+    def test_recently_rotated_session_is_not_rerotated(self, isolated_db):
+        """Rotation is throttled: a session rotated moments ago must not
+        rotate again (per-request rotation only multiplied DB writes and
+        cookie-desync races during page-load request bursts)."""
+        from app.db.sessions import create_session, rotate_session
+
+        _make_user("u1")
+        s = create_session("u1")
+        first = rotate_session(s["token"])
+        assert first is not None
+        assert rotate_session(first["token"]) is None
+
+    def test_rotation_resumes_after_min_interval(self, isolated_db):
+        import datetime as dt
+
+        from app.database import get_connection
+        from app.db.sessions import ROTATION_MIN_INTERVAL, create_session, rotate_session
+
+        _make_user("u1")
+        s = create_session("u1")
+        first = rotate_session(s["token"])
+        stale = (dt.datetime.utcnow() - ROTATION_MIN_INTERVAL - dt.timedelta(seconds=5)).isoformat()
+        with get_connection() as conn:
+            conn.execute("UPDATE sessions SET rotated_at = ? WHERE id = ?", (stale, s["id"]))
+            conn.commit()
+        second = rotate_session(first["token"])
+        assert second is not None
+        assert second["token"] != first["token"]
+
+
+class TestGraceTokenResync:
+    def test_middleware_resyncs_grace_token_cookie_to_current(self, isolated_db):
+        """A browser still holding the PREVIOUS token (it missed the rotation
+        response — out-of-order Set-Cookie during a page-load burst) must be
+        RESYNCED to the current token, not re-rotated: without the resync it
+        is silently logged out when the grace window closes."""
+        from litestar import get
+        from litestar.testing import create_test_client
+
+        from app.db.rbac import create_user_role
+        from app.db.sessions import create_session, rotate_session
+        from app_litestar.cookie_auth import SESSION_COOKIE
+        from app_litestar.middleware import ApiKeyMiddleware
+
+        _make_user("u1")
+        create_user_role("k-resync", label="t", role="admin", user_id="u1")
+        s = create_session("u1")
+        rotated = rotate_session(s["token"])
+        assert rotated is not None
+
+        @get("/api/ping", sync_to_thread=False)
+        def ping() -> dict:
+            return {"ok": True}
+
+        with create_test_client(route_handlers=[ping], middleware=[ApiKeyMiddleware()]) as c:
+            # Present the STALE (grace) token as the session cookie.
+            resp = c.get("/api/ping", cookies={SESSION_COOKIE: s["token"]})
+            assert resp.status_code == 200
+            # The response must hand the browser the CURRENT token back.
+            assert resp.cookies.get(SESSION_COOKIE) == rotated["token"]

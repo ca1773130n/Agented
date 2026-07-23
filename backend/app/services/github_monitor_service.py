@@ -51,6 +51,10 @@ logger = logging.getLogger(__name__)
 # name `gh` + the rest of the backend already use (see scripts/check_env.py).
 GITHUB_PAT_ENV = "GITHUB_TOKEN"
 
+# Token for GitHub Enterprise hosts — gh CLI's own convention. A github.com
+# PAT must never be sent to an enterprise host (and wouldn't work there).
+GHE_PAT_ENV = "GH_ENTERPRISE_TOKEN"
+
 # GitHub recommends pinning a REST API version; this also stabilises ETags.
 _GH_API_VERSION = "2022-11-28"
 _GH_ACCEPT = "application/vnd.github+json"
@@ -138,19 +142,27 @@ class GitHubMonitorService:
     # -- credential seam -------------------------------------------------
 
     @staticmethod
-    def _auth_headers() -> Optional[dict]:
+    def _auth_headers(host: str = "github.com") -> Optional[dict]:
         """Build the request headers, ALWAYS authenticated.
 
         Returns the header dict including ``Authorization`` when a PAT is
         configured, or ``None`` when no credential is available (the caller then
         skips the poll rather than issuing an unauthenticated 60/hr request).
 
+        ``host`` picks the credential via GithubCredentialsService: the
+        vault-stored per-host token first, then the host class's env var
+        (GITHUB_TOKEN for github.com / *.ghe.com, otherwise
+        GH_ENTERPRISE_TOKEN) — the github.com PAT is never sent to a GHE
+        Server host.
+
         UPGRADE PATH (GitHub App): this is the single place the credential is
         constructed. To go multi-tenant, mint a per-installation token here
-        (``token <installation_token>``) instead of reading the PAT env var; the
+        (``token <installation_token>``) instead of the PAT lookup; the
         poll logic below is credential-agnostic and needs no change.
         """
-        pat = (os.environ.get(GITHUB_PAT_ENV) or "").strip()
+        from app.services.github_credentials_service import GithubCredentialsService
+
+        pat = GithubCredentialsService.token_for_host(host, accessor="github_monitor")
         if not pat:
             return None
         return {
@@ -165,21 +177,34 @@ class GitHubMonitorService:
     # -- url derivation --------------------------------------------------
 
     @staticmethod
+    def _source_host(source: dict) -> Optional[str]:
+        """Host of the source's repo URL, or None when unparseable."""
+        from app.services.github_service import GitHubService
+
+        try:
+            _owner, _repo, host = GitHubService.parse_repo_url_with_host(source["url"])
+        except (ValueError, KeyError, TypeError):
+            return None
+        return host
+
+    @staticmethod
     def _api_url(source: dict) -> Optional[str]:
         """Derive the GitHub REST endpoint to poll from a source's repo URL.
 
         Starts with the repo's ``releases/latest`` endpoint — a single
         well-defined resource that ETags cleanly and is the highest-signal
         change for a competitor (a new release). Returns ``None`` if the URL is
-        not a parseable ``owner/repo`` on github.com.
+        not a parseable ``owner/repo``. Non-github.com hosts get their REST
+        base from ``GitHubService.api_base_for_host`` (GHE Server api/v3 vs
+        GHE Cloud data-residency api.HOST).
         """
         from app.services.github_service import GitHubService
 
         try:
-            owner, repo = GitHubService.parse_repo_url(source["url"])
+            owner, repo, host = GitHubService.parse_repo_url_with_host(source["url"])
         except (ValueError, KeyError, TypeError):
             return None
-        return f"https://api.github.com/repos/{owner}/{repo}/releases/latest"
+        return f"{GitHubService.api_base_for_host(host)}/repos/{owner}/{repo}/releases/latest"
 
     # -- persistence helpers --------------------------------------------
 
@@ -240,11 +265,15 @@ class GitHubMonitorService:
         ``url`` and ``etag`` are consulted.
         """
         source_id = source.get("id")
-        headers = GitHubMonitorService._auth_headers()
+        host = GitHubMonitorService._source_host(source) or "github.com"
+        headers = GitHubMonitorService._auth_headers(host)
         if headers is None:
             logger.warning(
-                "GITHUB_TOKEN unset — skipping competitor source %s "
+                "%s unset — skipping competitor source %s "
                 "(refusing the 60/hr unauthenticated path)",
+                GITHUB_PAT_ENV
+                if host == "github.com" or host.endswith(".ghe.com")
+                else GHE_PAT_ENV,
                 source_id,
             )
             return {"changed": False, "skipped": True}

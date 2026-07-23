@@ -182,3 +182,8 @@ export const tourMachine = setup({
     },
   },
 })
+
+/** The concrete machine type. Exported so consumers can annotate actors/
+ *  snapshots (`Actor<TourMachine>`, `SnapshotFrom<TourMachine>`) via a
+ *  type-only import — keeping xstate out of their runtime import graph. */
+export type TourMachine = typeof tourMachine

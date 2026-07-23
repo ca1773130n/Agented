@@ -23,6 +23,7 @@ vi.mock('../../services/api', () => ({
   clearApiKey: vi.fn(() => {
     sessionStorage.removeItem('agented-api-key');
   }),
+  invalidateAuthStatus: vi.fn(),
 }));
 
 import { useAuth } from '../useAuth';

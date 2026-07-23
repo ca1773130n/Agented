@@ -67,7 +67,7 @@ export { modelCacheApi } from './model-cache';
 export type { ModelCacheResponse, ModelCacheEntry } from './model-cache';
 export { rotationApi } from './rotation';
 export { schedulerApi } from './scheduler';
-export { healthApi, versionApi, utilityApi, settingsApi, setupApi, systemErrorApi } from './system';
+export { healthApi, versionApi, utilityApi, settingsApi, setupApi, systemErrorApi, invalidateAuthStatus } from './system';
 export type { DirectoryEntry, BrowseDirectoryResponse, CreateDirectoryResponse } from './system';
 export type { SystemError, FixAttempt, SystemErrorWithFixes, ErrorSource, ErrorCategory, ErrorStatus, FixTier, FixStatus, SystemErrorListResponse, ErrorCountsResponse, ReportErrorRequest } from './types/system';
 export { superAgentApi, superAgentDocumentApi, superAgentSessionApi, agentMessageApi, getSuperAgentMemory, distillSuperAgentMemory, drillSuperAgentMemory } from './super-agents';
@@ -134,7 +134,7 @@ export { chunkApi } from './chunks';
 export { botTemplateApi } from './bot-templates';
 export { promptSnippetApi } from './prompt-snippets';
 export { specializedBotApi } from './specialized-bots';
-export { secretsApi } from './secrets';
+export { secretsApi, githubCredentialsApi } from './secrets';
 export { rbacApi } from './rbac';
 export { authApi } from './auth';
 export type { AuthUser, LoginResponse } from './auth';
@@ -494,7 +494,7 @@ export type {
 } from './types';
 
 // Secrets types
-export type { SecretMetadata, VaultStatus, RevealedSecret } from './secrets';
+export type { SecretMetadata, VaultStatus, RevealedSecret, GithubHostToken } from './secrets';
 
 // RBAC types
 export type { UserRole, PermissionMatrix } from './rbac';

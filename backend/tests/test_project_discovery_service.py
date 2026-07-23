@@ -175,9 +175,12 @@ def test_import_repos_creates_projects_and_skips_dupes(tmp_path, isolated_db):
     assert reasons["Already"] == "already imported"
     assert "(unknown)" in reasons
     assert result["setup_started"] is False
-    # The fresh project is persisted with the normalized remote.
+    # The fresh project is persisted as bare slug + explicit host (GHE-aware):
+    # a host baked into github_repo would be stripped at clone time while
+    # github_host stayed at its default — wrong host for enterprise remotes.
     created = [p for p in get_all_projects() if p["name"] == "fresh"][0]
-    assert created["github_repo"] == "github.com/org/fresh"
+    assert created["github_repo"] == "org/fresh"
+    assert created["github_host"] == "github.com"
 
 
 def test_import_repos_spawns_harness_setup_when_team_given(tmp_path, isolated_db, monkeypatch):

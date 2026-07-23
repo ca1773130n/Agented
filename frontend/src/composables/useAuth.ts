@@ -11,6 +11,7 @@ import {
   clearApiKey,
   clearSessionToken,
   getSessionToken,
+  invalidateAuthStatus,
   setApiKey,
   type AuthUser,
 } from '../services/api';
@@ -28,6 +29,7 @@ async function login(email: string, password: string): Promise<AuthUser> {
     // Session now lives in an HttpOnly cookie (set by the login response) — the
     // token is no longer persisted to localStorage where XSS could read it.
     currentUser.value = result.user;
+    invalidateAuthStatus();
     return result.user;
   } catch (err) {
     lastError.value = err instanceof Error ? err.message : 'Login failed';
@@ -49,6 +51,7 @@ async function signup(
     // X-API-Key so subsequent /admin/* calls AND the ai-accounts sidecar
     // (account discovery) are both authorized. Absent for non-first signups.
     if (result.api_key) setApiKey(result.api_key);
+    invalidateAuthStatus();
     return result.user;
   } catch (err) {
     lastError.value = err instanceof Error ? err.message : 'Signup failed';
@@ -72,6 +75,7 @@ async function logout(): Promise<void> {
   }
   clearSessionToken();
   currentUser.value = null;
+  invalidateAuthStatus();
 }
 
 /**
