@@ -59,15 +59,21 @@ watch(selectedProjectId, (newId) => {
 });
 
 onMounted(async () => {
+  // Set loading BEFORE the first fetch so the page shows a skeleton instead of
+  // flashing the empty/zeroed state while the project list loads.
+  loading.value = true;
   try {
     const res = await projectApi.list();
     projects.value = res.projects ?? [];
     if (projects.value.length > 0) {
       selectedProjectId.value = projects.value[0].id;
-      await loadScorecard(selectedProjectId.value);
+      await loadScorecard(selectedProjectId.value); // owns its own loading finally
+    } else {
+      loading.value = false; // nothing to load — clear the skeleton
     }
   } catch (err) {
     console.error('Failed to load projects:', err);
+    loading.value = false;
   }
 });
 
@@ -645,7 +651,7 @@ function formatLastUpdated(iso: string): string {
 
 .bot-code {
   font-size: 0.78rem;
-  font-family: 'Geist Mono', monospace;
+  font-family: var(--font-mono);
   color: var(--accent-cyan);
   background: var(--bg-tertiary);
   padding: 2px 7px;

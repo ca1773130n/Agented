@@ -188,7 +188,8 @@
     "memoryDoctor": "Memory Health",
     "knowledgeGraph": "Knowledge Graph",
     "memoryResearch": "Memory Research",
-    "memorySessions": "Session History"
+    "memorySessions": "Session History",
+    "memoryHistory": "Query History"
   },
   "apiKeyBanner": {
     "title": "API key required",
@@ -7384,6 +7385,24 @@
       "testDemo": "Test completed (demo mode) — schema looks valid"
     }
   },
+  "superAgentMemory": {
+    "title": "Layered Memory",
+    "distilledRunbook": "Distilled runbook",
+    "reportsTo": "Reports to",
+    "directReports": "Direct reports",
+    "sessions": "sessions",
+    "emptyRunbook": "No distilled memory yet — run distill",
+    "distillNow": "Distill now",
+    "distilling": "Distilling…",
+    "drilling": "Drilling…",
+    "drillFailed": "Evidence unavailable",
+    "selectProject": "Select a project to view agent memory",
+    "selectProjectOption": "Select a project…",
+    "loading": "Loading…",
+    "retry": "Retry",
+    "noParent": "No manager",
+    "noReports": "No direct reports"
+  },
   "superAgentInspector": {
     "title": "Super-Agent Inspector",
     "loading": "Loading…",
@@ -9993,6 +10012,12 @@
       "running": "Refreshing…",
       "done": "Refresh complete",
       "failed": "Refresh failed"
+    },
+    "consolidation": {
+      "title": "Memory consolidation — idle sleep cycle ({idle}s)",
+      "on": "consolidating",
+      "stopped": "consolidation stopped",
+      "off": "consolidation off"
     }
   },
   "memorySessions": {
@@ -10005,7 +10030,7 @@
   },
   "knowledgeGraph": {
     "title": "Knowledge Graph",
-    "subtitle": "Browse what Tesserae knows — search the compiled graph (raw retrieval, no LLM).",
+    "subtitle": "Explore Tesserae's compiled graph — search or click a node to walk its neighborhood.",
     "statusFailed": "Failed to load graph status",
     "searchFailed": "Search failed",
     "nodes": "nodes",
@@ -10016,7 +10041,22 @@
     "searchPlaceholder": "Search the knowledge graph…",
     "searching": "Searching…",
     "search": "Search",
-    "noHits": "No hits for that query."
+    "noHits": "No hits for that query.",
+    "loading": "Loading the graph…",
+    "overviewFailed": "Failed to load the graph",
+    "subgraphFailed": "Failed to load that node's neighborhood",
+    "detailFailed": "Failed to load node detail",
+    "degree": "degree {n}",
+    "searchNoResults": "No nodes match that search.",
+    "graphEmptyTitle": "No graph yet",
+    "graphEmptyBody": "Nothing has been compiled into the knowledge graph yet.",
+    "truncated": "Showing a subset — this neighborhood was truncated.",
+    "legendTitle": "Types",
+    "panelClose": "Close panel",
+    "panelNoDescription": "No description.",
+    "panelAliases": "Aliases",
+    "panelSource": "Source",
+    "panelNeighbors": "Neighbors"
   },
   "memoryResearch": {
     "title": "Memory Research",
@@ -10026,6 +10066,44 @@
     "running": "Researching…",
     "workingFor": "Researching… ({s}s) — the agentic loop can take a few minutes.",
     "failed": "Research failed"
+  },
+  "memoryJob": {
+    "running": "Running…",
+    "background": "Running in the background — you can leave this page; results appear in History.",
+    "status": {
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed"
+    }
+  },
+  "memoryHistory": {
+    "title": "Query History",
+    "subtitle": "Past memory & observability queries run as background jobs. Click a row to read its full result.",
+    "refresh": "Refresh",
+    "loading": "Loading query history…",
+    "failed": "Failed to load query history",
+    "detailLoading": "Loading result…",
+    "detailFailed": "Failed to load result",
+    "emptyTitle": "No queries yet",
+    "emptyDescription": "Run a memory or observability query and it will appear here.",
+    "metaStatus": "Status",
+    "metaStarted": "Started",
+    "metaFinished": "Finished",
+    "relNow": "just now",
+    "relMinutes": "{n}m ago",
+    "relHours": "{n}h ago",
+    "relDays": "{n}d ago",
+    "kind": {
+      "doctor": "Doctor",
+      "lint": "Lint",
+      "config": "Config",
+      "graph_status": "Graph Status",
+      "activity_summary": "Activity Summary",
+      "decisions": "Decisions",
+      "graph_query": "Graph Query",
+      "sessions": "Sessions",
+      "research": "Research"
+    }
   },
   "council": {
     "title": "Council",
@@ -10060,5 +10138,33 @@
     "reasonExit": "The tesserae command failed. Check the CLI and its configuration.",
     "reasonDisabled": "Tesserae is not enabled for this project.",
     "reasonNoPaths": "No sources to ingest were found."
+  },
+  "researchSteering": {
+    "label": "Steering",
+    "autopilotLabel": "Autopilot",
+    "autopilotHelp": "Headless — GRD picks the recommended default at each checkpoint.",
+    "panelLabel": "AI panel",
+    "panelHelp": "Headless — a multi-backend AI panel decides each checkpoint.",
+    "attendedLabel": "Attended",
+    "attendedHelp": "Pause at each checkpoint so you can steer."
+  },
+  "researchCheckpoint": {
+    "pausedBadge": "Paused — awaiting decision",
+    "point": {
+      "seed": "Seed the research",
+      "hypothesize": "Hypothesis review",
+      "design": "Experiment design",
+      "decide": "Decision point"
+    },
+    "recommended": "Recommended",
+    "freeformLabel": "Your notes",
+    "freeformPlaceholder": "Add your guidance…",
+    "required": "This answer is required",
+    "submit": "Resume with these answers",
+    "resume": "Resume thread",
+    "loading": "Loading checkpoint…",
+    "loadErrorTitle": "Could not load checkpoint",
+    "loadError": "Failed to load the pending checkpoint for this thread.",
+    "pausedNoCheckpoint": "This thread is paused but has no pending decision. You can resume it directly."
   }
 }

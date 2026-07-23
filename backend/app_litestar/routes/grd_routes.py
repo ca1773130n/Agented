@@ -34,6 +34,7 @@ from app.database import (
     get_milestones_by_project,
     get_phases_by_milestone,
     get_plans_by_phase,
+    get_plans_by_project,
     get_project,
     get_project_plan,
     get_project_sync_states,
@@ -458,10 +459,8 @@ def list_plans(project_id: str, phase_id: Optional[str] = None) -> dict[str, Any
     if phase_id:
         plans = get_plans_by_phase(phase_id)
     else:
-        plans = []
-        for ms in get_milestones_by_project(project_id):
-            for phase in get_phases_by_milestone(ms["id"]):
-                plans.extend(get_plans_by_phase(phase["id"]))
+        # Single JOIN across milestones→phases→plans (was an N×M+1 fan-out).
+        plans = get_plans_by_project(project_id)
     return {"plans": plans}
 
 
@@ -1998,6 +1997,10 @@ def research_start(project_id: str, data: dict) -> dict[str, Any]:
     """Start a fresh ``gd research`` loop as a streamed ``grd_research``
     session. Returns ``{"session_id": ...}``; stream it via the generic
     ``/sessions/{session_id}/output`` SSE route.
+
+    Body ``research_steering`` (GRD 0.5.0) picks how checkpoints resolve:
+    ``autopilot`` (default, headless recommended defaults), ``panel`` (headless
+    multi-backend AI panel), or ``attended`` (loop pauses for a human).
     """
     _ensure_project(project_id)
     body = data or {}
@@ -2017,6 +2020,12 @@ def research_start(project_id: str, data: dict) -> dict[str, Any]:
         config["deep"] = True
     if body.get("ultracode"):
         config["ultracode"] = True
+    # GRD 0.5.0 interactive steering posture (autopilot | panel | attended).
+    # autopilot = headless recommended defaults (default); panel = headless
+    # multi-backend AI resolves each gate; attended = loop pauses for a human
+    # (surfaced via /research/status pendingCheckpoint + resume --answers).
+    if body.get("research_steering") in ("autopilot", "panel", "attended"):
+        config["research_steering"] = body["research_steering"]
 
     result = handler.start(config)
     if "error" in result:
@@ -2032,6 +2041,11 @@ def research_start(project_id: str, data: dict) -> dict[str, Any]:
 def research_resume(project_id: str, thread_id: str, data: dict) -> dict[str, Any]:
     """Resume an existing research thread by spawning a fresh
     ``grd_research`` session pinned to ``/grd:research resume <thread_id>``.
+
+    Body ``answers`` (GRD 0.5.0 interactive checkpoints) resolves a paused thread's
+    ``pendingCheckpoint``: ``[{question_id, label, text?}]`` — one per question,
+    ``label`` = the chosen option, ``text`` = optional freeform. Forwarded as a
+    temp ``--answers`` file so the resume clears the checkpoint before its gates.
     Returns ``{"session_id": ...}``.
     """
     _ensure_project(project_id)
@@ -2043,6 +2057,8 @@ def research_resume(project_id: str, thread_id: str, data: dict) -> dict[str, An
         config["max_iterations"] = body["max_iterations"]
     if body.get("no_gates"):
         config["no_gates"] = True
+    if isinstance(body.get("answers"), list) and body["answers"]:
+        config["answers"] = body["answers"]
 
     result = handler.start(config)
     if "error" in result:

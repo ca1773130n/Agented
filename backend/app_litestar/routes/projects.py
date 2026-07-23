@@ -448,13 +448,18 @@ def skill_sleep_evaluate(
         raise NotFoundException(detail=str(e)) from e
 
 
-@post("/{project_id:str}/skills/{skill_name:str}/sleep/round", sync_to_thread=True)
+@post("/{project_id:str}/skills/{skill_name:str}/sleep/round", sync_to_thread=False)
 def skill_sleep_round(
     project_id: str, skill_name: str, data: dict, caller: Caller
 ) -> dict[str, Any]:
-    """Run one autonomous Skill-Sleep round: Reflect (propose an improved body
-    from the project's recurring needs) → [rank] → gate + outcome → stage for
-    adoption.
+    """Kick off one autonomous Skill-Sleep round in the BACKGROUND: Reflect
+    (propose an improved body from the project's recurring needs) → [rank] →
+    gate + outcome → stage for adoption.
+
+    A round runs a codex/LLM Reflect (up to 600s) plus several judge calls —
+    minutes of work — so it runs on a daemon thread and this route returns
+    immediately with ``{"job_id"}``. Poll ``.../sleep/round/{job_id}`` for the
+    verdict; the operator can leave the page and the result still persists.
 
     Body (all optional): {"n": int, "seed": int, "measure": bool,
     "edit_budget": int}. ``edit_budget`` (omit/None = off) caps the candidate
@@ -462,11 +467,11 @@ def skill_sleep_round(
     """
     _assert_project_access(project_id, caller)
     body = data or {}
-    from app.services.skill_sleep_service import SkillNotInProjectError, SkillSleepGate
+    from app.services.skill_sleep_service import RoundBusyError, start_round_async
 
     edit_budget = body.get("edit_budget")
     try:
-        return SkillSleepGate.run_skill_sleep_round(
+        job_id = start_round_async(
             project_id,
             skill_name,
             n=int(body.get("n", 6)),
@@ -474,8 +479,25 @@ def skill_sleep_round(
             measure=bool(body.get("measure", True)),
             edit_budget=int(edit_budget) if edit_budget is not None else None,
         )
-    except SkillNotInProjectError as e:
-        raise NotFoundException(detail=str(e)) from e
+    except RoundBusyError as e:
+        # Bound on concurrent heavy rounds hit — tell the client to retry later.
+        raise HTTPException(status_code=429, detail=str(e)) from e
+    return {"job_id": job_id}
+
+
+@get("/{project_id:str}/skills/{skill_name:str}/sleep/round/{job_id:str}", sync_to_thread=False)
+def skill_sleep_round_status(
+    project_id: str, skill_name: str, job_id: str, caller: Caller
+) -> dict[str, Any]:
+    """Poll a background Skill-Sleep round: ``{status: running|done|error,
+    verdict?, error?}``. 404 if the job is unknown or has been evicted."""
+    _assert_project_access(project_id, caller)
+    from app.services.skill_sleep_service import get_round_job
+
+    job = get_round_job(job_id)
+    if job is None:
+        raise NotFoundException(detail="round job not found")
+    return job
 
 
 @get("/{project_id:str}/skill-sleep", sync_to_thread=False)
@@ -726,6 +748,7 @@ projects_router = Router(
         remove_skill_from_project,
         skill_sleep_evaluate,
         skill_sleep_round,
+        skill_sleep_round_status,
         skill_sleep_list,
         skill_sleep_adopt,
         list_installations,

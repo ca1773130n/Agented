@@ -126,3 +126,10 @@ backend/~/
 docs/.vitepress/cache/
 docs/.vitepress/dist/
 docs/node_modules/
+
+# Local tooling / editor artifacts + transient debris (not project files)
+*.dylib
+/R55TWymGHPcCjmGrsnTFR/
+.vscode/
+.cline/
+.codegraph/

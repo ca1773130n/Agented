@@ -3,7 +3,12 @@ import { ref, computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import type { Project } from '../services/api';
 import { projectApi, researchApi } from '../services/api';
-import type { ResearchThread, ResearchThreadBundle } from '../services/api/research';
+import type {
+  ResearchThread,
+  ResearchThreadBundle,
+  PendingCheckpoint,
+  CheckpointAnswer,
+} from '../services/api/research';
 import { useToast } from '../composables/useToast';
 import { handleApiError } from '../services/api/error-handler';
 import { useResearchSession } from '../composables/useResearchSession';
@@ -17,6 +22,9 @@ import HypothesisLedger from '../components/grd/research/HypothesisLedger.vue';
 import ReportViewer from '../components/grd/research/ReportViewer.vue';
 import PortfolioRuns from '../components/grd/research/PortfolioRuns.vue';
 import DeepReportList from '../components/grd/research/DeepReportList.vue';
+import CheckpointPanel from '../components/grd/research/CheckpointPanel.vue';
+import LoadingState from '../components/base/LoadingState.vue';
+import ErrorState from '../components/base/ErrorState.vue';
 
 const props = defineProps<{
   projectId?: string;
@@ -33,6 +41,18 @@ const project = ref<Project | null>(null);
 const threads = ref<ResearchThread[]>([]);
 const selectedThreadId = ref<string | null>(null);
 const selectedBundle = ref<ResearchThreadBundle | null>(null);
+
+// Checkpoint (GRD 0.5.0): a paused thread awaits a human decision. When such a
+// thread is selected we fetch its `gd research status` and surface the gate.
+const checkpoint = ref<PendingCheckpoint | null>(null);
+const checkpointLoading = ref(false);
+const checkpointError = ref(false);
+const checkpointResuming = ref(false);
+
+const selectedThread = computed(
+  () => threads.value.find((thr) => thr.id === selectedThreadId.value) || null,
+);
+const selectedThreadPaused = computed(() => selectedThread.value?.status === 'paused');
 const showSessionPanel = ref(false);
 // Deep-research mode hides the loop panels (thread/hypothesis/report/portfolio)
 // — deep-research's standalone report is incompatible with them.
@@ -96,11 +116,56 @@ async function selectThread(threadId: string) {
     selectedBundle.value = null;
     showToast(t('surface.research.loadThreadError'), 'error');
   }
+  await loadCheckpoint(threadId);
+}
+
+// Fetch the pending checkpoint for a paused thread; clears it otherwise so a
+// non-paused selection never shows a stale gate.
+async function loadCheckpoint(threadId: string) {
+  checkpoint.value = null;
+  checkpointError.value = false;
+  const thread = threads.value.find((thr) => thr.id === threadId);
+  if (thread?.status !== 'paused') return;
+  checkpointLoading.value = true;
+  try {
+    const statusRes = await researchApi.getStatus(projectId.value, threadId);
+    checkpoint.value = statusRes.pendingCheckpoint ?? null;
+  } catch {
+    checkpointError.value = true;
+  } finally {
+    checkpointLoading.value = false;
+  }
+}
+
+// Resume the paused thread, forwarding the operator's checkpoint answers. Runs
+// through the SSE composable so the live session panel shows progress; the
+// status watcher refreshes the thread list (and clears the gate) on completion.
+function resumeWithAnswers(answers: CheckpointAnswer[]) {
+  if (!selectedThreadId.value) return;
+  checkpointResuming.value = true;
+  dismissedFailure.value = false;
+  research.resume(selectedThreadId.value, { answers });
+  showSessionPanel.value = true;
+}
+
+// Fallback resume when the thread is paused but carries no checkpoint payload.
+function resumeWithoutAnswers() {
+  if (!selectedThreadId.value) return;
+  checkpointResuming.value = true;
+  dismissedFailure.value = false;
+  research.resume(selectedThreadId.value);
+  showSessionPanel.value = true;
 }
 
 function handleSubmit(
   question: string,
-  opts: { max_iterations?: number; no_gates?: boolean; deep?: boolean; ultracode?: boolean },
+  opts: {
+    max_iterations?: number;
+    no_gates?: boolean;
+    deep?: boolean;
+    ultracode?: boolean;
+    research_steering?: 'autopilot' | 'panel' | 'attended';
+  },
 ) {
   deepMode.value = !!opts.deep;
   dismissedFailure.value = false;
@@ -117,7 +182,11 @@ function handleClearSession() {
 watch(
   () => research.status.value,
   (newStatus) => {
+    if (newStatus === 'error') {
+      checkpointResuming.value = false;
+    }
     if (newStatus === 'complete') {
+      checkpointResuming.value = false;
       if (deepMode.value) {
         deepReportList.value?.refresh();
       } else {
@@ -165,6 +234,37 @@ watch(
                 @select="selectThread"
               />
               <div class="research-detail">
+                <div v-if="selectedThreadPaused" class="research-checkpoint" data-testid="research-checkpoint">
+                  <LoadingState
+                    v-if="checkpointLoading"
+                    :message="t('researchCheckpoint.loading')"
+                  />
+                  <ErrorState
+                    v-else-if="checkpointError"
+                    :title="t('researchCheckpoint.loadErrorTitle')"
+                    :message="t('researchCheckpoint.loadError')"
+                    @retry="selectedThreadId && loadCheckpoint(selectedThreadId)"
+                  />
+                  <CheckpointPanel
+                    v-else-if="checkpoint"
+                    :checkpoint="checkpoint"
+                    :submitting="checkpointResuming"
+                    @submit="resumeWithAnswers"
+                  />
+                  <div v-else class="research-plain-resume">
+                    <p class="research-plain-resume__msg">
+                      {{ t('researchCheckpoint.pausedNoCheckpoint') }}
+                    </p>
+                    <button
+                      type="button"
+                      class="btn btn-primary"
+                      :disabled="checkpointResuming"
+                      @click="resumeWithoutAnswers"
+                    >
+                      {{ t('researchCheckpoint.resume') }}
+                    </button>
+                  </div>
+                </div>
                 <HypothesisLedger :hypotheses="selectedBundle?.hypotheses" />
                 <ReportViewer :finding="selectedBundle?.finding" />
               </div>
@@ -257,6 +357,21 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.research-plain-resume {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: var(--content-padding, 16px);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+}
+.research-plain-resume__msg {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
 }
 
 .research-right {

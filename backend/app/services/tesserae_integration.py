@@ -890,12 +890,14 @@ def _day_is_past(day: Optional[str]) -> bool:
         return False
 
 
-def _read_tesserae_cache(key: str, immutable: bool) -> Optional[dict]:
+def _read_tesserae_cache(
+    key: str, immutable: bool, ttl: int = _TESSERAE_CACHE_TTL
+) -> Optional[dict]:
     try:
         f = _tesserae_cache_file(key)
         if not f.exists():
             return None
-        if not immutable and (time.time() - f.stat().st_mtime) > _TESSERAE_CACHE_TTL:
+        if not immutable and (time.time() - f.stat().st_mtime) > ttl:
             return None
         return json.loads(f.read_text()).get("result")
     except Exception:
@@ -1110,9 +1112,13 @@ def build_lint(*, refresh: bool = False, timeout: int = 60) -> dict:
 def graph_status(*, timeout: int = 30) -> dict:
     """Run ``tesserae status --json`` and return the compiled-graph OVERVIEW
     ``{project, nodes, edges, graph_corrupt, sessions, last_compile, vault, site}``
-    — the "what does Tesserae know" at-a-glance. NOT cached (cheap, and the operator
-    wants the live count). Returns ``{ok, status, reason}``.
+    — the "what does Tesserae know" at-a-glance. Cached ~30s (the subprocess ran on
+    every KG page load — a visible delay); stale-by-30s is fine for at-a-glance
+    counts. Returns ``{ok, status, reason}``.
     """
+    cached = _read_tesserae_cache("graph_status", immutable=False, ttl=30)
+    if cached is not None:
+        return cached
     res = _run_tesserae("status", ["status", "--json"], cwd=_REPO_ROOT, timeout=timeout)
     out = res.stdout or ""
     start = out.find("{")
@@ -1128,7 +1134,9 @@ def graph_status(*, timeout: int = 30) -> dict:
             "status": None,
             "reason": res.reason or (res.stderr or "").strip()[:400] or "tesserae status failed",
         }
-    return {"ok": True, "status": status, "reason": None}
+    result = {"ok": True, "status": status, "reason": None}
+    _write_tesserae_cache("graph_status", result)
+    return result
 
 
 def query_graph(
@@ -1259,6 +1267,68 @@ def run_research(
     return {"ok": True, "query": query, "report_md": report_md, "reason": None}
 
 
+def run_memory_job(
+    kind: str,
+    fn,
+    *,
+    label: Optional[str] = None,
+    params: Optional[dict] = None,
+    project: Optional[str] = None,
+) -> str:
+    """Run a memory/observability query in a daemon thread as a PERSISTED background
+    job. Returns a ``job_id`` polled via :func:`get_op_job`. The lifecycle + result
+    are written to ``memory_query_jobs`` (survives restart, readable later) AND
+    mirrored to the in-memory ``_op_jobs`` store for fast live polling.
+
+    ``fn`` is a zero-arg callable returning a result dict; an ``"ok"`` key (default
+    True) decides completed vs failed. An unexpected exception is caught and stored
+    as ``{"ok": False, "reason": ...}`` so a runner thread never crashes silently.
+    """
+    import secrets
+
+    from app.db import memory_jobs
+
+    job_id = f"mq-{kind}-{secrets.token_hex(6)}"
+    with _op_jobs_lock:
+        _op_jobs[job_id] = {
+            "job_id": job_id,
+            "project_id": project,
+            "op": kind,
+            "status": "running",
+            "started_at": _now_iso(),
+            "result": None,
+        }
+    try:
+        memory_jobs.create_job(job_id, kind, label=label, params=params, project_id=project)
+    except Exception:
+        logger.warning("memory job persist(create) failed for %s", job_id, exc_info=True)
+
+    def _runner():
+        try:
+            result = fn()
+            ok = bool(result.get("ok", True)) if isinstance(result, dict) else True
+            status = "completed" if ok else "failed"
+        except Exception as exc:
+            logger.warning("memory job %s (%s) failed", job_id, kind, exc_info=True)
+            result = {"ok": False, "reason": str(exc)[:300]}
+            status = "failed"
+        with _op_jobs_lock:
+            if job_id in _op_jobs:
+                _op_jobs[job_id]["status"] = status
+                _op_jobs[job_id]["finished_at"] = _now_iso()
+                _op_jobs[job_id]["result"] = result
+        err = None
+        if isinstance(result, dict) and not result.get("ok", True):
+            err = result.get("reason") or result.get("error")
+        try:
+            memory_jobs.finish_job(job_id, status=status, result=result, error=err)
+        except Exception:
+            logger.warning("memory job persist(finish) failed for %s", job_id, exc_info=True)
+
+    threading.Thread(target=_runner, daemon=True).start()
+    return job_id
+
+
 def run_research_async(
     query: str,
     *,
@@ -1267,45 +1337,22 @@ def run_research_async(
     max_iters: int = 6,
     top_k: int = 5,
 ) -> str:
-    """Kick off :func:`run_research` in a daemon thread and return a ``job_id`` the
-    caller polls via :func:`get_op_job` (same job store as compile/build-site)."""
-    import secrets
-
-    job_id = f"tess-research-{secrets.token_hex(6)}"
-    with _op_jobs_lock:
-        _op_jobs[job_id] = {
-            "job_id": job_id,
-            "project_id": None,
-            "op": "research",
-            "status": "running",
-            "started_at": _now_iso(),
-            "result": None,
-        }
-
-    def _runner():
-        try:
-            result = run_research(
-                query, breadth=breadth, depth=depth, max_iters=max_iters, top_k=top_k
-            )
-            with _op_jobs_lock:
-                _op_jobs[job_id]["status"] = "completed" if result["ok"] else "failed"
-                _op_jobs[job_id]["finished_at"] = _now_iso()
-                _op_jobs[job_id]["result"] = result
-        except Exception as exc:  # defensive: a runner thread must never crash silently
-            logger.warning("tesserae research job failed", exc_info=True)
-            with _op_jobs_lock:
-                _op_jobs[job_id]["status"] = "failed"
-                _op_jobs[job_id]["finished_at"] = _now_iso()
-                # Keep the full ResearchResult shape so the frontend type holds.
-                _op_jobs[job_id]["result"] = {
-                    "ok": False,
-                    "query": query,
-                    "report_md": "",
-                    "reason": str(exc)[:200],
-                }
-
-    threading.Thread(target=_runner, daemon=True).start()
-    return job_id
+    """Kick off :func:`run_research` as a persisted background job; poll via
+    :func:`get_op_job`."""
+    return run_memory_job(
+        "research",
+        lambda: run_research(
+            query, breadth=breadth, depth=depth, max_iters=max_iters, top_k=top_k
+        ),
+        label=(query or "")[:120],
+        params={
+            "query": query,
+            "breadth": breadth,
+            "depth": depth,
+            "max_iters": max_iters,
+            "top_k": top_k,
+        },
+    )
 
 
 def config_status(*, timeout: int = _TESSERAE_CONFIG_TIMEOUT) -> dict:
@@ -1315,7 +1362,14 @@ def config_status(*, timeout: int = _TESSERAE_CONFIG_TIMEOUT) -> dict:
     ``config status`` prints human text (no ``--json``), so we parse the two lines
     we care about defensively — a format drift degrades to ``provider=None`` /
     ``liveness_ok=None`` rather than raising.
+
+    Cached ~60s: this runs a live LLM liveness ping subprocess and several
+    observability pages hit it on every load — an uncached subprocess-per-load
+    was a visible navigation delay.
     """
+    cached = _read_tesserae_cache("config_status", immutable=False, ttl=60)
+    if cached is not None:
+        return cached
     res = _run_tesserae("config", ["config", "status"], cwd=_REPO_ROOT, timeout=timeout)
     out = res.stdout or ""
     if not out.strip():
@@ -1343,7 +1397,7 @@ def config_status(*, timeout: int = _TESSERAE_CONFIG_TIMEOUT) -> dict:
         # down, even if the failure text happens to contain "OK".
         live_mark = ("✓" in line) or bool(re.search(r"\bOK\b", line, re.IGNORECASE))
         liveness_ok = live_mark and ("✗" not in line)
-    return {
+    result = {
         "ok": True,
         "provider": provider,
         "effort": effort,
@@ -1351,6 +1405,8 @@ def config_status(*, timeout: int = _TESSERAE_CONFIG_TIMEOUT) -> dict:
         "source": source,
         "reason": None,
     }
+    _write_tesserae_cache("config_status", result)
+    return result
 
 
 def engine_refresh_async() -> str:
@@ -1409,26 +1465,38 @@ def list_sessions(
         return {"ok": False, "sessions": [], "reason": "invalid project id"}
     if limit is not None and (not isinstance(limit, int) or limit <= 0):
         return {"ok": False, "sessions": [], "reason": "invalid limit"}
-    args = ["sessions", "list", "--json"]
-    if project:
-        args += ["--project", project]
-    res = _run_tesserae("sessions_list", args, cwd=_REPO_ROOT, timeout=timeout)
-    if not res.ok:
-        return {
-            "ok": False,
-            "sessions": [],
-            "reason": res.reason
-            or (res.stderr or "").strip()[:400]
-            or "tesserae sessions list failed",
-        }
-    out = res.stdout or ""
-    start = out.find("[")
-    raw = out[start:] if start >= 0 else out
-    try:
-        sessions = json.loads(raw) if raw.strip() else []
-    except (json.JSONDecodeError, ValueError):
-        return {"ok": False, "sessions": [], "reason": "could not parse tesserae sessions JSON"}
-    if limit and isinstance(sessions, list):
+    # Cache the FULL enumerated list per project (~30s). `tesserae sessions list`
+    # has no --limit flag, so it enumerates + serializes the ENTIRE session history
+    # on every call; the limit is applied in Python below, so every page size shares
+    # one subprocess and repeat loads skip it entirely.
+    cache_key = f"sessions_list_{project or '__all__'}"
+    cached = _read_tesserae_cache(cache_key, immutable=False, ttl=30)
+    if cached is not None:
+        sessions = cached.get("sessions") or []
+    else:
+        args = ["sessions", "list", "--json"]
+        if project:
+            args += ["--project", project]
+        res = _run_tesserae("sessions_list", args, cwd=_REPO_ROOT, timeout=timeout)
+        if not res.ok:
+            return {
+                "ok": False,
+                "sessions": [],
+                "reason": res.reason
+                or (res.stderr or "").strip()[:400]
+                or "tesserae sessions list failed",
+            }
+        out = res.stdout or ""
+        start = out.find("[")
+        raw = out[start:] if start >= 0 else out
+        try:
+            sessions = json.loads(raw) if raw.strip() else []
+        except (json.JSONDecodeError, ValueError):
+            return {"ok": False, "sessions": [], "reason": "could not parse tesserae sessions JSON"}
+        if not isinstance(sessions, list):
+            sessions = []
+        _write_tesserae_cache(cache_key, {"sessions": sessions})
+    if limit:
         sessions = sessions[:limit]
     return {"ok": True, "sessions": sessions, "reason": None}
 
@@ -1552,11 +1620,29 @@ def build_site(project_id: str) -> TesseraeOpResult:
     )
 
 
+def _agent_distill_op(project_id: str) -> TesseraeOpResult:
+    """Async-op wrapper for the super-agent layered-memory distill pass (registry
+    sync + ``tesserae distill --all``). Local import avoids a circular dependency
+    (super_agent_memory imports this module)."""
+    from app.services.super_agent_memory import distill_super_agents
+
+    started = _now_iso()
+    res = distill_super_agents(project_id)
+    return TesseraeOpResult(
+        op="agent-distill",
+        ok=bool(res.get("ok")),
+        reason=res.get("reason", ""),
+        started_at=started,
+        finished_at=_now_iso(),
+    )
+
+
 _OP_DISPATCH = {
     "init": init_workspace,
     "ingest": ingest_paths,
     "compile": compile_workspace,
     "build-site": build_site,
+    "agent-distill": _agent_distill_op,
     "sessions-import": lambda pid: TesseraeOpResult(
         op="sessions-import",
         ok=(export_sessions_to_tesserae(pid).get("imported", 0) > 0),
@@ -1567,16 +1653,30 @@ _OP_DISPATCH = {
 }
 
 
-def run_op_async(project_id: str, op: str) -> str:
+def run_op_async(project_id: str, op: str, *, coalesce: bool = False) -> str:
     """Run a Tesserae op in a daemon thread, return a job_id the
     caller can poll. Used for long ops (compile, build-site) so the
-    HTTP handler returns immediately."""
+    HTTP handler returns immediately.
+
+    ``coalesce=True`` returns the id of an already-running job for the same
+    (project_id, op) instead of starting another — used for heavy ops like
+    agent-distill so a burst of triggers can't spawn overlapping subprocesses."""
     if op not in _OP_DISPATCH:
         raise ValueError(f"unknown tesserae op: {op}")
     import secrets
 
     job_id = f"tess-{op}-{secrets.token_hex(6)}"
+    # Coalesce check AND registration happen in ONE critical section — splitting
+    # them lets two near-simultaneous callers both pass the scan and both spawn.
     with _op_jobs_lock:
+        if coalesce:
+            for existing_id, job in _op_jobs.items():
+                if (
+                    job.get("project_id") == project_id
+                    and job.get("op") == op
+                    and job.get("status") == "running"
+                ):
+                    return existing_id
         _op_jobs[job_id] = {
             "job_id": job_id,
             "project_id": project_id,
@@ -1605,9 +1705,29 @@ def run_op_async(project_id: str, op: str) -> str:
 
 
 def get_op_job(job_id: str) -> Optional[dict[str, Any]]:
-    """Look up the in-memory status of an async op job."""
+    """Status/result of an async op job — in-memory first (fast, live), else the
+    persisted ``memory_query_jobs`` row (survives restart / reads a past query)."""
     with _op_jobs_lock:
-        return dict(_op_jobs.get(job_id) or {}) or None
+        job = _op_jobs.get(job_id)
+        if job:
+            return dict(job)
+    try:
+        from app.db import memory_jobs
+
+        row = memory_jobs.get_job(job_id)
+        if row:
+            return {
+                "job_id": row["job_id"],
+                "op": row["kind"],
+                "project_id": row.get("project_id"),
+                "status": row["status"],
+                "started_at": row["created_at"],
+                "finished_at": row.get("finished_at"),
+                "result": row.get("result"),
+            }
+    except Exception:
+        logger.debug("get_op_job DB fallback failed for %s", job_id, exc_info=True)
+    return None
 
 
 def workspace_status(project_id: str) -> dict[str, Any]:

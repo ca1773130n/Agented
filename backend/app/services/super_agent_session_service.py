@@ -458,6 +458,7 @@ class SuperAgentSessionService:
         """
         # If super_agent_id is a psa- instance, resolve the template SA
         effective_sa_id = super_agent_id
+        inst_project_id: Optional[str] = None
         if super_agent_id.startswith("psa-") and not instance_id:
             instance_id = super_agent_id
         if instance_id and instance_id.startswith("psa-"):
@@ -467,6 +468,7 @@ class SuperAgentSessionService:
                 inst = get_project_sa_instance(instance_id)
                 if inst:
                     effective_sa_id = inst["template_sa_id"]
+                    inst_project_id = inst.get("project_id")
             except Exception:
                 pass
 
@@ -487,6 +489,28 @@ class SuperAgentSessionService:
             if doc_type in docs_by_type:
                 for doc in docs_by_type[doc_type]:
                     parts.append(f"## {doc_type}\n\n{doc['content']}\n")
+
+        # Tesserae 0.21.0 layered agent memory: inject this super-agent's own
+        # distilled runbook (L1) — expertise accumulated across its sessions in
+        # this project, rolled up from its reports if it manages any. Project-
+        # scoped, so only when a project instance was resolved. Best-effort:
+        # silent when there is no distilled artifact yet.
+        if inst_project_id:
+            try:
+                from .super_agent_memory import read_agent_memory
+                from .taint import wrap_tainted
+
+                mem = read_agent_memory(inst_project_id, effective_sa_id)
+                if mem["text"]:
+                    # Distilled notes are derived from session transcripts, which
+                    # can contain adversarial/poisoned text — fence them as
+                    # untrusted DATA (nonce-tagged, do-not-follow preamble) so a
+                    # note can't smuggle instructions into the system prompt.
+                    parts.append(
+                        f"## Distilled Memory (Tesserae)\n\n{wrap_tainted(mem['text'])}\n"
+                    )
+            except Exception:
+                logger.debug("tesserae agent memory injection skipped", exc_info=True)
 
         # Add session summary if available
         with cls._lock:

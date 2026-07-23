@@ -276,6 +276,30 @@ def get_plans_by_phase(phase_id: str) -> List[dict]:
         return [dict(row) for row in cursor.fetchall()]
 
 
+def get_plans_by_project(project_id: str) -> List[dict]:
+    """All plans across a project's milestones/phases in ONE query — replaces the
+    milestones × phases × get_plans_by_phase N+1 fan-out on the planning page load.
+    Ordered milestone(created_at DESC) → phase(phase_number ASC) → plan(plan_number
+    ASC) to preserve the previous nested-loop order.
+    """
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT project_plans.*
+            FROM project_plans
+            JOIN project_phases ON project_plans.phase_id = project_phases.id
+            JOIN milestones ON project_phases.milestone_id = milestones.id
+            WHERE milestones.project_id = ?
+            ORDER BY milestones.created_at DESC,
+                     milestones.id ASC,
+                     project_phases.phase_number ASC,
+                     project_plans.plan_number ASC
+            """,
+            (project_id,),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+
 def update_project_plan(plan_id: str, **kwargs) -> bool:
     """Update project plan fields. Returns True on success.
 

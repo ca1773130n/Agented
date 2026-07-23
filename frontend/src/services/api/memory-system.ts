@@ -143,6 +143,15 @@ export interface DoctorResult {
 }
 
 // Tesserae `config status` — resolved LLM backend + liveness ping.
+// Tesserae 0.23/0.24 "sleep cycle" status — sourced from Agented's own
+// `engine --all --consolidate` daemon supervisor (the CLI exposes no such field).
+export interface ConsolidationStatus {
+  enabled: boolean;
+  running: boolean;
+  idle_seconds: number;
+  consolidate_every: number;
+}
+
 export interface MemoryConfig {
   ok: boolean;
   provider: string | null;
@@ -150,6 +159,7 @@ export interface MemoryConfig {
   liveness_ok: boolean | null;
   source: string | null;
   reason: string | null;
+  consolidation?: ConsolidationStatus | null;
 }
 
 // Tesserae `lint` — graph-QUALITY report (distinct from doctor's operational health).
@@ -244,6 +254,93 @@ export interface SessionsResult {
   reason: string | null;
 }
 
+// Tesserae interactive graph explorer — browsable nodes/edges (positions are
+// computed in the frontend; the backend emits no coordinates).
+export interface GraphNode {
+  id: string;
+  name: string;
+  type: string;
+  degree: number;
+  center: boolean;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  type: string;
+  evidence: string | null;
+}
+
+export interface GraphOverview {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  total_nodes: number;
+  total_edges: number;
+  seed: string | null;
+}
+
+export interface Subgraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  center: string;
+  truncated: boolean;
+}
+
+export interface NodeNeighbor {
+  id: string;
+  name: string;
+  type: string;
+  edge_type: string;
+  direction: string;
+}
+
+export interface NodeDetail {
+  id: string;
+  name: string;
+  type: string;
+  degree: number;
+  description: string | null;
+  aliases: string[];
+  source_path: string | null;
+  neighbors: NodeNeighbor[];
+}
+
+// --- Background memory/observability queries (v1) ---
+// Any memory/observability query can be dispatched as a background job the
+// operator can navigate away from; results land in the query-history store.
+export type MemoryQueryKind =
+  | 'doctor'
+  | 'lint'
+  | 'config'
+  | 'graph_status'
+  | 'activity_summary'
+  | 'decisions'
+  | 'graph_query'
+  | 'sessions'
+  | 'research';
+
+// A row in the jobs list (NO result blob — cheap to enumerate).
+export interface MemoryJobSummary {
+  job_id: string;
+  kind: string;
+  label: string;
+  project_id: string | null;
+  status: 'running' | 'completed' | 'failed';
+  created_at: string;
+  finished_at: string | null;
+  error: string | null;
+}
+
+// One job WITH its result (the kind-specific payload the old sync endpoint returned).
+export interface MemoryJob {
+  job_id: string;
+  op: string;
+  status: 'running' | 'completed' | 'failed';
+  started_at?: string;
+  finished_at?: string;
+  result: unknown;
+}
+
 export const memorySystemApi = {
   list: () =>
     apiFetch<{ memory_systems: MemorySystemSummary[] }>(
@@ -299,6 +396,41 @@ export const memorySystemApi = {
   // Tesserae `status` — compiled knowledge-graph overview (node/edge/session counts).
   graphStatus: () =>
     apiFetch<GraphStatusResult>('/admin/system/memory/graph/status'),
+
+  // --- Interactive graph explorer (browsable nodes/edges) ---
+
+  // A connected landing subgraph (never empty) + total node/edge counts.
+  graphOverview: (project?: string | null, maxNodes = 50) => {
+    const qs = new URLSearchParams({ max_nodes: String(maxNodes) });
+    if (project) qs.set('project', project);
+    return apiFetch<GraphOverview>(`/admin/system/memory/graph/overview?${qs.toString()}`);
+  },
+
+  // Ranked node search (name/alias/description) — clickable hits.
+  graphSearchNodes: (q: string, project?: string | null, limit = 25) => {
+    const qs = new URLSearchParams({ q, limit: String(limit) });
+    if (project) qs.set('project', project);
+    return apiFetch<{ nodes: GraphNode[] }>(`/admin/system/memory/graph/nodes?${qs.toString()}`);
+  },
+
+  // A node's N-hop neighborhood (nodes + connecting edges). nodeId is a query
+  // param (ids contain ':'); URLSearchParams URL-encodes it.
+  graphSubgraph: (nodeId: string, project?: string | null, hops = 1, maxNodes = 60) => {
+    const qs = new URLSearchParams({
+      node_id: nodeId,
+      hops: String(hops),
+      max_nodes: String(maxNodes),
+    });
+    if (project) qs.set('project', project);
+    return apiFetch<Subgraph>(`/admin/system/memory/graph/subgraph?${qs.toString()}`);
+  },
+
+  // Full detail for one node: description, aliases, source, typed neighbors.
+  graphNodeDetail: (nodeId: string, project?: string | null) => {
+    const qs = new URLSearchParams({ node_id: nodeId });
+    if (project) qs.set('project', project);
+    return apiFetch<NodeDetail>(`/admin/system/memory/graph/node?${qs.toString()}`);
+  },
 
   // Tesserae `query` — raw retrieval search over the knowledge graph (NO LLM).
   graphQuery: (q: string, topK = 8, kind?: string | null) => {
@@ -408,6 +540,30 @@ export const memorySystemApi = {
 
   tesseraeJobStatus: (jobId: string) =>
     apiFetch<TesseraeAsyncJob>(
+      `/admin/system/memory/tesserae/jobs/${encodeURIComponent(jobId)}`,
+    ),
+
+  // --- Background memory/observability queries ---
+
+  // Dispatch a memory/observability query as a background job; poll getMemoryJob.
+  runMemoryQuery: (kind: MemoryQueryKind, params?: Record<string, unknown> | null) =>
+    apiFetch<{ job_id: string; kind: string; status: 'running' }>(
+      '/admin/system/memory/query',
+      { method: 'POST', body: JSON.stringify({ kind, params: params ?? null }) },
+    ),
+
+  // List past query jobs (newest first, NO result blob). Optional kind filter.
+  listMemoryJobs: (kind?: MemoryQueryKind | null, limit?: number | null) => {
+    const qs = new URLSearchParams();
+    if (kind) qs.set('kind', kind);
+    if (limit) qs.set('limit', String(limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return apiFetch<{ jobs: MemoryJobSummary[] }>(`/admin/system/memory/jobs${suffix}`);
+  },
+
+  // Read one job WITH its result (shares the tesserae jobs store).
+  getMemoryJob: (jobId: string) =>
+    apiFetch<MemoryJob>(
       `/admin/system/memory/tesserae/jobs/${encodeURIComponent(jobId)}`,
     ),
 };

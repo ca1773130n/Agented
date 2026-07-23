@@ -188,7 +188,8 @@
     "memoryDoctor": "メモリ健全性",
     "knowledgeGraph": "ナレッジグラフ",
     "memoryResearch": "メモリリサーチ",
-    "memorySessions": "セッション履歴"
+    "memorySessions": "セッション履歴",
+    "memoryHistory": "クエリ履歴"
   },
   "apiKeyBanner": {
     "title": "API キーが必要です",
@@ -7384,6 +7385,24 @@
       "testDemo": "テスト完了 (デモモード) — スキーマは有効に見えます"
     }
   },
+  "superAgentMemory": {
+    "title": "階層型メモリ",
+    "distilledRunbook": "蒸留されたランブック",
+    "reportsTo": "報告先",
+    "directReports": "直属のエージェント",
+    "sessions": "セッション",
+    "emptyRunbook": "まだ蒸留されたメモリがありません — 蒸留を実行してください",
+    "distillNow": "今すぐ蒸留",
+    "distilling": "蒸留中…",
+    "drilling": "追跡中…",
+    "drillFailed": "証拠を取得できません",
+    "selectProject": "エージェントメモリを表示するにはプロジェクトを選択してください",
+    "selectProjectOption": "プロジェクトを選択…",
+    "loading": "読み込み中…",
+    "retry": "再試行",
+    "noParent": "マネージャーなし",
+    "noReports": "直属のエージェントなし"
+  },
   "superAgentInspector": {
     "title": "スーパーエージェントインスペクター",
     "loading": "読み込み中…",
@@ -9993,6 +10012,12 @@
       "running": "リフレッシュ中…",
       "done": "リフレッシュ完了",
       "failed": "リフレッシュ失敗"
+    },
+    "consolidation": {
+      "title": "メモリ統合 — アイドル・スリープサイクル（{idle}秒）",
+      "on": "統合中",
+      "stopped": "統合停止",
+      "off": "統合オフ"
     }
   },
   "memorySessions": {
@@ -10005,7 +10030,7 @@
   },
   "knowledgeGraph": {
     "title": "ナレッジグラフ",
-    "subtitle": "Tesserae が知っていることを閲覧 — コンパイル済みグラフを検索（生の検索、LLM なし）。",
+    "subtitle": "Tesserae がコンパイルしたグラフを探索 — ノードを検索またはクリックして近傍をたどります。",
     "statusFailed": "グラフステータスの読み込みに失敗しました",
     "searchFailed": "検索に失敗しました",
     "nodes": "ノード",
@@ -10016,7 +10041,22 @@
     "searchPlaceholder": "ナレッジグラフを検索…",
     "searching": "検索中…",
     "search": "検索",
-    "noHits": "そのクエリに該当する結果はありません。"
+    "noHits": "そのクエリに該当する結果はありません。",
+    "loading": "グラフを読み込み中…",
+    "overviewFailed": "グラフの読み込みに失敗しました",
+    "subgraphFailed": "そのノードの近傍の読み込みに失敗しました",
+    "detailFailed": "ノードの詳細の読み込みに失敗しました",
+    "degree": "次数 {n}",
+    "searchNoResults": "検索に一致するノードはありません。",
+    "graphEmptyTitle": "まだグラフがありません",
+    "graphEmptyBody": "ナレッジグラフにコンパイルされたものはまだありません。",
+    "truncated": "一部のみ表示 — この近傍は省略されています。",
+    "legendTitle": "タイプ",
+    "panelClose": "パネルを閉じる",
+    "panelNoDescription": "説明はありません。",
+    "panelAliases": "エイリアス",
+    "panelSource": "ソース",
+    "panelNeighbors": "近傍"
   },
   "memoryResearch": {
     "title": "メモリリサーチ",
@@ -10026,6 +10066,44 @@
     "running": "リサーチ中…",
     "workingFor": "リサーチ中…（{s}秒）— エージェントループは数分かかることがあります。",
     "failed": "リサーチに失敗しました"
+  },
+  "memoryJob": {
+    "running": "実行中…",
+    "background": "バックグラウンドで実行中です — このページを離れても構いません。結果は履歴に表示されます。",
+    "status": {
+      "running": "実行中",
+      "completed": "完了",
+      "failed": "失敗"
+    }
+  },
+  "memoryHistory": {
+    "title": "クエリ履歴",
+    "subtitle": "バックグラウンドジョブとして実行された過去のメモリ・可観測性クエリです。行をクリックすると結果全体を表示します。",
+    "refresh": "更新",
+    "loading": "クエリ履歴を読み込み中…",
+    "failed": "クエリ履歴の読み込みに失敗しました",
+    "detailLoading": "結果を読み込み中…",
+    "detailFailed": "結果の読み込みに失敗しました",
+    "emptyTitle": "まだクエリがありません",
+    "emptyDescription": "メモリまたは可観測性クエリを実行すると、ここに表示されます。",
+    "metaStatus": "ステータス",
+    "metaStarted": "開始",
+    "metaFinished": "終了",
+    "relNow": "たった今",
+    "relMinutes": "{n}分前",
+    "relHours": "{n}時間前",
+    "relDays": "{n}日前",
+    "kind": {
+      "doctor": "ドクター",
+      "lint": "リント",
+      "config": "設定",
+      "graph_status": "グラフステータス",
+      "activity_summary": "アクティビティサマリー",
+      "decisions": "決定",
+      "graph_query": "グラフクエリ",
+      "sessions": "セッション",
+      "research": "リサーチ"
+    }
   },
   "council": {
     "title": "カウンシル",
@@ -10060,5 +10138,33 @@
     "reasonExit": "tesserae コマンドが失敗しました。CLI と設定を確認してください。",
     "reasonDisabled": "このプロジェクトで Tesserae が有効になっていません。",
     "reasonNoPaths": "取り込むソースが見つかりませんでした。"
+  },
+  "researchSteering": {
+    "label": "進め方",
+    "autopilotLabel": "オートパイロット",
+    "autopilotHelp": "無人実行 — 各チェックポイントで GRD が推奨のデフォルトを選択します。",
+    "panelLabel": "AI パネル",
+    "panelHelp": "無人実行 — マルチバックエンドの AI パネルが各チェックポイントを判断します。",
+    "attendedLabel": "有人",
+    "attendedHelp": "各チェックポイントで停止し、自分で舵取りできます。"
+  },
+  "researchCheckpoint": {
+    "pausedBadge": "一時停止 — 判断待ち",
+    "point": {
+      "seed": "リサーチの起点設定",
+      "hypothesize": "仮説レビュー",
+      "design": "実験設計",
+      "decide": "判断ポイント"
+    },
+    "recommended": "推奨",
+    "freeformLabel": "メモ",
+    "freeformPlaceholder": "指示を入力してください…",
+    "required": "この回答は必須です",
+    "submit": "この回答で再開",
+    "resume": "スレッドを再開",
+    "loading": "チェックポイントを読み込み中…",
+    "loadErrorTitle": "チェックポイントを読み込めません",
+    "loadError": "このスレッドの保留中チェックポイントの読み込みに失敗しました。",
+    "pausedNoCheckpoint": "このスレッドは一時停止中ですが、保留中の判断はありません。そのまま再開できます。"
   }
 }

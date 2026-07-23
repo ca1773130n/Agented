@@ -188,7 +188,8 @@
     "memoryDoctor": "内存健康",
     "knowledgeGraph": "知识图谱",
     "memoryResearch": "记忆研究",
-    "memorySessions": "会话历史"
+    "memorySessions": "会话历史",
+    "memoryHistory": "查询历史"
   },
   "apiKeyBanner": {
     "title": "需要 API 密钥",
@@ -7384,6 +7385,24 @@
       "testDemo": "测试完成 (演示模式) — 架构看起来有效"
     }
   },
+  "superAgentMemory": {
+    "title": "分层记忆",
+    "distilledRunbook": "提炼的运行手册",
+    "reportsTo": "汇报给",
+    "directReports": "直接下属",
+    "sessions": "会话",
+    "emptyRunbook": "尚无提炼的记忆 — 请运行提炼",
+    "distillNow": "立即提炼",
+    "distilling": "提炼中…",
+    "drilling": "追溯中…",
+    "drillFailed": "无法获取证据",
+    "selectProject": "选择一个项目以查看智能体记忆",
+    "selectProjectOption": "选择项目…",
+    "loading": "加载中…",
+    "retry": "重试",
+    "noParent": "无管理者",
+    "noReports": "无直接下属"
+  },
   "superAgentInspector": {
     "title": "超级智能体检查器",
     "loading": "加载中…",
@@ -9993,6 +10012,12 @@
       "running": "刷新中…",
       "done": "刷新完成",
       "failed": "刷新失败"
+    },
+    "consolidation": {
+      "title": "记忆整合 — 空闲睡眠周期（{idle}秒）",
+      "on": "整合中",
+      "stopped": "整合已停止",
+      "off": "整合关闭"
     }
   },
   "memorySessions": {
@@ -10005,7 +10030,7 @@
   },
   "knowledgeGraph": {
     "title": "知识图谱",
-    "subtitle": "浏览 Tesserae 所知的内容——搜索已编译图谱（原始检索，无 LLM）。",
+    "subtitle": "浏览 Tesserae 编译的图谱 — 搜索或点击节点以遍历其邻域。",
     "statusFailed": "加载图谱状态失败",
     "searchFailed": "搜索失败",
     "nodes": "节点",
@@ -10016,7 +10041,22 @@
     "searchPlaceholder": "搜索知识图谱…",
     "searching": "搜索中…",
     "search": "搜索",
-    "noHits": "该查询没有结果。"
+    "noHits": "该查询没有结果。",
+    "loading": "正在加载图谱…",
+    "overviewFailed": "加载图谱失败",
+    "subgraphFailed": "加载该节点的邻域失败",
+    "detailFailed": "加载节点详情失败",
+    "degree": "度 {n}",
+    "searchNoResults": "没有匹配的节点。",
+    "graphEmptyTitle": "暂无图谱",
+    "graphEmptyBody": "尚未编译任何内容到知识图谱中。",
+    "truncated": "仅显示部分 — 此邻域已被截断。",
+    "legendTitle": "类型",
+    "panelClose": "关闭面板",
+    "panelNoDescription": "暂无描述。",
+    "panelAliases": "别名",
+    "panelSource": "来源",
+    "panelNeighbors": "邻居"
   },
   "memoryResearch": {
     "title": "记忆研究",
@@ -10026,6 +10066,44 @@
     "running": "研究中…",
     "workingFor": "研究中…（{s} 秒）——智能体循环可能需要几分钟。",
     "failed": "研究失败"
+  },
+  "memoryJob": {
+    "running": "运行中…",
+    "background": "正在后台运行 — 你可以离开此页面，结果会显示在历史记录中。",
+    "status": {
+      "running": "运行中",
+      "completed": "已完成",
+      "failed": "失败"
+    }
+  },
+  "memoryHistory": {
+    "title": "查询历史",
+    "subtitle": "以后台任务形式运行的过往内存与可观测性查询。点击某行可查看完整结果。",
+    "refresh": "刷新",
+    "loading": "正在加载查询历史…",
+    "failed": "加载查询历史失败",
+    "detailLoading": "正在加载结果…",
+    "detailFailed": "加载结果失败",
+    "emptyTitle": "暂无查询",
+    "emptyDescription": "运行内存或可观测性查询后，将显示在此处。",
+    "metaStatus": "状态",
+    "metaStarted": "开始",
+    "metaFinished": "完成",
+    "relNow": "刚刚",
+    "relMinutes": "{n}分钟前",
+    "relHours": "{n}小时前",
+    "relDays": "{n}天前",
+    "kind": {
+      "doctor": "诊断",
+      "lint": "检查",
+      "config": "配置",
+      "graph_status": "图谱状态",
+      "activity_summary": "活动摘要",
+      "decisions": "决策",
+      "graph_query": "图谱查询",
+      "sessions": "会话",
+      "research": "研究"
+    }
   },
   "council": {
     "title": "评议会",
@@ -10060,5 +10138,33 @@
     "reasonExit": "tesserae 命令失败。请检查 CLI 及其配置。",
     "reasonDisabled": "此项目未启用 Tesserae。",
     "reasonNoPaths": "未找到可摄取的来源。"
+  },
+  "researchSteering": {
+    "label": "推进方式",
+    "autopilotLabel": "自动驾驶",
+    "autopilotHelp": "无人值守 — 在每个检查点由 GRD 选择推荐的默认项。",
+    "panelLabel": "AI 讨论组",
+    "panelHelp": "无人值守 — 由多后端 AI 讨论组决定每个检查点。",
+    "attendedLabel": "人工参与",
+    "attendedHelp": "在每个检查点暂停，让你亲自把控方向。"
+  },
+  "researchCheckpoint": {
+    "pausedBadge": "已暂停 — 等待决策",
+    "point": {
+      "seed": "研究起点设定",
+      "hypothesize": "假设审查",
+      "design": "实验设计",
+      "decide": "决策节点"
+    },
+    "recommended": "推荐",
+    "freeformLabel": "备注",
+    "freeformPlaceholder": "输入你的指引…",
+    "required": "此回答为必填项",
+    "submit": "使用这些回答继续",
+    "resume": "继续线程",
+    "loading": "正在加载检查点…",
+    "loadErrorTitle": "无法加载检查点",
+    "loadError": "加载此线程的待处理检查点失败。",
+    "pausedNoCheckpoint": "此线程已暂停但没有待处理的决策。你可以直接继续。"
   }
 }

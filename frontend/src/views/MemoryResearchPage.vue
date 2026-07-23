@@ -102,7 +102,6 @@ onUnmounted(() => { alive = false; stopTimers(); });
 
 <style scoped>
 .research-page {
-  padding: 24px;
   max-width: 920px;
 }
 .research-bar {
@@ -113,7 +112,7 @@ onUnmounted(() => { alive = false; stopTimers(); });
 .research-input {
   flex: 1;
   padding: 10px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
   background: var(--bg-secondary, #12121a);
   color: var(--text-primary, #e4e4e7);
@@ -124,10 +123,10 @@ onUnmounted(() => { alive = false; stopTimers(); });
 }
 .research-btn {
   padding: 10px 20px;
-  border: 1px solid rgba(79, 70, 229, 0.5);
+  border: 1px solid var(--accent-violet);
   border-radius: 8px;
-  background: rgba(79, 70, 229, 0.18);
-  color: #a5b4fc;
+  background: var(--accent-violet-dim);
+  color: var(--accent-violet);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -146,7 +145,7 @@ onUnmounted(() => { alive = false; stopTimers(); });
   font-size: 14px;
 }
 .research-state--error {
-  color: #ef4444;
+  color: var(--danger);
 }
 .research-spinner {
   width: 14px;

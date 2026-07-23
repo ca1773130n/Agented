@@ -10,7 +10,7 @@
  * body only when set (the triggers.ts pattern). The "Run round" button is
  * disabled with no skill selected or while a round is in flight.
  */
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { ApiError, skillSleepApi } from '../../services/api';
 import type { SkillSleepVerdict } from '../../services/api';
@@ -60,6 +60,65 @@ function describe(v: SkillSleepVerdict): { line: string; cls: 'ok' | 'neutral' |
   }
 }
 
+// A round runs in the background (minutes; up to a 600s codex Reflect). We kick
+// it off, then POLL for the verdict rather than holding one long request — so
+// the operator can leave the page (polling stops on unmount; the backend round
+// still finishes and persists its run).
+const POLL_MS = 3000;
+let pollTimer: ReturnType<typeof setTimeout> | null = null;
+// Set on unmount so a poll whose request is already in flight doesn't reschedule
+// itself or mutate refs after the component is gone.
+let stopped = false;
+
+function stopPolling() {
+  if (pollTimer !== null) {
+    clearTimeout(pollTimer);
+    pollTimer = null;
+  }
+}
+onBeforeUnmount(() => {
+  stopped = true;
+  stopPolling();
+});
+
+function finishWith(verdict: SkillSleepVerdict) {
+  const d = describe(verdict);
+  resultLine.value = d.line;
+  resultClass.value = d.cls;
+  inFlight.value = false;
+  emit('completed');
+}
+
+function failWith(message: string) {
+  resultLine.value = message;
+  resultClass.value = 'error';
+  inFlight.value = false;
+  // No `completed` emit on error — nothing was staged.
+}
+
+function pollJob(jobId: string) {
+  if (stopped) return;
+  stopPolling();
+  pollTimer = setTimeout(async () => {
+    pollTimer = null;
+    if (stopped) return;
+    try {
+      const job = await skillSleepApi.roundStatus(props.projectId, selectedSkill.value, jobId);
+      if (stopped) return; // unmounted while this poll request was in flight
+      if (job.status === 'running') {
+        pollJob(jobId);
+      } else if (job.status === 'done' && job.verdict) {
+        finishWith(job.verdict);
+      } else {
+        failWith(job.error || t('skillSleep.roundFailed'));
+      }
+    } catch (err) {
+      if (stopped) return;
+      failWith(err instanceof ApiError ? err.message : t('skillSleep.roundError'));
+    }
+  }, POLL_MS);
+}
+
 async function runRound() {
   if (!canRun.value) return;
   inFlight.value = true;
@@ -75,17 +134,11 @@ async function runRound() {
     const eb = numOrUndef(editBudgetInput.value);
     if (eb !== undefined) body.edit_budget = eb;
 
-    const verdict = await skillSleepApi.runRound(props.projectId, selectedSkill.value, body);
-    const d = describe(verdict);
-    resultLine.value = d.line;
-    resultClass.value = d.cls;
-    emit('completed');
+    const { job_id } = await skillSleepApi.runRound(props.projectId, selectedSkill.value, body);
+    // inFlight stays true while polling; the button shows "running".
+    pollJob(job_id);
   } catch (err) {
-    resultLine.value = err instanceof ApiError ? err.message : t('skillSleep.roundError');
-    resultClass.value = 'error';
-    // No `completed` emit on error — nothing was staged.
-  } finally {
-    inFlight.value = false;
+    failWith(err instanceof ApiError ? err.message : t('skillSleep.roundError'));
   }
 }
 </script>

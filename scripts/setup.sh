@@ -101,8 +101,18 @@ ensure_node() {
 # (locale-proof daemon identity — live daemons no longer misread as stale; transparent to the
 # `doctor` lock-check + `engine --once` refresh Agented wires). 0.20.0 adds MCP `query` +
 # `doctor_run` tools (closes the CLI/MCP gap) — MCP-only, and Agented consumes the CLI (already
-# wires `query`→KG explorer, `doctor`→Memory Health), so the CLI surface is unchanged. Pure pin bump.
-TESSERAE_MIN="0.20.0"
+# wires `query`→KG explorer, `doctor`→Memory Health), so the CLI surface is unchanged.
+# 0.20.1 drops the 300-turn session-import cap; 0.20.2 reads full session history in chunks
+# (the model no longer truncates long conversations). Both are session-history bug fixes —
+# no new CLI surface, so nothing new to wire; pure pin bump so fresh installs get the fixes.
+# 0.21.0 lands the per-agent layered-KG / AgentRunbook distillation. 0.22 completes the
+# agent-memory CLI (`agents tree/show/drill` + `--agent` scoping — Agented wires `agents drill`
+# for the super-agent memory audit). 0.23/0.24 add the engine "sleep cycle": a long-lived
+# `engine --all --consolidate` daemon that on idle compresses agent memory, forgets-by-disuse
+# (LRU), and discovers cross-agent connections (`associate`). Agented runs that daemon
+# (tesserae_engine_daemon.py). The 0.24 `associate` pass needs a real embedding backend, so we
+# install the `semantic` extra below.
+TESSERAE_MIN="0.24.0"
 # Portable "A >= B" for dotted versions — BSD/macOS `sort` lacks `-V`.
 _version_ge() {
     local a b IFS=.
@@ -130,7 +140,10 @@ ensure_tesserae() {
     local src="$HOME/Developer/Projects/Tesserae"
     if [[ -d "$src" ]] && command_exists uv; then
         warn "Tesserae ${cur:-missing} < $TESSERAE_MIN — installing from $src (semantic extra)..."
-        if uv tool install --force "$src" --with model2vec --with numpy >/dev/null 2>&1; then
+        # `--extra semantic` = model2vec + numpy (the associate/LRU sleep cycle needs a real
+        # embedding backend; without it association is a quiet no-op). `--extra` is uv's
+        # unambiguous path-target form vs. a bracketed "$src[semantic]" suffix.
+        if uv tool install --force "$src" --extra semantic >/dev/null 2>&1; then
             info "Tesserae $(tesserae --version 2>/dev/null | awk '{print $NF}') installed"
         else
             warn "Tesserae install failed — Sketch ideation will be ungrounded (optional)"

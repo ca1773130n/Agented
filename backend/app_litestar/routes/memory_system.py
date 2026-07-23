@@ -29,6 +29,7 @@ from litestar.exceptions import NotFoundException, ValidationException
 
 from app.db.connection import get_connection
 from app.db.projects import get_project
+from app.services import memory_graph
 from app.services import tesserae_integration as ti
 from app.services.project_workspace_service import ProjectWorkspaceService
 
@@ -37,7 +38,17 @@ from app.services.project_workspace_service import ProjectWorkspaceService
 # ---------------------------------------------------------------------------
 
 
+# The tesserae CLI version is stable for the process lifetime, but the
+# memory-systems list endpoint spawned `tesserae --version` on EVERY page load —
+# a per-load subprocess that showed up as a navigation delay. Cache the installed
+# result process-wide (a fresh install is still picked up: the "not installed"
+# branch below never populates the cache).
+_cli_status_cache: dict[str, Any] = {}
+
+
 def _tesserae_cli_status() -> dict[str, Any]:
+    if _cli_status_cache:
+        return _cli_status_cache
     cli_path = shutil.which("tesserae")
     if not cli_path:
         return {"installed": False, "version": None, "path": None}
@@ -59,7 +70,9 @@ def _tesserae_cli_status() -> dict[str, Any]:
             version = first
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
-    return {"installed": True, "version": version, "path": cli_path}
+    result = {"installed": True, "version": version, "path": cli_path}
+    _cli_status_cache.update(result)
+    return result
 
 
 def _tesserae_per_project_state() -> list[dict[str, Any]]:
@@ -209,8 +222,18 @@ def get_memory_lint(refresh: bool = False) -> dict[str, Any]:
 def get_memory_config() -> dict[str, Any]:
     """Resolved Tesserae LLM backend + a live liveness ping via ``tesserae config
     status``: provider / effort / source / liveness_ok — ops visibility for the
-    Memory surface."""
-    return ti.config_status()
+    Memory surface. Also carries the 0.23/0.24 ``consolidation`` sleep-cycle
+    status (enabled / running / cadence) from Agented's own daemon supervisor —
+    Tesserae's CLI exposes no consolidation-status field, so this is the honest
+    source, not a parsed indicator."""
+    result = dict(ti.config_status())  # copy — config_status caches its dict
+    try:
+        from app.services.tesserae_engine_daemon import TesseraeEngineDaemon
+
+        result["consolidation"] = TesseraeEngineDaemon.status()
+    except Exception:  # surfacing status must never break the config read
+        result["consolidation"] = None
+    return result
 
 
 @post("/system/memory/engine-refresh", sync_to_thread=True)
@@ -541,9 +564,146 @@ def tesserae_job_status(job_id: str) -> dict[str, Any]:
     return job
 
 
+# --- Browsable knowledge graph (nodes/edges from the compiled graph.json) --------
+
+
+def _resolve_graph_root(project: Optional[str]) -> str:
+    """Filesystem root whose ``.tesserae/graph.json`` to browse — a project's
+    Tesserae root when given + enabled, else Agented's own repo root."""
+    if project:
+        root = ti.get_tesserae_root(project)
+        if root:
+            return str(root)
+    return str(ti._REPO_ROOT)
+
+
+@get("/system/memory/graph/overview", sync_to_thread=True)
+def graph_overview(project: Optional[str] = None, max_nodes: int = 50) -> dict[str, Any]:
+    """A connected landing subgraph around the most-connected node (so the graph
+    view is never empty) + the graph's total node/edge counts."""
+    return memory_graph.overview(
+        _resolve_graph_root(project), max_nodes=max(10, min(int(max_nodes), 150))
+    )
+
+
+@get("/system/memory/graph/nodes", sync_to_thread=True)
+def graph_search_nodes(
+    q: str, project: Optional[str] = None, limit: int = 25
+) -> dict[str, Any]:
+    """Search graph NODES by name/alias/description — ranked, clickable results
+    (each has id/name/type/degree) that open a focused subgraph."""
+    return {
+        "nodes": memory_graph.search_nodes(
+            _resolve_graph_root(project), q, limit=max(1, min(int(limit), 100))
+        )
+    }
+
+
+@get("/system/memory/graph/subgraph", sync_to_thread=True)
+def graph_subgraph(
+    node_id: str, project: Optional[str] = None, hops: int = 1, max_nodes: int = 60
+) -> dict[str, Any]:
+    """The node + its N-hop neighborhood (nodes + connecting edges) for visualization.
+    ``node_id`` is a query param (ids contain ':')."""
+    return memory_graph.subgraph(
+        _resolve_graph_root(project),
+        node_id,
+        hops=max(1, min(int(hops), 3)),
+        max_nodes=max(10, min(int(max_nodes), 200)),
+    )
+
+
+@get("/system/memory/graph/node", sync_to_thread=True)
+def graph_node_detail(node_id: str, project: Optional[str] = None) -> dict[str, Any]:
+    """Full detail for one node: description, aliases, source, and typed neighbors."""
+    detail = memory_graph.node_detail(_resolve_graph_root(project), node_id)
+    if detail is None:
+        raise NotFoundException(detail=f"node not found: {node_id}")
+    return detail
+
+
+# --- Persistent async query dispatcher + history (leave-the-page + read-later) ---
+
+_MEMORY_QUERY_KINDS = {
+    "doctor": lambda p: ti.build_doctor(refresh=True),
+    "lint": lambda p: ti.build_lint(refresh=True),
+    "config": lambda p: ti.config_status(),
+    "graph_status": lambda p: ti.graph_status(),
+    "activity_summary": lambda p: ti.build_activity_summary(
+        period=p.get("period", "day"),
+        day=p.get("date"),
+        project=p.get("project"),
+        max_turns=p.get("max_turns"),
+        refresh=True,
+    ),
+    "decisions": lambda p: ti.build_decisions(
+        period=p.get("period", "day"),
+        day=p.get("date"),
+        project=p.get("project"),
+        include_agent=p.get("include_agent", True),
+        max_turns=p.get("max_turns"),
+        refresh=True,
+    ),
+    "graph_query": lambda p: ti.query_graph(
+        str(p.get("q", "")), top_k=int(p.get("top_k", 8)), kind=p.get("kind")
+    ),
+    "sessions": lambda p: ti.list_sessions(project=p.get("project"), limit=p.get("limit")),
+}
+
+
+def _memory_job_label(kind: str, params: dict) -> str:
+    if kind == "graph_query":
+        return str(params.get("q", ""))[:120]
+    if kind in ("activity_summary", "decisions"):
+        return f"{params.get('period', 'day')} · {params.get('project') or 'all projects'}"
+    if kind == "sessions" and params.get("project"):
+        return str(params["project"])
+    return kind
+
+
+@post("/system/memory/query", sync_to_thread=False)
+def run_memory_query(data: dict[str, Any]) -> dict[str, Any]:
+    """Run a memory/observability query as a PERSISTED BACKGROUND job so the operator
+    can navigate away and read the result (and past results) later. Body
+    ``{kind, params?}``; returns ``{job_id, kind, status}``. Poll via
+    ``/system/memory/tesserae/jobs/{job_id}``; list history via ``/system/memory/jobs``.
+    """
+    kind = (data or {}).get("kind")
+    params = (data or {}).get("params") or {}
+    if not isinstance(params, dict):
+        raise ValidationException(detail="params must be an object")
+    if kind == "research":
+        return start_research(params)  # typed launcher (validates ints + persists)
+    fn_factory = _MEMORY_QUERY_KINDS.get(kind)
+    if fn_factory is None:
+        raise ValidationException(
+            detail=f"unknown memory query kind: {kind!r} "
+            f"(expected one of {sorted(_MEMORY_QUERY_KINDS) + ['research']})"
+        )
+    job_id = ti.run_memory_job(
+        kind,
+        lambda: fn_factory(params),
+        label=_memory_job_label(kind, params),
+        params=params,
+        project=params.get("project"),
+    )
+    return {"job_id": job_id, "kind": kind, "status": "running"}
+
+
+@get("/system/memory/jobs", sync_to_thread=True)
+def list_memory_jobs(kind: Optional[str] = None, limit: int = 50) -> dict[str, Any]:
+    """History of memory queries, newest first, WITHOUT result blobs (read one via the
+    poll endpoint ``/system/memory/tesserae/jobs/{job_id}``). Optional ``kind`` filter."""
+    from app.db import memory_jobs
+
+    return {"jobs": memory_jobs.list_jobs(kind=kind, limit=limit)}
+
+
 memory_system_router = Router(
     path="/admin",
     route_handlers=[
+        run_memory_query,
+        list_memory_jobs,
         list_memory_systems,
         get_activity_summary,
         get_decisions,
@@ -551,6 +711,10 @@ memory_system_router = Router(
         get_memory_lint,
         get_graph_status,
         query_graph,
+        graph_overview,
+        graph_search_nodes,
+        graph_subgraph,
+        graph_node_detail,
         get_memory_config,
         engine_refresh,
         start_research,

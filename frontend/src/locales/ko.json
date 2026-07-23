@@ -188,7 +188,8 @@
     "memoryDoctor": "메모리 상태",
     "knowledgeGraph": "지식 그래프",
     "memoryResearch": "메모리 리서치",
-    "memorySessions": "세션 기록"
+    "memorySessions": "세션 기록",
+    "memoryHistory": "쿼리 기록"
   },
   "apiKeyBanner": {
     "title": "API 키 필요",
@@ -7384,6 +7385,24 @@
       "testDemo": "테스트 완료 (데모 모드) — 스키마가 유효해 보입니다"
     }
   },
+  "superAgentMemory": {
+    "title": "계층형 메모리",
+    "distilledRunbook": "정제된 런북",
+    "reportsTo": "보고 대상",
+    "directReports": "직속 하위 에이전트",
+    "sessions": "세션",
+    "emptyRunbook": "아직 정제된 메모리가 없습니다 — 정제를 실행하세요",
+    "distillNow": "지금 정제",
+    "distilling": "정제 중…",
+    "drilling": "추적 중…",
+    "drillFailed": "증거를 불러올 수 없음",
+    "selectProject": "에이전트 메모리를 보려면 프로젝트를 선택하세요",
+    "selectProjectOption": "프로젝트 선택…",
+    "loading": "불러오는 중…",
+    "retry": "다시 시도",
+    "noParent": "관리자 없음",
+    "noReports": "직속 하위 에이전트 없음"
+  },
   "superAgentInspector": {
     "title": "슈퍼 에이전트 인스펙터",
     "loading": "불러오는 중…",
@@ -9993,6 +10012,12 @@
       "running": "새로고침 중…",
       "done": "새로고침 완료",
       "failed": "새로고침 실패"
+    },
+    "consolidation": {
+      "title": "메모리 통합 — 유휴 수면 주기 ({idle}초)",
+      "on": "통합 중",
+      "stopped": "통합 중지됨",
+      "off": "통합 꺼짐"
     }
   },
   "memorySessions": {
@@ -10005,7 +10030,7 @@
   },
   "knowledgeGraph": {
     "title": "지식 그래프",
-    "subtitle": "Tesserae가 아는 것을 탐색 — 컴파일된 그래프 검색 (원시 검색, LLM 없음).",
+    "subtitle": "Tesserae가 컴파일한 그래프를 탐색하세요 — 노드를 검색하거나 클릭해 이웃을 따라가 보세요.",
     "statusFailed": "그래프 상태 로드 실패",
     "searchFailed": "검색 실패",
     "nodes": "노드",
@@ -10016,7 +10041,22 @@
     "searchPlaceholder": "지식 그래프 검색…",
     "searching": "검색 중…",
     "search": "검색",
-    "noHits": "해당 쿼리에 대한 결과가 없습니다."
+    "noHits": "해당 쿼리에 대한 결과가 없습니다.",
+    "loading": "그래프를 불러오는 중…",
+    "overviewFailed": "그래프를 불러오지 못했습니다",
+    "subgraphFailed": "해당 노드의 이웃을 불러오지 못했습니다",
+    "detailFailed": "노드 상세 정보를 불러오지 못했습니다",
+    "degree": "연결도 {n}",
+    "searchNoResults": "검색과 일치하는 노드가 없습니다.",
+    "graphEmptyTitle": "아직 그래프가 없습니다",
+    "graphEmptyBody": "아직 지식 그래프로 컴파일된 내용이 없습니다.",
+    "truncated": "일부만 표시 중 — 이 이웃은 잘렸습니다.",
+    "legendTitle": "유형",
+    "panelClose": "패널 닫기",
+    "panelNoDescription": "설명이 없습니다.",
+    "panelAliases": "별칭",
+    "panelSource": "출처",
+    "panelNeighbors": "이웃"
   },
   "memoryResearch": {
     "title": "메모리 리서치",
@@ -10026,6 +10066,44 @@
     "running": "리서치 중…",
     "workingFor": "리서치 중… ({s}초) — 에이전트 루프는 몇 분 걸릴 수 있습니다.",
     "failed": "리서치 실패"
+  },
+  "memoryJob": {
+    "running": "실행 중…",
+    "background": "백그라운드에서 실행 중입니다 — 이 페이지를 떠나도 됩니다. 결과는 기록에 표시됩니다.",
+    "status": {
+      "running": "실행 중",
+      "completed": "완료됨",
+      "failed": "실패"
+    }
+  },
+  "memoryHistory": {
+    "title": "쿼리 기록",
+    "subtitle": "백그라운드 작업으로 실행된 지난 메모리 및 관측 쿼리입니다. 행을 클릭하면 전체 결과를 볼 수 있습니다.",
+    "refresh": "새로고침",
+    "loading": "쿼리 기록을 불러오는 중…",
+    "failed": "쿼리 기록을 불러오지 못했습니다",
+    "detailLoading": "결과를 불러오는 중…",
+    "detailFailed": "결과를 불러오지 못했습니다",
+    "emptyTitle": "아직 쿼리가 없습니다",
+    "emptyDescription": "메모리 또는 관측 쿼리를 실행하면 여기에 표시됩니다.",
+    "metaStatus": "상태",
+    "metaStarted": "시작",
+    "metaFinished": "완료",
+    "relNow": "방금 전",
+    "relMinutes": "{n}분 전",
+    "relHours": "{n}시간 전",
+    "relDays": "{n}일 전",
+    "kind": {
+      "doctor": "닥터",
+      "lint": "린트",
+      "config": "설정",
+      "graph_status": "그래프 상태",
+      "activity_summary": "활동 요약",
+      "decisions": "결정",
+      "graph_query": "그래프 쿼리",
+      "sessions": "세션",
+      "research": "리서치"
+    }
   },
   "council": {
     "title": "카운슬",
@@ -10060,5 +10138,33 @@
     "reasonExit": "tesserae 명령이 실패했습니다. CLI와 설정을 확인하세요.",
     "reasonDisabled": "이 프로젝트에 Tesserae가 활성화되지 않았습니다.",
     "reasonNoPaths": "수집할 소스를 찾을 수 없습니다."
+  },
+  "researchSteering": {
+    "label": "진행 방식",
+    "autopilotLabel": "자동 조종",
+    "autopilotHelp": "무인 실행 — 각 체크포인트에서 GRD가 권장 기본값을 선택합니다.",
+    "panelLabel": "AI 패널",
+    "panelHelp": "무인 실행 — 여러 백엔드로 구성된 AI 패널이 각 체크포인트를 결정합니다.",
+    "attendedLabel": "직접 관여",
+    "attendedHelp": "각 체크포인트에서 멈춰 직접 방향을 정할 수 있습니다."
+  },
+  "researchCheckpoint": {
+    "pausedBadge": "일시중지 — 결정 대기 중",
+    "point": {
+      "seed": "연구 시드 설정",
+      "hypothesize": "가설 검토",
+      "design": "실험 설계",
+      "decide": "결정 지점"
+    },
+    "recommended": "권장",
+    "freeformLabel": "메모",
+    "freeformPlaceholder": "지침을 입력하세요…",
+    "required": "이 답변은 필수입니다",
+    "submit": "이 답변으로 재개",
+    "resume": "스레드 재개",
+    "loading": "체크포인트 불러오는 중…",
+    "loadErrorTitle": "체크포인트를 불러올 수 없음",
+    "loadError": "이 스레드의 대기 중인 체크포인트를 불러오지 못했습니다.",
+    "pausedNoCheckpoint": "이 스레드는 일시중지되었지만 대기 중인 결정이 없습니다. 바로 재개할 수 있습니다."
   }
 }

@@ -15,7 +15,7 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from .goal_loop_runner import get_runner_state, start_runner, stop_runner
 from .project_session_manager import ProjectSessionManager
@@ -873,6 +873,84 @@ class GrdResearchSessionHandler(ExecutionTypeHandler):
       * ``cwd`` (optional) — overrides the resolved project cwd.
     """
 
+    @staticmethod
+    def _ensure_interactive_config(cwd: str, interactive: dict) -> None:
+        """Merge ``research_gates.interactive`` into ``<cwd>/.planning/config.json``
+        so GRD 0.5.0's ``readInteractiveConfig`` picks up the steering posture.
+        Preserves every other config key; only sets the interactive knobs we manage.
+
+        Hardened (codex review): an exclusive flock serializes the read-modify-write
+        against concurrent research starts on the same project; the write is atomic
+        (temp file + ``os.replace``) so a reader never sees a torn file; and a
+        MALFORMED existing config FAILS CLOSED (raises) rather than being silently
+        overwritten with only our block — that would destroy unrelated config keys.
+        A missing file starts fresh; failures propagate (the operator asked for a
+        steering mode we couldn't set up)."""
+        import fcntl
+        import hashlib
+        import stat
+        import tempfile
+
+        cfg_dir = os.path.join(cwd, ".planning")
+        cfg_path = os.path.join(cfg_dir, "config.json")
+        os.makedirs(cfg_dir, exist_ok=True)
+        # Keep the lock file OUT of the project worktree (a tracked .planning/
+        # would otherwise gain an untracked .lock after any research start), but
+        # its temp-dir name is PREDICTABLE (a hash of cfg_path), so guard against a
+        # symlink/temp-file attack on a shared host: (1) a per-uid, 0700, we-own-it
+        # lock dir an attacker can't plant files in, and (2) O_NOFOLLOW|0600 on the
+        # lock file so a pre-placed symlink is refused rather than followed+truncated.
+        lock_root = os.path.join(tempfile.gettempdir(), f"agented-grd-{os.getuid()}")
+        os.makedirs(lock_root, mode=0o700, exist_ok=True)
+        lock_dir_fd = os.open(lock_root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            st = os.fstat(lock_dir_fd)
+            if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid() or (st.st_mode & 0o077):
+                raise ValueError(f"refusing unsafe lock dir {lock_root}")
+            lock_name = hashlib.sha1(cfg_path.encode()).hexdigest() + ".lock"
+            lock_fd = os.open(
+                lock_name,
+                os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW,
+                0o600,
+                dir_fd=lock_dir_fd,
+            )
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_EX)
+                try:
+                    with open(cfg_path, encoding="utf-8") as fh:
+                        data = json.load(fh)
+                    if not isinstance(data, dict):
+                        data = {}
+                except FileNotFoundError:
+                    data = {}
+                except json.JSONDecodeError as e:
+                    # Fail closed: overwriting a corrupt-but-present config with just
+                    # our interactive block would silently drop every other key.
+                    raise ValueError(f"cannot update malformed {cfg_path}: {e}") from e
+                gates = data.get("research_gates")
+                if not isinstance(gates, dict):
+                    gates = data["research_gates"] = {}
+                existing = gates.get("interactive")
+                gates["interactive"] = {
+                    **(existing if isinstance(existing, dict) else {}),
+                    **interactive,
+                }
+                fd, tmp = tempfile.mkstemp(dir=cfg_dir, prefix=".config-", suffix=".json")
+                try:
+                    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                        json.dump(data, fh, indent=2)
+                    os.replace(tmp, cfg_path)  # atomic — no torn read by a concurrent gd
+                except Exception:
+                    try:
+                        os.unlink(tmp)
+                    except OSError:
+                        pass
+                    raise
+            finally:
+                os.close(lock_fd)
+        finally:
+            os.close(lock_dir_fd)
+
     def start(self, session_config: dict) -> dict:
         thread_id = (session_config.get("thread_id") or "").strip()
         question = (session_config.get("question") or "").strip()
@@ -891,6 +969,32 @@ class GrdResearchSessionHandler(ExecutionTypeHandler):
 
             cwd = ProjectWorkspaceService.resolve_working_directory(project_id)
 
+        # GRD 0.5.0 interactive checkpoints: when the operator answers a paused
+        # thread's pendingCheckpoint from Agented, write the answers to a temp JSON
+        # file keyed by question id ({"<qid>": {"label", "text"?}}) and pass
+        # `--answers <path>` to `gd research resume`. Answers can carry freeform
+        # operator text, so they go through a FILE, never argv (19-04 hardening).
+        answers_path: Optional[str] = None
+        raw_answers = session_config.get("answers") if thread_id else None
+        if isinstance(raw_answers, list) and raw_answers:
+            mapping: dict[str, dict] = {}
+            for a in raw_answers:
+                if not isinstance(a, dict):
+                    continue
+                qid = a.get("question_id") or a.get("questionId")
+                if not qid or a.get("label") is None:
+                    continue
+                entry: dict[str, Any] = {"label": a["label"]}
+                if a.get("text"):
+                    entry["text"] = str(a["text"])
+                mapping[str(qid)] = entry
+            if mapping:
+                import tempfile
+
+                fd, answers_path = tempfile.mkstemp(prefix="gd-answers-", suffix=".json")
+                with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                    json.dump(mapping, fh)
+
         # Build the /grd:research prompt. The question can arrive from
         # non-operator sources, so JSON-encode it (escapes embedded
         # quotes/newlines/backslashes) rather than naive `"{question}"`
@@ -900,6 +1004,10 @@ class GrdResearchSessionHandler(ExecutionTypeHandler):
         deep = bool(session_config.get("deep")) and not thread_id
         if thread_id:
             prompt = f"/grd:research resume {json.dumps(thread_id)}"
+            if answers_path:
+                # gd research resume <id> --answers <file> — resolves the paused
+                # pendingCheckpoint before the loop re-enters its gates.
+                prompt = f"{prompt} --answers {json.dumps(answers_path)}"
         elif deep:
             # GRD 0.4.14 /grd:deep-research — parallel KG-grounded,
             # adversarially-verified research. json.dumps keeps the 19-04
@@ -931,6 +1039,43 @@ class GrdResearchSessionHandler(ExecutionTypeHandler):
             prompt,
         ]
 
+        # GRD 0.5.0 interactive steering posture. The checkpoint mechanism
+        # (research_gates.interactive, SEED/HYPOTHESIZE/DESIGN/DECIDE) is inert
+        # unless `enabled` is written into <cwd>/.planning/config.json, so the
+        # posture both writes that config and sets the env. Three operator choices:
+        #   autopilot (default) — headless; gd resolves each gate to its
+        #     recommended default (GRD_AUTOPILOT=1). No config, never hangs.
+        #   panel — headless, but each gate is resolved by GRD's multi-backend AI
+        #     discussion panel (interactive.enabled + fallback=panel); degrade-safe
+        #     to recommended defaults. GRD_AUTOPILOT keeps the run from ever pausing.
+        #   attended — a human steers: the loop PAUSES at each gate (enabled=true,
+        #     no GRD_AUTOPILOT); Agented surfaces it via /research/status
+        #     pendingCheckpoint + resume --answers.
+        steering = session_config.get("research_steering")
+        if steering not in ("autopilot", "panel", "attended"):
+            # Back-compat: derive from the legacy execution_mode flag.
+            legacy = session_config.get("execution_mode", "autonomous")
+            steering = "autopilot" if legacy == "autonomous" else "attended"
+        if steering == "attended":
+            execution_mode = "attended"
+            research_env = None
+            self._ensure_interactive_config(cwd, {"enabled": True})
+        elif steering == "panel":
+            execution_mode = "autonomous"
+            research_env = {"GRD_AUTOPILOT": "1"}
+            self._ensure_interactive_config(cwd, {"enabled": True, "fallback": "panel"})
+        else:  # autopilot
+            execution_mode = "autonomous"
+            research_env = {"GRD_AUTOPILOT": "1"}
+            # Neutralize ONLY the panel fallback, not `enabled`. GRD_AUTOPILOT
+            # already makes the run unattended and resolve to recommended defaults
+            # for every posture EXCEPT a lingering `fallback:"panel"` (panel
+            # engages on enabled && !attended && fallback==='panel'). Pinning
+            # fallback:"recommended" defeats a stale panel from a prior run while
+            # leaving `enabled` untouched — so we don't clobber a config an
+            # operator set for their own attended/manual GRD use.
+            self._ensure_interactive_config(cwd, {"fallback": "recommended"})
+
         session_id = ProjectSessionManager.create_session(
             project_id=project_id,
             cmd=cmd,
@@ -940,7 +1085,8 @@ class GrdResearchSessionHandler(ExecutionTypeHandler):
             agent_id=session_config.get("agent_id"),
             worktree_path=session_config.get("worktree_path"),
             execution_type="grd_research",
-            execution_mode=session_config.get("execution_mode", "autonomous"),
+            execution_mode=execution_mode,
+            env=research_env,
             stream_json=True,
             use_pty=False,
             yolo_mode=session_config.get("yolo_mode", False),

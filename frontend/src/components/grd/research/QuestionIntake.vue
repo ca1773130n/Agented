@@ -6,11 +6,19 @@ const props = defineProps<{
   status?: string;
 }>();
 
+type Steering = 'autopilot' | 'panel' | 'attended';
+
 const emit = defineEmits<{
   (
     e: 'submit',
     question: string,
-    opts: { max_iterations?: number; no_gates?: boolean; deep?: boolean; ultracode?: boolean },
+    opts: {
+      max_iterations?: number;
+      no_gates?: boolean;
+      deep?: boolean;
+      ultracode?: boolean;
+      research_steering?: Steering;
+    },
   ): void;
   // Fires on mode toggle so the page can swap panels immediately (browse deep
   // reports without first running a deep-research), not only on submit.
@@ -24,6 +32,18 @@ const maxIterations = ref<number | null>(null);
 const noGates = ref(false);
 const mode = ref<'loop' | 'deep'>('loop');
 const ultracode = ref(false);
+// GRD 0.5.0 checkpoint steering posture (autoresearch loop only). Default
+// headless-autopilot; `panel` runs an AI discussion at each gate; `attended`
+// pauses the loop for a human (surfaced via CheckpointPanel).
+const steering = ref<Steering>('autopilot');
+const steeringOptions: { value: Steering; labelKey: string; helpKey: string }[] = [
+  { value: 'autopilot', labelKey: 'researchSteering.autopilotLabel', helpKey: 'researchSteering.autopilotHelp' },
+  { value: 'panel', labelKey: 'researchSteering.panelLabel', helpKey: 'researchSteering.panelHelp' },
+  { value: 'attended', labelKey: 'researchSteering.attendedLabel', helpKey: 'researchSteering.attendedHelp' },
+];
+const steeringHelp = computed(
+  () => steeringOptions.find((o) => o.value === steering.value)?.helpKey ?? '',
+);
 
 watch(mode, (m) => emit('modeChange', m === 'deep'));
 
@@ -32,8 +52,13 @@ const canSubmit = computed(() => question.value.trim().length > 0 && !isRunning.
 
 function submit() {
   if (!canSubmit.value) return;
-  const opts: { max_iterations?: number; no_gates?: boolean; deep?: boolean; ultracode?: boolean } =
-    {};
+  const opts: {
+    max_iterations?: number;
+    no_gates?: boolean;
+    deep?: boolean;
+    ultracode?: boolean;
+    research_steering?: Steering;
+  } = {};
   if (mode.value === 'deep') {
     // Deep-research ignores the loop knobs; carry only deep + ultracode.
     opts.deep = true;
@@ -41,6 +66,8 @@ function submit() {
   } else {
     if (maxIterations.value != null) opts.max_iterations = maxIterations.value;
     if (noGates.value) opts.no_gates = true;
+    // Steering drives the loop's SEED/HYPOTHESIZE/DESIGN/DECIDE checkpoints.
+    opts.research_steering = steering.value;
   }
   emit('submit', question.value.trim(), opts);
 }
@@ -82,16 +109,37 @@ function submit() {
       </div>
     </div>
 
-    <div v-if="mode === 'loop'" class="intake-options">
-      <label class="opt">
-        {{ t('surface.research.intake.maxIterations') }}
-        <input v-model.number="maxIterations" type="number" min="1" class="opt-num" />
-      </label>
-      <label class="opt">
-        <input v-model="noGates" type="checkbox" />
-        {{ t('surface.research.intake.noGates') }}
-      </label>
-    </div>
+    <template v-if="mode === 'loop'">
+      <div class="intake-options">
+        <label class="opt">
+          {{ t('surface.research.intake.maxIterations') }}
+          <input v-model.number="maxIterations" type="number" min="1" class="opt-num" />
+        </label>
+        <label class="opt">
+          <input v-model="noGates" type="checkbox" />
+          {{ t('surface.research.intake.noGates') }}
+        </label>
+      </div>
+
+      <div class="intake-steering">
+        <span class="mode-label">{{ t('researchSteering.label') }}</span>
+        <div class="mode-seg" role="radiogroup" :aria-label="t('researchSteering.label')">
+          <button
+            v-for="opt in steeringOptions"
+            :key="opt.value"
+            type="button"
+            class="seg-btn"
+            :class="{ active: steering === opt.value }"
+            role="radio"
+            :aria-checked="steering === opt.value"
+            @click="steering = opt.value"
+          >
+            {{ t(opt.labelKey) }}
+          </button>
+        </div>
+        <p class="deep-helper steering-help">{{ t(steeringHelp) }}</p>
+      </div>
+    </template>
 
     <div v-else class="intake-deep">
       <p class="deep-helper">{{ t('surface.research.intake.deepHelper') }}</p>
@@ -155,6 +203,17 @@ function submit() {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+.intake-steering {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.intake-steering .mode-seg {
+  align-self: flex-start;
+}
+.steering-help {
+  margin: 0;
 }
 .mode-label {
   font-size: 0.8rem;

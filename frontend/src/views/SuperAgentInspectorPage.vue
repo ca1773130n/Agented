@@ -20,6 +20,10 @@ import type {
 // v0.7.95 — surfaces the SA's spawned goal_loop sessions (from the
 // v0.7.91/.92 Ouroboros bridge) on the inspector page.
 import SuperAgentOuroborosRunsPanel from '../components/super-agents/SuperAgentOuroborosRunsPanel.vue';
+// Tesserae 0.21.0 — the SA's layered knowledge graph (L1 runbook + L2'
+// rollup) with an in-panel project picker, since the inspector page has
+// no project context of its own.
+import SuperAgentMemoryPanel from '../components/super-agents/SuperAgentMemoryPanel.vue';
 
 const props = defineProps<{ superAgentId: string }>();
 
@@ -230,6 +234,9 @@ function fmtPayload(p: string): string {
            exists, so it's effectively free when the SA isn't
            running Ouroboros work. -->
       <SuperAgentOuroborosRunsPanel :super-agent-id="superAgentId" />
+
+      <!-- Tesserae 0.21.0 Layered Memory — picks a project in-panel. -->
+      <SuperAgentMemoryPanel :super-agent-id="superAgentId" />
 
       <div class="sa-inspector__filters">
         <fieldset class="sa-inspector__type-filter" data-testid="type-filter">

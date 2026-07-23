@@ -323,7 +323,7 @@ onMounted(loadData);
   border: 1px solid var(--border-default);
   border-radius: 6px;
   color: var(--accent-cyan);
-  font-family: 'Geist Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.8rem;
   line-height: 1.6;
   resize: vertical;
@@ -409,7 +409,7 @@ onMounted(loadData);
 }
 
 .mono {
-  font-family: 'Geist Mono', monospace;
+  font-family: var(--font-mono);
   color: var(--accent-cyan);
   font-size: 0.78rem;
 }
@@ -420,7 +420,7 @@ onMounted(loadData);
 }
 
 .excerpt {
-  font-family: 'Geist Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.72rem;
   color: var(--text-tertiary);
   max-width: 260px;

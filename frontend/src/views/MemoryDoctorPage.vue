@@ -8,9 +8,10 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { memorySystemApi, friendlyMemoryReason } from '../services/api/memory-system';
+import { useMemoryJob } from '../composables/useMemoryJob';
 import type {
   DoctorFinding,
-  DoctorReport,
+  DoctorResult,
   LintFinding,
   LintReport,
   MemoryConfig,
@@ -18,9 +19,27 @@ import type {
 
 const { t } = useI18n();
 
-const report = ref<DoctorReport | null>(null);
-const loading = ref(false);
-const error = ref<string | null>(null);
+// Doctor runs as a BACKGROUND job (it can be slow); lint + config stay sync
+// (fast, independent). The operator can leave the page mid-doctor-run.
+const {
+  result: doctorResult,
+  error: doctorJobError,
+  running: doctorLoading,
+  run: runDoctor,
+  showLatest: showLatestDoctor,
+} = useMemoryJob<DoctorResult>('doctor');
+
+const report = computed(() => doctorResult.value?.report ?? null);
+const error = computed<string | null>(() => {
+  if (doctorJobError.value) return doctorJobError.value;
+  if (doctorResult.value && !doctorResult.value.ok) {
+    return friendlyMemoryReason(doctorResult.value.reason, t) || t('memoryDoctor.failed');
+  }
+  return null;
+});
+
+// Lint + config load synchronously alongside the doctor job.
+const lintLoading = ref(false);
 
 // Tesserae `lint` — graph QUALITY (loaded alongside doctor; shared Refresh).
 const lint = ref<LintReport | null>(null);
@@ -74,23 +93,15 @@ function lintSevMod(s: string): string {
   return 'ok';
 }
 
-async function load(refresh = false) {
-  loading.value = true;
-  error.value = null;
+// Lint + config only (sync). allSettled: independent — one HTTP failure must
+// not blank the other.
+async function loadLintConfig(refresh = false) {
+  lintLoading.value = true;
   lintError.value = null;
-  // allSettled, not all: doctor / lint / config are independent — one throwing at
-  // the HTTP layer must not blank the others.
-  const [doc, lnt, cfg] = await Promise.allSettled([
-    memorySystemApi.doctor(refresh),
+  const [lnt, cfg] = await Promise.allSettled([
     memorySystemApi.lint(refresh),
     memorySystemApi.config(),
   ]);
-  if (doc.status === 'fulfilled') {
-    report.value = doc.value.report;
-    if (!doc.value.ok) error.value = friendlyMemoryReason(doc.value.reason, t) || t('memoryDoctor.failed');
-  } else {
-    error.value = (doc.reason as Error)?.message || t('memoryDoctor.failed');
-  }
   if (lnt.status === 'fulfilled') {
     lint.value = lnt.value.report;
     if (!lnt.value.ok) lintError.value = friendlyMemoryReason(lnt.value.reason, t) || t('memoryDoctor.lint.failed');
@@ -98,7 +109,13 @@ async function load(refresh = false) {
     lintError.value = (lnt.reason as Error)?.message || t('memoryDoctor.lint.failed');
   }
   config.value = cfg.status === 'fulfilled' ? cfg.value : null;
-  loading.value = false;
+  lintLoading.value = false;
+}
+
+// Kick the doctor background job + refresh lint/config together.
+function refresh() {
+  runDoctor();
+  loadLintConfig(true);
 }
 
 function stopEnginePoll() {
@@ -134,7 +151,10 @@ async function runEngineRefresh() {
   }
 }
 
-onMounted(() => load());
+onMounted(() => {
+  showLatestDoctor(); // instant last doctor result (read-later)
+  loadLintConfig();
+});
 onUnmounted(() => { alive = false; stopEnginePoll(); });
 </script>
 
@@ -142,8 +162,8 @@ onUnmounted(() => { alive = false; stopEnginePoll(); });
   <div class="doctor-page">
     <PageHeader :title="t('memoryDoctor.title')" :subtitle="t('memoryDoctor.subtitle')">
       <template #actions>
-        <button class="doctor-refresh" :disabled="loading" @click="load(true)">
-          {{ t('memoryDoctor.refresh') }}
+        <button class="doctor-refresh" :disabled="doctorLoading || lintLoading" @click="refresh()">
+          {{ doctorLoading ? t('memoryJob.running') : t('memoryDoctor.refresh') }}
         </button>
       </template>
     </PageHeader>
@@ -159,6 +179,17 @@ onUnmounted(() => { alive = false; stopEnginePoll(); });
           class="backend-live"
           :class="config.liveness_ok ? 'backend-live--ok' : 'backend-live--down'"
         >{{ config.liveness_ok ? t('memoryDoctor.backend.live') : t('memoryDoctor.backend.down') }}</span>
+        <!-- Tesserae 0.23/0.24 sleep-cycle (consolidate + LRU forget + associate) -->
+        <span
+          v-if="config.consolidation"
+          class="backend-live"
+          :class="config.consolidation.running ? 'backend-live--ok' : 'backend-live--down'"
+          :title="t('memoryDoctor.consolidation.title', { idle: config.consolidation.idle_seconds })"
+        >{{ config.consolidation.enabled
+            ? (config.consolidation.running
+                ? t('memoryDoctor.consolidation.on')
+                : t('memoryDoctor.consolidation.stopped'))
+            : t('memoryDoctor.consolidation.off') }}</span>
       </div>
       <div class="backend-engine">
         <span v-if="engineMsg" class="backend-engine__msg">{{ engineMsg }}</span>
@@ -168,7 +199,10 @@ onUnmounted(() => { alive = false; stopEnginePoll(); });
       </div>
     </div>
 
-    <div v-if="loading" class="doctor-state">{{ t('memoryDoctor.loading') }}</div>
+    <div v-if="doctorLoading && !report" class="doctor-state">
+      {{ t('memoryDoctor.loading') }}
+      <p class="doctor-bg-note">{{ t('memoryJob.background') }}</p>
+    </div>
     <div v-else-if="error" class="doctor-state doctor-state--error">{{ error }}</div>
 
     <template v-else-if="report">
@@ -200,7 +234,7 @@ onUnmounted(() => { alive = false; stopEnginePoll(); });
     <div v-else class="doctor-state">{{ t('memoryDoctor.empty') }}</div>
 
     <!-- Graph lint — QUALITY (unsupported claims, orphans, wiki drift, staleness) -->
-    <section v-if="!loading" class="lint-section">
+    <section v-if="!lintLoading" class="lint-section">
       <h2 class="lint-title">{{ t('memoryDoctor.lint.title') }}</h2>
       <p class="lint-subtitle">{{ t('memoryDoctor.lint.subtitle') }}</p>
 
@@ -247,7 +281,6 @@ onUnmounted(() => { alive = false; stopEnginePoll(); });
 
 <style scoped>
 .doctor-page {
-  padding: 24px;
   max-width: 920px;
 }
 .doctor-refresh {
@@ -269,7 +302,12 @@ onUnmounted(() => { alive = false; stopEnginePoll(); });
   color: var(--text-secondary, #a1a1aa);
 }
 .doctor-state--error {
-  color: #ef4444;
+  color: var(--danger);
+}
+.doctor-bg-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary, #71717a);
 }
 .doctor-counts {
   display: flex;
@@ -285,16 +323,16 @@ onUnmounted(() => { alive = false; stopEnginePoll(); });
   border-radius: 100px;
 }
 .doctor-pill--error {
-  background: rgba(239, 68, 68, 0.15);
-  color: #f87171;
+  background: var(--accent-crimson-dim);
+  color: var(--danger);
 }
 .doctor-pill--warn {
-  background: rgba(234, 179, 8, 0.15);
-  color: #eab308;
+  background: var(--accent-amber-dim);
+  color: var(--warning);
 }
 .doctor-pill--ok {
-  background: rgba(34, 197, 94, 0.12);
-  color: #4ade80;
+  background: var(--accent-emerald-dim);
+  color: var(--success);
 }
 .doctor-root {
   margin-left: auto;
@@ -320,13 +358,13 @@ onUnmounted(() => { alive = false; stopEnginePoll(); });
   padding: 12px 14px;
 }
 .doctor-finding--error {
-  border-left-color: #ef4444;
+  border-left-color: var(--danger);
 }
 .doctor-finding--warn {
-  border-left-color: #eab308;
+  border-left-color: var(--warning);
 }
 .doctor-finding--ok {
-  border-left-color: #22c55e;
+  border-left-color: var(--success);
 }
 .doctor-finding__head {
   display: flex;
@@ -349,8 +387,8 @@ onUnmounted(() => { alive = false; stopEnginePoll(); });
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 100px;
-  background: rgba(79, 70, 229, 0.15);
-  color: #a5b4fc;
+  background: var(--accent-violet-dim);
+  color: var(--accent-violet);
 }
 .doctor-finding__msg {
   font-size: 13px;
@@ -454,12 +492,12 @@ onUnmounted(() => { alive = false; stopEnginePoll(); });
   border-radius: 100px;
 }
 .backend-live--ok {
-  background: rgba(34, 197, 94, 0.15);
-  color: #4ade80;
+  background: var(--accent-emerald-dim);
+  color: var(--success);
 }
 .backend-live--down {
-  background: rgba(239, 68, 68, 0.15);
-  color: #f87171;
+  background: var(--accent-crimson-dim);
+  color: var(--danger);
 }
 .backend-engine {
   display: flex;

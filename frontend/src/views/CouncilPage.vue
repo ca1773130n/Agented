@@ -235,7 +235,7 @@ onUnmounted(() => controller?.abort());
   flex-direction: column;
   gap: 8px;
   padding: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-subtle);
   border-radius: 12px;
   background: var(--bg-secondary, #12121a);
   margin: 16px 0 20px;
@@ -249,7 +249,7 @@ onUnmounted(() => controller?.abort());
 }
 .council-textarea, .council-input {
   padding: 9px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
   background: var(--bg-tertiary, #1a1a24);
   color: var(--text-primary, #e4e4e7);
@@ -263,14 +263,14 @@ onUnmounted(() => controller?.abort());
 .council-option-row { display: flex; gap: 6px; align-items: center; }
 .council-opt-btn {
   width: 30px; height: 30px; flex: none;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid var(--border-default);
   border-radius: 8px; background: transparent;
   color: var(--text-secondary, #a1a1aa); cursor: pointer; font-size: 16px;
 }
 .council-opt-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .council-add-opt {
   align-self: flex-start;
-  border: none; background: none; color: #a5b4fc;
+  border: none; background: none; color: var(--accent-violet);
   font-size: 13px; cursor: pointer; padding: 4px 0;
 }
 .council-add-opt:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -285,23 +285,23 @@ onUnmounted(() => controller?.abort());
   margin-bottom: 16px;
   padding: 8px 12px;
   border-radius: 8px;
-  border: 1px solid rgba(234, 179, 8, 0.25);
-  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid var(--warning);
+  background: var(--accent-amber-dim);
 }
 .council-convene, .council-stop {
   padding: 10px 22px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
 }
 .council-convene {
-  border: 1px solid rgba(79, 70, 229, 0.5);
-  background: rgba(79, 70, 229, 0.18); color: #a5b4fc;
+  border: 1px solid var(--accent-violet);
+  background: var(--accent-violet-dim); color: var(--accent-violet);
 }
 .council-convene:disabled { opacity: 0.5; cursor: not-allowed; }
 .council-stop {
-  border: 1px solid rgba(239, 68, 68, 0.5);
-  background: rgba(239, 68, 68, 0.15); color: #f87171;
+  border: 1px solid var(--danger);
+  background: var(--accent-crimson-dim); color: var(--danger);
 }
 .council-state { padding: 16px; color: var(--text-secondary, #a1a1aa); font-size: 14px; }
-.council-state--error { color: #ef4444; }
+.council-state--error { color: var(--danger); }
 .council-roster { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
 .council-roster__label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-secondary, #71717a); }
 .council-member-pill {
@@ -311,38 +311,38 @@ onUnmounted(() => controller?.abort());
 .council-member-pill em { color: var(--text-secondary, #a1a1aa); font-style: normal; }
 .council-spinner {
   width: 13px; height: 13px;
-  border: 2px solid rgba(165, 180, 252, 0.3); border-top-color: #a5b4fc;
+  border: 2px solid var(--accent-violet-dim); border-top-color: var(--accent-violet);
   border-radius: 50%; animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 .council-debate { display: flex; flex-direction: column; gap: 10px; }
 .council-turn {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-left-width: 3px; border-left-color: #6366f1;
+  border: 1px solid var(--border-subtle);
+  border-left-width: 3px; border-left-color: var(--accent-violet);
   border-radius: 10px; padding: 12px 14px;
 }
-.council-turn--rebuttal { border-left-color: #eab308; }
-.council-turn--error { border-left-color: #ef4444; }
+.council-turn--rebuttal { border-left-color: var(--warning); }
+.council-turn--error { border-left-color: var(--danger); }
 .council-turn__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .council-turn__who { font-size: 13px; font-weight: 600; color: var(--text-primary, #e4e4e7); }
 .council-turn__role { font-size: 11px; color: var(--text-secondary, #71717a); text-transform: uppercase; letter-spacing: 0.3px; }
-.council-turn__round { font-size: 11px; color: #eab308; }
-.council-turn__vote { font-size: 11px; color: #4ade80; margin-left: auto; }
+.council-turn__round { font-size: 11px; color: var(--warning); }
+.council-turn__vote { font-size: 11px; color: var(--success); margin-left: auto; }
 .council-turn__text { font-size: 13px; color: var(--text-secondary, #d4d4d8); margin-top: 6px; white-space: pre-wrap; }
-.council-turn__err { font-size: 12px; color: #f87171; margin-top: 6px; }
+.council-turn__err { font-size: 12px; color: var(--danger); margin-top: 6px; }
 .council-votes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 18px 0; }
 .council-votes__label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-secondary, #71717a); }
 .council-vote-pill { font-size: 12px; padding: 3px 10px; border-radius: 100px; background: rgba(255, 255, 255, 0.06); color: var(--text-secondary, #a1a1aa); }
 .council-vote-pill b { color: var(--text-primary, #e4e4e7); }
 .council-decision {
   margin-top: 12px; padding: 18px;
-  border: 1px solid rgba(34, 197, 94, 0.35);
-  border-radius: 12px; background: rgba(34, 197, 94, 0.06);
+  border: 1px solid var(--success);
+  border-radius: 12px; background: var(--accent-emerald-dim);
 }
 .council-decision__head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .council-decision__badge {
   font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
-  color: #4ade80; padding: 3px 9px; border-radius: 100px; background: rgba(34, 197, 94, 0.15);
+  color: var(--success); padding: 3px 9px; border-radius: 100px; background: var(--accent-emerald-dim);
 }
 .council-decision__choice { font-size: 16px; font-weight: 700; color: var(--text-primary, #fff); }
 .council-decision__conf { font-size: 12px; color: var(--text-secondary, #a1a1aa); }

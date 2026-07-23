@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
+import { useUrlTab } from '../composables/useUrlTab';
 import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
@@ -35,7 +36,7 @@ const historyError = ref('');
 
 const selectedLeft = ref<string>('');
 const selectedRight = ref<string>('');
-const activeTab = ref<'list' | 'diff'>('list');
+const activeTab = useUrlTab(['list', 'diff'] as const, 'list');
 const isRollingBack = ref(false);
 
 const leftVersion = computed(() => versions.value.find(v => String(v.id) === selectedLeft.value));

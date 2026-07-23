@@ -35,6 +35,7 @@ import logging
 import math
 import re
 import secrets
+import threading
 from datetime import datetime, timedelta
 from typing import Callable, Optional
 
@@ -1057,3 +1058,104 @@ class SkillSleepScheduler:
                     {"project_id": project_id, "skill": skill_name, "reason": "error"}
                 )
         return results
+
+
+# ---------------------------------------------------------------------------
+# Background round runner
+#
+# A Skill-Sleep round runs Reflect (a codex subprocess with a 600s timeout, or
+# the in-process LLM seam) plus ~6-12 sequential judge calls — minutes of work.
+# Running it inline on the request would block a UvicornWorker thread for that
+# whole time (the frontend's 30s fetch aborts long before, but the server keeps
+# churning), and repeated rounds starve the request pool until the whole app
+# stops responding. So the round runs on a DEDICATED daemon thread (separate
+# from the request pool) and the route returns a job_id the UI polls; the
+# operator can leave the page and the result still lands in the runs table.
+# ---------------------------------------------------------------------------
+
+_ROUND_JOBS: dict[str, dict] = {}
+_ROUND_JOBS_LOCK = threading.Lock()
+# Retain at most this many FINISHED jobs for late polls. A RUNNING job is never
+# evicted — dropping it would make an in-flight round unobservable (its status
+# would 404 and its verdict would be lost on completion). The durable result is
+# still the persisted run row; eviction only loses an old finished job's poll.
+_ROUND_JOBS_MAX_TERMINAL = 100
+# Bound simultaneously-running rounds so a burst of triggers can't spawn an
+# unbounded number of minutes-long daemon threads (each round is heavy).
+_MAX_CONCURRENT_ROUNDS = 8
+
+
+class RoundBusyError(RuntimeError):
+    """Too many Skill-Sleep rounds are already running to start another."""
+
+
+def _round_now_iso() -> str:
+    return datetime.now(tz=None).astimezone().isoformat()
+
+
+def _round_terminal(job: dict) -> bool:
+    return job["status"] != "running"
+
+
+def _prune_terminal_locked() -> None:
+    """Evict the oldest FINISHED jobs down to the retention cap. Never evicts a
+    running job (that would orphan an in-flight round mid-poll). Caller MUST hold
+    ``_ROUND_JOBS_LOCK``. Runs on both start and completion so the terminal count
+    stays at the cap rather than drifting up to +_MAX_CONCURRENT_ROUNDS."""
+    finished = sorted(
+        (k for k, j in _ROUND_JOBS.items() if _round_terminal(j)),
+        key=lambda k: _ROUND_JOBS[k]["started_at"],
+    )
+    while len(finished) > _ROUND_JOBS_MAX_TERMINAL:
+        _ROUND_JOBS.pop(finished.pop(0), None)
+
+
+def start_round_async(project_id: str, skill_name: str, **opts: object) -> str:
+    """Kick off one Skill-Sleep round on a daemon thread; return a job_id to
+    poll via :func:`get_round_job`. Never blocks the caller. Raises
+    :class:`RoundBusyError` when too many rounds are already in flight."""
+    job_id = f"ssround-{secrets.token_hex(6)}"
+    with _ROUND_JOBS_LOCK:
+        running = sum(1 for j in _ROUND_JOBS.values() if not _round_terminal(j))
+        if running >= _MAX_CONCURRENT_ROUNDS:
+            raise RoundBusyError(
+                f"{running} skill-sleep rounds already running; try again shortly"
+            )
+        _prune_terminal_locked()
+        _ROUND_JOBS[job_id] = {
+            "job_id": job_id,
+            "status": "running",
+            "project_id": project_id,
+            "skill_name": skill_name,
+            "started_at": _round_now_iso(),
+            "finished_at": None,
+            "verdict": None,
+            "error": None,
+        }
+
+    def _work() -> None:
+        try:
+            verdict = SkillSleepGate.run_skill_sleep_round(project_id, skill_name, **opts)
+            update = {"status": "done", "verdict": verdict}
+        except SkillNotInProjectError as e:
+            update = {"status": "error", "error": str(e)}
+        except Exception as e:  # noqa: BLE001 — a background round must never crash silently
+            logger.warning("skill-sleep round job %s failed", job_id, exc_info=True)
+            update = {"status": "error", "error": str(e)}
+        with _ROUND_JOBS_LOCK:
+            job = _ROUND_JOBS.get(job_id)
+            if job is not None:
+                job.update(update, finished_at=_round_now_iso())
+                # This job just became terminal — prune so the finished-job count
+                # holds at the cap instead of drifting up as rounds complete.
+                _prune_terminal_locked()
+
+    threading.Thread(target=_work, name=f"skill-sleep-{job_id}", daemon=True).start()
+    return job_id
+
+
+def get_round_job(job_id: str) -> Optional[dict]:
+    """Snapshot of a background round job, or None if unknown/evicted."""
+    with _ROUND_JOBS_LOCK:
+        job = _ROUND_JOBS.get(job_id)
+        return dict(job) if job else None

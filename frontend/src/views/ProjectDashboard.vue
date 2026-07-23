@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from 'vue';
+import { ref, computed, watch, onUnmounted, defineAsyncComponent } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { Project, HarnessStatusResult, ProjectSkill, Hook, Command, Rule, Agent, TeamMember, ProjectInstallation, SuperAgent, SuperAgentSession, ProjectSAInstance, SuperAgentActivityStatus, GrdHarnessSetupStep, SkillSleepRun } from '../services/api';
 import { projectApi, grdApi, hookApi, commandApi, ruleApi, agentApi, teamApi, superAgentApi, superAgentSessionApi, projectInstanceApi, skillSleepApi, ApiError } from '../services/api';
@@ -8,7 +8,11 @@ import InteractiveSetup from '../components/projects/InteractiveSetup.vue';
 import ProjectStatusCard from '../components/projects/ProjectStatusCard.vue';
 import ProjectTeamLeaderChat from '../components/projects/ProjectTeamLeaderChat.vue';
 import ProjectTeamsSection from '../components/projects/ProjectTeamsSection.vue';
-import ProjectTeamCanvas from '../components/projects/ProjectTeamCanvas.vue';
+// Async so the heavy VueFlow graph library splits into its own chunk loaded
+// AFTER first paint, instead of bloating the ProjectDashboard route chunk.
+const ProjectTeamCanvas = defineAsyncComponent(
+  () => import('../components/projects/ProjectTeamCanvas.vue'),
+);
 import ProjectLibraryTabs from '../components/projects/ProjectLibraryTabs.vue';
 import SkillSleepCard from './dashboards/cards/SkillSleepCard.vue';
 import SkillSleepReviewDrawer from '../components/projects/SkillSleepReviewDrawer.vue';
@@ -226,20 +230,24 @@ useWebMcpTool({
 });
 
 async function loadData() {
-  const [projectData, skillsData, installationsData] = await Promise.all([
-    projectApi.get(projectId.value),
-    projectApi.listSkills(projectId.value),
-    projectApi.listInstallations(projectId.value),
-  ]);
+  // First paint waits ONLY on the project itself. Skills + installations feed
+  // below-the-fold sections, so fetch them non-blocking (was awaited in a
+  // Promise.all, which still blocked paint on the SLOWEST of the three).
+  const projectData = await projectApi.get(projectId.value);
   project.value = projectData;
-  projectSkills.value = skillsData.skills || [];
-  installations.value = installationsData.installations || [];
+  projectApi
+    .listSkills(projectId.value)
+    .then((d) => { projectSkills.value = d.skills || []; })
+    .catch(() => {});
+  projectApi
+    .listInstallations(projectId.value)
+    .then((d) => { installations.value = d.installations || []; })
+    .catch(() => {});
 
-  // First paint waits ONLY on the project itself (skills + installations are
-  // parallel — no extra round-trip). Everything below is non-blocking: each section
-  // owns its loading state and fills in AFTER the page renders. Previously the
-  // team-member avatars AND harness status (getHarnessStatus can hit git) were
-  // awaited here, adding two sequential round-trips before EntityLayout could paint.
+  // Everything below is non-blocking: each section owns its loading state and
+  // fills in AFTER the page renders. Previously the team-member avatars AND
+  // harness status (getHarnessStatus can hit git) were awaited here, adding two
+  // sequential round-trips before EntityLayout could paint.
   loadTeamMembers();
   if (projectData.github_repo) checkHarnessStatus();
   loadLibraryItems();

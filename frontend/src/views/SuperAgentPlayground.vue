@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useUrlTab } from '../composables/useUrlTab';
 import { useRouter, useRoute } from 'vue-router';
 import { superAgentApi, superAgentSessionApi, projectInstanceApi } from '../services/api';
 import type { ChatMode, SuperAgent, SuperAgentSession } from '../services/api';
@@ -50,7 +51,7 @@ const chatMode = ref<ChatMode>('work');
 const superAgent = ref<SuperAgent | null>(null);
 const sessions = ref<SuperAgentSession[]>([]);
 
-const rightTab = ref<'identity' | 'team' | 'sessions' | 'messages'>('identity');
+const rightTab = useUrlTab(['identity', 'team', 'sessions', 'messages'] as const, 'identity', 'panel');
 const selectedThreadPeer = ref<string | null>(null);
 // When set, the left pane shows a read-only viewer of a historical psa-* session
 // instead of the live ai-accounts-backed AiChatPanel.
