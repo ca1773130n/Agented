@@ -112,7 +112,12 @@ ensure_node() {
 # (LRU), and discovers cross-agent connections (`associate`). Agented runs that daemon
 # (tesserae_engine_daemon.py). The 0.24 `associate` pass needs a real embedding backend, so we
 # install the `semantic` extra below.
-TESSERAE_MIN="0.24.0"
+# 0.25 ("Descent") adds the graph_map structural-navigation tool (Agented wires it as a
+# `graph-map` CLI verb + Descent explorer), a .tesserae/hierarchy.json sidecar (written by
+# compile; required by graph_map / hierarchical compile_context), and the daemon SUMMARIZE op
+# (--summarize-budget). It also adds an opt-in extraction timeout (TESSERAE_EXTRACT_TIMEOUT) so
+# a wedged codex child no longer blocks a compile forever.
+TESSERAE_MIN="0.25.0"
 # Portable "A >= B" for dotted versions — BSD/macOS `sort` lacks `-V`.
 _version_ge() {
     local a b IFS=.
@@ -140,10 +145,12 @@ ensure_tesserae() {
     local src="$HOME/Developer/Projects/Tesserae"
     if [[ -d "$src" ]] && command_exists uv; then
         warn "Tesserae ${cur:-missing} < $TESSERAE_MIN — installing from $src (semantic extra)..."
-        # `--extra semantic` = model2vec + numpy (the associate/LRU sleep cycle needs a real
-        # embedding backend; without it association is a quiet no-op). `--extra` is uv's
-        # unambiguous path-target form vs. a bracketed "$src[semantic]" suffix.
-        if uv tool install --force "$src" --extra semantic >/dev/null 2>&1; then
+        # `[semantic]` = model2vec + numpy (the associate/LRU sleep cycle needs a real
+        # embedding backend; without it association is a quiet no-op). NOTE: `uv tool install`
+        # rejects the separate `--extra semantic` form on uv 0.10.x ("unexpected argument"),
+        # which silently fell through to the failure branch and never installed the extra — use
+        # the bracketed path-target suffix, which is stable across uv versions.
+        if uv tool install --force "$src[semantic]" >/dev/null 2>&1; then
             info "Tesserae $(tesserae --version 2>/dev/null | awk '{print $NF}') installed"
         else
             warn "Tesserae install failed — Sketch ideation will be ungrounded (optional)"

@@ -11,6 +11,8 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from app.services import tesserae_integration as ti
 
 
@@ -104,6 +106,44 @@ def test_build_decisions_parses_json_array():
     assert res["ok"] is True
     assert len(res["decisions"]) == 1
     assert res["decisions"][0]["source"] == "human"
+
+
+def test_graph_map_parses_card_payload():
+    """graph-map JSON stdout is parsed into {ok, map}; the map carries the cards."""
+    from app.services.tesserae_integration import TesseraeOpResult
+
+    payload = '{"header": {"scope": null, "kind": "root", "levels": 4}, "cards": [{"scope_id": "CommunitySummary:abc", "kind": "community", "title": "SLAM"}]}'
+    fake = TesseraeOpResult(op="graph-map", ok=True, stdout=payload, stderr="")
+    with patch.object(ti, "_run_tesserae", return_value=fake) as run:
+        res = ti.graph_map(scope="CommunitySummary:abc", cursor=50, budget_chars=8000)
+    assert res["ok"] is True
+    assert res["map"]["cards"][0]["scope_id"] == "CommunitySummary:abc"
+    # scope/cursor/budget flow into argv (guards passed).
+    argv = run.call_args[0][1]
+    assert argv[:2] == ["graph-map", "--project"]
+    assert "--scope" in argv and "CommunitySummary:abc" in argv
+    assert "--cursor" in argv and "--budget-chars" in argv
+
+
+@pytest.mark.parametrize("bad", ["-x", "--evil", "bad scope", "a" * 250])
+def test_graph_map_rejects_flag_smuggling_scope(bad):
+    """A scope that could smuggle a CLI flag (leading dash) or is malformed is
+    rejected BEFORE any subprocess runs."""
+    with patch.object(ti, "_run_tesserae") as run:
+        res = ti.graph_map(scope=bad)
+    assert res["ok"] is False and res["reason"] == "invalid scope"
+    run.assert_not_called()
+
+
+def test_graph_map_surfaces_cli_failure():
+    """A pre-0.25 project (no hierarchy sidecar) makes graph-map exit non-zero →
+    ok=False with the CLI's reason, not a crash."""
+    from app.services.tesserae_integration import TesseraeOpResult
+
+    fake = TesseraeOpResult(op="graph-map", ok=False, stdout="", stderr="error: no hierarchy sidecar", reason="exit_1")
+    with patch.object(ti, "_run_tesserae", return_value=fake):
+        res = ti.graph_map()
+    assert res["ok"] is False and res["map"] is None
 
 
 def test_build_activity_summary_caches_result(tmp_path, monkeypatch):

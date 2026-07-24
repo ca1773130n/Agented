@@ -22,6 +22,7 @@ import LoadingState from '../components/base/LoadingState.vue';
 import ErrorState from '../components/base/ErrorState.vue';
 import EmptyState from '../components/base/EmptyState.vue';
 import { memorySystemApi } from '../services/api/memory-system';
+import DescentExplorer from '../components/memory/DescentExplorer.vue';
 import type {
   GraphNode,
   GraphEdge,
@@ -232,6 +233,9 @@ function closePanel() {
 }
 
 // --- Search (debounced ~250ms) ---
+// View toggle: the VueFlow node canvas vs. the 0.25 Descent card explorer.
+const view = ref<'graph' | 'descent'>('graph');
+
 const q = ref('');
 const results = ref<GraphNode[]>([]);
 const searching = ref(false);
@@ -274,8 +278,24 @@ onMounted(loadOverview);
 <template>
   <div class="kg-page">
     <PageHeader :title="t('knowledgeGraph.title')" :subtitle="t('knowledgeGraph.subtitle')">
-      <template v-if="!loading && !loadError" #actions>
-        <div class="kg-counts">
+      <template #actions>
+        <div class="kg-viewtoggle" role="tablist" :aria-label="t('descent.viewToggle')">
+          <button
+            role="tab"
+            :aria-selected="view === 'graph'"
+            :class="{ 'kg-viewtoggle__btn--active': view === 'graph' }"
+            class="kg-viewtoggle__btn"
+            @click="view = 'graph'"
+          >{{ t('descent.viewGraph') }}</button>
+          <button
+            role="tab"
+            :aria-selected="view === 'descent'"
+            :class="{ 'kg-viewtoggle__btn--active': view === 'descent' }"
+            class="kg-viewtoggle__btn"
+            @click="view = 'descent'"
+          >{{ t('descent.viewDescent') }}</button>
+        </div>
+        <div v-if="!loading && !loadError && view === 'graph'" class="kg-counts">
           <span><strong>{{ totalNodes.toLocaleString() }}</strong> {{ t('knowledgeGraph.nodes') }}</span>
           <span class="kg-counts__sep">·</span>
           <span><strong>{{ totalEdges.toLocaleString() }}</strong> {{ t('knowledgeGraph.edges') }}</span>
@@ -283,6 +303,7 @@ onMounted(loadOverview);
       </template>
     </PageHeader>
 
+    <template v-if="view === 'graph'">
     <!-- Search -->
     <div class="kg-search">
       <input
@@ -420,6 +441,9 @@ onMounted(loadOverview);
         </template>
       </aside>
     </div>
+    </template>
+
+    <DescentExplorer v-else class="kg-descent" />
   </div>
 </template>
 
@@ -428,6 +452,28 @@ onMounted(loadOverview);
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+.kg-viewtoggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+  margin-right: 12px;
+}
+.kg-viewtoggle__btn {
+  background: none;
+  border: none;
+  padding: 4px 12px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.kg-viewtoggle__btn--active {
+  background: var(--accent-blue, #6ea8fe);
+  color: #fff;
+}
+.kg-descent {
+  margin-top: 4px;
 }
 .kg-counts {
   display: flex;

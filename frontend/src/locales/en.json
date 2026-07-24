@@ -10166,5 +10166,26 @@
     "loadErrorTitle": "Could not load checkpoint",
     "loadError": "Failed to load the pending checkpoint for this thread.",
     "pausedNoCheckpoint": "This thread is paused but has no pending decision. You can resume it directly."
+  },
+  "descent": {
+    "title": "Descent",
+    "subtitle": "Navigate the graph by community, one budgeted level at a time",
+    "root": "Root",
+    "loading": "Loading…",
+    "failed": "Could not load the map",
+    "retry": "Retry",
+    "empty": "No cards at this level",
+    "communities": "communities",
+    "levels": "levels",
+    "members": "{n} members",
+    "children": "{n} sub-communities",
+    "qualityLlm": "LLM",
+    "qualityStructural": "structural",
+    "stale": "stale",
+    "loadMore": "Load {n} more",
+    "breadcrumb": "Descent path",
+    "viewToggle": "Graph view",
+    "viewGraph": "Graph",
+    "viewDescent": "Descent"
   }
 }

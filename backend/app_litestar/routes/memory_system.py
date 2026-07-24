@@ -288,6 +288,21 @@ def query_graph(q: str, top_k: int = 8, kind: Optional[str] = None) -> dict[str,
     return ti.query_graph(q, top_k=top_k, kind=kind)
 
 
+@get("/system/memory/graph/map", sync_to_thread=True)
+def graph_map_route(
+    scope: Optional[str] = None,
+    cursor: int = 0,
+    budget_chars: Optional[int] = None,
+    project: Optional[str] = None,
+) -> dict[str, Any]:
+    """Descent structural navigation via ``tesserae graph-map`` (0.25): a budgeted
+    card map over the community hierarchy. No ``scope`` = root map; pass a card's
+    ``scope_id`` to descend, its ``parent_scope`` to ascend, ``cursor`` to page an
+    oversized level. Needs a >= 0.25 recompile (writes ``.tesserae/hierarchy.json``);
+    otherwise returns ``ok=False`` with an actionable reason."""
+    return ti.graph_map(scope=scope, cursor=cursor, budget_chars=budget_chars, project=project)
+
+
 @get("/system/memory/sessions", sync_to_thread=True)
 def get_memory_sessions(
     project: Optional[str] = None, limit: Optional[int] = None
@@ -711,6 +726,7 @@ memory_system_router = Router(
         get_memory_lint,
         get_graph_status,
         query_graph,
+        graph_map_route,
         graph_overview,
         graph_search_nodes,
         graph_subgraph,

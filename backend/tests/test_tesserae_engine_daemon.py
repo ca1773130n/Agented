@@ -43,10 +43,23 @@ def test_disabled_gate_blocks_start(monkeypatch, val):
 
 def test_status_shape(monkeypatch):
     monkeypatch.delenv("AGENTED_TESSERAE_CONSOLIDATE", raising=False)
+    monkeypatch.delenv("AGENTED_TESSERAE_SUMMARIZE_BUDGET", raising=False)
     st = ted.TesseraeEngineDaemon.status()
-    assert set(st) == {"enabled", "running", "idle_seconds", "consolidate_every"}
+    assert set(st) == {"enabled", "running", "idle_seconds", "consolidate_every", "summarize_budget"}
     assert st["idle_seconds"] == 300 and st["consolidate_every"] == 21600
+    assert st["summarize_budget"] == 25  # 0.25 default
     assert st["running"] is False  # nothing spawned
+
+
+@pytest.mark.parametrize("raw,expected", [
+    (None, 25), ("", 25), ("50", 50), ("0", 0), ("-3", 25), ("nope", 25),
+])
+def test_summarize_budget_env(monkeypatch, raw, expected):
+    if raw is None:
+        monkeypatch.delenv("AGENTED_TESSERAE_SUMMARIZE_BUDGET", raising=False)
+    else:
+        monkeypatch.setenv("AGENTED_TESSERAE_SUMMARIZE_BUDGET", raw)
+    assert ted._summarize_budget() == expected
 
 
 def test_start_spawns_consolidate_with_distill_env(monkeypatch):
@@ -67,9 +80,13 @@ def test_start_spawns_consolidate_with_distill_env(monkeypatch):
         captured["env"] = kw.get("env")
         return _Proc()
 
+    monkeypatch.setenv("AGENTED_TESSERAE_SUMMARIZE_BUDGET", "25")
     monkeypatch.setattr(ted.subprocess, "Popen", _popen)
     assert ted.TesseraeEngineDaemon.start() is True
     assert captured["cmd"][1:4] == ["engine", "--all", "--consolidate"]
+    # 0.25 SUMMARIZE budget appended after the cadence flags (prefix unchanged so
+    # kill_orphans' pkill substring still matches).
+    assert captured["cmd"][-2:] == ["--summarize-budget", "25"]
     assert captured["env"]["TESSERAE_AGENT_DISTILL"] == "1"
     assert ted.TesseraeEngineDaemon.status()["running"] is True
 

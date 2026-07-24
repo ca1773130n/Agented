@@ -443,9 +443,10 @@ def _register_cleanup_handlers() -> None:
             exc_info=True,
         )
 
-    # Tesserae 0.23/0.24 "sleep cycle": a long-lived `engine --all --consolidate`
-    # daemon that compresses agent memory, forgets-by-disuse (LRU), and discovers
-    # cross-agent connections during idle. Gated on AGENTED_TESSERAE_CONSOLIDATE
+    # Tesserae 0.23–0.25 "sleep cycle": a long-lived `engine --all --consolidate`
+    # daemon that compresses agent memory, forgets-by-disuse (LRU), discovers
+    # cross-agent connections, and (0.25) pre-warms community summaries during
+    # idle. Gated on AGENTED_TESSERAE_CONSOLIDATE
     # (default on); no-op under AGENTED_LITESTAR_SKIP_STARTUP since this whole
     # function is skipped there.
     try:

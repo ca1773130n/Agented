@@ -10166,5 +10166,26 @@
     "loadErrorTitle": "无法加载检查点",
     "loadError": "加载此线程的待处理检查点失败。",
     "pausedNoCheckpoint": "此线程已暂停但没有待处理的决策。你可以直接继续。"
+  },
+  "descent": {
+    "title": "下钻",
+    "subtitle": "按社区逐层浏览图谱，每次一个预算层级",
+    "root": "根",
+    "loading": "加载中…",
+    "failed": "无法加载图谱",
+    "retry": "重试",
+    "empty": "该层级没有卡片",
+    "communities": "社区",
+    "levels": "层级",
+    "members": "{n} 个成员",
+    "children": "{n} 个子社区",
+    "qualityLlm": "LLM",
+    "qualityStructural": "结构化",
+    "stale": "已过期",
+    "loadMore": "再加载 {n} 个",
+    "breadcrumb": "下钻路径",
+    "viewToggle": "图谱视图",
+    "viewGraph": "图谱",
+    "viewDescent": "下钻"
   }
 }

@@ -1190,6 +1190,66 @@ def query_graph(
     return {"ok": True, "question": parsed.get("question", question), "hits": hits, "reason": None}
 
 
+def graph_map(
+    *,
+    scope: Optional[str] = None,
+    cursor: int = 0,
+    budget_chars: Optional[int] = None,
+    project: Optional[str] = None,
+    timeout: int = 30,
+) -> dict:
+    """Run ``tesserae graph-map`` (0.25 "Descent" structural navigation) and return
+    the budgeted card map ``{header, cards}``. No ``scope`` = the root map; a card's
+    ``scope_id`` descends a level, its ``parent_scope`` ascends, ``cursor`` pages an
+    oversized level. Requires a >= 0.25 compile (writes ``.tesserae/hierarchy.json``);
+    a project compiled before the bump returns ``ok=False`` until recompiled. Returns
+    ``{ok, map, reason}``.
+
+    ``scope`` becomes CLI argv, so it is guarded against flag-smuggling (a leading
+    ``-`` would be read as a flag); ``cursor``/``budget_chars`` are bound to sane
+    ranges. ``project`` is an optional workspace-root path (default: this repo).
+    """
+    if scope is not None:
+        # scope_ids look like "CommunitySummary:hex", "org:root", "agent:<key>",
+        # "<alias>::<cid>" — allow alnum + : . / _ - but never a leading dash.
+        if (
+            not scope.strip()
+            or scope.lstrip().startswith("-")
+            or not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_:./-]{0,199}", scope)
+        ):
+            return {"ok": False, "map": None, "reason": "invalid scope"}
+    if not isinstance(cursor, int) or cursor < 0:
+        return {"ok": False, "map": None, "reason": "invalid cursor"}
+    if budget_chars is not None and (not isinstance(budget_chars, int) or budget_chars < 0):
+        return {"ok": False, "map": None, "reason": "invalid budget_chars"}
+    cwd = Path(project).expanduser().resolve() if project else _REPO_ROOT
+    args = ["graph-map", "--project", str(cwd)]
+    if scope:
+        args += ["--scope", scope]
+    if cursor:
+        args += ["--cursor", str(cursor)]
+    if budget_chars is not None:
+        args += ["--budget-chars", str(budget_chars)]
+    res = _run_tesserae("graph-map", args, cwd=cwd, timeout=timeout)
+    if not res.ok:
+        return {
+            "ok": False,
+            "map": None,
+            "reason": res.reason or (res.stderr or "").strip()[:400] or "tesserae graph-map failed",
+        }
+    out = res.stdout or ""
+    start = out.find("{")
+    parsed = None
+    if start >= 0:
+        try:
+            parsed, _ = json.JSONDecoder().raw_decode(out[start:])
+        except (json.JSONDecodeError, ValueError):
+            parsed = None
+    if not isinstance(parsed, dict) or "cards" not in parsed:
+        return {"ok": False, "map": None, "reason": "could not parse tesserae graph-map JSON"}
+    return {"ok": True, "map": parsed, "reason": None}
+
+
 def run_research(
     query: str,
     *,

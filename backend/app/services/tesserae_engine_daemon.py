@@ -1,9 +1,12 @@
-"""Supervised Tesserae engine daemon — the 0.23/0.24 "sleep cycle".
+"""Supervised Tesserae engine daemon — the 0.23–0.25 "sleep cycle".
 
 ``tesserae engine --all --consolidate`` is a *long-lived* process. On idle it
-compresses agent memory (0.23) and — the 0.24 additions — forgets-by-disuse via
-LRU decay and discovers cross-agent connections via the ``associate`` pass.
-Agented's other engine path (``engine --all --once``, see
+compresses agent memory (0.23), forgets-by-disuse via LRU decay and discovers
+cross-agent connections via the ``associate`` pass (0.24), and — the 0.25
+addition — pre-warms community-summary caches for the most-demanded graph_map
+scopes via the ``SUMMARIZE`` op, bounded per tick by ``--summarize-budget``
+(default 25 LLM calls; set ``AGENTED_TESSERAE_SUMMARIZE_BUDGET=0`` to disable
+just that op). Agented's other engine path (``engine --all --once``, see
 :func:`tesserae_integration.engine_refresh_async`) is a one-shot recompile DRAIN
 that *skips consolidation by design*, so the sleep cycle needs this persistent
 supervisor.
@@ -33,13 +36,33 @@ _TRUTHY = {"1", "true", "yes", "on"}
 # is legible in `ps`/status rather than implicit in the CLI defaults.
 _IDLE_SECONDS = 300
 _CONSOLIDATE_EVERY = 21600
-# The exact argv tail we spawn — also the pkill match for orphan cleanup.
+# The exact argv tail we spawn — also the pkill match for orphan cleanup. The
+# cadence and --summarize-budget flags are appended in start(); this stays the
+# 3-token prefix so the kill_orphans() pkill substring keeps matching regardless.
 _ENGINE_ARGS = ["engine", "--all", "--consolidate"]
+# 0.25 SUMMARIZE budget: max LLM calls/tick spent pre-warming community summaries
+# (Tesserae's own default is 25). A recurring background cost, so it's operator-
+# tunable; 0 disables just the SUMMARIZE op (the rest of the sleep cycle runs on).
+_DEFAULT_SUMMARIZE_BUDGET = 25
 
 
 def _enabled() -> bool:
     # Default ON — the operator opted into the full sleep cycle; opt out with =0.
     return os.environ.get("AGENTED_TESSERAE_CONSOLIDATE", "1").strip().lower() in _TRUTHY
+
+
+def _summarize_budget() -> int:
+    """Per-tick SUMMARIZE LLM-call budget from AGENTED_TESSERAE_SUMMARIZE_BUDGET
+    (default 25). Non-negative int; a bad/negative value falls back to the default,
+    0 disables the op. Clamped here so a fat-fingered env can't spend unboundedly."""
+    raw = os.environ.get("AGENTED_TESSERAE_SUMMARIZE_BUDGET")
+    if raw is None or raw.strip() == "":
+        return _DEFAULT_SUMMARIZE_BUDGET
+    try:
+        val = int(raw)
+    except (TypeError, ValueError):
+        return _DEFAULT_SUMMARIZE_BUDGET
+    return val if val >= 0 else _DEFAULT_SUMMARIZE_BUDGET
 
 
 class TesseraeEngineDaemon:
@@ -89,6 +112,8 @@ class TesseraeEngineDaemon:
                 str(_IDLE_SECONDS),
                 "--consolidate-every",
                 str(_CONSOLIDATE_EVERY),
+                "--summarize-budget",
+                str(_summarize_budget()),
             ]
             try:
                 cls._process = subprocess.Popen(
@@ -155,4 +180,5 @@ class TesseraeEngineDaemon:
             "running": running,
             "idle_seconds": _IDLE_SECONDS,
             "consolidate_every": _CONSOLIDATE_EVERY,
+            "summarize_budget": _summarize_budget(),
         }
