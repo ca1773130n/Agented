@@ -82,7 +82,10 @@ async function loadMore() {
   } catch (e) {
     if (myReq === reqSeq) error.value = (e as Error).message || t('descent.failed');
   } finally {
-    if (myReq === reqSeq) loadingMore.value = false;
+    // ALWAYS clear — unlike loadScope (where the newest request reliably clears
+    // `loading`), a superseded loadMore may be the only one in flight, so gating
+    // this on myReq would leave "load more" disabled forever on the new scope.
+    loadingMore.value = false;
   }
 }
 

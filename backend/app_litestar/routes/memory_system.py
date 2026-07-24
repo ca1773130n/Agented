@@ -63,6 +63,7 @@ def _tesserae_cli_status() -> dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=5,
+            env=ti._tesserae_env(),
         )
         candidate = (result.stdout or result.stderr or "").strip().splitlines()
         first = candidate[0] if candidate else ""

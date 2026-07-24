@@ -151,18 +151,16 @@ def test_tesserae_env_scrubs_llm_keys_when_flag_set(monkeypatch):
     assert "PATH" in scrubbed  # only inference keys are stripped, not the whole env
 
 
-def test_every_tesserae_subprocess_passes_scrubbed_env():
-    """Bug-class guard: EVERY subprocess spawn in this module must pass
-    env=_tesserae_env(). A new spawn site added without it silently reopens the
-    AGENTED_SERVER_NO_LLM_KEYS bypass."""
-    import inspect
+def _spawns_missing_env(path):
+    """(line, snippet) for every subprocess.run/Popen in `path` that spawns tesserae
+    without an explicit env=. Paren-matched so multi-line calls are handled."""
     import re
 
-    src = inspect.getsource(ti)
-    missing = []
-    for m in re.finditer(r"subprocess\.run\(", src):
+    src = path.read_text()
+    out = []
+    for m in re.finditer(r"subprocess\.(run|Popen)\(", src):
         seg, depth, end = src[m.start():], 0, 0
-        for i, ch in enumerate(seg[:800]):
+        for i, ch in enumerate(seg[:900]):
             if ch == "(":
                 depth += 1
             elif ch == ")":
@@ -170,9 +168,38 @@ def test_every_tesserae_subprocess_passes_scrubbed_env():
                 if depth == 0:
                     end = i
                     break
-        if "env=" not in seg[:end]:
-            missing.append(src[: m.start()].count("\n") + 1)
-    assert not missing, f"subprocess.run without env=_tesserae_env() at lines {missing}"
+        call = seg[:end]
+        # Only tesserae spawns matter here; `pkill`/`claude`/etc. are out of scope.
+        if "tesserae" not in call.lower() and "_TESSERAE_CMD" not in call:
+            continue
+        if "pkill" in call:
+            continue
+        if "env=" not in call:
+            out.append((src[: m.start()].count("\n") + 1, call.split("\n")[1:2]))
+    return out
+
+
+def test_no_tesserae_subprocess_escapes_env_scrub_backend_wide():
+    """Bug-class guard, BACKEND-WIDE (not just tesserae_integration).
+
+    A tesserae child that inherits raw os.environ re-exposes a server-baked
+    inference key despite AGENTED_SERVER_NO_LLM_KEYS. The first pass of this fix
+    only swept tesserae_integration.py and MISSED super_agent_memory.py's
+    distill/agents-list/agents-drill spawns (distill is itself an LLM op) plus the
+    `tesserae --version` probe in the route module. Assert across the package so a
+    new spawn in ANY module cannot silently reopen the bypass.
+    """
+    from pathlib import Path
+
+    backend = Path(ti.__file__).resolve().parents[2]
+    offenders = {}
+    for py in list((backend / "app").rglob("*.py")) + list((backend / "app_litestar").rglob("*.py")):
+        if "test" in py.name:
+            continue
+        found = _spawns_missing_env(py)
+        if found:
+            offenders[str(py.relative_to(backend))] = [ln for ln, _ in found]
+    assert not offenders, f"tesserae subprocess without env= (NO_LLM_KEYS bypass): {offenders}"
 
 
 @pytest.mark.parametrize("bad", ["-x", "--evil", "bad scope", "a" * 250])
