@@ -10186,6 +10186,9 @@
     "breadcrumb": "디센트 경로",
     "viewToggle": "그래프 보기",
     "viewGraph": "그래프",
-    "viewDescent": "디센트"
+    "viewDescent": "디센트",
+    "summarizeBudget": "요약 {n}회/틱",
+    "summarizeBudgetOff": "요약 꺼짐",
+    "summarizeBudgetTitle": "통합 틱마다 커뮤니티 요약 예열에 사용하는 최대 LLM 호출 수 (AGENTED_TESSERAE_SUMMARIZE_BUDGET, 0이면 비활성)"
   }
 }

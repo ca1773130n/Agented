@@ -125,6 +125,56 @@ def test_graph_map_parses_card_payload():
     assert "--cursor" in argv and "--budget-chars" in argv
 
 
+@pytest.mark.parametrize("bad", [0, -1, 200_001, "80000", 1.5])
+def test_graph_map_rejects_unbounded_budget_chars(bad):
+    """Tesserae reads budget_chars <= 0 as UNCAPPED, so an HTTP caller must not be
+    able to request an unbounded (or absurd) response. Rejected before spawning."""
+    with patch.object(ti, "_run_tesserae") as run:
+        res = ti.graph_map(budget_chars=bad)
+    assert res["ok"] is False and "budget_chars" in res["reason"]
+    run.assert_not_called()
+
+
+def test_tesserae_env_scrubs_llm_keys_when_flag_set(monkeypatch):
+    """REQ-41: a tesserae subprocess must not inherit a server-baked inference key
+    when AGENTED_SERVER_NO_LLM_KEYS is on — graph-map can lazily materialize a
+    community summary (an LLM call), and ask/context/research/federation all spend
+    keys outright. Flag OFF must stay byte-identical to plain os.environ."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-should-not-leak")
+
+    monkeypatch.delenv("AGENTED_SERVER_NO_LLM_KEYS", raising=False)
+    assert ti._tesserae_env().get("ANTHROPIC_API_KEY") == "sk-should-not-leak"
+
+    monkeypatch.setenv("AGENTED_SERVER_NO_LLM_KEYS", "1")
+    scrubbed = ti._tesserae_env()
+    assert "ANTHROPIC_API_KEY" not in scrubbed
+    assert "PATH" in scrubbed  # only inference keys are stripped, not the whole env
+
+
+def test_every_tesserae_subprocess_passes_scrubbed_env():
+    """Bug-class guard: EVERY subprocess spawn in this module must pass
+    env=_tesserae_env(). A new spawn site added without it silently reopens the
+    AGENTED_SERVER_NO_LLM_KEYS bypass."""
+    import inspect
+    import re
+
+    src = inspect.getsource(ti)
+    missing = []
+    for m in re.finditer(r"subprocess\.run\(", src):
+        seg, depth, end = src[m.start():], 0, 0
+        for i, ch in enumerate(seg[:800]):
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    end = i
+                    break
+        if "env=" not in seg[:end]:
+            missing.append(src[: m.start()].count("\n") + 1)
+    assert not missing, f"subprocess.run without env=_tesserae_env() at lines {missing}"
+
+
 @pytest.mark.parametrize("bad", ["-x", "--evil", "bad scope", "a" * 250])
 def test_graph_map_rejects_flag_smuggling_scope(bad):
     """A scope that could smuggle a CLI flag (leading dash) or is malformed is

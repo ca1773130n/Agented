@@ -150,6 +150,9 @@ export interface ConsolidationStatus {
   running: boolean;
   idle_seconds: number;
   consolidate_every: number;
+  // 0.25 SUMMARIZE op: max LLM calls per tick spent pre-warming community
+  // summaries (0 = that op disabled). A real recurring cost, so it is shown.
+  summarize_budget?: number;
 }
 
 export interface MemoryConfig {

@@ -293,14 +293,20 @@ def graph_map_route(
     scope: Optional[str] = None,
     cursor: int = 0,
     budget_chars: Optional[int] = None,
-    project: Optional[str] = None,
 ) -> dict[str, Any]:
     """Descent structural navigation via ``tesserae graph-map`` (0.25): a budgeted
     card map over the community hierarchy. No ``scope`` = root map; pass a card's
     ``scope_id`` to descend, its ``parent_scope`` to ascend, ``cursor`` to page an
     oversized level. Needs a >= 0.25 recompile (writes ``.tesserae/hierarchy.json``);
-    otherwise returns ``ok=False`` with an actionable reason."""
-    return ti.graph_map(scope=scope, cursor=cursor, budget_chars=budget_chars, project=project)
+    otherwise returns ``ok=False`` with an actionable reason.
+
+    Deliberately NO ``project`` parameter: ``ti.graph_map`` uses it as the subprocess
+    ``cwd``, and GET ``/admin/*`` only requires ``viewer``, so exposing it would let
+    any authenticated viewer point a subprocess at an arbitrary filesystem path. The
+    KG explorer is single-project; if per-project Descent is ever needed, resolve a
+    DB project id through ``get_tesserae_root()`` like the sibling graph routes do —
+    never pass raw query text through as a path."""
+    return ti.graph_map(scope=scope, cursor=cursor, budget_chars=budget_chars)
 
 
 @get("/system/memory/sessions", sync_to_thread=True)

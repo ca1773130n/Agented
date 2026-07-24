@@ -190,6 +190,15 @@ onUnmounted(() => { alive = false; stopEnginePoll(); });
                 ? t('memoryDoctor.consolidation.on')
                 : t('memoryDoctor.consolidation.stopped'))
             : t('memoryDoctor.consolidation.off') }}</span>
+        <!-- 0.25 SUMMARIZE: a recurring background LLM cost, so make the budget visible -->
+        <span
+          v-if="config.consolidation && config.consolidation.summarize_budget != null"
+          class="backend-live"
+          :class="config.consolidation.summarize_budget > 0 ? 'backend-live--ok' : 'backend-live--down'"
+          :title="t('descent.summarizeBudgetTitle')"
+        >{{ config.consolidation.summarize_budget > 0
+            ? t('descent.summarizeBudget', { n: config.consolidation.summarize_budget })
+            : t('descent.summarizeBudgetOff') }}</span>
       </div>
       <div class="backend-engine">
         <span v-if="engineMsg" class="backend-engine__msg">{{ engineMsg }}</span>

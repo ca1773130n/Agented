@@ -36,11 +36,18 @@ function canDescend(c: GraphMapCard): boolean {
   return c.kind === 'community' && (c.children_count ?? 0) > 0;
 }
 
+// Monotonic request id: rapid drill/ascend can leave a SLOWER earlier request in
+// flight, and without this guard its late response would overwrite the newer scope's
+// cards. Only the most recent request may write state.
+let reqSeq = 0;
+
 async function loadScope(scope: string | null) {
+  const myReq = ++reqSeq;
   loading.value = true;
   error.value = null;
   try {
     const res = await memorySystemApi.graphMap(scope);
+    if (myReq !== reqSeq) return; // superseded — discard
     if (!res.ok || !res.map) {
       error.value = res.reason || t('descent.failed');
       header.value = null;
@@ -50,26 +57,32 @@ async function loadScope(scope: string | null) {
     header.value = res.map.header;
     cards.value = res.map.cards;
   } catch (e) {
+    if (myReq !== reqSeq) return;
     error.value = (e as Error).message || t('descent.failed');
   } finally {
-    loading.value = false;
+    if (myReq === reqSeq) loading.value = false;
   }
 }
 
 async function loadMore() {
   if (loadingMore.value || !hasMore.value) return;
+  const myReq = reqSeq; // page belongs to THIS scope; a navigation invalidates it
   loadingMore.value = true;
   try {
     const res = await memorySystemApi.graphMap(currentScope.value, cards.value.length);
+    if (myReq !== reqSeq) return; // navigated away — do not append to the new scope
     if (res.ok && res.map) {
       // Append only genuinely new scope_ids (defensive against cursor overlap).
       const seen = new Set(cards.value.map((c) => c.scope_id));
       cards.value.push(...res.map.cards.filter((c) => !seen.has(c.scope_id)));
+    } else {
+      // Don't fail silently — the user needs to know the page didn't arrive.
+      error.value = res.reason || t('descent.failed');
     }
-  } catch {
-    /* leave what we have; the user can retry via "load more" */
+  } catch (e) {
+    if (myReq === reqSeq) error.value = (e as Error).message || t('descent.failed');
   } finally {
-    loadingMore.value = false;
+    if (myReq === reqSeq) loadingMore.value = false;
   }
 }
 

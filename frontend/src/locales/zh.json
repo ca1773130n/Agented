@@ -10186,6 +10186,9 @@
     "breadcrumb": "下钻路径",
     "viewToggle": "图谱视图",
     "viewGraph": "图谱",
-    "viewDescent": "下钻"
+    "viewDescent": "下钻",
+    "summarizeBudget": "摘要 {n}次/轮",
+    "summarizeBudgetOff": "摘要已关闭",
+    "summarizeBudgetTitle": "每轮整合中用于预热社区摘要的最大 LLM 调用次数 (AGENTED_TESSERAE_SUMMARIZE_BUDGET，0 表示禁用)"
   }
 }
