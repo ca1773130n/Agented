@@ -150,6 +150,9 @@ export interface ConsolidationStatus {
   running: boolean;
   idle_seconds: number;
   consolidate_every: number;
+  // 0.25 SUMMARIZE op: max LLM calls per tick spent pre-warming community
+  // summaries (0 = that op disabled). A real recurring cost, so it is shown.
+  summarize_budget?: number;
 }
 
 export interface MemoryConfig {
@@ -219,6 +222,46 @@ export interface GraphQueryResult {
   ok: boolean;
   question: string;
   hits: GraphHit[];
+  reason: string | null;
+}
+
+// Tesserae 0.25 `graph-map` — budgeted "Descent" structural navigation. A card is
+// a community or node scope; descend via scope_id, ascend via parent_scope, page an
+// oversized level via the header cursor.
+export interface GraphMapHeader {
+  scope: string | null;
+  kind: string; // 'root' | 'community' | 'node' | 'agent' | ...
+  levels?: number;
+  node_count?: number;
+  edge_count?: number;
+  community_count?: number;
+  hubs?: string[];
+  total_cards?: number;
+  cursor?: number;
+}
+
+export interface GraphMapCard {
+  scope_id: string;
+  kind: string; // 'community' | 'node'
+  title: string;
+  summary?: string;
+  size?: number;
+  children_count?: number;
+  leaf_member_count?: number;
+  parent_scope: string | null;
+  tags?: string[];
+  quality?: string; // 'llm' | 'structural'
+  stale?: boolean;
+}
+
+export interface GraphMap {
+  header: GraphMapHeader;
+  cards: GraphMapCard[];
+}
+
+export interface GraphMapResult {
+  ok: boolean;
+  map: GraphMap | null;
   reason: string | null;
 }
 
@@ -437,6 +480,18 @@ export const memorySystemApi = {
     const qs = new URLSearchParams({ q, top_k: String(topK) });
     if (kind) qs.set('kind', kind);
     return apiFetch<GraphQueryResult>(`/admin/system/memory/graph/query?${qs.toString()}`);
+  },
+
+  // Tesserae 0.25 `graph-map` — Descent structural navigation. Omit scope for the
+  // root map; pass a card's scope_id to descend, its parent_scope to ascend, cursor
+  // to page an oversized level.
+  graphMap: (scope?: string | null, cursor = 0, budgetChars?: number | null) => {
+    const qs = new URLSearchParams();
+    if (scope) qs.set('scope', scope);
+    if (cursor) qs.set('cursor', String(cursor));
+    if (budgetChars != null) qs.set('budget_chars', String(budgetChars));
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return apiFetch<GraphMapResult>(`/admin/system/memory/graph/map${suffix}`);
   },
 
   // Tesserae `config status` — resolved LLM backend + liveness ping.

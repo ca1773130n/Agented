@@ -14,7 +14,7 @@ def test_tesserae_cli_status_caches_version(monkeypatch):
 
     class _R:
         returncode = 0
-        stdout = "tesserae 0.20.0"
+        stdout = "tesserae 0.25.0"
         stderr = ""
 
     def _fake_run(*a, **k):
@@ -27,7 +27,7 @@ def test_tesserae_cli_status_caches_version(monkeypatch):
         r2 = ms._tesserae_cli_status()
         assert r1 == r2 == {
             "installed": True,
-            "version": "tesserae 0.20.0",
+            "version": "tesserae 0.25.0",
             "path": "/usr/bin/tesserae",
         }
         assert len(calls) == 1  # spawned once, not per call

@@ -50,11 +50,35 @@ logger = logging.getLogger(__name__)
 
 _TESSERAE_CMD = shutil.which("tesserae") or "tesserae"
 
+
+def _tesserae_env() -> dict:
+    """Environment for a ``tesserae`` subprocess, honoring AGENTED_SERVER_NO_LLM_KEYS.
+
+    REQ-41 4th-leak guard: a child that inherits the full ``os.environ`` re-exposes a
+    server-baked ``ANTHROPIC_API_KEY`` to Tesserae, which resolves inference keys from
+    env — so ``ask``/``context``/``research``/``federation --semantic`` (and 0.25's
+    ``graph-map``, which can lazily materialize a community summary with one LLM call)
+    would silently spend the server key the operator asked us to ignore.
+
+    Applied at EVERY spawn site in this module, not just the LLM-obvious ones: the
+    daemon already did this (``tesserae_engine_daemon``) but these paths did not.
+    With the flag OFF ``config.subprocess_env`` returns the base unchanged, so the
+    child sees a plain copy of ``os.environ`` — byte-for-byte the prior behaviour.
+    """
+    from app import config
+
+    base = os.environ.copy()
+    scrubbed = config.subprocess_env(base)
+    return scrubbed if scrubbed is not None else base
+
 # A Tesserae project alias is a safe project-name token; we pass these as
 # positional values to ``--scope-aliases``, so reject anything that could be read
 # as a CLI flag or shell-special even though argv (no shell) already blocks
 # shell injection.
 _SAFE_ALIAS_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+# Ceiling for the graph-map response budget. Tesserae's own default is 32k chars and
+# it treats <= 0 as uncapped, so bound what an HTTP caller may ask for.
+_GRAPH_MAP_MAX_BUDGET_CHARS = 200_000
 _TESSERAE_BATCH_MAX_SESSIONS = 500
 _TESSERAE_IMPORT_TIMEOUT = 60  # sessions import — fast
 _TESSERAE_INIT_TIMEOUT = 30  # init — instant
@@ -724,6 +748,7 @@ def export_sessions_to_tesserae(project_id: str) -> dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=_TESSERAE_IMPORT_TIMEOUT,
+            env=_tesserae_env(),
         )
         if result.returncode != 0:
             logger.warning(
@@ -821,7 +846,10 @@ def _run_tesserae(
     started = _time.monotonic()
     started_iso = _now_iso()
     try:
-        proc = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, timeout=timeout)
+        proc = subprocess.run(
+            cmd, cwd=str(cwd), capture_output=True, text=True, timeout=timeout,
+            env=_tesserae_env(),
+        )
     except FileNotFoundError:
         return TesseraeOpResult(
             op=op,
@@ -1188,6 +1216,77 @@ def query_graph(
         }
     hits = parsed.get("hits") or []
     return {"ok": True, "question": parsed.get("question", question), "hits": hits, "reason": None}
+
+
+def graph_map(
+    *,
+    scope: Optional[str] = None,
+    cursor: int = 0,
+    budget_chars: Optional[int] = None,
+    project: Optional[str] = None,
+    timeout: int = 30,
+) -> dict:
+    """Run ``tesserae graph-map`` (0.25 "Descent" structural navigation) and return
+    the budgeted card map ``{header, cards}``. No ``scope`` = the root map; a card's
+    ``scope_id`` descends a level, its ``parent_scope`` ascends, ``cursor`` pages an
+    oversized level. Requires a >= 0.25 compile (writes ``.tesserae/hierarchy.json``);
+    a project compiled before the bump returns ``ok=False`` until recompiled. Returns
+    ``{ok, map, reason}``.
+
+    ``scope`` becomes CLI argv, so it is guarded against flag-smuggling (a leading
+    ``-`` would be read as a flag); ``cursor``/``budget_chars`` are bound to sane
+    ranges. ``project`` is an optional workspace-root path (default: this repo).
+    """
+    if scope is not None:
+        # scope_ids look like "CommunitySummary:hex", "org:root", "agent:<key>",
+        # "<alias>::<cid>" — allow alnum + : . / _ - but never a leading dash.
+        if (
+            not scope.strip()
+            or scope.lstrip().startswith("-")
+            or not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_:./-]{0,199}", scope)
+        ):
+            return {"ok": False, "map": None, "reason": "invalid scope"}
+    if not isinstance(cursor, int) or cursor < 0:
+        return {"ok": False, "map": None, "reason": "invalid cursor"}
+    # Tesserae reads budget_chars <= 0 as UNCAPPED, so a caller could otherwise force
+    # an unbounded (or absurdly large) response through an HTTP query param. Require a
+    # positive value within a sane ceiling; omit it to get Tesserae's 32k default.
+    if budget_chars is not None and (
+        not isinstance(budget_chars, int)
+        or budget_chars <= 0
+        or budget_chars > _GRAPH_MAP_MAX_BUDGET_CHARS
+    ):
+        return {
+            "ok": False,
+            "map": None,
+            "reason": f"invalid budget_chars (1-{_GRAPH_MAP_MAX_BUDGET_CHARS})",
+        }
+    cwd = Path(project).expanduser().resolve() if project else _REPO_ROOT
+    args = ["graph-map", "--project", str(cwd)]
+    if scope:
+        args += ["--scope", scope]
+    if cursor:
+        args += ["--cursor", str(cursor)]
+    if budget_chars is not None:
+        args += ["--budget-chars", str(budget_chars)]
+    res = _run_tesserae("graph-map", args, cwd=cwd, timeout=timeout)
+    if not res.ok:
+        return {
+            "ok": False,
+            "map": None,
+            "reason": res.reason or (res.stderr or "").strip()[:400] or "tesserae graph-map failed",
+        }
+    out = res.stdout or ""
+    start = out.find("{")
+    parsed = None
+    if start >= 0:
+        try:
+            parsed, _ = json.JSONDecoder().raw_decode(out[start:])
+        except (json.JSONDecodeError, ValueError):
+            parsed = None
+    if not isinstance(parsed, dict) or "cards" not in parsed:
+        return {"ok": False, "map": None, "reason": "could not parse tesserae graph-map JSON"}
+    return {"ok": True, "map": parsed, "reason": None}
 
 
 def run_research(
@@ -1933,6 +2032,7 @@ def ask_tesserae(
             capture_output=True,
             text=True,
             timeout=60,
+            env=_tesserae_env(),
         )
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
         logger.warning("tesserae: ask failed: %s", exc)
@@ -1972,7 +2072,7 @@ def context_tesserae(
     # smuggled in as a CLI flag (argv injection).
     cmd += ["--", question]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=90, env=_tesserae_env())
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
         logger.warning("tesserae: context failed: %s", exc)
         return None
@@ -2004,6 +2104,7 @@ def list_tesserae_project_aliases() -> list[str]:
             capture_output=True,
             text=True,
             timeout=20,
+            env=_tesserae_env(),
         )
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
         logger.warning("tesserae: projects list failed: %s", exc)
@@ -2068,7 +2169,7 @@ def federated_ask_tesserae(
         "--semantic" if semantic else "--no-semantic",
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=_tesserae_env())
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
         logger.warning("tesserae: federated ask failed: %s", exc)
         return None
@@ -2115,7 +2216,7 @@ def federation_status(*, semantic: bool = True, timeout: int = 60) -> Optional[d
     cmd = [_TESSERAE_CMD, "federation", "status", *aliases, "--json"]
     cmd.append("--semantic" if semantic else "--no-semantic")
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=_tesserae_env())
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
         logger.warning("tesserae: federation status failed: %s", exc)
         return None

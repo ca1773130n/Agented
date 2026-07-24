@@ -10166,5 +10166,29 @@
     "loadErrorTitle": "チェックポイントを読み込めません",
     "loadError": "このスレッドの保留中チェックポイントの読み込みに失敗しました。",
     "pausedNoCheckpoint": "このスレッドは一時停止中ですが、保留中の判断はありません。そのまま再開できます。"
+  },
+  "descent": {
+    "title": "ディセント",
+    "subtitle": "コミュニティ単位で、予算内の階層ごとにグラフを探索します",
+    "root": "ルート",
+    "loading": "読み込み中…",
+    "failed": "マップを読み込めませんでした",
+    "retry": "再試行",
+    "empty": "この階層にはカードがありません",
+    "communities": "コミュニティ",
+    "levels": "階層",
+    "members": "{n} 個のメンバー",
+    "children": "{n} 個のサブコミュニティ",
+    "qualityLlm": "LLM",
+    "qualityStructural": "構造的",
+    "stale": "古い",
+    "loadMore": "さらに {n} 件を読み込む",
+    "breadcrumb": "ディセント経路",
+    "viewToggle": "グラフ表示",
+    "viewGraph": "グラフ",
+    "viewDescent": "ディセント",
+    "summarizeBudget": "要約 {n}回/ティック",
+    "summarizeBudgetOff": "要約オフ",
+    "summarizeBudgetTitle": "統合ティックごとにコミュニティ要約の事前生成へ使う最大 LLM 呼び出し数 (AGENTED_TESSERAE_SUMMARIZE_BUDGET、0 で無効)"
   }
 }

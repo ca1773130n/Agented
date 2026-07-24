@@ -36,6 +36,7 @@ from app.db.connection import get_connection
 
 from .tesserae_integration import (
     _TESSERAE_CMD,
+    _tesserae_env,
     get_distill_enabled,
     get_tesserae_root,
     logger,
@@ -144,7 +145,9 @@ def distill_super_agents(project_id: str, *, timeout: int = 1800) -> dict[str, A
     if reg is None:
         return {"ok": False, "reason": "no_super_agents"}
     # tesserae distill no-ops unless agent-distill is opted in (env or config).
-    env = {**os.environ, "TESSERAE_AGENT_DISTILL": "1"}
+    # Scrubbed base (REQ-41): distill IS an LLM operation, so a server-baked
+    # inference key must not reach it when AGENTED_SERVER_NO_LLM_KEYS is on.
+    env = {**_tesserae_env(), "TESSERAE_AGENT_DISTILL": "1"}
     try:
         proc = subprocess.run(
             [_TESSERAE_CMD, "distill", "--all", "--project", str(root)],
@@ -239,6 +242,7 @@ def agent_org(project_id: str, *, timeout: int = 30) -> Optional[list[dict[str, 
             capture_output=True,
             text=True,
             timeout=timeout,
+            env=_tesserae_env(),
         )
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return None
@@ -291,6 +295,7 @@ def agent_drill(
             capture_output=True,
             text=True,
             timeout=timeout,
+            env=_tesserae_env(),
         )
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return {"ok": False, "reason": "cli_unavailable"}
