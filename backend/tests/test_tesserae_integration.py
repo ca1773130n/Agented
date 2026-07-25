@@ -11,6 +11,8 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+import time as _t
+
 import pytest
 
 from app.services import tesserae_integration as ti
@@ -106,6 +108,125 @@ def test_build_decisions_parses_json_array():
     assert res["ok"] is True
     assert len(res["decisions"]) == 1
     assert res["decisions"][0]["source"] == "human"
+
+
+def test_extraction_timeout_fits_inside_subprocess_budget():
+    """0.25.1 arms the per-doc extraction guard at 1800s, but we SIGKILL the whole
+    compile at _TESSERAE_COMPILE_TIMEOUT (600s). Unbounded, one wedged doc burns 3x
+    our budget and we abort mid-extraction, leaving a sidecar that outlives the graph
+    the run never wrote. The per-doc cutoff must be well inside the op budget."""
+    for budget in (1800, 600, 900, 60, 120):
+        got = int(ti._extraction_timeout_for(budget))
+        assert 0 < got < budget, f"budget={budget} -> {got} must be strictly inside it"
+    # At the real compile budget the doc gets the full cutoff — extraction averaged
+    # ~118s/doc on the live corpus, so a cutoff near that average would degrade
+    # roughly half of it to the deterministic baseline to buy safety we don't need.
+    assert int(ti._extraction_timeout_for(1800)) == 600
+    assert int(ti._extraction_timeout_for(600)) == 300  # clamped to half the budget
+    assert int(ti._extraction_timeout_for(60)) == 30  # floor still inside the budget
+
+
+def test_run_tesserae_blank_operator_timeout_does_not_disarm_the_bound(monkeypatch):
+    """A blank TESSERAE_EXTRACT_TIMEOUT= is read by Tesserae as UNSET (falls back to
+    1800s), so honouring it would silently restore the overrun we prevent. Blank must
+    lose; an explicit "0" (run-to-completion) is deliberate and must be preserved."""
+    seen = {}
+
+    class _P:
+        returncode, stdout, stderr = 0, "{}", ""
+
+    monkeypatch.setattr(ti.subprocess, "run", lambda cmd, **kw: (seen.update(kw.get("env") or {}), _P())[1])
+
+    for blank in ("", "   "):
+        seen.clear()
+        monkeypatch.setenv("TESSERAE_EXTRACT_TIMEOUT", blank)
+        ti._run_tesserae("x", ["status"], cwd=ti._REPO_ROOT, timeout=1800)
+        assert seen["TESSERAE_EXTRACT_TIMEOUT"] == "600", f"blank {blank!r} must not win"
+
+    seen.clear()
+    monkeypatch.setenv("TESSERAE_EXTRACT_TIMEOUT", "0")
+    ti._run_tesserae("x", ["status"], cwd=ti._REPO_ROOT, timeout=1800)
+    assert seen["TESSERAE_EXTRACT_TIMEOUT"] == "0"  # explicit escape hatch preserved
+
+
+def test_run_op_async_forwards_kwargs_to_the_op(monkeypatch):
+    """retry_fallbacks must actually REACH compile_workspace — otherwise the recovery
+    path is dead code for every HTTP caller."""
+    got = {}
+    monkeypatch.setitem(ti._OP_DISPATCH, "compile", lambda pid, **kw: got.update(pid=pid, **kw))
+    job = ti.run_op_async("proj-1", "compile", retry_fallbacks=True)
+    for _ in range(50):
+        if got:
+            break
+        _t.sleep(0.02)
+    assert got.get("retry_fallbacks") is True, f"kwargs not forwarded: {got}"
+    assert job.startswith("tess-compile-")
+
+
+def test_run_tesserae_bounds_extract_timeout_but_operator_wins(monkeypatch):
+    """We inject TESSERAE_EXTRACT_TIMEOUT, but an explicit operator value is kept."""
+    seen = {}
+
+    class _P:
+        returncode, stdout, stderr = 0, "{}", ""
+
+    def _fake(cmd, **kw):
+        seen.update(kw.get("env") or {})
+        return _P()
+
+    monkeypatch.delenv("TESSERAE_EXTRACT_TIMEOUT", raising=False)
+    monkeypatch.setattr(ti.subprocess, "run", _fake)
+    ti._run_tesserae("x", ["status"], cwd=ti._REPO_ROOT, timeout=600)
+    assert seen["TESSERAE_EXTRACT_TIMEOUT"] == "300"  # half the budget, clamped by cutoff
+
+    seen.clear()
+    monkeypatch.setenv("TESSERAE_EXTRACT_TIMEOUT", "42")
+    ti._run_tesserae("x", ["status"], cwd=ti._REPO_ROOT, timeout=600)
+    assert seen["TESSERAE_EXTRACT_TIMEOUT"] == "42"  # operator override survives
+
+
+def test_compile_workspace_is_incremental_by_default(monkeypatch):
+    """A full compile of a real corpus (~4.5h measured) cannot fit the 30-minute
+    HTTP-job ceiling, so the operator's Compile button would ALWAYS be SIGKILLed
+    partway — leaving a sidecar referencing nodes the aborted run never wrote.
+    The request-scoped path must therefore be incremental; `full=True` opts out."""
+    monkeypatch.setattr(ti, "get_tesserae_root", lambda pid: Path("/tmp/proj"))
+    monkeypatch.setattr(ti, "get_distill_enabled", lambda pid: False)
+
+    with patch.object(ti, "_run_tesserae") as run:
+        ti.compile_workspace("proj-1")
+    assert "--changed-only" in run.call_args[0][1]
+
+    with patch.object(ti, "_run_tesserae") as run:
+        ti.compile_workspace("proj-1", full=True)
+    assert "--changed-only" not in run.call_args[0][1]
+
+
+def test_compile_timeout_reason_tells_the_operator_what_to_do(monkeypatch):
+    """A bare 'timeout_after_1800s' leaves the operator stuck; say what to run."""
+    monkeypatch.setattr(ti, "get_tesserae_root", lambda pid: Path("/tmp/proj"))
+    monkeypatch.setattr(ti, "get_distill_enabled", lambda pid: False)
+    timed_out = ti.TesseraeOpResult(op="compile", ok=False, reason="timeout_after_1800s")
+    with patch.object(ti, "_run_tesserae", return_value=timed_out):
+        res = ti.compile_workspace("proj-1")
+    assert "detached" in res.reason and "nohup" in res.reason
+
+
+def test_compile_workspace_retry_fallbacks_pairs_with_changed_only(monkeypatch):
+    """--retry-fallbacks (0.25.1) is meaningless without --changed-only; a doc that
+    degraded to deterministic is byte-identical to a clean one, so it would otherwise
+    stay deterministic until its content changes."""
+    monkeypatch.setattr(ti, "get_tesserae_root", lambda pid: Path("/tmp/proj"))
+    monkeypatch.setattr(ti, "get_distill_enabled", lambda pid: False)
+    with patch.object(ti, "_run_tesserae") as run:
+        ti.compile_workspace("proj-1", retry_fallbacks=True)
+    argv = run.call_args[0][1]
+    assert "--changed-only" in argv and "--retry-fallbacks" in argv
+
+    with patch.object(ti, "_run_tesserae") as run:
+        ti.compile_workspace("proj-1")
+    argv = run.call_args[0][1]
+    assert "--retry-fallbacks" not in argv  # (--changed-only is now the default)
 
 
 def test_graph_map_parses_card_payload():

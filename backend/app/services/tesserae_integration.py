@@ -51,6 +51,29 @@ logger = logging.getLogger(__name__)
 _TESSERAE_CMD = shutil.which("tesserae") or "tesserae"
 
 
+def _extraction_timeout_for(op_timeout: int) -> str:
+    """Per-doc extraction cutoff that FITS INSIDE our own subprocess budget.
+
+    Tesserae 0.25.1 (#69) arms the extraction wedge guard by default at 1800s PER
+    DOC. That is right for a detached, hours-long CLI compile, but Agented kills
+    the whole subprocess after the op budget. Left alone, ONE wedged doc could burn
+    the entire window and we'd SIGKILL the compile mid-extraction — the truncated
+    state that leaves a hierarchy sidecar referencing nodes the run never wrote.
+
+    Prefer :data:`_EXTRACT_DOC_CUTOFF`, clamped to HALF the op budget so a wedge
+    always leaves time for other docs. The cutoff must separate "wedged" from
+    "merely slow": on the real 137-doc corpus extraction averaged ~118s/doc, and a
+    naive quarter-budget rule (150s) sat barely above that average — it would have
+    degraded roughly half the corpus to the deterministic baseline to buy safety we
+    were not actually short of. 600s is where healthy docs finished and only genuine
+    wedges hit the wall. A nonblank operator TESSERAE_EXTRACT_TIMEOUT still wins.
+    """
+    # Floor 30s: at the smallest op budget we use (60s) a larger floor would equal
+    # the whole budget and re-open the very hole this closes. Invariant: the per-doc
+    # cutoff is always strictly less than the op budget.
+    return str(min(_EXTRACT_DOC_CUTOFF, max(30, op_timeout // 2)))
+
+
 def _tesserae_env() -> dict:
     """Environment for a ``tesserae`` subprocess, honoring AGENTED_SERVER_NO_LLM_KEYS.
 
@@ -83,7 +106,13 @@ _TESSERAE_BATCH_MAX_SESSIONS = 500
 _TESSERAE_IMPORT_TIMEOUT = 60  # sessions import — fast
 _TESSERAE_INIT_TIMEOUT = 30  # init — instant
 _TESSERAE_INGEST_TIMEOUT = 180  # ingest — walks markdown files
-_TESSERAE_COMPILE_TIMEOUT = 600  # compile — extractor over all sources (5-10 min)
+_TESSERAE_COMPILE_TIMEOUT = 1800  # compile — extractor over all sources. Raised from 600s
+# so the per-doc cutoff below can actually be granted (a 600s budget could only ever
+# hand a doc 300s, under the ~118s/doc average measured on the real corpus — too tight).
+# This runs as an async job (run_op_async), so a longer ceiling never blocks a request.
+# Per-doc extraction cutoff preferred inside any op budget. 600s is where healthy docs
+# finished on the real corpus and only genuine wedges hit the wall.
+_EXTRACT_DOC_CUTOFF = 600
 _TESSERAE_BUILD_SITE_TIMEOUT = 300  # build-site — static gen
 _TESSERAE_RESEARCH_TIMEOUT = 900  # research — agentic plan→search→reflect→synthesize loop
 _TESSERAE_CONFIG_TIMEOUT = 30  # config status — resolves + pings the LLM backend
@@ -845,10 +874,20 @@ def _run_tesserae(
     cmd = [_TESSERAE_CMD, *args]
     started = _time.monotonic()
     started_iso = _now_iso()
+    env = _tesserae_env()
+    # Keep Tesserae's 0.25.1 per-doc extraction guard (default 1800s) inside OUR
+    # subprocess budget, or one wedged doc eats the whole window and we SIGKILL a
+    # half-written compile. A NONBLANK operator value wins — `setdefault` would
+    # honour an empty `TESSERAE_EXTRACT_TIMEOUT=`, which Tesserae reads as unset and
+    # falls back to 1800s, silently restoring the very overrun this prevents.
+    # An explicit "0" is nonblank and preserved: that is the documented
+    # run-to-completion escape hatch, and disarming deliberately is the operator's call.
+    if not (env.get("TESSERAE_EXTRACT_TIMEOUT") or "").strip():
+        env["TESSERAE_EXTRACT_TIMEOUT"] = _extraction_timeout_for(timeout)
     try:
         proc = subprocess.run(
             cmd, cwd=str(cwd), capture_output=True, text=True, timeout=timeout,
-            env=_tesserae_env(),
+            env=env,
         )
     except FileNotFoundError:
         return TesseraeOpResult(
@@ -1667,12 +1706,20 @@ def ingest_paths(
     )
 
 
-def compile_workspace(project_id: str) -> TesseraeOpResult:
+def compile_workspace(
+    project_id: str, *, retry_fallbacks: bool = False, full: bool = False
+) -> TesseraeOpResult:
     """Extract the typed knowledge graph over all ingested sources.
 
     Heavy operation (LLM calls if extractor is claude-cli; minutes to
     complete). Synchronous variant — callers wanting async should use
     ``run_op_async`` instead.
+
+    ``retry_fallbacks`` (Tesserae 0.25.1 / #70) pairs with ``--changed-only`` to
+    re-extract docs whose typed extraction previously failed and was served by the
+    deterministic baseline. Without it such a doc stays deterministic FOREVER — its
+    manifest entry is byte-identical to a clean one, so ``--changed-only`` skips it
+    until the file content itself changes.
     """
     root = get_tesserae_root(project_id)
     if root is None:
@@ -1687,12 +1734,35 @@ def compile_workspace(project_id: str) -> TesseraeOpResult:
     # is a 0.9.0 deprecation stub). Pass distillation explicitly so the
     # per-project toggle reliably overrides any global config/env default.
     distill_flag = "--distill" if get_distill_enabled(project_id) else "--no-distill"
-    return _run_tesserae(
+    args = ["compile", "--project", str(root), distill_flag]
+    # INCREMENTAL BY DEFAULT. A full compile of a real corpus does not fit in any
+    # HTTP-job budget — the live 137-doc project takes ~4.5h against a 30-minute
+    # ceiling, so an operator pressing Compile would ALWAYS be SIGKILLed partway,
+    # leaving a sidecar that references nodes the aborted run never wrote. Skipping
+    # unchanged docs is what actually completes: steady-state edits finish in
+    # minutes. A genuine full rebuild is a detached CLI job (`nohup tesserae
+    # compile … & disown`), not a request-scoped one. ``full=True`` is the explicit
+    # opt-out for a caller that has its own budget.
+    if not full:
+        args.append("--changed-only")
+    if retry_fallbacks:
+        # --retry-fallbacks only has meaning alongside --changed-only.
+        if "--changed-only" not in args:
+            args.append("--changed-only")
+        args.append("--retry-fallbacks")
+    res = _run_tesserae(
         "compile",
-        ["compile", "--project", str(root), distill_flag],
+        args,
         cwd=root,
         timeout=_TESSERAE_COMPILE_TIMEOUT,
     )
+    if not res.ok and (res.reason or "").startswith("timeout_after_"):
+        # Don't leave the operator staring at a bare timeout: say what to do.
+        res.reason = (
+            f"{res.reason} — a full compile of a large corpus exceeds this budget; "
+            f"run it detached (`nohup tesserae compile --project {root} & disown`)"
+        )
+    return res
 
 
 def build_site(project_id: str) -> TesseraeOpResult:
@@ -1752,14 +1822,18 @@ _OP_DISPATCH = {
 }
 
 
-def run_op_async(project_id: str, op: str, *, coalesce: bool = False) -> str:
+def run_op_async(project_id: str, op: str, *, coalesce: bool = False, **op_kwargs) -> str:
     """Run a Tesserae op in a daemon thread, return a job_id the
     caller can poll. Used for long ops (compile, build-site) so the
     HTTP handler returns immediately.
 
     ``coalesce=True`` returns the id of an already-running job for the same
     (project_id, op) instead of starting another — used for heavy ops like
-    agent-distill so a burst of triggers can't spawn overlapping subprocesses."""
+    agent-distill so a burst of triggers can't spawn overlapping subprocesses.
+
+    ``op_kwargs`` are forwarded to the dispatched op (e.g. ``retry_fallbacks=True``
+    for ``compile``); without this the flag would be unreachable from any HTTP
+    caller and the recovery path would be dead code."""
     if op not in _OP_DISPATCH:
         raise ValueError(f"unknown tesserae op: {op}")
     import secrets
@@ -1787,7 +1861,7 @@ def run_op_async(project_id: str, op: str, *, coalesce: bool = False) -> str:
 
     def _runner():
         try:
-            result = _OP_DISPATCH[op](project_id)
+            result = _OP_DISPATCH[op](project_id, **op_kwargs)
             with _op_jobs_lock:
                 _op_jobs[job_id]["status"] = "completed" if result.ok else "failed"
                 _op_jobs[job_id]["finished_at"] = _now_iso()

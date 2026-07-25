@@ -10189,6 +10189,7 @@
     "viewDescent": "디센트",
     "summarizeBudget": "요약 {n}회/틱",
     "summarizeBudgetOff": "요약 꺼짐",
-    "summarizeBudgetTitle": "통합 틱마다 커뮤니티 요약 예열에 사용하는 최대 LLM 호출 수 (AGENTED_TESSERAE_SUMMARIZE_BUDGET, 0이면 비활성)"
+    "summarizeBudgetTitle": "통합 틱마다 커뮤니티 요약 예열에 사용하는 최대 LLM 호출 수 (AGENTED_TESSERAE_SUMMARIZE_BUDGET, 0이면 비활성)",
+    "staleHidden": "오래된 커뮤니티 {n}개 숨김 (멤버가 그래프에 없음 — 재컴파일하면 복구됩니다)"
   }
 }
