@@ -11,6 +11,8 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+import time as _t
+
 import pytest
 
 from app.services import tesserae_integration as ti
@@ -113,11 +115,52 @@ def test_extraction_timeout_fits_inside_subprocess_budget():
     compile at _TESSERAE_COMPILE_TIMEOUT (600s). Unbounded, one wedged doc burns 3x
     our budget and we abort mid-extraction, leaving a sidecar that outlives the graph
     the run never wrote. The per-doc cutoff must be well inside the op budget."""
-    for budget in (600, 900, 60, 120):
+    for budget in (1800, 600, 900, 60, 120):
         got = int(ti._extraction_timeout_for(budget))
         assert 0 < got < budget, f"budget={budget} -> {got} must be strictly inside it"
-    assert int(ti._extraction_timeout_for(600)) == 150
+    # At the real compile budget the doc gets the full cutoff — extraction averaged
+    # ~118s/doc on the live corpus, so a cutoff near that average would degrade
+    # roughly half of it to the deterministic baseline to buy safety we don't need.
+    assert int(ti._extraction_timeout_for(1800)) == 600
+    assert int(ti._extraction_timeout_for(600)) == 300  # clamped to half the budget
     assert int(ti._extraction_timeout_for(60)) == 30  # floor still inside the budget
+
+
+def test_run_tesserae_blank_operator_timeout_does_not_disarm_the_bound(monkeypatch):
+    """A blank TESSERAE_EXTRACT_TIMEOUT= is read by Tesserae as UNSET (falls back to
+    1800s), so honouring it would silently restore the overrun we prevent. Blank must
+    lose; an explicit "0" (run-to-completion) is deliberate and must be preserved."""
+    seen = {}
+
+    class _P:
+        returncode, stdout, stderr = 0, "{}", ""
+
+    monkeypatch.setattr(ti.subprocess, "run", lambda cmd, **kw: (seen.update(kw.get("env") or {}), _P())[1])
+
+    for blank in ("", "   "):
+        seen.clear()
+        monkeypatch.setenv("TESSERAE_EXTRACT_TIMEOUT", blank)
+        ti._run_tesserae("x", ["status"], cwd=ti._REPO_ROOT, timeout=1800)
+        assert seen["TESSERAE_EXTRACT_TIMEOUT"] == "600", f"blank {blank!r} must not win"
+
+    seen.clear()
+    monkeypatch.setenv("TESSERAE_EXTRACT_TIMEOUT", "0")
+    ti._run_tesserae("x", ["status"], cwd=ti._REPO_ROOT, timeout=1800)
+    assert seen["TESSERAE_EXTRACT_TIMEOUT"] == "0"  # explicit escape hatch preserved
+
+
+def test_run_op_async_forwards_kwargs_to_the_op(monkeypatch):
+    """retry_fallbacks must actually REACH compile_workspace — otherwise the recovery
+    path is dead code for every HTTP caller."""
+    got = {}
+    monkeypatch.setitem(ti._OP_DISPATCH, "compile", lambda pid, **kw: got.update(pid=pid, **kw))
+    job = ti.run_op_async("proj-1", "compile", retry_fallbacks=True)
+    for _ in range(50):
+        if got:
+            break
+        _t.sleep(0.02)
+    assert got.get("retry_fallbacks") is True, f"kwargs not forwarded: {got}"
+    assert job.startswith("tess-compile-")
 
 
 def test_run_tesserae_bounds_extract_timeout_but_operator_wins(monkeypatch):
@@ -134,7 +177,7 @@ def test_run_tesserae_bounds_extract_timeout_but_operator_wins(monkeypatch):
     monkeypatch.delenv("TESSERAE_EXTRACT_TIMEOUT", raising=False)
     monkeypatch.setattr(ti.subprocess, "run", _fake)
     ti._run_tesserae("x", ["status"], cwd=ti._REPO_ROOT, timeout=600)
-    assert seen["TESSERAE_EXTRACT_TIMEOUT"] == "150"
+    assert seen["TESSERAE_EXTRACT_TIMEOUT"] == "300"  # half the budget, clamped by cutoff
 
     seen.clear()
     monkeypatch.setenv("TESSERAE_EXTRACT_TIMEOUT", "42")

@@ -531,10 +531,16 @@ def tesserae_ingest(
     "/system/memory/tesserae/projects/{project_id:str}/compile",
     sync_to_thread=True,
 )
-def tesserae_compile(project_id: str) -> dict[str, Any]:
+def tesserae_compile(project_id: str, retry_fallbacks: bool = False) -> dict[str, Any]:
     """``tesserae project compile`` — extract the typed knowledge
     graph. Long-running (minutes); dispatched async. Returns a
-    ``job_id`` the caller polls via the jobs endpoint."""
+    ``job_id`` the caller polls via the jobs endpoint.
+
+    ``retry_fallbacks=true`` (Tesserae 0.25.1) re-extracts docs whose typed
+    extraction previously failed and was served by the deterministic baseline.
+    Those docs are otherwise stuck: their manifest entry is byte-identical to a
+    clean one, so an incremental compile skips them until the file itself changes.
+    """
     with get_connection() as conn:
         row = conn.execute(
             "SELECT 1 FROM projects WHERE id = ?",
@@ -546,7 +552,7 @@ def tesserae_compile(project_id: str) -> dict[str, Any]:
         raise ValidationException(
             detail="Tesserae not enabled for this project",
         )
-    job_id = ti.run_op_async(project_id, "compile")
+    job_id = ti.run_op_async(project_id, "compile", retry_fallbacks=retry_fallbacks)
     return {"job_id": job_id, "project_id": project_id, "op": "compile", "status": "running"}
 
 
