@@ -185,6 +185,33 @@ def test_run_tesserae_bounds_extract_timeout_but_operator_wins(monkeypatch):
     assert seen["TESSERAE_EXTRACT_TIMEOUT"] == "42"  # operator override survives
 
 
+def test_compile_workspace_is_incremental_by_default(monkeypatch):
+    """A full compile of a real corpus (~4.5h measured) cannot fit the 30-minute
+    HTTP-job ceiling, so the operator's Compile button would ALWAYS be SIGKILLed
+    partway — leaving a sidecar referencing nodes the aborted run never wrote.
+    The request-scoped path must therefore be incremental; `full=True` opts out."""
+    monkeypatch.setattr(ti, "get_tesserae_root", lambda pid: Path("/tmp/proj"))
+    monkeypatch.setattr(ti, "get_distill_enabled", lambda pid: False)
+
+    with patch.object(ti, "_run_tesserae") as run:
+        ti.compile_workspace("proj-1")
+    assert "--changed-only" in run.call_args[0][1]
+
+    with patch.object(ti, "_run_tesserae") as run:
+        ti.compile_workspace("proj-1", full=True)
+    assert "--changed-only" not in run.call_args[0][1]
+
+
+def test_compile_timeout_reason_tells_the_operator_what_to_do(monkeypatch):
+    """A bare 'timeout_after_1800s' leaves the operator stuck; say what to run."""
+    monkeypatch.setattr(ti, "get_tesserae_root", lambda pid: Path("/tmp/proj"))
+    monkeypatch.setattr(ti, "get_distill_enabled", lambda pid: False)
+    timed_out = ti.TesseraeOpResult(op="compile", ok=False, reason="timeout_after_1800s")
+    with patch.object(ti, "_run_tesserae", return_value=timed_out):
+        res = ti.compile_workspace("proj-1")
+    assert "detached" in res.reason and "nohup" in res.reason
+
+
 def test_compile_workspace_retry_fallbacks_pairs_with_changed_only(monkeypatch):
     """--retry-fallbacks (0.25.1) is meaningless without --changed-only; a doc that
     degraded to deterministic is byte-identical to a clean one, so it would otherwise
@@ -199,7 +226,7 @@ def test_compile_workspace_retry_fallbacks_pairs_with_changed_only(monkeypatch):
     with patch.object(ti, "_run_tesserae") as run:
         ti.compile_workspace("proj-1")
     argv = run.call_args[0][1]
-    assert "--retry-fallbacks" not in argv and "--changed-only" not in argv
+    assert "--retry-fallbacks" not in argv  # (--changed-only is now the default)
 
 
 def test_graph_map_parses_card_payload():

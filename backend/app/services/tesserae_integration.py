@@ -1706,7 +1706,9 @@ def ingest_paths(
     )
 
 
-def compile_workspace(project_id: str, *, retry_fallbacks: bool = False) -> TesseraeOpResult:
+def compile_workspace(
+    project_id: str, *, retry_fallbacks: bool = False, full: bool = False
+) -> TesseraeOpResult:
     """Extract the typed knowledge graph over all ingested sources.
 
     Heavy operation (LLM calls if extractor is claude-cli; minutes to
@@ -1733,15 +1735,34 @@ def compile_workspace(project_id: str, *, retry_fallbacks: bool = False) -> Tess
     # per-project toggle reliably overrides any global config/env default.
     distill_flag = "--distill" if get_distill_enabled(project_id) else "--no-distill"
     args = ["compile", "--project", str(root), distill_flag]
+    # INCREMENTAL BY DEFAULT. A full compile of a real corpus does not fit in any
+    # HTTP-job budget — the live 137-doc project takes ~4.5h against a 30-minute
+    # ceiling, so an operator pressing Compile would ALWAYS be SIGKILLed partway,
+    # leaving a sidecar that references nodes the aborted run never wrote. Skipping
+    # unchanged docs is what actually completes: steady-state edits finish in
+    # minutes. A genuine full rebuild is a detached CLI job (`nohup tesserae
+    # compile … & disown`), not a request-scoped one. ``full=True`` is the explicit
+    # opt-out for a caller that has its own budget.
+    if not full:
+        args.append("--changed-only")
     if retry_fallbacks:
         # --retry-fallbacks only has meaning alongside --changed-only.
-        args += ["--changed-only", "--retry-fallbacks"]
-    return _run_tesserae(
+        if "--changed-only" not in args:
+            args.append("--changed-only")
+        args.append("--retry-fallbacks")
+    res = _run_tesserae(
         "compile",
         args,
         cwd=root,
         timeout=_TESSERAE_COMPILE_TIMEOUT,
     )
+    if not res.ok and (res.reason or "").startswith("timeout_after_"):
+        # Don't leave the operator staring at a bare timeout: say what to do.
+        res.reason = (
+            f"{res.reason} — a full compile of a large corpus exceeds this budget; "
+            f"run it detached (`nohup tesserae compile --project {root} & disown`)"
+        )
+    return res
 
 
 def build_site(project_id: str) -> TesseraeOpResult:
