@@ -10189,6 +10189,7 @@
     "viewDescent": "ディセント",
     "summarizeBudget": "要約 {n}回/ティック",
     "summarizeBudgetOff": "要約オフ",
-    "summarizeBudgetTitle": "統合ティックごとにコミュニティ要約の事前生成へ使う最大 LLM 呼び出し数 (AGENTED_TESSERAE_SUMMARIZE_BUDGET、0 で無効)"
+    "summarizeBudgetTitle": "統合ティックごとにコミュニティ要約の事前生成へ使う最大 LLM 呼び出し数 (AGENTED_TESSERAE_SUMMARIZE_BUDGET、0 で無効)",
+    "staleHidden": "古いコミュニティ {n} 件を非表示 (メンバーがグラフに存在しません — 再コンパイルで復元されます)"
   }
 }

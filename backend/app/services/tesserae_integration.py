@@ -51,6 +51,26 @@ logger = logging.getLogger(__name__)
 _TESSERAE_CMD = shutil.which("tesserae") or "tesserae"
 
 
+def _extraction_timeout_for(op_timeout: int) -> str:
+    """Per-doc extraction cutoff that FITS INSIDE our own subprocess budget.
+
+    Tesserae 0.25.1 (#69) arms the extraction wedge guard by default at 1800s PER
+    DOC. That is right for a detached, hours-long CLI compile, but Agented kills
+    the whole ``tesserae compile`` subprocess after ``_TESSERAE_COMPILE_TIMEOUT``
+    (600s). Left alone, ONE wedged doc would burn 3x our entire budget and we'd
+    SIGKILL the compile mid-extraction — the truncated state that leaves a
+    hierarchy sidecar referencing nodes the aborted run never wrote.
+
+    So bound it to a fraction of the op budget: a wedged doc is abandoned with
+    time left for the rest to finish. Operators who front-load a longer budget can
+    still override with an explicit TESSERAE_EXTRACT_TIMEOUT in the server env.
+    """
+    # Floor 30s, not 60: at the smallest op budget we use (60s) a 60s floor would
+    # equal the whole budget and re-open the very hole this closes. Invariant: the
+    # per-doc cutoff is always strictly less than the op budget.
+    return str(max(30, op_timeout // 4))
+
+
 def _tesserae_env() -> dict:
     """Environment for a ``tesserae`` subprocess, honoring AGENTED_SERVER_NO_LLM_KEYS.
 
@@ -845,10 +865,15 @@ def _run_tesserae(
     cmd = [_TESSERAE_CMD, *args]
     started = _time.monotonic()
     started_iso = _now_iso()
+    env = _tesserae_env()
+    # Keep Tesserae's 0.25.1 per-doc extraction guard (default 1800s) inside OUR
+    # subprocess budget, or one wedged doc eats the whole window and we SIGKILL a
+    # half-written compile. An explicit operator value in the server env wins.
+    env.setdefault("TESSERAE_EXTRACT_TIMEOUT", _extraction_timeout_for(timeout))
     try:
         proc = subprocess.run(
             cmd, cwd=str(cwd), capture_output=True, text=True, timeout=timeout,
-            env=_tesserae_env(),
+            env=env,
         )
     except FileNotFoundError:
         return TesseraeOpResult(
@@ -1667,12 +1692,18 @@ def ingest_paths(
     )
 
 
-def compile_workspace(project_id: str) -> TesseraeOpResult:
+def compile_workspace(project_id: str, *, retry_fallbacks: bool = False) -> TesseraeOpResult:
     """Extract the typed knowledge graph over all ingested sources.
 
     Heavy operation (LLM calls if extractor is claude-cli; minutes to
     complete). Synchronous variant — callers wanting async should use
     ``run_op_async`` instead.
+
+    ``retry_fallbacks`` (Tesserae 0.25.1 / #70) pairs with ``--changed-only`` to
+    re-extract docs whose typed extraction previously failed and was served by the
+    deterministic baseline. Without it such a doc stays deterministic FOREVER — its
+    manifest entry is byte-identical to a clean one, so ``--changed-only`` skips it
+    until the file content itself changes.
     """
     root = get_tesserae_root(project_id)
     if root is None:
@@ -1687,9 +1718,13 @@ def compile_workspace(project_id: str) -> TesseraeOpResult:
     # is a 0.9.0 deprecation stub). Pass distillation explicitly so the
     # per-project toggle reliably overrides any global config/env default.
     distill_flag = "--distill" if get_distill_enabled(project_id) else "--no-distill"
+    args = ["compile", "--project", str(root), distill_flag]
+    if retry_fallbacks:
+        # --retry-fallbacks only has meaning alongside --changed-only.
+        args += ["--changed-only", "--retry-fallbacks"]
     return _run_tesserae(
         "compile",
-        ["compile", "--project", str(root), distill_flag],
+        args,
         cwd=root,
         timeout=_TESSERAE_COMPILE_TIMEOUT,
     )

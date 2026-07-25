@@ -252,6 +252,11 @@ export interface GraphMapCard {
   tags?: string[];
   quality?: string; // 'llm' | 'structural'
   stale?: boolean;
+  // Tesserae 0.25.1 (#71): how many of the scope's members exist in the CURRENT
+  // graph. `size` counts the sidecar's members, which can outlive the graph when a
+  // compile is interrupted or code nodes aren't synced — such a card is unnavigable
+  // and renders as "Untitled community". 0 here is the only reliable way to spot it.
+  live_member_count?: number;
 }
 
 export interface GraphMap {

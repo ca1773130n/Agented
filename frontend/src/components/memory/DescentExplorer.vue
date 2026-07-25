@@ -31,6 +31,17 @@ const currentScope = computed<string | null>(() => trail.value[trail.value.lengt
 const hasMore = computed(
   () => (header.value?.total_cards ?? 0) > cards.value.length,
 );
+
+// A scope whose members no longer exist in the graph (interrupted compile, or code
+// nodes not synced) is unnavigable — it renders as "Untitled community" and descends
+// into nothing. `size` can't reveal it (it counts sidecar members); `live_member_count`
+// (Tesserae 0.25.1) can. Hide them, but say so rather than silently dropping data.
+// Older backends omit the field — treat missing as live so we never hide real cards.
+function isLive(c: GraphMapCard): boolean {
+  return c.live_member_count == null || c.live_member_count > 0;
+}
+const visibleCards = computed(() => cards.value.filter(isLive));
+const staleCount = computed(() => cards.value.length - visibleCards.value.length);
 // A descendable card has a hierarchy below it; leaf 'node' cards do not.
 function canDescend(c: GraphMapCard): boolean {
   return c.kind === 'community' && (c.children_count ?? 0) > 0;
@@ -143,7 +154,7 @@ onMounted(() => {
 
     <ul v-else class="descent__cards">
       <li
-        v-for="c in cards"
+        v-for="c in visibleCards"
         :key="c.scope_id"
         class="descent__card"
         :class="{ 'descent__card--drillable': canDescend(c) }"
@@ -170,6 +181,10 @@ onMounted(() => {
         </div>
       </li>
     </ul>
+
+    <p v-if="!loading && !error && staleCount" class="descent__stale-note">
+      {{ t('descent.staleHidden', { n: staleCount }) }}
+    </p>
 
     <button
       v-if="!loading && !error && hasMore"
@@ -347,6 +362,12 @@ onMounted(() => {
   background: color-mix(in srgb, var(--text-muted) 12%, transparent);
   padding: 0.08rem 0.4rem;
   border-radius: 4px;
+}
+.descent__stale-note {
+  margin: 0.8rem 0 0;
+  text-align: center;
+  font-size: 0.74rem;
+  color: var(--text-muted);
 }
 .descent__more {
   display: block;

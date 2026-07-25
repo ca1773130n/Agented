@@ -117,7 +117,12 @@ ensure_node() {
 # compile; required by graph_map / hierarchical compile_context), and the daemon SUMMARIZE op
 # (--summarize-budget). It also adds an opt-in extraction timeout (TESSERAE_EXTRACT_TIMEOUT) so
 # a wedged codex child no longer blocks a compile forever.
-TESSERAE_MIN="0.25.0"
+# 0.25.1 arms that guard BY DEFAULT (1800s/doc), adds `compile --retry-fallbacks` (recovers
+# docs that degraded to the deterministic baseline — otherwise they stay deterministic until
+# their content changes), and puts `live_member_count` on graph_map cards so a consumer can
+# detect a scope whose members no longer exist in the graph. Agented bounds the per-doc guard
+# to a quarter of its own subprocess budget (see _extraction_timeout_for).
+TESSERAE_MIN="0.25.1"
 # Portable "A >= B" for dotted versions — BSD/macOS `sort` lacks `-V`.
 _version_ge() {
     local a b IFS=.

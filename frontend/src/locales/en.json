@@ -10189,6 +10189,7 @@
     "viewDescent": "Descent",
     "summarizeBudget": "summarize {n}/tick",
     "summarizeBudgetOff": "summarize off",
-    "summarizeBudgetTitle": "Max LLM calls per consolidation tick spent pre-warming community summaries (AGENTED_TESSERAE_SUMMARIZE_BUDGET; 0 disables)"
+    "summarizeBudgetTitle": "Max LLM calls per consolidation tick spent pre-warming community summaries (AGENTED_TESSERAE_SUMMARIZE_BUDGET; 0 disables)",
+    "staleHidden": "{n} stale community hidden (members no longer in the graph — recompile to restore)"
   }
 }

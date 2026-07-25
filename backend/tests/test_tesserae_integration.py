@@ -108,6 +108,57 @@ def test_build_decisions_parses_json_array():
     assert res["decisions"][0]["source"] == "human"
 
 
+def test_extraction_timeout_fits_inside_subprocess_budget():
+    """0.25.1 arms the per-doc extraction guard at 1800s, but we SIGKILL the whole
+    compile at _TESSERAE_COMPILE_TIMEOUT (600s). Unbounded, one wedged doc burns 3x
+    our budget and we abort mid-extraction, leaving a sidecar that outlives the graph
+    the run never wrote. The per-doc cutoff must be well inside the op budget."""
+    for budget in (600, 900, 60, 120):
+        got = int(ti._extraction_timeout_for(budget))
+        assert 0 < got < budget, f"budget={budget} -> {got} must be strictly inside it"
+    assert int(ti._extraction_timeout_for(600)) == 150
+    assert int(ti._extraction_timeout_for(60)) == 30  # floor still inside the budget
+
+
+def test_run_tesserae_bounds_extract_timeout_but_operator_wins(monkeypatch):
+    """We inject TESSERAE_EXTRACT_TIMEOUT, but an explicit operator value is kept."""
+    seen = {}
+
+    class _P:
+        returncode, stdout, stderr = 0, "{}", ""
+
+    def _fake(cmd, **kw):
+        seen.update(kw.get("env") or {})
+        return _P()
+
+    monkeypatch.delenv("TESSERAE_EXTRACT_TIMEOUT", raising=False)
+    monkeypatch.setattr(ti.subprocess, "run", _fake)
+    ti._run_tesserae("x", ["status"], cwd=ti._REPO_ROOT, timeout=600)
+    assert seen["TESSERAE_EXTRACT_TIMEOUT"] == "150"
+
+    seen.clear()
+    monkeypatch.setenv("TESSERAE_EXTRACT_TIMEOUT", "42")
+    ti._run_tesserae("x", ["status"], cwd=ti._REPO_ROOT, timeout=600)
+    assert seen["TESSERAE_EXTRACT_TIMEOUT"] == "42"  # operator override survives
+
+
+def test_compile_workspace_retry_fallbacks_pairs_with_changed_only(monkeypatch):
+    """--retry-fallbacks (0.25.1) is meaningless without --changed-only; a doc that
+    degraded to deterministic is byte-identical to a clean one, so it would otherwise
+    stay deterministic until its content changes."""
+    monkeypatch.setattr(ti, "get_tesserae_root", lambda pid: Path("/tmp/proj"))
+    monkeypatch.setattr(ti, "get_distill_enabled", lambda pid: False)
+    with patch.object(ti, "_run_tesserae") as run:
+        ti.compile_workspace("proj-1", retry_fallbacks=True)
+    argv = run.call_args[0][1]
+    assert "--changed-only" in argv and "--retry-fallbacks" in argv
+
+    with patch.object(ti, "_run_tesserae") as run:
+        ti.compile_workspace("proj-1")
+    argv = run.call_args[0][1]
+    assert "--retry-fallbacks" not in argv and "--changed-only" not in argv
+
+
 def test_graph_map_parses_card_payload():
     """graph-map JSON stdout is parsed into {ok, map}; the map carries the cards."""
     from app.services.tesserae_integration import TesseraeOpResult
