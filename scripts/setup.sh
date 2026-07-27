@@ -122,7 +122,31 @@ ensure_node() {
 # their content changes), and puts `live_member_count` on graph_map cards so a consumer can
 # detect a scope whose members no longer exist in the graph. Agented bounds the per-doc guard
 # to a quarter of its own subprocess budget (see _extraction_timeout_for).
-TESSERAE_MIN="0.25.1"
+# 0.26.0 parallelises extraction (4-wide; TESSERAE_EXTRACT_CONCURRENCY=1 restores serial), makes
+# the CLI response cache actually cache, and keeps junk directories (pytest tmpdirs, pip scratch)
+# out of the corpus — that last one matters here: Agented's own manifest had rotted to 519 entries
+# of which 355 (68%) pointed at files that no longer existed, which defeats --changed-only
+# entirely. A full compile on 0.27.0 prunes it (measured: 519 -> 137 entries, 0 dead).
+# 0.27.0 adds `graph_write` and `verify_claim`; 0.28.2 promotes the latter to a `verify-claim` CLI
+# verb, so it is reachable from our subprocess seam. Agented does NOT consume either yet, and that
+# is deliberate: verify_claim answers "does the graph license this triple", which on a
+# session/summary corpus is 95% PRESENT_UNEVIDENCED (measured: 38/40 real edges, informative
+# SUPPORTED 1/40, unchanged by recompiling). Its useful signal is provenance.class ==
+# "agent_assertion", and nothing here emits agent-asserted triples yet. Wire it when a
+# memory/evolution promotion boundary needs to decide whether to trust one.
+# 0.28.0 is a SPEND fix and the reason for this floor: a knowledge base at ~/.tesserae made $HOME
+# look like a project root, so the plugin hooks' resolve_project_root() walked up to it and
+# backgrounded a compile over the whole home directory — reproduced here at 15k files and ~10h of
+# LLM spend, fired by posttooluse-edit.sh on every Edit/Write. 0.28.0 refuses $HOME by either the
+# walk-up or the git-root path, returns empty+non-zero instead of echoing $PWD, and makes the two
+# spending hooks opt-in behind TESSERAE_HOOK_AUTOCOMPILE=1. Agented does not set that flag and
+# disables these hooks outright (see #366) — leave it unset unless you want automatic recompiles.
+# 0.28.1 declares pyyaml, without which `export okf` was broken in every installed build.
+# Trap for whoever wires `verify-claim` later: its exit status is 2 for BOTH NOT_RESOLVABLE (which
+# IS an answer) and no-compiled-graph (which is not), so branch on the JSON body's `verdict`, never
+# on $?. Endpoints resolve exact-only — no natural language — so free-text input yields
+# NOT_RESOLVABLE, and ABSENT never means false.
+TESSERAE_MIN="0.28.2"
 # Portable "A >= B" for dotted versions — BSD/macOS `sort` lacks `-V`.
 _version_ge() {
     local a b IFS=.
