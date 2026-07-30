@@ -812,7 +812,27 @@
       "saving": "저장 중...",
       "saveSettings": "GRD 설정 저장",
       "toastSaved": "GRD 설정이 저장되었습니다",
-      "toastSaveFailed": "GRD 설정 저장에 실패했습니다"
+      "toastSaveFailed": "GRD 설정 저장에 실패했습니다",
+      "steering": {
+        "title": "리서치 스티어링 (GRD 0.5.0)",
+        "desc": "프로젝트별 GRD 리서치 루프의 대화형 스티어링입니다. Agented 설정이 아니라 GRD가 실제로 읽는 프로젝트의 .planning/config.json 파일에 기록됩니다.",
+        "loadError": "GRD 스티어링 설정을 불러오지 못했습니다.",
+        "noProjects": "아직 프로젝트가 없습니다.",
+        "notConfigured": "GRD 설정 없음",
+        "notConfiguredHelp": "이 프로젝트에서 읽을 수 있는 .planning/config.json이 없습니다. 먼저 해당 경로에서 GRD를 초기화하세요. Agented는 의도적으로 파일을 새로 만들지 않습니다 — 그렇게 하면 나머지 GRD 설정이 모두 누락으로 정의되기 때문입니다.",
+        "autonomousTitle": "자율 모드",
+        "autonomousDesc": "켜져 있으면 SEED / HYPOTHESIZE / DESIGN / DECIDE 체크포인트가 사람을 기다리며 멈추지 않고, 아래 폴백이 대신 답합니다. 실제 사람 개입 스티어링을 원하면 끄세요.",
+        "fallbackLabel": "무인 실행 시 응답자",
+        "fallbackRecommended": "권장 기본값",
+        "fallbackPanel": "AI 토론 패널",
+        "fallbackHelp": "사람이 없을 때 체크포인트에 답할 주체입니다. 패널은 claude / codex / gemini / opencode 중 루프 자신의 백엔드를 제외하고 참여하며, 패널이 비어 있거나 레이트 리밋에 걸리면 권장 기본값으로 저하됩니다.",
+        "interactiveOff": "research_gates.interactive.enabled가 꺼져 있어 체크포인트가 발생하지 않으므로 두 설정 모두 아직 효과가 없습니다.",
+        "noteAutonomous": "적용 중: 패널 또는 기본값이 자동으로 응답합니다. 루프는 멈추지 않습니다.",
+        "noteHuman": "적용 중: 체크포인트가 직접 질문합니다. 폴백은 무인 실행(오토파일럿, 포트폴리오)에만 적용됩니다.",
+        "toastSaved": "{name}의 GRD 스티어링을 업데이트했습니다",
+        "toastFailed": "GRD 스티어링을 업데이트하지 못했습니다",
+        "saveScopeHint": "저장은 위 설정에만 적용됩니다 — 리서치 스티어링은 변경할 때 프로젝트별로 즉시 저장됩니다."
+      }
     },
     "memory": {
       "title": "메모리 시스템",

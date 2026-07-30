@@ -812,7 +812,27 @@
       "saving": "保存中...",
       "saveSettings": "GRD 設定を保存",
       "toastSaved": "GRD 設定を保存しました",
-      "toastSaveFailed": "GRD 設定の保存に失敗しました"
+      "toastSaveFailed": "GRD 設定の保存に失敗しました",
+      "steering": {
+        "title": "リサーチステアリング (GRD 0.5.0)",
+        "desc": "プロジェクトごとの GRD リサーチループの対話的ステアリングです。Agented の設定ではなく、GRD が実際に読み込むプロジェクトの .planning/config.json に書き込まれます。",
+        "loadError": "GRD ステアリング設定を読み込めませんでした。",
+        "noProjects": "プロジェクトがまだありません。",
+        "notConfigured": "GRD 設定なし",
+        "notConfiguredHelp": "このプロジェクトに読み取り可能な .planning/config.json がありません。まずそこで GRD を初期化してください。Agented は意図的にファイルを作成しません — 作成すると他のすべての GRD 設定が省略によって決まってしまうためです。",
+        "autonomousTitle": "自律モード",
+        "autonomousDesc": "オンの間は SEED / HYPOTHESIZE / DESIGN / DECIDE のチェックポイントが人間を待って停止せず、下のフォールバックが代わりに回答します。実際に人間が介入するステアリングを行うにはオフにしてください。",
+        "fallbackLabel": "無人時の回答者",
+        "fallbackRecommended": "推奨デフォルト",
+        "fallbackPanel": "AI ディスカッションパネル",
+        "fallbackHelp": "人間がいないときにチェックポイントへ回答する主体です。パネルは claude / codex / gemini / opencode からループ自身のバックエンドを除いて参加し、パネルが空またはレート制限の場合は推奨デフォルトに縮退します。",
+        "interactiveOff": "research_gates.interactive.enabled がオフのためチェックポイントが発生せず、どちらの設定もまだ効果がありません。",
+        "noteAutonomous": "有効: パネルまたはデフォルトが自動的に回答します。ループは停止しません。",
+        "noteHuman": "有効: チェックポイントが直接質問します。フォールバックは無人実行(オートパイロット、ポートフォリオ)にのみ適用されます。",
+        "toastSaved": "{name} の GRD ステアリングを更新しました",
+        "toastFailed": "GRD ステアリングを更新できませんでした",
+        "saveScopeHint": "保存は上の設定にのみ適用されます — リサーチステアリングは変更時にプロジェクトごとに保存されます。"
+      }
     },
     "memory": {
       "title": "メモリシステム",

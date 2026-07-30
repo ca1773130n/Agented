@@ -331,7 +331,37 @@ tiny <1 KB always-loaded blob. Don't write the same fact to both.
 `config.json` is the GRD config; milestones live under
 `.planning/milestones/v*/` (v0.5.0 onboarding tour → v0.6.0 unified loops
 shipped: `LoopSpec` + single executor + eval/sandbox + observability/control,
-migrations 166–170).
+migrations 166–170). Latest shipped milestone: **v0.10.0**.
+
+### GRD 0.5.0 — interactive research steering (wired)
+
+GRD itself is at **0.5.0** (`gd --version`; note `gd` resolves to the local dev
+clone at `~/Developer/Projects/GetResearchDone`, not the plugin cache).
+`research_gates.interactive` is wired on in `.planning/config.json`: all four
+stations (`seed`/`hypothesize`/`design`/`decide`), `max_rounds: 2`,
+`max_questions: 4`, `hypothesis_candidates: 3`, `every_iteration: false`,
+`fallback: "panel"`. Verified by GRD's own `readInteractiveConfig` — every key
+accepted, no `[interactive-config]` warnings.
+
+**With `autonomous_mode: true` the human checkpoints never fire.**
+`resolveInteractive` returns `active:false` under *any* unattended condition —
+`autonomous_mode`, autopilot/`GRD_AUTOPILOT`, `--no-gates`, portfolio
+concurrency > 1 — and this project sets `autonomous_mode: true`. Measured:
+`autonomousMode:false → {active:true}`, `autonomousMode:true → {active:false}`.
+So the setting that actually does work here is `fallback`, which picks *who
+answers* when no human is present. **To get real human-in-the-loop steering, set
+`autonomous_mode: false`** — the four station flags are already on and will
+engage immediately.
+
+`fallback: "panel"` answers via a multi-backend AI discussion instead of each
+question's recommended default. Its roster is `['claude','codex','gemini',
+'opencode']` minus the loop's own backend (no self-consultation); all four are
+installed on this machine, so the panel is real rather than degrading. It is
+degrade-safe by design: empty synthesis, a rate-limited or logged-out panelist,
+or any unforeseen error resolves to the recommended defaults. The loop never
+pauses unattended either way (REQ-208). `every_iteration` is left `false`
+deliberately — `true` runs a panel discussion every iteration, which is real
+recurring LLM spend.
 
 ## Tooling
 

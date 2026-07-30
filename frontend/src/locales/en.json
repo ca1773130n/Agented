@@ -812,7 +812,27 @@
       "saving": "Saving...",
       "saveSettings": "Save GRD Settings",
       "toastSaved": "GRD settings saved",
-      "toastSaveFailed": "Failed to save GRD settings"
+      "toastSaveFailed": "Failed to save GRD settings",
+      "steering": {
+        "title": "Research steering (GRD 0.5.0)",
+        "desc": "Interactive steering of GRD's research loop, per project. These write to the project's own .planning/config.json — the file GRD reads — not to Agented's settings.",
+        "loadError": "Could not load GRD steering settings.",
+        "noProjects": "No projects yet.",
+        "notConfigured": "no GRD config",
+        "notConfiguredHelp": "No readable .planning/config.json for this project. Run GRD init there first — Agented deliberately won't create one, since that would define every other GRD setting by omission.",
+        "autonomousTitle": "Autonomous mode",
+        "autonomousDesc": "While on, the SEED / HYPOTHESIZE / DESIGN / DECIDE checkpoints never pause for a human — the fallback below answers instead. Turn it off for real human-in-the-loop steering.",
+        "fallbackLabel": "Unattended answerer",
+        "fallbackRecommended": "Recommended defaults",
+        "fallbackPanel": "AI discussion panel",
+        "fallbackHelp": "Who answers a checkpoint when no human is present. The panel consults claude / codex / gemini / opencode minus the loop's own backend, and degrades to the recommended defaults if the panel is empty or rate-limited.",
+        "interactiveOff": "research_gates.interactive.enabled is off, so no checkpoint is raised and neither setting has any effect yet.",
+        "noteAutonomous": "In force: the panel or defaults answer automatically. The loop never pauses.",
+        "noteHuman": "In force: checkpoints will ask you directly. The fallback only applies to unattended runs (autopilot, portfolio).",
+        "toastSaved": "Updated GRD steering for {name}",
+        "toastFailed": "Could not update GRD steering",
+        "saveScopeHint": "Save applies to the settings above only — research steering saves per project as you change it."
+      }
     },
     "memory": {
       "title": "Memory System",

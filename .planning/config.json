@@ -29,7 +29,19 @@
   "research_gates": {
     "verification_design": false,
     "method_selection": false,
-    "baseline_review": false
+    "baseline_review": false,
+    "interactive": {
+      "enabled": true,
+      "seed": true,
+      "hypothesize": true,
+      "design": true,
+      "decide": true,
+      "max_rounds": 2,
+      "max_questions": 4,
+      "hypothesis_candidates": 3,
+      "every_iteration": false,
+      "fallback": "panel"
+    }
   },
   "confirmation_gates": {
     "commit_confirmation": false,

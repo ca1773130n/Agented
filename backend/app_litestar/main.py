@@ -63,6 +63,7 @@ from .routes.conversation_cluster import (
 from .routes.discovery_routes import discovery_router
 from .routes.executions import executions_router
 from .routes.grd_routes import grd_router
+from .routes.grd_settings import grd_settings_router
 from .routes.harness_evolution import harness_evolution_router
 from .routes.harness_takeaways import harness_takeaways_router
 from .routes.health import health_router
@@ -382,6 +383,7 @@ def create_app() -> Litestar:
             utility_leftover_router,
             backends_router,
             grd_router,
+            grd_settings_router,
             competitor_intel_router,
             competitor_intel_config_router,
             strategy_router,
