@@ -78,6 +78,12 @@ export type { RetrievalDetails, RetrievalSource, RetrievalStats, RetrievalFedera
 export { councilApi } from './council';
 export type { CouncilRequest, CouncilEvent, CouncilHandlers } from './council';
 export { grdApi } from './grd';
+export { grdSteeringApi } from './grd-steering';
+export type {
+  GrdSteeringProject,
+  GrdSteeringPatch,
+  InteractiveFallback,
+} from './grd-steering';
 export { competitorIntelApi, lookalikeApi } from './competitor-intel';
 export type {
   CompetitorSource,
