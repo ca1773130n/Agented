@@ -94,9 +94,27 @@ def _migrate_180_memory_query_jobs(conn):
         "CREATE INDEX IF NOT EXISTS idx_memory_query_jobs_created "
         "ON memory_query_jobs(created_at DESC)"
     )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_memory_query_jobs_kind ON memory_query_jobs(kind)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_query_jobs_kind ON memory_query_jobs(kind)")
+
+
+def _migrate_181_projects_auto_distill_state(conn) -> None:
+    """Make the auto-distill record durable — it sits beside the toggle that
+    authorises it, so it must survive a restart the same way.
+
+    ``_auto_distill_state`` was process memory, which cost two things on every
+    gunicorn restart: the operator-visible audit trail of what automatic LLM
+    spend happened and why (it read ``{}`` for a project that had distilled an
+    hour earlier), and the 6 h rate-limit floor — with no prior record the
+    interval check is skipped as a "first dispatch", so the next successful
+    compile opened a fresh spend window.
+
+    One JSON blob per project: ``{digest, at, at_epoch, reason, llm_calls,
+    llm_calls_partial}``. NULL until the project auto-distills once.
+    """
+    cursor = conn.execute("PRAGMA table_info(projects)")
+    cols = {row[1] for row in cursor.fetchall()}
+    if "tesserae_auto_distill_state" not in cols:
+        conn.execute("ALTER TABLE projects ADD COLUMN tesserae_auto_distill_state TEXT")
 
 
 V08_MIGRATIONS = [
@@ -104,4 +122,7 @@ V08_MIGRATIONS = [
     (178, "project_session_owner", _migrate_178_project_session_owner),
     (179, "oidc_identities", _migrate_179_oidc_identities),
     (180, "memory_query_jobs", _migrate_180_memory_query_jobs),
+    # Auto-distill: persist the last automatic dispatch (audit trail + the 6 h
+    # spend floor) so neither is lost on restart.
+    (181, "projects_auto_distill_state", _migrate_181_projects_auto_distill_state),
 ]

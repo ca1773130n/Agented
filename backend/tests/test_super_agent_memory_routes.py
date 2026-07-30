@@ -16,12 +16,8 @@ def _caller():
 
 def _patch(monkeypatch, *, sa=True, project=True, access=True):
     monkeypatch.setattr(sac, "get_super_agent", lambda sid: {"id": sid} if sa else None)
-    monkeypatch.setattr(
-        "app.db.projects.get_project", lambda pid: {"id": pid} if project else None
-    )
-    monkeypatch.setattr(
-        "app.db.owned_entities.can_access", lambda table, eid, uid, role: access
-    )
+    monkeypatch.setattr("app.db.projects.get_project", lambda pid: {"id": pid} if project else None)
+    monkeypatch.setattr("app.db.owned_entities.can_access", lambda table, eid, uid, role: access)
 
 
 @pytest.mark.parametrize(
@@ -46,6 +42,28 @@ def test_distill_route_uniform_404(monkeypatch):
     assert exc.value.detail == "Not found"
 
 
+def test_distill_route_reports_a_stood_down_click_instead_of_a_job_id(monkeypatch):
+    """``run_op_async`` returns "" when the only running distill is the AUTOMATIC
+    one, which carries a provider-call budget this click does not. Handing that
+    job back would answer an explicit, deliberately unpriced approval with a
+    budget refusal — and the SPA would show "Distilling…" for a run this button
+    never started."""
+    _patch(monkeypatch)
+    monkeypatch.setattr("app.services.tesserae_integration.run_op_async", lambda *a, **k: "")
+    res = sac.super_agent_memory_distill_endpoint.fn("super-x", "proj", _caller())
+    assert res == {"job_id": None, "reason": "auto_distill_running"}
+
+
+def test_distill_route_returns_the_job_id_when_it_dispatched(monkeypatch):
+    """Paired control for the test above."""
+    _patch(monkeypatch)
+    monkeypatch.setattr(
+        "app.services.tesserae_integration.run_op_async", lambda *a, **k: "tess-agent-distill-1"
+    )
+    res = sac.super_agent_memory_distill_endpoint.fn("super-x", "proj", _caller())
+    assert res == {"job_id": "tess-agent-distill-1", "reason": None}
+
+
 def test_guard_runs_all_checks_even_when_first_fails(monkeypatch):
     # codex (timing oracle): the guard must NOT short-circuit — SA-missing,
     # project-missing, and project-denied must each do the SAME work (query count)
@@ -53,7 +71,9 @@ def test_guard_runs_all_checks_even_when_first_fails(monkeypatch):
     # the super-agent is already missing.
     calls = []
     monkeypatch.setattr(sac, "get_super_agent", lambda sid: calls.append("sa") or None)
-    monkeypatch.setattr("app.db.projects.get_project", lambda pid: calls.append("proj") or {"id": pid})
+    monkeypatch.setattr(
+        "app.db.projects.get_project", lambda pid: calls.append("proj") or {"id": pid}
+    )
     monkeypatch.setattr(
         "app.db.owned_entities.can_access",
         lambda t, e, u, r: calls.append("access") or True,

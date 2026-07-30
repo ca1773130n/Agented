@@ -78,9 +78,14 @@ export const getSuperAgentMemory = (superAgentId: string, projectId: string) =>
 /**
  * Kick off a fire-and-forget background op that rebuilds this SA's
  * L1 runbook + L2' manager rollup. Returns the async job id.
+ *
+ * `job_id` is null with `reason: 'auto_distill_running'` when the automatic
+ * distill policy already has a run in flight for this project. That run carries
+ * a provider-call budget this click does not, so it is not served as the answer
+ * to an explicit approval — retry once it finishes.
  */
 export const distillSuperAgentMemory = (superAgentId: string, projectId: string) =>
-  apiFetch<{ job_id: string }>(
+  apiFetch<{ job_id: string | null; reason: string | null }>(
     `/admin/super-agents/${superAgentId}/memory/distill?project_id=${encodeURIComponent(projectId)}`,
     { method: 'POST' },
   );

@@ -45,15 +45,29 @@ def test_status_shape(monkeypatch):
     monkeypatch.delenv("AGENTED_TESSERAE_CONSOLIDATE", raising=False)
     monkeypatch.delenv("AGENTED_TESSERAE_SUMMARIZE_BUDGET", raising=False)
     st = ted.TesseraeEngineDaemon.status()
-    assert set(st) == {"enabled", "running", "idle_seconds", "consolidate_every", "summarize_budget"}
+    assert set(st) == {
+        "enabled",
+        "running",
+        "idle_seconds",
+        "consolidate_every",
+        "summarize_budget",
+    }
     assert st["idle_seconds"] == 300 and st["consolidate_every"] == 21600
     assert st["summarize_budget"] == 25  # 0.25 default
     assert st["running"] is False  # nothing spawned
 
 
-@pytest.mark.parametrize("raw,expected", [
-    (None, 25), ("", 25), ("50", 50), ("0", 0), ("-3", 25), ("nope", 25),
-])
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        (None, 25),
+        ("", 25),
+        ("50", 50),
+        ("0", 0),
+        ("-3", 25),
+        ("nope", 25),
+    ],
+)
 def test_summarize_budget_env(monkeypatch, raw, expected):
     if raw is None:
         monkeypatch.delenv("AGENTED_TESSERAE_SUMMARIZE_BUDGET", raising=False)
@@ -62,8 +76,22 @@ def test_summarize_budget_env(monkeypatch, raw, expected):
     assert ted._summarize_budget() == expected
 
 
-def test_start_spawns_consolidate_with_distill_env(monkeypatch):
+@pytest.mark.parametrize("ambient", [None, "1", "true"])
+def test_start_spawns_consolidate_with_distill_disabled(monkeypatch, ambient):
+    """F1: the sleep-cycle daemon must NOT be a second agent distiller.
+
+    ``_maybe_schedule_auto_distill`` owns agent distill; the daemon writing the
+    same ``.tesserae/agents/<key>/distilled.graph.json`` from another OS process
+    is unserializable (its tick takes no ``.tesserae/compile.lock``). ``"0"``
+    rather than a pop, because an explicit env spelling beats a project's
+    ``agent_distill.enabled`` config — so an ambient ``=1`` inherited from the
+    operator's shell must be overridden, not passed through.
+    """
     monkeypatch.setenv("AGENTED_TESSERAE_CONSOLIDATE", "1")
+    if ambient is None:
+        monkeypatch.delenv("TESSERAE_AGENT_DISTILL", raising=False)
+    else:
+        monkeypatch.setenv("TESSERAE_AGENT_DISTILL", ambient)
     # AGENTED_SERVER_NO_LLM_KEYS off → env is os.environ copy + the distill flag.
     monkeypatch.delenv("AGENTED_SERVER_NO_LLM_KEYS", raising=False)
     monkeypatch.setattr(ted.TesseraeEngineDaemon, "kill_orphans", classmethod(lambda cls: None))
@@ -87,7 +115,7 @@ def test_start_spawns_consolidate_with_distill_env(monkeypatch):
     # 0.25 SUMMARIZE budget appended after the cadence flags (prefix unchanged so
     # kill_orphans' pkill substring still matches).
     assert captured["cmd"][-2:] == ["--summarize-budget", "25"]
-    assert captured["env"]["TESSERAE_AGENT_DISTILL"] == "1"
+    assert captured["env"]["TESSERAE_AGENT_DISTILL"] == "0"
     assert ted.TesseraeEngineDaemon.status()["running"] is True
 
 

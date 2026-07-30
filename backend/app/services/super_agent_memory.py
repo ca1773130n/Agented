@@ -28,7 +28,9 @@ the export ever sets ``harness=backend_type`` or a real config-root, update
 import json
 import os
 import re
+import signal
 import subprocess
+import time
 from pathlib import Path
 from typing import Any, Optional
 
@@ -36,6 +38,7 @@ from app.db.connection import get_connection
 
 from .tesserae_integration import (
     _TESSERAE_CMD,
+    _graph_digest,
     _tesserae_env,
     get_distill_enabled,
     get_tesserae_root,
@@ -131,11 +134,230 @@ def sync_agent_registry(project_id: str) -> Optional[Path]:
     return reg_path
 
 
-def distill_super_agents(project_id: str, *, timeout: int = 1800) -> dict[str, Any]:
+# ``tesserae distill`` has no ``--json``; both numbers are scraped from the
+# per-agent stdout lines (cli.py:6148-6151 dry-run, :6156 real run).
+_ESTIMATE_RE = re.compile(r"estimated_llm_calls=(\d+)")
+_LLM_CALLS_RE = re.compile(r"\bllm_calls=(\d+)")
+# tesserae prints exactly this and exits 0 when the registry scopes to no Agent
+# node in the compiled graph (cli.py:6131). Nothing to price is not a broken
+# pricer, and the two must not share a reason code — see _estimate_distill_calls.
+_NO_AGENTS_MARKER = "No agents observed in the compiled graph"
+
+# The OTHER healthy-but-unpriced shape, and the one this machine's data actually
+# produces. An agent that exists in the registry but has nothing attributed to it
+# prints its own line and ``continue``s WITHOUT an ``estimated_llm_calls=``
+# (cli.py:6144-6146). When that is true of EVERY agent, ``results`` is non-empty —
+# so ``_NO_AGENTS_MARKER`` is absent — yet not one estimate line was printed and
+# the exit code is 0. Without this marker that priced-at-zero pass is
+# indistinguishable from a broken pricer and refuses as
+# ``estimate_unavailable_no_estimate``, which then still burns the 6 h window.
+# ``skipped-watermark`` is the third ``continue`` without an estimate but CANNOT
+# occur here: ``agent_distill.py:1970`` bypasses the watermark skip under
+# ``dry_run``, so ``no-sessions`` is the only one a dry run can emit.
+_NO_SESSIONS_MARKER = "no-sessions (nothing attributed to this agent)"
+
+# Grace period to drain the pipes after the process group has been SIGKILLed.
+# ``communicate()`` resumes from the same accumulated buffer across a timed-out
+# call (CPython ``Popen._fileobj2output``), so this returns everything the run
+# printed before we killed it — not a second, partial read.
+_DISTILL_DRAIN_SECONDS = 10
+
+
+def _drained_text(buf: str | bytes | None) -> str:
+    """Decode a buffer taken off a ``TimeoutExpired``.
+
+    ``Popen._check_timeout`` builds the exception with the raw accumulated
+    chunks — ``output=b"".join(...)``, i.e. **bytes even under ``text=True``**;
+    only ``subprocess.run`` re-``communicate()``s to decode. Measured on this
+    interpreter. Feeding that straight to the ``llm_calls=`` regex is a
+    ``TypeError``, which would escape ``distill_super_agents``' never-raises
+    contract and leave the auto-distill record permanently unresolved.
+    """
+    if isinstance(buf, bytes):
+        return buf.decode(errors="replace")
+    return buf or ""
+
+
+def _run_distill(
+    argv: list[str], *, root: Path, env: dict[str, str], timeout: int
+) -> tuple[Optional[int], str, str]:
+    """Run one tesserae distill subprocess; return ``(returncode, stdout, stderr)``
+    with ``returncode is None`` meaning TIMED OUT.
+
+    Two deliberate departures from ``subprocess.run(timeout=...)``, both about
+    spend:
+
+    - ``start_new_session`` + ``killpg``. ``run``'s ``proc.kill()`` reaps only the
+      tesserae process, leaving its own children running and then draining their
+      inherited pipes with NO timeout — the wedge tesserae itself hit. ``killpg``
+      reaps everything still in tesserae's group, which on the dry-run path is the
+      whole cost: minutes of CPU chewing the ~12 MB graph.
+
+      **It does not reach the provider call.** Tesserae spawns the Claude/Codex CLI
+      with ``start_new_session=True`` of its own (``tesserae/llm_json.py`` ``_run_cli``),
+      so that process sits in a different session; ``killpg`` on tesserae's group
+      does not signal it, and because tesserae is SIGKILLed its own cleanup never
+      runs either. A real run killed at 1800 s can therefore leave one in-flight
+      provider call orphaned — which is precisely why the partial ``llm_calls=``
+      salvage below is a FLOOR rather than a total.
+    - stdout is RETURNED on the timeout path instead of discarded. The per-agent
+      ``llm_calls=`` lines already printed are the only evidence of what a killed
+      run cost; throwing them away is what let a 30-minute timeout be filed as
+      zero spend.
+
+    Spawn failures propagate as ``OSError``; both callers catch it and split off
+    ``FileNotFoundError`` (no CLI) from the rest, so neither ever raises.
+    """
+    proc = subprocess.Popen(
+        argv,
+        cwd=str(root),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+        start_new_session=True,
+    )
+    try:
+        out, err = proc.communicate(timeout=timeout)
+        return proc.returncode, out or "", err or ""
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OSError):
+            proc.kill()  # group gone or unreachable — at least reap the child
+        try:
+            out, err = proc.communicate(timeout=_DISTILL_DRAIN_SECONDS)
+        except subprocess.TimeoutExpired as drained:
+            # A session-escaping grandchild (the provider CLI) can still hold the
+            # pipes open past the killpg; salvage the buffer the exception carries.
+            out, err = _drained_text(drained.stdout), _drained_text(drained.stderr)
+        return None, out or "", err or ""
+
+
+def _estimate_distill_calls(root: Path, *, timeout: int = 300) -> tuple[Optional[int], str]:
+    """Price a distill pass in provider calls WITHOUT spending anything.
+    Returns ``(estimate, reason)``; ``estimate is None`` means REFUSE TO SPEND
+    because the pass could not be priced. ``0`` is a successful pricing of an
+    empty scope — a different fact, and the caller reports it as
+    ``nothing_to_distill`` rather than pointing the operator at a pre-flight
+    that is working fine.
+
+    Zero-spend is verified in tesserae's source, not assumed: under ``dry_run``
+    the LLM stage adds ``_planned_provider_calls(request)`` to
+    ``estimated_llm_calls`` and returns the deterministic fallback *before*
+    ``self.summarizer(request)`` (``agent_distill.py:1567``), and ``distill_agent``
+    returns before the artifact write (``:2234``) with ``state=None`` throughout.
+
+    It bypasses the per-agent watermark skip (``:1970`` is gated on ``not
+    options.dry_run``), so it OVER-counts relative to a real run — but the shared
+    distill cache is a *file* cache read before that accounting (``:1531``), so
+    the overcount covers only genuinely uncached clusters. It is an approximation
+    in one other direction too: dry-run clustering runs with ``state=None``
+    (``:1999``) and so without the memo the real run uses, and cluster shapes can
+    differ. Treat it as a go/no-go, never as a guaranteed bound.
+
+    ⚠️ **The ``timeout`` is UNVALIDATED.** This dry run has never been executed
+    against a real corpus — the live ``graph.json`` is ~12 MB and the pass does
+    full scope closure + clustering for *every* agent. If 300 s is short the
+    feature fails closed (no spend) and logs the elapsed seconds it was killed
+    at; that log line is the evidence to set the real number from. The measured
+    duration of every successful pricing run is logged for the same reason.
+    """
+    started = time.monotonic()
+    try:
+        rc, stdout, stderr = _run_distill(
+            [_TESSERAE_CMD, "distill", "--all", "--dry-run", "--project", str(root)],
+            root=root,
+            env={**_tesserae_env(), "TESSERAE_AGENT_DISTILL": "1"},
+            timeout=timeout,
+        )
+    except FileNotFoundError:
+        return None, "cli_missing"
+    except OSError as exc:
+        # PermissionError, ENOMEM, ENOEXEC… Popen raises these too, and
+        # distill_super_agents promises never to raise.
+        logger.warning("tesserae: distill dry-run could not be spawned for %s: %s", root, exc)
+        return None, "spawn_failed"
+    elapsed = time.monotonic() - started
+    if rc is None:
+        logger.warning(
+            "tesserae: distill dry-run for %s blew its %ds pricing budget (killed the "
+            "process group at %.0fs). No provider calls were made, but the pass cannot "
+            "be priced and will not run. This is the datapoint the 300s budget was "
+            "never validated against — raise _estimate_distill_calls(timeout=) if it recurs.",
+            root,
+            timeout,
+            elapsed,
+        )
+        return None, "timeout"
+    if rc != 0:
+        logger.warning(
+            "tesserae: distill dry-run for %s exited %d in %.1fs: %s",
+            root,
+            rc,
+            elapsed,
+            (stderr or "").strip()[:300],
+        )
+        return None, "exit_nonzero"
+    hits = _ESTIMATE_RE.findall(stdout)
+    if not hits:
+        if _NO_AGENTS_MARKER in stdout:
+            # Priced successfully; the scope is empty. The old code returned
+            # None here, so an ordinary "this project has no agents in the
+            # graph yet" was reported to the operator as a broken pre-flight
+            # ("could not price the pass"). Zero flows to nothing_to_distill.
+            logger.info(
+                "tesserae: distill dry-run for %s found no agents in the compiled "
+                "graph — nothing to distill, priced at 0 in %.1fs",
+                root,
+                elapsed,
+            )
+            return 0, "no_agents_in_graph"
+        if _NO_SESSIONS_MARKER in stdout:
+            # Agents exist, but nothing is attributed to any of them, so tesserae
+            # priced every one at zero without printing a single estimate line.
+            # Same meaning as the empty scope above — nothing to distill — and it
+            # must NOT be reported as a pre-flight failure.
+            logger.info(
+                "tesserae: distill dry-run for %s scoped only agents with no attributed "
+                "sessions — nothing to distill, priced at 0 in %.1fs",
+                root,
+                elapsed,
+            )
+            return 0, "no_sessions_for_any_agent"
+        return None, "no_estimate"
+    est = sum(int(h) for h in hits)
+    logger.info(
+        "tesserae: distill dry-run priced %s at %d provider call(s) in %.1fs (budget %ds)",
+        root,
+        est,
+        elapsed,
+        timeout,
+    )
+    return est, "ok"
+
+
+def distill_super_agents(
+    project_id: str,
+    *,
+    timeout: int = 1800,
+    max_estimated_llm_calls: Optional[int] = None,
+) -> dict[str, Any]:
     """Sync the registry, then run ``tesserae distill --all`` (agent-distill
     enabled via env) to rebuild every super-agent's L1 runbook + L2' manager
     rollups. Gated on the per-project distill toggle. Best-effort — every failure
-    path returns a status dict, never raises."""
+    path returns a status dict, never raises.
+
+    ``max_estimated_llm_calls`` adds a **go/no-go** spend gate — emphatically not
+    a cap. A free ``--dry-run`` prices the pass first and the real run is REFUSED
+    if the estimate exceeds the budget or cannot be obtained; once authorised the
+    run is uncapped and may spend more than the estimate (see
+    :func:`_estimate_distill_calls` for the two ways the estimate and the run can
+    disagree). What IS enforced is that the run distills the bytes that were
+    priced: ``graph.json`` is re-hashed immediately before the spawn and the run
+    is refused (``graph_moved_during_pricing``) if a concurrent compile moved it.
+    Operator-initiated distills pass nothing and are unpriced + unbounded,
+    exactly as before — a human clicking Distill has consented to the spend."""
     root = get_tesserae_root(project_id)
     if root is None:
         return {"ok": False, "reason": "tesserae_disabled"}
@@ -144,29 +366,128 @@ def distill_super_agents(project_id: str, *, timeout: int = 1800) -> dict[str, A
     reg = sync_agent_registry(project_id)
     if reg is None:
         return {"ok": False, "reason": "no_super_agents"}
+    if max_estimated_llm_calls is not None:
+        # Pre-flight AFTER the registry sync — the dry run scopes agents through it.
+        # Hash the graph BEFORE pricing: the estimate only authorises the corpus it
+        # actually looked at (see the re-check before the spawn below).
+        priced_digest = _graph_digest(root)
+        est, why = _estimate_distill_calls(root)
+        if est is None:
+            logger.warning(
+                "tesserae: auto-distill refused for %s — pass not priced (%s); no spend",
+                project_id,
+                why,
+            )
+            return {
+                "ok": False,
+                "reason": f"estimate_unavailable_{why}",
+                "registry": str(reg),
+                "llm_calls": 0,
+            }
+        if est == 0:
+            return {
+                "ok": True,
+                "reason": "nothing_to_distill",
+                "registry": str(reg),
+                "estimated_llm_calls": 0,
+                "llm_calls": 0,
+            }
+        if est > max_estimated_llm_calls:
+            logger.warning(
+                "tesserae: auto-distill refused for %s — estimate %d calls > budget %d; "
+                "run Distill from Settings → Memory System to approve the spend",
+                project_id,
+                est,
+                max_estimated_llm_calls,
+            )
+            return {
+                "ok": False,
+                "reason": f"estimate_over_budget_{est}",
+                "registry": str(reg),
+                "estimated_llm_calls": est,
+                "llm_calls": 0,
+            }
+        # Pricing took minutes; a compile (auto-policy or the operator's Compile
+        # button) can land in that window and grow the corpus the real run then
+        # distills, turning "≤60 authorised" into an unbounded bill. Refuse instead
+        # of re-pricing in a loop — the next compile past the 6 h window reprices.
+        if not priced_digest or _graph_digest(root) != priced_digest:
+            logger.warning(
+                "tesserae: auto-distill refused for %s — graph.json moved while the "
+                "pass was being priced (estimate %d is stale); no spend, will reprice "
+                "on the next compile",
+                project_id,
+                est,
+            )
+            return {
+                "ok": False,
+                "reason": "graph_moved_during_pricing",
+                "registry": str(reg),
+                "estimated_llm_calls": est,
+                "llm_calls": 0,
+            }
     # tesserae distill no-ops unless agent-distill is opted in (env or config).
     # Scrubbed base (REQ-41): distill IS an LLM operation, so a server-baked
     # inference key must not reach it when AGENTED_SERVER_NO_LLM_KEYS is on.
     env = {**_tesserae_env(), "TESSERAE_AGENT_DISTILL": "1"}
     try:
-        proc = subprocess.run(
+        rc, stdout, stderr = _run_distill(
+            # Deliberately UNCAPPED — no ``--max-llm-calls``. That flag is not a
+            # spend control on this path, it is silent artifact damage: an
+            # over-budget cluster takes the deterministic fallback
+            # (agent_distill.py:1580), capped fallbacks are NOT cached
+            # (:1520-1524), and the scope watermark is stamped unconditionally at
+            # the tail of distill_agent (:2282) — while the watermark skip (:1970)
+            # is gated only on --full/--dry-run, so --retry-fallbacks cannot lift
+            # it. A capped run therefore freezes fallback prose into the runbook
+            # until someone runs --full. The budget is a go/no-go BEFORE the run
+            # (see max_estimated_llm_calls), never a throttle inside it.
             [_TESSERAE_CMD, "distill", "--all", "--project", str(root)],
-            cwd=str(root),
-            capture_output=True,
-            text=True,
-            timeout=timeout,
+            root=root,
             env=env,
+            timeout=timeout,
         )
     except FileNotFoundError:
-        return {"ok": False, "reason": "cli_missing"}
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "reason": f"timeout_after_{timeout}s"}
-    ok = proc.returncode == 0
-    if not ok:
+        return {"ok": False, "reason": "cli_missing", "llm_calls": 0}
+    except OSError as exc:
+        # Keeps the "never raises" contract above true for the spawn failures
+        # that are not a missing CLI (PermissionError, ENOMEM, …).
+        logger.warning("tesserae distill --all could not be spawned for %s: %s", project_id, exc)
+        return {"ok": False, "reason": "spawn_failed", "llm_calls": 0}
+    # Sum the per-agent ``llm_calls=`` from the FULL stdout, before the tail
+    # truncation below — what it actually cost, not "it fired". Parsed BEFORE the
+    # timeout branch, because a killed run is exactly the case where the number
+    # matters most.
+    calls = sum(int(h) for h in _LLM_CALLS_RE.findall(stdout))
+    if rc is None:
+        # A timeout is the largest and least-known spend on this path. Report it
+        # as a FLOOR — the agents that finished printed their cost, the agent we
+        # killed mid-flight did not — never as the zero it used to read as.
         logger.warning(
-            "tesserae distill --all failed for %s: %s", project_id, (proc.stderr or "")[:300]
+            "tesserae distill --all TIMED OUT for %s after %ds; process group killed. "
+            "Spend is NOT zero and NOT fully known: ≥%d provider call(s) from agents "
+            "that finished, plus whatever the interrupted agent had already issued.",
+            project_id,
+            timeout,
+            calls,
         )
-    return {"ok": ok, "registry": str(reg), "stdout_tail": (proc.stdout or "")[-500:]}
+        return {
+            "ok": False,
+            "reason": f"timeout_after_{timeout}s",
+            "registry": str(reg),
+            "llm_calls": calls,
+            "llm_calls_partial": True,
+            "stdout_tail": stdout[-500:],
+        }
+    ok = rc == 0
+    if not ok:
+        logger.warning("tesserae distill --all failed for %s: %s", project_id, stderr[:300])
+    return {
+        "ok": ok,
+        "registry": str(reg),
+        "llm_calls": calls,
+        "stdout_tail": stdout[-500:],
+    }
 
 
 def read_agent_memory(
@@ -287,9 +608,15 @@ def agent_drill(
             # ``--flag``-shaped id can never smuggle a CLI option (the argv-guard
             # class already hardened elsewhere in this codebase).
             [
-                _TESSERAE_CMD, "agents", "drill",
-                "--agent", key, "--project", str(root),
-                "--", node_id,
+                _TESSERAE_CMD,
+                "agents",
+                "drill",
+                "--agent",
+                key,
+                "--project",
+                str(root),
+                "--",
+                node_id,
             ],
             cwd=str(root),
             capture_output=True,

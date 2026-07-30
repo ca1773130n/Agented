@@ -59,7 +59,12 @@ class ChatStateService:
                 "subscribers": [],
                 "event_log": [],
                 "status": "idle",
-                "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z",
+                # NO trailing "Z". ``isoformat()`` on an aware datetime already
+                # emits "+00:00"; appending "Z" produced "…+00:00Z", which is not
+                # ISO-8601 and which ``datetime.fromisoformat`` rejects outright.
+                # Same bug class as the ``ended_at`` stamp in
+                # ``super_agent_session_service`` — see the note there.
+                "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             }
             logger.info("ChatStateService: initialized session %s", session_id)
 
