@@ -127,6 +127,26 @@ with no estimate anywhere and exit 0. `skipped-watermark` is the third such
 `continue` but cannot occur while pricing: `agent_distill.py:1970` bypasses the
 watermark skip under `dry_run`.
 
+**The L2' hierarchy is structurally unpriceable until every declared child has
+attributed sessions — and this is the feature's headline shape.**
+`sync_agent_registry` sets `parent = <other agent>` whenever one super-agent
+parents another (`super_agent_memory.py`), which is exactly what makes tesserae
+treat it as a MANAGER. `_distill_manager` then raises `DistillError`
+unconditionally when any declared child has no `distilled.graph.json`
+(`agent_distill.py:2472-2479`), and a child with nothing attributed never writes
+one (`no-sessions`, `:1940`). A dry run cannot create one either — it returns at
+`:2236`, *before* the artifact write. **MEASURED against tesserae 0.28.2: both
+`distill --all --dry-run` and the real `distill --all` exit 1 on that shape**, so
+this does NOT clear by clicking Distill; the operator button fails the same way.
+Surfaced as `estimate_unavailable_manager_children_unbuilt` rather than a generic
+`exit_nonzero`, because the generic code reads as a broken CLI and hides the
+cause. It fails closed — zero spend — but the automatic path stays a no-op for a
+hierarchical registry, and each attempt still consumes its 6 h window. Flat
+registries (every agent `parent: org:root`) price and run normally. Fixing it
+properly needs tesserae to either exempt managers under `--dry-run` or treat a
+`no-sessions` child as distillable-empty; until then, treat L2' manager rollups as
+unsupported on the automatic path.
+
 **Inert on this machine today, by data not by design.** 0 projects have
 `tesserae_distill_enabled = 1`, and all 3 rows in `super_agent_sessions` have
 `project_id IS NULL` while `_project_super_agents` joins on it — so

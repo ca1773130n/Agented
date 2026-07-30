@@ -857,6 +857,38 @@ def test_mixed_no_sessions_and_priced_agents_sum_only_the_priced(distill_enabled
     assert sam._estimate_distill_calls(distill_enabled) == (7, "ok")
 
 
+def test_manager_with_unbuilt_child_reports_its_own_reason(distill_enabled, monkeypatch):
+    """A hierarchical registry — the L2' manager rollup, i.e. the whole point of
+    `parent_super_agent_id` — is structurally unpriceable until every declared
+    child has attributed sessions.
+
+    `sync_agent_registry` writes `parent = <other agent>`; tesserae's
+    `_distill_manager` then raises unconditionally when a child has no
+    `distilled.graph.json`, and a dry run returns before writing one. MEASURED
+    against tesserae 0.28.2: the real `distill --all` fails identically, so this
+    does NOT clear by clicking Distill. It must not be reported as a generic
+    `exit_nonzero`, which reads as a broken CLI and hides the actual cause.
+
+    The stderr below is copied verbatim from the real 0.28.2 CLI.
+    """
+    proc = _Proc(
+        "",
+        returncode=1,
+        stderr=(
+            "distill: children of claude:unknown:super-lead have no distilled "
+            "artifact: claude:unknown:super-rep; run: tesserae distill --agent "
+            "claude:unknown:super-rep\n"
+        ),
+    )
+    argvs = _record_subprocess(monkeypatch, proc, proc)
+    assert sam._estimate_distill_calls(distill_enabled) == (None, "manager_children_unbuilt")
+    res = sam.distill_super_agents("proj-1", max_estimated_llm_calls=60)
+    assert res["ok"] is False
+    assert res["reason"] == "estimate_unavailable_manager_children_unbuilt"
+    assert res["llm_calls"] == 0
+    assert all("--dry-run" in a for a in argvs), "the real run must never spawn"
+
+
 def test_unrecognised_zero_estimate_output_still_fails_closed(distill_enabled, monkeypatch):
     """The paired control, and the reason the branch keys on the MARKER rather
     than on "no estimate lines": output this function cannot account for is a

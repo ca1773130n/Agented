@@ -157,6 +157,18 @@ _NO_AGENTS_MARKER = "No agents observed in the compiled graph"
 # ``dry_run``, so ``no-sessions`` is the only one a dry run can emit.
 _NO_SESSIONS_MARKER = "no-sessions (nothing attributed to this agent)"
 
+# The L2' hierarchy's structural trap. ``sync_agent_registry`` declares
+# ``parent = <other agent>`` whenever one super-agent parents another — that IS the
+# manager-rollup feature. But tesserae's ``_distill_manager`` raises
+# ``DistillError`` unconditionally when a declared child has no
+# ``distilled.graph.json`` (agent_distill.py:2472-2479), and a child with nothing
+# attributed never writes one (it returns ``no-sessions`` at :1940). A dry run
+# cannot write one either — it returns at :2236, before the artifact write.
+# MEASURED against tesserae 0.28.2: BOTH ``distill --all --dry-run`` AND the real
+# ``distill --all`` exit 1 on that shape, so the operator's Distill button does not
+# clear it. Detected here only to report it under an honest, actionable reason.
+_MANAGER_CHILDREN_UNBUILT_MARKER = "have no distilled artifact"
+
 
 def _scope_digest(root: Path) -> str:
     """Digest of EVERYTHING that decides what a distill pass will do.
@@ -322,6 +334,26 @@ def _estimate_distill_calls(root: Path, *, timeout: int = 300) -> tuple[Optional
         )
         return None, "timeout"
     if rc != 0:
+        blob = f"{stderr or ''}\n{stdout or ''}"
+        if _MANAGER_CHILDREN_UNBUILT_MARKER in blob:
+            # STRUCTURAL, not transient: this project's registry declares a manager
+            # whose child has no distilled artifact, and a dry run cannot create one
+            # (agent_distill.py:2236 returns before the artifact write), so pricing
+            # can never succeed while that shape holds. Reported under its own reason
+            # so the operator sees the actual cause instead of a generic non-zero
+            # exit that reads like a broken CLI. MEASURED against tesserae 0.28.2 —
+            # the real ``--all`` run fails identically, so this does not clear by
+            # clicking Distill; see the note in CLAUDE.md.
+            logger.warning(
+                "tesserae: distill dry-run for %s cannot be priced — the agent registry "
+                "declares a manager whose child has no distilled artifact yet, and "
+                "neither a dry run nor `distill --all` can create one. Every declared "
+                "child needs attributed sessions in the compiled graph first. No spend. "
+                "tesserae said: %s",
+                root,
+                (stderr or "").strip()[:300],
+            )
+            return None, "manager_children_unbuilt"
         logger.warning(
             "tesserae: distill dry-run for %s exited %d in %.1fs: %s",
             root,
