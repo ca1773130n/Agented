@@ -150,8 +150,13 @@ async function distill() {
   distillNote.value = null;
   error.value = null;
   try {
-    await distillSuperAgentMemory(props.superAgentId, selectedProjectId.value);
-    distillNote.value = t('superAgentMemory.distilling');
+    const res = await distillSuperAgentMemory(props.superAgentId, selectedProjectId.value);
+    // job_id null ⇒ the automatic (budgeted) distill is already running and was
+    // NOT handed back as the answer to this click. Say so instead of showing
+    // "Distilling…" for a run this button did not start.
+    distillNote.value = res.job_id
+      ? t('superAgentMemory.distilling')
+      : t('superAgentMemory.distillAutoRunning');
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : String(e);
   } finally {

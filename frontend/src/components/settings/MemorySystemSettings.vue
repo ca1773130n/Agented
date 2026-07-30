@@ -277,6 +277,17 @@ onUnmounted(() => {
   jobPollers.clear();
 });
 
+/**
+ * Provider-call count for the last automatic distill. A run killed at the
+ * timeout reports only a FLOOR — the agent it killed mid-flight never printed
+ * its cost — so that case renders `≥n`. An unknown spend must never be shown as
+ * an exact number, and a refusal's real 0 must not be shown as unknown.
+ */
+function autoDistillCalls(s: NonNullable<TesseraeProjectState['last_auto_distill']>): string {
+  if (s.llm_calls == null) return '—';
+  return s.llm_calls_partial ? `≥${s.llm_calls}` : String(s.llm_calls);
+}
+
 onMounted(loadAll);
 </script>
 
@@ -404,6 +415,20 @@ onMounted(loadAll);
                     />
                     {{ t('settings.memory.distillLabel') }}
                   </label>
+                  <!-- Automatic LLM spend, made auditable. `reason` also carries
+                       refusals (over-budget / unpriced), so don't trim it. -->
+                  <span
+                    v-if="p.last_auto_distill?.at"
+                    class="auto-distill-note"
+                    :data-testid="`tesserae-auto-distill-${p.project_id}`"
+                    :title="p.last_auto_distill.reason || ''"
+                  >
+                    {{ t('settings.memory.lastAutoDistill', {
+                      at: p.last_auto_distill.at,
+                      reason: p.last_auto_distill.reason || '—',
+                      calls: autoDistillCalls(p.last_auto_distill),
+                    }) }}
+                  </span>
                 </td>
               </tr>
               <tr
@@ -602,6 +627,7 @@ onMounted(loadAll);
 .btn-refresh { border-color: var(--accent-cyan, #06b6d4); color: var(--accent-cyan, #06b6d4); }
 .distill-toggle { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; font-size: 0.8rem; color: var(--text-tertiary, #888); cursor: pointer; }
 .distill-toggle input { cursor: pointer; }
+.auto-distill-note { display: inline-block; margin-left: 8px; font-size: 0.75rem; color: var(--text-tertiary, #888); }
 
 .disclosure {
   background: none; border: none;

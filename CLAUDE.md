@@ -24,7 +24,165 @@ the product is the autonomous-agent workflow on top.
 | `AGENTED_DISABLE_SIGNUP` | backend | unset (open) | Set to `1` to close open self-registration (`POST /api/auth/signup` → 403). Open by default for single-operator onboarding (the **first** registrant becomes admin). **Set this once you've registered, and always before exposing the instance to an untrusted network** — otherwise an attacker could race to be the first signup and gain admin. Surfaced to the SPA via `signup_enabled` in `/health/auth-status`. |
 | `AGENTED_SERVER_NO_LLM_KEYS` | backend | unset (read env keys) | Set truthy (`1`/`true`/`yes`/`on`) to make the server **refuse to read raw LLM inference keys from its own process environment** (e.g. a `ANTHROPIC_API_KEY` baked into the deploy). Credentials must instead flow in per-request via explicit `api_key` args sourced from the ai-accounts sidecar — isolating a shared/"poison" server-wide key from silently backing every user's inference. Read dynamically (not cached) through `config.env_llm_key`, which gates the server-side fallbacks (`cliproxy_chat_service.stream_chat_direct`, `conversation_streaming` direct-API path, `orchestration_service._build_account_env`) **and** the harness subprocess env (`config.subprocess_env`/`scrub_env_inplace` — pipe, PTY-fork, and cli-agent-runner paths). Default (unset) reads env keys as before — byte-for-byte unchanged. |
 | `DATABASE_URL` | backend | unset → SQLite | **SQLite is the zero-config default; unset ⇒ byte-for-byte unchanged.** Set to a `postgres://`/`postgresql://` URL to run the backend on Postgres via the Phase-26 DB-API adapter (`app/db/connection.py`). ⚠️ **Postgres is EXPERIMENTAL.** Core paths are verified on a live Postgres 16 (PR #289 / DEFER-26-01): fresh-schema build + full migration replay, CRUD, auth/RBAC/sessions, date/analytics queries, and the sidecar admin-key lookup. Remaining caveats: full-text search degrades to `ILIKE` (no `fts5` BM25 ranking), a few SQLite-only maintenance/backup paths are skipped on PG, and not every code path is PG-exercised yet. Validate your workload before production; SQLite stays the supported default. |
-| `AGENTED_TESSERAE_CONSOLIDATE` | backend | unset (on) | Gates the Tesserae 0.23/0.24 **sleep-cycle daemon** — a lifecycle-supervised `tesserae engine --all --consolidate` (`app/services/tesserae_engine_daemon.py`, started in `lifecycle._register_cleanup_handlers`, atexit-stopped, `killpg` on shutdown). On idle it compresses per-agent memory, forgets-by-disuse (LRU decay by retrieval recency), and discovers cross-agent connections (`associate`, needs the `[semantic]` extra `scripts/setup.sh` installs). Runs with `TESSERAE_AGENT_DISTILL=1` and honors `AGENTED_SERVER_NO_LLM_KEYS` (LLM keys scrubbed from the daemon env; Tesserae resolves its backend from the harness config dir, not a raw key). Set to `0`/`false` to disable — consolidation is a real background CPU/LLM consumer. No-op under `AGENTED_LITESTAR_SKIP_STARTUP=1` (tests never spawn it). Status is surfaced on the Memory Health page via `/admin/system/memory/config` → `consolidation`. |
+| `AGENTED_TESSERAE_CONSOLIDATE` | backend | unset (on) | Gates the Tesserae 0.23/0.24 **sleep-cycle daemon** — a lifecycle-supervised `tesserae engine --all --consolidate` (`app/services/tesserae_engine_daemon.py`, started in `lifecycle._register_cleanup_handlers`, atexit-stopped, `killpg` on shutdown). On idle it discovers cross-agent connections (`associate`, needs the `[semantic]` extra `scripts/setup.sh` installs) and pre-warms community summaries (`SUMMARIZE`). It runs with **`TESSERAE_AGENT_DISTILL=0`**: the daemon's third op, agent DISTILL, is deliberately off, because it and Auto-distill (below) would otherwise write the same `.tesserae/agents/<key>/distilled.graph.json` from two OS processes with nothing able to serialize them (the daemon's tick takes no `.tesserae/compile.lock`). Agent memory compression and forgetting-by-disuse therefore happen only on the Auto-distill path — per-project opted-in and priced — not fleet-wide. **What stays fleet-wide is this daemon's own ASSOCIATE + SUMMARIZE spend**, which runs `--all` over every project in `~/.tesserae/registry.json` and is gated **only** by this variable — `projects.tesserae_distill_enabled` does not gate it and never did. So "the per-project toggle controls spend" is true of agent-distill specifically, not of all Tesserae LLM spend: a project with the toggle off still gets summarised by this daemon whenever it is on. Honors `AGENTED_SERVER_NO_LLM_KEYS` (LLM keys scrubbed from the daemon env; Tesserae resolves its backend from the harness config dir, not a raw key). Set to `0`/`false` to disable — consolidation is a real background CPU/LLM consumer. No-op under `AGENTED_LITESTAR_SKIP_STARTUP=1` (tests never spawn it). Status is surfaced on the Memory Health page via `/admin/system/memory/config` → `consolidation`. |
+
+### Auto-distill (super-agent L1 runbooks)
+
+`projects.tesserae_distill_enabled` now authorises two spending passes, not one:
+the compile-time Runbook/Gotcha pass (`--distill`) **and** automatic super-agent
+L1 distillation. The latter chains off `compile_workspace` — after a compile that
+succeeded **and** whose `.tesserae/graph.json` digest changed, an opted-in project
+dispatches `agent-distill` at most **once per 6 hours**, coalesced per (project,
+op). The run is refused unless a free `distill --all --dry-run` prices it at **≤60
+provider calls**; it is deliberately run **uncapped** (`--max-llm-calls` degrades
+over-budget clusters to uncached deterministic fallback behind a stamped
+watermark, so it damages the artifact instead of bounding it).
+
+**What the ≤60 is and is not.** It is a go/no-go taken *before* the run, never a
+throttle inside it, so 4 windows × 60 is an **expectation of about 240 provider
+calls per project per day, not an enforced ceiling** — nothing anywhere counts a
+daily total. Two things narrow the gap and neither closes it: the distill **scope**
+— `graph.json` *and* `.tesserae/agents/registry.json`, which tesserae reads as
+`known_agent_keys` — is re-hashed immediately before the real run and the run is
+refused (`graph_moved_during_pricing`) if either moved while pricing was in
+flight, so the priced bytes are the distilled bytes. Hashing the registry too is
+load-bearing: a graph-only digest cannot see a scope swap that leaves `graph.json`
+byte-identical. (`_scope_digest` is deliberately separate from `_graph_digest`,
+which the change-detection policy uses — folding the registry into *that* would
+make any super-agent rename dispatch a paid run.) And the dry run *over*-counts
+relative to a real run because it ignores the per-agent watermark skip. It can
+also under-describe the run — dry-run clustering executes without the memo
+`state` (`agent_distill.py:1999`), so cluster shapes can differ. Spend is a hard
+zero for a project that has not opted in, a failed compile, an unchanged graph,
+an unpriceable pass, or an over-budget estimate.
+
+**The 6 h floor survives a restart.** The record — last digest, timestamp,
+outcome and measured cost — is persisted as JSON in
+`projects.tesserae_auto_distill_state` (migration 181) next to the toggle that
+authorises it, and read back when this process didn't dispatch it. Without that
+the in-memory map was empty after every gunicorn restart, `prev` was falsy, the
+interval check was skipped as a "first dispatch", and the next successful compile
+opened a fresh window. Within one process the age still comes from
+`time.monotonic()` (immune to wall-clock changes); across a restart it comes from
+the persisted `at_epoch`. A record with neither reads as infinitely old, so a
+corrupt row costs one extra *priced* dispatch rather than wedging the policy shut.
+Persisting is best-effort: a failed write is logged and leaves the in-memory
+record intact, which degrades to exactly the old behaviour.
+
+**A timed-out run reports a floor, not a total.** A run killed at the 1800 s
+timeout records `llm_calls_partial` (rendered `≥n`) — the agent killed mid-flight
+never printed its cost. `start_new_session` + `killpg` reap tesserae **and every
+child still in its process group** — the CPU-burning graph work, and the pipe
+holders that would otherwise wedge the drain. They do **not** reach the provider
+call: tesserae spawns the Claude/Codex CLI with its own `start_new_session=True`
+(`tesserae/llm_json.py` `_run_cli`), so it lives in a different session, and
+tesserae being SIGKILLed means its own cleanup never runs either. One in-flight
+provider call can survive a timeout, unbilled to us and unobserved — the reported
+`≥n` is a floor for that reason as much as for the unprinted line.
+
+**One distill per project, and never one path's outcome reported as the
+other's.** The automatic policy and the operator's Distill button share the
+`(project, op)` coalesce key, but `run_op_async` joins a running job only when it
+was dispatched with the same arguments — and they never are, because only the
+automatic path passes a budget. A mismatch returns `""`: nothing dispatched. So
+the operator clicking Distill while an automatic run is in flight gets
+`{job_id: null, reason: "auto_distill_running"}` and a "try again once it
+finishes" note, not that run's budget refusal as the answer to an explicit
+unpriced approval; and the automatic path, rather than recording a dispatch that
+never ran, resolves its record to `served_by_operator_distill` with a cost of 0
+(the operator's run is rebuilding the same runbooks, so the window is consumed).
+
+**`served_by_operator_distill` is not a promise that the NEW graph was
+distilled.** The operator's run may have started against an older graph and the
+compile that triggered this check landed after it; the window is consumed either
+way, so that digest can go undistilled until the *next* graph change. Consuming
+the window is still right — a distill genuinely is in flight and a second
+concurrent one would race the same artifact — but read the record as "a distill
+covered this window", never as "this digest is now distilled".
+
+**The 300 s pricing budget is unvalidated.** The dry run has never executed
+against a real corpus; the live `graph.json` is ~12 MB and the pass does full
+scope closure + clustering for *every* agent because it deliberately bypasses the
+watermark skip. It is free of provider calls — verified in tesserae's source, not
+assumed (`agent_distill.py:1567` returns the deterministic fallback before
+`self.summarizer(request)`) — so overrunning costs CPU, not money, and fails
+closed with `estimate_unavailable_timeout` plus the killed-at elapsed seconds in
+the log. That log line is the evidence to set the real number from, and it is the
+only evidence you get: **a refusal spends nothing but still consumes the 6 h
+window**, so a pricing budget set too low does not fail loudly — it degrades into
+"the runbook silently stops refreshing", one quiet refusal per window. That is a
+deliberate trade (not re-consuming the window would re-burn the full CPU-bound
+dry run on every compile), which is why the refusal reason is surfaced in the UI
+via `last_auto_distill.reason` rather than left in the log: an
+`estimate_unavailable_*` sitting on that row is the symptom to look for.
+
+An `estimate_unavailable_*` reason always means the pricer failed. **Two**
+healthy shapes price at 0 and report `nothing_to_distill` instead, and neither
+may be shown as "could not price the pass": an empty scope (tesserae prints "No
+agents observed in the compiled graph" and exits 0, `cli.py:6131`), and — the
+shape this machine's data actually produces — agents that exist but have nothing
+attributed to them, which print `no-sessions` and `continue` **without** an
+`estimated_llm_calls=` line (`cli.py:6144-6146`), leaving a non-empty `results`
+with no estimate anywhere and exit 0. `skipped-watermark` is the third such
+`continue` but cannot occur while pricing: `agent_distill.py:1970` bypasses the
+watermark skip under `dry_run`.
+
+**The L2' hierarchy is structurally unpriceable until every declared child has
+attributed sessions — and this is the feature's headline shape.**
+`sync_agent_registry` sets `parent = <other agent>` whenever one super-agent
+parents another (`super_agent_memory.py`), which is exactly what makes tesserae
+treat it as a MANAGER. `_distill_manager` then raises `DistillError`
+unconditionally when any declared child has no `distilled.graph.json`
+(`agent_distill.py:2472-2479`), and a child with nothing attributed never writes
+one (`no-sessions`, `:1940`). A dry run cannot create one either — it returns at
+`:2236`, *before* the artifact write. **MEASURED against tesserae 0.28.2: both
+`distill --all --dry-run` and the real `distill --all` exit 1 on that shape**, so
+this does NOT clear by clicking Distill; the operator button fails the same way.
+Surfaced as `estimate_unavailable_manager_children_unbuilt` rather than a generic
+`exit_nonzero`, because the generic code reads as a broken CLI and hides the
+cause. It fails closed — zero spend — but the automatic path stays a no-op for a
+hierarchical registry, and each attempt still consumes its 6 h window. Flat
+registries (every agent `parent: org:root`) price and run normally. Fixing it
+properly needs tesserae to either exempt managers under `--dry-run` or treat a
+`no-sessions` child as distillable-empty; until then, treat L2' manager rollups as
+unsupported on the automatic path.
+
+**Inert on this machine today, by data not by design.** 0 projects have
+`tesserae_distill_enabled = 1`, and all 3 rows in `super_agent_sessions` have
+`project_id IS NULL` while `_project_super_agents` joins on it — so
+`distill_super_agents` returns `no_super_agents` and BOTH the manual Distill
+button and this automatic path are no-ops here. The gates above are therefore
+covered by tests, not by a production run: nothing in this feature has ever
+spawned `tesserae distill`. Do a manual Distill first on a project that has
+super-agent sessions with a `project_id` before trusting the automatic path — it
+will also surface why those 3 rows have none, which independently keeps
+super-agent expertise out of the graph. Note the column is **not** globally
+unwritten: `create_super_agent_session` takes `project_id` and inserts it
+(`app/db/super_agents.py`), and `super_agent_session_service` backfills it — so
+this is specific callers creating projectless sessions, not a missing write. Look
+for the caller, not for the persistence bug.
+
+**These gates assume `workers = 1`.** The coalesce map and the 6 h record are
+in-process (`tesserae_integration`), and the DB write is a record, not an atomic
+claim. `gunicorn.conf.py` pins `workers = 1` as MANDATORY, so today exactly one
+process can dispatch. That comment frames the pin as temporary ("until in-memory
+SSE state is migrated to Redis") — **whoever lifts it must first make the dispatch
+an atomic claim**, or two workers seeing the same changed graph both dispatch,
+doubling spend and racing the same artifact.
+
+Last dispatch, outcome and measured call count surface at
+`/admin/system/memory/tesserae/projects` → per-project `last_auto_distill`, and on
+the Memory System settings row — durably, from the persisted row above, not from
+process memory. A record can also sit unresolved at `graph_changed` with no cost:
+the tesserae child is spawned with `start_new_session=True`, so a worker restart
+mid-run orphans a child that keeps spending while the new process has no job to
+resolve. An old `graph_changed` on that row means "outcome unknown", not "nothing
+happened".
+This is the **only** automatic agent distiller — the sleep-cycle
+daemon's DISTILL op is switched off for exactly that reason (see
+`AGENTED_TESSERAE_CONSOLIDATE` above). No env knob —
+`_TESSERAE_AUTO_DISTILL_*` in `app/services/tesserae_integration.py` are spend
+ceilings, not deployment config.
 
 ## ai-accounts dev linking
 

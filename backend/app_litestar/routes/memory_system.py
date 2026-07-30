@@ -99,6 +99,9 @@ def _tesserae_per_project_state() -> list[dict[str, Any]]:
                 "tesserae_project_root": root,
                 "enabled": bool(root),
                 "distill_enabled": bool(row["tesserae_distill_enabled"]),
+                # Last AUTOMATIC distill dispatch — {} until one fires. This is
+                # how automatic LLM spend becomes auditable from the UI.
+                "last_auto_distill": ti.auto_distill_state(row["id"]),
                 "workspace_initialized": False,
                 "session_count": 0,
                 "last_imported_at": None,
@@ -615,9 +618,7 @@ def graph_overview(project: Optional[str] = None, max_nodes: int = 50) -> dict[s
 
 
 @get("/system/memory/graph/nodes", sync_to_thread=True)
-def graph_search_nodes(
-    q: str, project: Optional[str] = None, limit: int = 25
-) -> dict[str, Any]:
+def graph_search_nodes(q: str, project: Optional[str] = None, limit: int = 25) -> dict[str, Any]:
     """Search graph NODES by name/alias/description — ranked, clickable results
     (each has id/name/type/degree) that open a focused subgraph."""
     return {

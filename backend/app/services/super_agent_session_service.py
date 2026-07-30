@@ -195,7 +195,7 @@ class SuperAgentSessionService:
             if session["status"] != "active":
                 return False, "Session is not active"
 
-            iso_now = datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z"
+            iso_now = datetime.datetime.now(datetime.timezone.utc).isoformat()
             token_estimate = len(content) // cls.CHARS_PER_TOKEN
 
             message = {
@@ -254,7 +254,7 @@ class SuperAgentSessionService:
             if not session:
                 return False
 
-            iso_now = datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z"
+            iso_now = datetime.datetime.now(datetime.timezone.utc).isoformat()
             token_estimate = len(content) // cls.CHARS_PER_TOKEN
 
             message = {
@@ -308,7 +308,17 @@ class SuperAgentSessionService:
             if not session:
                 return False, "Session not found"
 
-            iso_now = datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z"
+            # NO trailing "Z". ``isoformat()`` on an aware datetime already emits
+            # "+00:00"; appending "Z" produced "…+00:00Z", which is not ISO-8601.
+            # This value lands in the ``ended_at`` COLUMN, which
+            # ``tesserae_integration._normalize_super_agent_session`` exports as the
+            # session's ended_at, which tesserae's ``_corpus_clock`` reduces to the
+            # distill corpus clock. Its ``_parse_iso`` rewrites a trailing "Z" to
+            # "+00:00" → "…+00:00+00:00" → ValueError → None. Unparseable stamps
+            # sort earliest, so this is fatal exactly when every session in an
+            # agent's scope came through here (the normal case): the max is then a
+            # malformed stamp and ``distill_agent`` raises DistillError.
+            iso_now = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
             # Persist final state
             update_super_agent_session(
@@ -506,9 +516,7 @@ class SuperAgentSessionService:
                     # can contain adversarial/poisoned text — fence them as
                     # untrusted DATA (nonce-tagged, do-not-follow preamble) so a
                     # note can't smuggle instructions into the system prompt.
-                    parts.append(
-                        f"## Distilled Memory (Tesserae)\n\n{wrap_tainted(mem['text'])}\n"
-                    )
+                    parts.append(f"## Distilled Memory (Tesserae)\n\n{wrap_tainted(mem['text'])}\n")
             except Exception:
                 logger.debug("tesserae agent memory injection skipped", exc_info=True)
 
@@ -644,7 +652,7 @@ class SuperAgentSessionService:
         message_tokens = sum(msg.get("token_count", 0) for msg in recent_messages)
         session["token_count"] = summary_tokens + message_tokens
 
-        iso_now = datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z"
+        iso_now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         session["last_compacted_at"] = iso_now
 
         logger.info(

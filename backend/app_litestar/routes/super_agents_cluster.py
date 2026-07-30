@@ -898,11 +898,21 @@ def super_agent_memory_distill_endpoint(
     """Sync the project's agent-org registry from its super-agents and kick off the
     Tesserae distill pass (L1 runbooks + L2' manager rollups) as a background op.
     Gated on the project distill toggle. Coalesced per (project, op) so repeated
-    clicks don't spawn overlapping distill subprocesses. Returns a job_id to poll."""
+    clicks don't spawn overlapping distill subprocesses. Returns a job_id to poll.
+
+    ``job_id`` is None with ``reason="auto_distill_running"`` when the AUTOMATIC
+    distill policy already has a run in flight for this project. That run carries
+    a ≤N-provider-call budget this click does not, so it can end in a budget
+    refusal — handing it back as the answer to an explicit, deliberately unpriced
+    approval would be a lie. Nothing else may run concurrently (two distills race
+    on the same watermark), so the honest answer is "not now"."""
     from app.services.tesserae_integration import run_op_async
 
     _guard_memory_access(super_agent_id, project_id, caller)
-    return {"job_id": run_op_async(project_id, "agent-distill", coalesce=True)}
+    job_id = run_op_async(project_id, "agent-distill", coalesce=True)
+    if not job_id:
+        return {"job_id": None, "reason": "auto_distill_running"}
+    return {"job_id": job_id, "reason": None}
 
 
 super_agents_router = Router(

@@ -1,15 +1,20 @@
 """Supervised Tesserae engine daemon — the 0.23–0.25 "sleep cycle".
 
-``tesserae engine --all --consolidate`` is a *long-lived* process. On idle it
-compresses agent memory (0.23), forgets-by-disuse via LRU decay and discovers
-cross-agent connections via the ``associate`` pass (0.24), and — the 0.25
-addition — pre-warms community-summary caches for the most-demanded graph_map
-scopes via the ``SUMMARIZE`` op, bounded per tick by ``--summarize-budget``
-(default 25 LLM calls; set ``AGENTED_TESSERAE_SUMMARIZE_BUDGET=0`` to disable
-just that op). Agented's other engine path (``engine --all --once``, see
+``tesserae engine --all --consolidate`` is a *long-lived* process whose idle tick
+runs three ops (``engine/daemon.py:_consolidate_once``): DISTILL, then ASSOCIATE
+(0.24 — discovers cross-agent connections by embedding similarity, needs the
+``[semantic]`` extra), then SUMMARIZE (0.25 — pre-warms community-summary caches
+for the most-demanded graph_map scopes, bounded per tick by ``--summarize-budget``;
+default 25 LLM calls, ``AGENTED_TESSERAE_SUMMARIZE_BUDGET=0`` disables just that
+op). Agented's other engine path (``engine --all --once``, see
 :func:`tesserae_integration.engine_refresh_async`) is a one-shot recompile DRAIN
 that *skips consolidation by design*, so the sleep cycle needs this persistent
 supervisor.
+
+**We run this daemon with DISTILL off** (``TESSERAE_AGENT_DISTILL=0``, see
+:meth:`TesseraeEngineDaemon.start`) — agent distillation is owned solely by
+:func:`tesserae_integration._maybe_schedule_auto_distill`. ASSOCIATE and
+SUMMARIZE are independent of that gate and still run every tick.
 
 Mirrors :class:`cliproxy_manager.CLIProxyManager`: a module-singleton
 ``subprocess.Popen`` handle (safe only under gunicorn ``workers=1``, the mandated
@@ -89,22 +94,41 @@ class TesseraeEngineDaemon:
         """Spawn the daemon. Returns True when a live process is running.
         No-op (returns False) when disabled or the binary is missing."""
         if not _enabled():
-            logger.info(
-                "Tesserae consolidation daemon disabled (AGENTED_TESSERAE_CONSOLIDATE=0)"
-            )
+            logger.info("Tesserae consolidation daemon disabled (AGENTED_TESSERAE_CONSOLIDATE=0)")
             return False
         with cls._lock:
             if cls._process is not None and cls._process.poll() is None:
                 return True
             cls.kill_orphans()
-            # ``TESSERAE_AGENT_DISTILL=1`` is the same opt-in gate ``distill`` uses;
-            # without it consolidation no-ops. The LLM backend resolves from the
-            # harness config dir (CLAUDE_CONFIG_DIR), never a raw inference key, so
-            # honouring AGENTED_SERVER_NO_LLM_KEYS (scrub) stays correct here.
+            # The LLM backend resolves from the harness config dir
+            # (CLAUDE_CONFIG_DIR), never a raw inference key, so honouring
+            # AGENTED_SERVER_NO_LLM_KEYS (scrub) stays correct here.
             env = config.subprocess_env(os.environ.copy())
             if env is None:
                 env = os.environ.copy()
-            env["TESSERAE_AGENT_DISTILL"] = "1"
+            # DISTILL off, deliberately. This daemon and Agented's auto-distill
+            # policy (tesserae_integration._maybe_schedule_auto_distill) would
+            # otherwise both drive agent_distill.distill_agent against the same
+            # ``.tesserae/agents/<key>/distilled.graph.json`` in two OS processes,
+            # and nothing can serialize them: the daemon's consolidation tick holds
+            # only an in-process semaphore (engine/daemon.py:702) and takes no
+            # ``.tesserae/compile.lock``, so a lock on our side would be inert.
+            # Concurrent runs cost double, can regress the artifact to an older
+            # graph's content (last os.replace wins), and race an unWALed
+            # DistillStateStore (agent_distill.py:355) with a 5 s busy timeout.
+            #
+            # Agented's path is the one to keep: it honours the per-project
+            # ``projects.tesserae_distill_enabled`` opt-in (the daemon's `--all`
+            # ignores it and would spend on every project in the tesserae
+            # registry), it dry-run-prices the pass before spending, it refreshes
+            # on ANY graph change rather than only under the daemon's memory-
+            # pressure floor of half the 48k chunk budget (agent_distill.py:2853),
+            # and it survives this daemon being switched off.
+            #
+            # "0" and not a pop: an explicit env spelling WINS over a project's
+            # ``agent_distill.enabled`` config (agent_distill.py:291-293), so this
+            # is a hard off for every project the fleet daemon touches.
+            env["TESSERAE_AGENT_DISTILL"] = "0"
             cmd = [
                 _TESSERAE_CMD,
                 *_ENGINE_ARGS,
@@ -124,9 +148,7 @@ class TesseraeEngineDaemon:
                     start_new_session=True,
                     env=env,
                 )
-                logger.info(
-                    "Tesserae consolidation daemon started (pid=%d)", cls._process.pid
-                )
+                logger.info("Tesserae consolidation daemon started (pid=%d)", cls._process.pid)
                 return True
             except FileNotFoundError:
                 logger.warning("tesserae binary not found — consolidation daemon not started")

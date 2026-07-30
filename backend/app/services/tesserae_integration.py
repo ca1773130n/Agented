@@ -33,6 +33,7 @@ not break the producer.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -93,6 +94,7 @@ def _tesserae_env() -> dict:
     base = os.environ.copy()
     scrubbed = config.subprocess_env(base)
     return scrubbed if scrubbed is not None else base
+
 
 # A Tesserae project alias is a safe project-name token; we pass these as
 # positional values to ``--scope-aliases``, so reject anything that could be read
@@ -886,7 +888,11 @@ def _run_tesserae(
         env["TESSERAE_EXTRACT_TIMEOUT"] = _extraction_timeout_for(timeout)
     try:
         proc = subprocess.run(
-            cmd, cwd=str(cwd), capture_output=True, text=True, timeout=timeout,
+            cmd,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
             env=env,
         )
     except FileNotFoundError:
@@ -1479,9 +1485,7 @@ def run_research_async(
     :func:`get_op_job`."""
     return run_memory_job(
         "research",
-        lambda: run_research(
-            query, breadth=breadth, depth=depth, max_iters=max_iters, top_k=top_k
-        ),
+        lambda: run_research(query, breadth=breadth, depth=depth, max_iters=max_iters, top_k=top_k),
         label=(query or "")[:120],
         params={
             "query": query,
@@ -1762,6 +1766,16 @@ def compile_workspace(
             f"{res.reason} — a full compile of a large corpus exceeds this budget; "
             f"run it detached (`nohup tesserae compile --project {root} & disown`)"
         )
+    # A compile that moved the graph is the ONLY event that can stale a
+    # super-agent runbook. This is the single funnel for both the auto-compile
+    # policy and the operator's Compile button, so one call site covers both.
+    if res.ok:
+        try:
+            _maybe_schedule_auto_distill(project_id, root)
+        except Exception:
+            logger.warning(
+                "tesserae: auto-distill decision failed for %s", project_id, exc_info=True
+            )
     return res
 
 
@@ -1789,14 +1803,43 @@ def build_site(project_id: str) -> TesseraeOpResult:
     )
 
 
-def _agent_distill_op(project_id: str) -> TesseraeOpResult:
+def _agent_distill_op(
+    project_id: str, *, max_estimated_llm_calls: Optional[int] = None
+) -> TesseraeOpResult:
     """Async-op wrapper for the super-agent layered-memory distill pass (registry
     sync + ``tesserae distill --all``). Local import avoids a circular dependency
-    (super_agent_memory imports this module)."""
+    (super_agent_memory imports this module).
+
+    ``max_estimated_llm_calls`` is set only by the automatic path; when present,
+    the outcome (including a refusal) and the measured provider-call count are
+    written back to ``_auto_distill_state`` so the operator sees them in the UI,
+    not only in the log. A run that TIMED OUT reports a floor
+    (``llm_calls_partial``), because the agent that was killed mid-flight never
+    printed its cost — an unknown spend must never render as ``0``."""
     from app.services.super_agent_memory import distill_super_agents
 
     started = _now_iso()
-    res = distill_super_agents(project_id)
+    res = distill_super_agents(project_id, max_estimated_llm_calls=max_estimated_llm_calls)
+    if max_estimated_llm_calls is not None:
+        outcome = res.get("reason") or ("ok" if res.get("ok") else "failed")
+        # Absent ⇒ no subprocess was ever spawned (refused, disabled, no agents),
+        # which is a genuine zero. Every path that DID spawn tesserae returns a
+        # count — the timeout included, flagged partial.
+        calls = res.get("llm_calls")
+        partial = bool(res.get("llm_calls_partial"))
+        if calls is None:
+            calls = 0
+        _record_auto_distill_outcome(project_id, outcome, calls, partial=partial)
+        # Close the audit loop in the log too: what the automatic run actually
+        # cost, in the same units as the budget that authorised it.
+        logger.info(
+            "tesserae: auto-distill finished for %s — %s, %s provider calls (budget %d, "
+            "a go/no-go before the run and not a cap inside it)",
+            project_id,
+            outcome,
+            f"≥{calls} (partial — run killed mid-flight)" if partial else calls,
+            max_estimated_llm_calls,
+        )
     return TesseraeOpResult(
         op="agent-distill",
         ok=bool(res.get("ok")),
@@ -1830,6 +1873,14 @@ def run_op_async(project_id: str, op: str, *, coalesce: bool = False, **op_kwarg
     ``coalesce=True`` returns the id of an already-running job for the same
     (project_id, op) instead of starting another — used for heavy ops like
     agent-distill so a burst of triggers can't spawn overlapping subprocesses.
+    It joins that job only when it was dispatched with the SAME ``op_kwargs``;
+    a running job with different arguments is a different request and the
+    return is ``""`` — nothing was dispatched, and the caller must not report
+    one. ``agent-distill`` is why: the automatic policy passes a
+    ``max_estimated_llm_calls`` budget and the operator's Distill button passes
+    none, so answering either with the other's outcome is a lie in both
+    directions (an explicit unpriced approval gets a budgeted refusal; the
+    automatic audit trail records a dispatch that never ran).
 
     ``op_kwargs`` are forwarded to the dispatched op (e.g. ``retry_fallbacks=True``
     for ``compile``); without this the flag would be unreachable from any HTTP
@@ -1849,7 +1900,7 @@ def run_op_async(project_id: str, op: str, *, coalesce: bool = False, **op_kwarg
                     and job.get("op") == op
                     and job.get("status") == "running"
                 ):
-                    return existing_id
+                    return existing_id if job.get("op_kwargs") == op_kwargs else ""
         _op_jobs[job_id] = {
             "job_id": job_id,
             "project_id": project_id,
@@ -1857,6 +1908,8 @@ def run_op_async(project_id: str, op: str, *, coalesce: bool = False, **op_kwarg
             "status": "running",
             "started_at": _now_iso(),
             "result": None,
+            # Coalesce identity only — stripped by get_op_job, not part of the API.
+            "op_kwargs": dict(op_kwargs),
         }
 
     def _runner():
@@ -1883,7 +1936,8 @@ def get_op_job(job_id: str) -> Optional[dict[str, Any]]:
     with _op_jobs_lock:
         job = _op_jobs.get(job_id)
         if job:
-            return dict(job)
+            # ``op_kwargs`` is internal coalesce identity — keep the job API shape.
+            return {k: v for k, v in job.items() if k != "op_kwargs"}
     try:
         from app.db import memory_jobs
 
@@ -2007,6 +2061,262 @@ def _maybe_schedule_auto_compile(project_id: str) -> None:
         run_op_async(project_id, "compile")
     except Exception:
         logger.warning("tesserae: auto-compile dispatch failed for %s", project_id, exc_info=True)
+
+
+# ---------------------------------------------------------------------------
+# Auto-distill policy
+# ---------------------------------------------------------------------------
+
+# ``tesserae distill --all`` is an LLM-SPENDING pass, so this chains off the one
+# event that can actually stale a runbook: a SUCCESSFUL compile whose graph.json
+# moved. Distill reads the COMPILED graph and nothing else — a session import
+# cannot stale a runbook, and neither can a no-op compile, so triggering on
+# either would dispatch a subprocess that loads the graph, prints
+# "skipped-watermark" and exits, forever. graph.json is in tesserae's
+# byte-stable output-snapshot allowlist (output_snapshot.py:44), so the digest is
+# an exact change detector, not a heuristic.
+#
+# Not env-tunable on purpose: these are spend ceilings, not deployment knobs.
+_TESSERAE_AUTO_DISTILL_MIN_INTERVAL_SECONDS = 6 * 60 * 60  # ≤4 windows/project/day
+_TESSERAE_AUTO_DISTILL_MAX_ESTIMATED_LLM_CALLS = 60  # go/no-go, see distill_super_agents
+
+# project_id -> {digest, at_monotonic, at, at_epoch, reason, llm_calls,
+# llm_calls_partial}. In-process CACHE of ``projects.tesserae_auto_distill_state``
+# (migration 181), not the source of truth — see _auto_distill_record.
+_auto_distill_state: dict[str, dict[str, Any]] = {}
+# NEVER nested with _auto_compile_lock or _op_jobs_lock.
+_auto_distill_lock = threading.Lock()
+
+
+def _load_auto_distill_state(project_id: str) -> dict[str, Any]:
+    """Read the persisted auto-distill record. ``{}`` when the project has never
+    auto-distilled, or on any DB/JSON error — a lookup failure must not fail the
+    compile that consulted it."""
+    try:
+        from app.db.connection import get_connection
+
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT tesserae_auto_distill_state FROM projects WHERE id = ?",
+                (project_id,),
+            ).fetchone()
+        raw = row["tesserae_auto_distill_state"] if row else None
+        loaded = json.loads(raw) if raw else None
+        return loaded if isinstance(loaded, dict) else {}
+    except Exception:
+        logger.warning("tesserae: auto-distill state load failed for %s", project_id, exc_info=True)
+        return {}
+
+
+def _save_auto_distill_state(project_id: str, state: dict[str, Any]) -> None:
+    """Mirror the in-memory record onto the projects row. Best-effort: losing the
+    write costs restart-durability of the audit trail and of the 6 h floor, not
+    the dispatch itself.
+
+    ``at_monotonic`` is deliberately dropped — a monotonic reading means nothing
+    in another process. ``at_epoch`` is the durable clock (see
+    :func:`_seconds_since_dispatch`)."""
+    payload = {k: v for k, v in state.items() if k != "at_monotonic"}
+    try:
+        from app.db.connection import get_connection
+
+        with get_connection() as conn:
+            conn.execute(
+                "UPDATE projects SET tesserae_auto_distill_state = ? WHERE id = ?",
+                (json.dumps(payload), project_id),
+            )
+            conn.commit()
+    except Exception:
+        logger.warning(
+            "tesserae: auto-distill state persist failed for %s — the record stays "
+            "in memory and will not survive a restart",
+            project_id,
+            exc_info=True,
+        )
+
+
+def _auto_distill_record(project_id: str) -> dict[str, Any]:
+    """The last auto-distill record: process cache first, else the persisted row.
+    Caller MUST hold ``_auto_distill_lock``.
+
+    The DB fallback is what closes the restart hole — without it ``prev`` is
+    falsy after every restart, the interval check is skipped as a "first
+    dispatch", and the next successful compile opens a fresh spend window."""
+    st = _auto_distill_state.get(project_id)
+    if st is None:
+        st = _load_auto_distill_state(project_id)
+        if st:
+            _auto_distill_state[project_id] = st
+    return st or {}
+
+
+def _seconds_since_dispatch(prev: dict[str, Any]) -> float:
+    """Age of the last dispatch in seconds; ``inf`` when there is none.
+
+    Prefers the monotonic stamp (immune to wall-clock changes) and falls back to
+    the persisted epoch for a record restored from the DB in a later process —
+    which is the whole point of persisting it. A record with neither, or with an
+    unreadable epoch, reads as ``inf``: a corrupt row costs at most one extra
+    *priced* dispatch rather than wedging the policy shut forever."""
+    if not prev:
+        return float("inf")
+    mono = prev.get("at_monotonic")
+    if mono is not None:
+        return _time.monotonic() - float(mono)
+    epoch = prev.get("at_epoch")
+    try:
+        return max(0.0, _time.time() - float(epoch))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return float("inf")
+
+
+def _record_auto_distill_outcome(
+    project_id: str, reason: str, llm_calls: int, *, partial: bool = False
+) -> None:
+    """Resolve this process's pending auto-distill record with what actually
+    happened, in memory AND on disk. No-op when there is no pending record — an
+    operator-initiated distill is not automatic spend and must never be filed as
+    such."""
+    with _auto_distill_lock:
+        st = _auto_distill_state.get(project_id)
+        if st is None:
+            return
+        st["reason"] = reason
+        st["llm_calls"] = llm_calls
+        st["llm_calls_partial"] = partial
+        _save_auto_distill_state(project_id, st)
+
+
+def _graph_digest(root: Path) -> str:
+    """sha256 of the compiled ``.tesserae/graph.json``; ``""`` when unreadable.
+    Chunked — the live graph is ~12 MB."""
+    h = hashlib.sha256()
+    try:
+        with open(root / ".tesserae" / "graph.json", "rb") as fh:
+            for block in iter(lambda: fh.read(1024 * 1024), b""):
+                h.update(block)
+    except OSError:
+        return ""
+    return h.hexdigest()
+
+
+def _maybe_schedule_auto_distill(project_id: str, root: Path) -> None:
+    """Refresh super-agent L1 runbooks after a compile that moved the graph.
+
+    THIS SPENDS MONEY. Every gate below is load-bearing:
+
+    - the per-project distill opt-in (``projects.tesserae_distill_enabled``) —
+      never spend for a project that has not opted in;
+    - ``graph.json`` must exist and its digest must differ from the last
+      dispatch — an unchanged graph cannot stale a runbook;
+    - ≥6 h since the last dispatch for this project, so a burst of compiles
+      buys at most one distill per window. The record is PERSISTED
+      (``projects.tesserae_auto_distill_state``, migration 181), so a restart no
+      longer resets the clock into a fresh window;
+    - ``coalesce=True``, so no two Agented ``agent-distill`` jobs for this
+      project overlap. Coalescing joins only a job dispatched with the SAME
+      arguments: an operator-initiated distill carries no budget, so
+      :func:`run_op_async` returns ``""`` rather than serving this policy the
+      operator's run, and the record is resolved as ``served_by_operator_distill``
+      instead of a dispatch that never happened;
+    - the op itself dry-run-prices the pass, REFUSES it over budget, and refuses
+      again if a concurrent compile moved ``graph.json`` between the price and
+      the spawn (the budget is a go/no-go BEFORE the run, never a cap inside it,
+      so the priced corpus and the distilled corpus must be the same bytes).
+
+    This is the ONLY automatic distiller. The other process that could drive
+    :func:`agent_distill.distill_agent` against the same artifacts — the
+    ``tesserae engine --all --consolidate`` sleep-cycle daemon — is spawned with
+    ``TESSERAE_AGENT_DISTILL=0`` precisely so it cannot (see
+    :mod:`app.services.tesserae_engine_daemon`). ``coalesce`` is an in-process
+    dict and would not have covered that; nothing else could, since the daemon's
+    consolidation tick takes no ``.tesserae`` file lock.
+    """
+    if not get_distill_enabled(project_id):
+        return
+    digest = _graph_digest(root)
+    if not digest:
+        return
+    now = _time.monotonic()
+    with _auto_distill_lock:
+        prev = _auto_distill_record(project_id)
+        if prev.get("digest") == digest:
+            return
+        since = _seconds_since_dispatch(prev)
+        if since < _TESSERAE_AUTO_DISTILL_MIN_INTERVAL_SECONDS:
+            logger.info(
+                "tesserae: auto-distill deferred for %s — graph moved to %s but only "
+                "%.0fs since the last dispatch (min %ds)",
+                project_id,
+                digest[:12],
+                since,
+                _TESSERAE_AUTO_DISTILL_MIN_INTERVAL_SECONDS,
+            )
+            return
+        # Claimed BEFORE the dispatch: two concurrent compiles for one project
+        # would otherwise both pass the gates. Resolved below with the real
+        # outcome, and again by _agent_distill_op once the op finishes.
+        _auto_distill_state[project_id] = {
+            "digest": digest,
+            "at_monotonic": now,
+            "at": _now_iso(),
+            "at_epoch": _time.time(),
+            "reason": "graph_changed",
+            "llm_calls": None,
+            "llm_calls_partial": False,
+        }
+        _save_auto_distill_state(project_id, _auto_distill_state[project_id])
+    logger.info(
+        "tesserae: auto-distill scheduled for %s — graph.json changed to %s, "
+        "%s since last dispatch, budget %d estimated provider calls",
+        project_id,
+        digest[:12],
+        "first dispatch" if since == float("inf") else f"{since:.0f}s",
+        _TESSERAE_AUTO_DISTILL_MAX_ESTIMATED_LLM_CALLS,
+    )
+    try:
+        job_id = run_op_async(
+            project_id,
+            "agent-distill",
+            coalesce=True,
+            max_estimated_llm_calls=_TESSERAE_AUTO_DISTILL_MAX_ESTIMATED_LLM_CALLS,
+        )
+    except Exception:
+        logger.warning("tesserae: auto-distill dispatch failed for %s", project_id, exc_info=True)
+        return
+    if not job_id:
+        # An operator-initiated distill is already running for this project.
+        # It rebuilds the same runbooks from the same graph, so there is nothing
+        # to add — but it is not OUR spend and ``_agent_distill_op`` will never
+        # resolve the record above, which would leave the audit trail asserting
+        # an automatic dispatch, cost unknown, forever. Say what happened.
+        # The window IS consumed: this graph is being distilled, just not by us.
+        _record_auto_distill_outcome(project_id, "served_by_operator_distill", 0)
+        logger.info(
+            "tesserae: auto-distill for %s stood down — an operator-initiated "
+            "(unpriced) distill is already running for this project; zero automatic spend",
+            project_id,
+        )
+
+
+def auto_distill_state(project_id: str) -> dict[str, Any]:
+    """Last auto-distill dispatch for a project — ``{at, reason, llm_calls,
+    llm_calls_partial}``, empty when it has never fired. Lets an operator audit
+    automatic spend, INCLUDING across a restart: the record is read back from
+    ``projects.tesserae_auto_distill_state`` when this process didn't dispatch it.
+    ``llm_calls_partial`` means the run was killed on timeout and ``llm_calls``
+    is a FLOOR, not the total — the UI must render it as ``≥n`` so an unknown
+    spend never looks like an exact one."""
+    with _auto_distill_lock:
+        st = _auto_distill_record(project_id)
+        if not st:
+            return {}
+        return {
+            "at": st.get("at"),
+            "reason": st.get("reason"),
+            "llm_calls": st.get("llm_calls"),
+            "llm_calls_partial": bool(st.get("llm_calls_partial")),
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -2146,7 +2456,9 @@ def context_tesserae(
     # smuggled in as a CLI flag (argv injection).
     cmd += ["--", question]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=90, env=_tesserae_env())
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=90, env=_tesserae_env()
+        )
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
         logger.warning("tesserae: context failed: %s", exc)
         return None
@@ -2243,7 +2555,9 @@ def federated_ask_tesserae(
         "--semantic" if semantic else "--no-semantic",
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=_tesserae_env())
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=timeout, env=_tesserae_env()
+        )
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
         logger.warning("tesserae: federated ask failed: %s", exc)
         return None
@@ -2290,7 +2604,9 @@ def federation_status(*, semantic: bool = True, timeout: int = 60) -> Optional[d
     cmd = [_TESSERAE_CMD, "federation", "status", *aliases, "--json"]
     cmd.append("--semantic" if semantic else "--no-semantic")
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=_tesserae_env())
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=timeout, env=_tesserae_env()
+        )
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
         logger.warning("tesserae: federation status failed: %s", exc)
         return None

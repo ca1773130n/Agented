@@ -47,8 +47,27 @@ export interface TesseraeProjectState {
   local_path: string | null;
   tesserae_project_root: string | null;
   enabled: boolean;
-  /** AgentRunbook distillation (Runbook/Gotcha) opt-in for this project. */
+  /**
+   * Distillation opt-in for this project. Authorises BOTH the compile-time
+   * Runbook/Gotcha pass AND automatic super-agent L1 distillation after a
+   * compile whose graph changed. Both spend LLM calls.
+   */
   distill_enabled?: boolean;
+  /**
+   * Last AUTOMATIC super-agent distill dispatch. `{}` until one fires.
+   * `reason` carries the outcome, including a refusal
+   * (`estimate_over_budget_<n>`, `estimate_unavailable_<why>`,
+   * `graph_moved_during_pricing`, `nothing_to_distill`); `llm_calls` is the
+   * measured provider-call count. A refusal never spawned tesserae, so its 0 is
+   * exact. `llm_calls_partial` means the run was KILLED on timeout and
+   * `llm_calls` is only a floor — render it `≥n`, never as an exact figure.
+   */
+  last_auto_distill?: {
+    at?: string | null;
+    reason?: string | null;
+    llm_calls?: number | null;
+    llm_calls_partial?: boolean;
+  };
   workspace_initialized: boolean;
   session_count: number;
   last_imported_at: string | null;
