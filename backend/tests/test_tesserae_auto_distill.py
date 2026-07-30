@@ -582,6 +582,78 @@ def test_persisted_ended_at_is_parseable_by_tesserae(isolated_db):
     assert parsed.tzinfo is not None
 
 
+def test_compile_writes_the_agent_registry_BEFORE_running_tesserae(
+    isolated_db, tmp_path, monkeypatch
+):
+    """Ordering bug, and the reason a first real run silently produced nothing.
+
+    Tesserae mints the `Agent` nodes and `performed_by` edges DURING the compile,
+    by reading `.tesserae/agents/registry.json` off disk. Agented's only other
+    writer of that file is `distill_super_agents`, which runs AFTER a compile —
+    so on a virgin project the compile resolved every session to the fallback
+    `claude:unknown:default`, and the distill that followed declared the real
+    agents against a graph that had never heard of them: every one `no-sessions`,
+    priced at 0, `nothing_to_distill` — while the 6 h window and the graph digest
+    were consumed anyway.
+
+    Asserting the call ORDER is the whole point; asserting only that the registry
+    was written would pass even if it happened after the compile, which is the
+    bug.
+    """
+    from app.services import tesserae_integration as ti
+
+    root = tmp_path / "ws"
+    (root / ".tesserae").mkdir(parents=True)
+    monkeypatch.setattr(ti, "get_tesserae_root", lambda pid: root)
+    monkeypatch.setattr(ti, "get_distill_enabled", lambda pid: False)
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "app.services.super_agent_memory.sync_agent_registry",
+        lambda pid: calls.append("registry") or (root / ".tesserae" / "agents"),
+    )
+
+    def _fake_run(op, args, **kw):
+        calls.append("tesserae")
+        return ti.TesseraeOpResult(op=op, ok=True, reason=None, started_at="t0", finished_at="t1")
+
+    monkeypatch.setattr(ti, "_run_tesserae", _fake_run)
+    monkeypatch.setattr(ti, "_maybe_schedule_auto_distill", lambda *a, **k: None)
+
+    ti.compile_workspace("proj-1")
+    assert calls == ["registry", "tesserae"], (
+        "the registry must be refreshed BEFORE the compile that reads it"
+    )
+
+
+def test_compile_survives_a_failing_registry_refresh(isolated_db, tmp_path, monkeypatch):
+    """Attribution prep is best-effort: a registry we cannot write must never
+    block a compile. Failing closed here would turn a cosmetic attribution
+    problem into 'Compile is broken'."""
+    from app.services import tesserae_integration as ti
+
+    root = tmp_path / "ws"
+    (root / ".tesserae").mkdir(parents=True)
+    monkeypatch.setattr(ti, "get_tesserae_root", lambda pid: root)
+    monkeypatch.setattr(ti, "get_distill_enabled", lambda pid: False)
+
+    def _boom(pid):
+        raise RuntimeError("disk on fire")
+
+    monkeypatch.setattr("app.services.super_agent_memory.sync_agent_registry", _boom)
+    monkeypatch.setattr(
+        ti,
+        "_run_tesserae",
+        lambda op, args, **kw: ti.TesseraeOpResult(
+            op=op, ok=True, reason=None, started_at="t0", finished_at="t1"
+        ),
+    )
+    monkeypatch.setattr(ti, "_maybe_schedule_auto_distill", lambda *a, **k: None)
+
+    res = ti.compile_workspace("proj-1")
+    assert res.ok is True
+
+
 def test_chat_state_created_at_is_parseable():
     """Same bug class as above, second site: ``ChatStateService.init_session``.
 

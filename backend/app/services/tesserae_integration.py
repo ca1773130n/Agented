@@ -1734,6 +1734,34 @@ def compile_workspace(
             started_at=_now_iso(),
             finished_at=_now_iso(),
         )
+    # ORDERING, not an optimisation. Tesserae mints the `Agent` nodes and
+    # `performed_by` edges during THIS compile — `extract_structural` calls
+    # `resolve_agent_key(session, registry)`, reading `.tesserae/agents/registry.json`
+    # off disk. Agented's only other writer of that file is `distill_super_agents`,
+    # which runs AFTER a compile, so on a virgin project the first compile resolved
+    # every session to the tier-3 fallback `claude:unknown:default`. The distill that
+    # followed then declared the real agents against a graph that had never heard of
+    # them: every one printed `no-sessions`, priced at 0, and returned
+    # `nothing_to_distill` — while the 6 h window and the graph digest were consumed
+    # anyway (the record is claimed before dispatch). Correct attribution only
+    # appeared two compiles later, which reads exactly like a broken feature.
+    #
+    # Best-effort by design: a registry we cannot write must never block a compile.
+    # `sync_agent_registry` returns None when tesserae is off for this project or no
+    # super-agent has run here, which is the ordinary case and not an error.
+    try:
+        from app.services.super_agent_memory import sync_agent_registry
+
+        if sync_agent_registry(project_id) is not None:
+            logger.debug("tesserae: refreshed agent registry for %s before compile", project_id)
+    except Exception:  # noqa: BLE001 — never let attribution prep fail a compile
+        logger.warning(
+            "tesserae: could not refresh the agent registry for %s before compile; "
+            "sessions in this compile may attribute to the default agent",
+            project_id,
+            exc_info=True,
+        )
+
     # Modern top-level `tesserae compile` (the old `tesserae project compile`
     # is a 0.9.0 deprecation stub). Pass distillation explicitly so the
     # per-project toggle reliably overrides any global config/env default.
