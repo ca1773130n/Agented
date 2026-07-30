@@ -96,6 +96,15 @@ def _project_super_agents(conn, project_id: str) -> list[dict]:
     Consequence worth knowing: delegated sessions are long-lived and only reach
     ``completed`` via an explicit ``end_session`` or the 7-day stale sweep, so
     expertise lags the work that earned it.
+
+    KNOWN RESIDUAL MISMATCH (not closed here): ``_gather_project_sessions`` also
+    caps the export at the newest N sessions, while this scans every completed
+    one. A project with more completed super-agent sessions than that cap can
+    still declare an agent whose only sessions fall outside it — the same
+    declared-but-unexported shape, reachable only at that volume. Closing it means
+    threading the export's limit + ordering into this query so the two select
+    literally the same rows; deliberately deferred rather than approximated,
+    because a wrong limit here silently drops agents that DO have exported work.
     """
     rows = conn.execute(
         """SELECT DISTINCT sa.id AS id, sa.name AS name,
@@ -108,6 +117,69 @@ def _project_super_agents(conn, project_id: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def _declared_super_agents(conn, project_id: str) -> list[dict]:
+    """The agents the registry declares: those with completed sessions, PLUS
+    their ancestor chain.
+
+    The two halves have DIFFERENT requirements, and collapsing them breaks one or
+    the other:
+
+    - A declared **child** must have exportable (completed) sessions. A child with
+      no attributed sessions writes no ``distilled.graph.json``, and
+      ``_distill_manager`` raises ``DistillError`` on that, taking the whole
+      project's pass down (see ``_MANAGER_CHILDREN_UNBUILT_MARKER``).
+    - A declared **ancestor** does NOT need sessions of its own. The manager trap
+      is about children lacking artifacts, never about the manager itself, and a
+      manager's whole job is to roll up its reports.
+
+    Filtering ancestors by completed sessions too — which is what a naive
+    ``status='completed'`` filter does — silently flattens the org: a project
+    leader holds a long-lived ``session_type='leader'`` session that is designed
+    NOT to end, so it never reaches ``completed``, so it vanishes from
+    ``present``, so every report it manages is written under ``org:root`` and the
+    L2' rollup it exists to produce never happens. That is the normal
+    leader-chat shape, not an edge case.
+
+    An ancestor added here always has at least one attributed descendant (that is
+    why it was reached), so it always has a child that can produce an artifact.
+
+    An ancestor still has to have RUN HERE — any session in this project, of any
+    status. A super-agent that merely exists in ``super_agents`` and never touched
+    this project is somebody else's manager; declaring it would put an agent with
+    no presence at all into this project's org, which is what the pre-existing
+    ``org:root`` fallback is for. The relaxation is only over *status*, never over
+    *project*.
+    """
+    attributed = _project_super_agents(conn, project_id)
+    if not attributed:
+        return []
+    # Any session in this project, regardless of status — the candidate pool an
+    # ancestor must belong to.
+    participants = {
+        r["id"]: dict(r)
+        for r in conn.execute(
+            """SELECT DISTINCT sa.id AS id, sa.name AS name,
+                      sa.parent_super_agent_id AS parent_super_agent_id
+               FROM super_agent_sessions sas
+               JOIN super_agents sa ON sa.id = sas.super_agent_id
+               WHERE sas.project_id = ?""",
+            (project_id,),
+        ).fetchall()
+    }
+    declared: dict[str, dict] = {s["id"]: s for s in attributed}
+    for s in attributed:
+        cur = s.get("parent_super_agent_id")
+        seen: set[str] = {s["id"]}
+        # Bounded by `seen`: parent_super_agent_id has only an existence FK, so
+        # A→B→A is possible and would loop forever here. `_acyclic_parent` breaks
+        # the cycle in the emitted registry; this just has to terminate.
+        while cur and cur in participants and cur not in seen:
+            seen.add(cur)
+            declared.setdefault(cur, participants[cur])
+            cur = participants[cur].get("parent_super_agent_id")
+    return list(declared.values())
+
+
 def sync_agent_registry(project_id: str) -> Optional[Path]:
     """Write ``.tesserae/agents/registry.json`` mapping each of the project's
     super-agents to a Tesserae agent identity + org parent. Returns the path, or
@@ -116,8 +188,16 @@ def sync_agent_registry(project_id: str) -> Optional[Path]:
     if root is None:
         return None
     with get_connection() as conn:
-        sas = _project_super_agents(conn, project_id)
+        sas = _declared_super_agents(conn, project_id)
     if not sas:
+        # Returning None while leaving a PREVIOUS registry on disk would be worse
+        # than never writing one: `compile_workspace` now refreshes this file
+        # immediately before the compile that reads it, so a stale registry keeps
+        # declaring agents whose sessions are gone or no longer exportable — the
+        # declared-but-unexported shape this module exists to prevent. Clear it to
+        # an explicit empty declaration (honest: no agents to attribute) and still
+        # report None, which callers read as "no super-agents here".
+        _clear_agent_registry(root)
         return None
     present = {s["id"] for s in sas}
     parent_of = {s["id"]: s.get("parent_super_agent_id") for s in sas}
@@ -153,11 +233,49 @@ def sync_agent_registry(project_id: str) -> Optional[Path]:
             "parent": parent,
             "match": [{"label": s["id"]}],
         }
+    return _write_agent_registry(root, agents)
+
+
+def _write_agent_registry(root: Path, agents: dict[str, dict]) -> Path:
+    """Write ``registry.json`` ATOMICALLY (temp file in the same dir + replace).
+
+    ``write_text`` truncates before it writes, and ``compile_workspace`` now
+    refreshes this file immediately before spawning tesserae — so a plain write
+    opens a window in which the compile (or an overlapping compile/distill for the
+    same project) reads an empty or half-written registry and fails. The broad
+    ``except`` around the refresh cannot catch that: the bad read happens later,
+    inside the tesserae subprocess. ``os.replace`` is atomic within a filesystem,
+    so a reader sees either the old registry or the new one, never a partial file.
+    """
     reg_dir = root / ".tesserae" / "agents"
     reg_dir.mkdir(parents=True, exist_ok=True)
     reg_path = reg_dir / "registry.json"
-    reg_path.write_text(json.dumps({"version": 1, "agents": agents}, indent=2))
+    tmp = reg_dir / f"registry.json.{os.getpid()}.tmp"
+    try:
+        tmp.write_text(json.dumps({"version": 1, "agents": agents}, indent=2))
+        os.replace(tmp, reg_path)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        raise
     return reg_path
+
+
+def _clear_agent_registry(root: Path) -> None:
+    """Replace any existing registry with an empty declaration. Best-effort — a
+    registry we cannot clear must not fail the compile that called us."""
+    reg_path = root / ".tesserae" / "agents" / "registry.json"
+    if not reg_path.exists():
+        return
+    try:
+        _write_agent_registry(root, {})
+        logger.info(
+            "sync_agent_registry: no exportable super-agent sessions for this project; "
+            "cleared the previous registry at %s so the compile cannot read stale "
+            "declarations",
+            reg_path,
+        )
+    except OSError:
+        logger.warning("sync_agent_registry: could not clear stale registry at %s", reg_path)
 
 
 # ``tesserae distill`` has no ``--json``; both numbers are scraped from the

@@ -8,6 +8,7 @@ import os
 import sys
 import textwrap
 import time
+from pathlib import Path
 
 import pytest
 
@@ -166,6 +167,126 @@ def test_registry_declares_only_completed_sessions(isolated_db, tmp_path, monkey
     reg = json.loads(sam.sync_agent_registry("proj-1").read_text())
     assert "claude:unknown:super-done" in reg["agents"]
     assert "claude:unknown:super-running" not in reg["agents"]
+
+
+def test_active_leader_is_still_declared_as_the_parent_of_a_completed_report(
+    isolated_db, tmp_path, monkeypatch
+):
+    """The regression a completed-only filter introduces, and the normal
+    leader-chat shape rather than an edge case.
+
+    A project leader holds a long-lived `session_type='leader'` session that is
+    designed NOT to end, so it never reaches `completed`. Filtering ancestors by
+    completed sessions drops it from `present`, so its report is written under
+    `org:root` and the L2' manager rollup — the entire point of the hierarchy —
+    silently never happens.
+
+    A declared ANCESTOR needs no sessions of its own: the manager trap is about
+    CHILDREN lacking artifacts, never the manager itself.
+    """
+    root = tmp_path / "ws"
+    root.mkdir()
+    monkeypatch.setattr(sam, "get_tesserae_root", lambda pid: root)
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name) VALUES (?,?)", ("proj-1", "P1"))
+        conn.execute(
+            "INSERT INTO super_agents (id, name, parent_super_agent_id) VALUES (?,?,?)",
+            ("super-lead", "Lead", None),
+        )
+        conn.execute(
+            "INSERT INTO super_agents (id, name, parent_super_agent_id) VALUES (?,?,?)",
+            ("super-rep", "Reporter", "super-lead"),
+        )
+        conn.execute(
+            "INSERT INTO super_agent_sessions (id, super_agent_id, project_id, status, "
+            "session_type) VALUES (?,?,?,?,?)",
+            ("s-lead", "super-lead", "proj-1", "active", "leader"),
+        )
+        conn.execute(
+            "INSERT INTO super_agent_sessions (id, super_agent_id, project_id, status) "
+            "VALUES (?,?,?,?)",
+            ("s-rep", "super-rep", "proj-1", "completed"),
+        )
+        conn.commit()
+
+    reg = json.loads(sam.sync_agent_registry("proj-1").read_text())
+    lead, rep = "claude:unknown:super-lead", "claude:unknown:super-rep"
+    assert lead in reg["agents"], "an active leader must still be declared as a parent"
+    assert reg["agents"][rep]["parent"] == lead, "the rollup hierarchy must survive"
+
+
+def test_ancestor_walk_terminates_on_a_parent_cycle(isolated_db, tmp_path, monkeypatch):
+    """`parent_super_agent_id` has only an existence FK, so A→B→A is possible.
+    The ancestor walk must terminate rather than spin."""
+    root = tmp_path / "ws"
+    root.mkdir()
+    monkeypatch.setattr(sam, "get_tesserae_root", lambda pid: root)
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name) VALUES (?,?)", ("proj-1", "P1"))
+        conn.execute("INSERT INTO super_agents (id, name) VALUES (?,?)", ("super-a", "A"))
+        conn.execute(
+            "INSERT INTO super_agents (id, name, parent_super_agent_id) VALUES (?,?,?)",
+            ("super-b", "B", "super-a"),
+        )
+        conn.execute(
+            "UPDATE super_agents SET parent_super_agent_id=? WHERE id=?", ("super-b", "super-a")
+        )
+        conn.execute(
+            "INSERT INTO super_agent_sessions (id, super_agent_id, project_id, status) "
+            "VALUES (?,?,?,?)",
+            ("s1", "super-a", "proj-1", "completed"),
+        )
+        conn.commit()
+
+    reg = json.loads(sam.sync_agent_registry("proj-1").read_text())  # must not hang
+    assert "org:root" in {a["parent"] for a in reg["agents"].values()}
+
+
+def test_stale_registry_is_cleared_when_nothing_is_declarable(isolated_db, tmp_path, monkeypatch):
+    """`compile_workspace` refreshes this file immediately before the compile that
+    reads it, so leaving a PREVIOUS registry in place would keep declaring agents
+    whose sessions are gone — the declared-but-unexported shape this module exists
+    to prevent."""
+    root = tmp_path / "ws"
+    reg_path = root / ".tesserae" / "agents" / "registry.json"
+    reg_path.parent.mkdir(parents=True)
+    reg_path.write_text(json.dumps({"version": 1, "agents": {"claude:unknown:super-gone": {}}}))
+    monkeypatch.setattr(sam, "get_tesserae_root", lambda pid: root)
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name) VALUES (?,?)", ("proj-1", "P1"))
+        conn.commit()
+
+    assert sam.sync_agent_registry("proj-1") is None
+    assert json.loads(reg_path.read_text())["agents"] == {}, "stale declarations must be cleared"
+
+
+def test_registry_write_is_atomic(isolated_db, tmp_path, monkeypatch, project_with_super_agents):
+    """A reader must see the old registry or the new one, never a truncated file:
+    the compile reads it immediately after we write it."""
+    root = project_with_super_agents
+    reg_path = root / ".tesserae" / "agents" / "registry.json"
+    sam.sync_agent_registry("proj-1")
+    first = reg_path.read_text()
+
+    real_replace = os.replace
+    seen: dict[str, str] = {}
+
+    def _spy(src, dst):
+        # At the moment of the swap the destination still holds the OLD content —
+        # proving the new bytes were never written into it directly.
+        seen["dst_before_swap"] = Path(dst).read_text()
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(sam.os, "replace", _spy)
+    sam.sync_agent_registry("proj-1")
+    assert seen["dst_before_swap"] == first
+    assert not list((root / ".tesserae" / "agents").glob("*.tmp"))
 
 
 def test_registry_is_none_when_only_uncompleted_sessions_exist(isolated_db, tmp_path, monkeypatch):
