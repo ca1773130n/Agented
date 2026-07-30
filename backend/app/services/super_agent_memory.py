@@ -25,6 +25,7 @@ the export ever sets ``harness=backend_type`` or a real config-root, update
 ``agent_key`` to match, or attribution silently collapses to one ``default`` agent.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -155,6 +156,36 @@ _NO_AGENTS_MARKER = "No agents observed in the compiled graph"
 # occur here: ``agent_distill.py:1970`` bypasses the watermark skip under
 # ``dry_run``, so ``no-sessions`` is the only one a dry run can emit.
 _NO_SESSIONS_MARKER = "no-sessions (nothing attributed to this agent)"
+
+
+def _scope_digest(root: Path) -> str:
+    """Digest of EVERYTHING that decides what a distill pass will do.
+
+    ``_graph_digest`` covers ``graph.json`` only, and it must stay that way — the
+    auto-distill policy uses it to decide whether the corpus CHANGED, and folding
+    the registry into that would make any super-agent rename dispatch a paid run.
+
+    But the priced-vs-distilled guarantee needs more than the graph: scope also
+    comes from ``.tesserae/agents/registry.json``, which is what tesserae reads as
+    ``known_agent_keys``. Pricing a pass over registry A and then distilling
+    registry B would spend outside the estimate that authorised it, so the
+    re-check before the spawn hashes both. ``""`` when the graph is unreadable,
+    which the caller already treats as "refuse"; a missing registry contributes a
+    fixed marker rather than failing, since ``sync_agent_registry`` has by then
+    returned a path and its absence is itself a change worth refusing on.
+    """
+    graph = _graph_digest(root)
+    if not graph:
+        return ""
+    h = hashlib.sha256(graph.encode())
+    try:
+        h.update(
+            hashlib.sha256((root / ".tesserae" / "agents" / "registry.json").read_bytes()).digest()
+        )
+    except OSError:
+        h.update(b"no-registry")
+    return h.hexdigest()
+
 
 # Grace period to drain the pipes after the process group has been SIGKILLed.
 # ``communicate()`` resumes from the same accumulated buffer across a timed-out
@@ -368,9 +399,11 @@ def distill_super_agents(
         return {"ok": False, "reason": "no_super_agents"}
     if max_estimated_llm_calls is not None:
         # Pre-flight AFTER the registry sync — the dry run scopes agents through it.
-        # Hash the graph BEFORE pricing: the estimate only authorises the corpus it
-        # actually looked at (see the re-check before the spawn below).
-        priced_digest = _graph_digest(root)
+        # Hash the scope BEFORE pricing: the estimate only authorises the corpus it
+        # actually looked at (see the re-check before the spawn below). Both inputs,
+        # not just the graph — the registry written just above is what tesserae
+        # reads as ``known_agent_keys``, so it decides the scope every bit as much.
+        priced_digest = _scope_digest(root)
         est, why = _estimate_distill_calls(root)
         if est is None:
             logger.warning(
@@ -411,10 +444,11 @@ def distill_super_agents(
         # button) can land in that window and grow the corpus the real run then
         # distills, turning "≤60 authorised" into an unbounded bill. Refuse instead
         # of re-pricing in a loop — the next compile past the 6 h window reprices.
-        if not priced_digest or _graph_digest(root) != priced_digest:
+        if not priced_digest or _scope_digest(root) != priced_digest:
             logger.warning(
-                "tesserae: auto-distill refused for %s — graph.json moved while the "
-                "pass was being priced (estimate %d is stale); no spend, will reprice "
+                "tesserae: auto-distill refused for %s — the distill scope "
+                "(graph.json or agents/registry.json) moved while the pass was being "
+                "priced (estimate %d is stale); no spend, will reprice "
                 "on the next compile",
                 project_id,
                 est,

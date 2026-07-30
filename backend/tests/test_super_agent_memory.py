@@ -676,6 +676,34 @@ def test_stable_graph_still_runs(distill_enabled, monkeypatch):
     assert len(argvs) == 2 and res["ok"] is True
 
 
+def test_refuses_when_the_agent_registry_moves_between_pricing_and_run(
+    distill_enabled, monkeypatch
+):
+    """The graph is not the whole scope. Tesserae reads
+    `.tesserae/agents/registry.json` as `known_agent_keys`, so pricing a pass over
+    registry A and then distilling registry B spends outside the estimate that
+    authorised it — with graph.json byte-identical throughout, which a graph-only
+    digest cannot see. Guards the "the priced bytes are the distilled bytes" claim
+    against the second input.
+    """
+    root = distill_enabled
+    reg_path = root / ".tesserae" / "agents" / "registry.json"
+
+    def _run(argv, **k):
+        if "--dry-run" in argv:
+            # graph.json deliberately untouched; only the scope registry moves.
+            reg_path.write_text(
+                json.dumps({"version": 1, "agents": {"claude:unknown:super-new": {}}})
+            )
+            return _Proc("a  dry-run  clusters=5 estimated_llm_calls=55 scope=5\n")
+        raise AssertionError("the real run must not spawn against an unpriced scope")
+
+    monkeypatch.setattr(sam, "_run_distill", _run)
+    res = sam.distill_super_agents("proj-1", max_estimated_llm_calls=60)
+    assert res["ok"] is False
+    assert res["reason"] == "graph_moved_during_pricing"
+
+
 def test_operator_path_is_not_gated_on_the_graph_digest(project_with_super_agents, monkeypatch):
     """The digest guard belongs to the budget, not to distill: an operator who
     clicked Distill has consented, and must still get a run on a project whose
