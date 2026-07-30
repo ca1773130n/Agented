@@ -35,7 +35,8 @@ def project_with_super_agents(isolated_db, tmp_path, monkeypatch):
         )
         for sid, sa in (("s1", "super-lead"), ("s2", "super-rep")):
             conn.execute(
-                "INSERT INTO super_agent_sessions (id, super_agent_id, project_id) VALUES (?,?,?)",
+                "INSERT INTO super_agent_sessions (id, super_agent_id, project_id, status) "
+                "VALUES (?,?,?,'completed')",
                 (sid, sa, "proj-1"),
             )
         conn.commit()
@@ -44,6 +45,26 @@ def project_with_super_agents(isolated_db, tmp_path, monkeypatch):
 
 def test_agent_key_is_deterministic():
     assert sam.agent_key("super-abc") == "claude:unknown:super-abc"
+
+
+def test_agent_key_lowercases_so_one_capital_cannot_reject_the_registry():
+    """Tesserae's `sanitize_agent_key` lowercases and `AgentRegistry._validate`
+    raises when a key differs from its own sanitized form — for the WHOLE file.
+    `_SAFE_SA_ID` permits uppercase, so an id with one capital letter would have
+    taken every other agent's attribution down with it."""
+    assert sam.agent_key("Super-ABC") == "claude:unknown:super-abc"
+    # …and it stays a safe path component (lowercasing cannot widen the charset).
+    assert "/" not in sam.agent_key("Super-ABC")
+
+
+def test_registry_match_label_stays_raw_while_the_key_is_lowercased(project_with_super_agents):
+    """Only the KEY is sanitized. The `match` rule is fnmatched against
+    `session.agent_label`, which `_normalize_super_agent_session` sets to the RAW
+    `super_agent_id` — lowercasing that too would break attribution instead of
+    fixing it."""
+    reg = json.loads(sam.sync_agent_registry("proj-1").read_text())
+    entry = reg["agents"]["claude:unknown:super-lead"]
+    assert entry["match"] == [{"label": "super-lead"}]
 
 
 @pytest.mark.parametrize(
@@ -114,6 +135,61 @@ def test_sync_registry_maps_hierarchy_and_label_rules(project_with_super_agents)
     assert reg["agents"][lead]["parent"] == "org:root"
 
 
+def test_registry_declares_only_completed_sessions(isolated_db, tmp_path, monkeypatch):
+    """The registry must agree with the EXPORT, which ships only
+    `status='completed'` sessions (`_gather_project_sessions`). A still-running
+    delegate that is declared but never exported reads to tesserae as an agent
+    with no attributed sessions — `no-sessions` — and that is precisely the shape
+    that makes a manager's distill exit 1 and take the whole project's pass down.
+    """
+    root = tmp_path / "ws"
+    root.mkdir()
+    monkeypatch.setattr(sam, "get_tesserae_root", lambda pid: root)
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name) VALUES (?,?)", ("proj-1", "P1"))
+        for sa_id in ("super-done", "super-running"):
+            conn.execute("INSERT INTO super_agents (id, name) VALUES (?,?)", (sa_id, sa_id))
+        conn.execute(
+            "INSERT INTO super_agent_sessions (id, super_agent_id, project_id, status) "
+            "VALUES (?,?,?,?)",
+            ("s-done", "super-done", "proj-1", "completed"),
+        )
+        conn.execute(
+            "INSERT INTO super_agent_sessions (id, super_agent_id, project_id, status) "
+            "VALUES (?,?,?,?)",
+            ("s-active", "super-running", "proj-1", "active"),
+        )
+        conn.commit()
+
+    reg = json.loads(sam.sync_agent_registry("proj-1").read_text())
+    assert "claude:unknown:super-done" in reg["agents"]
+    assert "claude:unknown:super-running" not in reg["agents"]
+
+
+def test_registry_is_none_when_only_uncompleted_sessions_exist(isolated_db, tmp_path, monkeypatch):
+    """The mirror image: a project whose only sessions are still running has
+    nothing exportable, so it must not get a registry declaring agents tesserae
+    will never see."""
+    root = tmp_path / "ws"
+    root.mkdir()
+    monkeypatch.setattr(sam, "get_tesserae_root", lambda pid: root)
+    from app.db.connection import get_connection
+
+    with get_connection() as conn:
+        conn.execute("INSERT INTO projects (id, name) VALUES (?,?)", ("proj-1", "P1"))
+        conn.execute("INSERT INTO super_agents (id, name) VALUES (?,?)", ("super-a", "A"))
+        conn.execute(
+            "INSERT INTO super_agent_sessions (id, super_agent_id, project_id, status) "
+            "VALUES (?,?,?,?)",
+            ("s1", "super-a", "proj-1", "active"),
+        )
+        conn.commit()
+
+    assert sam.sync_agent_registry("proj-1") is None
+
+
 def test_sync_registry_parent_absent_from_project_falls_back_to_root(
     isolated_db, tmp_path, monkeypatch
 ):
@@ -134,7 +210,8 @@ def test_sync_registry_parent_absent_from_project_falls_back_to_root(
             ("super-child", "Child", "super-elsewhere"),
         )
         conn.execute(
-            "INSERT INTO super_agent_sessions (id, super_agent_id, project_id) VALUES (?,?,?)",
+            "INSERT INTO super_agent_sessions (id, super_agent_id, project_id, status) "
+            "VALUES (?,?,?,'completed')",
             ("s1", "super-child", "proj-1"),
         )
         conn.commit()
@@ -166,7 +243,8 @@ def test_sync_registry_breaks_parent_cycle(isolated_db, tmp_path, monkeypatch):
         )
         for sid, sa in (("s1", "super-a"), ("s2", "super-b")):
             conn.execute(
-                "INSERT INTO super_agent_sessions (id, super_agent_id, project_id) VALUES (?,?,?)",
+                "INSERT INTO super_agent_sessions (id, super_agent_id, project_id, status) "
+                "VALUES (?,?,?,'completed')",
                 (sid, sa, "proj-1"),
             )
         conn.commit()

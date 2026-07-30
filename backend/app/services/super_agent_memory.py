@@ -63,21 +63,46 @@ def agent_key(super_agent_id: str) -> str:
     for why the harness/account components are pinned to ``claude:unknown``.
 
     Rejects an id that isn't a plain ``[A-Za-z0-9_-]`` token — the key becomes a
-    path component, so a ``/``/``..``/NUL id must never reach the filesystem."""
+    path component, so a ``/``/``..``/NUL id must never reach the filesystem.
+
+    LOWERCASED, and that is load-bearing rather than cosmetic. Tesserae's
+    ``sanitize_agent_key`` lowercases, and ``AgentRegistry._validate`` raises on
+    any key that differs from its own sanitized form — for the WHOLE file, not
+    the offending entry. ``_SAFE_SA_ID`` permits uppercase, so a single
+    super-agent id carrying one capital letter would have made tesserae reject
+    the entire registry, taking every other agent's attribution with it. The ids
+    this repo generates are lowercase ``super-<suffix>``, so this changes no key
+    in practice; it removes the trap for an id that arrives from anywhere else.
+    Lowercasing cannot widen the charset, so the path-safety guarantee above is
+    unaffected."""
     if not _SAFE_SA_ID.fullmatch(super_agent_id or ""):
         raise ValueError(f"unsafe super_agent_id: {super_agent_id!r}")
-    return f"claude:unknown:{super_agent_id}"
+    return f"claude:unknown:{super_agent_id.lower()}"
 
 
 def _project_super_agents(conn, project_id: str) -> list[dict]:
-    """Super-agents that ran at least one session in this project, with name +
-    parent. Scoped to the project because the registry is per-project."""
+    """Super-agents with at least one COMPLETED session in this project, with
+    name + parent. Scoped to the project because the registry is per-project.
+
+    The ``status = 'completed'`` filter must match
+    ``tesserae_integration._gather_project_sessions``, which exports only
+    completed sessions. Without it the two disagreed: a still-running delegate
+    was DECLARED in the registry but never EXPORTED, so tesserae saw an agent
+    with no attributed sessions and printed ``no-sessions`` for it. That is not
+    cosmetic — a declared-but-unexported agent is exactly the shape that makes a
+    manager's distill raise ``DistillError`` and exit 1, taking the whole
+    project's pass down with it (see ``_MANAGER_CHILDREN_UNBUILT_MARKER``).
+
+    Consequence worth knowing: delegated sessions are long-lived and only reach
+    ``completed`` via an explicit ``end_session`` or the 7-day stale sweep, so
+    expertise lags the work that earned it.
+    """
     rows = conn.execute(
         """SELECT DISTINCT sa.id AS id, sa.name AS name,
                   sa.parent_super_agent_id AS parent_super_agent_id
            FROM super_agent_sessions sas
            JOIN super_agents sa ON sa.id = sas.super_agent_id
-           WHERE sas.project_id = ?""",
+           WHERE sas.project_id = ? AND sas.status = 'completed'""",
         (project_id,),
     ).fetchall()
     return [dict(r) for r in rows]
