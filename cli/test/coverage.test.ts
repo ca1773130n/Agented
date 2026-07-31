@@ -72,6 +72,26 @@ function frontendEndpoints(): Set<string> {
         p += ':p';
         i = close + 1;
       }
+      // Mirror the generator's CONCATENATION handling too. Without it this test
+      // saw `/admin/bot-templates` where the generator sees
+      // `/admin/bot-templates/:p/deploy`, so a regression in concat support would
+      // make this test agree with the bug instead of catching it.
+      let rest = text.slice(m.index + m[0].length);
+      for (;;) {
+        const ident = rest.match(/^\s*\+\s*([A-Za-z_][A-Za-z0-9_]*)/);
+        if (ident) {
+          if (p.endsWith('/')) p += ':p';
+          rest = rest.slice(ident[0].length);
+          continue;
+        }
+        const lit = rest.match(/^\s*\+\s*(['"])([^'"]*)\1/);
+        if (lit) {
+          p += lit[2];
+          rest = rest.slice(lit[0].length);
+          continue;
+        }
+        break;
+      }
       p = p.split(/[\s'"`?]/)[0].replace(/\/+$/, '');
       if (p.startsWith('/')) paths.add(p);
     }

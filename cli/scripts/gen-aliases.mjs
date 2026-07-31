@@ -153,13 +153,13 @@ function matchBrace(text, openIdx) {
  * collision on a different path gets a numeric suffix; only an exact repeat of
  * the same path is a true duplicate worth dropping.
  */
-function addAlias(group, baseVerb, method, path, params, source, bodyKeys = []) {
+function addAlias(group, baseVerb, method, path, params, source, bodyKeys = [], transforms = []) {
   if (aliases.some((a) => a.group === group && a.path === path && a.method === method)) return;
   let verb = baseVerb;
   let n = 2;
   while (seen.has(`${group} ${verb}`)) verb = `${baseVerb}-${n++}`;
   seen.add(`${group} ${verb}`);
-  aliases.push({ group, verb, method, path, params, source, bodyKeys });
+  aliases.push({ group, verb, method, path, params, source, bodyKeys, transforms });
 }
 
 
@@ -262,7 +262,7 @@ function bodyKeysFor(entryValue, callText) {
  * So: after a `/`, take the LAST identifier in the expression (which unwraps
  * `encodeURIComponent(projectId)` to `projectId`); anywhere else, stop.
  */
-function normalisePath(raw) {
+function normalisePath(raw, transforms = new Set()) {
   let path = '';
   let i = 0;
   while (i < raw.length) {
@@ -281,6 +281,11 @@ function normalisePath(raw) {
 
     const ids = expr.match(/[A-Za-z_][A-Za-z0-9_]*/g) || [];
     if (!ids.length) break;
+    // A wrapper the CLI cannot reproduce (e.g. `repoToSlug(repo)`, which turns
+    // `owner/name` into `owner__name`) means the positional must already be in
+    // the TRANSFORMED form — the CLI would otherwise percent-encode the slash
+    // and hit a path the server does not decode. Record it so --help can say so.
+    if (ids.length > 1 && ids[0] !== 'encodeURIComponent') transforms.add(ids[0]);
     path += ':' + ids[ids.length - 1];
     i = close + 1;
   }
@@ -371,7 +376,8 @@ function walkObject(body, group, prefix) {
         }
         break;
       }
-      const { path, params } = normalisePath(raw);
+      const transforms = new Set();
+      const { path, params } = normalisePath(raw, transforms);
       if (!path.startsWith('/')) return;
 
       // Method + body for this call: read the options object that follows it.
@@ -380,7 +386,7 @@ function walkObject(body, group, prefix) {
       const bodyKeys = bodyKeysFor(value, after);
 
       const verb = i === 0 ? baseVerb : `${baseVerb}-${i + 1}`;
-      addAlias(group, verb, method, path, params, currentFile, bodyKeys);
+      addAlias(group, verb, method, path, params, currentFile, bodyKeys, [...transforms]);
     });
   }
 }
@@ -411,8 +417,28 @@ for (const file of readdirSync(API_DIR).sort()) {
     // `invalidateAuthStatus()` (which only clears a local cache) was published as
     // `GET /health/readiness`, an executable command for something that is not an
     // API operation at all.
-    const nextExport = text.indexOf('\nexport ', s.index + 1);
-    const chunk = text.slice(s.index, nextExport < 0 ? text.length : nextExport);
+    // Scope to THIS declaration's own body, not "up to the next export": a
+    // helper with no API call of its own (`toLocalKind`) swallowed a private
+    // function defined after it and published that function's apiFetch as its
+    // command. Prefer the balanced body; fall back to the next export only for
+    // a concise arrow with no block.
+    // End the window at the next TOP-LEVEL declaration, not at the next `{`.
+    // Two failure modes to avoid at once:
+    //   * too wide  — `toLocalKind()` has no call of its own and swallowed the
+    //     private `tryDetect()` defined below it, publishing that function's
+    //     endpoint as its command;
+    //   * too narrow — a brace-based cut latched onto the `{` inside a template
+    //     literal (`${superAgentId}`) and truncated the path mid-string, losing
+    //     `/admin/super-agents/:id/memory/drill` and `/admin/backends/:id/check`
+    //     entirely. Multi-line arrow bodies have no block brace at all.
+    // A column-0 `function`/`const`/`export` is an unambiguous boundary; a brace
+    // is not.
+    let chunkEnd = text.length;
+    for (const marker of ['\nexport ', '\nfunction ', '\nasync function ', '\nconst ']) {
+      const at = text.indexOf(marker, s.index + 1);
+      if (at >= 0 && at < chunkEnd) chunkEnd = at;
+    }
+    const chunk = text.slice(s.index, chunkEnd);
     const call = chunk.match(PATH_RE);
     if (!call || !call[2].startsWith('/')) continue;
     const { path, params } = normalisePath(call[2]);
@@ -450,7 +476,10 @@ const rows = aliases
     return `  { group: ${JSON.stringify(a.group)}, verb: ${JSON.stringify(a.verb)}, method: ${JSON.stringify(
       a.method,
     )}, path: ${JSON.stringify(a.path)}${params}${bodyKeys}, render: "raw", help: ${JSON.stringify(
-      `${a.method} ${a.path}  (${a.source})`,
+      `${a.method} ${a.path}  (${a.source})` +
+        (a.transforms?.length
+          ? `  [arg must be pre-transformed by ${a.transforms.join(', ')} — pass the value in the form the web UI sends]`
+          : ''),
     )} },`;
   })
   .join('\n');

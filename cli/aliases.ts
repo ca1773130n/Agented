@@ -216,6 +216,37 @@ export const ALIASES: Alias[] = [
     help: 'Per-project Tesserae state (incl. last_auto_distill)',
   },
 
+  // ---- backends -----------------------------------------------------------
+  {
+    // Curated because the generator cannot reach it: the web client calls this
+    // from a PRIVATE helper (a fallback inside backend-management.ts's detection
+    // path), not from an exported API object. Scanning private functions would
+    // let a helper's internal call masquerade as its caller's command — that bug
+    // was just fixed — so the honest fix is to name this one explicitly.
+    group: 'backend',
+    verb: 'check',
+    method: 'POST',
+    path: '/admin/backends/:backend_id/check',
+    params: ['backend_id'],
+    render: 'raw',
+    help: 'Probe whether a backend CLI is installed on disk',
+  },
+
+  // ---- auth ---------------------------------------------------------------
+  {
+    // Hand-written because the generator cannot see it: session-events.ts builds
+    // its URL into a local variable and calls `apiFetch(url)`, so there is no
+    // literal path at the call site to extract. The generator REPORTS such call
+    // sites as skipped rather than hiding them, and this is the follow-up.
+    group: 'auth',
+    verb: 'session-events',
+    method: 'GET',
+    path: '/admin/auth/session-events',
+    queryFlags: { user: 'user_id', type: 'event_type', limit: 'limit', offset: 'offset' },
+    render: 'raw',
+    help: 'Recent auth session events (login/logout/revoke)',
+  },
+
   // ---- GRD steering (added by this repo’s own settings work) -----------
   {
     group: 'grd',

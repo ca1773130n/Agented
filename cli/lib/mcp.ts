@@ -145,8 +145,14 @@ export async function handleMessage(msg: JsonRpcMessage): Promise<JsonRpcRespons
   // Replying (even `{id: null}`) desyncs a client's id matching. This applies to
   // every method, not just the `notifications/*` names — `{"method":"ping"}` with
   // no id was being answered with `{"id":null,...}`.
+  // Explicit null/undefined checks, never truthiness: JSON-RPC permits id `0`
+  // and `""`, and a falsy test would silently drop those clients' responses.
   const isNotification = id === undefined || id === null;
-  if (isNotification && method !== 'initialize') return null;
+  // No exemption for `initialize`. MCP defines it as a REQUEST that carries an
+  // id; `notifications/initialized` is the notification. Exempting it meant a
+  // malformed `{"method":"initialize"}` got an `id:null` reply, which is exactly
+  // the desync this rule exists to prevent.
+  if (isNotification) return null;
 
   if (method === 'initialize') {
     return ok(id, {

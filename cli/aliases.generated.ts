@@ -5,7 +5,7 @@
  * capability surface: every endpoint the UI can call appears here, so every
  * action available in the browser has a command in the terminal.
  *
- * 755 commands across 105 groups.
+ * 754 commands across 105 groups.
  * Hand-written aliases in ./aliases.ts take precedence over anything here.
  */
 
@@ -81,7 +81,6 @@ export const GENERATED: Alias[] = [
   { group: "backend-management", verb: "respond-connect", method: "POST", path: "/admin/backends/:backendId/connect/:sessionId/respond", params: ["backendId","sessionId"], bodyKeys: ["interaction_id","response"], render: "raw", help: "POST /admin/backends/:backendId/connect/:sessionId/respond  (backend-management.ts)" },
   { group: "backend-management", verb: "start-connect", method: "POST", path: "/admin/backends/:backendId/connect", params: ["backendId"], render: "raw", help: "POST /admin/backends/:backendId/connect  (backend-management.ts)" },
   { group: "backend-management", verb: "test-prompt", method: "POST", path: "/admin/backends/test", bodyKeys: ["backend_type","prompt","account_id","model"], render: "raw", help: "POST /admin/backends/test  (backend-management.ts)" },
-  { group: "backend-management", verb: "to-local-kind", method: "POST", path: "/admin/backends/:kind/check", params: ["kind"], render: "raw", help: "POST /admin/backends/:kind/check  (backend-management.ts)" },
   { group: "backend-management", verb: "upgrade-cliproxy", method: "POST", path: "/admin/system/cliproxy/upgrade", render: "raw", help: "POST /admin/system/cliproxy/upgrade  (backend-management.ts)" },
   { group: "bot-health", verb: "list", method: "GET", path: "/admin/bots/health", render: "raw", help: "GET /admin/bots/health  (bot-health.ts)" },
   { group: "bot-memory", verb: "clear-all", method: "DELETE", path: "/admin/bots/:botId/memory", params: ["botId"], render: "raw", help: "DELETE /admin/bots/:botId/memory  (bot-memory.ts)" },
@@ -529,8 +528,8 @@ export const GENERATED: Alias[] = [
   { group: "replay", verb: "preview-diff-context", method: "POST", path: "/admin/diff-context/preview", bodyKeys: ["diff_text","context_lines"], render: "raw", help: "POST /admin/diff-context/preview  (replay.ts)" },
   { group: "repo-bot-defaults", verb: "create", method: "POST", path: "/admin/repo-bot-defaults", bodyKeys: ["repo","bot_ids"], render: "raw", help: "POST /admin/repo-bot-defaults  (repo-bot-defaults.ts)" },
   { group: "repo-bot-defaults", verb: "list", method: "GET", path: "/admin/repo-bot-defaults", render: "raw", help: "GET /admin/repo-bot-defaults  (repo-bot-defaults.ts)" },
-  { group: "repo-bot-defaults", verb: "remove", method: "DELETE", path: "/admin/repo-bot-defaults/:repo", params: ["repo"], render: "raw", help: "DELETE /admin/repo-bot-defaults/:repo  (repo-bot-defaults.ts)" },
-  { group: "repo-bot-defaults", verb: "toggle-enabled", method: "PUT", path: "/admin/repo-bot-defaults/:repo", params: ["repo"], bodyKeys: ["enabled"], render: "raw", help: "PUT /admin/repo-bot-defaults/:repo  (repo-bot-defaults.ts)" },
+  { group: "repo-bot-defaults", verb: "remove", method: "DELETE", path: "/admin/repo-bot-defaults/:repo", params: ["repo"], render: "raw", help: "DELETE /admin/repo-bot-defaults/:repo  (repo-bot-defaults.ts)  [arg must be pre-transformed by repoToSlug — pass the value in the form the web UI sends]" },
+  { group: "repo-bot-defaults", verb: "toggle-enabled", method: "PUT", path: "/admin/repo-bot-defaults/:repo", params: ["repo"], bodyKeys: ["enabled"], render: "raw", help: "PUT /admin/repo-bot-defaults/:repo  (repo-bot-defaults.ts)  [arg must be pre-transformed by repoToSlug — pass the value in the form the web UI sends]" },
   { group: "research", verb: "get-deep-report", method: "GET", path: "/api/projects/:projectId/research/deep-reports/:name", params: ["projectId","name"], render: "raw", help: "GET /api/projects/:projectId/research/deep-reports/:name  (research.ts)" },
   { group: "research", verb: "get-status", method: "GET", path: "/api/projects/:projectId/research/status", params: ["projectId"], render: "raw", help: "GET /api/projects/:projectId/research/status  (research.ts)" },
   { group: "research", verb: "get-thread", method: "GET", path: "/api/projects/:projectId/research/threads/:threadId", params: ["projectId","threadId"], render: "raw", help: "GET /api/projects/:projectId/research/threads/:threadId  (research.ts)" },
