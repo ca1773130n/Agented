@@ -78,6 +78,14 @@ test('num rejects non-numeric', () => {
   assert.throws(() => num(parseArgs(['--limit', 'abc']), 'limit', 1), UsageError);
 });
 
+test('--version prints the version, not the help screen', () => {
+  // `--version` takes no command, so the "no command -> usage" branch swallowed
+  // it once per-command --help routing moved that check to the top.
+  const a = parseArgs(['--version']);
+  assert.equal(bool(a, 'version'), true);
+  assert.deepEqual(a.positionals, []);
+});
+
 // ---- service routing ------------------------------------------------------
 
 test('/api/v1/* goes to the sidecar, everything else to the backend', () => {
