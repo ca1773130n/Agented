@@ -565,6 +565,14 @@ def tesserae_compile(
         raise ValidationException(
             detail="Tesserae not enabled for this project",
         )
+    # Reject a model its provider cannot serve BEFORE dispatching: tesserae would
+    # answer a mismatch by silently ignoring the model and using the provider
+    # default, so the run would look accepted and be wrong.
+    try:
+        provider, model = ti.reconcile_provider_model(provider, model)
+    except ValueError as exc:
+        raise ValidationException(detail=str(exc)) from exc
+
     job_id = ti.run_op_async(
         project_id, "compile", retry_fallbacks=retry_fallbacks, provider=provider, model=model
     )

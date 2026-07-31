@@ -261,3 +261,39 @@ def test_curated_body_flags_match_what_the_web_ui_sends():
         "curated bodyFlags use keys the web UI never sends — likely wrong, and a wrong key "
         "is silently dropped by the server:\n  " + "\n  ".join(bad)
     )
+
+
+# ---------------------------------------------------------------------------
+# --provider / --model pairing. Tesserae guards against a claude-shaped model
+# reaching the Codex CLI by returning NO model — falling back to the provider
+# default rather than failing. That silence is the bug: a mismatched --model
+# looks accepted and changes nothing.
+# ---------------------------------------------------------------------------
+
+
+def test_model_alone_infers_its_provider():
+    """`--model gpt-…` with no --provider must SET provider=codex. Left unset,
+    tesserae's provider-scoped lookup drops the model on any machine whose
+    resolved provider is not codex, and the compile silently uses the default."""
+    from app.services.tesserae_integration import reconcile_provider_model
+
+    assert reconcile_provider_model(None, "gpt-5.1-codex-max") == ("codex", "gpt-5.1-codex-max")
+    assert reconcile_provider_model(None, "claude-sonnet-4-6") == ("claude", "claude-sonnet-4-6")
+
+
+def test_mismatched_provider_and_model_is_refused():
+    from app.services.tesserae_integration import reconcile_provider_model
+
+    with pytest.raises(ValueError, match="belongs to provider"):
+        reconcile_provider_model("codex", "claude-sonnet-4-6")
+    with pytest.raises(ValueError, match="belongs to provider"):
+        reconcile_provider_model("claude", "gpt-5.1-codex-max")
+
+
+def test_unrecognised_model_is_allowed_through():
+    """A custom claude-compatible endpoint can serve any name. Unrecognised means
+    "cannot check", not "invalid" — refusing here would block real setups."""
+    from app.services.tesserae_integration import reconcile_provider_model
+
+    assert reconcile_provider_model(None, "my-custom-llm") == (None, "my-custom-llm")
+    assert reconcile_provider_model("custom", "my-custom-llm") == ("custom", "my-custom-llm")

@@ -469,7 +469,8 @@ async function aliasCmd(a: Args, profile: ReturnType<typeof resolveProfile>, gro
     else note(`job ${outcome.status}`);
     return outcome.code;
   }
-  if (alias.job && !bool(a, 'wait')) {
+  // Only claim a dispatch that HAPPENED — this printed "dispatched" above a 422.
+  if (alias.job && !bool(a, 'wait') && exitCodeForStatus(res.status) === 0) {
     note('dispatched — add --wait to block until it finishes (exit code then reflects the JOB)');
   }
   return emit(a, res, alias);

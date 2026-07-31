@@ -1713,6 +1713,55 @@ def ingest_paths(
     )
 
 
+# A model name implies its provider. Tesserae guards against a claude-shaped
+# model landing on the Codex CLI by returning NO model when the resolved provider
+# does not match — which silently falls back to the provider default instead of
+# failing. That silence is the problem: `--model gpt-5.1-codex-max` on a
+# claude-resolved machine looks accepted and changes nothing.
+_MODEL_PROVIDER_HINTS = (
+    ("codex", ("gpt-", "o1-", "o3-", "o4-", "codex")),
+    ("claude", ("claude-",)),
+)
+
+
+def provider_for_model(model: str) -> Optional[str]:
+    """The provider a model name belongs to, or None when it is unrecognisable.
+
+    Unrecognised is NOT an error — a custom endpoint can serve any name; it just
+    means we cannot check the pairing and must let it through.
+    """
+    m = (model or "").strip().lower()
+    if not m:
+        return None
+    for provider, prefixes in _MODEL_PROVIDER_HINTS:
+        if any(p in m if p == "codex" else m.startswith(p) for p in prefixes):
+            return provider
+    return None
+
+
+def reconcile_provider_model(
+    provider: Optional[str], model: Optional[str]
+) -> tuple[Optional[str], Optional[str]]:
+    """Pair a model with a provider that can actually serve it.
+
+    - model alone -> infer and SET the provider, so the choice cannot be silently
+      dropped by tesserae's own provider-scoped guard.
+    - both, and they disagree -> ValueError. Sending a claude model to codex is
+      never what was meant, and tesserae would answer by ignoring the model.
+    """
+    if not model:
+        return provider, model
+    implied = provider_for_model(model)
+    if implied is None:
+        return provider, model
+    if provider and provider.strip().lower() != implied:
+        raise ValueError(
+            f"model {model!r} belongs to provider {implied!r}, not {provider!r}. "
+            f"Use --provider {implied}, or drop --provider and it is inferred."
+        )
+    return implied, model
+
+
 def compile_workspace(
     project_id: str,
     *,
@@ -1795,6 +1844,7 @@ def compile_workspace(
     # THIS child selects the backend for this compile only. Without it the choice
     # is process-wide: whatever the server was started with applies to every
     # tesserae subprocess, including the consolidation daemon.
+    provider, model = reconcile_provider_model(provider, model)
     env = None
     if provider or model:
         env = _tesserae_env()
