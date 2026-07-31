@@ -33,9 +33,26 @@ export async function waitForJob(
   const intervalMs = opts.intervalMs ?? 2000;
   const started = Date.now();
   let spun = 0;
+  let consecutiveErrors = 0;
 
   for (;;) {
-    const res = await request({ method: 'GET', path: `${JOB_PATH}/${encodeURIComponent(jobId)}`, profile });
+    // A long op can make the single-worker backend briefly unreachable, and one
+    // dropped poll must not abandon a job that is running fine. MEASURED: two
+    // real compiles both COMPLETED while `--wait` reported "cannot reach" and
+    // exited 4 — the run was healthy, the watcher was not. Tolerate a short
+    // outage; give up only if it persists.
+    let res;
+    try {
+      res = await request({ method: 'GET', path: `${JOB_PATH}/${encodeURIComponent(jobId)}`, profile });
+      consecutiveErrors = 0;
+    } catch (e) {
+      if (++consecutiveErrors > 15) {
+        note(`lost contact with the server for ${consecutiveErrors} polls — the job may still be running: ${jobId}`);
+        return { status: 'unknown', job: {}, code: 4 };
+      }
+      await new Promise((r) => setTimeout(r, intervalMs));
+      continue;
+    }
     if (res.status === 404) {
       // The job map is in-process; a server restart loses it. Say so plainly
       // rather than reporting a failure the job may not have had.
