@@ -33,6 +33,7 @@ const BOOLEAN_FLAGS = new Set<string>([
   'version',
   'refresh',
   'all',
+  'wait',
   'no-color',
   'color',
 ]);

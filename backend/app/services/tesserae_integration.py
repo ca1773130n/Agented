@@ -867,6 +867,7 @@ def _run_tesserae(
     *,
     cwd: Path,
     timeout: int,
+    env: Optional[dict] = None,
 ) -> TesseraeOpResult:
     """Run a MODERN top-level ``tesserae <args>`` command (no ``project``
     prefix). Tesserae 0.9.0 retired the ``project`` subcommand group; init /
@@ -876,7 +877,9 @@ def _run_tesserae(
     cmd = [_TESSERAE_CMD, *args]
     started = _time.monotonic()
     started_iso = _now_iso()
-    env = _tesserae_env()
+    # `env` from the caller (per-call TESSERAE_LLM_PROVIDER/MODEL) seeds this;
+    # otherwise a plain copy, exactly as before.
+    env = dict(env) if env is not None else _tesserae_env()
     # Keep Tesserae's 0.25.1 per-doc extraction guard (default 1800s) inside OUR
     # subprocess budget, or one wedged doc eats the whole window and we SIGKILL a
     # half-written compile. A NONBLANK operator value wins — `setdefault` would
@@ -1710,8 +1713,62 @@ def ingest_paths(
     )
 
 
+# A model name implies its provider. Tesserae guards against a claude-shaped
+# model landing on the Codex CLI by returning NO model when the resolved provider
+# does not match — which silently falls back to the provider default instead of
+# failing. That silence is the problem: `--model gpt-5.1-codex-max` on a
+# claude-resolved machine looks accepted and changes nothing.
+_MODEL_PROVIDER_HINTS = (
+    ("codex", ("gpt-", "o1-", "o3-", "o4-", "codex")),
+    ("claude", ("claude-",)),
+)
+
+
+def provider_for_model(model: str) -> Optional[str]:
+    """The provider a model name belongs to, or None when it is unrecognisable.
+
+    Unrecognised is NOT an error — a custom endpoint can serve any name; it just
+    means we cannot check the pairing and must let it through.
+    """
+    m = (model or "").strip().lower()
+    if not m:
+        return None
+    for provider, prefixes in _MODEL_PROVIDER_HINTS:
+        if any(p in m if p == "codex" else m.startswith(p) for p in prefixes):
+            return provider
+    return None
+
+
+def reconcile_provider_model(
+    provider: Optional[str], model: Optional[str]
+) -> tuple[Optional[str], Optional[str]]:
+    """Pair a model with a provider that can actually serve it.
+
+    - model alone -> infer and SET the provider, so the choice cannot be silently
+      dropped by tesserae's own provider-scoped guard.
+    - both, and they disagree -> ValueError. Sending a claude model to codex is
+      never what was meant, and tesserae would answer by ignoring the model.
+    """
+    if not model:
+        return provider, model
+    implied = provider_for_model(model)
+    if implied is None:
+        return provider, model
+    if provider and provider.strip().lower() != implied:
+        raise ValueError(
+            f"model {model!r} belongs to provider {implied!r}, not {provider!r}. "
+            f"Use --provider {implied}, or drop --provider and it is inferred."
+        )
+    return implied, model
+
+
 def compile_workspace(
-    project_id: str, *, retry_fallbacks: bool = False, full: bool = False
+    project_id: str,
+    *,
+    retry_fallbacks: bool = False,
+    full: bool = False,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
 ) -> TesseraeOpResult:
     """Extract the typed knowledge graph over all ingested sources.
 
@@ -1782,11 +1839,26 @@ def compile_workspace(
         if "--changed-only" not in args:
             args.append("--changed-only")
         args.append("--retry-fallbacks")
+    # Per-call LLM backend. Tesserae resolves provider/model as
+    # explicit-arg -> TESSERAE_LLM_* env -> default "claude", so setting them on
+    # THIS child selects the backend for this compile only. Without it the choice
+    # is process-wide: whatever the server was started with applies to every
+    # tesserae subprocess, including the consolidation daemon.
+    provider, model = reconcile_provider_model(provider, model)
+    env = None
+    if provider or model:
+        env = _tesserae_env()
+        if provider:
+            env["TESSERAE_LLM_PROVIDER"] = provider
+        if model:
+            env["TESSERAE_LLM_MODEL"] = model
+
     res = _run_tesserae(
         "compile",
         args,
         cwd=root,
         timeout=_TESSERAE_COMPILE_TIMEOUT,
+        env=env,
     )
     if not res.ok and (res.reason or "").startswith("timeout_after_"):
         # Don't leave the operator staring at a bare timeout: say what to do.

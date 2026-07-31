@@ -534,10 +534,20 @@ def tesserae_ingest(
     "/system/memory/tesserae/projects/{project_id:str}/compile",
     sync_to_thread=True,
 )
-def tesserae_compile(project_id: str, retry_fallbacks: bool = False) -> dict[str, Any]:
+def tesserae_compile(
+    project_id: str,
+    retry_fallbacks: bool = False,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+) -> dict[str, Any]:
     """``tesserae project compile`` — extract the typed knowledge
     graph. Long-running (minutes); dispatched async. Returns a
     ``job_id`` the caller polls via the jobs endpoint.
+
+    ``provider``/``model`` select the LLM backend for THIS compile only
+    (``TESSERAE_LLM_PROVIDER``/``TESSERAE_LLM_MODEL`` on that child). Setting them
+    in the server's own environment instead would apply to every tesserae
+    subprocess, including the consolidation daemon.
 
     ``retry_fallbacks=true`` (Tesserae 0.25.1) re-extracts docs whose typed
     extraction previously failed and was served by the deterministic baseline.
@@ -555,7 +565,17 @@ def tesserae_compile(project_id: str, retry_fallbacks: bool = False) -> dict[str
         raise ValidationException(
             detail="Tesserae not enabled for this project",
         )
-    job_id = ti.run_op_async(project_id, "compile", retry_fallbacks=retry_fallbacks)
+    # Reject a model its provider cannot serve BEFORE dispatching: tesserae would
+    # answer a mismatch by silently ignoring the model and using the provider
+    # default, so the run would look accepted and be wrong.
+    try:
+        provider, model = ti.reconcile_provider_model(provider, model)
+    except ValueError as exc:
+        raise ValidationException(detail=str(exc)) from exc
+
+    job_id = ti.run_op_async(
+        project_id, "compile", retry_fallbacks=retry_fallbacks, provider=provider, model=model
+    )
     return {"job_id": job_id, "project_id": project_id, "op": "compile", "status": "running"}
 
 

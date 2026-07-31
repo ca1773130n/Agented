@@ -52,6 +52,59 @@ def test_create_project_rejects_empty(isolated_db):
     assert resp.status_code == 400
 
 
+def test_create_project_rejects_non_string_field(isolated_db):
+    """A JSON object where a string is expected must 400, not 500.
+
+    Reaching the SQLite bind raises ProgrammingError ("type 'dict' is not
+    supported") and surfaces as a 500 (err-shegum).
+    """
+    create_user_role("admin-key-pj-typed", "Admin", "admin")
+    with _client() as c:
+        resp = c.post(
+            "/admin/projects/",
+            headers={"X-API-Key": "admin-key-pj-typed"},
+            json={"name": "MyProj", "product_id": {"id": "prod-abc123"}},
+        )
+    assert resp.status_code == 400
+    assert "product_id" in resp.json()["detail"]
+
+
+def test_update_project_rejects_non_string_field(isolated_db):
+    create_user_role("admin-key-pj-typed2", "Admin", "admin")
+    with _client() as c:
+        created = c.post(
+            "/admin/projects/",
+            headers={"X-API-Key": "admin-key-pj-typed2"},
+            json={"name": "MyProj"},
+        )
+        project_id = created.json()["project"]["id"]
+        resp = c.put(
+            f"/admin/projects/{project_id}",
+            headers={"X-API-Key": "admin-key-pj-typed2"},
+            json={"product_id": {"id": "prod-abc123"}},
+        )
+    assert resp.status_code == 400
+    assert "product_id" in resp.json()["detail"]
+
+
+def test_update_project_rejects_non_string_github_repo(isolated_db):
+    """github_repo is .strip()ed before the DB call — a dict is an AttributeError."""
+    create_user_role("admin-key-pj-typed3", "Admin", "admin")
+    with _client() as c:
+        created = c.post(
+            "/admin/projects/",
+            headers={"X-API-Key": "admin-key-pj-typed3"},
+            json={"name": "MyProj"},
+        )
+        project_id = created.json()["project"]["id"]
+        resp = c.put(
+            f"/admin/projects/{project_id}",
+            headers={"X-API-Key": "admin-key-pj-typed3"},
+            json={"github_repo": ["owner/repo"]},
+        )
+    assert resp.status_code == 400
+
+
 def test_unknown_project_404(isolated_db):
     create_user_role("admin-key-pj3", "Admin", "admin")
     with _client() as c:

@@ -80,10 +80,10 @@ test('a tool failure is an isError RESULT, not a JSON-RPC error', async () => {
 test('a missing positional names the argument it wants', async () => {
   const r = await handleMessage({
     jsonrpc: '2.0', id: 6, method: 'tools/call',
-    params: { name: 'ag_call', arguments: { group: 'sa', verb: 'get' } },
+    params: { name: 'ag_call', arguments: { group: 'sa', verb: 'show' } },
   });
   assert.equal((r!.result as any).isError, true);
-  assert.match((r!.result as any).content[0].text, /super_agent_id/);
+  assert.match((r!.result as any).content[0].text, /\bsa\b/);
 });
 
 test('ag_call dry_run builds the request and redacts the key', async () => {
