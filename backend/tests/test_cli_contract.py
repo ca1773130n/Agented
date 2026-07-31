@@ -17,10 +17,10 @@ import pytest
 ALIASES_TS = Path(__file__).resolve().parent.parent.parent / "cli" / "aliases.ts"
 
 # `method: 'GET',` … `path: '/admin/products/:product_id',` inside one object literal.
-_ENTRY = re.compile(
-    r"method:\s*'(?P<method>[A-Z]+)',\s*\n\s*path:\s*'(?P<path>[^']+)'",
-    re.MULTILINE,
-)
+# Formatting must not decide whether coverage is checked: an entry on one line
+# is as valid as one spread over several, and a regex that only matched the
+# latter silently parsed ZERO aliases when the table was reformatted.
+_ENTRY = re.compile(r"method:\s*'(?P<method>[A-Z]+)',\s*path:\s*'(?P<path>[^']+)'", re.S)
 
 
 def _declared_aliases() -> list[tuple[str, str]]:

@@ -18,7 +18,7 @@
 import { request, buildRequest, exitCodeForStatus, errorMessage, type Service } from './transport.ts';
 import { resolveProfile } from './config.ts';
 import { loadSchema, searchOps, matchOp } from './schema.ts';
-import { allAliases, findAlias, groups, verbsFor } from '../aliases.ts';
+import { allAliases, findAlias, groups, verbsFor, bodyKeysFor } from '../aliases.ts';
 
 export interface JsonRpcMessage {
   jsonrpc?: string;
@@ -219,8 +219,8 @@ async function callTool(name: string, a: Record<string, unknown>): Promise<unkno
       query: (op?.params ?? []).filter((p) => p.type.startsWith('query:')).map((p) => p.name),
       body_typed: op?.body?.length ? op.body : undefined,
       // The server does not type most bodies; these come from the web client.
-      body_keys_from_web_ui: alias.bodyKeys?.length ? alias.bodyKeys : undefined,
-      body_shape_unknown: !op?.body?.length && !alias.bodyKeys?.length && op?.bodyUntyped === true,
+      body_keys_from_web_ui: bodyKeysFor(alias),
+      body_shape_unknown: !op?.body?.length && !bodyKeysFor(alias) && op?.bodyUntyped === true,
       help: alias.help,
     });
   }

@@ -25,7 +25,9 @@ import {
 import { out, note, json, scalar, table, kv, unwrapList, isTTY } from '../lib/output.ts';
 import { loadSchema, searchOps, matchOp, type Operation } from '../lib/schema.ts';
 import { stream } from '../lib/stream.ts';
-import { ALIASES, findAlias, groups, curatedGroups, verbsFor, allAliases, type Alias } from '../aliases.ts';
+import { resolveId, ResolveError } from '../lib/resolve.ts';
+import { waitForJob, jobIdOf } from '../lib/jobs.ts';
+import { ALIASES, findAlias, groups, curatedGroups, verbsFor, allAliases, bodyKeysFor, type Alias } from '../aliases.ts';
 
 const VERSION = '0.1.0';
 
@@ -278,14 +280,15 @@ async function describe(
       const desc = f.description ? `  — ${f.description.split('\n')[0]}` : '';
       note(`    ${f.name.padEnd(24)} ${f.type}${f.required ? '  (required)' : ''}${desc}`);
     }
-  } else if (op.bodyUntyped || alias?.bodyKeys?.length) {
+  } else if (op.bodyUntyped || (alias && bodyKeysFor(alias))) {
     note('\n  BODY  -f name=value');
-    if (alias?.bodyKeys?.length) {
+    const hintKeys = alias ? bodyKeysFor(alias) : undefined;
+    if (hintKeys?.length) {
       // The server's OpenAPI has no property schema for this handler (251 of 286
       // bodies are untyped, and 0 operations carry a description). These keys are
       // what the WEBSITE actually sends to this endpoint, read off the frontend
       // client — the only real shape hint available. `?` marks optional.
-      for (const k of alias.bodyKeys) note(`    ${k}`);
+      for (const k of hintKeys) note(`    ${k}`);
       note('\n    (from the frontend client — the server schema does not type this body)');
     } else {
       note('    shape not in the schema and the website does not call this endpoint,');
@@ -380,7 +383,17 @@ async function aliasCmd(a: Args, profile: ReturnType<typeof resolveProfile>, gro
     return await describe(profile, alias.method, alias.path, `ag ${alias.group} ${alias.verb}`, alias);
   }
 
-  const { path, used } = fillPath(alias, a.positionals.slice(2));
+  // Resolve names -> ids first: `ag mem compile GetResearchDone` should work.
+  let positionals = a.positionals.slice(2);
+  if (alias.resolve?.length) {
+    positionals = await Promise.all(
+      positionals.map(async (v, i) => {
+        const kind = alias.resolve?.[i];
+        return kind ? await resolveId(kind, v, profile) : v;
+      }),
+    );
+  }
+  const { path, used } = fillPath(alias, positionals);
   const body: Record<string, unknown> = { ...a.fields };
   if (alias.bodyFlags) {
     for (const [flag, key] of Object.entries(alias.bodyFlags)) {
@@ -437,7 +450,29 @@ async function aliasCmd(a: Args, profile: ReturnType<typeof resolveProfile>, gro
     const r = await stream(opts);
     return r.frames ? 0 : 8;
   }
-  return emit(a, await request(opts), alias);
+
+  const res = await request(opts);
+
+  // `--wait` makes the JOB's outcome the command's outcome. Without it a failed
+  // compile still exits 0, because the DISPATCH succeeded — which is the API's
+  // truth, not the operator's.
+  if (alias.job && bool(a, 'wait')) {
+    const code = exitCodeForStatus(res.status);
+    if (code !== 0) return emit(a, res, alias);
+    const jobId = jobIdOf(res.body);
+    if (!jobId) {
+      note('no job_id in the response — cannot wait');
+      return emit(a, res, alias);
+    }
+    const outcome = await waitForJob(jobId, profile, { label: `${alias.group} ${alias.verb}` });
+    if (bool(a, 'json')) json(outcome.job);
+    else note(`job ${outcome.status}`);
+    return outcome.code;
+  }
+  if (alias.job && !bool(a, 'wait')) {
+    note('dispatched — add --wait to block until it finishes (exit code then reflects the JOB)');
+  }
+  return emit(a, res, alias);
 }
 
 // ---------------------------------------------------------------------------
@@ -482,7 +517,20 @@ function redact(h: Record<string, string>): Record<string, string> {
 }
 
 function emit(a: Args, res: Awaited<ReturnType<typeof request>>, alias?: Alias): number {
-  const code = exitCodeForStatus(res.status);
+  let code = exitCodeForStatus(res.status);
+
+  // A 200 whose body says `ok: false` is a FAILED operation. Several ops report
+  // failure in the payload rather than the status line (`ag mem ingest` returns
+  // 200 with ok:false and a tesserae stderr), so trusting HTTP alone made a
+  // broken command look successful — the same "dispatch succeeded" lie that
+  // `--wait` exists to stop, in the synchronous path.
+  if (code === 0 && res.body && typeof res.body === 'object') {
+    const b = res.body as Record<string, unknown>;
+    if (b.ok === false) {
+      note(`operation failed: ${b.reason ?? b.error ?? '(no reason given)'}`);
+      code = 8;
+    }
+  }
   if (code !== 0) {
     note(`HTTP ${res.status} ${res.method} ${res.url}`);
     note(errorMessage(res.body));
@@ -567,6 +615,7 @@ main(process.argv.slice(2))
   })
   .catch((e) => {
     if (e instanceof UsageError || e instanceof ConfigError) return fail(String(e.message), 2);
+    if (e instanceof ResolveError) return fail(String(e.message), 6);
     if (e instanceof TransportError) return fail(String(e.message), e.code);
     return fail(`ag: ${e instanceof Error ? e.message : String(e)}`, 1);
   });

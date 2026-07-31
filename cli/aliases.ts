@@ -23,6 +23,18 @@ export interface Alias {
   path: string;
   /** Names for the positional path params, in order — used for usage errors. */
   params?: string[];
+  /**
+   * Resolve each positional by NAME before filling the path, so
+   * `ag mem compile GetResearchDone` works and nobody has to know `proj-xe3qj4`.
+   * Index-aligned with `params`; a null entry means "pass through untouched".
+   */
+  resolve?: (('project' | 'product' | 'super-agent' | 'agent') | null)[];
+  /**
+   * This endpoint returns a job_id. `--wait` polls it and makes the JOB's
+   * outcome the command's exit code — dispatching successfully is not the same
+   * as the operation succeeding.
+   */
+  job?: boolean;
   /** Body keys taken from named flags: flag -> body key. */
   bodyFlags?: Record<string, string>;
   /** Query keys taken from named flags: flag -> query key. */
@@ -42,225 +54,102 @@ export interface Alias {
 }
 
 export const ALIASES: Alias[] = [
-  // ---- products -----------------------------------------------------------
-  {
-    group: 'product',
-    verb: 'ls',
-    method: 'GET',
-    path: '/admin/products',
-    render: 'table',
-    columns: ['id', 'name', 'status'],
-    queryFlags: { limit: 'limit', offset: 'offset' },
-    help: 'List products',
-  },
-  {
-    group: 'product',
-    verb: 'new',
-    method: 'POST',
-    path: '/admin/products',
-    bodyFlags: { desc: 'description', status: 'status' },
-    render: 'id',
-    idPath: ['product', 'id'],
-    help: 'Create a product:  ag product new "Name" --desc "..."',
-  },
-  {
-    group: 'product',
-    verb: 'get',
-    method: 'GET',
-    path: '/admin/products/:product_id',
-    params: ['product_id'],
-    render: 'kv',
-    help: 'Show one product',
-  },
+  // ---- product ------------------------------------------------------------
+  { group: 'product', verb: 'ls', method: 'GET', path: '/admin/products',
+    render: 'table', columns: ['id', 'name', 'status'],
+    queryFlags: { limit: 'limit', offset: 'offset' }, help: 'List products' },
+  { group: 'product', verb: 'show', method: 'GET', path: '/admin/products/:product',
+    params: ['product'], resolve: ['product'], render: 'kv', help: 'Show one product (by name or id)' },
+  { group: 'product', verb: 'new', method: 'POST', path: '/admin/products',
+    bodyFlags: { desc: 'description', status: 'status' }, render: 'id', idPath: ['product', 'id'],
+    help: 'ag product new "Agented Core" --desc "…"' },
 
-  // ---- projects -----------------------------------------------------------
-  {
-    group: 'project',
-    verb: 'ls',
-    method: 'GET',
-    path: '/admin/projects',
-    render: 'table',
-    columns: ['id', 'name', 'status', 'local_path'],
-    // ponytail: no --product filter — GET /admin/projects accepts only
-    // limit/offset, so it was silently ignored and returned everything.
-    // Filter client-side: ag project ls --json | jq '.[]|select(.product_id=="X")'
-    queryFlags: { limit: 'limit', offset: 'offset' },
-    help: 'List projects',
-  },
-  {
-    group: 'project',
-    verb: 'new',
-    method: 'POST',
-    path: '/admin/projects',
-    bodyFlags: {
-      repo: 'github_repo',
-      product: 'product_id',
-      desc: 'description',
-      path: 'local_path',
-      team: 'owner_team_id',
-    },
-    render: 'id',
-    idPath: ['project', 'id'],
-    help: 'Create a project (clones --repo into the workspace root):  ag project new Foo --repo owner/Foo --product prod-x',
-  },
-  {
-    group: 'project',
-    verb: 'get',
-    method: 'GET',
-    path: '/admin/projects/:project_id',
-    params: ['project_id'],
-    render: 'kv',
-    help: 'Show one project',
-  },
-  {
-    group: 'project',
-    verb: 'clone-status',
-    method: 'GET',
-    path: '/admin/projects/:project_id/clone-status',
-    params: ['project_id'],
-    render: 'kv',
-    help: 'Clone progress for a project created with --repo',
-  },
-  {
-    group: 'project',
-    verb: 'sessions',
-    method: 'GET',
-    path: '/admin/projects/:project_id/sessions',
-    params: ['project_id'],
-    render: 'table',
-    help: 'Sessions recorded against a project',
-  },
+  // ---- project ------------------------------------------------------------
+  { group: 'project', verb: 'ls', method: 'GET', path: '/admin/projects',
+    render: 'table', columns: ['id', 'name', 'status', 'clone_status', 'local_path'],
+    queryFlags: { limit: 'limit', offset: 'offset' }, help: 'List projects' },
+  { group: 'project', verb: 'show', method: 'GET', path: '/admin/projects/:project',
+    params: ['project'], resolve: ['project'], render: 'kv', help: 'Show one project (by name or id)' },
+  { group: 'project', verb: 'new', method: 'POST', path: '/admin/projects',
+    bodyFlags: { repo: 'github_repo', product: 'product_id', desc: 'description', path: 'local_path', team: 'owner_team_id' },
+    render: 'id', idPath: ['project', 'id'],
+    help: 'ag project new GRD --repo owner/GRD --product "Dev Tools"  (clones into the workspace root)' },
+  { group: 'project', verb: 'clone-status', method: 'GET', path: '/admin/projects/:project/clone-status',
+    params: ['project'], resolve: ['project'], render: 'kv', help: 'Clone progress for a project created with --repo' },
+  { group: 'project', verb: 'sessions', method: 'GET', path: '/admin/projects/:project/sessions',
+    params: ['project'], resolve: ['project'], render: 'table', help: 'Sessions recorded against a project' },
 
-  // ---- super-agents -------------------------------------------------------
-  {
-    group: 'sa',
-    verb: 'ls',
-    method: 'GET',
-    path: '/admin/super-agents',
-    render: 'table',
-    columns: ['id', 'name', 'backend_type'],
-    help: 'List super-agents',
-  },
-  {
-    group: 'sa',
-    verb: 'get',
-    method: 'GET',
-    path: '/admin/super-agents/:super_agent_id',
-    params: ['super_agent_id'],
-    render: 'kv',
-    help: 'Show one super-agent',
-  },
-  {
-    group: 'sa',
-    verb: 'sessions',
-    method: 'GET',
-    path: '/admin/super-agents/:super_agent_id/sessions',
-    params: ['super_agent_id'],
-    render: 'table',
-    columns: ['id', 'project_id', 'status', 'session_type'],
-    help: 'List a super-agent’s sessions',
-  },
-  {
-    group: 'sa',
-    verb: 'session-new',
-    method: 'POST',
-    path: '/admin/super-agents/:super_agent_id/sessions',
-    params: ['super_agent_id'],
-    bodyFlags: { project: 'project_id', title: 'title', type: 'session_type' },
-    render: 'id',
-    idPath: ['session_id'],
-    help: 'Start a session. PASS --project: without it the session has no project_id and is invisible to the memory loop.',
-  },
-  {
-    group: 'sa',
-    verb: 'memory',
-    method: 'GET',
-    path: '/admin/super-agents/:super_agent_id/memory',
-    params: ['super_agent_id'],
-    queryFlags: { project: 'project_id' },
-    render: 'raw',
-    help: 'Read a super-agent’s distilled L1 runbook',
-  },
-  {
-    group: 'sa',
-    verb: 'distill',
-    method: 'POST',
-    path: '/admin/super-agents/:super_agent_id/memory/distill',
-    params: ['super_agent_id'],
-    queryFlags: { project: 'project_id' },
-    render: 'raw',
-    help: 'Rebuild L1 runbooks for a project’s super-agents (spends LLM calls)',
-  },
+  // ---- agent --------------------------------------------------------------
+  { group: 'agent', verb: 'ls', method: 'GET', path: '/admin/agents',
+    render: 'table', columns: ['id', 'name', 'status'], help: 'List agents' },
+  { group: 'agent', verb: 'show', method: 'GET', path: '/admin/agents/:agent',
+    params: ['agent'], resolve: ['agent'], render: 'kv', help: 'Show one agent (by name or id)' },
+  { group: 'agent', verb: 'run', method: 'POST', path: '/admin/agents/:agent/run',
+    params: ['agent'], resolve: ['agent'], bodyFlags: { message: 'message' }, render: 'raw',
+    help: 'ag agent run Apoc --message "…"' },
 
-  // ---- memory / tesserae --------------------------------------------------
-  {
-    group: 'mem',
-    verb: 'status',
-    method: 'GET',
-    path: '/admin/system/memory',
-    render: 'raw',
-    help: 'Memory-system status (Tesserae CLI, version, project count)',
-  },
-  {
-    group: 'mem',
-    verb: 'config',
-    method: 'GET',
-    path: '/admin/system/memory/config',
-    render: 'raw',
-    help: 'Memory config, including consolidation daemon state',
-  },
-  {
-    group: 'mem',
-    verb: 'projects',
-    method: 'GET',
-    path: '/admin/system/memory/tesserae/projects',
-    render: 'table',
-    columns: ['project_id', 'project_name', 'enabled', 'distill_enabled'],
-    help: 'Per-project Tesserae state (incl. last_auto_distill)',
-  },
+  // ---- sa (super-agents) --------------------------------------------------
+  { group: 'sa', verb: 'ls', method: 'GET', path: '/admin/super-agents',
+    render: 'table', columns: ['id', 'name', 'backend_type'], help: 'List super-agents' },
+  { group: 'sa', verb: 'show', method: 'GET', path: '/admin/super-agents/:sa',
+    params: ['sa'], resolve: ['super-agent'], render: 'kv', help: 'Show one super-agent (by name or id)' },
+  { group: 'sa', verb: 'sessions', method: 'GET', path: '/admin/super-agents/:sa/sessions',
+    params: ['sa'], resolve: ['super-agent'], render: 'table',
+    columns: ['id', 'project_id', 'status', 'session_type'], help: 'List a super-agent’s sessions' },
+  { group: 'sa', verb: 'start', method: 'POST', path: '/admin/super-agents/:sa/sessions',
+    params: ['sa'], resolve: ['super-agent'], bodyFlags: { project: 'project_id', title: 'title', type: 'session_type' },
+    render: 'id', idPath: ['session_id'],
+    help: 'ag sa start Apoc --project GRD   (WITHOUT --project the session is invisible to the memory loop)' },
+  { group: 'sa', verb: 'end', method: 'POST', path: '/admin/super-agents/:sa/sessions/:session/end',
+    params: ['sa', 'session'], resolve: ['super-agent', null], render: 'raw',
+    help: 'End a session — only completed sessions are exported to memory' },
 
-  // ---- backends -----------------------------------------------------------
-  {
-    // Curated because the generator cannot reach it: the web client calls this
-    // from a PRIVATE helper (a fallback inside backend-management.ts's detection
-    // path), not from an exported API object. Scanning private functions would
-    // let a helper's internal call masquerade as its caller's command — that bug
-    // was just fixed — so the honest fix is to name this one explicitly.
-    group: 'backend',
-    verb: 'check',
-    method: 'POST',
-    path: '/admin/backends/:backend_id/check',
-    params: ['backend_id'],
+  // ---- mem (Tesserae memory) ----------------------------------------------
+  { group: 'mem', verb: 'ls', method: 'GET', path: '/admin/system/memory/tesserae/projects',
+    render: 'table', columns: ['project_name', 'enabled', 'distill_enabled', 'session_count'],
+    help: 'Per-project memory state' },
+  { group: 'mem', verb: 'status', method: 'GET', path: '/admin/system/memory',
+    render: 'raw', help: 'Memory-system status (Tesserae CLI, version, project count)' },
+  { group: 'mem', verb: 'enable', method: 'POST', path: '/admin/system/memory/tesserae/projects/:project',
+    params: ['project'], resolve: ['project'], bodyFlags: { enabled: 'enabled' }, render: 'raw',
+    help: 'ag mem enable GRD   (resolves the workspace root; --enabled false to turn off)' },
+  { group: 'mem', verb: 'distill-toggle', method: 'POST', path: '/admin/system/memory/tesserae/projects/:project/distill',
+    params: ['project'], resolve: ['project'], bodyFlags: { enabled: 'enabled' }, render: 'raw',
+    help: 'ag mem distill-toggle GRD --enabled true   (authorises LLM spend for this project)' },
+  { group: 'mem', verb: 'compile', method: 'POST', path: '/admin/system/memory/tesserae/projects/:project/compile',
+    params: ['project'], resolve: ['project'], job: true,
+    queryFlags: { 'retry-fallbacks': 'retry_fallbacks', provider: 'provider', model: 'model' },
     render: 'raw',
-    help: 'Probe whether a backend CLI is installed on disk',
-  },
+    help: 'ag mem compile GRD --wait [--provider codex --model X]   (LLM spend; minutes)' },
+  { group: 'mem', verb: 'ingest', method: 'POST', path: '/admin/system/memory/tesserae/projects/:project/ingest',
+    params: ['project'], resolve: ['project'], render: 'raw',
+    help: 'ag mem ingest GRD   (synchronous — returns the result, not a job)' },
+  { group: 'mem', verb: 'distill', method: 'POST', path: '/admin/super-agents/:sa/memory/distill',
+    params: ['sa'], resolve: ['super-agent'], queryFlags: { project: 'project_id' }, render: 'raw',
+    help: 'ag mem distill Apoc --project GRD   (rebuild L1 runbooks; UNPRICED and uncapped)' },
+  { group: 'mem', verb: 'read', method: 'GET', path: '/admin/super-agents/:sa/memory',
+    params: ['sa'], resolve: ['super-agent'], queryFlags: { project: 'project_id' }, render: 'raw',
+    help: 'ag mem read Apoc --project GRD   (that agent’s distilled runbook)' },
+  { group: 'mem', verb: 'job', method: 'GET', path: '/admin/system/memory/tesserae/jobs/:job',
+    params: ['job'], render: 'raw', help: 'Status of one async memory job' },
 
-  // ---- auth ---------------------------------------------------------------
-  {
-    // Hand-written because the generator cannot see it: session-events.ts builds
-    // its URL into a local variable and calls `apiFetch(url)`, so there is no
-    // literal path at the call site to extract. The generator REPORTS such call
-    // sites as skipped rather than hiding them, and this is the follow-up.
-    group: 'auth',
-    verb: 'session-events',
-    method: 'GET',
-    path: '/admin/auth/session-events',
+  // ---- grd ----------------------------------------------------------------
+  { group: 'grd', verb: 'steering', method: 'GET', path: '/admin/system/grd/steering/projects',
+    render: 'table', columns: ['project_name', 'configured', 'autonomous_mode', 'interactive_fallback'],
+    help: 'GRD 0.5.0 research-steering settings per project' },
+  { group: 'grd', verb: 'steer', method: 'POST', path: '/admin/system/grd/steering/projects/:project',
+    params: ['project'], resolve: ['project'],
+    bodyFlags: { autonomous: 'autonomous_mode', fallback: 'interactive_fallback' }, render: 'raw',
+    help: 'ag grd steer GRD --autonomous false --fallback panel' },
+
+  // ---- backend / auth -----------------------------------------------------
+  { group: 'backend', verb: 'check', method: 'POST', path: '/admin/backends/:backend_id/check',
+    params: ['backend_id'], render: 'raw', help: 'Probe whether a backend CLI is installed on disk' },
+  { group: 'auth', verb: 'session-events', method: 'GET', path: '/admin/auth/session-events',
     queryFlags: { user: 'user_id', type: 'event_type', limit: 'limit', offset: 'offset' },
-    render: 'raw',
-    help: 'Recent auth session events (login/logout/revoke)',
-  },
-
-  // ---- GRD steering (added by this repo’s own settings work) -----------
-  {
-    group: 'grd',
-    verb: 'steering',
-    method: 'GET',
-    path: '/admin/system/grd/steering/projects',
-    render: 'table',
-    columns: ['project_id', 'project_name', 'configured', 'autonomous_mode', 'interactive_fallback'],
-    help: 'GRD 0.5.0 research-steering settings per project',
-  },
+    render: 'raw', help: 'Recent auth session events (login/logout/revoke)' },
 ];
+
 
 import { GENERATED } from './aliases.generated.ts';
 
@@ -289,6 +178,22 @@ export function groups(): string[] {
 /** Curated groups only — what `ag help` shows before the long tail. */
 export function curatedGroups(): string[] {
   return [...new Set(ALIASES.map((a) => a.group))];
+}
+
+/**
+ * Body-shape hint for an alias, falling back to its GENERATED twin.
+ *
+ * A curated alias shadows the generated one to gain ergonomics (named flags,
+ * resolution, --wait). It must not LOSE what the generated entry knew: the body
+ * keys extracted from the web client are the only shape hint for the handlers
+ * the server leaves untyped, so curation would otherwise make `--help` and
+ * `ag_describe` less useful for exactly the commands people use most.
+ */
+export function bodyKeysFor(alias: Alias): string[] | undefined {
+  if (alias.bodyKeys?.length) return alias.bodyKeys;
+  const shape = (p: string) => p.replace(/:[A-Za-z0-9_]+/g, '*');
+  const twin = GENERATED.find((g) => g.method === alias.method && shape(g.path) === shape(alias.path));
+  return twin?.bodyKeys?.length ? twin.bodyKeys : undefined;
 }
 
 export function verbsFor(group: string): Alias[] {
