@@ -17,6 +17,8 @@
     "bin",
     "lib",
     "commands",
-    "aliases.ts"
+    "scripts",
+    "aliases.ts",
+    "aliases.generated.ts"
   ]
 }

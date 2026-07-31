@@ -32,7 +32,20 @@ const API_DIR = join(HERE, '..', '..', 'frontend', 'src', 'services', 'api');
 const GEN_SCRIPT = join(HERE, '..', 'scripts', 'gen-aliases.mjs');
 const GEN_FILE = join(HERE, '..', 'aliases.generated.ts');
 
-/** Every distinct endpoint path the frontend calls, normalised to `:param` form. */
+/**
+ * Every distinct endpoint path the frontend calls, reduced to its SHAPE.
+ *
+ * This deliberately applies the same rule the generator does — an interpolation
+ * is a path param only when it follows a `/`, otherwise the path ends there —
+ * because the question being asked is "did the generator cover everything it
+ * saw", and comparing under two different rules would produce phantom gaps.
+ *
+ * That shared rule is exactly why this test CANNOT be the correctness oracle: if
+ * the rule itself is wrong, this test agrees with the bug. The independent
+ * oracle is `backend/tests/test_cli_contract.py`, which checks every generated
+ * path against the server's REAL route table — and which caught two classes of
+ * wrong command that this test happily passed.
+ */
 function frontendEndpoints(): Set<string> {
   const paths = new Set<string>();
   const re = /apiFetch\s*(?:<[\s\S]*?>)?\s*\(\s*([`'"])([^`'"]+)\1/g;
@@ -42,11 +55,23 @@ function frontendEndpoints(): Set<string> {
     let m: RegExpExecArray | null;
     re.lastIndex = 0;
     while ((m = re.exec(text))) {
-      let p = m[2];
-      if (!p.startsWith('/')) continue;
-      p = p.replace(/\$\{\s*[A-Za-z0-9_]+\s*\}/g, ':p');
-      const tail = p.indexOf('${');
-      if (tail >= 0) p = p.slice(0, tail);
+      const raw = m[2];
+      if (!raw.startsWith('/')) continue;
+      let p = '';
+      let i = 0;
+      for (;;) {
+        const at = raw.indexOf('${', i);
+        if (at < 0) {
+          p += raw.slice(i);
+          break;
+        }
+        p += raw.slice(i, at);
+        const close = raw.indexOf('}', at);
+        const expr = close < 0 ? '' : raw.slice(at + 2, close);
+        if (!p.endsWith('/') || close < 0 || /[`?:]/.test(expr)) break;
+        p += ':p';
+        i = close + 1;
+      }
       p = p.split(/[\s'"`?]/)[0].replace(/\/+$/, '');
       if (p.startsWith('/')) paths.add(p);
     }

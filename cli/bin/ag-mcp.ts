@@ -46,7 +46,17 @@ export function serve(): void {
 
       let msg: JsonRpcMessage;
       try {
-        msg = JSON.parse(line) as JsonRpcMessage;
+        const parsed: unknown = JSON.parse(line);
+        // `null`, `3`, `"x"` and `[]` are all VALID JSON but not JSON-RPC. Casting
+        // them straight to JsonRpcMessage meant the error handler dereferenced
+        // `msg.id` on null and took the whole server down — one malformed frame
+        // from any client would end the session. Measured: `printf 'null\n'`
+        // crashed it with a TypeError.
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          write({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Invalid Request' } });
+          continue;
+        }
+        msg = parsed as JsonRpcMessage;
       } catch {
         write({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
         continue;

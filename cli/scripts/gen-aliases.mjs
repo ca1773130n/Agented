@@ -201,10 +201,19 @@ function typeKeys(typeName) {
       const open = text.indexOf('{', m.index);
       const close = matchBrace(text, open);
       if (close < 0) continue;
+      // TOP-LEVEL properties only. Scanning every property-looking line hoisted
+      // nested fields into the request body: `{ messages: Array<{ role, content }> }`
+      // advertised `role`/`content` as top-level keys, so an agent told to send
+      // `-f role=user` would build a body the server rejects.
       const keys = [];
+      let depth = 0;
       for (const line of text.slice(open + 1, close).split('\n')) {
         const k = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)(\?)?\s*:/);
-        if (k) keys.push(k[1] + (k[2] ? '?' : ''));
+        if (k && depth === 0) keys.push(k[1] + (k[2] ? '?' : ''));
+        for (const ch of line) {
+          if (ch === '{' || ch === '[') depth++;
+          else if (ch === '}' || ch === ']') depth--;
+        }
       }
       TYPE_CACHE.set(typeName, keys);
       return keys;
@@ -234,16 +243,47 @@ function bodyKeysFor(entryValue, callText) {
   return [];
 }
 
-/** Raw template path -> `/a/:id`, plus the params that survived into it. */
+/**
+ * Raw template path -> `/a/:id`, plus the params that survived into it.
+ *
+ * The rule that matters: an interpolation is a PATH PARAM only when it directly
+ * follows a `/`. Anything else is a query-string suffix and the path ends before
+ * it. Getting this wrong is not cosmetic — it produced two classes of dangerous
+ * output:
+ *
+ *   `/admin/projects/${encodeURIComponent(id)}/leader-chat/session`
+ *      naive: the expression is not a bare identifier, so the whole tail was cut
+ *      -> POST /admin/projects, i.e. `ag team-leader-chat open-session p1` would
+ *      CREATE A PROJECT instead of opening a chat.
+ *   `/admin/system/errors${query}`
+ *      naive: `${query}` looks like an identifier -> `/admin/system/errors:query`,
+ *      a path that does not exist and 404s.
+ *
+ * So: after a `/`, take the LAST identifier in the expression (which unwraps
+ * `encodeURIComponent(projectId)` to `projectId`); anywhere else, stop.
+ */
 function normalisePath(raw) {
-  let path = raw.replace(/\$\{\s*([A-Za-z0-9_]+)\s*\}/g, (_x, name) => ':' + name);
-  // What remains is a NESTED template literal — the query-string builders the
-  // client uses, e.g. `/admin/agents${query ? `?${query}` : ''}`. The capture
-  // stopped at the inner backtick, so from the first surviving `${` it is a
-  // truncated expression, not path. The prefix is the real path; the query is
-  // expressible as `-q k=v`.
-  const tail = path.indexOf('${');
-  if (tail >= 0) path = path.slice(0, tail);
+  let path = '';
+  let i = 0;
+  while (i < raw.length) {
+    const at = raw.indexOf('${', i);
+    if (at < 0) {
+      path += raw.slice(i);
+      break;
+    }
+    path += raw.slice(i, at);
+    const close = raw.indexOf('}', at);
+    const expr = close < 0 ? raw.slice(at + 2) : raw.slice(at + 2, close);
+
+    // Not a path position, unterminated (the capture stopped at a nested
+    // backtick), or a conditional/nested template — the path ends here.
+    if (!path.endsWith('/') || close < 0 || /[`?:]/.test(expr)) break;
+
+    const ids = expr.match(/[A-Za-z_][A-Za-z0-9_]*/g) || [];
+    if (!ids.length) break;
+    path += ':' + ids[ids.length - 1];
+    i = close + 1;
+  }
   path = path.split(/[\s'"`?]/)[0].replace(/\/+$/, '');
   // Params are whatever survived into the FINAL path — never what we hoped to
   // substitute, or a truncated path would claim params it does not have.
@@ -305,8 +345,32 @@ function walkObject(body, group, prefix) {
     }
 
     calls.forEach((call, i) => {
-      const raw = call[2];
+      let raw = call[2];
       if (!raw.startsWith('/')) return;
+      // STRING CONCATENATION, not just template literals: the client also writes
+      // `apiFetch('/admin/prompt-snippets/' + id, …)`. The capture stops at the
+      // closing quote, so without this the id vanished and the command became
+      // `PUT /admin/prompt-snippets` — a write aimed at the collection instead of
+      // the item. Splice the concatenated identifier back on as a path param.
+      // CHAINED concatenation: `'/admin/bot-templates/' + id + '/deploy'`. Handling
+      // only the first `+ ident` produced `/admin/bot-templates/:id`, silently
+      // dropping `/deploy` — a POST aimed at the wrong endpoint again.
+      let rest = value.slice(call.index + call[0].length);
+      for (;;) {
+        const ident = rest.match(/^\s*\+\s*([A-Za-z_][A-Za-z0-9_]*)/);
+        if (ident) {
+          raw += '${' + ident[1] + '}';
+          rest = rest.slice(ident[0].length);
+          continue;
+        }
+        const lit = rest.match(/^\s*\+\s*(['"])([^'"]*)\1/);
+        if (lit) {
+          raw += lit[2];
+          rest = rest.slice(lit[0].length);
+          continue;
+        }
+        break;
+      }
       const { path, params } = normalisePath(raw);
       if (!path.startsWith('/')) return;
 
@@ -342,7 +406,13 @@ for (const file of readdirSync(API_DIR).sort()) {
   while ((s = standalone.exec(text))) {
     const name = s[1];
     if (name.endsWith('Api')) continue;
-    const chunk = text.slice(s.index, s.index + 600);
+    // Scope to THIS declaration, not a fixed window: a 600-char slice ran past
+    // the end of a non-API helper and picked up the next function's apiFetch —
+    // `invalidateAuthStatus()` (which only clears a local cache) was published as
+    // `GET /health/readiness`, an executable command for something that is not an
+    // API operation at all.
+    const nextExport = text.indexOf('\nexport ', s.index + 1);
+    const chunk = text.slice(s.index, nextExport < 0 ? text.length : nextExport);
     const call = chunk.match(PATH_RE);
     if (!call || !call[2].startsWith('/')) continue;
     const { path, params } = normalisePath(call[2]);

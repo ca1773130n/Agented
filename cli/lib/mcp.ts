@@ -141,6 +141,13 @@ function fillPath(template: string, args: string[]): string {
 export async function handleMessage(msg: JsonRpcMessage): Promise<JsonRpcResponse | null> {
   const { method, id } = msg;
 
+  // JSON-RPC: a message with NO id is a notification and must never be answered.
+  // Replying (even `{id: null}`) desyncs a client's id matching. This applies to
+  // every method, not just the `notifications/*` names — `{"method":"ping"}` with
+  // no id was being answered with `{"id":null,...}`.
+  const isNotification = id === undefined || id === null;
+  if (isNotification && method !== 'initialize') return null;
+
   if (method === 'initialize') {
     return ok(id, {
       protocolVersion: PROTOCOL_VERSION,
