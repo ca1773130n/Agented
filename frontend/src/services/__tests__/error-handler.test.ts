@@ -127,3 +127,50 @@ describe('handleApiError', () => {
     expect(mockShowToast).toHaveBeenCalledTimes(3);
   });
 });
+
+describe('handleApiError — transient network failures', () => {
+  // These must never reach the autofix pipeline: it acts on defects in our
+  // code, and no source change can fix a dropped connection.
+  it('does not report a failed fetch to the backend', async () => {
+    const reportError = vi.fn().mockResolvedValue(undefined);
+    vi.doMock('../api/system', () => ({ systemErrorApi: { reportError } }));
+
+    handleApiError(new TypeError('Failed to fetch'), vi.fn());
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(reportError).not.toHaveBeenCalled();
+    vi.doUnmock('../api/system');
+  });
+
+  it('shows an infrastructure toast, not an error toast', () => {
+    const showToast = vi.fn();
+    handleApiError(new TypeError('Failed to fetch'), showToast);
+    expect(showToast).toHaveBeenCalledWith(expect.any(String), 'infrastructure');
+  });
+
+  it('replaces the unactionable "Failed to fetch" with something a user can act on', () => {
+    const result = handleApiError(new TypeError('Failed to fetch'), vi.fn());
+    expect(result).toContain('ERR-NETWORK');
+    expect(result).not.toContain('Failed to fetch');
+  });
+
+  it('treats an aborted request as transient', () => {
+    const showToast = vi.fn();
+    const abort = new DOMException('The user aborted a request.', 'AbortError');
+    handleApiError(abort, showToast);
+    expect(showToast).toHaveBeenCalledWith(expect.any(String), 'infrastructure');
+  });
+
+  it('still reports a genuine application error', async () => {
+    const showToast = vi.fn();
+    const result = handleApiError(new Error('Cannot read property of undefined'), showToast);
+    expect(showToast).toHaveBeenCalledWith(expect.any(String), 'error');
+    expect(result).toContain('ERR-UNKNOWN');
+  });
+
+  it('does not misclassify an unrelated TypeError as a network failure', () => {
+    const showToast = vi.fn();
+    handleApiError(new TypeError('x.map is not a function'), showToast);
+    expect(showToast).toHaveBeenCalledWith(expect.any(String), 'error');
+  });
+});
