@@ -483,6 +483,16 @@ function emit(a: Args, res: Awaited<ReturnType<typeof request>>, alias?: Alias):
     return code;
   }
 
+  // `render: 'id'` emits the bare id even when piped — that is the entire point
+  // of it. Falling through to JSON here broke `ID=$(ag product new X)`, i.e. the
+  // one situation the bare id exists for. Only --json overrides it.
+  if (alias?.render === 'id' && !bool(a, 'json')) {
+    const id = dig(res.body, alias.idPath ?? []);
+    if (typeof id === 'string' || typeof id === 'number') {
+      scalar(id);
+      return 0;
+    }
+  }
   if (bool(a, 'json') || !isTTY) {
     json(alias?.render === 'table' ? unwrapList(res.body) : res.body);
     return 0;

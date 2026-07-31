@@ -64,6 +64,20 @@ def _result_or_raise(payload: tuple[dict, int]) -> dict:
     return body
 
 
+def _text(data: dict, key: str, default: Optional[str] = None) -> Optional[str]:
+    """Pull a string field out of an untyped JSON body.
+
+    The body is typed `dict`, so nothing checks value types: a JSON object or
+    array reaches the SQLite bind and dies there as a 500 ProgrammingError
+    ("type 'dict' is not supported"). These columns are all TEXT — reject a
+    non-string here, where it is still a 400 with the offending key named.
+    """
+    value = data.get(key, default)
+    if value is None or isinstance(value, str):
+        return value
+    raise ClientException(detail=f"{key} must be a string")
+
+
 def _assert_project_access(project_id: str, caller: Caller) -> None:
     """Enforce per-object ownership on a single project (IDOR, H1).
 
@@ -102,12 +116,12 @@ def create_project(data: dict, caller: Caller) -> dict[str, Any]:
     if not data:
         raise ClientException(detail="JSON body required")
 
-    name = data.get("name")
+    name = _text(data, "name")
     if not name:
         raise ClientException(detail="name is required")
 
-    github_repo_raw = data.get("github_repo")
-    local_path = data.get("local_path")
+    github_repo_raw = _text(data, "github_repo")
+    local_path = _text(data, "local_path")
 
     github_repo = None
     github_host = None
@@ -122,11 +136,11 @@ def create_project(data: dict, caller: Caller) -> dict[str, Any]:
 
     project_id = db_create_project(
         name=name,
-        description=data.get("description"),
-        status=data.get("status", "active"),
-        product_id=data.get("product_id"),
+        description=_text(data, "description"),
+        status=_text(data, "status", "active"),
+        product_id=_text(data, "product_id"),
         github_repo=github_repo,
-        owner_team_id=data.get("owner_team_id"),
+        owner_team_id=_text(data, "owner_team_id"),
         local_path=local_path,
         github_host=github_host,
         user_id=caller.user_id,
@@ -221,8 +235,8 @@ def update_project_endpoint(project_id: str, data: dict, caller: Caller) -> dict
     # Create-path parity: a pasted full URL (or host-prefixed slug) carries its
     # host — extract it so a GitHub Enterprise URL doesn't leave github_host
     # stale. A bare 'owner/repo' slug keeps the stored host untouched.
-    github_repo = data.get("github_repo")
-    github_host = data.get("github_host")
+    github_repo = _text(data, "github_repo")
+    github_host = _text(data, "github_host")
     if github_repo:
         raw = github_repo.strip()
         has_host = raw.startswith(("http://", "https://")) or (
