@@ -138,6 +138,16 @@ export interface DeepReportsResponse {
   reports: DeepReportSummary[];
 }
 
+/** Merge optional run knobs onto a request body (only the ones provided). */
+function withResearchOpts(
+  body: Record<string, unknown>,
+  opts?: StartResearchOptions,
+): Record<string, unknown> {
+  if (opts?.max_iterations !== undefined) body.max_iterations = opts.max_iterations;
+  if (opts?.no_gates !== undefined) body.no_gates = opts.no_gates;
+  return body;
+}
+
 export const researchApi = {
   /**
    * POST /api/projects/{id}/research/start — spawn a ``grd_research`` session
@@ -148,9 +158,7 @@ export const researchApi = {
     question: string,
     opts?: StartResearchOptions,
   ) => {
-    const body: Record<string, unknown> = { question };
-    if (opts?.max_iterations !== undefined) body.max_iterations = opts.max_iterations;
-    if (opts?.no_gates !== undefined) body.no_gates = opts.no_gates;
+    const body = withResearchOpts({ question }, opts);
     if (opts?.deep) body.deep = true;
     if (opts?.ultracode) body.ultracode = true;
     if (opts?.research_steering) body.research_steering = opts.research_steering;
@@ -170,9 +178,7 @@ export const researchApi = {
     threadId: string,
     opts?: StartResearchOptions,
   ) => {
-    const body: Record<string, unknown> = {};
-    if (opts?.max_iterations !== undefined) body.max_iterations = opts.max_iterations;
-    if (opts?.no_gates !== undefined) body.no_gates = opts.no_gates;
+    const body = withResearchOpts({}, opts);
     if (opts?.answers !== undefined) body.answers = opts.answers;
     return apiFetch<StartResearchResponse>(
       `/api/projects/${projectId}/research/${threadId}/resume`,

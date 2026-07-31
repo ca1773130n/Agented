@@ -112,3 +112,27 @@ def test_finish_uses_fallback_model_when_stream_has_none():
     finish = cs.deltas[-1][1]
     assert finish["backend"] == "claude"
     assert finish["model"] == "sonnet-4"
+
+
+def test_finish_delta_carries_grd_session_id():
+    """REQ-13's "View GRD session" link needs the id on the finish delta.
+    No producer ever attached it, so the link could never render.
+    """
+    cs = FakeChatState()
+    bridge_psm_to_chat(
+        "chat-1",
+        [{"type": "result", "finish_reason": "complete"}],
+        cs,
+        backend="claude",
+        grd_session_id="psess-abc123",
+    )
+    finish = [d for d in cs.deltas if d[0] == "finish"]
+    assert finish, "no finish delta emitted"
+    assert finish[-1][1].get("grd_session_id") == "psess-abc123"
+
+
+def test_finish_delta_omits_grd_session_id_when_absent():
+    cs = FakeChatState()
+    bridge_psm_to_chat("chat-2", [{"type": "result"}], cs, backend="claude")
+    finish = [d for d in cs.deltas if d[0] == "finish"]
+    assert finish and "grd_session_id" not in finish[-1][1]

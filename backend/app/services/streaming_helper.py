@@ -441,6 +441,13 @@ def run_streaming_response(
                                     payload.setdefault("type", event_type)
                                     yield payload
 
+                            # Past this point the GRD session is RUNNING, so a
+                            # failure must NOT degrade to cli_agent: that path
+                            # would execute the same task a second time while
+                            # the GRD session kept going, double-billing the
+                            # user and interleaving two answers into one
+                            # bubble. Surface the failure as an error delta and
+                            # stop. Degrading is only safe *before* the spawn.
                             try:
                                 bridge_psm_to_chat(
                                     _session_id,
@@ -448,7 +455,22 @@ def run_streaming_response(
                                     ChatStateService,
                                     backend=backend,
                                     model=_resolve_finish_model(model, backend),
+                                    grd_session_id=grd_session_id,
                                 )
+                            except Exception:
+                                logger.warning(
+                                    "GRD bridge failed for session %s after the GRD "
+                                    "session had started; reporting an error rather "
+                                    "than re-running the task",
+                                    _session_id,
+                                    exc_info=True,
+                                )
+                                ChatStateService.push_delta(
+                                    _session_id,
+                                    "error",
+                                    {"error_message": "GRD session stream failed"},
+                                )
+                                ChatStateService.push_status(_session_id, "error")
                             finally:
                                 ProjectSessionManager.unsubscribe_raw(grd_session_id, raw_q)
                             if on_complete:
@@ -461,7 +483,8 @@ def run_streaming_response(
                         _session_id,
                         exc_info=True,
                     )
-                # Fall through to the cli_agent block below (degrade).
+                # Fall through to the cli_agent block below (degrade). Only
+                # reachable BEFORE a GRD session spawned — see above.
 
             # ---- CLI-agent path with rate-limit rotation --------------------
             # When an account hits a provider rate limit (429 / weekly cap),

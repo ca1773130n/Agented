@@ -150,3 +150,30 @@ def test_llm_error_degrades_to_conversational(monkeypatch):
 
     assert result["shape"] == "conversational"
     assert result["grd_command"] is None
+
+
+# ---------------------------------------------------------------------------
+# Word-boundary matching — substrings of task keywords must not misroute
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # "explain" contains "plan"; must stay conversational, not /grd:plan-phase.
+        "explain how the resolver works",
+        "can you explain the routing precedence here",
+        # "address" contains "add" — conversational opener "what" wins.
+        "what does this address?",
+    ],
+)
+def test_task_keyword_substrings_do_not_misroute(text):
+    result = classify_turn(text, backend_kind="claude")
+    assert result["shape"] == "conversational"
+    assert result["grd_command"] is None
+
+
+def test_multiword_phrases_still_match():
+    result = classify_turn("break down the migration into milestones", backend_kind="claude")
+    assert result["shape"] == "task"
+    assert result["grd_command"] == "/grd:plan-phase"
