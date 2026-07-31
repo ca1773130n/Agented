@@ -38,6 +38,33 @@ test('parses flags, values, negations and repeated -f/-q', () => {
   assert.deepEqual(a.query, { p: '3' });
 });
 
+test('a flag value may start with a dash', () => {
+  // `ag product new "N" --desc "-5 degrees"` used to DROP the description (its
+  // value starts with `-`) and merge it into the name — silent data corruption
+  // with no error. A leading `-` does not make a token a flag.
+  const a = parseArgs(['product', 'new', 'N', '--desc', '-5 degrees']);
+  assert.equal(str(a, 'desc'), '-5 degrees');
+  assert.deepEqual(a.positionals, ['product', 'new', 'N']);
+});
+
+test('negative numbers survive as flag values', () => {
+  assert.equal(str(parseArgs(['--offset', '-1']), 'offset'), '-1');
+});
+
+test('a boolean flag never swallows the next token', () => {
+  // `ag --json product ls` read "product" as the value of --json and dispatched
+  // the wrong command.
+  const a = parseArgs(['--json', 'product', 'ls']);
+  assert.equal(bool(a, 'json'), true);
+  assert.deepEqual(a.positionals, ['product', 'ls']);
+});
+
+test('a flag followed by another flag is boolean', () => {
+  const a = parseArgs(['--dry-run', '--host', 'http://h']);
+  assert.equal(bool(a, 'dry-run'), true);
+  assert.equal(str(a, 'host'), 'http://h');
+});
+
 test('-- stops flag parsing', () => {
   const a = parseArgs(['api', 'GET', '/x', '--', '--not-a-flag']);
   assert.ok(a.positionals.includes('--not-a-flag'));

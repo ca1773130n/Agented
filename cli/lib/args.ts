@@ -21,7 +21,21 @@ export interface Args {
   query: Record<string, string>;
 }
 
-const VALUE_FLAGS_TAKING_NEXT = new Set<string>();
+/**
+ * Flags that are switches, never values. Listed explicitly because the parser has
+ * no schema: without this, `ag --json product ls` would read "product" as the
+ * value of `--json` and then dispatch the wrong command.
+ */
+const BOOLEAN_FLAGS = new Set<string>([
+  'json',
+  'dry-run',
+  'help',
+  'version',
+  'refresh',
+  'all',
+  'no-color',
+  'color',
+]);
 
 export function parseArgs(argv: string[]): Args {
   const out: Args = { positionals: [], flags: {}, fields: {}, query: {} };
@@ -60,15 +74,22 @@ export function parseArgs(argv: string[]): Args {
         out.flags[body.slice(3)] = false;
         continue;
       }
+      // Known boolean flags NEVER swallow the next token, and every other flag
+      // consumes one unless it is itself a flag. The old rule — "consume unless
+      // the next token starts with `-`" — was wrong in both directions:
+      //   `ag product new "N" --desc "-5 degrees"` silently DROPPED the
+      //   description (its value starts with `-`) and then merged `-5 degrees`
+      //   into the name, corrupting the record with no error;
+      //   `ag --json product ls` consumed `product` as the value of `--json`.
+      // A leading `-` does not make something a flag: `--` does, and so does a
+      // single-letter short flag.
       const next = argv[i + 1];
-      // A bare `--flag` followed by something that is not another flag takes it as
-      // a value. `--json` before a positional would misfire, so boolean flags are
-      // consumed by name in `bool()` and never looked up via `str()`.
-      if (next !== undefined && !next.startsWith('-')) {
+      const nextIsFlag = next !== undefined && (next.startsWith('--') || /^-[A-Za-z]$/.test(next));
+      if (BOOLEAN_FLAGS.has(body) || next === undefined || nextIsFlag) {
+        out.flags[body] = true;
+      } else {
         out.flags[body] = next;
         i++;
-      } else {
-        out.flags[body] = true;
       }
       continue;
     }
@@ -106,4 +127,4 @@ export function num(a: Args, name: string, dflt: number): number {
 /** A usage mistake by the caller — exit 2, never a stack trace. */
 export class UsageError extends Error {}
 
-export { VALUE_FLAGS_TAKING_NEXT };
+export { BOOLEAN_FLAGS };

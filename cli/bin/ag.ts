@@ -383,9 +383,24 @@ async function aliasCmd(a: Args, profile: ReturnType<typeof resolveProfile>, gro
   // `ag product new "Agented Core"` puts the name in the body without a flag.
   // `params` on an alias documents PATH params only; a body field never appears
   // there (the unit test enforces that every declared param exists in the path).
-  if (alias.method === 'POST') {
-    const extra = a.positionals.slice(2 + used);
-    if (extra.length && body.name === undefined) body.name = extra.join(' ');
+  const extra = a.positionals.slice(2 + used);
+  if (extra.length) {
+    // ONLY for curated aliases that declare a body flag mapping. This shortcut
+    // exists so `ag product new "Agented Core"` works without a flag — but it was
+    // applying to all 700+ GENERATED commands too, where it invented a field the
+    // endpoint never asked for: `ag agent run agent-7 oops` sent
+    // {"name":"oops"} to an endpoint whose body is {message}. Silently adding a
+    // bogus field is worse than refusing, so unknown extras are now an error.
+    if (alias.method === 'POST' && alias.bodyFlags && body.name === undefined) {
+      body.name = extra.join(' ');
+    } else {
+      throw new UsageError(
+        `ag ${alias.group} ${alias.verb}: unexpected argument${extra.length > 1 ? 's' : ''} ` +
+          `${extra.map((e) => JSON.stringify(e)).join(', ')}\n` +
+          `  ${alias.method} ${alias.path}\n` +
+          `  pass body fields with -f key=value (see: ag ${alias.group} ${alias.verb} --help)`,
+      );
+    }
   }
   const query: Record<string, string> = { ...a.query };
   if (alias.queryFlags) {
