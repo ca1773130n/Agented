@@ -229,6 +229,17 @@ async function describe(
   }
   note(title);
   note(`  ${method} ${path}`);
+  // The alias's own help carries notes the schema cannot know — most importantly
+  // that an argument must be pre-transformed (e.g. repoToSlug turns `owner/name`
+  // into `owner__name`, and the server only decodes the latter). Printing it here
+  // matters because --help is where someone looks for detail; without this the
+  // warning appeared only in the terse group listing, which is backwards.
+  if (alias?.help) {
+    // Generated help begins with "METHOD /path", which was just printed — show
+    // only what it adds, so the line is not duplicated.
+    const extra = alias.help.replace(`${alias.method} ${alias.path}`, '').trim();
+    if (extra) note(`  ${extra}`);
+  }
   if (!op) {
     note('\n  No schema entry found — the server may be down, or this path is');
     note('  served by the sidecar (which publishes no OpenAPI).');
