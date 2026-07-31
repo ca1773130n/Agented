@@ -259,3 +259,25 @@ test('every declared path param appears in the path template', () => {
     }
   }
 });
+
+test('a flag that names a thing declares how to resolve it', () => {
+  // `resolve` covered positionals only, so `ag mem distill Apoc --project GRD`
+  // sent ?project_id=GRD and the endpoint 404'd — a name worked as a path
+  // segment but not as a flag. Any alias whose flag maps to an *_id query key
+  // must say what that flag names, or the same gap reopens silently.
+  //
+  // Exempt only where resolution is IMPOSSIBLE, not merely unimplemented:
+  // `resolveId` needs a list endpoint returning {id,name}, and there is no
+  // users-listing endpoint anywhere in the API surface. Delete this entry the
+  // day one exists.
+  const NO_RESOLVER = new Set(['auth session-events --user']);
+  const missing: string[] = [];
+  for (const a of ALIASES) {
+    for (const [flag, key] of Object.entries(a.queryFlags ?? {})) {
+      if (!/_id$/.test(key)) continue;
+      if (NO_RESOLVER.has(`${a.group} ${a.verb} --${flag}`)) continue;
+      if (!a.resolveFlags?.[flag]) missing.push(`ag ${a.group} ${a.verb} --${flag} -> ${key}`);
+    }
+  }
+  assert.deepEqual(missing, [], 'these flags carry an id but never resolve a name:\n  ' + missing.join('\n  '));
+});

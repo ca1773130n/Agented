@@ -428,7 +428,10 @@ async function aliasCmd(a: Args, profile: ReturnType<typeof resolveProfile>, gro
   if (alias.queryFlags) {
     for (const [flag, key] of Object.entries(alias.queryFlags)) {
       const v = str(a, flag);
-      if (v !== undefined && v !== '') query[key] = v;
+      if (v === undefined || v === '') continue;
+      // A name has to work wherever the thing is named — flag or positional.
+      const kind = alias.resolveFlags?.[flag];
+      query[key] = kind ? await resolveId(kind, v, profile) : v;
     }
   }
 
