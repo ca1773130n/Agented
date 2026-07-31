@@ -165,6 +165,21 @@ test('every generated command is well-formed', () => {
   }
 });
 
+test('generated verbs do not stutter the group name', () => {
+  // Verbs come from JS function names in a flat namespace, so they repeat the
+  // noun: `superAgentsApi.drillSuperAgentMemory` -> `super-agents
+  // drill-super-agent-memory`. On a command line the group already said it.
+  // Allowed exception: stripping would leave the verb EMPTY (`plugin-export
+  // export`), where the repetition is the whole verb.
+  const bad: string[] = [];
+  for (const a of GENERATED) {
+    const groupTokens = new Set(a.group.split('-').flatMap((t) => [t, t.endsWith('s') ? t.slice(0, -1) : t + 's']));
+    const kept = a.verb.split('-').filter((t) => !groupTokens.has(t));
+    if (kept.length && kept.length !== a.verb.split('-').length) bad.push(`ag ${a.group} ${a.verb}`);
+  }
+  assert.deepEqual(bad, [], 'these verbs repeat their group and could be shortened:\n  ' + bad.join('\n  '));
+});
+
 test('group+verb pairs are unique across the whole command set', () => {
   const seen = new Map<string, string>();
   for (const a of allAliases()) {

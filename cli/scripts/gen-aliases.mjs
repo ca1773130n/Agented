@@ -49,6 +49,32 @@ const kebab = (s) =>
 const groupName = (exportName) => kebab(exportName.replace(/Api$/, ''));
 
 /**
+ * Drop the group's own name out of the verb.
+ *
+ * Verbs come from the client's JS function names, which repeat the noun because
+ * they live in a flat namespace: `superAgentsApi.drillSuperAgentMemory` becomes
+ * `super-agents drill-super-agent-memory`. On a command line the group already
+ * says it — the stutter is pure transliteration.
+ *
+ *   super-agents drill-super-agent-memory  ->  super-agents drill-memory
+ *   trigger      trigger-list              ->  trigger      list
+ *
+ * Only whole tokens are removed, and never all of them: if stripping empties the
+ * verb (`agentApi.agent`), the original stands. Collisions are impossible to
+ * introduce — addAlias() suffixes a duplicate rather than dropping it.
+ */
+function deStutter(group, verb) {
+  const groupTokens = new Set();
+  for (const t of group.split('-')) {
+    if (!t) continue;
+    groupTokens.add(t);
+    groupTokens.add(t.endsWith('s') ? t.slice(0, -1) : t + 's'); // agents <-> agent
+  }
+  const kept = verb.split('-').filter((t) => !groupTokens.has(t));
+  return kept.length ? kept.join('-') : verb;
+}
+
+/**
  * Remove comments while respecting strings and template literals.
  *
  * Load-bearing: the client documents each entry with a JSDoc block
@@ -321,10 +347,10 @@ function walkObject(body, group, prefix) {
     let baseVerb;
     let value;
     if (shorthand) {
-      baseVerb = prefix + kebab(shorthand[1]);
+      baseVerb = prefix + deStutter(group, kebab(shorthand[1]));
       value = entry.slice(shorthand[0].length - 1);
     } else if (property) {
-      baseVerb = prefix + kebab(property[1]);
+      baseVerb = prefix + deStutter(group, kebab(property[1]));
       value = entry.slice(entry.indexOf(':') + 1).trim();
     } else {
       continue;
@@ -444,7 +470,7 @@ for (const file of readdirSync(API_DIR).sort()) {
     const { path, params } = normalisePath(call[2]);
     if (!path.startsWith('/')) continue;
     const group = kebab(file.replace(/\.ts$/, ''));
-    const verb = kebab(name);
+    const verb = deStutter(group, kebab(name));
     const method = (chunk.slice(call.index).match(METHOD_RE)?.[1] || 'GET').toUpperCase();
     addAlias(group, verb, method, path, params, file, bodyKeysFor(chunk, chunk));
   }
