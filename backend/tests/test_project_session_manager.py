@@ -1519,3 +1519,42 @@ def test_backend_from_cmd_maps_known_clis():
     assert _backend_from_cmd(["python", "foo.py"]) is None
     assert _backend_from_cmd([]) is None
     assert _backend_from_cmd(None) is None
+
+
+# ---------------------------------------------------------------------------
+# subscribe_raw — late-subscriber guard
+# ---------------------------------------------------------------------------
+
+
+class TestSubscribeRaw:
+    def test_unknown_session_gets_immediate_end_sentinel(self):
+        # A subscriber that arrives after the session is gone must not
+        # block forever on an empty queue.
+        q = ProjectSessionManager.subscribe_raw("psess-nope")
+        event_type, data = q.get_nowait()
+        assert event_type == "__end__"
+        assert data["status"] == "unknown"
+
+    def test_terminal_session_gets_immediate_end_sentinel(self):
+        si = _make_session_info(session_id="psess-late", status="completed")
+        ProjectSessionManager._sessions["psess-late"] = si
+        try:
+            q = ProjectSessionManager.subscribe_raw("psess-late")
+            event_type, data = q.get_nowait()
+            assert event_type == "__end__"
+            assert data["status"] == "completed"
+            # And it must NOT have been registered as a live subscriber.
+            assert q not in ProjectSessionManager._raw_subscribers.get("psess-late", [])
+        finally:
+            ProjectSessionManager._sessions.pop("psess-late", None)
+
+    def test_active_session_registers_normally(self):
+        si = _make_session_info(session_id="psess-live", status="active")
+        ProjectSessionManager._sessions["psess-live"] = si
+        try:
+            q = ProjectSessionManager.subscribe_raw("psess-live")
+            assert q in ProjectSessionManager._raw_subscribers["psess-live"]
+            assert q.empty()
+            ProjectSessionManager.unsubscribe_raw("psess-live", q)
+        finally:
+            ProjectSessionManager._sessions.pop("psess-live", None)

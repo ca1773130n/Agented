@@ -124,6 +124,7 @@ def bridge_psm_to_chat(
     *,
     backend: Optional[str] = None,
     model: Optional[str] = None,
+    grd_session_id: Optional[str] = None,
 ) -> None:
     """Tail PSM stream-json events and bridge them to chat SSE deltas.
 
@@ -133,6 +134,10 @@ def bridge_psm_to_chat(
             dicts (injectable so tests feed fakes without a real PSM).
         chat_state_service: ``ChatStateService`` (or a spy exposing
             ``push_delta`` / ``push_status``).
+        grd_session_id: When set, attached to the finish delta as
+            ``grd_session_id`` so the frontend can link the turn to the
+            GRD session that produced it (REQ-13's "View GRD session"
+            link had no producer attaching this, so it never rendered).
 
     Emits, in source order, one ``push_delta`` per event using the
     frontend wire strings, and a terminal ``push_status`` of
@@ -152,6 +157,8 @@ def bridge_psm_to_chat(
         resolved = seen_model or model
         if resolved:
             data["model"] = resolved
+        if grd_session_id:
+            data["grd_session_id"] = grd_session_id
         return data
 
     terminated = False

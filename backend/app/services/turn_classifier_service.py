@@ -113,9 +113,16 @@ def _keyword_classify(text: str) -> dict:
     # match the token "what?" but NOT a substring of "somewhat".
     word_set = {tok.strip("?.!,;:") for tok in tokens}
 
-    research_score = sum(1 for kw in TASK_RESEARCH if kw in lowered)
-    plan_score = sum(1 for kw in TASK_PLAN if kw in lowered)
-    generic_score = sum(1 for kw in TASK_GENERIC if kw in lowered)
+    # Task keywords match on word boundary too — "explain" must not score the
+    # keyword "plan", "address" must not score "add". Multi-word phrases
+    # ("break down", "compare papers") can't appear in the word set, so they
+    # keep the substring check.
+    def _score(keywords) -> int:
+        return sum(1 for kw in keywords if (kw in lowered if " " in kw else kw in word_set))
+
+    research_score = _score(TASK_RESEARCH)
+    plan_score = _score(TASK_PLAN)
+    generic_score = _score(TASK_GENERIC)
     # Conversational openers match on word boundary (token membership); "?" is
     # punctuation so it stays a substring check.
     conversational_score = sum(

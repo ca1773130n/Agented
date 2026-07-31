@@ -2118,9 +2118,20 @@ class ProjectSessionManager:
         replay ring-buffer history — raw subscribers only see
         events emitted after they registered. Goal-loop runners
         register before the first turn, so they catch everything.
+
+        If the session is unknown or already terminal, its
+        ``__end__`` broadcast has already happened (or never will),
+        so the sentinel is delivered immediately — a late subscriber
+        must never block forever on an empty queue (same TOCTOU
+        guard the SSE ``subscribe`` generator applies).
         """
         queue: Queue = Queue(maxsize=cls._SUBSCRIBER_QUEUE_MAXSIZE)
         with cls._lock:
+            session_info = cls._sessions.get(session_id)
+            if session_info is None or session_info.status in ("completed", "failed"):
+                status = session_info.status if session_info else "unknown"
+                queue.put(("__end__", {"status": status, "exit_code": None}))
+                return queue
             cls._raw_subscribers.setdefault(session_id, []).append(queue)
         return queue
 
