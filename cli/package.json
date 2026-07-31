@@ -1,0 +1,24 @@
+{
+  "name": "@agented/cli",
+  "version": "0.1.0",
+  "description": "ag \u2014 drive the entire Agented platform from the terminal (no browser, no curl)",
+  "type": "module",
+  "bin": {
+    "ag": "./bin/ag.ts",
+    "ag-mcp": "./bin/ag-mcp.ts"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.ts"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "commands",
+    "scripts",
+    "aliases.ts",
+    "aliases.generated.ts"
+  ]
+}

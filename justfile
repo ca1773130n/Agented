@@ -489,3 +489,32 @@ dev-link-status:
     (cd backend && uv pip show ai-accounts-core 2>/dev/null | grep -E '^(Name|Version|Location|Editable project location):' || echo "  ai-accounts-core NOT INSTALLED")
     echo ""
     (cd backend && uv pip show ai-accounts-litestar 2>/dev/null | grep -E '^(Name|Version|Location|Editable project location):' || echo "  ai-accounts-litestar NOT INSTALLED")
+
+# --- ag CLI -----------------------------------------------------------------
+# Symlink rather than `npm i -g`: edits to cli/ are then live with no reinstall.
+# Node 24 runs the .ts entrypoint directly (strip-only mode), so there is no build.
+cli-install:
+    mkdir -p ~/.local/bin
+    chmod +x {{justfile_directory()}}/cli/bin/ag.ts
+    ln -sf {{justfile_directory()}}/cli/bin/ag.ts ~/.local/bin/ag
+    @echo "ag -> $(readlink ~/.local/bin/ag)"
+    @echo "ensure ~/.local/bin is on PATH, then: ag help"
+
+# Unit tests — no server, no network, no build step.
+cli-test:
+    cd {{justfile_directory()}}/cli && node --test test/*.test.ts
+
+# Contract: every curated alias still resolves against the real route table.
+cli-contract:
+    cd {{justfile_directory()}}/backend && uv run pytest tests/test_cli_contract.py -q
+
+# Regenerate the command table from the frontend API client. Run after any
+# change to frontend/src/services/api/ — cli/test/coverage.test.ts enforces it.
+cli-gen:
+    node {{justfile_directory()}}/cli/scripts/gen-aliases.mjs
+
+# Register the CLI as an MCP server so an agent drives Agented through the same
+# registry the terminal uses. Requires `just cli-install` first.
+cli-mcp:
+    claude mcp add agented -- ag mcp
+    @echo "registered. tools: ag_groups, ag_find, ag_describe, ag_call, ag_request"
