@@ -507,3 +507,8 @@ cli-test:
 # Contract: every curated alias still resolves against the real route table.
 cli-contract:
     cd {{justfile_directory()}}/backend && uv run pytest tests/test_cli_contract.py -q
+
+# Regenerate the command table from the frontend API client. Run after any
+# change to frontend/src/services/api/ — cli/test/coverage.test.ts enforces it.
+cli-gen:
+    node {{justfile_directory()}}/cli/scripts/gen-aliases.mjs

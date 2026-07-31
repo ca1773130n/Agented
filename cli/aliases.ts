@@ -225,10 +225,37 @@ export const ALIASES: Alias[] = [
   },
 ];
 
+import { GENERATED } from './aliases.generated.ts';
+
+/**
+ * Every command the CLI knows: the curated ones first, then everything derived
+ * from the website's own API client.
+ *
+ * Order matters — a hand-written alias SHADOWS a generated one with the same
+ * group+verb, so an operation can be given better ergonomics (positional args,
+ * a nicer table, an `id` result) without losing the guarantee that the generated
+ * layer covers the whole surface.
+ */
+export function allAliases(): Alias[] {
+  return [...ALIASES, ...GENERATED];
+}
+
 export function findAlias(group: string, verb: string): Alias | undefined {
-  return ALIASES.find((a) => a.group === group && a.verb === verb);
+  return ALIASES.find((a) => a.group === group && a.verb === verb)
+    ?? GENERATED.find((a) => a.group === group && a.verb === verb);
 }
 
 export function groups(): string[] {
+  return [...new Set(allAliases().map((a) => a.group))].sort();
+}
+
+/** Curated groups only — what `ag help` shows before the long tail. */
+export function curatedGroups(): string[] {
   return [...new Set(ALIASES.map((a) => a.group))];
+}
+
+export function verbsFor(group: string): Alias[] {
+  const curated = ALIASES.filter((a) => a.group === group);
+  const gen = GENERATED.filter((a) => a.group === group && !curated.some((c) => c.verb === a.verb));
+  return [...curated, ...gen];
 }

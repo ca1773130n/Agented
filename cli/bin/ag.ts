@@ -25,7 +25,7 @@ import {
 import { out, note, json, scalar, table, kv, unwrapList, isTTY } from '../lib/output.ts';
 import { loadSchema, searchOps } from '../lib/schema.ts';
 import { stream } from '../lib/stream.ts';
-import { ALIASES, findAlias, groups, type Alias } from '../aliases.ts';
+import { ALIASES, findAlias, groups, curatedGroups, verbsFor, allAliases, type Alias } from '../aliases.ts';
 
 const VERSION = '0.1.0';
 
@@ -55,6 +55,8 @@ async function main(argv: string[]): Promise<number> {
       return await login(a, profile);
     case 'api':
       return await apiCmd(a, profile);
+    case 'groups':
+      return listGroups(a);
     case 'find':
     case 'routes':
       return await findCmd(a, profile);
@@ -83,10 +85,17 @@ function usage(a: Args): number {
     '',
     'SHORTCUTS',
   ];
-  for (const g of groups()) {
+  for (const g of curatedGroups()) {
     const verbs = ALIASES.filter((x) => x.group === g).map((x) => x.verb);
     lines.push(`  ${g.padEnd(10)} ${verbs.join(', ')}`);
   }
+  lines.push(
+    '',
+    `EVERYTHING ELSE — ${allAliases().length} commands across ${groups().length} groups,`,
+    "derived from the website's own API client, so every UI action has a command:",
+    '  ag groups                  list every command group',
+    '  ag <group>                 list that group\'s verbs',
+  );
   lines.push(
     '',
     'GLOBAL',
@@ -170,6 +179,17 @@ async function login(a: Args, profile: ReturnType<typeof resolveProfile>): Promi
   return 0;
 }
 
+function listGroups(a: Args): number {
+  const gs = groups();
+  if (bool(a, 'json')) {
+    json(gs.map((g) => ({ group: g, verbs: verbsFor(g).map((v) => v.verb) })));
+    return 0;
+  }
+  for (const g of gs) out(`${g.padEnd(26)} ${verbsFor(g).length}`);
+  note(`\n${allAliases().length} commands across ${gs.length} groups — ag <group> to list verbs`);
+  return 0;
+}
+
 async function findCmd(a: Args, profile: ReturnType<typeof resolveProfile>): Promise<number> {
   const ops = await loadSchema(profile, { refresh: bool(a, 'refresh') });
   const hits = searchOps(ops, a.positionals.slice(1));
@@ -235,7 +255,7 @@ async function aliasCmd(a: Args, profile: ReturnType<typeof resolveProfile>, gro
   const verb = a.positionals[1];
   const alias = verb ? findAlias(group, verb) : undefined;
   if (!alias) {
-    const known = ALIASES.filter((x) => x.group === group);
+    const known = verbsFor(group);
     if (!known.length) {
       note(`unknown command "${group}". Try: ag help, or ag find ${group}`);
       return 2;
