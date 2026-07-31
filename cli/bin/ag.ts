@@ -33,13 +33,15 @@ async function main(argv: string[]): Promise<number> {
   const a = parseArgs(argv);
   const cmd = a.positionals[0];
 
-  // Global usage only when there is NO command. With one, `--help` is handled
-  // per-command (it needs the schema to explain that operation's body).
-  if (!cmd || cmd === 'help') return usage(a);
+  // `--version` is checked BEFORE the usage fallback: it takes no command, so
+  // the `!cmd` branch would otherwise swallow it and print help instead.
   if (bool(a, 'version') || cmd === 'version') {
     scalar(VERSION);
     return 0;
   }
+  // Global usage only when there is NO command. With one, `--help` is handled
+  // per-command (it needs the schema to explain that operation's body).
+  if (!cmd || cmd === 'help') return usage(a);
 
   const warn = checkPerms();
   if (warn) note(`warning: ${warn}`);
