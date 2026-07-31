@@ -39,6 +39,18 @@ export interface Alias {
   bodyFlags?: Record<string, string>;
   /** Query keys taken from named flags: flag -> query key. */
   queryFlags?: Record<string, string>;
+  /**
+   * Resolve a FLAG's value by name, the way `resolve` does for positionals:
+   * flag -> what kind of thing it names.
+   *
+   * Without this, `resolve` covered only positionals, so
+   * `ag mem distill Apoc --project GetResearchDone` sent
+   * `?project_id=GetResearchDone` and the endpoint 404'd — the one command where
+   * the project arrives as a flag rather than a path segment. A name works in
+   * one argument position and not the other is exactly the inconsistency this
+   * CLI exists to remove.
+   */
+  resolveFlags?: Record<string, 'project' | 'product' | 'super-agent' | 'agent'>;
   /** How to render a successful response on a TTY. */
   render?: 'table' | 'kv' | 'id' | 'raw';
   /** Columns for `render: table`. */
@@ -125,10 +137,12 @@ export const ALIASES: Alias[] = [
     params: ['project'], resolve: ['project'], render: 'raw',
     help: 'ag mem ingest GRD   (synchronous — returns the result, not a job)' },
   { group: 'mem', verb: 'distill', method: 'POST', path: '/admin/super-agents/:sa/memory/distill',
-    params: ['sa'], resolve: ['super-agent'], queryFlags: { project: 'project_id' }, render: 'raw',
+    params: ['sa'], resolve: ['super-agent'], queryFlags: { project: 'project_id' },
+    resolveFlags: { project: 'project' }, render: 'raw',
     help: 'ag mem distill Apoc --project GRD   (rebuild L1 runbooks; UNPRICED and uncapped)' },
   { group: 'mem', verb: 'read', method: 'GET', path: '/admin/super-agents/:sa/memory',
-    params: ['sa'], resolve: ['super-agent'], queryFlags: { project: 'project_id' }, render: 'raw',
+    params: ['sa'], resolve: ['super-agent'], queryFlags: { project: 'project_id' },
+    resolveFlags: { project: 'project' }, render: 'raw',
     help: 'ag mem read Apoc --project GRD   (that agent’s distilled runbook)' },
   { group: 'mem', verb: 'job', method: 'GET', path: '/admin/system/memory/tesserae/jobs/:job',
     params: ['job'], render: 'raw', help: 'Status of one async memory job' },
