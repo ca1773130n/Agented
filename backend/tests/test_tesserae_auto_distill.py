@@ -703,3 +703,46 @@ def test_no_aware_datetime_gets_a_trailing_z_appended():
     ]
 
     assert offenders == [], "aware datetime with a trailing 'Z' appended:\n" + "\n".join(offenders)
+
+
+def test_sessions_import_calls_the_export_exactly_once(monkeypatch):
+    """The dispatch entry used to invoke the export TWICE — once to compute
+    ``ok`` and again to read ``skipped_reason`` — so the reason reported came
+    from a second, redundant import pass rather than the one being reported on.
+    """
+    from app.services import tesserae_integration as ti
+
+    calls = []
+
+    def fake_export(project_id):
+        calls.append(project_id)
+        return {"imported": 1, "stdout": "Imported harness sessions: 1"}
+
+    monkeypatch.setattr(ti, "export_sessions_to_tesserae", fake_export)
+    result = ti.sessions_import("proj-abc123")
+
+    assert calls == ["proj-abc123"], f"export ran {len(calls)}x, expected once"
+    assert result.ok is True
+    assert result.reason == ""
+    assert result.op == "sessions-import"
+
+
+def test_sessions_import_reports_a_skip_reason_as_not_ok(monkeypatch):
+    """``imported == 0`` alone is not failure — a project whose sessions are
+    already imported imports none. Only a skipped_reason means it could not run.
+    """
+    from app.services import tesserae_integration as ti
+
+    monkeypatch.setattr(
+        ti,
+        "export_sessions_to_tesserae",
+        lambda pid: {"imported": 0, "skipped_reason": "tesserae_not_initialized"},
+    )
+    result = ti.sessions_import("proj-abc123")
+    assert result.ok is False
+    assert result.reason == "tesserae_not_initialized"
+
+    monkeypatch.setattr(
+        ti, "export_sessions_to_tesserae", lambda pid: {"imported": 0, "stdout": ""}
+    )
+    assert ti.sessions_import("proj-abc123").ok is True
