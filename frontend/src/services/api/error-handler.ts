@@ -106,9 +106,38 @@ export function isNotImplemented(err: unknown): boolean {
 }
 
 /**
+ * Connection-level failures that no source change can fix: the server is
+ * unreachable, a CORS preflight was denied, or the request was aborted.
+ *
+ * These must not reach the autofix pipeline. It exists to act on defects in
+ * *our* code, and a network blip is indistinguishable from one once it has been
+ * flattened into a message string — so every dropped connection becomes an
+ * error report that autofix can never resolve.
+ *
+ * `fetch` rejects with a bare `TypeError` for all of these (the spec gives no
+ * distinguishable subclass), and an aborted request surfaces as a DOMException
+ * named AbortError.
+ */
+function isTransientNetworkError(error: unknown): boolean {
+  if (error instanceof TypeError && /fetch|network/i.test(error.message)) {
+    return true;
+  }
+  if (
+    typeof DOMException !== 'undefined' &&
+    error instanceof DOMException &&
+    error.name === 'AbortError'
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Handle any error by showing a toast notification and returning the formatted message.
  *
  * - ApiError: uses formatApiError with the status and message
+ * - Transient network error (TypeError: Failed to fetch / AbortError):
+ *   shows an 'infrastructure' toast and skips backend reporting
  * - Generic Error: shows the error message with ERR-UNKNOWN
  * - Other: shows the fallbackMessage with ERR-UNKNOWN
  *
@@ -120,16 +149,26 @@ export function handleApiError(
   fallbackMessage?: string,
 ): string {
   let formatted: string;
+  const transient = isTransientNetworkError(error);
 
   if (error instanceof ApiError) {
     formatted = formatApiError(error.status, error.message);
+  } else if (transient) {
+    // "TypeError: Failed to fetch" tells the user nothing actionable.
+    formatted = 'Cannot reach the server (ERR-NETWORK). Check your connection and try again.';
   } else if (error instanceof Error) {
     formatted = `${error.message} (ERR-UNKNOWN). Try again.`;
   } else {
     formatted = `${fallbackMessage || 'An unexpected error occurred'} (ERR-UNKNOWN). Try again.`;
   }
 
-  showToast(formatted, 'error');
+  showToast(formatted, transient ? 'infrastructure' : 'error');
+
+  // A transient network failure is not a defect, and reporting it would also
+  // be the one report most likely to fail to send anyway.
+  if (transient) {
+    return formatted;
+  }
 
   // Report error to backend (fire-and-forget)
   try {
