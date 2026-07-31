@@ -64,6 +64,13 @@ async function main(argv: string[]): Promise<number> {
       return await findCmd(a, profile);
     case 'stream':
       return await streamCmd(a, profile);
+    case 'mcp': {
+      // Serve MCP on stdio. Never returns until stdin closes; stdout is the
+      // protocol from here on, so nothing else may write to it.
+      const { serve } = await import('./ag-mcp.ts');
+      serve();
+      return await new Promise<number>(() => {});
+    }
     default:
       return await aliasCmd(a, profile, cmd);
   }
@@ -84,6 +91,7 @@ function usage(a: Args): number {
     '  find <terms…>              search all endpoints from the live schema',
     '  api <METHOD> <path>        call ANY endpoint  (the escape hatch)',
     '  stream <path>              follow a Server-Sent Events endpoint',
+    '  mcp                        serve MCP on stdio (claude mcp add agented -- ag mcp)',
     '',
     'SHORTCUTS',
   ];

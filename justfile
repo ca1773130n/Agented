@@ -512,3 +512,9 @@ cli-contract:
 # change to frontend/src/services/api/ — cli/test/coverage.test.ts enforces it.
 cli-gen:
     node {{justfile_directory()}}/cli/scripts/gen-aliases.mjs
+
+# Register the CLI as an MCP server so an agent drives Agented through the same
+# registry the terminal uses. Requires `just cli-install` first.
+cli-mcp:
+    claude mcp add agented -- ag mcp
+    @echo "registered. tools: ag_groups, ag_find, ag_describe, ag_call, ag_request"

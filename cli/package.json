@@ -1,10 +1,11 @@
 {
   "name": "@agented/cli",
   "version": "0.1.0",
-  "description": "ag — drive the entire Agented platform from the terminal (no browser, no curl)",
+  "description": "ag \u2014 drive the entire Agented platform from the terminal (no browser, no curl)",
   "type": "module",
   "bin": {
-    "ag": "./bin/ag.ts"
+    "ag": "./bin/ag.ts",
+    "ag-mcp": "./bin/ag-mcp.ts"
   },
   "engines": {
     "node": ">=24"
