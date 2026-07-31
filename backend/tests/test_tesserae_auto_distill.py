@@ -746,3 +746,50 @@ def test_sessions_import_reports_a_skip_reason_as_not_ok(monkeypatch):
         ti, "export_sessions_to_tesserae", lambda pid: {"imported": 0, "stdout": ""}
     )
     assert ti.sessions_import("proj-abc123").ok is True
+
+
+def test_stale_session_autofix_preserves_project_id(isolated_db, monkeypatch):
+    """The stale-session autofix deletes and recreates a super-agent session.
+    If the replacement drops ``project_id``, the Tesserae export hook — whose
+    first line is ``if not project_id: return`` — silently no-ops forever and
+    agent memory never populates for that project again.
+    """
+    import json
+
+    from app.db.connection import get_connection
+    from app.services import autofix_service
+    from app.services.super_agent_session_service import SuperAgentSessionService
+
+    with get_connection() as conn:
+        conn.execute("INSERT INTO products (id, name) VALUES ('prod-t', 'T')")
+        conn.execute(
+            "INSERT INTO projects (id, product_id, name) "
+            "VALUES ('proj-keepme', 'prod-t', 'Keep')"
+        )
+        conn.execute("INSERT INTO super_agents (id, name) VALUES ('sa-t', 'T')")
+        conn.execute(
+            "INSERT INTO super_agent_sessions (id, super_agent_id, project_id, status) "
+            "VALUES ('sess-stale', 'sa-t', 'proj-keepme', 'active')"
+        )
+        conn.commit()
+
+    captured = {}
+
+    def _fake(super_agent_id, project_id=None):
+        captured["project_id"] = project_id
+        return "sess-new"
+
+    monkeypatch.setattr(SuperAgentSessionService, "get_or_create_session", _fake)
+
+    result = autofix_service._fix_stale_session(
+        {
+            "context_json": json.dumps(
+                {"session_id": "sess-stale", "super_agent_id": "sa-t"}
+            )
+        }
+    )
+
+    assert result["success"] is True, result
+    assert captured["project_id"] == "proj-keepme", (
+        "the recreated session dropped its project — the Tesserae hook will no-op"
+    )
