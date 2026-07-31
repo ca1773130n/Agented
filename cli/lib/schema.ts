@@ -24,11 +24,26 @@ import { createHash } from 'node:crypto';
 import { request } from './transport.ts';
 import type { Resolved } from './config.ts';
 
+export interface Field {
+  name: string;
+  type: string;
+  required: boolean;
+  description?: string;
+}
+
 export interface Operation {
   method: string;
   path: string;
   summary: string;
   description: string;
+  /** Request-body properties, when the handler takes a TYPED body. */
+  body: Field[];
+  /** True when the handler declares a body but OpenAPI carries no property
+   *  schema for it — i.e. an untyped `data: dict`. The description is then the
+   *  only hint, which is why it is indexed and shown. */
+  bodyUntyped: boolean;
+  /** Query + path parameters. */
+  params: Field[];
 }
 
 const CACHE_DIR = join(homedir(), '.cache', 'ag');
@@ -73,23 +88,125 @@ export async function loadSchema(profile: Resolved, opts: { refresh?: boolean } 
 export function indexSchema(doc: unknown): Operation[] {
   const ops: Operation[] = [];
   if (!doc || typeof doc !== 'object') return ops;
-  const paths = (doc as Record<string, unknown>).paths;
+  const root = doc as Record<string, unknown>;
+  const paths = root.paths;
   if (!paths || typeof paths !== 'object') return ops;
+
   for (const [path, item] of Object.entries(paths as Record<string, unknown>)) {
     if (!item || typeof item !== 'object') continue;
     for (const [method, op] of Object.entries(item as Record<string, unknown>)) {
       if (!['get', 'post', 'put', 'patch', 'delete'].includes(method)) continue;
       const o = (op ?? {}) as Record<string, unknown>;
+      const { body, bodyUntyped } = requestFields(o, root);
       ops.push({
         method: method.toUpperCase(),
         path,
         summary: typeof o.summary === 'string' ? o.summary : '',
         description: typeof o.description === 'string' ? o.description : '',
+        body,
+        bodyUntyped,
+        params: paramFields(o, root),
       });
     }
   }
   ops.sort((a, b) => a.path.localeCompare(b.path) || a.method.localeCompare(b.method));
   return ops;
+}
+
+/** Follow a local `$ref` (`#/components/schemas/Foo`). */
+function deref(node: unknown, root: Record<string, unknown>, seen = new Set<string>()): Record<string, unknown> {
+  let cur = (node ?? {}) as Record<string, unknown>;
+  let ref = typeof cur.$ref === 'string' ? cur.$ref : null;
+  while (ref && !seen.has(ref)) {
+    seen.add(ref);
+    const parts = ref.replace(/^#\//, '').split('/');
+    let target: unknown = root;
+    for (const p of parts) {
+      if (!target || typeof target !== 'object') return {};
+      target = (target as Record<string, unknown>)[p];
+    }
+    cur = (target ?? {}) as Record<string, unknown>;
+    ref = typeof cur.$ref === 'string' ? cur.$ref : null;
+  }
+  return cur;
+}
+
+function typeName(schema: Record<string, unknown>): string {
+  if (Array.isArray(schema.oneOf) || Array.isArray(schema.anyOf)) {
+    const alts = ((schema.oneOf ?? schema.anyOf) as unknown[])
+      .map((s) => (s && typeof s === 'object' ? String((s as Record<string, unknown>).type ?? '?') : '?'))
+      .filter((t) => t !== 'null');
+    return [...new Set(alts)].join('|') || 'any';
+  }
+  const t = schema.type;
+  if (t === 'array') {
+    const items = (schema.items ?? {}) as Record<string, unknown>;
+    return `${items.type ?? 'any'}[]`;
+  }
+  return typeof t === 'string' ? t : 'any';
+}
+
+function requestFields(op: Record<string, unknown>, root: Record<string, unknown>): { body: Field[]; bodyUntyped: boolean } {
+  const rb = deref(op.requestBody, root);
+  const content = (rb.content ?? {}) as Record<string, unknown>;
+  const json = (content['application/json'] ?? {}) as Record<string, unknown>;
+  if (!Object.keys(rb).length || !Object.keys(json).length) return { body: [], bodyUntyped: false };
+
+  const schema = deref(json.schema, root);
+  const props = (schema.properties ?? {}) as Record<string, unknown>;
+  const required = new Set((Array.isArray(schema.required) ? schema.required : []) as string[]);
+
+  if (!Object.keys(props).length) {
+    // A body is declared but has no properties — the untyped `data: dict` case.
+    return { body: [], bodyUntyped: true };
+  }
+  const body = Object.entries(props).map(([name, raw]) => {
+    const s = deref(raw, root);
+    return {
+      name,
+      type: typeName(s),
+      required: required.has(name),
+      description: typeof s.description === 'string' ? s.description : undefined,
+    };
+  });
+  return { body, bodyUntyped: false };
+}
+
+function paramFields(op: Record<string, unknown>, root: Record<string, unknown>): Field[] {
+  const list = Array.isArray(op.parameters) ? op.parameters : [];
+  return list
+    .map((raw) => deref(raw, root))
+    .filter((p) => p.in === 'query' || p.in === 'path')
+    .map((p) => ({
+      name: String(p.name ?? ''),
+      type: `${p.in}:${typeName(deref(p.schema, root))}`,
+      required: p.required === true,
+      description: typeof p.description === 'string' ? p.description : undefined,
+    }))
+    .filter((p) => p.name);
+}
+
+/**
+ * Find the operation backing a CLI path template.
+ *
+ * The CLI writes `:id` (shell-friendly, no quoting) and OpenAPI writes
+ * `{id:str}`, so compare structurally: same segment count, and each segment
+ * either matches literally or is a placeholder on both sides.
+ */
+export function matchOp(ops: Operation[], method: string, cliPath: string): Operation | undefined {
+  const want = cliPath.split('/');
+  const M = method.toUpperCase();
+  return ops.find((o) => {
+    if (o.method !== M) return false;
+    const got = o.path.split('/');
+    if (got.length !== want.length) return false;
+    return got.every((seg, i) => {
+      const w = want[i];
+      const segIsParam = seg.startsWith('{');
+      const wIsParam = w.startsWith(':');
+      return segIsParam && wIsParam ? true : seg === w;
+    });
+  });
 }
 
 /** All terms must match (AND), case-insensitive, across method+path+summary+description. */

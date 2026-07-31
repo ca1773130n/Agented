@@ -23,7 +23,7 @@ import {
   type Service,
 } from '../lib/transport.ts';
 import { out, note, json, scalar, table, kv, unwrapList, isTTY } from '../lib/output.ts';
-import { loadSchema, searchOps } from '../lib/schema.ts';
+import { loadSchema, searchOps, matchOp, type Operation } from '../lib/schema.ts';
 import { stream } from '../lib/stream.ts';
 import { ALIASES, findAlias, groups, curatedGroups, verbsFor, allAliases, type Alias } from '../aliases.ts';
 
@@ -33,7 +33,9 @@ async function main(argv: string[]): Promise<number> {
   const a = parseArgs(argv);
   const cmd = a.positionals[0];
 
-  if (!cmd || bool(a, 'help') || cmd === 'help') return usage(a);
+  // Global usage only when there is NO command. With one, `--help` is handled
+  // per-command (it needs the schema to explain that operation's body).
+  if (!cmd || cmd === 'help') return usage(a);
   if (bool(a, 'version') || cmd === 'version') {
     scalar(VERSION);
     return 0;
@@ -123,12 +125,17 @@ async function ping(a: Args, profile: ReturnType<typeof resolveProfile>): Promis
   const rows: Record<string, unknown>[] = [];
   let worst = 0;
 
+  // The two services expose DIFFERENT health paths — verified against a running
+  // pair, not assumed: the Litestar backend serves /health/readiness (there is no
+  // bare /health, it 404s), while the ai-accounts sidecar serves /health.
+  const HEALTH = { backend: '/health/readiness', sidecar: '/health' } as const;
+
   for (const svc of ['backend', 'sidecar'] as const) {
     const base = svc === 'backend' ? profile.backend : profile.sidecar;
     try {
       const res = await request({
         method: 'GET',
-        path: '/health',
+        path: HEALTH[svc],
         profile,
         service: svc,
         timeoutMs: 5000,
@@ -190,6 +197,76 @@ function listGroups(a: Args): number {
   return 0;
 }
 
+
+/**
+ * Explain ONE operation: what it does, and what body/params it takes.
+ *
+ * This is the answer to "`-f k=v` is guesswork". For a typed handler the schema
+ * names every field; for the many handlers with an untyped `data: dict` body
+ * OpenAPI carries no properties at all, so the DOCSTRING is the only hint there
+ * is — which is exactly why it is printed rather than dropped.
+ */
+async function describe(
+  profile: ReturnType<typeof resolveProfile>,
+  method: string,
+  path: string,
+  title: string,
+  alias?: Alias,
+): Promise<number> {
+  let op: Operation | undefined;
+  try {
+    op = matchOp(await loadSchema(profile), method, path);
+  } catch (e) {
+    note(`(schema unavailable: ${(e as Error).message})`);
+  }
+  note(title);
+  note(`  ${method} ${path}`);
+  if (!op) {
+    note('\n  No schema entry found — the server may be down, or this path is');
+    note('  served by the sidecar (which publishes no OpenAPI).');
+    return 0;
+  }
+  if (op.summary) note(`\n  ${op.summary}`);
+  if (op.description && op.description !== op.summary) {
+    note(op.description.split('\n').map((l) => '  ' + l).join('\n'));
+  }
+
+  const pathParams = op.params.filter((p) => p.type.startsWith('path:'));
+  const queryParams = op.params.filter((p) => p.type.startsWith('query:'));
+
+  if (pathParams.length) {
+    note('\n  ARGUMENTS (positional, in order)');
+    for (const p of pathParams) note(`    <${p.name}>`);
+  }
+  if (queryParams.length) {
+    note('\n  QUERY  -q name=value');
+    for (const p of queryParams) {
+      note(`    ${p.name.padEnd(24)} ${p.type.replace('query:', '')}${p.required ? '  (required)' : ''}`);
+    }
+  }
+  if (op.body.length) {
+    note('\n  BODY  -f name=value');
+    for (const f of op.body) {
+      const desc = f.description ? `  — ${f.description.split('\n')[0]}` : '';
+      note(`    ${f.name.padEnd(24)} ${f.type}${f.required ? '  (required)' : ''}${desc}`);
+    }
+  } else if (op.bodyUntyped || alias?.bodyKeys?.length) {
+    note('\n  BODY  -f name=value');
+    if (alias?.bodyKeys?.length) {
+      // The server's OpenAPI has no property schema for this handler (251 of 286
+      // bodies are untyped, and 0 operations carry a description). These keys are
+      // what the WEBSITE actually sends to this endpoint, read off the frontend
+      // client — the only real shape hint available. `?` marks optional.
+      for (const k of alias.bodyKeys) note(`    ${k}`);
+      note('\n    (from the frontend client — the server schema does not type this body)');
+    } else {
+      note('    shape not in the schema and the website does not call this endpoint,');
+      note('    so there is no hint. `--dry-run` shows exactly what would be sent.');
+    }
+  }
+  return 0;
+}
+
 async function findCmd(a: Args, profile: ReturnType<typeof resolveProfile>): Promise<number> {
   const ops = await loadSchema(profile, { refresh: bool(a, 'refresh') });
   const hits = searchOps(ops, a.positionals.slice(1));
@@ -214,6 +291,12 @@ async function apiCmd(a: Args, profile: ReturnType<typeof resolveProfile>): Prom
   const path = a.positionals[2];
   if (!method || !path) throw new UsageError('ag api <METHOD> <path> [-f k=v …] [-q k=v …]');
   if (!path.startsWith('/')) throw new UsageError(`path must start with "/", got ${JSON.stringify(path)}`);
+  if (bool(a, 'help')) {
+    const hint = allAliases().find(
+      (x) => x.method === method && x.path.replace(/:[A-Za-z0-9_]+/g, '*') === path.replace(/:[A-Za-z0-9_]+|\{[^}]+\}/g, '*'),
+    );
+    return await describe(profile, method, path, `ag api ${method} ${path}`, hint);
+  }
 
   const body = Object.keys(a.fields).length ? coerce(a.fields) : undefined;
   const opts = {
@@ -263,6 +346,10 @@ async function aliasCmd(a: Args, profile: ReturnType<typeof resolveProfile>, gro
     note(`ag ${group} <verb>`);
     for (const k of known) note(`  ${k.verb.padEnd(14)} ${k.help}`);
     return 2;
+  }
+
+  if (bool(a, 'help')) {
+    return await describe(profile, alias.method, alias.path, `ag ${alias.group} ${alias.verb}`, alias);
   }
 
   const { path, used } = fillPath(alias, a.positionals.slice(2));
@@ -406,21 +493,27 @@ function dig(body: unknown, path: string[]): unknown {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * Set `exitCode` and RETURN — never `process.exit()`.
+ *
+ * `process.exit()` terminates before Node flushes a pipe, so any payload past
+ * the ~64 KB pipe buffer is silently truncated. That turned
+ * `ag api GET /schema/openapi.json --json | jq` into a parse error on a
+ * half-written document — and it fails ONLY when piped and only past 64 KB, so
+ * it looks like a server problem rather than a CLI one. Letting the event loop
+ * drain naturally is the fix.
+ */
+function fail(message: string, code: number): void {
+  note(message);
+  process.exitCode = code;
+}
+
 main(process.argv.slice(2))
-  .then((code) => process.exit(code))
+  .then((code) => {
+    process.exitCode = code;
+  })
   .catch((e) => {
-    if (e instanceof UsageError) {
-      note(String(e.message));
-      process.exit(2);
-    }
-    if (e instanceof ConfigError) {
-      note(String(e.message));
-      process.exit(2);
-    }
-    if (e instanceof TransportError) {
-      note(String(e.message));
-      process.exit(e.code);
-    }
-    note(`ag: ${e instanceof Error ? e.message : String(e)}`);
-    process.exit(1);
+    if (e instanceof UsageError || e instanceof ConfigError) return fail(String(e.message), 2);
+    if (e instanceof TransportError) return fail(String(e.message), e.code);
+    return fail(`ag: ${e instanceof Error ? e.message : String(e)}`, 1);
   });

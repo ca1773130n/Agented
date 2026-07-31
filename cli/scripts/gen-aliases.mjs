@@ -153,13 +153,85 @@ function matchBrace(text, openIdx) {
  * collision on a different path gets a numeric suffix; only an exact repeat of
  * the same path is a true duplicate worth dropping.
  */
-function addAlias(group, baseVerb, method, path, params, source) {
+function addAlias(group, baseVerb, method, path, params, source, bodyKeys = []) {
   if (aliases.some((a) => a.group === group && a.path === path && a.method === method)) return;
   let verb = baseVerb;
   let n = 2;
   while (seen.has(`${group} ${verb}`)) verb = `${baseVerb}-${n++}`;
   seen.add(`${group} ${verb}`);
-  aliases.push({ group, verb, method, path, params, source });
+  aliases.push({ group, verb, method, path, params, source, bodyKeys });
+}
+
+
+// ---------------------------------------------------------------------------
+// Request-body hints.
+//
+// The server's OpenAPI is no help here: measured against the live schema, 878
+// operations carry ZERO descriptions, and of the 286 with a request body only 35
+// are typed — 251 expose no property schema at all. So `-f k=v` would be pure
+// guesswork for the majority of write endpoints.
+//
+// The frontend client, however, demonstrably knows: it SENDS those bodies. Two
+// forms cover 231 of 242 call sites:
+//   `JSON.stringify({ name, color })`      -> keys read directly
+//   `JSON.stringify(data)` where the arrow is `(data: CreateProjectRequest)`
+//                                          -> keys read off that interface
+// ---------------------------------------------------------------------------
+
+const TYPE_CACHE = new Map();
+
+/** Property names of a TS interface/type alias, searched across the api package. */
+function typeKeys(typeName) {
+  if (!typeName) return [];
+  if (TYPE_CACHE.has(typeName)) return TYPE_CACHE.get(typeName);
+  TYPE_CACHE.set(typeName, []); // guard against recursive types
+  const roots = [API_DIR, join(API_DIR, 'types')];
+  for (const root of roots) {
+    let files;
+    try {
+      files = readdirSync(root).filter((f) => f.endsWith('.ts'));
+    } catch {
+      continue;
+    }
+    for (const f of files) {
+      const text = stripComments(readFileSync(join(root, f), 'utf8'));
+      const re = new RegExp(`(?:interface|type)\\s+${typeName}\\b[^{]*\\{`);
+      const m = text.match(re);
+      if (!m) continue;
+      const open = text.indexOf('{', m.index);
+      const close = matchBrace(text, open);
+      if (close < 0) continue;
+      const keys = [];
+      for (const line of text.slice(open + 1, close).split('\n')) {
+        const k = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)(\?)?\s*:/);
+        if (k) keys.push(k[1] + (k[2] ? '?' : ''));
+      }
+      TYPE_CACHE.set(typeName, keys);
+      return keys;
+    }
+  }
+  return [];
+}
+
+/** Body keys for one call site, from an inline literal or the parameter's type. */
+function bodyKeysFor(entryValue, callText) {
+  const inline = callText.match(/body:\s*JSON\.stringify\(\s*\{([\s\S]{0,400}?)\}\s*\)/);
+  if (inline) {
+    const keys = [];
+    for (const part of inline[1].split(',')) {
+      const k = part.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)/);
+      if (k) keys.push(k[1]);
+    }
+    if (keys.length) return keys;
+  }
+  const ident = callText.match(/body:\s*JSON\.stringify\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)/);
+  if (ident) {
+    // Find that identifier's declared type in the arrow/method signature.
+    const sig = entryValue.slice(0, entryValue.indexOf('=>') + 1 || 200);
+    const typed = sig.match(new RegExp(`\\b${ident[1]}\\s*:\\s*([A-Za-z_][A-Za-z0-9_]*)`));
+    if (typed) return typeKeys(typed[1]);
+  }
+  return [];
 }
 
 /** Raw template path -> `/a/:id`, plus the params that survived into it. */
@@ -238,11 +310,13 @@ function walkObject(body, group, prefix) {
       const { path, params } = normalisePath(raw);
       if (!path.startsWith('/')) return;
 
-      // Method for this call: look at the options object that follows it.
-      const after = value.slice(call.index, call.index + 400);
+      // Method + body for this call: read the options object that follows it.
+      const after = value.slice(call.index, call.index + 600);
       const method = (after.match(METHOD_RE)?.[1] || 'GET').toUpperCase();
+      const bodyKeys = bodyKeysFor(value, after);
 
-      addAlias(group, i === 0 ? baseVerb : `${baseVerb}-${i + 1}`, method, path, params, currentFile);
+      const verb = i === 0 ? baseVerb : `${baseVerb}-${i + 1}`;
+      addAlias(group, verb, method, path, params, currentFile, bodyKeys);
     });
   }
 }
@@ -276,7 +350,7 @@ for (const file of readdirSync(API_DIR).sort()) {
     const group = kebab(file.replace(/\.ts$/, ''));
     const verb = kebab(name);
     const method = (chunk.slice(call.index).match(METHOD_RE)?.[1] || 'GET').toUpperCase();
-    addAlias(group, verb, method, path, params, file);
+    addAlias(group, verb, method, path, params, file, bodyKeysFor(chunk, chunk));
   }
 }
 
@@ -302,9 +376,10 @@ export const GENERATED: Alias[] = [
 const rows = aliases
   .map((a) => {
     const params = a.params.length ? `, params: ${JSON.stringify(a.params)}` : '';
+    const bodyKeys = a.bodyKeys?.length ? `, bodyKeys: ${JSON.stringify(a.bodyKeys)}` : '';
     return `  { group: ${JSON.stringify(a.group)}, verb: ${JSON.stringify(a.verb)}, method: ${JSON.stringify(
       a.method,
-    )}, path: ${JSON.stringify(a.path)}${params}, render: "raw", help: ${JSON.stringify(
+    )}, path: ${JSON.stringify(a.path)}${params}${bodyKeys}, render: "raw", help: ${JSON.stringify(
       `${a.method} ${a.path}  (${a.source})`,
     )} },`;
   })

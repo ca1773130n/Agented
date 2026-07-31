@@ -33,6 +33,9 @@ export interface Alias {
   columns?: string[];
   /** For `render: id` — which field of the response is the bare id. */
   idPath?: string[];
+  /** Body keys the WEBSITE sends to this endpoint — the only shape hint for
+   *  the 251 handlers whose OpenAPI body is untyped. */
+  bodyKeys?: string[];
   /** This endpoint is Server-Sent Events. */
   stream?: boolean;
   help: string;
