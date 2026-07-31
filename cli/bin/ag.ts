@@ -66,6 +66,11 @@ async function main(argv: string[]): Promise<number> {
       return await findCmd(a, profile);
     case 'stream':
       return await streamCmd(a, profile);
+    case 'qa': {
+      // Local only, and its exit code IS the result (3 = unverified, never a pass).
+      const { qaCmd } = await import('../commands/qa.ts');
+      return await qaCmd(a);
+    }
     case 'mcp': {
       // Serve MCP on stdio. Never returns until stdin closes; stdout is the
       // protocol from here on, so nothing else may write to it.
@@ -94,6 +99,8 @@ function usage(a: Args): number {
     '  api <METHOD> <path>        call ANY endpoint  (the escape hatch)',
     '  stream <path>              follow a Server-Sent Events endpoint',
     '  mcp                        serve MCP on stdio (claude mcp add agented -- ag mcp)',
+    '  qa [--seed N] [--headed]   random-click QA over the local app (exit 3 = unverified)',
+    '  qa replay <runId>          re-run a previous run exactly',
     '',
     'SHORTCUTS',
   ];

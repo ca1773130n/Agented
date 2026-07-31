@@ -248,15 +248,15 @@ def update_project_endpoint(project_id: str, data: dict, caller: Caller) -> dict
 
     if not update_project(
         project_id,
-        name=data.get("name"),
-        description=data.get("description"),
-        status=data.get("status"),
-        product_id=data.get("product_id"),
+        name=_text(data, "name"),
+        description=_text(data, "description"),
+        status=_text(data, "status"),
+        product_id=_text(data, "product_id"),
         github_repo=github_repo,
-        owner_team_id=data.get("owner_team_id"),
-        local_path=data.get("local_path"),
+        owner_team_id=_text(data, "owner_team_id"),
+        local_path=_text(data, "local_path"),
         github_host=github_host,
-        manager_super_agent_id=data.get("manager_super_agent_id"),
+        manager_super_agent_id=_text(data, "manager_super_agent_id"),
     ):
         raise NotFoundException(detail="Project not found or no changes made")
     return get_project(project_id)
