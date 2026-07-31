@@ -97,12 +97,26 @@ def _fix_stale_session(error: dict) -> dict:
         from app.db.connection import get_connection
 
         with get_connection() as conn:
+            # Read the project BEFORE deleting: the replacement session must
+            # inherit it. Without this the recreated session has
+            # ``project_id IS NULL``, and every downstream consumer that keys
+            # off the project silently no-ops forever — notably the Tesserae
+            # export hook, whose first line is ``if not project_id: return``.
+            # The session keeps working, so nothing surfaces the loss; agent
+            # memory just never populates for that project again.
+            prior = conn.execute(
+                "SELECT project_id FROM super_agent_sessions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
             conn.execute("DELETE FROM super_agent_sessions WHERE id = ?", (session_id,))
             conn.commit()
 
         from app.services.super_agent_session_service import SuperAgentSessionService
 
-        new_session_id = SuperAgentSessionService.get_or_create_session(super_agent_id)
+        new_session_id = SuperAgentSessionService.get_or_create_session(
+            super_agent_id,
+            project_id=prior["project_id"] if prior else None,
+        )
         return {
             "success": True,
             "action_taken": (

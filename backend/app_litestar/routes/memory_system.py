@@ -531,33 +531,6 @@ def tesserae_ingest(
 
 
 @post(
-    "/system/memory/tesserae/projects/{project_id:str}/sessions-import",
-    sync_to_thread=True,
-)
-def tesserae_sessions_import(project_id: str) -> dict[str, Any]:
-    """``tesserae sessions-import`` — push this project's completed sessions
-    into its Tesserae workspace.
-
-    This op existed in the service's dispatch table but no route reached it, so
-    there was no way to run it from the UI, the API or the CLI. That is the one
-    link that leaves the memory loop open: without an import the graph has no
-    sessions attributed to any agent, ``distill`` reports ``no-sessions``, and
-    every L1 runbook stays empty — with nothing anywhere saying why.
-
-    Synchronous like ``ingest``: it normalises rows and shells out once, so it
-    returns in about a second rather than needing a job to poll.
-    """
-    with get_connection() as conn:
-        row = conn.execute(
-            "SELECT 1 FROM projects WHERE id = ?",
-            (project_id,),
-        ).fetchone()
-    if not row:
-        raise NotFoundException(detail=f"project not found: {project_id}")
-    return ti.sessions_import(project_id).to_dict()
-
-
-@post(
     "/system/memory/tesserae/projects/{project_id:str}/compile",
     sync_to_thread=True,
 )
@@ -803,7 +776,6 @@ memory_system_router = Router(
         tesserae_workspace_status,
         tesserae_init,
         tesserae_ingest,
-        tesserae_sessions_import,
         tesserae_compile,
         tesserae_build_site,
         tesserae_job_status,
