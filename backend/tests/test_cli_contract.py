@@ -167,3 +167,97 @@ def test_auth_exempt_prefixes_match_what_the_cli_assumes(route_table):
         assert required in _AUTH_BYPASS_PREFIXES, (
             f"{required} is no longer auth-exempt; cli/lib/transport.ts needsAuth() must be updated"
         )
+
+
+# ---------------------------------------------------------------------------
+# Curated alias FLAGS. The tests above validate paths; nothing validated the
+# hand-written bodyFlags/queryFlags, so a wrong mapping silently dropped a value.
+# Oracles that already exist: OpenAPI types query params, and the generator
+# extracts the body keys the web UI actually sends.
+# ---------------------------------------------------------------------------
+
+_ALIAS_BLOCK = re.compile(r"\{\s*group:.*?\n  \}", re.S)
+
+
+def _curated_blocks() -> list[str]:
+    return _ALIAS_BLOCK.findall(ALIASES_TS.read_text())
+
+
+def _flags(block: str, kind: str) -> list[str]:
+    """Target keys of a bodyFlags/queryFlags map: `{ desc: 'description' }` -> ['description']."""
+    m = re.search(kind + r":\s*\{(.*?)\}", block, re.S)
+    return re.findall(r":\s*'([^']+)'", m.group(1)) if m else []
+
+
+def _field(block: str, name: str) -> str | None:
+    m = re.search(name + r":\s*'([^']+)'", block)
+    return m.group(1) if m else None
+
+
+@pytest.fixture(scope="module")
+def query_params():
+    """{(METHOD, shape): {param names}} from the app's own OpenAPI document."""
+    import os
+
+    os.environ.setdefault("AGENTED_LITESTAR_SKIP_STARTUP", "1")
+    from app_litestar.main import create_app
+
+    doc = create_app().openapi_schema.to_schema()
+    out: dict[tuple[str, str], set[str]] = {}
+    for path, item in (doc.get("paths") or {}).items():
+        for method, op in item.items():
+            if method.upper() not in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
+                continue
+            names = {
+                p.get("name")
+                for p in (op.get("parameters") or [])
+                if p.get("in") == "query" and p.get("name")
+            }
+            out[(method.upper(), _shape(path))] = names
+    return out
+
+
+def test_curated_query_flags_name_real_query_params(query_params):
+    """A queryFlag pointing at a param the endpoint does not accept is silently
+    ignored by the server — the filter appears to work and returns everything."""
+    bad = []
+    for block in _curated_blocks():
+        method, path = _field(block, "method"), _field(block, "path")
+        if not method or not path:
+            continue
+        known = query_params.get((method, _shape(path)))
+        if known is None:
+            continue  # path checked by the tests above; nothing to compare here
+        for target in _flags(block, "queryFlags"):
+            if target not in known:
+                bad.append(f"{method} {path}: -q {target} (accepts: {sorted(known) or 'none'})")
+    assert not bad, "curated queryFlags name params the endpoint does not accept:\n  " + "\n  ".join(bad)
+
+
+def test_curated_body_flags_match_what_the_web_ui_sends():
+    """The server types almost no bodies, so the oracle is the generated table:
+    the keys the web client demonstrably sends to that same endpoint."""
+    gen = GENERATED_TS.read_text() if GENERATED_TS.is_file() else ""
+    known: dict[tuple[str, str], set[str]] = {}
+    for m in re.finditer(
+        r'method: "(?P<m>[A-Z]+)", path: "(?P<p>[^"]+)"(?P<rest>[^}]*)', gen
+    ):
+        keys = re.findall(r'"([^"]+)"', re.search(r"bodyKeys: \[([^\]]*)\]", m.group("rest")).group(1)) \
+            if "bodyKeys" in m.group("rest") else []
+        known[(m.group("m"), _shape(m.group("p")))] = {k.rstrip("?") for k in keys}
+
+    bad = []
+    for block in _curated_blocks():
+        method, path = _field(block, "method"), _field(block, "path")
+        if not method or not path:
+            continue
+        sends = known.get((method, _shape(path)))
+        if not sends:
+            continue  # no generated twin, or that endpoint takes no body
+        for target in _flags(block, "bodyFlags"):
+            if target not in sends:
+                bad.append(f"{method} {path}: -f {target} (web UI sends: {sorted(sends)})")
+    assert not bad, (
+        "curated bodyFlags use keys the web UI never sends — likely wrong, and a wrong key "
+        "is silently dropped by the server:\n  " + "\n  ".join(bad)
+    )

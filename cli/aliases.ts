@@ -81,7 +81,10 @@ export const ALIASES: Alias[] = [
     path: '/admin/projects',
     render: 'table',
     columns: ['id', 'name', 'status', 'local_path'],
-    queryFlags: { product: 'product_id', limit: 'limit' },
+    // ponytail: no --product filter — GET /admin/projects accepts only
+    // limit/offset, so it was silently ignored and returned everything.
+    // Filter client-side: ag project ls --json | jq '.[]|select(.product_id=="X")'
+    queryFlags: { limit: 'limit', offset: 'offset' },
     help: 'List projects',
   },
   {
