@@ -215,15 +215,32 @@ cd backend && uv run ruff format .                           # Format (line-leng
 ## Verification — all three must pass before any task is complete
 
 1. `just build` (vue-tsc type checking + vite build)
-2. `cd backend && uv run pytest` — **known issue:** the full serial suite
-   hangs at ~40-48% (no failures before the hang). Procedure: attempt the
-   full suite under a ~12-minute watchdog; on hang, kill it and run a
-   comprehensive targeted set (all suites touched by the change + execution/
-   streaming/harness regressions), and disclose the substitution in the PR.
-   Never present targeted runs as the full suite.
-3. `cd frontend && npm run test:run` — baseline carries 7 known pre-existing
-   failures (RateLimitGauge, MarkdownContent, WorkingMemoryView,
-   useTourMachine areas); the gate is **no NEW failures**.
+2. `cd backend && uv run pytest` — **the full serial suite completes. It does
+   NOT hang.** Measured 2026-08-01 across two runs: 13m04s and 16m24s, both to
+   100%. Run it and wait.
+
+   This previously documented a hang at ~40-48% and told you to kill the run at
+   **12 minutes** and substitute a targeted set. That is almost certainly the
+   whole story — a 12-minute watchdog on a 13-to-17-minute suite kills it every
+   time, at whatever percentage it happens to have reached, and the kill was
+   then read as the hang. If you time out, raise the budget before concluding
+   anything; do not reach for targeted runs first. (Two runs in this session
+   looked like hangs for exactly this reason: a harness timeout at 10 minutes,
+   not the suite.)
+
+   Baseline is **20 pre-existing failures / 5449 passed** (2026-08-01):
+   `test_grd_research_handler` (10), `test_tesserae_integration` (4, flaky —
+   the names shift between runs), `test_grd_cli_v0324` (3),
+   `test_litestar_health` (2), `test_skill_sleep_routes` (1). The gate is **no
+   NEW failures**; compare against a pristine `main` worktree rather than
+   assuming a failure is yours, and never present targeted runs as the full
+   suite.
+3. `cd frontend && npm run test:run` — **1727 passed / 191 files, zero
+   failures** (measured 2026-08-01). This previously documented "7 known
+   pre-existing failures (RateLimitGauge, MarkdownContent, WorkingMemoryView,
+   useTourMachine)" and told you to gate on "no NEW failures". Those are fixed;
+   the gate is now simply **green**. A red frontend suite is a real regression,
+   not the baseline.
 
 ## Architecture
 
