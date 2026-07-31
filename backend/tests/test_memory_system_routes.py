@@ -70,6 +70,13 @@ def test_list_memory_systems_envelope(client):
 def test_list_memory_systems_reports_cli_uninstalled(client):
     """When the CLI isn't on PATH, ``cli.installed`` is False and the
     operator gets a clear hint instead of a silent failure later."""
+    # `_cli_status_cache` is module-level and process-wide, so any earlier test
+    # that saw a real tesserae install leaves "installed" cached and this test
+    # never reaches the patched `which`. It passed alone and failed in-file —
+    # order dependence, not a route bug.
+    from app_litestar.routes.memory_system import _cli_status_cache
+
+    _cli_status_cache.clear()
     with patch("app_litestar.routes.memory_system.shutil.which", return_value=None):
         r = client.get("/admin/system/memory")
     body = r.json()

@@ -1949,19 +1949,40 @@ def _agent_distill_op(
     )
 
 
+def sessions_import(project_id: str) -> TesseraeOpResult:
+    """Import this project's completed sessions into its Tesserae workspace.
+
+    Without this step the graph has nothing attributed to any agent, so
+    ``distill`` reports ``no-sessions`` and every L1 runbook stays empty — the
+    memory loop is open at exactly one link, and silently.
+
+    ``imported == 0`` is not a failure on its own: a project whose sessions are
+    all already imported legitimately imports none. Only a ``skipped_reason``
+    means the op could not run.
+    """
+    started = _now_iso()
+    # Called ONCE. The previous lambda invoked the export twice — once for
+    # ``ok`` and again for ``reason`` — so the reported reason came from a
+    # second, redundant import pass rather than the one being reported on.
+    result = export_sessions_to_tesserae(project_id)
+    reason = str(result.get("skipped_reason", "") or "")
+    return TesseraeOpResult(
+        op="sessions-import",
+        ok=not reason,
+        reason=reason,
+        started_at=started,
+        finished_at=_now_iso(),
+        stdout=str(result.get("stdout", "") or ""),
+    )
+
+
 _OP_DISPATCH = {
     "init": init_workspace,
     "ingest": ingest_paths,
     "compile": compile_workspace,
     "build-site": build_site,
     "agent-distill": _agent_distill_op,
-    "sessions-import": lambda pid: TesseraeOpResult(
-        op="sessions-import",
-        ok=(export_sessions_to_tesserae(pid).get("imported", 0) > 0),
-        reason=export_sessions_to_tesserae(pid).get("skipped_reason", ""),
-        started_at=_now_iso(),
-        finished_at=_now_iso(),
-    ),
+    "sessions-import": sessions_import,
 }
 
 
