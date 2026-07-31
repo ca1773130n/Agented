@@ -10,6 +10,22 @@ failing — the CI reality from 24-RESEARCH §Test Design.
 CEILING (Pitfall 3): v1 egress is env+proxy BEST-EFFORT. These prove the configured
 boundary holds for a COOPERATING client — not that a hostile process cannot bypass
 env vars / dial a raw IP. Airtight no-bypass needs netns + nftables (deferred).
+
+EVERY sandboxed child here runs with ``cwd=ws``, because that is how production
+launches one (``sandbox_eval._popen_run`` and ``execution_service`` both pass the
+workspace as ``cwd``). It is not incidental: the profile denies reading file
+CONTENTS under $HOME, and seatbelt counts listing a directory as reading it. A
+child left in pytest's own cwd — anywhere under $HOME — therefore dies during
+interpreter startup, because ``python -c`` puts the cwd at ``sys.path[0]`` and the
+first import does ``listdir`` on it:
+
+    PermissionError: [Errno 1] Operation not permitted   (_path_importer_cache)
+
+That failure looks like a broken sandbox and is the opposite: the boundary
+working exactly as designed, on a directory the test had no business reading. It
+also fires BEFORE any escape is attempted, so these tests were red without ever
+testing what they claim to. If one starts failing this way again, check the cwd
+before changing the profile.
 """
 
 import os
@@ -44,7 +60,7 @@ def test_escape_write_outside_workspace_blocked(tmp_path):
     assert sandboxed is True, "sandbox_available() was True but the wrap degraded"
 
     try:
-        subprocess.run(prefix, capture_output=True, text=True, timeout=30)
+        subprocess.run(prefix, capture_output=True, text=True, timeout=30, cwd=ws)
         # The write OUTSIDE the workspace was contained — neither path exists.
         for p in _OUTSIDE_PROBES:
             assert not os.path.exists(p), f"escape write landed at {p}"
@@ -79,19 +95,19 @@ def test_escape_read_secret_outside_workspace_blocked(tmp_path):
         # Reading the in-workspace file SUCCEEDS (proves it's a boundary, not a block).
         pfx_in, sandboxed = build_sandbox_prefix(["/bin/cat", inside], ws, net=False)
         assert sandboxed is True, "sandbox_available() was True but the wrap degraded"
-        r_in = subprocess.run(pfx_in, capture_output=True, text=True, timeout=30)
+        r_in = subprocess.run(pfx_in, capture_output=True, text=True, timeout=30, cwd=ws)
         assert r_in.returncode == 0 and "workspace-data" in r_in.stdout, r_in.stderr
 
         # Running a real interpreter still works (system libs remain readable).
         pfx_py, _ = build_sandbox_prefix(
             [sys.executable, "-c", "import json,ssl,hashlib;print('pyok')"], ws, net=False
         )
-        r_py = subprocess.run(pfx_py, capture_output=True, text=True, timeout=30)
+        r_py = subprocess.run(pfx_py, capture_output=True, text=True, timeout=30, cwd=ws)
         assert r_py.returncode == 0 and "pyok" in r_py.stdout, r_py.stderr
 
         # Reading the home-dir secret is DENIED — cat cannot read the contents.
         pfx_secret, _ = build_sandbox_prefix(["/bin/cat", secret], ws, net=False)
-        r_secret = subprocess.run(pfx_secret, capture_output=True, text=True, timeout=30)
+        r_secret = subprocess.run(pfx_secret, capture_output=True, text=True, timeout=30, cwd=ws)
         assert r_secret.returncode != 0, "reading a home-dir secret must be blocked"
         assert "TOP-SECRET" not in r_secret.stdout
     finally:
@@ -136,6 +152,7 @@ def test_sbpl_home_rooted_read_allow_does_not_expose_ssh_live(tmp_path, monkeypa
         capture_output=True,
         text=True,
         timeout=30,
+        cwd=ws,
     )
     assert r.returncode != 0, "home-rooted read allow must NOT re-expose ~/.ssh/id_rsa"
     assert "TOP-SECRET" not in r.stdout
@@ -176,7 +193,7 @@ def test_config_dir_home_or_root_dropped_ssh_blocked_live(tmp_path, monkeypatch)
         "config_dir == $HOME must be dropped, not granted a broad home read"
     )
     assert f'(allow file-write* (subpath "{fake_home}"))' not in profile_home
-    r_home = subprocess.run(pfx_home, capture_output=True, text=True, timeout=30)
+    r_home = subprocess.run(pfx_home, capture_output=True, text=True, timeout=30, cwd=ws)
     assert r_home.returncode != 0 and "TOP-SECRET" not in r_home.stdout, (
         "config_dir == $HOME must not re-expose ~/.ssh"
     )
@@ -193,12 +210,12 @@ def test_config_dir_home_or_root_dropped_ssh_blocked_live(tmp_path, monkeypatch)
         ["/bin/cat", cfg_file], ws, net=False, config_dirs=[claude_cfg]
     )
     assert f'(allow file-read-data (subpath "{real_cfg}"))' in pfx_cfg[2]
-    r_cfg = subprocess.run(pfx_cfg, capture_output=True, text=True, timeout=30)
+    r_cfg = subprocess.run(pfx_cfg, capture_output=True, text=True, timeout=30, cwd=ws)
     assert r_cfg.returncode == 0 and "CONFIG-OK" in r_cfg.stdout, r_cfg.stderr
     pfx_ssh, _ = build_sandbox_prefix(
         ["/bin/cat", ssh_secret], ws, net=False, config_dirs=[claude_cfg]
     )
-    r_ssh = subprocess.run(pfx_ssh, capture_output=True, text=True, timeout=30)
+    r_ssh = subprocess.run(pfx_ssh, capture_output=True, text=True, timeout=30, cwd=ws)
     assert r_ssh.returncode != 0 and "TOP-SECRET" not in r_ssh.stdout, (
         "~/.ssh must stay blocked even with a valid config dir granted"
     )
@@ -230,7 +247,7 @@ def test_secret_blocked_when_home_is_symlinked_live(tmp_path, monkeypatch):
     for path in (secret, os.path.join(home_link, ".ssh", "id_rsa")):
         prefix, sandboxed = build_sandbox_prefix(["/bin/cat", path], ws, net=False)
         assert sandboxed is True, "sandbox_available() was True but the wrap degraded"
-        r = subprocess.run(prefix, capture_output=True, text=True, timeout=30)
+        r = subprocess.run(prefix, capture_output=True, text=True, timeout=30, cwd=ws)
         assert r.returncode != 0, f"reading {path} must be blocked under an aliased $HOME"
         assert "TOP-SECRET" not in r.stdout
 
@@ -258,7 +275,7 @@ def test_secret_via_symlink_into_ssh_blocked_live(tmp_path, monkeypatch):
     linked_secret = os.path.join(link, "id_rsa")  # resolves to ~/.ssh/id_rsa
     prefix, sandboxed = build_sandbox_prefix(["/bin/cat", linked_secret], ws, net=False)
     assert sandboxed is True
-    r = subprocess.run(prefix, capture_output=True, text=True, timeout=30)
+    r = subprocess.run(prefix, capture_output=True, text=True, timeout=30, cwd=ws)
     assert r.returncode != 0, "reading ~/.ssh/id_rsa via a symlink must be blocked"
     assert "TOP-SECRET" not in r.stdout
 
