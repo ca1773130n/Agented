@@ -83,9 +83,10 @@ class GrdCliService:
 
         Detection runs the same probe order for each binary independently:
           1. Settings table (``grd_binary_path`` / ``gd_binary_path``)
-          2. ``CLAUDE_PLUGIN_ROOT`` env var + ``bin/<name>``
-          3. Glob known install locations (most recently modified wins)
-          4. Mark unavailable if nothing matches
+          2. ``CLAUDE_PLUGIN_ROOT`` env var + ``bin/<name>`` (explicit override)
+          3. On PATH (npm installs symlink ``gd`` / ``grd-tools``)
+          4. Glob known install locations (highest semver, then mtime)
+          5. Mark unavailable if nothing matches
         """
         cls._binary_path, cls._binary_available, cls._binary_is_exec = cls._detect_one(
             filename="grd-tools.js",
@@ -122,19 +123,26 @@ class GrdCliService:
             # Settings table may not be available during import.
             pass
 
-        # 2. On PATH (npm @jokerized/getresearchdone symlinks `gd` / `grd-tools`)
-        which = shutil.which(exec_name)
-        if which:
-            logger.info("GRD %s binary found on PATH: %s", label, which)
-            return which, True, True
-
-        # 3. CLAUDE_PLUGIN_ROOT env var
+        # 2. CLAUDE_PLUGIN_ROOT env var — an EXPLICIT override, so it must beat
+        # whatever happens to be on PATH. The PATH probe below was added later
+        # (2026-06-14, "detect 0.4.x gd binary (npm/PATH…)") and was inserted
+        # ABOVE this block, which silently demoted the override: setting
+        # CLAUDE_PLUGIN_ROOT to pin a specific GRD build got you the PATH one
+        # instead. The docstring above never described that order, and the three
+        # tests asserting it have been red since — long enough to be filed as
+        # "known baseline failures" rather than read.
         plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT")
         if plugin_root:
             candidate = os.path.join(plugin_root, "bin", filename)
             if os.path.isfile(candidate):
                 logger.info("GRD %s binary found via CLAUDE_PLUGIN_ROOT: %s", label, candidate)
                 return candidate, True, False
+
+        # 3. On PATH (npm @jokerized/getresearchdone symlinks `gd` / `grd-tools`)
+        which = shutil.which(exec_name)
+        if which:
+            logger.info("GRD %s binary found on PATH: %s", label, which)
+            return which, True, True
 
         # 4. Glob known install locations (most recently modified first). The
         # v0.4.x marketplace cache is lowercase `grd/<version>/bin`; the npm

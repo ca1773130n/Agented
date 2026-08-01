@@ -307,7 +307,9 @@ def test_escape_connect_non_allowlisted_blocked(tmp_path, monkeypatch):
                 "HTTPS_PROXY": proxy.url,
             }
         )
-        result = subprocess.run(prefix, env=env, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(
+            prefix, env=env, capture_output=True, text=True, timeout=30, cwd=ws
+        )
         # The connection to the NON-allowlisted host is refused (403 surfaces as a
         # non-zero exit from urllib).
         assert result.returncode != 0, result.stderr

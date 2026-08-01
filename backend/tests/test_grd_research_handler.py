@@ -20,9 +20,19 @@ from app.services.execution_type_handler import (
 
 
 @pytest.fixture
-def spy_psm(monkeypatch):
-    """Spy create_session/get_session_info/stop_session + a known cwd."""
+def spy_psm(monkeypatch, tmp_path):
+    """Spy create_session/get_session_info/stop_session + a known cwd.
+
+    The cwd must be a REAL directory. The handler writes the GRD steering config
+    to ``<cwd>/.planning/config.json``, so a fake absolute path like
+    "/resolved/workspace" makes ``os.makedirs`` try to create "/resolved" at the
+    filesystem root — read-only on macOS, so all 10 tests in this file died with
+    ``OSError: [Errno 30] Read-only file system`` before reaching any assertion.
+    """
     calls = {}
+    workspace = tmp_path / "resolved" / "workspace"
+    workspace.mkdir(parents=True)
+    calls["_workspace"] = str(workspace)
 
     def fake_create_session(**kwargs):
         calls["create"] = kwargs
@@ -36,7 +46,7 @@ def spy_psm(monkeypatch):
         return True
 
     def fake_resolve(project_id):
-        return "/resolved/workspace"
+        return str(workspace)
 
     monkeypatch.setattr(
         eth.ProjectSessionManager, "create_session", staticmethod(fake_create_session)
@@ -72,7 +82,7 @@ def test_start_spawns_research_session(spy_psm):
     assert result["session_id"] == "sess-research-1"
     create = spy_psm["create"]
     # cwd resolved from the workspace service
-    assert create["cwd"] == "/resolved/workspace"
+    assert create["cwd"] == spy_psm["_workspace"]
     assert create["execution_type"] == "grd_research"
     assert create["stream_json"] is True
     assert create["use_pty"] is False
@@ -180,10 +190,12 @@ def test_resume_uses_thread_id(spy_psm):
     assert prompt == '/grd:research resume "thread-abc"'
 
 
-def test_explicit_cwd_overrides_resolution(spy_psm):
+def test_explicit_cwd_overrides_resolution(spy_psm, tmp_path):
     handler = GrdResearchSessionHandler()
-    handler.start({"project_id": "p", "question": "go", "cwd": "/wt/path"})
-    assert spy_psm["create"]["cwd"] == "/wt/path"
+    explicit = tmp_path / "wt" / "path"
+    explicit.mkdir(parents=True)
+    handler.start({"project_id": "p", "question": "go", "cwd": str(explicit)})
+    assert spy_psm["create"]["cwd"] == str(explicit)
 
 
 def test_missing_question_errors(spy_psm):

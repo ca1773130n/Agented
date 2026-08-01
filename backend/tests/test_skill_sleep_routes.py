@@ -8,6 +8,9 @@ calls fire.
 
 from __future__ import annotations
 
+import json
+import time
+
 from litestar.testing import create_test_client
 
 from app.db.rbac import create_user_role
@@ -92,6 +95,11 @@ def test_round_endpoint_runs(isolated_db, monkeypatch):
             }
         ),
     )
+    # The endpoint is ASYNC: it dispatches and returns a job id, and the round's
+    # own outcome is read back from the job. This test asserted the old
+    # synchronous shape (`{"status": ...}` straight off the POST) and had been
+    # failing with KeyError: 'status' ever since — filed as a known baseline
+    # failure rather than read.
     with _client() as c:
         pid = _make_project(c, "ss-key-round")
         resp = c.post(
@@ -99,8 +107,32 @@ def test_round_endpoint_runs(isolated_db, monkeypatch):
             headers={"X-API-Key": "ss-key-round"},
             json={"n": 4, "seed": 1},
         )
-    assert resp.status_code == 201
-    assert resp.json()["status"] == "no_candidate"
+        assert resp.status_code == 201
+        job_id = resp.json()["job_id"]
+        assert job_id
+
+        # Poll through the ROUTE, not `get_round_job` directly. Reading the job
+        # store in-process would prove the worker ran but not that
+        # `GET .../sleep/round/{job_id}` works — break that handler or its path
+        # and the test would still pass, which is the failure this whole file is
+        # being fixed for.
+        body = None
+        for _ in range(200):
+            poll = c.get(
+                f"/admin/projects/{pid}/skills/deploy/sleep/round/{job_id}",
+                headers={"X-API-Key": "ss-key-round"},
+            )
+            assert poll.status_code == 200, poll.text
+            body = poll.json()
+            if body.get("status") in ("done", "error"):
+                break
+            time.sleep(0.05)
+
+    assert body is not None, "round job vanished"
+    assert body["status"] == "done", body
+    # Assert the exact field, not a substring of the whole JSON: the stubbed
+    # round's verdict has to survive the trip through the job intact.
+    assert body["verdict"]["status"] == "no_candidate", body
 
 
 def test_adopt_404_for_foreign_run(isolated_db):
