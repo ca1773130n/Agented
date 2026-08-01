@@ -412,17 +412,8 @@ export async function planCommand(
   const body: Record<string, unknown> = { ...alias.bodyDefaults, ...a.fields };
   if (alias.bodyFlags) {
     for (const [flag, key] of Object.entries(alias.bodyFlags)) {
-      // The raw flag, not `str`, which flattens the parser's two boolean forms
-      // into exactly the values this loop then skipped: `--flag` -> '' and
-      // `--no-flag` -> undefined. Measured, `ag mem enable proj-abc
-      // --no-enabled` POSTed with NO body at all — and that handler reads
-      // intent from the body — so the documented way to turn memory off was a
-      // silent no-op that still exited 0. `coerce` passes booleans through
-      // untouched, so `--enabled`/`--no-enabled` now reach the wire as
-      // true/false. A string still behaves byte-for-byte as before.
-      const v = a.flags[flag];
-      if (v === undefined || v === '') continue;
-      body[key] = v;
+      const v = flagValue(alias, flag, a.flags[flag]);
+      if (v !== undefined) body[key] = v;
     }
   }
   // Positionals left over after the path params are the primary field — so
@@ -458,16 +449,11 @@ export async function planCommand(
   const query: Record<string, string> = { ...a.query };
   if (alias.queryFlags) {
     for (const [flag, key] of Object.entries(alias.queryFlags)) {
-      const v = a.flags[flag];
-      if (v === undefined || v === '') continue;
+      const v = flagValue(alias, flag, a.flags[flag]);
+      if (v === undefined) continue;
       // A name has to work wherever the thing is named — flag or positional.
       const kind = alias.resolveFlags?.[flag];
       if (typeof v === 'boolean') {
-        // Same dropped-boolean bug as the body loop: measured, `ag mem compile
-        // proj-abc --retry-fallbacks` sent no query param at all, so the switch
-        // the help documents did nothing. A boolean carries no name, so a flag
-        // that resolves one has to refuse rather than look up "true".
-        if (kind) throw new UsageError(`ag ${alias.group} ${alias.verb}: --${flag} needs a ${kind} name or id`);
         query[key] = String(v);
         continue;
       }
@@ -550,6 +536,43 @@ async function aliasCmd(a: Args, profile: ReturnType<typeof resolveProfile>, gro
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * One flag's value, or `undefined` to omit it — the single place that decides what
+ * a MISSING value means, because the answer differs by flag and getting it wrong
+ * corrupts the request silently either way.
+ *
+ * `parseArgs` gives a bare `--flag` the value `true` and `--no-flag` the value
+ * `false`. For a boolean flag that IS the value. For a string flag it means the
+ * user forgot the value, and there is no safe guess: dropping it silently ignores
+ * what they typed (what the code did before), and forwarding it writes a boolean
+ * into a string field — `ag product new Foo --desc` sent {"description":true}. So
+ * a string flag with no value is a usage error, which is the only outcome the
+ * operator can actually see and fix.
+ *
+ * An explicit empty (`--desc=`) still means "clear it" for a string, and is
+ * refused for a boolean where it cannot mean anything.
+ */
+function flagValue(alias: Alias, flag: string, v: string | boolean | undefined): string | boolean | undefined {
+  if (v === undefined) return undefined;
+  const isBool = alias.boolFlags?.includes(flag) ?? false;
+  if (typeof v === 'boolean') {
+    if (isBool) return v;
+    // A flag that names an entity says so, rather than the generic complaint: a
+    // boolean carries no name, so there is nothing for `resolveId` to look up.
+    const kind = alias.resolveFlags?.[flag];
+    throw new UsageError(
+      kind
+        ? `ag ${alias.group} ${alias.verb}: --${flag} needs a ${kind} name or id`
+        : `ag ${alias.group} ${alias.verb}: --${flag} needs a value (e.g. --${flag} "…")`,
+    );
+  }
+  if (v === '' && isBool) {
+    throw new UsageError(`ag ${alias.group} ${alias.verb}: --${flag} expects true or false`);
+  }
+  if (v === '') return undefined;
+  return v;
+}
 
 function fillPath(alias: Alias, positionals: string[]): { path: string; used: number } {
   let used = 0;

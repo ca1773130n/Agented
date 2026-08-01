@@ -43,6 +43,12 @@ export interface Alias {
    * where the handler reads that intent from the body and rejects an empty one.
    */
   bodyDefaults?: Record<string, unknown>;
+  /**
+   * Flags that are switches, not values — `--flag` / `--no-flag` reach the wire as
+   * true/false. Any flag NOT listed here needs a value; a bare one is a usage
+   * error rather than a silently-dropped or boolean-typed field.
+   */
+  boolFlags?: string[];
   /** Query keys taken from named flags: flag -> query key. */
   queryFlags?: Record<string, string>;
   /**
@@ -130,14 +136,16 @@ export const ALIASES: Alias[] = [
     render: 'raw', help: 'Memory-system status (Tesserae CLI, version, project count)' },
   { group: 'mem', verb: 'enable', method: 'POST', path: '/admin/system/memory/tesserae/projects/:project',
     params: ['project'], resolve: ['project'], bodyFlags: { enabled: 'enabled' },
-    bodyDefaults: { enabled: true }, render: 'raw',
+    boolFlags: ['enabled'], bodyDefaults: { enabled: true }, render: 'raw',
     help: 'ag mem enable GRD   (resolves the workspace root; --enabled false to turn off)' },
   { group: 'mem', verb: 'distill-toggle', method: 'POST', path: '/admin/system/memory/tesserae/projects/:project/distill',
-    params: ['project'], resolve: ['project'], bodyFlags: { enabled: 'enabled' }, render: 'raw',
+    params: ['project'], resolve: ['project'], bodyFlags: { enabled: 'enabled' },
+    boolFlags: ['enabled'], render: 'raw',
     help: 'ag mem distill-toggle GRD --enabled true   (authorises LLM spend for this project)' },
   { group: 'mem', verb: 'compile', method: 'POST', path: '/admin/system/memory/tesserae/projects/:project/compile',
     params: ['project'], resolve: ['project'], job: true,
     queryFlags: { 'retry-fallbacks': 'retry_fallbacks', provider: 'provider', model: 'model' },
+    boolFlags: ['retry-fallbacks'],
     render: 'raw',
     help: 'ag mem compile GRD --wait [--provider codex --model X]   (LLM spend; minutes)' },
   { group: 'mem', verb: 'ingest', method: 'POST', path: '/admin/system/memory/tesserae/projects/:project/ingest',
@@ -163,7 +171,8 @@ export const ALIASES: Alias[] = [
     help: 'GRD 0.5.0 research-steering settings per project' },
   { group: 'grd', verb: 'steer', method: 'POST', path: '/admin/system/grd/steering/projects/:project',
     params: ['project'], resolve: ['project'],
-    bodyFlags: { autonomous: 'autonomous_mode', fallback: 'interactive_fallback' }, render: 'raw',
+    bodyFlags: { autonomous: 'autonomous_mode', fallback: 'interactive_fallback' },
+    boolFlags: ['autonomous'], render: 'raw',
     help: 'ag grd steer GRD --autonomous false --fallback panel' },
 
   // ---- backend / auth -----------------------------------------------------

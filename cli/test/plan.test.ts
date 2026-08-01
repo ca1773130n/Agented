@@ -249,3 +249,41 @@ test('bodyDefaults is deliberately rare — it is not a way to paper over a requ
   const withDefaults = allAliases().filter((a) => a.bodyDefaults).map((a) => `${a.group} ${a.verb}`);
   assert.deepEqual(withDefaults, ['mem enable']);
 });
+
+test('a flag with no value is refused for a string flag, honoured for a boolean one', async () => {
+  // The canonical sweep above always writes `--flag=value`, so it cannot reach
+  // this: `parseArgs` gives a bare `--flag` the value `true`. For a declared
+  // boolean that IS the value; for a string flag the user forgot the value, and
+  // both silent answers corrupt the request — dropping it ignores what they
+  // typed, forwarding it wrote {"description": true} into a string field.
+  const plan = async (group: string, verb: string, ...rest: string[]) => {
+    const alias = findAlias(group, verb)!;
+    return planCommand(parseArgs([group, verb, ...rest]), PROFILE, group, alias);
+  };
+  const refuses = async (msg: string, ...argv: [string, string, ...string[]]) => {
+    await assert.rejects(() => plan(...argv), (e: Error) => e.message.includes(msg), argv.join(' '));
+  };
+
+  await refuses('needs a value', 'product', 'new', 'Foo', '--desc');
+  await refuses('needs a value', 'product', 'new', 'Foo', '--no-desc');
+  await refuses('needs a value', 'mem', 'compile', 'proj-aaaaaa', '--provider');
+  // An explicit empty cannot mean anything for a boolean, but still clears a string.
+  await refuses('expects true or false', 'mem', 'enable', 'proj-aaaaaa', '--enabled=');
+  assert.deepEqual((await plan('product', 'new', 'Foo', '--desc=')).body, { name: 'Foo' });
+
+  // Declared booleans keep working — the bug this file exists to pin.
+  assert.deepEqual((await plan('mem', 'enable', 'proj-aaaaaa', '--enabled')).body, { enabled: true });
+  assert.deepEqual((await plan('mem', 'enable', 'proj-aaaaaa', '--no-enabled')).body, { enabled: false });
+  assert.equal((await plan('mem', 'compile', 'proj-aaaaaa', '--retry-fallbacks')).query.retry_fallbacks, 'true');
+});
+
+test('every declared boolFlag is actually a flag that alias declares', async () => {
+  // A typo here silently turns a boolean back into a string flag, restoring the
+  // bug. Nothing else would catch it.
+  for (const a of allAliases()) {
+    for (const f of a.boolFlags ?? []) {
+      const known = { ...(a.bodyFlags ?? {}), ...(a.queryFlags ?? {}) };
+      assert.ok(f in known, `${a.group} ${a.verb}: boolFlags names "${f}", which is not a body or query flag`);
+    }
+  }
+});
