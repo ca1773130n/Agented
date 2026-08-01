@@ -37,6 +37,12 @@ export interface Alias {
   job?: boolean;
   /** Body keys taken from named flags: flag -> body key. */
   bodyFlags?: Record<string, string>;
+  /**
+   * Body fields sent when the caller supplies nothing — overridden by `-f` and by
+   * any `bodyFlags` value. For a verb whose NAME is the intent (`mem enable`),
+   * where the handler reads that intent from the body and rejects an empty one.
+   */
+  bodyDefaults?: Record<string, unknown>;
   /** Query keys taken from named flags: flag -> query key. */
   queryFlags?: Record<string, string>;
   /**
@@ -123,7 +129,8 @@ export const ALIASES: Alias[] = [
   { group: 'mem', verb: 'status', method: 'GET', path: '/admin/system/memory',
     render: 'raw', help: 'Memory-system status (Tesserae CLI, version, project count)' },
   { group: 'mem', verb: 'enable', method: 'POST', path: '/admin/system/memory/tesserae/projects/:project',
-    params: ['project'], resolve: ['project'], bodyFlags: { enabled: 'enabled' }, render: 'raw',
+    params: ['project'], resolve: ['project'], bodyFlags: { enabled: 'enabled' },
+    bodyDefaults: { enabled: true }, render: 'raw',
     help: 'ag mem enable GRD   (resolves the workspace root; --enabled false to turn off)' },
   { group: 'mem', verb: 'distill-toggle', method: 'POST', path: '/admin/system/memory/tesserae/projects/:project/distill',
     params: ['project'], resolve: ['project'], bodyFlags: { enabled: 'enabled' }, render: 'raw',

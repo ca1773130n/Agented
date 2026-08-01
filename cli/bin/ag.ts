@@ -31,7 +31,7 @@ import { ALIASES, findAlias, groups, curatedGroups, verbsFor, allAliases, bodyKe
 
 const VERSION = '0.1.0';
 
-async function main(argv: string[]): Promise<number> {
+export async function main(argv: string[]): Promise<number> {
   const a = parseArgs(argv);
   const cmd = a.positionals[0];
 
@@ -365,6 +365,126 @@ async function streamCmd(a: Args, profile: ReturnType<typeof resolveProfile>): P
   return 0;
 }
 
+/** What one `ag <group> <verb> …` invocation resolves to, before anything is sent. */
+export interface Plan {
+  alias: Alias;
+  method: string;
+  /** Path params already filled. */
+  path: string;
+  query: Record<string, string>;
+  body: Record<string, unknown> | undefined;
+}
+
+/**
+ * Decide the request; send nothing.
+ *
+ * This half used to be welded to the I/O half inside `aliasCmd`, which made it
+ * unreachable from a test: the argument rules below are the same for all 784
+ * commands, but exercising even one of them meant a live server. Split out, the
+ * whole table can be planned in-process — the only I/O left here is the
+ * name -> id lookup that `resolve`/`resolveFlags` always performed.
+ *
+ * `group` is what the operator typed; it is `alias.group` by construction
+ * (`findAlias` matched on it), and messages below deliberately quote the ALIAS
+ * so a plan built by any other caller still names the command it describes.
+ */
+export async function planCommand(
+  a: Args,
+  profile: ReturnType<typeof resolveProfile>,
+  group: string,
+  alias: Alias,
+): Promise<Plan> {
+  // Resolve names -> ids first: `ag mem compile GetResearchDone` should work.
+  let positionals = a.positionals.slice(2);
+  if (alias.resolve?.length) {
+    positionals = await Promise.all(
+      positionals.map(async (v, i) => {
+        const kind = alias.resolve?.[i];
+        return kind ? await resolveId(kind, v, profile) : v;
+      }),
+    );
+  }
+  const { path, used } = fillPath(alias, positionals);
+  // Defaults first, so `-f` and an explicit flag both override them. A verb whose
+  // name IS the intent needs this: `ag mem enable GRD` is the invocation its own
+  // help documents, but the handler reads intent from the body and rejects an
+  // empty one ("missing 'root' or 'enabled'"), so the documented command 400'd.
+  const body: Record<string, unknown> = { ...alias.bodyDefaults, ...a.fields };
+  if (alias.bodyFlags) {
+    for (const [flag, key] of Object.entries(alias.bodyFlags)) {
+      // The raw flag, not `str`, which flattens the parser's two boolean forms
+      // into exactly the values this loop then skipped: `--flag` -> '' and
+      // `--no-flag` -> undefined. Measured, `ag mem enable proj-abc
+      // --no-enabled` POSTed with NO body at all — and that handler reads
+      // intent from the body — so the documented way to turn memory off was a
+      // silent no-op that still exited 0. `coerce` passes booleans through
+      // untouched, so `--enabled`/`--no-enabled` now reach the wire as
+      // true/false. A string still behaves byte-for-byte as before.
+      const v = a.flags[flag];
+      if (v === undefined || v === '') continue;
+      body[key] = v;
+    }
+  }
+  // Positionals left over after the path params are the primary field — so
+  // `ag product new "Agented Core"` puts the name in the body without a flag.
+  // `params` on an alias documents PATH params only; a body field never appears
+  // there (the unit test enforces that every declared param exists in the path).
+  const extra = a.positionals.slice(2 + used);
+  let literalName: string | undefined;
+  if (extra.length) {
+    // ONLY for a curated CREATE-style alias: POST, declares a body flag mapping,
+    // and consumed no path param. The shortcut exists so `ag product new
+    // "Agented Core"` works without a flag; on a command that ADDRESSES an
+    // existing entity it instead invented a field the endpoint never asked for.
+    // Measured: `ag agent run agent-7 oops` sent {"name":"oops"} to a handler
+    // that reads only data["message"], so the agent ran on an EMPTY message and
+    // exited 0. `used === 0` is what separates the two — of the 7 curated POST
+    // aliases with body flags, exactly the 2 taking no path param (product new,
+    // project new) document a bare name, while the 5 that take one (agent run,
+    // sa start, mem enable, mem distill-toggle, grd steer) all address a thing
+    // that already exists. Silently adding a bogus field is worse than refusing.
+    if (alias.method === 'POST' && alias.bodyFlags && used === 0 && body.name === undefined) {
+      literalName = extra.join(' ');
+      body.name = literalName;
+    } else {
+      throw new UsageError(
+        `ag ${alias.group} ${alias.verb}: unexpected argument${extra.length > 1 ? 's' : ''} ` +
+          `${extra.map((e) => JSON.stringify(e)).join(', ')}\n` +
+          `  ${alias.method} ${alias.path}\n` +
+          `  pass body fields with -f key=value (see: ag ${alias.group} ${alias.verb} --help)`,
+      );
+    }
+  }
+  const query: Record<string, string> = { ...a.query };
+  if (alias.queryFlags) {
+    for (const [flag, key] of Object.entries(alias.queryFlags)) {
+      const v = a.flags[flag];
+      if (v === undefined || v === '') continue;
+      // A name has to work wherever the thing is named — flag or positional.
+      const kind = alias.resolveFlags?.[flag];
+      if (typeof v === 'boolean') {
+        // Same dropped-boolean bug as the body loop: measured, `ag mem compile
+        // proj-abc --retry-fallbacks` sent no query param at all, so the switch
+        // the help documents did nothing. A boolean carries no name, so a flag
+        // that resolves one has to refuse rather than look up "true".
+        if (kind) throw new UsageError(`ag ${alias.group} ${alias.verb}: --${flag} needs a ${kind} name or id`);
+        query[key] = String(v);
+        continue;
+      }
+      query[key] = kind ? await resolveId(kind, v, profile) : v;
+    }
+  }
+
+  const sendBody = alias.method === 'GET' || !Object.keys(body).length ? undefined : coerce(body);
+  // `coerce` is for `-f n=3`, where a number is the intent. A name lifted out of
+  // the positionals is always a string, and it went through `coerce` too:
+  // measured, `ag product new 123` sent {"name":123}, and a product named
+  // "true"/"false"/"null" went the same way. Restore it verbatim afterwards.
+  if (sendBody && literalName !== undefined) sendBody.name = literalName;
+
+  return { alias, method: alias.method, path, query, body: sendBody };
+}
+
 async function aliasCmd(a: Args, profile: ReturnType<typeof resolveProfile>, group: string): Promise<number> {
   const verb = a.positionals[1];
   const alias = verb ? findAlias(group, verb) : undefined;
@@ -383,63 +503,13 @@ async function aliasCmd(a: Args, profile: ReturnType<typeof resolveProfile>, gro
     return await describe(profile, alias.method, alias.path, `ag ${alias.group} ${alias.verb}`, alias);
   }
 
-  // Resolve names -> ids first: `ag mem compile GetResearchDone` should work.
-  let positionals = a.positionals.slice(2);
-  if (alias.resolve?.length) {
-    positionals = await Promise.all(
-      positionals.map(async (v, i) => {
-        const kind = alias.resolve?.[i];
-        return kind ? await resolveId(kind, v, profile) : v;
-      }),
-    );
-  }
-  const { path, used } = fillPath(alias, positionals);
-  const body: Record<string, unknown> = { ...a.fields };
-  if (alias.bodyFlags) {
-    for (const [flag, key] of Object.entries(alias.bodyFlags)) {
-      const v = str(a, flag);
-      if (v !== undefined && v !== '') body[key] = v;
-    }
-  }
-  // Positionals left over after the path params are the primary field — so
-  // `ag product new "Agented Core"` puts the name in the body without a flag.
-  // `params` on an alias documents PATH params only; a body field never appears
-  // there (the unit test enforces that every declared param exists in the path).
-  const extra = a.positionals.slice(2 + used);
-  if (extra.length) {
-    // ONLY for curated aliases that declare a body flag mapping. This shortcut
-    // exists so `ag product new "Agented Core"` works without a flag — but it was
-    // applying to all 700+ GENERATED commands too, where it invented a field the
-    // endpoint never asked for: `ag agent run agent-7 oops` sent
-    // {"name":"oops"} to an endpoint whose body is {message}. Silently adding a
-    // bogus field is worse than refusing, so unknown extras are now an error.
-    if (alias.method === 'POST' && alias.bodyFlags && body.name === undefined) {
-      body.name = extra.join(' ');
-    } else {
-      throw new UsageError(
-        `ag ${alias.group} ${alias.verb}: unexpected argument${extra.length > 1 ? 's' : ''} ` +
-          `${extra.map((e) => JSON.stringify(e)).join(', ')}\n` +
-          `  ${alias.method} ${alias.path}\n` +
-          `  pass body fields with -f key=value (see: ag ${alias.group} ${alias.verb} --help)`,
-      );
-    }
-  }
-  const query: Record<string, string> = { ...a.query };
-  if (alias.queryFlags) {
-    for (const [flag, key] of Object.entries(alias.queryFlags)) {
-      const v = str(a, flag);
-      if (v === undefined || v === '') continue;
-      // A name has to work wherever the thing is named — flag or positional.
-      const kind = alias.resolveFlags?.[flag];
-      query[key] = kind ? await resolveId(kind, v, profile) : v;
-    }
-  }
+  const plan = await planCommand(a, profile, group, alias);
 
   const opts = {
-    method: alias.method,
-    path,
-    query,
-    body: alias.method === 'GET' || !Object.keys(body).length ? undefined : coerce(body),
+    method: plan.method,
+    path: plan.path,
+    query: plan.query,
+    body: plan.body,
     profile,
     timeoutMs: num(a, 'timeout', 30_000),
   };
@@ -613,13 +683,21 @@ function fail(message: string, code: number): void {
   process.exitCode = code;
 }
 
-main(process.argv.slice(2))
-  .then((code) => {
-    process.exitCode = code;
-  })
-  .catch((e) => {
-    if (e instanceof UsageError || e instanceof ConfigError) return fail(String(e.message), 2);
-    if (e instanceof ResolveError) return fail(String(e.message), 6);
-    if (e instanceof TransportError) return fail(String(e.message), e.code);
-    return fail(`ag: ${e instanceof Error ? e.message : String(e)}`, 1);
-  });
+// Run only as the entry point. `planCommand` above is imported by tests, and a
+// bare top-level call would then dispatch the TEST RUNNER's argv as a command.
+// `import.meta.main` — not an argv[1] comparison — because `just cli-install`
+// symlinks this file to ~/.local/bin/ag, and Node reports the realpath in
+// `import.meta.url` while argv[1] keeps the symlink; measured true through such
+// a symlink and false when imported, on the Node 24.14 this ships against.
+if (import.meta.main) {
+  main(process.argv.slice(2))
+    .then((code) => {
+      process.exitCode = code;
+    })
+    .catch((e) => {
+      if (e instanceof UsageError || e instanceof ConfigError) return fail(String(e.message), 2);
+      if (e instanceof ResolveError) return fail(String(e.message), 6);
+      if (e instanceof TransportError) return fail(String(e.message), e.code);
+      return fail(`ag: ${e instanceof Error ? e.message : String(e)}`, 1);
+    });
+}
