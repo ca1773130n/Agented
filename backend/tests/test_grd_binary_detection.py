@@ -3,9 +3,18 @@
 from app.services.grd_cli_service import GrdCliService
 
 
-def test_detect_prefers_path_executable(monkeypatch, isolated_db):
+def test_detect_prefers_path_executable_when_no_explicit_override(monkeypatch, isolated_db):
     """gd / grd-tools resolvable on PATH (npm @jokerized/getresearchdone
-    symlinks) are preferred and marked as direct executables."""
+    symlinks) are preferred and marked as direct executables.
+
+    PATH wins only in the ABSENCE of an explicit override — ``CLAUDE_PLUGIN_ROOT``
+    deliberately outranks it, so a pinned build cannot lose to whatever happens to
+    be on PATH. This therefore has to ESTABLISH "no override" rather than inherit
+    whatever the developer's environment holds; with that variable set and
+    populated, detection correctly returns the env-root path and this test would
+    otherwise fail for a reason that is not about PATH at all.
+    """
+    monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
 
     def fake_which(name):
         return {"gd": "/usr/local/bin/gd", "grd-tools": "/usr/local/bin/grd-tools"}.get(name)
