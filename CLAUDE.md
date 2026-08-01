@@ -265,13 +265,20 @@ cd backend && uv run ruff format .                           # Format (line-leng
    looked like hangs for exactly this reason: a harness timeout at 10 minutes,
    not the suite.)
 
-   Baseline is **20 pre-existing failures / 5449 passed** (2026-08-01):
-   `test_grd_research_handler` (10), `test_tesserae_integration` (4, flaky —
-   the names shift between runs), `test_grd_cli_v0324` (3),
-   `test_litestar_health` (2), `test_skill_sleep_routes` (1). The gate is **no
-   NEW failures**; compare against a pristine `main` worktree rather than
-   assuming a failure is yours, and never present targeted runs as the full
-   suite.
+   **The suite is GREEN: 5469 passed, 0 failed** (2026-08-01, 14m13s). Any
+   failure is yours. This previously listed 20 "pre-existing failures" to be
+   tolerated; all 20 were triaged and fixed, and they were not noise — among
+   them was a real bug (a PATH probe silently outranking the explicit
+   `CLAUDE_PLUGIN_ROOT` override) whose three tests had been correct and red for
+   seven weeks. Do not re-introduce a tolerated-failure list: it is how a suite
+   stops being able to warn anyone.
+
+   Two of the twenty depended on the DEVELOPER's environment, not on the code —
+   worth knowing when a test fails for you and nobody else: a shell that exports
+   `AGENTED_API_KEY` (this machine's `~/.zshrc` does) makes "no auth configured"
+   false, and `config_status`/`graph_status` cache to `~/.cache/agented/tesserae`
+   so a stubbed test could assert against your real cache. Both are now
+   neutralised in `tests/conftest.py` and the tests themselves.
 3. `cd frontend && npm run test:run` — **1727 passed / 191 files, zero
    failures** (measured 2026-08-01). This previously documented "7 known
    pre-existing failures (RateLimitGauge, MarkdownContent, WorkingMemoryView,
