@@ -127,7 +127,13 @@ class TestSetupStatus:
 
 
 class TestAuthStatus:
-    def test_needs_setup_when_no_keys(self, isolated_db):
+    def test_needs_setup_when_no_keys(self, isolated_db, monkeypatch):
+        # "No keys" has to be MADE true. `auth_configured` is
+        # `has_any_keys() or bool(os.environ["AGENTED_API_KEY"])`, and a
+        # developer whose shell exports AGENTED_API_KEY (this machine does, via
+        # ~/.zshrc) inherits it into pytest — so this asserted the opposite of
+        # the state it was running in, and failed for everyone but CI.
+        monkeypatch.delenv("AGENTED_API_KEY", raising=False)
         with _client(isolated_db) as c:
             resp = c.get("/health/auth-status")
         body = resp.json()
@@ -178,7 +184,11 @@ class TestVerifyKey:
         body = resp.json()
         assert body["valid"] is True
 
-    def test_no_auth_configured_treats_any_key_as_valid(self, isolated_db):
+    def test_no_auth_configured_treats_any_key_as_valid(self, isolated_db, monkeypatch):
+        # Same precondition as needs_setup above: an inherited AGENTED_API_KEY
+        # means auth IS configured, so "no auth configured" must be established
+        # rather than assumed.
+        monkeypatch.delenv("AGENTED_API_KEY", raising=False)
         with _client(isolated_db) as c:
             resp = c.post("/health/verify-key", json={"api_key": "anything"})
         body = resp.json()

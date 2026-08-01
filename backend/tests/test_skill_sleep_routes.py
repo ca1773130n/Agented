@@ -8,6 +8,9 @@ calls fire.
 
 from __future__ import annotations
 
+import json
+import time
+
 from litestar.testing import create_test_client
 
 from app.db.rbac import create_user_role
@@ -92,6 +95,11 @@ def test_round_endpoint_runs(isolated_db, monkeypatch):
             }
         ),
     )
+    # The endpoint is ASYNC: it dispatches and returns a job id, and the round's
+    # own outcome is read back from the job. This test asserted the old
+    # synchronous shape (`{"status": ...}` straight off the POST) and had been
+    # failing with KeyError: 'status' ever since — filed as a known baseline
+    # failure rather than read.
     with _client() as c:
         pid = _make_project(c, "ss-key-round")
         resp = c.post(
@@ -99,8 +107,24 @@ def test_round_endpoint_runs(isolated_db, monkeypatch):
             headers={"X-API-Key": "ss-key-round"},
             json={"n": 4, "seed": 1},
         )
-    assert resp.status_code == 201
-    assert resp.json()["status"] == "no_candidate"
+        assert resp.status_code == 201
+        job_id = resp.json()["job_id"]
+        assert job_id
+
+        # Poll to a terminal state — the round runs in a thread.
+        from app.services.skill_sleep_service import get_round_job
+
+        for _ in range(200):
+            job = get_round_job(job_id)
+            if job and job.get("status") in ("done", "error"):
+                break
+            time.sleep(0.05)
+
+    assert job is not None, "round job vanished"
+    assert job["status"] == "done", job
+    # The stubbed round reported no candidate; that outcome must survive the trip
+    # through the job, which is the whole point of the async shape.
+    assert json.dumps(job).find("no_candidate") != -1, job
 
 
 def test_adopt_404_for_foreign_run(isolated_db):

@@ -148,3 +148,22 @@ def reset_rbac_cache():
         invalidate_key_cache()
     except ImportError:
         logger.debug("Could not import invalidate_key_cache (module not loaded)")
+
+
+@pytest.fixture(autouse=True)
+def _isolate_tesserae_cache(tmp_path, monkeypatch):
+    """Point the Tesserae disk cache at a temp dir for every test.
+
+    ``config_status`` / ``graph_status`` and friends cache their result as JSON
+    under ``~/.cache/agented/tesserae`` with a 60-900s TTL. Tests that stub
+    ``_run_tesserae`` were therefore asserting against whatever the DEVELOPER's
+    real cache happened to hold — the stub never ran on a cache hit. That is why
+    4 tests in test_tesserae_integration.py "failed flakily": which ones failed
+    depended on how recently something had populated the cache, so they came and
+    went with a 60-second TTL rather than with any code change.
+    """
+    try:
+        from app.services import tesserae_integration as _ti
+    except Exception:  # pragma: no cover - module not importable in some suites
+        return
+    monkeypatch.setattr(_ti, "_TESSERAE_CACHE_DIR", tmp_path / "tesserae-cache")

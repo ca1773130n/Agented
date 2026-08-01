@@ -36,7 +36,13 @@ def test_detect_binaries_no_install_marks_both_unavailable(monkeypatch):
     """Neither binary present → both ``*_available`` flags clear."""
     _reset_cli()
     monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
-    with patch("glob.glob", return_value=[]):
+    # Every probe must be made to miss, or "no install" is not what is being
+    # tested. The PATH probe was added after this test was written, so on any
+    # machine with GRD actually installed (this one) `shutil.which` found the
+    # real binary and the assertions below could never hold.
+    with patch("glob.glob", return_value=[]), patch(
+        "app.services.grd_cli_service.shutil.which", return_value=None
+    ):
         GrdCliService.detect_binaries()
     avail = GrdCliService.available()
     assert avail["grd_tools_available"] is False

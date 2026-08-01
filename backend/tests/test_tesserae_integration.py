@@ -834,7 +834,11 @@ def test_run_research_async_job_lifecycle():
         ti, "run_research", return_value={"ok": True, "query": "q", "report_md": "# R", "reason": None}
     ):
         job_id = ti.run_research_async("q")
-        assert job_id.startswith("tess-research-")
+        # `run_research_async` now delegates to the shared `run_memory_job`,
+        # which mints `mq-<kind>-<token>` — the old `tess-research-` prefix went
+        # away with that refactor. Assert the KIND segment, which is the part
+        # that actually identifies the job, not the queue prefix.
+        assert job_id.startswith("mq-research-"), job_id
         # poll the in-memory job store until the daemon thread finishes
         for _ in range(50):
             job = ti.get_op_job(job_id)
