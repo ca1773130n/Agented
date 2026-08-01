@@ -147,20 +147,57 @@ properly needs tesserae to either exempt managers under `--dry-run` or treat a
 `no-sessions` child as distillable-empty; until then, treat L2' manager rollups as
 unsupported on the automatic path.
 
-**Inert on this machine today, by data not by design.** 0 projects have
-`tesserae_distill_enabled = 1`, and all 3 rows in `super_agent_sessions` have
-`project_id IS NULL` while `_project_super_agents` joins on it — so
-`distill_super_agents` returns `no_super_agents` and BOTH the manual Distill
-button and this automatic path are no-ops here. The gates above are therefore
-covered by tests, not by a production run: nothing in this feature has ever
-spawned `tesserae distill`. Do a manual Distill first on a project that has
-super-agent sessions with a `project_id` before trusting the automatic path — it
-will also surface why those 3 rows have none, which independently keeps
-super-agent expertise out of the graph. Note the column is **not** globally
-unwritten: `create_super_agent_session` takes `project_id` and inserts it
-(`app/db/super_agents.py`), and `super_agent_session_service` backfills it — so
-this is specific callers creating projectless sessions, not a missing write. Look
-for the caller, not for the persistence bug.
+**No longer inert — the loop was closed by hand on 2026-08-01.** This section
+previously said 0 projects had `tesserae_distill_enabled = 1`, that all 3
+`super_agent_sessions` rows had `project_id IS NULL`, and that "nothing in this
+feature has ever spawned `tesserae distill`". All three are now false. Measured
+state: **1 project opted in** (GetResearchDone), **5 session rows, 1 correctly
+attributed** (`sess-cv1uqiev` → `sa-apoc` → `proj-xe3qj4`), and the first
+`distilled.graph.json` on this machine exists at
+`.tesserae/agents/claude:unknown:sa-apoc/` (5 nodes: 2 Agent, 2 DistilledNote,
+1 ExpertiseProfile).
+
+Three things had to be fixed to get there, and each failed silently:
+
+1. **The graph was never built.** `compile --changed-only` reported
+   `processed=0 skipped=316` against a `graph.json` holding 302 nodes — the
+   manifest claimed every doc was current. A full re-extraction produced 8734
+   nodes / 12779 edges. A no-op compile is not evidence of anything; check
+   `processed>0` before believing a compile did work.
+2. **Sessions were never imported.** The DB row was correctly attributed and the
+   registry declared the agent, yet `distill --all --dry-run` still priced it as
+   `no-sessions`. `export_sessions_to_tesserae` had to run before the graph had
+   anything attributed to any agent.
+3. **The `project_id` was being dropped by a specific caller** — the thing the
+   old text told you to go looking for. `_fix_stale_session`
+   (`autofix_service.py`) deleted a stale super-agent session and recreated it
+   via `get_or_create_session(super_agent_id)` without forwarding the project, so
+   the replacement carried NULL. The Tesserae export hook opens with
+   `if not project_id: return`, so agent memory for that project silently never
+   populated again. Fixed; the 4 remaining NULL rows are `sa-system` autofix
+   investigations that genuinely have no project.
+
+**The AUTOMATIC path has now fired too, once, on 2026-08-01 — and spent
+nothing.** A compile on the opted-in project produced, unprompted:
+
+```
+auto-distill scheduled for proj-xe3qj4 — graph.json changed to 375802fd4ed0,
+  79849s since last dispatch, budget 60 estimated provider calls
+auto-distill finished for proj-xe3qj4 — nothing_to_distill, 0 provider calls
+```
+
+So change-detection, the 6 h interval check, and the pricing gate all work as
+documented, and the record persisted to `projects.tesserae_auto_distill_state`
+with its digest and `at_epoch` (so the floor survives a restart, not just this
+process).
+
+Read the outcome precisely: `nothing_to_distill` here is the **priced-at-zero**
+shape, not the `no-sessions` one. The free dry run reports
+`clusters=0 estimated_llm_calls=0 scope=1` — the agent HAS scope, but one session
+with 8 decisions does not form a cluster worth summarising. The chain is proven;
+what is still unobserved is a dispatch that actually spends, and with it the
+`≥n` partial-cost path and the 1800 s timeout. Do not read "the automatic path
+works" as "the automatic path has been seen to bill".
 
 **These gates assume `workers = 1`.** The coalesce map and the 6 h record are
 in-process (`tesserae_integration`), and the DB write is a record, not an atomic

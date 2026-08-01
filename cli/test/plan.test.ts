@@ -287,3 +287,16 @@ test('every declared boolFlag is actually a flag that alias declares', async () 
     }
   }
 });
+
+test('a path param containing a digit is filled whole, not truncated', async () => {
+  // fillPath used /:([a-zA-Z_]+)/, which stops at the digit: `:id2` matched `:id`
+  // and left a literal "2" in the URL — a wrong endpoint, silently. No alias has
+  // such a param today (all 784 scanned), so this pins the grammar rather than a
+  // live bug: the generator and coverage test already use [A-Za-z0-9_].
+  const alias: Alias = {
+    group: 'x', verb: 'y', method: 'GET', path: '/admin/a/:id2/b',
+    params: ['id2'], help: 'test-only alias',
+  };
+  const plan = await planCommand(parseArgs(['x', 'y', 'val']), PROFILE, 'x', alias);
+  assert.equal(plan.path, '/admin/a/val/b');
+});

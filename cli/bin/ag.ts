@@ -576,7 +576,13 @@ function flagValue(alias: Alias, flag: string, v: string | boolean | undefined):
 
 function fillPath(alias: Alias, positionals: string[]): { path: string; used: number } {
   let used = 0;
-  const path = alias.path.replace(/:([a-zA-Z_]+)/g, (_m, name: string) => {
+  // Same character class the generator and the coverage test use. It was
+  // /:([a-zA-Z_]+)/ here, which would consume `:id` out of `:id2` and leave a
+  // literal "2" in the URL — a wrong endpoint, silently. No current path has a
+  // digit in a param name (all 784 scanned), so this is a latent disagreement
+  // rather than a live bug; three regexes describing one grammar should still
+  // agree, because the one that drifts is the one that builds the request.
+  const path = alias.path.replace(/:([A-Za-z0-9_]+)/g, (_m, name: string) => {
     const v = positionals[used++];
     if (v === undefined) throw new UsageError(`ag ${alias.group} ${alias.verb} needs <${name}>\n  ${alias.help}`);
     return encodeURIComponent(v);
