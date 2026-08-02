@@ -14,6 +14,7 @@ export default defineConfig({
   srcExclude: [
     'ai-accounts/**',
     'deploy/**',
+    'handoffs/**',
     'perf/**',
     'plans/**',
     'superpowers/**',
