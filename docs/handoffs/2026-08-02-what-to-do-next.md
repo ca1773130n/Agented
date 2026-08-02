@@ -106,12 +106,17 @@ spawned a real `claude -p … --dangerously-skip-permissions` subprocess that
 edited backend source mid-run.
 
 **There is no way to turn that off.** `capture_error` calls `trigger_autofix`
-unconditionally (`error_capture.py:93`), and no env var or setting gates it —
-an earlier version of this file told you to set `AGENTED_AUTOFIX_*`, which does
-not exist and never did. Which backend it spends on is now configurable and
-defaults to codex (#384); whether it runs at all is not. So a QA run against a
-build that 500s will spend tokens and write to your tree, and the only lever is
-not provoking the errors.
+for every error it newly persists (`error_capture.py:94`), and no env var or
+setting gates it — an earlier version of this file told you to set
+`AGENTED_AUTOFIX_*`, which does not exist and never did. Which backend it
+spends on is now configurable and defaults to codex (#384); whether it runs at
+all is not.
+
+The one thing that holds it back is deduplication: an error recognised as a
+duplicate is stored with `skip_autofix` and returns before the dispatch. So a
+run that trips the same 500 forty times pays for one investigation, not forty
+— but a run that trips forty *distinct* errors pays for forty. The only lever
+is not provoking them.
 
 The original note follows.
 
@@ -175,11 +180,17 @@ manifest claimed everything was current while the graph was never built. Check
 
 ```bash
 just build                                   # vue-tsc + vite
-cd backend && uv run pytest                  # 5469 passed, 0 failed (~14 min)
-cd frontend && npm run test:run              # 1727 passed, 0 failed
-cd cli && node --test --experimental-strip-types test/*.test.ts   # 57 passed
+cd backend && uv run pytest                  # 5476 passed, 0 failed (~14 min)
+cd frontend && npm run test:run              # 1738 passed, 0 failed
+cd cli && node --test --experimental-strip-types test/*.test.ts   # 77 passed
 cd backend && uv run pytest tests/test_cli_contract.py            # 9 passed
 ```
+
+Those counts are from #384 and were re-measured, not carried forward. If the
+backend suite fails for you and nobody else, re-read the two developer-machine
+shapes above before believing the code: a review agent running it under a fresh
+`UV_CACHE_DIR` in a sandbox saw 15 failures on this exact commit, none of them
+in changed code, while the same commit was 5476/0 here.
 
 `test_cli_contract.py` is the independent oracle for the CLI. It validates all
 784 alias paths against the server's real route table, and it caught two classes
