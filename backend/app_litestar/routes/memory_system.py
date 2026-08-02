@@ -26,6 +26,7 @@ from typing import Any, Optional
 
 from litestar import Router, get, post
 from litestar.exceptions import NotFoundException, ValidationException
+from litestar.params import Parameter
 
 from app.db.connection import get_connection
 from app.db.projects import get_project
@@ -294,7 +295,11 @@ def query_graph(q: str, top_k: int = 8, kind: Optional[str] = None) -> dict[str,
 
 @get("/system/memory/graph/map", sync_to_thread=True)
 def graph_map_route(
-    scope: Optional[str] = None,
+    # NOT named `scope`: that is one of Litestar's RESERVED_KWARGS, so a handler
+    # parameter of that name is injected with the raw ASGI scope dict instead of
+    # the query param — and it is in SKIP_VALIDATION_NAMES, so the `str`
+    # annotation never catches it. The public query name stays `scope`.
+    scope_id: Optional[str] = Parameter(query="scope", default=None, required=False),
     cursor: int = 0,
     budget_chars: Optional[int] = None,
 ) -> dict[str, Any]:
@@ -310,7 +315,7 @@ def graph_map_route(
     KG explorer is single-project; if per-project Descent is ever needed, resolve a
     DB project id through ``get_tesserae_root()`` like the sibling graph routes do —
     never pass raw query text through as a path."""
-    return ti.graph_map(scope=scope, cursor=cursor, budget_chars=budget_chars)
+    return ti.graph_map(scope=scope_id, cursor=cursor, budget_chars=budget_chars)
 
 
 @get("/system/memory/sessions", sync_to_thread=True)

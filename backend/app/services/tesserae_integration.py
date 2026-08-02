@@ -1289,7 +1289,8 @@ def graph_map(
         # scope_ids look like "CommunitySummary:hex", "org:root", "agent:<key>",
         # "<alias>::<cid>" — allow alnum + : . / _ - but never a leading dash.
         if (
-            not scope.strip()
+            not isinstance(scope, str)
+            or not scope.strip()
             or scope.lstrip().startswith("-")
             or not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_:./-]{0,199}", scope)
         ):
