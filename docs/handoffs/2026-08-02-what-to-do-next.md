@@ -106,17 +106,19 @@ spawned a real `claude -p … --dangerously-skip-permissions` subprocess that
 edited backend source mid-run.
 
 **There is no way to turn that off.** `capture_error` calls `trigger_autofix`
-for every error it newly persists (`error_capture.py:94`), and no env var or
-setting gates it — an earlier version of this file told you to set
-`AGENTED_AUTOFIX_*`, which does not exist and never did. Which backend it
-spends on is now configurable and defaults to codex (#384); whether it runs at
-all is not.
+(`error_capture.py:95`) with no env var or setting gating it — an earlier
+version of this file told you to set `AGENTED_AUTOFIX_*`, which does not exist
+and never did. Which backend it spends on is now configurable and defaults to
+codex (#384); whether it runs at all is not.
 
-The one thing that holds it back is deduplication: an error recognised as a
-duplicate is stored with `skip_autofix` and returns before the dispatch. So a
-run that trips the same 500 forty times pays for one investigation, not forty
-— but a run that trips forty *distinct* errors pays for forty. The only lever
-is not provoking them.
+The one thing that holds it back is deduplication, and it is narrower than it
+sounds. Every error is persisted, duplicates included; what a duplicate skips
+is the dispatch. "Duplicate" means `find_recent_duplicate` found the same
+error hash **within the last 60 seconds** — so the same 500 hit repeatedly
+inside a minute costs one investigation, the same 500 hit once a minute costs
+one per minute, and forty distinct errors cost forty. A monkey run that
+provokes varied errors over a quarter of an hour is closer to the expensive
+end than the cheap one. The only lever is not provoking them.
 
 The original note follows.
 
