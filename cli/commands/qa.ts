@@ -79,28 +79,28 @@ export async function qaCmd(a: Args): Promise<number> {
   note(`mischief ${argv.join(' ') || '(default run)'}  [cwd ${dir}]`);
 
   // CONCURRENT RUNS AGAINST ONE reports/ DIRECTORY ARE NOT SUPPORTED, and this
-  // command does not try to make them safe.
+  // command deliberately does not pretend otherwise.
   //
   // mischief run ids are precise to the second (util.mjs makeRunId), so two
-  // runs starting in the same second share a directory AND an id. If one of
-  // them then fails to write its own log.json, the other's can satisfy the
-  // proof check below — the wrong exit code on a local QA command.
+  // runs starting in the same second share a directory AND an id. If one then
+  // fails to write its own log.json, the other's satisfies the proof check
+  // below, and this run reports a verdict computed from someone else's data.
   //
-  // An exclusive lock was tried here and removed. It could not deliver what it
-  // promised: it guarded this process, while the thing writing into reports/ is
-  // the mischief child, which outlives a killed parent and keeps writing after
-  // the next run has taken the lock. It also introduced its own failure modes —
-  // an owner dying mid-claim, or a dead recovery marker, wedged every later run.
-  // Four review rounds found four defects in it, all in code that existed only
-  // for this one coincidence. The residual below is smaller than the machinery
-  // was.
+  // Two things were tried and both removed. An exclusive lock guarded THIS
+  // process, while the thing writing into reports/ is the mischief child, which
+  // outlives a killed parent — so the exclusivity was never real, and its own
+  // recovery path could wedge every later run. Then an mtime floor, which
+  // cannot see the collision it was written for: both logs fall in the same
+  // second, so the earlier one passes a `>= startedAt` test.
   //
-  // Two concurrent runs already race the app, the database and the browser, so
-  // the honest answer is "don't", not a lock that implies it is handled.
+  // Each was a mechanism that read as a guarantee and was not one, which is
+  // worse than no mechanism. Two concurrent runs already race the app, the
+  // database and the browser regardless. The honest answer is "don't run two",
+  // said here rather than implied by machinery that cannot enforce it.
   //
-  // Floor to the second: mischief's run ids are second-precise, and some
-  // filesystems store mtimes at that granularity too. See provenLog().
-  const startedAt = Math.floor(Date.now() / 1000) * 1000;
+  // Closing it properly needs a per-run nonce from mischief — a token in the
+  // log that a caller can match against the run it launched. That is an
+  // upstream change; there is an open PR on mischief where it belongs.
   const { code: rawCode, stdout } = await run(
     join(dir, 'node_modules', '.bin', 'mischief'),
     argv,
@@ -108,7 +108,7 @@ export async function qaCmd(a: Args): Promise<number> {
     bool(a, 'json'),
   );
   const runDir = reportedRunDir(stdout, dir);
-  const proof = provenLog(runDir, startedAt);
+  const proof = provenLog(runDir);
 
   // A CRASHED HARNESS MUST NOT READ AS FINDINGS — the whole reason 3 exists.
   //
@@ -145,12 +145,7 @@ export async function qaCmd(a: Args): Promise<number> {
             '  command exists to prevent.\n' +
             '  (`ag qa` needs the markdown + json reporters; a config that disables\n' +
             '  them removes the only proof that a run happened.)'
-        : proof === 'stale'
-          ? `\nmischief exited ${rawCode} and named ${runDir}, but the log.json there\n` +
-            '  predates this run — it belongs to an earlier run that happened to get the\n' +
-            '  same second-precise run id. This run produced no log of its own, so it is\n' +
-            '  3 (unverified) rather than a verdict read off somebody else’s data.'
-          : proof === 'corrupt'
+        : proof === 'corrupt'
             ? `\nmischief exited ${rawCode} and named ${runDir}, but the log.json there does\n` +
               '  not parse, or names a different run. A reporter that opened the file and\n' +
               '  then failed leaves exactly this. `ag qa` tells you to parse that file, so\n' +
@@ -193,9 +188,9 @@ export async function qaCmd(a: Args): Promise<number> {
  * The run directory THIS invocation wrote, taken from the child's own
  * `REPORT: <path>` line (mischief's bin prints it last, after the summary).
  *
- * The last match wins: nothing else prints that prefix, but a run's own output
- * could in principle be echoed by page content, and the child's final line is
- * the authoritative one.
+ * Exactly one match is required. Nothing legitimate prints two, and a report
+ * path containing a literal "\nREPORT: " would forge a second — so a pair is
+ * unreadable rather than a case for picking the last.
  *
  * Returns null when no such line was printed, which means the run did not reach
  * its reporting stage. `report.outDir` is resolved to an absolute path by
@@ -224,31 +219,31 @@ function reportedRunDir(stdout: string, dir: string): string | null {
 }
 
 /**
- * Is there a parseable report in the directory the child named, and is it from
- * THIS run?
+ * Is there a parseable report in the directory the child named?
  *
- * 'proven'    — log.json is there and was written during our window. That IS
- *               the evidence `ag qa` reports on.
- * 'no-report' — the child never named a directory: it did not finish.
+ * 'proven'    — log.json is there and parses, and names this run. That IS the
+ *               evidence `ag qa` reports on.
+ * 'no-report' — the child never named a single directory: it did not finish,
+ *               or printed an ambiguous pair of sentinels.
  * 'no-log'    — it named one, but only the markdown rendering landed. The
  *               markdown is for humans; log.json is the data, and without it
  *               there is nothing to parse.
- * 'stale'     — the log there predates us. Run ids are only second-precise
- *               (mischief's util.mjs makeRunId), so two runs started in the
- *               same second share a directory; a run whose json reporter failed
- *               would otherwise be "proven" by the earlier run's log. The mtime
- *               is NOT identity here — the child already told us the path — it
- *               is only a freshness assertion on top of it.
+ * 'corrupt'   — the log does not parse, or names a different run.
+ * 'oversized' — larger than this command will read to answer a yes/no question.
  * 'unreadable'— the path exists but cannot be stat'd.
+ *
+ * There is deliberately no freshness check. An mtime floor was tried and cannot
+ * see the case it was written for: two runs starting in the same second share
+ * a run id AND a directory, so the earlier log passes any `>= start` test. A
+ * guard that misses its own scenario is worse than none, because it reads as
+ * cover. See the note in qaCmd for what would actually close it.
  */
 function provenLog(
   runDir: string | null,
-  startedAt: number,
-): 'proven' | 'no-report' | 'no-log' | 'stale' | 'corrupt' | 'oversized' | 'unreadable' {
+): 'proven' | 'no-report' | 'no-log' | 'corrupt' | 'oversized' | 'unreadable' {
   if (!runDir) return 'no-report';
   const log = join(runDir, 'log.json');
   let raw: string;
-  let mtimeMs: number;
   try {
     const s = statSync(log);
     if (!s.isFile()) return 'no-log';
@@ -256,7 +251,6 @@ function provenLog(
     // slurping an arbitrarily large file to answer a yes/no question is how a
     // verification step becomes the thing that falls over.
     if (s.size > MAX_LOG_BYTES) return 'oversized';
-    mtimeMs = s.mtimeMs;
     raw = readFileSync(log, 'utf8');
   } catch (e) {
     return (e as NodeJS.ErrnoException)?.code === 'ENOENT' ? 'no-log' : 'unreadable';
@@ -274,7 +268,7 @@ function provenLog(
   // The log names its own run (report/index.mjs writes runId first). It must be
   // the run whose directory it sits in, or this is somebody else's data.
   if (parsed?.runId !== basename(runDir)) return 'corrupt';
-  return mtimeMs >= startedAt ? 'proven' : 'stale';
+  return 'proven';
 }
 
 /**
@@ -300,15 +294,25 @@ function resolveExit(code: number, proof: ReturnType<typeof provenLog>): number 
  */
 const STDOUT_TAIL_LINES = 200;
 
+/** Hard ceiling regardless of line count. Generous next to a real run's output
+ *  (a 24-route run printed under 3 KB) and small enough to be a real bound. */
+const STDOUT_TAIL_CHARS = 1024 * 1024;
+
 /**
  * Ceiling on the log we will read to verify a run. Generous next to a real one
  * (a 24-route run here produced ~35 KB) and far below what would hurt.
  */
 const MAX_LOG_BYTES = 256 * 1024 * 1024;
 
-/** Trim accumulated output to the last N whole lines, sentinel intact. */
+/**
+ * Trim accumulated output to the last N whole lines, sentinel intact — plus a
+ * character backstop, because "200 lines" is not a memory bound when one of
+ * them is a reporter dumping a megabyte without a newline. The backstop is
+ * applied to the FRONT so the final line, which carries the sentinel, survives.
+ */
 function keepTail(text: string): string {
-  return text.split('\n').slice(-STDOUT_TAIL_LINES).join('\n');
+  const lines = text.split('\n').slice(-STDOUT_TAIL_LINES).join('\n');
+  return lines.length > STDOUT_TAIL_CHARS ? lines.slice(-STDOUT_TAIL_CHARS) : lines;
 }
 
 

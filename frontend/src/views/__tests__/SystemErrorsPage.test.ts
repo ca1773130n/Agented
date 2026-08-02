@@ -228,8 +228,12 @@ describe('SystemErrorsPage', () => {
       pending += 1
       return new Promise(() => {})
     })
-    await wrapper.find('.autofix-retry').trigger('click')
-    await wrapper.find('.autofix-retry').trigger('click')
+    // Dispatch on the element directly. `trigger()` is a no-op once the button
+    // is disabled, so clicking twice through it would pass even with no
+    // in-flight guard at all — it would only prove VTU respects `disabled`.
+    const btn = wrapper.find('.autofix-retry').element as HTMLButtonElement
+    btn.dispatchEvent(new Event('click'))
+    btn.dispatchEvent(new Event('click'))
     await flushPromises()
 
     expect(pending).toBe(1)

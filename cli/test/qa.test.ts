@@ -11,6 +11,9 @@
  * log.json mtime — and both were unsound: with a concurrent run writing to the
  * same directory, "a new report appeared" does not mean THIS run wrote it, so a
  * crash could be credited with someone else's findings.
+ *
+ * Concurrent runs against one reports/ directory remain unsupported, and
+ * deliberately have no mechanism pretending otherwise — see the note in qaCmd.
  */
 
 import { test } from 'node:test';
@@ -68,14 +71,15 @@ test('the md is a SIBLING of the run directory, not inside it', () => {
   );
 });
 
-test('a concurrent run\'s report cannot be mistaken for ours', () => {
+test('a crashed run names no report, so nothing can be credited to it', () => {
   // The defect that killed two previous designs: run A crashes while run B
-  // writes a perfectly good report. Scanning saw "one new report" and credited
-  // it to A. Reading A's own output, A named nothing, so A is unverified.
+  // writes a perfectly good report. A filesystem scan saw "one new report" and
+  // credited it to A. Reading A's OWN output, A named nothing — which is why
+  // no report on disk, whoever wrote it, can become A's verdict.
   const crashed = 'mischief: route 1/24 /login\nTypeError: re.test is not a function\n';
   assert.equal(reportedRunDir(crashed, '/frontend'), null);
-  assert.equal(provenLog(null, 0), 'no-report');
-  assert.equal(resolveExit(1, provenLog(null, 0)), 3);
+  assert.equal(provenLog(null), 'no-report');
+  assert.equal(resolveExit(1, provenLog(null)), 3);
 });
 
 test('a relative REPORT path is anchored to the frontend dir', () => {
@@ -88,7 +92,7 @@ test('two REPORT lines are refused, not resolved by picking one', () => {
   // choosing. Nothing legitimate prints two, so ambiguity is unreadable.
   const forged = 'REPORT: /a/real.md\nREPORT: /somewhere/else.md\n';
   assert.equal(reportedRunDir(forged, '/frontend'), null);
-  assert.equal(resolveExit(0, provenLog(null, 0)), 3);
+  assert.equal(resolveExit(0, provenLog(null)), 3);
 });
 
 test('a configured report.outDir is followed, not second-guessed', () => {
@@ -108,7 +112,7 @@ test('a run laid out the way mischief lays one out resolves to its log.json', ()
       'mischief: route 24/24 /help\n' +
       'mischief: done — 8 critical, 85 high — NOT VERIFIED (exit 3)\n' +
       `REPORT: ${md}\n`;
-    assert.equal(provenLog(reportedRunDir(stdout, dir), 0), 'proven');
+    assert.equal(provenLog(reportedRunDir(stdout, dir)), 'proven');
   });
 });
 
@@ -117,7 +121,7 @@ test('a run laid out the way mischief lays one out resolves to its log.json', ()
 test('a finished run is proven by its log.json', () => {
   withTmp((dir) => {
     const md = runDir(dir, '20260802-114440', true);
-    assert.equal(provenLog(reportedRunDir(`REPORT: ${md}\n`, dir), 0), 'proven');
+    assert.equal(provenLog(reportedRunDir(`REPORT: ${md}\n`, dir)), 'proven');
   });
 });
 
@@ -126,28 +130,12 @@ test('markdown without log.json is not proof', () => {
   // parse. A run that produced only the rendering has nothing to report on.
   withTmp((dir) => {
     const md = runDir(dir, '20260802-114440', false);
-    assert.equal(provenLog(reportedRunDir(`REPORT: ${md}\n`, dir), 0), 'no-log');
+    assert.equal(provenLog(reportedRunDir(`REPORT: ${md}\n`, dir)), 'no-log');
   });
 });
 
 test('a named directory that does not exist is not proof', () => {
-  withTmp((dir) => assert.equal(provenLog(join(dir, 'never-created'), 0), 'no-log'));
-});
-
-test("an EARLIER run's log at the same path does not prove this one", () => {
-  // Run ids are second-precise, so two runs started in the same second share a
-  // directory. A run whose json reporter failed would otherwise be "proven" by
-  // the older run's log sitting there. The child named the path; the mtime only
-  // asserts freshness on top of that.
-  withTmp((dir) => {
-    const md = runDir(dir, '20260802-114440', true);
-    const startedAfterTheLogWasWritten = Date.now() + 60_000;
-    assert.equal(
-      provenLog(reportedRunDir(`REPORT: ${md}\n`, dir), startedAfterTheLogWasWritten),
-      'stale',
-    );
-    assert.equal(resolveExit(0, 'stale'), 3);
-  });
+  withTmp((dir) => assert.equal(provenLog(join(dir, 'never-created')), 'no-log'));
 });
 
 test('a truncated log is not proof, however fresh it is', () => {
@@ -156,7 +144,7 @@ test('a truncated log is not proof, however fresh it is', () => {
   // its caller to parse this file, so the least it can do is confirm it parses.
   withTmp((dir) => {
     const md = runDir(dir, '20260802-114440', '{"runId":"20260802-1144');
-    assert.equal(provenLog(reportedRunDir(`REPORT: ${md}\n`, dir), 0), 'corrupt');
+    assert.equal(provenLog(reportedRunDir(`REPORT: ${md}\n`, dir)), 'corrupt');
     assert.equal(resolveExit(0, 'corrupt'), 3);
   });
 });
@@ -164,7 +152,7 @@ test('a truncated log is not proof, however fresh it is', () => {
 test("a log belonging to a different run is not proof", () => {
   withTmp((dir) => {
     const md = runDir(dir, '20260802-114440', JSON.stringify({ runId: '20260731-090000' }));
-    assert.equal(provenLog(reportedRunDir(`REPORT: ${md}\n`, dir), 0), 'corrupt');
+    assert.equal(provenLog(reportedRunDir(`REPORT: ${md}\n`, dir)), 'corrupt');
   });
 });
 

@@ -103,8 +103,15 @@ all render fine on a fresh context.
 
 One thing to know before the next run: the crashes fed `error_capture`, which
 spawned a real `claude -p … --dangerously-skip-permissions` subprocess that
-edited backend source mid-run. Set `AGENTED_AUTOFIX_*` off, or expect the QA
-run to spend tokens and write to your tree.
+edited backend source mid-run.
+
+**There is no way to turn that off.** `capture_error` calls `trigger_autofix`
+unconditionally (`error_capture.py:93`), and no env var or setting gates it —
+an earlier version of this file told you to set `AGENTED_AUTOFIX_*`, which does
+not exist and never did. Which backend it spends on is now configurable and
+defaults to codex (#384); whether it runs at all is not. So a QA run against a
+build that 500s will spend tokens and write to your tree, and the only lever is
+not provoking the errors.
 
 The original note follows.
 
