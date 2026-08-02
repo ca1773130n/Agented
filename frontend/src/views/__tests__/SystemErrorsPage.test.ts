@@ -160,8 +160,13 @@ describe('SystemErrorsPage', () => {
     const wrapper = mountComponent()
     await wrapper.vm.$nextTick()
 
-    // No write can be issued while the read is outstanding.
-    await wrapper.find('#autofix-backend').trigger('change')
+    // Dispatch the event directly on the DOM node. `trigger()` is a no-op on a
+    // disabled element, so asserting through it proved only that Vue Test Utils
+    // respects `disabled` — the handler itself was never exercised, and this
+    // test passed while the logical guard was missing entirely.
+    const el = wrapper.find('#autofix-backend').element as HTMLSelectElement
+    el.value = 'claude'
+    el.dispatchEvent(new Event('change'))
     await flushPromises()
     expect(settingsApi.set).not.toHaveBeenCalled()
 

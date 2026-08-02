@@ -78,10 +78,14 @@ export async function qaCmd(a: Args): Promise<number> {
 
   note(`mischief ${argv.join(' ') || '(default run)'}  [cwd ${dir}]`);
 
+  // Floor to the second: mischief's run ids are second-precise, and some
+  // filesystems store mtimes at that granularity too. See provenLog().
+  const startedAt = Math.floor(Date.now() / 1000) * 1000;
   const { code: rawCode, stdout } = await run(
     join(dir, 'node_modules', '.bin', 'mischief'),
     argv,
     dir,
+    bool(a, 'json'),
   );
 
   // A CRASHED HARNESS MUST NOT READ AS FINDINGS — the whole reason 3 exists.
@@ -108,8 +112,9 @@ export async function qaCmd(a: Args): Promise<number> {
   // healthy one's findings. A path the child itself reports cannot be confused
   // with someone else's, and it also follows a configured `report.outDir`,
   // which a hardcoded reports/ scan silently missed.
-  const proof = provenLog(reportedRunDir(stdout, dir));
-  let code = resolveExit(rawCode, proof);
+  const runDir = reportedRunDir(stdout, dir);
+  const proof = provenLog(runDir, startedAt);
+  const code = resolveExit(rawCode, proof);
   if (code !== rawCode) {
     note(
       proof === 'no-report'
@@ -119,16 +124,25 @@ export async function qaCmd(a: Args): Promise<number> {
             '  command exists to prevent.\n' +
             '  (`ag qa` needs the markdown + json reporters; a config that disables\n' +
             '  them removes the only proof that a run happened.)'
-        : `\nmischief exited ${rawCode} and named a report, but ${proof === 'no-log' ? 'no log.json sits beside it' : 'that path is unreadable'}.\n` +
+        : proof === 'stale'
+          ? `\nmischief exited ${rawCode} and named ${runDir}, but the log.json there\n` +
+            '  predates this run — it belongs to an earlier run that happened to get the\n' +
+            '  same second-precise run id. This run produced no log of its own, so it is\n' +
+            '  3 (unverified) rather than a verdict read off somebody else’s data.'
+          : `\nmischief exited ${rawCode} and named a report, but ${proof === 'no-log' ? 'no log.json sits beside it' : 'that path is unreadable'}.\n` +
             '  The markdown is a rendering; log.json is the data. Without it there is\n' +
             '  nothing to parse, so this is 3 (unverified), not a verdict.',
     );
   }
 
   const meaning = EXIT_MEANING[code] ?? `exit ${code}`;
+  // Report the directory the child actually used, not a guess. A configured
+  // `report.outDir` sends output somewhere else entirely, and printing
+  // frontend/reports then sends the reader to an empty directory.
+  const where = runDir ?? join(dir, 'reports');
 
   if (bool(a, 'json')) {
-    json({ exit_code: code, meaning, reports: join(dir, 'reports') });
+    json({ exit_code: code, meaning, reports: where });
   } else if (code === 3) {
     note(
       `\nexit 3 — ${meaning}.\n` +
@@ -139,7 +153,7 @@ export async function qaCmd(a: Args): Promise<number> {
         '  enough data. Do not disable the guardrails to make it green.',
     );
   } else {
-    note(`\nexit ${code} — ${meaning}. Reports: ${join(dir, 'reports')} (parse the JSON, not the markdown)`);
+    note(`\nexit ${code} — ${meaning}. Reports: ${where} (parse the JSON, not the markdown)`);
   }
   return code;
 }
@@ -175,19 +189,32 @@ function reportedRunDir(stdout: string, dir: string): string | null {
 }
 
 /**
- * Is there a parseable report in the directory the child named?
+ * Is there a parseable report in the directory the child named, and is it from
+ * THIS run?
  *
- * 'proven'    — log.json is there. That IS the evidence `ag qa` reports on.
+ * 'proven'    — log.json is there and was written during our window. That IS
+ *               the evidence `ag qa` reports on.
  * 'no-report' — the child never named a directory: it did not finish.
  * 'no-log'    — it named one, but only the markdown rendering landed. The
  *               markdown is for humans; log.json is the data, and without it
  *               there is nothing to parse.
+ * 'stale'     — the log there predates us. Run ids are only second-precise
+ *               (mischief's util.mjs makeRunId), so two runs started in the
+ *               same second share a directory; a run whose json reporter failed
+ *               would otherwise be "proven" by the earlier run's log. The mtime
+ *               is NOT identity here — the child already told us the path — it
+ *               is only a freshness assertion on top of it.
  * 'unreadable'— the path exists but cannot be stat'd.
  */
-function provenLog(runDir: string | null): 'proven' | 'no-report' | 'no-log' | 'unreadable' {
+function provenLog(
+  runDir: string | null,
+  startedAt: number,
+): 'proven' | 'no-report' | 'no-log' | 'stale' | 'unreadable' {
   if (!runDir) return 'no-report';
   try {
-    return statSync(join(runDir, 'log.json')).isFile() ? 'proven' : 'no-log';
+    const s = statSync(join(runDir, 'log.json'));
+    if (!s.isFile()) return 'no-log';
+    return s.mtimeMs >= startedAt ? 'proven' : 'stale';
   } catch (e) {
     return (e as NodeJS.ErrnoException)?.code === 'ENOENT' ? 'no-log' : 'unreadable';
   }
@@ -206,18 +233,35 @@ function resolveExit(code: number, proof: ReturnType<typeof provenLog>): number 
   return proof === 'proven' ? code : 3;
 }
 
-function run(cmd: string, args: string[], cwd: string): Promise<{ code: number; stdout: string }> {
+/**
+ * Only the tail is kept. The sentinel we parse is the child's LAST line, so a
+ * bounded window is enough, and a long run with a chatty custom reporter should
+ * not be able to grow this process without limit.
+ */
+const STDOUT_TAIL_BYTES = 64 * 1024;
+
+function run(
+  cmd: string,
+  args: string[],
+  cwd: string,
+  jsonMode: boolean,
+): Promise<{ code: number; stdout: string }> {
   return new Promise((resolve) => {
     // stdout is piped rather than inherited so the child's `REPORT:` line can
     // be read, then written straight through so its progress still streams
     // live. mischief formats no differently off a TTY (no isTTY checks in its
     // source), so nothing is lost by piping. stderr stays inherited.
+    //
+    // Under --json the child's narration goes to STDERR instead: this command's
+    // stdout must be a single parseable object, and `ag qa --json | jq` was
+    // being fed mischief's progress lines first.
+    const echo = jsonMode ? process.stderr : process.stdout;
     const child = spawn(cmd, args, { cwd, stdio: ['inherit', 'pipe', 'inherit'] });
     let stdout = '';
     child.stdout?.setEncoding('utf8');
     child.stdout?.on('data', (chunk: string) => {
-      stdout += chunk;
-      process.stdout.write(chunk);
+      stdout = (stdout + chunk).slice(-STDOUT_TAIL_BYTES);
+      echo.write(chunk);
     });
     child.on('close', (code) => resolve({ code: code ?? 3, stdout }));
     child.on('error', () => resolve({ code: 3, stdout }));

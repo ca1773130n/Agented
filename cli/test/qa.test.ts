@@ -15,7 +15,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -67,8 +67,8 @@ test('a concurrent run\'s report cannot be mistaken for ours', () => {
   // it to A. Reading A's own output, A named nothing, so A is unverified.
   const crashed = 'mischief: route 1/24 /login\nTypeError: re.test is not a function\n';
   assert.equal(reportedRunDir(crashed, '/frontend'), null);
-  assert.equal(provenLog(null), 'no-report');
-  assert.equal(resolveExit(1, provenLog(null)), 3);
+  assert.equal(provenLog(null, 0), 'no-report');
+  assert.equal(resolveExit(1, provenLog(null, 0)), 3);
 });
 
 test('a relative REPORT path is anchored to the frontend dir', () => {
@@ -95,7 +95,7 @@ test("a REAL run's stdout resolves to a directory that holds its log.json", () =
       'mischief: route 24/24 /help\n' +
       'mischief: done — 8 critical, 85 high — NOT VERIFIED (exit 3)\n' +
       `REPORT: ${md}\n`;
-    assert.equal(provenLog(reportedRunDir(stdout, dir)), 'proven');
+    assert.equal(provenLog(reportedRunDir(stdout, dir), 0), 'proven');
   });
 });
 
@@ -104,7 +104,7 @@ test("a REAL run's stdout resolves to a directory that holds its log.json", () =
 test('a finished run is proven by its log.json', () => {
   withTmp((dir) => {
     const md = runDir(dir, '20260802-114440', true);
-    assert.equal(provenLog(reportedRunDir(`REPORT: ${md}\n`, dir)), 'proven');
+    assert.equal(provenLog(reportedRunDir(`REPORT: ${md}\n`, dir), 0), 'proven');
   });
 });
 
@@ -113,12 +113,41 @@ test('markdown without log.json is not proof', () => {
   // parse. A run that produced only the rendering has nothing to report on.
   withTmp((dir) => {
     const md = runDir(dir, '20260802-114440', false);
-    assert.equal(provenLog(reportedRunDir(`REPORT: ${md}\n`, dir)), 'no-log');
+    assert.equal(provenLog(reportedRunDir(`REPORT: ${md}\n`, dir), 0), 'no-log');
   });
 });
 
 test('a named directory that does not exist is not proof', () => {
-  withTmp((dir) => assert.equal(provenLog(join(dir, 'never-created')), 'no-log'));
+  withTmp((dir) => assert.equal(provenLog(join(dir, 'never-created'), 0), 'no-log'));
+});
+
+test("an EARLIER run's log at the same path does not prove this one", () => {
+  // Run ids are second-precise, so two runs started in the same second share a
+  // directory. A run whose json reporter failed would otherwise be "proven" by
+  // the older run's log sitting there. The child named the path; the mtime only
+  // asserts freshness on top of that.
+  withTmp((dir) => {
+    const md = runDir(dir, '20260802-114440', true);
+    const startedAfterTheLogWasWritten = Date.now() + 60_000;
+    assert.equal(
+      provenLog(reportedRunDir(`REPORT: ${md}\n`, dir), startedAfterTheLogWasWritten),
+      'stale',
+    );
+    assert.equal(resolveExit(0, 'stale'), 3);
+  });
+});
+
+test('mischief still writes reports where this command looks for them', () => {
+  // A contract canary. Every other test here agrees with qa.ts by construction,
+  // so none of them would notice mischief moving its output — which is exactly
+  // the mistake that shipped once already. This reads the installed package and
+  // fails when the layout it encodes changes.
+  const src = readFileSync(
+    join(import.meta.dirname, '..', '..', 'frontend', 'node_modules', 'mischief', 'src', 'report', 'index.mjs'),
+    'utf8',
+  );
+  assert.match(src, /path\.join\(outDir, `\$\{runId\}\.md`\)/, 'markdown is <outDir>/<runId>.md');
+  assert.match(src, /path\.join\(outDir, runId, 'log\.json'\)/, 'log is <outDir>/<runId>/log.json');
 });
 
 // ---- the policy, as a truth table ------------------------------------------

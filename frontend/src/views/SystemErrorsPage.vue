@@ -74,6 +74,13 @@ async function loadAutofixBackend() {
 }
 
 async function onChangeAutofixBackend() {
+  // `disabled` on the select is UX, not a guarantee: it stops a person, but a
+  // dispatched change event still reaches this handler. Without a logical
+  // guard, a save issued while the initial GET is in flight would be overwritten
+  // when that GET resolves — leaving the control showing one backend and the
+  // server holding another. Refuse instead; the operator's next change is a
+  // click away, and a silent disagreement here is about billing.
+  if (loadingAutofixBackend.value || savingAutofixBackend.value) return;
   savingAutofixBackend.value = true;
   const chosen = autofixBackend.value;
   try {
