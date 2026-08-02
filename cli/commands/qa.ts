@@ -15,8 +15,8 @@
  */
 
 import { spawn } from 'node:child_process';
-import { existsSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, statSync } from 'node:fs';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 import { note, out, json, isTTY } from '../lib/output.ts';
 import { str, bool, num, UsageError, type Args } from '../lib/args.ts';
 
@@ -78,11 +78,11 @@ export async function qaCmd(a: Args): Promise<number> {
 
   note(`mischief ${argv.join(' ') || '(default run)'}  [cwd ${dir}]`);
 
-  // Fingerprint the existing logs so THIS run's can be identified afterwards.
-  // See the proof check below.
-  const before = logFingerprints(dir);
-
-  let code = await run(join(dir, 'node_modules', '.bin', 'mischief'), argv, dir);
+  const { code: rawCode, stdout } = await run(
+    join(dir, 'node_modules', '.bin', 'mischief'),
+    argv,
+    dir,
+  );
 
   // A CRASHED HARNESS MUST NOT READ AS FINDINGS — the whole reason 3 exists.
   //
@@ -93,30 +93,37 @@ export async function qaCmd(a: Args): Promise<number> {
   // reported as "exit 1 — HIGH findings", which is precisely the predecessor
   // behaviour this file was written to eliminate.
   //
-  // A completed run always writes reports/<runId>/log.json (mischief's
-  // report/index.mjs); a crash leaves the directory holding only shots/. That
-  // file IS the proof, so demand it for EVERY outcome — 0 included. "Clean"
-  // is the claim that most needs evidence: a green with nothing behind it is
-  // worse than a red, and exit 0 is reachable with an unwritten report.
+  // Proof is demanded for EVERY outcome, 0 included. "Clean" is the claim that
+  // most needs evidence: a green nobody looks behind is worse than a red.
   //
-  // Replay is NOT exempt. It resolves the old run's seed/routes/steps and
-  // calls runMonkey exactly like a fresh run (mischief's bin: replayOverrides
-  // -> runMonkey), so it opens its own run directory and owes the same proof.
-  const proof = provenLog(dir, before);
-  if (resolveExit(code, proof) !== code) {
+  // Replay is NOT exempt. It resolves the old run's seed/routes/steps and calls
+  // runMonkey exactly like a fresh run (mischief's bin: replayOverrides ->
+  // runMonkey), so it opens its own run directory and owes the same proof.
+  //
+  // Ownership comes from the CHILD, via the `REPORT:` line it prints, and never
+  // from scanning reports/. Two earlier attempts scanned: by directory name,
+  // then by log.json mtime. Both were unsound for the same reason — with a
+  // concurrent run in the same directory, "a new report appeared" is not
+  // evidence that THIS run wrote it, so a crashed run could be credited with a
+  // healthy one's findings. A path the child itself reports cannot be confused
+  // with someone else's, and it also follows a configured `report.outDir`,
+  // which a hardcoded reports/ scan silently missed.
+  const proof = provenLog(reportedRunDir(stdout, dir));
+  let code = resolveExit(rawCode, proof);
+  if (code !== rawCode) {
     note(
-      proof === 'ambiguous'
-        ? `\nmischief exited ${code}, but more than one report was written while it ran.\n` +
-            '  This run cannot be told apart from a concurrent one, so its findings\n' +
-            '  cannot be attributed. Reporting 3 (unverified). Run `ag qa` one at a\n' +
-            '  time against a given reports/ directory.'
-        : `\nmischief exited ${code} but wrote no reports/<runId>/log.json — it did not\n` +
-            '  finish. Reporting 3 (unverified) instead: there is no findings list to\n' +
-            '  believe, and calling that "findings" — or "clean" — is the exact\n' +
-            '  confusion this command exists to prevent.',
+      proof === 'no-report'
+        ? `\nmischief exited ${rawCode} but printed no REPORT: line — it did not finish.\n` +
+            '  Reporting 3 (unverified) instead: there is no findings list to believe,\n' +
+            '  and calling that "findings" — or "clean" — is the exact confusion this\n' +
+            '  command exists to prevent.\n' +
+            '  (`ag qa` needs the markdown + json reporters; a config that disables\n' +
+            '  them removes the only proof that a run happened.)'
+        : `\nmischief exited ${rawCode} and named a report, but ${proof === 'no-log' ? 'no log.json sits beside it' : 'that path is unreadable'}.\n` +
+            '  The markdown is a rendering; log.json is the data. Without it there is\n' +
+            '  nothing to parse, so this is 3 (unverified), not a verdict.',
     );
   }
-  code = resolveExit(code, proof);
 
   const meaning = EXIT_MEANING[code] ?? `exit ${code}`;
 
@@ -138,51 +145,52 @@ export async function qaCmd(a: Args): Promise<number> {
 }
 
 /**
- * Every `reports/<runId>/log.json` that exists, mapped to its mtime.
+ * The run directory THIS invocation wrote, taken from the child's own
+ * `REPORT: <path>` line (mischief's bin prints it last, after the summary).
  *
- * Identity comes from the mtime, NOT from the directory name. A run id is only
- * second-precise (`makeRunId` in mischief's util.mjs), so names can repeat, and
- * a name-diff also cannot tell "this run wrote it" from "some other run did".
- * A log whose mtime changed is unambiguously written during our window.
+ * The last match wins: nothing else prints that prefix, but a run's own output
+ * could in principle be echoed by page content, and the child's final line is
+ * the authoritative one.
  *
- * `statSync` follows symlinks, unlike `Dirent.isDirectory()` — a symlinked run
- * directory is a real report and must not read as a missing one.
+ * Returns null when no such line was printed, which means the run did not reach
+ * its reporting stage. `report.outDir` is resolved to an absolute path by
+ * mischief's config, but a relative one is anchored to the frontend dir rather
+ * than assumed.
+ *
+ * The two reporters do NOT write to the same place: markdown lands at
+ * `<outDir>/<runId>.md` and the log at `<outDir>/<runId>/log.json`
+ * (report/index.mjs:23 and :37). So the run directory is the md path's
+ * basename-minus-extension, NOT its dirname — taking the dirname yields
+ * `<outDir>` and reports every healthy run as unproven.
  */
-function logFingerprints(dir: string): Map<string, number> {
-  const reports = join(dir, 'reports');
-  const out = new Map<string, number>();
-  if (!existsSync(reports)) return out;
-  try {
-    for (const name of readdirSync(reports)) {
-      const log = join(reports, name, 'log.json');
-      try {
-        const s = statSync(log);
-        if (s.isFile()) out.set(log, s.mtimeMs);
-      } catch {
-        // Not a run directory, or unreadable. Either way it is not evidence.
-      }
-    }
-  } catch {
-    // reports/ unreadable — no evidence available, which the caller reads as
-    // "not proven" rather than as a pass.
+function reportedRunDir(stdout: string, dir: string): string | null {
+  let found: string | null = null;
+  for (const line of stdout.split('\n')) {
+    const m = /^REPORT:\s*(.+?)\s*$/.exec(line);
+    if (m) found = m[1];
   }
-  return out;
+  if (!found) return null;
+  const md = isAbsolute(found) ? found : join(dir, found);
+  return join(dirname(md), basename(md, '.md'));
 }
 
 /**
- * Did THIS invocation finish writing a report?
+ * Is there a parseable report in the directory the child named?
  *
- * 'proven'    — exactly one log.json appeared or changed. That one is ours.
- * 'missing'   — none did. The run did not finish, whatever it exited with.
- * 'ambiguous' — several did, so a concurrent run is in play and this run's
- *               findings cannot be attributed to it. Deliberately NOT treated
- *               as proof: guessing which is ours is how a crash gets reported
- *               as somebody else's findings.
+ * 'proven'    — log.json is there. That IS the evidence `ag qa` reports on.
+ * 'no-report' — the child never named a directory: it did not finish.
+ * 'no-log'    — it named one, but only the markdown rendering landed. The
+ *               markdown is for humans; log.json is the data, and without it
+ *               there is nothing to parse.
+ * 'unreadable'— the path exists but cannot be stat'd.
  */
-function provenLog(dir: string, before: Map<string, number>): 'proven' | 'missing' | 'ambiguous' {
-  const fresh = [...logFingerprints(dir)].filter(([p, m]) => before.get(p) !== m);
-  if (fresh.length === 1) return 'proven';
-  return fresh.length === 0 ? 'missing' : 'ambiguous';
+function provenLog(runDir: string | null): 'proven' | 'no-report' | 'no-log' | 'unreadable' {
+  if (!runDir) return 'no-report';
+  try {
+    return statSync(join(runDir, 'log.json')).isFile() ? 'proven' : 'no-log';
+  } catch (e) {
+    return (e as NodeJS.ErrnoException)?.code === 'ENOENT' ? 'no-log' : 'unreadable';
+  }
 }
 
 /**
@@ -193,19 +201,27 @@ function provenLog(dir: string, before: Map<string, number>): 'proven' | 'missin
  * nobody goes looking behind it. mischief's own 3 is passed through untouched:
  * it already means unverified, and it carries a better reason than we could.
  */
-function resolveExit(code: number, proof: 'proven' | 'missing' | 'ambiguous'): number {
+function resolveExit(code: number, proof: ReturnType<typeof provenLog>): number {
   if (code === 3) return 3;
   return proof === 'proven' ? code : 3;
 }
 
-function run(cmd: string, args: string[], cwd: string): Promise<number> {
+function run(cmd: string, args: string[], cwd: string): Promise<{ code: number; stdout: string }> {
   return new Promise((resolve) => {
-    // inherit: mischief's own progress goes straight to the terminal. Its exit
-    // code is the product here, not its stdout.
-    const child = spawn(cmd, args, { cwd, stdio: 'inherit' });
-    child.on('close', (code) => resolve(code ?? 3));
-    child.on('error', () => resolve(3));
+    // stdout is piped rather than inherited so the child's `REPORT:` line can
+    // be read, then written straight through so its progress still streams
+    // live. mischief formats no differently off a TTY (no isTTY checks in its
+    // source), so nothing is lost by piping. stderr stays inherited.
+    const child = spawn(cmd, args, { cwd, stdio: ['inherit', 'pipe', 'inherit'] });
+    let stdout = '';
+    child.stdout?.setEncoding('utf8');
+    child.stdout?.on('data', (chunk: string) => {
+      stdout += chunk;
+      process.stdout.write(chunk);
+    });
+    child.on('close', (code) => resolve({ code: code ?? 3, stdout }));
+    child.on('error', () => resolve({ code: 3, stdout }));
   });
 }
 
-export { EXIT_MEANING, logFingerprints, provenLog, resolveExit };
+export { EXIT_MEANING, provenLog, reportedRunDir, resolveExit };

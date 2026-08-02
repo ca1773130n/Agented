@@ -6,40 +6,25 @@
  * route 1 of 24, node exited 1 for the uncaught exception, and `ag qa` printed
  * "exit 1 — HIGH findings" for a run that had tested nothing.
  *
- * The distinguishing fact is on disk, not in the exit code: a finished run
- * writes reports/<runId>/log.json, a crashed one leaves the directory with only
- * shots/. Identity comes from the mtime rather than the directory name, because
- * a run id is only second-precise and a name-diff cannot tell "we wrote this"
- * from "something else did".
+ * Ownership of a report comes from the CHILD's `REPORT:` line, never from
+ * scanning reports/. Two earlier attempts scanned — by directory name, then by
+ * log.json mtime — and both were unsound: with a concurrent run writing to the
+ * same directory, "a new report appeared" does not mean THIS run wrote it, so a
+ * crash could be credited with someone else's findings.
  */
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { EXIT_MEANING, logFingerprints, provenLog, resolveExit } from '../commands/qa.ts';
+import { EXIT_MEANING, provenLog, reportedRunDir, resolveExit } from '../commands/qa.ts';
 
-/** Build a fake frontend/ dir; `runs` maps a run id to whether it finished. */
-function fixture(runs: Record<string, boolean> = {}): string {
+function withTmp(fn: (dir: string) => void) {
+  // NB: this repo sets TMPDIR to the project root, so fixtures land inside it.
+  // The finally-clean is what keeps them from becoming committed litter.
   const dir = mkdtempSync(join(tmpdir(), 'ag-qa-'));
-  for (const [id, finished] of Object.entries(runs)) writeRun(dir, id, finished);
-  return dir;
-}
-
-/** Create reports/<id>/, with a log.json only if the run "finished". */
-function writeRun(dir: string, id: string, finished: boolean, mtime?: number) {
-  const run = join(dir, 'reports', id);
-  mkdirSync(join(run, 'shots'), { recursive: true });
-  if (!finished) return;
-  const log = join(run, 'log.json');
-  writeFileSync(log, '{"pages":[]}');
-  if (mtime !== undefined) utimesSync(log, mtime, mtime);
-}
-
-function withFixture(runs: Record<string, boolean>, fn: (dir: string) => void) {
-  const dir = fixture(runs);
   try {
     fn(dir);
   } finally {
@@ -47,92 +32,102 @@ function withFixture(runs: Record<string, boolean>, fn: (dir: string) => void) {
   }
 }
 
-test('a crashed run — a run directory with no log.json — is not proven', () => {
-  withFixture({}, (dir) => {
-    const before = logFingerprints(dir);
-    writeRun(dir, '20260802-114121', false);
-    assert.equal(provenLog(dir, before), 'missing');
+/**
+ * A finished run, laid out the way mischief actually lays one out: the markdown
+ * at <outDir>/<id>.md and the log at <outDir>/<id>/log.json — siblings, not
+ * nested (report/index.mjs:23 and :37). Returns the md path the child reports.
+ */
+function runDir(dir: string, id: string, withLog: boolean): string {
+  mkdirSync(join(dir, id), { recursive: true });
+  writeFileSync(join(dir, `${id}.md`), '# report');
+  if (withLog) writeFileSync(join(dir, id, 'log.json'), '{"pages":[]}');
+  return join(dir, `${id}.md`);
+}
+
+// ---- whose report is it -----------------------------------------------------
+
+test('the run directory comes from the child, not from the filesystem', () => {
+  const out = 'mischief: route 1/2 /login\nmischief: done — 0 critical\nREPORT: /tmp/r/20260802-114440.md\n';
+  assert.equal(reportedRunDir(out, '/frontend'), '/tmp/r/20260802-114440');
+});
+
+test('the md is a SIBLING of the run directory, not inside it', () => {
+  // Taking dirname(md) yields <outDir> and reports every healthy run as
+  // unproven. Caught by replaying a real run's stdout, not by a fixture —
+  // the fixture had encoded the same wrong assumption as the code.
+  assert.equal(
+    reportedRunDir('REPORT: /f/reports/20260802-114440.md\n', '/f'),
+    '/f/reports/20260802-114440',
+  );
+});
+
+test('a concurrent run\'s report cannot be mistaken for ours', () => {
+  // The defect that killed two previous designs: run A crashes while run B
+  // writes a perfectly good report. Scanning saw "one new report" and credited
+  // it to A. Reading A's own output, A named nothing, so A is unverified.
+  const crashed = 'mischief: route 1/24 /login\nTypeError: re.test is not a function\n';
+  assert.equal(reportedRunDir(crashed, '/frontend'), null);
+  assert.equal(provenLog(null), 'no-report');
+  assert.equal(resolveExit(1, provenLog(null)), 3);
+});
+
+test('a relative REPORT path is anchored to the frontend dir', () => {
+  assert.equal(reportedRunDir('REPORT: reports/r1.md\n', '/frontend'), '/frontend/reports/r1');
+});
+
+test('the last REPORT line wins', () => {
+  const out = 'REPORT: /a/one.md\nREPORT: /a/two.md\n';
+  assert.equal(reportedRunDir(out, '/frontend'), '/a/two');
+});
+
+test('a configured report.outDir is followed, not second-guessed', () => {
+  // A hardcoded reports/ scan reported a healthy run as unverified whenever the
+  // config pointed the reporter somewhere else.
+  assert.equal(reportedRunDir('REPORT: /elsewhere/qa-alt/r9.md\n', '/frontend'), '/elsewhere/qa-alt/r9');
+});
+
+test("a REAL run's stdout resolves to a directory that holds its log.json", () => {
+  // Replays the exact bytes mischief printed on this machine. A fixture cannot
+  // catch a wrong assumption about mischief's own layout; this can.
+  withTmp((dir) => {
+    const md = runDir(dir, '20260802-114440', true);
+    const stdout =
+      'mischief: route 24/24 /help\n' +
+      'mischief: done — 8 critical, 85 high — NOT VERIFIED (exit 3)\n' +
+      `REPORT: ${md}\n`;
+    assert.equal(provenLog(reportedRunDir(stdout, dir)), 'proven');
   });
 });
 
-test('a finished run is proven', () => {
-  withFixture({}, (dir) => {
-    const before = logFingerprints(dir);
-    writeRun(dir, '20260802-114121', true);
-    assert.equal(provenLog(dir, before), 'proven');
+// ---- is there anything to parse --------------------------------------------
+
+test('a finished run is proven by its log.json', () => {
+  withTmp((dir) => {
+    const md = runDir(dir, '20260802-114440', true);
+    assert.equal(provenLog(reportedRunDir(`REPORT: ${md}\n`, dir)), 'proven');
   });
 });
 
-test("an EARLIER run's log.json does not vouch for this one", () => {
-  // reports/ almost always holds a finished run already, so a check that asks
-  // "is there a log.json anywhere" passes for every crash after the first.
-  withFixture({ '20260731-144558': true }, (dir) => {
-    const before = logFingerprints(dir);
-    writeRun(dir, '20260802-114121', false);
-    assert.equal(provenLog(dir, before), 'missing');
+test('markdown without log.json is not proof', () => {
+  // The markdown is a rendering; log.json is the data the command tells you to
+  // parse. A run that produced only the rendering has nothing to report on.
+  withTmp((dir) => {
+    const md = runDir(dir, '20260802-114440', false);
+    assert.equal(provenLog(reportedRunDir(`REPORT: ${md}\n`, dir)), 'no-log');
   });
 });
 
-test('a REUSED run id is proven by its new mtime, not missed for its old name', () => {
-  // makeRunId is second-precise, so a directory name can repeat. Keying on
-  // names alone reported a perfectly good run as unverified.
-  withFixture({}, (dir) => {
-    writeRun(dir, '20260802-114121', true, 1_600_000_000);
-    const before = logFingerprints(dir);
-    writeRun(dir, '20260802-114121', true, 1_700_000_000);
-    assert.equal(provenLog(dir, before), 'proven');
-  });
+test('a named directory that does not exist is not proof', () => {
+  withTmp((dir) => assert.equal(provenLog(join(dir, 'never-created')), 'no-log'));
 });
 
-test('two reports written concurrently are ambiguous, never proof', () => {
-  // Attributing one of them to us is how a crashed run reports a concurrent
-  // run's findings as its own.
-  withFixture({}, (dir) => {
-    const before = logFingerprints(dir);
-    writeRun(dir, '20260802-114121', true);
-    writeRun(dir, '20260802-114122', true);
-    assert.equal(provenLog(dir, before), 'ambiguous');
-  });
-});
-
-test('a symlinked run directory still counts as a report', () => {
-  // Dirent.isDirectory() is false for a symlink, so an entry-type check
-  // silently discarded a real report. statSync follows the link.
-  withFixture({}, (dir) => {
-    mkdirSync(join(dir, 'reports'), { recursive: true });
-    const before = logFingerprints(dir);
-    const real = join(dir, 'elsewhere', '20260802-999999');
-    mkdirSync(real, { recursive: true });
-    writeFileSync(join(real, 'log.json'), '{"pages":[]}');
-    symlinkSync(real, join(dir, 'reports', 'linked-run'));
-    assert.equal(provenLog(dir, before), 'proven');
-  });
-});
-
-test('no reports/ directory at all is not proven, and does not throw', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'ag-qa-'));
-  try {
-    assert.deepEqual([...logFingerprints(dir)], []);
-    assert.equal(provenLog(dir, new Map()), 'missing');
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('loose files beside the run directories are not mistaken for reports', () => {
-  withFixture({ '20260802-114121': true }, (dir) => {
-    writeFileSync(join(dir, 'reports', '20260802-114121.md'), '# report');
-    assert.equal(logFingerprints(dir).size, 1);
-  });
-});
-
-// ---- the policy itself, as a truth table -----------------------------------
+// ---- the policy, as a truth table ------------------------------------------
 
 test('an UNPROVEN clean run is not reported as clean', () => {
-  // The dangerous direction. A green nobody looks behind is worse than a red,
-  // and mischief can exit 0 with its report unwritten.
-  assert.equal(resolveExit(0, 'missing'), 3);
-  assert.equal(resolveExit(0, 'ambiguous'), 3);
+  // The dangerous direction: nobody looks behind a green.
+  assert.equal(resolveExit(0, 'no-report'), 3);
+  assert.equal(resolveExit(0, 'no-log'), 3);
+  assert.equal(resolveExit(0, 'unreadable'), 3);
 });
 
 test('a proven run keeps its own verdict, whatever it is', () => {
@@ -144,22 +139,21 @@ test('a proven run keeps its own verdict, whatever it is', () => {
 test('an unproven findings run is unverified, not findings', () => {
   // The original bug: a crash exits 1 because node does, which is the same 1
   // mischief uses for HIGH findings.
-  assert.equal(resolveExit(1, 'missing'), 3);
-  assert.equal(resolveExit(2, 'missing'), 3);
-  assert.equal(resolveExit(1, 'ambiguous'), 3);
+  assert.equal(resolveExit(1, 'no-report'), 3);
+  assert.equal(resolveExit(2, 'no-report'), 3);
 });
 
 test("mischief's own 3 is passed through untouched", () => {
   // It already means unverified and carries a better reason than we could.
   assert.equal(resolveExit(3, 'proven'), 3);
-  assert.equal(resolveExit(3, 'missing'), 3);
+  assert.equal(resolveExit(3, 'no-report'), 3);
 });
 
 test('replay is subject to the same rule as a fresh run', () => {
   // replay resolves the old seed/routes/steps and calls runMonkey exactly like
   // a fresh run, so it opens its own run directory and owes the same proof.
   // Exempting it let a crashed replay report findings.
-  assert.equal(resolveExit(1, 'missing'), 3);
+  assert.equal(resolveExit(1, 'no-report'), 3);
   assert.equal(resolveExit(1, 'proven'), 1);
 });
 
