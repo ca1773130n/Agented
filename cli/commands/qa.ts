@@ -15,7 +15,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { note, out, json, isTTY } from '../lib/output.ts';
 import { str, bool, num, UsageError, type Args } from '../lib/args.ts';
@@ -78,9 +78,9 @@ export async function qaCmd(a: Args): Promise<number> {
 
   note(`mischief ${argv.join(' ') || '(default run)'}  [cwd ${dir}]`);
 
-  // Snapshot the run dirs so the new one can be identified afterwards. See
-  // the crash check below for why this matters.
-  const before = runDirs(dir);
+  // Fingerprint the existing logs so THIS run's can be identified afterwards.
+  // See the proof check below.
+  const before = logFingerprints(dir);
 
   let code = await run(join(dir, 'node_modules', '.bin', 'mischief'), argv, dir);
 
@@ -95,19 +95,28 @@ export async function qaCmd(a: Args): Promise<number> {
   //
   // A completed run always writes reports/<runId>/log.json (mischief's
   // report/index.mjs); a crash leaves the directory holding only shots/. That
-  // file IS the proof of coverage, so its absence is the definition of 3.
+  // file IS the proof, so demand it for EVERY outcome — 0 included. "Clean"
+  // is the claim that most needs evidence: a green with nothing behind it is
+  // worse than a red, and exit 0 is reachable with an unwritten report.
   //
-  // Replay is exempt: it re-runs a recorded run and is not required to open a
-  // new run directory, so applying this to it would manufacture a false 3.
-  if (sub !== 'replay' && code !== 0 && code !== 3 && !wroteLog(dir, before)) {
+  // Replay is NOT exempt. It resolves the old run's seed/routes/steps and
+  // calls runMonkey exactly like a fresh run (mischief's bin: replayOverrides
+  // -> runMonkey), so it opens its own run directory and owes the same proof.
+  const proof = provenLog(dir, before);
+  if (resolveExit(code, proof) !== code) {
     note(
-      `\nmischief exited ${code} but wrote no reports/<runId>/log.json — it crashed\n` +
-        '  rather than finishing. Reporting 3 (unverified) instead: there is no\n' +
-        '  findings list to believe, and calling that "findings" is the exact\n' +
-        '  confusion this command exists to prevent.',
+      proof === 'ambiguous'
+        ? `\nmischief exited ${code}, but more than one report was written while it ran.\n` +
+            '  This run cannot be told apart from a concurrent one, so its findings\n' +
+            '  cannot be attributed. Reporting 3 (unverified). Run `ag qa` one at a\n' +
+            '  time against a given reports/ directory.'
+        : `\nmischief exited ${code} but wrote no reports/<runId>/log.json — it did not\n` +
+            '  finish. Reporting 3 (unverified) instead: there is no findings list to\n' +
+            '  believe, and calling that "findings" — or "clean" — is the exact\n' +
+            '  confusion this command exists to prevent.',
     );
-    code = 3;
   }
+  code = resolveExit(code, proof);
 
   const meaning = EXIT_MEANING[code] ?? `exit ${code}`;
 
@@ -128,25 +137,65 @@ export async function qaCmd(a: Args): Promise<number> {
   return code;
 }
 
-/** Names of the run directories under frontend/reports/, or [] if there are none. */
-function runDirs(dir: string): string[] {
+/**
+ * Every `reports/<runId>/log.json` that exists, mapped to its mtime.
+ *
+ * Identity comes from the mtime, NOT from the directory name. A run id is only
+ * second-precise (`makeRunId` in mischief's util.mjs), so names can repeat, and
+ * a name-diff also cannot tell "this run wrote it" from "some other run did".
+ * A log whose mtime changed is unambiguously written during our window.
+ *
+ * `statSync` follows symlinks, unlike `Dirent.isDirectory()` — a symlinked run
+ * directory is a real report and must not read as a missing one.
+ */
+function logFingerprints(dir: string): Map<string, number> {
   const reports = join(dir, 'reports');
-  if (!existsSync(reports)) return [];
+  const out = new Map<string, number>();
+  if (!existsSync(reports)) return out;
   try {
-    return readdirSync(reports, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
-      .map((e) => e.name);
+    for (const name of readdirSync(reports)) {
+      const log = join(reports, name, 'log.json');
+      try {
+        const s = statSync(log);
+        if (s.isFile()) out.set(log, s.mtimeMs);
+      } catch {
+        // Not a run directory, or unreadable. Either way it is not evidence.
+      }
+    }
   } catch {
-    return [];
+    // reports/ unreadable — no evidence available, which the caller reads as
+    // "not proven" rather than as a pass.
   }
+  return out;
 }
 
-/** Did this invocation open a run directory and finish writing its log.json? */
-function wroteLog(dir: string, before: string[]): boolean {
-  const seen = new Set(before);
-  return runDirs(dir).some(
-    (name) => !seen.has(name) && existsSync(join(dir, 'reports', name, 'log.json')),
-  );
+/**
+ * Did THIS invocation finish writing a report?
+ *
+ * 'proven'    — exactly one log.json appeared or changed. That one is ours.
+ * 'missing'   — none did. The run did not finish, whatever it exited with.
+ * 'ambiguous' — several did, so a concurrent run is in play and this run's
+ *               findings cannot be attributed to it. Deliberately NOT treated
+ *               as proof: guessing which is ours is how a crash gets reported
+ *               as somebody else's findings.
+ */
+function provenLog(dir: string, before: Map<string, number>): 'proven' | 'missing' | 'ambiguous' {
+  const fresh = [...logFingerprints(dir)].filter(([p, m]) => before.get(p) !== m);
+  if (fresh.length === 1) return 'proven';
+  return fresh.length === 0 ? 'missing' : 'ambiguous';
+}
+
+/**
+ * The whole policy, in one place so it can be checked as a truth table.
+ *
+ * Every outcome owes proof, including 0. "Clean" is the claim that most needs
+ * evidence — an unverified green is worse than an unverified red, because
+ * nobody goes looking behind it. mischief's own 3 is passed through untouched:
+ * it already means unverified, and it carries a better reason than we could.
+ */
+function resolveExit(code: number, proof: 'proven' | 'missing' | 'ambiguous'): number {
+  if (code === 3) return 3;
+  return proof === 'proven' ? code : 3;
 }
 
 function run(cmd: string, args: string[], cwd: string): Promise<number> {
@@ -159,4 +208,4 @@ function run(cmd: string, args: string[], cwd: string): Promise<number> {
   });
 }
 
-export { EXIT_MEANING, runDirs, wroteLog };
+export { EXIT_MEANING, logFingerprints, provenLog, resolveExit };

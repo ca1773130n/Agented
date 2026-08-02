@@ -45,6 +45,14 @@ const AUTOFIX_BACKEND_DEFAULT: AutofixBackend = 'codex';
 
 const autofixBackend = ref<AutofixBackend>(AUTOFIX_BACKEND_DEFAULT);
 const savingAutofixBackend = ref(false);
+// The control stays disabled until the stored value has loaded. That is what
+// closes the stale-read race: a slow GET landing after the operator had already
+// saved would otherwise stamp the old value back over their choice, silently,
+// on a control that says which account gets billed. Disabled-while-loading
+// makes that collision unreachable, so no request-sequencing token is needed —
+// the operator cannot touch the select while a read is in flight, and a save
+// disables it again for the duration of the write.
+const loadingAutofixBackend = ref(true);
 
 function asAutofixBackend(value: string | null | undefined): AutofixBackend | null {
   const v = (value || '').trim().toLowerCase();
@@ -52,6 +60,7 @@ function asAutofixBackend(value: string | null | undefined): AutofixBackend | nu
 }
 
 async function loadAutofixBackend() {
+  loadingAutofixBackend.value = true;
   try {
     const { value } = await settingsApi.get('autofix_backend');
     // Unset is the normal first-run state, not an error: the server applies the
@@ -59,14 +68,17 @@ async function loadAutofixBackend() {
     autofixBackend.value = asAutofixBackend(value) ?? AUTOFIX_BACKEND_DEFAULT;
   } catch {
     autofixBackend.value = AUTOFIX_BACKEND_DEFAULT;
+  } finally {
+    loadingAutofixBackend.value = false;
   }
 }
 
 async function onChangeAutofixBackend() {
   savingAutofixBackend.value = true;
+  const chosen = autofixBackend.value;
   try {
-    await settingsApi.set('autofix_backend', autofixBackend.value);
-    showToast(t('systemErrors.autofix.saved', { backend: autofixBackend.value }), 'success');
+    await settingsApi.set('autofix_backend', chosen);
+    showToast(t('systemErrors.autofix.saved', { backend: chosen }), 'success');
   } catch {
     showToast(t('systemErrors.autofix.saveFailed'), 'error');
     // Never leave the control showing a backend that was not saved — this
@@ -141,7 +153,7 @@ onUnmounted(() => {
       <select
         id="autofix-backend"
         v-model="autofixBackend"
-        :disabled="savingAutofixBackend"
+        :disabled="savingAutofixBackend || loadingAutofixBackend"
         @change="onChangeAutofixBackend"
       >
         <option value="codex">Codex</option>

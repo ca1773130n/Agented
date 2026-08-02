@@ -133,6 +133,65 @@ describe('SystemErrorsPage', () => {
     expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('autofix'), 'error')
   })
 
+  it('is disabled until the stored value has loaded', async () => {
+    // Enabled-while-loading is what makes the stale-read race reachable: the
+    // operator can change a control that is about to be overwritten.
+    const { settingsApi } = await import('../../services/api')
+    vi.mocked(settingsApi.get).mockReturnValue(new Promise(() => {}))
+
+    const wrapper = mountComponent()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('#autofix-backend').attributes('disabled')).toBeDefined()
+  })
+
+  it('a save cannot race an in-flight read, because the control is locked until it lands', async () => {
+    // The stale-read race needs the operator to save while a GET is pending.
+    // Locking the control for exactly that window makes the collision
+    // unreachable, which is why there is no request-sequencing token.
+    const { settingsApi } = await import('../../services/api')
+    let resolveGet: (v: { key: string; value: string }) => void = () => {}
+    vi.mocked(settingsApi.get).mockReturnValue(
+      new Promise((r) => {
+        resolveGet = r
+      }),
+    )
+
+    const wrapper = mountComponent()
+    await wrapper.vm.$nextTick()
+
+    // No write can be issued while the read is outstanding.
+    await wrapper.find('#autofix-backend').trigger('change')
+    await flushPromises()
+    expect(settingsApi.set).not.toHaveBeenCalled()
+
+    // Once it lands the control unlocks and shows the stored value.
+    resolveGet({ key: 'autofix_backend', value: 'opencode' })
+    await flushPromises()
+    expect(wrapper.find('#autofix-backend').attributes('disabled')).toBeUndefined()
+    expect((wrapper.find('#autofix-backend').element as HTMLSelectElement).value).toBe('opencode')
+  })
+
+  it('locks the control again while a save is in flight', async () => {
+    const { settingsApi } = await import('../../services/api')
+    let resolveSet: (v: { key: string; value: string }) => void = () => {}
+    vi.mocked(settingsApi.set).mockReturnValue(
+      new Promise((r) => {
+        resolveSet = r
+      }),
+    )
+
+    const wrapper = mountComponent()
+    await flushPromises()
+    await wrapper.find('#autofix-backend').setValue('claude')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('#autofix-backend').attributes('disabled')).toBeDefined()
+    resolveSet({ key: 'autofix_backend', value: 'claude' })
+    await flushPromises()
+    expect(wrapper.find('#autofix-backend').attributes('disabled')).toBeUndefined()
+  })
+
   it('falls back to the default when the settings read fails', async () => {
     const { settingsApi } = await import('../../services/api')
     vi.mocked(settingsApi.get).mockRejectedValue(new Error('unreachable'))
