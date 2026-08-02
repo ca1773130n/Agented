@@ -197,14 +197,67 @@ describe('SystemErrorsPage', () => {
     expect(wrapper.find('#autofix-backend').attributes('disabled')).toBeUndefined()
   })
 
-  it('falls back to the default when the settings read fails', async () => {
+  it('does not claim a backend it could not read', async () => {
+    // Rendering the default after a failed read states, on a control about
+    // billing, something the server may flatly contradict — it could be storing
+    // opencode. Stay locked and say so instead.
     const { settingsApi } = await import('../../services/api')
     vi.mocked(settingsApi.get).mockRejectedValue(new Error('unreachable'))
 
     const wrapper = mountComponent()
     await flushPromises()
 
+    expect(wrapper.find('#autofix-backend').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.autofix-retry').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Could not read the current setting')
+  })
+
+  it('recovers when the retry succeeds', async () => {
+    const { settingsApi } = await import('../../services/api')
+    vi.mocked(settingsApi.get).mockRejectedValueOnce(new Error('unreachable'))
+
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    vi.mocked(settingsApi.get).mockResolvedValue({ key: 'autofix_backend', value: 'gemini' })
+    await wrapper.find('.autofix-retry').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.autofix-retry').exists()).toBe(false)
+    expect((wrapper.find('#autofix-backend').element as HTMLSelectElement).value).toBe('gemini')
+  })
+
+  it('puts the control back when a change is refused mid-save', async () => {
+    // v-model moves the select before the handler runs, so a refusal that does
+    // not restore leaves it displaying a backend nobody saved.
+    const { settingsApi } = await import('../../services/api')
+    vi.mocked(settingsApi.get).mockResolvedValue({ key: 'autofix_backend', value: 'codex' })
+    let resolveSet: (v: { key: string; value: string }) => void = () => {}
+    vi.mocked(settingsApi.set).mockReturnValue(
+      new Promise((r) => {
+        resolveSet = r
+      }),
+    )
+
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    const el = wrapper.find('#autofix-backend').element as HTMLSelectElement
+    el.value = 'claude'
+    el.dispatchEvent(new Event('change')) // accepted; save now in flight
+    await flushPromises()
+
+    el.value = 'gemini'
+    el.dispatchEvent(new Event('change')) // refused: a save is already running
+    await flushPromises()
+
+    expect(settingsApi.set).toHaveBeenCalledTimes(1)
+    expect(settingsApi.set).toHaveBeenCalledWith('autofix_backend', 'claude')
+    // Back to the last confirmed value, not left showing the refused 'gemini'.
     expect((wrapper.find('#autofix-backend').element as HTMLSelectElement).value).toBe('codex')
+
+    resolveSet({ key: 'autofix_backend', value: 'claude' })
+    await flushPromises()
   })
 
   it('renders the loading state initially', async () => {

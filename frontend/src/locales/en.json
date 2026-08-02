@@ -7547,7 +7547,9 @@
       "label": "Autofix backend",
       "hint": "Which AI backend the unattended Tier-2 investigation runs on. It edits the working tree, so this decides which account is billed.",
       "saved": "Autofix will now run on {backend}",
-      "saveFailed": "Could not save the autofix backend"
+      "saveFailed": "Could not save the autofix backend",
+      "retry": "Retry",
+      "readFailed": "Could not read the current setting, so it is not shown — autofix may be running on a different backend than you expect."
     },
     "searchPlaceholder": "Search errors...",
     "loading": "Loading errors...",

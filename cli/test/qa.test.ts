@@ -19,7 +19,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { EXIT_MEANING, provenLog, reportedRunDir, resolveExit } from '../commands/qa.ts';
+import { EXIT_MEANING, keepTail, provenLog, reportedRunDir, resolveExit } from '../commands/qa.ts';
 
 function withTmp(fn: (dir: string) => void) {
   // NB: this repo sets TMPDIR to the project root, so fixtures land inside it.
@@ -37,10 +37,17 @@ function withTmp(fn: (dir: string) => void) {
  * at <outDir>/<id>.md and the log at <outDir>/<id>/log.json — siblings, not
  * nested (report/index.mjs:23 and :37). Returns the md path the child reports.
  */
-function runDir(dir: string, id: string, withLog: boolean): string {
+function runDir(dir: string, id: string, log: boolean | string): string {
   mkdirSync(join(dir, id), { recursive: true });
   writeFileSync(join(dir, `${id}.md`), '# report');
-  if (withLog) writeFileSync(join(dir, id, 'log.json'), '{"pages":[]}');
+  if (log !== false) {
+    // A real log names its own run first (report/index.mjs), which is what
+    // proves it belongs to the directory it sits in.
+    writeFileSync(
+      join(dir, id, 'log.json'),
+      typeof log === 'string' ? log : JSON.stringify({ runId: id, pages: [] }),
+    );
+  }
   return join(dir, `${id}.md`);
 }
 
@@ -75,9 +82,13 @@ test('a relative REPORT path is anchored to the frontend dir', () => {
   assert.equal(reportedRunDir('REPORT: reports/r1.md\n', '/frontend'), '/frontend/reports/r1');
 });
 
-test('the last REPORT line wins', () => {
-  const out = 'REPORT: /a/one.md\nREPORT: /a/two.md\n';
-  assert.equal(reportedRunDir(out, '/frontend'), '/a/two');
+test('two REPORT lines are refused, not resolved by picking one', () => {
+  // A report path containing a literal "\nREPORT: " forges a second sentinel;
+  // "last one wins" would then steer proof at a directory of the forger's
+  // choosing. Nothing legitimate prints two, so ambiguity is unreadable.
+  const forged = 'REPORT: /a/real.md\nREPORT: /somewhere/else.md\n';
+  assert.equal(reportedRunDir(forged, '/frontend'), null);
+  assert.equal(resolveExit(0, provenLog(null, 0)), 3);
 });
 
 test('a configured report.outDir is followed, not second-guessed', () => {
@@ -137,6 +148,24 @@ test("an EARLIER run's log at the same path does not prove this one", () => {
   });
 });
 
+test('a truncated log is not proof, however fresh it is', () => {
+  // A reporter that opened the file then died — out of disk, killed mid-write —
+  // leaves a log that exists, is current, and cannot be parsed. `ag qa` tells
+  // its caller to parse this file, so the least it can do is confirm it parses.
+  withTmp((dir) => {
+    const md = runDir(dir, '20260802-114440', '{"runId":"20260802-1144');
+    assert.equal(provenLog(reportedRunDir(`REPORT: ${md}\n`, dir), 0), 'corrupt');
+    assert.equal(resolveExit(0, 'corrupt'), 3);
+  });
+});
+
+test("a log belonging to a different run is not proof", () => {
+  withTmp((dir) => {
+    const md = runDir(dir, '20260802-114440', JSON.stringify({ runId: '20260731-090000' }));
+    assert.equal(provenLog(reportedRunDir(`REPORT: ${md}\n`, dir), 0), 'corrupt');
+  });
+});
+
 test('mischief still writes reports where this command looks for them', () => {
   // A contract canary. Every other test here agrees with qa.ts by construction,
   // so none of them would notice mischief moving its output — which is exactly
@@ -148,6 +177,17 @@ test('mischief still writes reports where this command looks for them', () => {
   );
   assert.match(src, /path\.join\(outDir, `\$\{runId\}\.md`\)/, 'markdown is <outDir>/<runId>.md');
   assert.match(src, /path\.join\(outDir, runId, 'log\.json'\)/, 'log is <outDir>/<runId>/log.json');
+  // And that the log still names its own run, which is what provenLog checks.
+  assert.match(src, /JSON\.stringify\(\s*\{\s*runId,/, 'log.json starts with runId');
+});
+
+test('the kept tail cannot slice through the sentinel', () => {
+  // A character-window tail could cut "REPORT: /x.md" in half at the boundary,
+  // which reads as no sentinel and turns a healthy run into exit 3. Whole lines
+  // only, so the last line always survives intact.
+  const noise = Array.from({ length: 5000 }, (_, i) => `mischief: step ${i} ${'x'.repeat(200)}`);
+  const stdout = keepTail([...noise, 'REPORT: /a/r1.md'].join('\n'));
+  assert.equal(reportedRunDir(stdout, '/frontend'), '/a/r1');
 });
 
 // ---- the policy, as a truth table ------------------------------------------

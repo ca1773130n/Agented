@@ -43,7 +43,17 @@ const AUTOFIX_BACKENDS = ['codex', 'claude', 'gemini', 'opencode'] as const;
 type AutofixBackend = (typeof AUTOFIX_BACKENDS)[number];
 const AUTOFIX_BACKEND_DEFAULT: AutofixBackend = 'codex';
 
+// The server-confirmed value, and ONLY ever that — the select is bound with
+// `:value`, not `v-model`, so a choice becomes state after it is stored rather
+// than before. With v-model the ref moved first and a refused change left the
+// control displaying a backend nobody saved; putting the ref back did not fix
+// it either, because Vue skips patching a <select> whose bound value did not
+// change between renders, leaving the DOM on the refused option.
 const autofixBackend = ref<AutofixBackend>(AUTOFIX_BACKEND_DEFAULT);
+// Null until a read succeeds. A failed read must not render as "codex" — the
+// server may well be billing opencode, and a confident wrong answer on this
+// control is worse than an obvious blank.
+const autofixReadFailed = ref(false);
 const savingAutofixBackend = ref(false);
 // The control stays disabled until the stored value has loaded. That is what
 // closes the stale-read race: a slow GET landing after the operator had already
@@ -66,31 +76,51 @@ async function loadAutofixBackend() {
     // Unset is the normal first-run state, not an error: the server applies the
     // same default, so showing it is accurate rather than a guess.
     autofixBackend.value = asAutofixBackend(value) ?? AUTOFIX_BACKEND_DEFAULT;
+    autofixReadFailed.value = false;
   } catch {
-    autofixBackend.value = AUTOFIX_BACKEND_DEFAULT;
+    // Do NOT fall back to the default here. The stored value is unknown, and
+    // rendering "codex" would state, on a control about billing, something the
+    // server may flatly contradict. Say so and stay locked instead.
+    autofixReadFailed.value = true;
   } finally {
     loadingAutofixBackend.value = false;
   }
 }
 
-async function onChangeAutofixBackend() {
+async function onChangeAutofixBackend(event: Event) {
+  const el = event.target as HTMLSelectElement;
+  /** Put the visible control back to what the server actually holds. */
+  const revert = () => {
+    el.value = autofixBackend.value;
+  };
+
   // `disabled` on the select is UX, not a guarantee: it stops a person, but a
   // dispatched change event still reaches this handler. Without a logical
   // guard, a save issued while the initial GET is in flight would be overwritten
   // when that GET resolves — leaving the control showing one backend and the
   // server holding another. Refuse instead; the operator's next change is a
   // click away, and a silent disagreement here is about billing.
-  if (loadingAutofixBackend.value || savingAutofixBackend.value) return;
+  const chosen = asAutofixBackend(el.value);
+  if (
+    loadingAutofixBackend.value ||
+    savingAutofixBackend.value ||
+    autofixReadFailed.value ||
+    !chosen
+  ) {
+    revert();
+    return;
+  }
+
   savingAutofixBackend.value = true;
-  const chosen = autofixBackend.value;
   try {
     await settingsApi.set('autofix_backend', chosen);
+    autofixBackend.value = chosen;
     showToast(t('systemErrors.autofix.saved', { backend: chosen }), 'success');
   } catch {
     showToast(t('systemErrors.autofix.saveFailed'), 'error');
     // Never leave the control showing a backend that was not saved — this
     // dropdown is a claim about which account is about to be billed.
-    await loadAutofixBackend();
+    revert();
   } finally {
     savingAutofixBackend.value = false;
   }
@@ -159,8 +189,8 @@ onUnmounted(() => {
       <label for="autofix-backend">{{ t('systemErrors.autofix.label') }}</label>
       <select
         id="autofix-backend"
-        v-model="autofixBackend"
-        :disabled="savingAutofixBackend || loadingAutofixBackend"
+        :value="autofixBackend"
+        :disabled="savingAutofixBackend || loadingAutofixBackend || autofixReadFailed"
         @change="onChangeAutofixBackend"
       >
         <option value="codex">Codex</option>
@@ -168,7 +198,12 @@ onUnmounted(() => {
         <option value="gemini">Gemini (Antigravity)</option>
         <option value="opencode">OpenCode</option>
       </select>
-      <p class="autofix-hint">{{ t('systemErrors.autofix.hint') }}</p>
+      <button v-if="autofixReadFailed" type="button" class="autofix-retry" @click="loadAutofixBackend">
+        {{ t('systemErrors.autofix.retry') }}
+      </button>
+      <p class="autofix-hint">
+        {{ autofixReadFailed ? t('systemErrors.autofix.readFailed') : t('systemErrors.autofix.hint') }}
+      </p>
     </div>
 
     <!-- Filters -->
@@ -431,6 +466,17 @@ onUnmounted(() => {
   min-width: 200px;
   font-size: 12px;
   color: var(--text-tertiary);
+}
+
+.autofix-retry {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  cursor: pointer;
 }
 
 .search-group {

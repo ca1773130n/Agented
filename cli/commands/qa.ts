@@ -15,7 +15,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import { note, out, json, isTTY } from '../lib/output.ts';
 import { str, bool, num, UsageError, type Args } from '../lib/args.ts';
@@ -178,13 +178,17 @@ export async function qaCmd(a: Args): Promise<number> {
  * `<outDir>` and reports every healthy run as unproven.
  */
 function reportedRunDir(stdout: string, dir: string): string | null {
-  let found: string | null = null;
-  for (const line of stdout.split('\n')) {
-    const m = /^REPORT:\s*(.+?)\s*$/.exec(line);
-    if (m) found = m[1];
-  }
-  if (!found) return null;
-  const md = isAbsolute(found) ? found : join(dir, found);
+  const found = stdout
+    .split('\n')
+    .map((line) => /^REPORT:\s*(.+?)\s*$/.exec(line))
+    .filter((m): m is RegExpExecArray => m !== null)
+    .map((m) => m[1]);
+  // More than one sentinel is not "the last one wins" — it is a signal we
+  // cannot read. A report path containing a literal "\nREPORT: " would forge a
+  // second line and steer this at another run's directory, and nothing else
+  // legitimately prints two. Refuse rather than pick.
+  if (found.length !== 1) return null;
+  const md = isAbsolute(found[0]) ? found[0] : join(dir, found[0]);
   return join(dirname(md), basename(md, '.md'));
 }
 
@@ -209,15 +213,33 @@ function reportedRunDir(stdout: string, dir: string): string | null {
 function provenLog(
   runDir: string | null,
   startedAt: number,
-): 'proven' | 'no-report' | 'no-log' | 'stale' | 'unreadable' {
+): 'proven' | 'no-report' | 'no-log' | 'stale' | 'corrupt' | 'unreadable' {
   if (!runDir) return 'no-report';
+  const log = join(runDir, 'log.json');
+  let raw: string;
+  let mtimeMs: number;
   try {
-    const s = statSync(join(runDir, 'log.json'));
+    const s = statSync(log);
     if (!s.isFile()) return 'no-log';
-    return s.mtimeMs >= startedAt ? 'proven' : 'stale';
+    mtimeMs = s.mtimeMs;
+    raw = readFileSync(log, 'utf8');
   } catch (e) {
     return (e as NodeJS.ErrnoException)?.code === 'ENOENT' ? 'no-log' : 'unreadable';
   }
+  // Existence is not evidence. A reporter that opened the file and then failed
+  // — out of disk, killed mid-write — leaves a truncated log that is present,
+  // current, and unparseable. Since `ag qa` tells its caller to parse this
+  // file, the least it can do is confirm that parsing works.
+  let parsed: { runId?: unknown };
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return 'corrupt';
+  }
+  // The log names its own run (report/index.mjs writes runId first). It must be
+  // the run whose directory it sits in, or this is somebody else's data.
+  if (parsed?.runId !== basename(runDir)) return 'corrupt';
+  return mtimeMs >= startedAt ? 'proven' : 'stale';
 }
 
 /**
@@ -234,11 +256,19 @@ function resolveExit(code: number, proof: ReturnType<typeof provenLog>): number 
 }
 
 /**
- * Only the tail is kept. The sentinel we parse is the child's LAST line, so a
- * bounded window is enough, and a long run with a chatty custom reporter should
- * not be able to grow this process without limit.
+ * Only the tail is kept — a long run with a chatty custom reporter should not
+ * grow this process without limit. The bound is in LINES, not characters:
+ * slicing a character window can cut through the sentinel itself (`REPORT: …`
+ * straddling the boundary reads as no sentinel at all, turning a healthy run
+ * into an exit 3), and a character count is not a memory bound anyway once the
+ * output is multibyte.
  */
-const STDOUT_TAIL_BYTES = 64 * 1024;
+const STDOUT_TAIL_LINES = 200;
+
+/** Trim accumulated output to the last N whole lines, sentinel intact. */
+function keepTail(text: string): string {
+  return text.split('\n').slice(-STDOUT_TAIL_LINES).join('\n');
+}
 
 function run(
   cmd: string,
@@ -260,7 +290,9 @@ function run(
     let stdout = '';
     child.stdout?.setEncoding('utf8');
     child.stdout?.on('data', (chunk: string) => {
-      stdout = (stdout + chunk).slice(-STDOUT_TAIL_BYTES);
+      // Whole lines only. A trailing partial line is kept as-is — the sentinel
+      // arrives last and may still be mid-flight when a chunk ends.
+      stdout = keepTail(stdout + chunk);
       echo.write(chunk);
     });
     child.on('close', (code) => resolve({ code: code ?? 3, stdout }));
@@ -268,4 +300,4 @@ function run(
   });
 }
 
-export { EXIT_MEANING, provenLog, reportedRunDir, resolveExit };
+export { EXIT_MEANING, keepTail, provenLog, reportedRunDir, resolveExit };
