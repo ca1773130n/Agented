@@ -15,7 +15,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { note, out, json, isTTY } from '../lib/output.ts';
 import { str, bool, num, UsageError, type Args } from '../lib/args.ts';
@@ -78,7 +78,37 @@ export async function qaCmd(a: Args): Promise<number> {
 
   note(`mischief ${argv.join(' ') || '(default run)'}  [cwd ${dir}]`);
 
-  const code = await run(join(dir, 'node_modules', '.bin', 'mischief'), argv, dir);
+  // Snapshot the run dirs so the new one can be identified afterwards. See
+  // the crash check below for why this matters.
+  const before = runDirs(dir);
+
+  let code = await run(join(dir, 'node_modules', '.bin', 'mischief'), argv, dir);
+
+  // A CRASHED HARNESS MUST NOT READ AS FINDINGS — the whole reason 3 exists.
+  //
+  // The exit code alone cannot tell the two apart: an uncaught throw inside
+  // mischief exits 1 because that is node's code for an unhandled exception,
+  // which is the same 1 mischief itself uses for HIGH findings. So on the
+  // first live run against the app, a config type error on route 1 of 24 was
+  // reported as "exit 1 — HIGH findings", which is precisely the predecessor
+  // behaviour this file was written to eliminate.
+  //
+  // A completed run always writes reports/<runId>/log.json (mischief's
+  // report/index.mjs); a crash leaves the directory holding only shots/. That
+  // file IS the proof of coverage, so its absence is the definition of 3.
+  //
+  // Replay is exempt: it re-runs a recorded run and is not required to open a
+  // new run directory, so applying this to it would manufacture a false 3.
+  if (sub !== 'replay' && code !== 0 && code !== 3 && !wroteLog(dir, before)) {
+    note(
+      `\nmischief exited ${code} but wrote no reports/<runId>/log.json — it crashed\n` +
+        '  rather than finishing. Reporting 3 (unverified) instead: there is no\n' +
+        '  findings list to believe, and calling that "findings" is the exact\n' +
+        '  confusion this command exists to prevent.',
+    );
+    code = 3;
+  }
+
   const meaning = EXIT_MEANING[code] ?? `exit ${code}`;
 
   if (bool(a, 'json')) {
@@ -98,6 +128,27 @@ export async function qaCmd(a: Args): Promise<number> {
   return code;
 }
 
+/** Names of the run directories under frontend/reports/, or [] if there are none. */
+function runDirs(dir: string): string[] {
+  const reports = join(dir, 'reports');
+  if (!existsSync(reports)) return [];
+  try {
+    return readdirSync(reports, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name);
+  } catch {
+    return [];
+  }
+}
+
+/** Did this invocation open a run directory and finish writing its log.json? */
+function wroteLog(dir: string, before: string[]): boolean {
+  const seen = new Set(before);
+  return runDirs(dir).some(
+    (name) => !seen.has(name) && existsSync(join(dir, 'reports', name, 'log.json')),
+  );
+}
+
 function run(cmd: string, args: string[], cwd: string): Promise<number> {
   return new Promise((resolve) => {
     // inherit: mischief's own progress goes straight to the terminal. Its exit
@@ -108,4 +159,4 @@ function run(cmd: string, args: string[], cwd: string): Promise<number> {
   });
 }
 
-export { EXIT_MEANING };
+export { EXIT_MEANING, runDirs, wroteLog };

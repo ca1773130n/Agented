@@ -8,6 +8,8 @@
  * if you ever reach for `--allow-prod`, stop and ask.
  */
 
+import { presets } from 'mischief';
+
 export default {
   baseUrl: 'http://127.0.0.1:3000',
 
@@ -81,7 +83,18 @@ export default {
       'http://127.0.0.1:20001',
     ],
     // Vue + Vite toolchain noise, so framework chatter does not drown real errors.
-    consoleIgnore: ['vite', 'vue', 'vueI18n'],
+    //
+    // These are matched with `re.test(text)` (collect.mjs), so they must be
+    // RegExps — plain strings threw `re.test is not a function` on route 1 of
+    // 24, and mischief does not validate the type at config load. The bare
+    // strings also would have been wrong even if they had worked: they would
+    // have swallowed every console error containing the word "vue", not just
+    // the framework's own banner. presets.consoleIgnore is the maintained list.
+    consoleIgnore: [
+      ...presets.consoleIgnore.vite,
+      ...presets.consoleIgnore.vue,
+      ...presets.consoleIgnore.vueI18n,
+    ],
   },
 
   /**
