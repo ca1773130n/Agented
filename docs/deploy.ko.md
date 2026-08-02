@@ -93,7 +93,7 @@ curl -fsSL https://raw.githubusercontent.com/ca1773130n/Agented/v0.8.0/install.s
 > 설정하지 않는 한 **거부됩니다**. 이 설정은 체크섬 검증을 건너뛰고 보안 경고를 출력합니다.
 > 위험을 이해한 경우에만 사용하세요.
 
-[`install.sh`](../install.sh)는:
+[`install.sh`](https\:\/\/github\.com\/ca1773130n\/Agented\/blob\/main/install.sh)는:
 
 - `ghcr.io/ca1773130n/agented:${GHCR_TAG:-latest}`를 pull하고,
 - `docker-compose.yml`(클론에서 번들되거나, 고정 태그에서 가져와 **체크섬 검증됨**)과
@@ -110,7 +110,7 @@ curl -fsSL https://raw.githubusercontent.com/ca1773130n/Agented/v0.8.0/install.s
 환경 변수: `GHCR_TAG`(이미지 태그, 기본값 `latest`), `INSTALL_DIR`(compose 파일이 기록되는
 위치, 기본값 현재 디렉터리), `AGENTED_INSTALL_REF`(compose를 가져올 git ref, 기본값은 태그된
 릴리스), `AGENTED_INSTALL_UNVERIFIED=1`(검증 없이 가변 ref에서 가져오도록 옵트인). 시크릿은
-`.env`에 추가하세요 — [docs/deploy/SECRETS.md](deploy/SECRETS.md) 참조.
+`.env`에 추가하세요 — [docs/deploy/SECRETS.md](https\:\/\/github\.com\/ca1773130n\/Agented\/blob\/main/docs/deploy/SECRETS.md) 참조.
 
 ---
 
@@ -129,7 +129,7 @@ just self-update
 GHCR_TAG=v0.10.0 just self-update
 ```
 
-저장소가 체크아웃되지 않은 호스트에서는 [`install.sh`](../install.sh)를 재실행해도 동일하게
+저장소가 체크아웃되지 않은 호스트에서는 [`install.sh`](https\:\/\/github\.com\/ca1773130n\/Agented\/blob\/main/install.sh)를 재실행해도 동일하게
 동작합니다.
 
 > 라이브 자체 업데이트 pull-and-restart(구 → 신 이미지, DB 스키마 유지)는 이 단계의 지연된
@@ -168,6 +168,6 @@ Render blueprint는 관리형 데이터베이스에서 이를 자동으로 설�
 
 ## 함께 보기
 
-- [Runbook](deploy/RUNBOOK.md) · [Backup](deploy/BACKUP.md) · [Secrets](deploy/SECRETS.md)
-- [Security](SECURITY.md)
+- [Runbook](https\:\/\/github\.com\/ca1773130n\/Agented\/blob\/main/docs/deploy/RUNBOOK.md) · [Backup](https\:\/\/github\.com\/ca1773130n\/Agented\/blob\/main/docs/deploy/BACKUP.md) · [Secrets](https\:\/\/github\.com\/ca1773130n\/Agented\/blob\/main/docs/deploy/SECRETS.md)
+- [Security](https\:\/\/github\.com\/ca1773130n\/Agented\/blob\/main/docs/SECURITY.md)
 - [i18n 규약](i18n.md)
