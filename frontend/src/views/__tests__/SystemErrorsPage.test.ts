@@ -15,6 +15,10 @@ vi.mock('../../services/api', () => ({
     retryFix: vi.fn(),
     getCounts: vi.fn(),
   },
+  settingsApi: {
+    get: vi.fn(),
+    set: vi.fn(),
+  },
   ApiError: class extends Error {
     status: number
     constructor(status: number, message: string) {
@@ -66,6 +70,77 @@ describe('SystemErrorsPage', () => {
     })
     // Polling helper (startPolling -> setInterval) calls this; harmless no-op.
     vi.mocked(systemErrorApi.getCounts).mockResolvedValue({ counts: { new: 2 } })
+    const { settingsApi } = await import('../../services/api')
+    vi.mocked(settingsApi.get).mockResolvedValue({ key: 'autofix_backend', value: '' })
+    vi.mocked(settingsApi.set).mockResolvedValue({ key: 'autofix_backend', value: 'codex' })
+  })
+
+  // ---- autofix backend picker -------------------------------------------
+  // Tier-2 autofix used to be hardcoded to claude with no way to change it,
+  // while running unattended and editing the working tree.
+
+  it('offers all four backends and shows codex when the setting is unset', async () => {
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    const select = wrapper.find('#autofix-backend')
+    expect(select.exists()).toBe(true)
+    expect(select.findAll('option').map((o) => o.attributes('value'))).toEqual([
+      'codex',
+      'claude',
+      'gemini',
+      'opencode',
+    ])
+    // Unset is first-run, not an error — the server applies the same default,
+    // so showing codex is accurate rather than a guess.
+    expect((select.element as HTMLSelectElement).value).toBe('codex')
+  })
+
+  it('shows the stored backend rather than the default', async () => {
+    const { settingsApi } = await import('../../services/api')
+    vi.mocked(settingsApi.get).mockResolvedValue({ key: 'autofix_backend', value: 'opencode' })
+
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    expect((wrapper.find('#autofix-backend').element as HTMLSelectElement).value).toBe('opencode')
+  })
+
+  it('persists the operator choice', async () => {
+    const { settingsApi } = await import('../../services/api')
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    await wrapper.find('#autofix-backend').setValue('gemini')
+    await flushPromises()
+
+    expect(settingsApi.set).toHaveBeenCalledWith('autofix_backend', 'gemini')
+  })
+
+  it('does not leave the control showing a backend that failed to save', async () => {
+    // The dropdown is a claim about which account is about to be billed, so a
+    // failed write must not read as a successful one.
+    const { settingsApi } = await import('../../services/api')
+    vi.mocked(settingsApi.get).mockResolvedValue({ key: 'autofix_backend', value: 'codex' })
+    vi.mocked(settingsApi.set).mockRejectedValue(new Error('boom'))
+
+    const wrapper = mountComponent()
+    await flushPromises()
+    await wrapper.find('#autofix-backend').setValue('claude')
+    await flushPromises()
+
+    expect((wrapper.find('#autofix-backend').element as HTMLSelectElement).value).toBe('codex')
+    expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('autofix'), 'error')
+  })
+
+  it('falls back to the default when the settings read fails', async () => {
+    const { settingsApi } = await import('../../services/api')
+    vi.mocked(settingsApi.get).mockRejectedValue(new Error('unreachable'))
+
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    expect((wrapper.find('#autofix-backend').element as HTMLSelectElement).value).toBe('codex')
   })
 
   it('renders the loading state initially', async () => {

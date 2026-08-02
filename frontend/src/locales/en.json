@@ -7543,6 +7543,12 @@
   "systemErrors": {
     "title": "System Errors",
     "subtitle": "Monitor and manage system errors with automated fix tracking",
+    "autofix": {
+      "label": "Autofix backend",
+      "hint": "Which AI backend the unattended Tier-2 investigation runs on. It edits the working tree, so this decides which account is billed.",
+      "saved": "Autofix will now run on {backend}",
+      "saveFailed": "Could not save the autofix backend"
+    },
     "searchPlaceholder": "Search errors...",
     "loading": "Loading errors...",
     "loadFailedTitle": "Failed to load errors",

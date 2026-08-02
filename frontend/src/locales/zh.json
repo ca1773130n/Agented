@@ -7543,6 +7543,12 @@
   "systemErrors": {
     "title": "系统错误",
     "subtitle": "通过自动修复跟踪监控和管理系统错误",
+    "autofix": {
+      "label": "自动修复后端",
+      "hint": "无人值守的 Tier-2 调查所使用的 AI 后端。它会修改工作区，因此这决定了由哪个账户计费。",
+      "saved": "自动修复现在将在 {backend} 上运行",
+      "saveFailed": "无法保存自动修复后端"
+    },
     "searchPlaceholder": "搜索错误...",
     "loading": "正在加载错误...",
     "loadFailedTitle": "加载错误失败",

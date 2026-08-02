@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { useSystemErrors } from '../composables/useSystemErrors';
+import { settingsApi } from '../services/api';
 import type { SystemError } from '../services/api/types/system';
 import { safeFormatDateTime } from '../utils/datetime';
 
@@ -32,6 +33,49 @@ const {
 
 const stackTraceExpanded = ref(false);
 const contextExpanded = ref(false);
+
+// Which backend Tier-2 autofix spends on. It runs unattended and edits the
+// working tree, so the operator gets to choose — this used to be hardcoded to
+// claude with no way to change it. Mirrors `_AUTOFIX_BACKENDS` in
+// autofix_service.py; the server re-validates and falls back on its own, so a
+// stale tab cannot make it launch something unrecognised.
+const AUTOFIX_BACKENDS = ['codex', 'claude', 'gemini', 'opencode'] as const;
+type AutofixBackend = (typeof AUTOFIX_BACKENDS)[number];
+const AUTOFIX_BACKEND_DEFAULT: AutofixBackend = 'codex';
+
+const autofixBackend = ref<AutofixBackend>(AUTOFIX_BACKEND_DEFAULT);
+const savingAutofixBackend = ref(false);
+
+function asAutofixBackend(value: string | null | undefined): AutofixBackend | null {
+  const v = (value || '').trim().toLowerCase();
+  return (AUTOFIX_BACKENDS as readonly string[]).includes(v) ? (v as AutofixBackend) : null;
+}
+
+async function loadAutofixBackend() {
+  try {
+    const { value } = await settingsApi.get('autofix_backend');
+    // Unset is the normal first-run state, not an error: the server applies the
+    // same default, so showing it is accurate rather than a guess.
+    autofixBackend.value = asAutofixBackend(value) ?? AUTOFIX_BACKEND_DEFAULT;
+  } catch {
+    autofixBackend.value = AUTOFIX_BACKEND_DEFAULT;
+  }
+}
+
+async function onChangeAutofixBackend() {
+  savingAutofixBackend.value = true;
+  try {
+    await settingsApi.set('autofix_backend', autofixBackend.value);
+    showToast(t('systemErrors.autofix.saved', { backend: autofixBackend.value }), 'success');
+  } catch {
+    showToast(t('systemErrors.autofix.saveFailed'), 'error');
+    // Never leave the control showing a backend that was not saved — this
+    // dropdown is a claim about which account is about to be billed.
+    await loadAutofixBackend();
+  } finally {
+    savingAutofixBackend.value = false;
+  }
+}
 
 function relativeTime(ts: string): string {
   const diff = Date.now() - new Date(ts).getTime();
@@ -77,6 +121,7 @@ function applyFilters() {
 
 onMounted(() => {
   loadErrors();
+  loadAutofixBackend();
   startPolling();
 });
 
@@ -88,6 +133,24 @@ onUnmounted(() => {
 <template>
   <div class="system-errors-page">
     <PageHeader :title="t('systemErrors.title')" :subtitle="t('systemErrors.subtitle')" />
+
+    <!-- Autofix backend. A setting, not a filter — it decides which account the
+         unattended Tier-2 investigation spends on. -->
+    <div class="autofix-bar">
+      <label for="autofix-backend">{{ t('systemErrors.autofix.label') }}</label>
+      <select
+        id="autofix-backend"
+        v-model="autofixBackend"
+        :disabled="savingAutofixBackend"
+        @change="onChangeAutofixBackend"
+      >
+        <option value="codex">Codex</option>
+        <option value="claude">Claude</option>
+        <option value="gemini">Gemini (Antigravity)</option>
+        <option value="opencode">OpenCode</option>
+      </select>
+      <p class="autofix-hint">{{ t('systemErrors.autofix.hint') }}</p>
+    </div>
 
     <!-- Filters -->
     <div class="filters-bar">
@@ -327,6 +390,28 @@ onUnmounted(() => {
 <style scoped>
 .system-errors-page {
   max-width: 1400px;
+}
+
+.autofix-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.autofix-bar label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.autofix-hint {
+  margin: 0;
+  flex: 1;
+  min-width: 200px;
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 
 .search-group {
