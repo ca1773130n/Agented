@@ -15,7 +15,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -233,6 +233,51 @@ test('a lock held by a LIVE process is respected', () => {
     mkdirSync(join(dir, 'reports'), { recursive: true });
     writeFileSync(join(dir, 'reports', '.ag-qa.lock'), String(process.pid));
     assert.equal(acquireLock(dir), null);
+  });
+});
+
+test('a stale lock is taken over by exactly one of two racing runs', () => {
+  // unlink-then-claim had both processes deleting the stale file, the second
+  // deleting the FIRST one's fresh lock. rename did not fix it either — it is
+  // not compare-and-swap, so the loser can still move the winner's lock aside.
+  // Recovery is serialised through its own O_EXCL file instead.
+  withTmp((dir) => {
+    mkdirSync(join(dir, 'reports'), { recursive: true });
+    writeFileSync(join(dir, 'reports', '.ag-qa.lock'), '2147483647'); // no such process
+    const a = acquireLock(dir);
+    const b = acquireLock(dir); // races the same stale lock
+    assert.equal([a, b].filter(Boolean).length, 1, 'exactly one run may hold it');
+    ;(a ?? b)!.release();
+    // No scratch files left behind.
+    assert.deepEqual(
+      readdirSync(join(dir, 'reports')).filter((f) => f.startsWith('.ag-qa.lock')),
+      [],
+    );
+  });
+});
+
+test('a lock still being written is not mistaken for an abandoned one', () => {
+  // openSync(wx) creates the file before the owner writes its token, so a
+  // concurrent reader can see it empty. Number('') is 0, which read as "no
+  // valid pid" and therefore as stale — stealing the directory from a run that
+  // was seconds into starting.
+  withTmp((dir) => {
+    mkdirSync(join(dir, 'reports'), { recursive: true });
+    writeFileSync(join(dir, 'reports', '.ag-qa.lock'), ''); // mid-write
+    assert.equal(acquireLock(dir), null);
+  });
+});
+
+test('release does not remove a lock that now belongs to someone else', () => {
+  // If ours is cleared externally and another run claims the directory, our
+  // finally would otherwise delete THEIR lock and let a third run in beside it.
+  withTmp((dir) => {
+    const mine = acquireLock(dir);
+    assert.ok(mine);
+    const lockPath = join(dir, 'reports', '.ag-qa.lock');
+    writeFileSync(lockPath, `${process.pid}:someone-elses-token`);
+    mine!.release();
+    assert.equal(readFileSync(lockPath, 'utf8'), `${process.pid}:someone-elses-token`);
   });
 });
 

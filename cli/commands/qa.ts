@@ -21,10 +21,12 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  renameSync,
   statSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import { note, out, json, isTTY } from '../lib/output.ts';
 import { str, bool, num, UsageError, type Args } from '../lib/args.ts';
@@ -111,6 +113,8 @@ export async function qaCmd(a: Args): Promise<number> {
   const startedAt = Math.floor(Date.now() / 1000) * 1000;
   let rawCode: number;
   let stdout: string;
+  let runDir: string | null;
+  let proof: ReturnType<typeof provenLog>;
   try {
     ({ code: rawCode, stdout } = await run(
       join(dir, 'node_modules', '.bin', 'mischief'),
@@ -118,6 +122,12 @@ export async function qaCmd(a: Args): Promise<number> {
       dir,
       bool(a, 'json'),
     ));
+    // Resolve the proof while STILL HOLDING the lock. Releasing at the end of
+    // the child's life reopened the window the lock exists to close: a failed
+    // run could let go, a second run could create the very log.json it was
+    // missing, and the first would then read that as its own evidence.
+    runDir = reportedRunDir(stdout, dir);
+    proof = provenLog(runDir, startedAt);
   } finally {
     lock.release();
   }
@@ -146,8 +156,6 @@ export async function qaCmd(a: Args): Promise<number> {
   // healthy one's findings. A path the child itself reports cannot be confused
   // with someone else's, and it also follows a configured `report.outDir`,
   // which a hardcoded reports/ scan silently missed.
-  const runDir = reportedRunDir(stdout, dir);
-  const proof = provenLog(runDir, startedAt);
   const code = resolveExit(rawCode, proof);
   if (code !== rawCode) {
     note(
@@ -169,7 +177,12 @@ export async function qaCmd(a: Args): Promise<number> {
               '  not parse, or names a different run. A reporter that opened the file and\n' +
               '  then failed leaves exactly this. `ag qa` tells you to parse that file, so\n' +
               '  a file that cannot be parsed is 3 (unverified), not a verdict.'
-            : `\nmischief exited ${rawCode} and named a report, but ${proof === 'no-log' ? 'no log.json sits beside it' : 'that path could not be read'}.\n` +
+            : proof === 'oversized'
+              ? `\nmischief exited ${rawCode} and named ${runDir}, but its log.json is larger\n` +
+                `  than the ${Math.round(MAX_LOG_BYTES / 1024 / 1024)} MB this command will read to verify a run. Nothing is\n` +
+                '  wrong with the run itself; the proof step declined to load it. Parse the\n' +
+                '  file directly, or raise MAX_LOG_BYTES if reports are legitimately this big.'
+              : `\nmischief exited ${rawCode} and named a report, but ${proof === 'no-log' ? 'no log.json sits beside it' : 'that path could not be read'}.\n` +
               '  The markdown is a rendering; log.json is the data. Without it there is\n' +
               '  nothing to parse, so this is 3 (unverified), not a verdict.',
     );
@@ -253,7 +266,7 @@ function reportedRunDir(stdout: string, dir: string): string | null {
 function provenLog(
   runDir: string | null,
   startedAt: number,
-): 'proven' | 'no-report' | 'no-log' | 'stale' | 'corrupt' | 'unreadable' {
+): 'proven' | 'no-report' | 'no-log' | 'stale' | 'corrupt' | 'oversized' | 'unreadable' {
   if (!runDir) return 'no-report';
   const log = join(runDir, 'log.json');
   let raw: string;
@@ -264,7 +277,7 @@ function provenLog(
     // Read it, but not at any size. Only a small prefix is actually needed, and
     // slurping an arbitrarily large file to answer a yes/no question is how a
     // verification step becomes the thing that falls over.
-    if (s.size > MAX_LOG_BYTES) return 'unreadable';
+    if (s.size > MAX_LOG_BYTES) return 'oversized';
     mtimeMs = s.mtimeMs;
     raw = readFileSync(log, 'utf8');
   } catch (e) {
@@ -333,35 +346,86 @@ function acquireLock(dir: string): { release: () => void } | null {
   const reports = join(dir, 'reports');
   mkdirSync(reports, { recursive: true });
   const lockPath = join(reports, '.ag-qa.lock');
+  const token = `${process.pid}:${randomUUID()}`;
+
+  /**
+   * Create the lock, or fail. The token is written into the SAME file the
+   * O_EXCL create produced, so nobody else can be holding it — but the file is
+   * briefly empty between create and write, which a concurrent reader must not
+   * mistake for an abandoned lock. See the read side below.
+   */
   const claim = () => {
     const fd = openSync(lockPath, 'wx');
-    writeFileSync(fd, String(process.pid));
-    closeSync(fd);
+    try {
+      writeFileSync(fd, token);
+    } finally {
+      closeSync(fd);
+    }
     return {
       release: () => {
+        // Only remove a lock we still own. If ours was cleared externally and
+        // another run has since claimed the directory, unlinking here would
+        // delete THEIR lock and let a third run in alongside them.
         try {
-          unlinkSync(lockPath);
+          if (readFileSync(lockPath, 'utf8') === token) unlinkSync(lockPath);
         } catch {
-          // Already gone: nothing to release, and failing here would turn a
-          // finished run into an error.
+          // Already gone, or unreadable. Either way there is nothing of ours to
+          // remove, and failing here would turn a finished run into an error.
         }
       },
     };
   };
+
   try {
     return claim();
   } catch (e) {
     if ((e as NodeJS.ErrnoException)?.code !== 'EEXIST') throw e;
   }
-  const holder = Number(readFileSync(lockPath, 'utf8').trim());
-  if (Number.isInteger(holder) && holder > 0 && isAlive(holder)) return null;
-  // Stale. Clear it and claim; if someone beat us to that, they hold it.
+
+  // Someone holds it. Recovery is only for a lock whose owner is gone, and it
+  // is serialised through a second O_EXCL file: two runs both deciding a lock
+  // is stale and both replacing it is how they end up both believing they own
+  // it. rename does not help — it is not compare-and-swap, so the loser can
+  // still move the winner's fresh lock aside. Only one process at a time may
+  // even attempt recovery.
+  const recoveryPath = `${lockPath}.recover`;
+  let recoveryFd: number;
   try {
+    recoveryFd = openSync(recoveryPath, 'wx');
+  } catch {
+    return null; // another run is already recovering; let it finish
+  }
+  try {
+    const holder = readLockOwner(lockPath);
+    // 'unknown' covers both an unreadable lock and one that is still empty
+    // because its owner is mid-write. Neither is evidence of abandonment, and
+    // guessing wrong steals the directory from a live run.
+    if (holder === 'unknown' || (holder !== 'gone' && isAlive(holder))) return null;
     unlinkSync(lockPath);
     return claim();
   } catch {
     return null;
+  } finally {
+    closeSync(recoveryFd);
+    try {
+      unlinkSync(recoveryPath);
+    } catch {
+      // Best effort; a leftover .recover only costs one retry.
+    }
   }
+}
+
+/** The pid holding a lock, 'gone' if the file has vanished, 'unknown' if it
+ *  cannot be read or has not been written yet. */
+function readLockOwner(lockPath: string): number | 'gone' | 'unknown' {
+  let raw: string;
+  try {
+    raw = readFileSync(lockPath, 'utf8').trim();
+  } catch (e) {
+    return (e as NodeJS.ErrnoException)?.code === 'ENOENT' ? 'gone' : 'unknown';
+  }
+  const pid = Number(raw.split(':')[0]);
+  return Number.isInteger(pid) && pid > 0 ? pid : 'unknown';
 }
 
 function isAlive(pid: number): boolean {
