@@ -423,3 +423,38 @@ def test_engine_refresh_handler_dispatches_async(isolated_db):
     er.assert_called_once_with()
     assert out["job_id"] == "tess-engine-xyz"
     assert out["op"] == "engine-refresh"
+
+
+# ---------- GET /admin/system/memory/graph/map ----------------------------
+
+
+def test_graph_map_forwards_scope_query_param_as_string(client):
+    """`scope` is a Litestar RESERVED_KWARG: a handler parameter of that name
+    receives the raw ASGI scope dict, not the query param — and it is in
+    SKIP_VALIDATION_NAMES, so the `str` annotation does not catch it. Every
+    call used to 500 with "'dict' object has no attribute 'strip'"."""
+    with patch("app_litestar.routes.memory_system.ti.graph_map") as m:
+        m.return_value = {"ok": True, "map": {"cards": []}, "reason": None}
+        r = client.get("/admin/system/memory/graph/map?scope=org:root&cursor=2")
+
+    assert r.status_code == 200, r.text
+    m.assert_called_once_with(scope="org:root", cursor=2, budget_chars=None)
+
+
+def test_graph_map_root_map_passes_scope_none(client):
+    """No `scope` in the query string must reach the service as None (root map),
+    not as the injected ASGI dict."""
+    with patch("app_litestar.routes.memory_system.ti.graph_map") as m:
+        m.return_value = {"ok": True, "map": {"cards": []}, "reason": None}
+        r = client.get("/admin/system/memory/graph/map")
+
+    assert r.status_code == 200, r.text
+    m.assert_called_once_with(scope=None, cursor=0, budget_chars=None)
+
+
+def test_graph_map_service_rejects_non_string_scope():
+    """Defense in depth: the service guards argv against a non-str scope the
+    same way it already guards cursor/budget_chars."""
+    from app.services import tesserae_integration as real_ti
+
+    assert real_ti.graph_map(scope={"type": "http"})["reason"] == "invalid scope"

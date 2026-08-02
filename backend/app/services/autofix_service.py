@@ -12,6 +12,7 @@ import subprocess
 import time
 from typing import Callable, Optional
 
+from app.db.settings import get_setting
 from app.db.system_errors import (
     create_fix_attempt,
     get_system_error,
@@ -21,6 +22,41 @@ from app.db.system_errors import (
 from app.models.system import ErrorStatus, FixStatus
 
 logger = logging.getLogger(__name__)
+
+# Backend for the Tier-2 agent investigation. This used to be hardcoded to
+# "claude", which made autofix the one LLM feature that could not follow the
+# operator's chosen backend — and it spends real tokens unattended, so which
+# account it bills is not a detail. Codex is the default; override per install
+# with the `autofix_backend` setting.
+_AUTOFIX_BACKEND_SETTING = "autofix_backend"
+_AUTOFIX_BACKENDS = ("codex", "claude", "gemini", "opencode")
+_DEFAULT_AUTOFIX_BACKEND = "codex"
+
+
+def _autofix_backend() -> str:
+    """Resolve the Tier-2 backend, falling back to the default rather than
+    launching something unrecognised. Read per call, not cached: an operator
+    changing the setting should not need a restart to stop billing the old
+    account."""
+    try:
+        configured = (get_setting(_AUTOFIX_BACKEND_SETTING) or "").strip().lower()
+    except Exception:
+        logger.warning(
+            "could not read %s; using %s", _AUTOFIX_BACKEND_SETTING, _DEFAULT_AUTOFIX_BACKEND
+        )
+        return _DEFAULT_AUTOFIX_BACKEND
+    if not configured:
+        return _DEFAULT_AUTOFIX_BACKEND
+    if configured not in _AUTOFIX_BACKENDS:
+        logger.warning(
+            "%s=%r is not one of %s; using %s",
+            _AUTOFIX_BACKEND_SETTING,
+            configured,
+            ", ".join(_AUTOFIX_BACKENDS),
+            _DEFAULT_AUTOFIX_BACKEND,
+        )
+        return _DEFAULT_AUTOFIX_BACKEND
+    return configured
 
 
 def _now() -> str:
@@ -248,7 +284,7 @@ Diagnose the root cause, apply a fix if possible, and report what you did.
         run_streaming_response(
             session_id=session_id,
             super_agent_id="sa-system",
-            backend="claude",
+            backend=_autofix_backend(),
             on_complete=on_complete,
             on_error=on_error,
         )

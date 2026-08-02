@@ -15,8 +15,8 @@
  */
 
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 import { note, out, json, isTTY } from '../lib/output.ts';
 import { str, bool, num, UsageError, type Args } from '../lib/args.ts';
 
@@ -78,11 +78,97 @@ export async function qaCmd(a: Args): Promise<number> {
 
   note(`mischief ${argv.join(' ') || '(default run)'}  [cwd ${dir}]`);
 
-  const code = await run(join(dir, 'node_modules', '.bin', 'mischief'), argv, dir);
+  // CONCURRENT RUNS AGAINST ONE reports/ DIRECTORY ARE NOT SUPPORTED, and this
+  // command deliberately does not pretend otherwise.
+  //
+  // mischief run ids are precise to the second (util.mjs makeRunId), so two
+  // runs starting in the same second share a directory AND an id. If one then
+  // fails to write its own log.json, the other's satisfies the proof check
+  // below, and this run reports a verdict computed from someone else's data.
+  //
+  // Two things were tried and both removed. An exclusive lock guarded THIS
+  // process, while the thing writing into reports/ is the mischief child, which
+  // outlives a killed parent — so the exclusivity was never real, and its own
+  // recovery path could wedge every later run. Then an mtime floor, which
+  // cannot see the collision it was written for: both logs fall in the same
+  // second, so the earlier one passes a `>= startedAt` test.
+  //
+  // Each was a mechanism that read as a guarantee and was not one, which is
+  // worse than no mechanism. Two concurrent runs already race the app, the
+  // database and the browser regardless. The honest answer is "don't run two",
+  // said here rather than implied by machinery that cannot enforce it.
+  //
+  // Closing it properly needs a per-run nonce from mischief — a token in the
+  // log that a caller can match against the run it launched. That is an
+  // upstream change; there is an open PR on mischief where it belongs.
+  const { code: rawCode, stdout } = await run(
+    join(dir, 'node_modules', '.bin', 'mischief'),
+    argv,
+    dir,
+    bool(a, 'json'),
+  );
+  const runDir = reportedRunDir(stdout, dir);
+  const proof = provenLog(runDir);
+
+  // A CRASHED HARNESS MUST NOT READ AS FINDINGS — the whole reason 3 exists.
+  //
+  // The exit code alone cannot tell the two apart: an uncaught throw inside
+  // mischief exits 1 because that is node's code for an unhandled exception,
+  // which is the same 1 mischief itself uses for HIGH findings. So on the
+  // first live run against the app, a config type error on route 1 of 24 was
+  // reported as "exit 1 — HIGH findings", which is precisely the predecessor
+  // behaviour this file was written to eliminate.
+  //
+  // Proof is demanded for EVERY outcome, 0 included. "Clean" is the claim that
+  // most needs evidence: a green nobody looks behind is worse than a red.
+  //
+  // Replay is NOT exempt. It resolves the old run's seed/routes/steps and calls
+  // runMonkey exactly like a fresh run (mischief's bin: replayOverrides ->
+  // runMonkey), so it opens its own run directory and owes the same proof.
+  //
+  // Ownership comes from the CHILD, via the `REPORT:` line it prints, and never
+  // from scanning reports/. Two earlier attempts scanned: by directory name,
+  // then by log.json mtime. Both were unsound for the same reason — with a
+  // concurrent run in the same directory, "a new report appeared" is not
+  // evidence that THIS run wrote it, so a crashed run could be credited with a
+  // healthy one's findings. A path the child itself reports cannot be confused
+  // with someone else's, and it also follows a configured `report.outDir`,
+  // which a hardcoded reports/ scan silently missed.
+  const code = resolveExit(rawCode, proof);
+  if (code !== rawCode) {
+    note(
+      proof === 'no-report'
+        ? `\nmischief exited ${rawCode} but named no single report — it did not finish, or\n` +
+            '  printed more than one REPORT: line, which cannot be attributed.\n' +
+            '  Reporting 3 (unverified) instead: there is no findings list to believe,\n' +
+            '  and calling that "findings" — or "clean" — is the exact confusion this\n' +
+            '  command exists to prevent.\n' +
+            '  (`ag qa` needs the markdown + json reporters; a config that disables\n' +
+            '  them removes the only proof that a run happened.)'
+        : proof === 'corrupt'
+            ? `\nmischief exited ${rawCode} and named ${runDir}, but the log.json there does\n` +
+              '  not parse, or names a different run. A reporter that opened the file and\n' +
+              '  then failed leaves exactly this. `ag qa` tells you to parse that file, so\n' +
+              '  a file that cannot be parsed is 3 (unverified), not a verdict.'
+            : proof === 'oversized'
+              ? `\nmischief exited ${rawCode} and named ${runDir}, but its log.json is larger\n` +
+                `  than the ${Math.round(MAX_LOG_BYTES / 1024 / 1024)} MB this command will read to verify a run. Nothing is\n` +
+                '  wrong with the run itself; the proof step declined to load it. Parse the\n' +
+                '  file directly, or raise MAX_LOG_BYTES if reports are legitimately this big.'
+              : `\nmischief exited ${rawCode} and named a report, but ${proof === 'no-log' ? 'no log.json sits beside it' : 'that path could not be read'}.\n` +
+              '  The markdown is a rendering; log.json is the data. Without it there is\n' +
+              '  nothing to parse, so this is 3 (unverified), not a verdict.',
+    );
+  }
+
   const meaning = EXIT_MEANING[code] ?? `exit ${code}`;
+  // Report the directory the child actually used, not a guess. A configured
+  // `report.outDir` sends output somewhere else entirely, and printing
+  // frontend/reports then sends the reader to an empty directory.
+  const where = runDir ?? join(dir, 'reports');
 
   if (bool(a, 'json')) {
-    json({ exit_code: code, meaning, reports: join(dir, 'reports') });
+    json({ exit_code: code, meaning, reports: where });
   } else if (code === 3) {
     note(
       `\nexit 3 — ${meaning}.\n` +
@@ -93,19 +179,171 @@ export async function qaCmd(a: Args): Promise<number> {
         '  enough data. Do not disable the guardrails to make it green.',
     );
   } else {
-    note(`\nexit ${code} — ${meaning}. Reports: ${join(dir, 'reports')} (parse the JSON, not the markdown)`);
+    note(`\nexit ${code} — ${meaning}. Reports: ${where} (parse the JSON, not the markdown)`);
   }
   return code;
 }
 
-function run(cmd: string, args: string[], cwd: string): Promise<number> {
+/**
+ * The run directory THIS invocation wrote, taken from the child's own
+ * `REPORT: <path>` line (mischief's bin prints it last, after the summary).
+ *
+ * Exactly one match is required. Nothing legitimate prints two, and a report
+ * path containing a literal "\nREPORT: " would forge a second — so a pair is
+ * unreadable rather than a case for picking the last.
+ *
+ * Returns null when no such line was printed, which means the run did not reach
+ * its reporting stage. `report.outDir` is resolved to an absolute path by
+ * mischief's config, but a relative one is anchored to the frontend dir rather
+ * than assumed.
+ *
+ * The two reporters do NOT write to the same place: markdown lands at
+ * `<outDir>/<runId>.md` and the log at `<outDir>/<runId>/log.json`
+ * (report/index.mjs:23 and :37). So the run directory is the md path's
+ * basename-minus-extension, NOT its dirname — taking the dirname yields
+ * `<outDir>` and reports every healthy run as unproven.
+ */
+function reportedRunDir(stdout: string, dir: string): string | null {
+  const found = stdout
+    .split('\n')
+    .map((line) => /^REPORT:\s*(.+?)\s*$/.exec(line))
+    .filter((m): m is RegExpExecArray => m !== null)
+    .map((m) => m[1]);
+  // More than one sentinel is not "the last one wins" — it is a signal we
+  // cannot read. A report path containing a literal "\nREPORT: " would forge a
+  // second line and steer this at another run's directory, and nothing else
+  // legitimately prints two. Refuse rather than pick.
+  if (found.length !== 1) return null;
+  const md = isAbsolute(found[0]) ? found[0] : join(dir, found[0]);
+  return join(dirname(md), basename(md, '.md'));
+}
+
+/**
+ * Is there a parseable report in the directory the child named?
+ *
+ * 'proven'    — log.json is there and parses, and names this run. That IS the
+ *               evidence `ag qa` reports on.
+ * 'no-report' — the child never named a single directory: it did not finish,
+ *               or printed an ambiguous pair of sentinels.
+ * 'no-log'    — it named one, but only the markdown rendering landed. The
+ *               markdown is for humans; log.json is the data, and without it
+ *               there is nothing to parse.
+ * 'corrupt'   — the log does not parse, or names a different run.
+ * 'oversized' — larger than this command will read to answer a yes/no question.
+ * 'unreadable'— the path exists but cannot be stat'd.
+ *
+ * There is deliberately no freshness check. An mtime floor was tried and cannot
+ * see the case it was written for: two runs starting in the same second share
+ * a run id AND a directory, so the earlier log passes any `>= start` test. A
+ * guard that misses its own scenario is worse than none, because it reads as
+ * cover. See the note in qaCmd for what would actually close it.
+ */
+function provenLog(
+  runDir: string | null,
+): 'proven' | 'no-report' | 'no-log' | 'corrupt' | 'oversized' | 'unreadable' {
+  if (!runDir) return 'no-report';
+  const log = join(runDir, 'log.json');
+  let raw: string;
+  try {
+    const s = statSync(log);
+    if (!s.isFile()) return 'no-log';
+    // Read it, but not at any size. Only a small prefix is actually needed, and
+    // slurping an arbitrarily large file to answer a yes/no question is how a
+    // verification step becomes the thing that falls over.
+    if (s.size > MAX_LOG_BYTES) return 'oversized';
+    raw = readFileSync(log, 'utf8');
+  } catch (e) {
+    return (e as NodeJS.ErrnoException)?.code === 'ENOENT' ? 'no-log' : 'unreadable';
+  }
+  // Existence is not evidence. A reporter that opened the file and then failed
+  // — out of disk, killed mid-write — leaves a truncated log that is present,
+  // current, and unparseable. Since `ag qa` tells its caller to parse this
+  // file, the least it can do is confirm that parsing works.
+  let parsed: { runId?: unknown };
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return 'corrupt';
+  }
+  // The log names its own run (report/index.mjs writes runId first). It must be
+  // the run whose directory it sits in, or this is somebody else's data.
+  if (parsed?.runId !== basename(runDir)) return 'corrupt';
+  return 'proven';
+}
+
+/**
+ * The whole policy, in one place so it can be checked as a truth table.
+ *
+ * Every outcome owes proof, including 0. "Clean" is the claim that most needs
+ * evidence — an unverified green is worse than an unverified red, because
+ * nobody goes looking behind it. mischief's own 3 is passed through untouched:
+ * it already means unverified, and it carries a better reason than we could.
+ */
+function resolveExit(code: number, proof: ReturnType<typeof provenLog>): number {
+  if (code === 3) return 3;
+  return proof === 'proven' ? code : 3;
+}
+
+/**
+ * Only the tail is kept — a long run with a chatty custom reporter should not
+ * grow this process without limit. The bound is in LINES, not characters:
+ * slicing a character window can cut through the sentinel itself (`REPORT: …`
+ * straddling the boundary reads as no sentinel at all, turning a healthy run
+ * into an exit 3), and a character count is not a memory bound anyway once the
+ * output is multibyte.
+ */
+const STDOUT_TAIL_LINES = 200;
+
+/** Hard ceiling regardless of line count. Generous next to a real run's output
+ *  (a 24-route run printed under 3 KB) and small enough to be a real bound. */
+const STDOUT_TAIL_CHARS = 1024 * 1024;
+
+/**
+ * Ceiling on the log we will read to verify a run. Generous next to a real one
+ * (a 24-route run here produced ~35 KB) and far below what would hurt.
+ */
+const MAX_LOG_BYTES = 256 * 1024 * 1024;
+
+/**
+ * Trim accumulated output to the last N whole lines, sentinel intact — plus a
+ * character backstop, because "200 lines" is not a memory bound when one of
+ * them is a reporter dumping a megabyte without a newline. The backstop is
+ * applied to the FRONT so the final line, which carries the sentinel, survives.
+ */
+function keepTail(text: string): string {
+  const lines = text.split('\n').slice(-STDOUT_TAIL_LINES).join('\n');
+  return lines.length > STDOUT_TAIL_CHARS ? lines.slice(-STDOUT_TAIL_CHARS) : lines;
+}
+
+
+function run(
+  cmd: string,
+  args: string[],
+  cwd: string,
+  jsonMode: boolean,
+): Promise<{ code: number; stdout: string }> {
   return new Promise((resolve) => {
-    // inherit: mischief's own progress goes straight to the terminal. Its exit
-    // code is the product here, not its stdout.
-    const child = spawn(cmd, args, { cwd, stdio: 'inherit' });
-    child.on('close', (code) => resolve(code ?? 3));
-    child.on('error', () => resolve(3));
+    // stdout is piped rather than inherited so the child's `REPORT:` line can
+    // be read, then written straight through so its progress still streams
+    // live. mischief formats no differently off a TTY (no isTTY checks in its
+    // source), so nothing is lost by piping. stderr stays inherited.
+    //
+    // Under --json the child's narration goes to STDERR instead: this command's
+    // stdout must be a single parseable object, and `ag qa --json | jq` was
+    // being fed mischief's progress lines first.
+    const echo = jsonMode ? process.stderr : process.stdout;
+    const child = spawn(cmd, args, { cwd, stdio: ['inherit', 'pipe', 'inherit'] });
+    let stdout = '';
+    child.stdout?.setEncoding('utf8');
+    child.stdout?.on('data', (chunk: string) => {
+      // Whole lines only. A trailing partial line is kept as-is — the sentinel
+      // arrives last and may still be mid-flight when a chunk ends.
+      stdout = keepTail(stdout + chunk);
+      echo.write(chunk);
+    });
+    child.on('close', (code) => resolve({ code: code ?? 3, stdout }));
+    child.on('error', () => resolve({ code: 3, stdout }));
   });
 }
 
-export { EXIT_MEANING };
+export { EXIT_MEANING, keepTail, provenLog, reportedRunDir, resolveExit };

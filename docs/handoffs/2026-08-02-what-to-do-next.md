@@ -91,7 +91,37 @@ Meanwhile: never run `tesserae sessions discover --import` on a project whose
 store has externally-imported sessions without re-running Agented's export
 afterwards.
 
-### 2. `ag qa` has never been run end to end
+### 2. ~~`ag qa` has never been run end to end~~ — DONE, see PR #384
+
+It has now, against a copy of the local DB with an empty sidecar store. It found
+two bugs: its own crash reporting itself as "HIGH findings" instead of 3, and a
+`GET /admin/system/memory/graph/map` that had 500'd on every call since it was
+wired (`scope` is a Litestar reserved kwarg). Both fixed. The rest of the run's
+8 critical / 85 high was self-inflicted: 7 criticals are the offline mutator's
+own doing, 64 highs are one rate-limited button, and the 7 "unreached" routes
+all render fine on a fresh context.
+
+One thing to know before the next run: the crashes fed `error_capture`, which
+spawned a real `claude -p … --dangerously-skip-permissions` subprocess that
+edited backend source mid-run.
+
+**There is no way to turn that off.** `capture_error` calls `trigger_autofix`
+(`error_capture.py:95`) with no env var or setting gating it — an earlier
+version of this file told you to set `AGENTED_AUTOFIX_*`, which does not exist
+and never did. Which backend it spends on is now configurable and defaults to
+codex (#384); whether it runs at all is not.
+
+The one thing that holds it back is deduplication, and it is narrower than it
+sounds. Every error is persisted, duplicates included; what a duplicate skips
+is the dispatch. "Duplicate" means `find_recent_duplicate` found the same
+error hash **within the last 60 seconds** — so the same 500 hit repeatedly
+inside a minute costs one investigation, the same 500 hit once a minute costs
+one per minute, and forty distinct errors cost forty. A monkey run that
+provokes varied errors over a quarter of an hour is closer to the expensive
+end than the cheap one. The only lever is not provoking them.
+
+The original note follows.
+
 
 `cli/commands/qa.ts` wraps mischief for random-click QA and is tested at the unit
 level, but has never been pointed at the running app.
@@ -152,11 +182,17 @@ manifest claimed everything was current while the graph was never built. Check
 
 ```bash
 just build                                   # vue-tsc + vite
-cd backend && uv run pytest                  # 5469 passed, 0 failed (~14 min)
-cd frontend && npm run test:run              # 1727 passed, 0 failed
-cd cli && node --test --experimental-strip-types test/*.test.ts   # 57 passed
+cd backend && uv run pytest                  # 5476 passed, 0 failed (~14 min)
+cd frontend && npm run test:run              # 1738 passed, 0 failed
+cd cli && node --test --experimental-strip-types test/*.test.ts   # 77 passed
 cd backend && uv run pytest tests/test_cli_contract.py            # 9 passed
 ```
+
+Those counts are from #384 and were re-measured, not carried forward. If the
+backend suite fails for you and nobody else, re-read the two developer-machine
+shapes above before believing the code: a review agent running it under a fresh
+`UV_CACHE_DIR` in a sandbox saw 15 failures on this exact commit, none of them
+in changed code, while the same commit was 5476/0 here.
 
 `test_cli_contract.py` is the independent oracle for the CLI. It validates all
 784 alias paths against the server's real route table, and it caught two classes

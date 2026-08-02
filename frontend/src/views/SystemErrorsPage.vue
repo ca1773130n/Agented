@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import PageHeader from '../components/base/PageHeader.vue';
 import { useToast } from '../composables/useToast';
 import { useSystemErrors } from '../composables/useSystemErrors';
+import { settingsApi } from '../services/api';
 import type { SystemError } from '../services/api/types/system';
 import { safeFormatDateTime } from '../utils/datetime';
 
@@ -32,6 +33,108 @@ const {
 
 const stackTraceExpanded = ref(false);
 const contextExpanded = ref(false);
+
+// Which backend Tier-2 autofix spends on. It runs unattended and edits the
+// working tree, so the operator gets to choose — this used to be hardcoded to
+// claude with no way to change it. Mirrors `_AUTOFIX_BACKENDS` in
+// autofix_service.py; the server re-validates and falls back on its own, so a
+// stale tab cannot make it launch something unrecognised.
+const AUTOFIX_BACKENDS = ['codex', 'claude', 'gemini', 'opencode'] as const;
+type AutofixBackend = (typeof AUTOFIX_BACKENDS)[number];
+const AUTOFIX_BACKEND_DEFAULT: AutofixBackend = 'codex';
+
+// The server-confirmed value, and ONLY ever that — the select is bound with
+// `:value`, not `v-model`, so a choice becomes state after it is stored rather
+// than before. With v-model the ref moved first and a refused change left the
+// control displaying a backend nobody saved; putting the ref back did not fix
+// it either, because Vue skips patching a <select> whose bound value did not
+// change between renders, leaving the DOM on the refused option.
+const autofixBackend = ref<AutofixBackend>(AUTOFIX_BACKEND_DEFAULT);
+// Null until a read succeeds. A failed read must not render as "codex" — the
+// server may well be billing opencode, and a confident wrong answer on this
+// control is worse than an obvious blank.
+const autofixReadFailed = ref(false);
+const savingAutofixBackend = ref(false);
+// The control stays disabled until the stored value has loaded. That is what
+// closes the stale-read race: a slow GET landing after the operator had already
+// saved would otherwise stamp the old value back over their choice, silently,
+// on a control that says which account gets billed. Disabled-while-loading
+// makes that collision unreachable, so no request-sequencing token is needed —
+// the operator cannot touch the select while a read is in flight, and a save
+// disables it again for the duration of the write.
+const loadingAutofixBackend = ref(true);
+// Distinct from the flag above, which starts true so the control is disabled
+// from first paint — before any read has been issued. Using that as the
+// re-entry guard made the very first load return immediately.
+let autofixReadInFlight = false;
+
+function asAutofixBackend(value: string | null | undefined): AutofixBackend | null {
+  const v = (value || '').trim().toLowerCase();
+  return (AUTOFIX_BACKENDS as readonly string[]).includes(v) ? (v as AutofixBackend) : null;
+}
+
+async function loadAutofixBackend() {
+  // Retry is a button, and a button can be clicked twice. Two reads in flight
+  // can resolve out of order, so the older one would win and could re-raise the
+  // failed state over a successful read.
+  if (autofixReadInFlight) return;
+  autofixReadInFlight = true;
+  loadingAutofixBackend.value = true;
+  try {
+    const { value } = await settingsApi.get('autofix_backend');
+    // Unset is the normal first-run state, not an error: the server applies the
+    // same default, so showing it is accurate rather than a guess.
+    autofixBackend.value = asAutofixBackend(value) ?? AUTOFIX_BACKEND_DEFAULT;
+    autofixReadFailed.value = false;
+  } catch {
+    // Do NOT fall back to the default here. The stored value is unknown, and
+    // rendering "codex" would state, on a control about billing, something the
+    // server may flatly contradict. Say so and stay locked instead.
+    autofixReadFailed.value = true;
+  } finally {
+    autofixReadInFlight = false;
+    loadingAutofixBackend.value = false;
+  }
+}
+
+async function onChangeAutofixBackend(event: Event) {
+  const el = event.target as HTMLSelectElement;
+  /** Put the visible control back to what the server actually holds. */
+  const revert = () => {
+    el.value = autofixBackend.value;
+  };
+
+  // `disabled` on the select is UX, not a guarantee: it stops a person, but a
+  // dispatched change event still reaches this handler. Without a logical
+  // guard, a save issued while the initial GET is in flight would be overwritten
+  // when that GET resolves — leaving the control showing one backend and the
+  // server holding another. Refuse instead; the operator's next change is a
+  // click away, and a silent disagreement here is about billing.
+  const chosen = asAutofixBackend(el.value);
+  if (
+    loadingAutofixBackend.value ||
+    savingAutofixBackend.value ||
+    autofixReadFailed.value ||
+    !chosen
+  ) {
+    revert();
+    return;
+  }
+
+  savingAutofixBackend.value = true;
+  try {
+    await settingsApi.set('autofix_backend', chosen);
+    autofixBackend.value = chosen;
+    showToast(t('systemErrors.autofix.saved', { backend: chosen }), 'success');
+  } catch {
+    showToast(t('systemErrors.autofix.saveFailed'), 'error');
+    // Never leave the control showing a backend that was not saved — this
+    // dropdown is a claim about which account is about to be billed.
+    revert();
+  } finally {
+    savingAutofixBackend.value = false;
+  }
+}
 
 function relativeTime(ts: string): string {
   const diff = Date.now() - new Date(ts).getTime();
@@ -77,6 +180,7 @@ function applyFilters() {
 
 onMounted(() => {
   loadErrors();
+  loadAutofixBackend();
   startPolling();
 });
 
@@ -88,6 +192,40 @@ onUnmounted(() => {
 <template>
   <div class="system-errors-page">
     <PageHeader :title="t('systemErrors.title')" :subtitle="t('systemErrors.subtitle')" />
+
+    <!-- Autofix backend. A setting, not a filter — it decides which account the
+         unattended Tier-2 investigation spends on. -->
+    <div class="autofix-bar">
+      <label for="autofix-backend">{{ t('systemErrors.autofix.label') }}</label>
+      <select
+        id="autofix-backend"
+        :value="autofixReadFailed ? '' : autofixBackend"
+        :disabled="savingAutofixBackend || loadingAutofixBackend || autofixReadFailed"
+        @change="onChangeAutofixBackend"
+      >
+        <!-- After a failed read the control must not name a backend at all.
+             Showing the default here would assert "Codex" while the server may
+             be billing OpenCode — the disabled state alone does not stop a
+             reader taking the visible option as fact. -->
+        <option v-if="autofixReadFailed" value="">—</option>
+        <option value="codex">Codex</option>
+        <option value="claude">Claude</option>
+        <option value="gemini">Gemini (Antigravity)</option>
+        <option value="opencode">OpenCode</option>
+      </select>
+      <button
+        v-if="autofixReadFailed"
+        type="button"
+        class="autofix-retry"
+        :disabled="loadingAutofixBackend"
+        @click="loadAutofixBackend"
+      >
+        {{ t('systemErrors.autofix.retry') }}
+      </button>
+      <p class="autofix-hint">
+        {{ autofixReadFailed ? t('systemErrors.autofix.readFailed') : t('systemErrors.autofix.hint') }}
+      </p>
+    </div>
 
     <!-- Filters -->
     <div class="filters-bar">
@@ -327,6 +465,39 @@ onUnmounted(() => {
 <style scoped>
 .system-errors-page {
   max-width: 1400px;
+}
+
+.autofix-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.autofix-bar label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.autofix-hint {
+  margin: 0;
+  flex: 1;
+  min-width: 200px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.autofix-retry {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  cursor: pointer;
 }
 
 .search-group {
