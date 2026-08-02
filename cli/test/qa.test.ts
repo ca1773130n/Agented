@@ -19,7 +19,14 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { EXIT_MEANING, keepTail, provenLog, reportedRunDir, resolveExit } from '../commands/qa.ts';
+import {
+  acquireLock,
+  EXIT_MEANING,
+  keepTail,
+  provenLog,
+  reportedRunDir,
+  resolveExit,
+} from '../commands/qa.ts';
 
 function withTmp(fn: (dir: string) => void) {
   // NB: this repo sets TMPDIR to the project root, so fixtures land inside it.
@@ -188,6 +195,55 @@ test('the kept tail cannot slice through the sentinel', () => {
   const noise = Array.from({ length: 5000 }, (_, i) => `mischief: step ${i} ${'x'.repeat(200)}`);
   const stdout = keepTail([...noise, 'REPORT: /a/r1.md'].join('\n'));
   assert.equal(reportedRunDir(stdout, '/frontend'), '/a/r1');
+});
+
+// ---- one run at a time ------------------------------------------------------
+
+test('a second run cannot start against the same reports/ directory', () => {
+  // Two runs sharing reports/ cannot be told apart: run ids are second-precise,
+  // so a same-second pair gets the same directory AND the same id, and no
+  // inspection of the output separates them. Refusing to overlap is what makes
+  // the proof check sound rather than probabilistic.
+  withTmp((dir) => {
+    const first = acquireLock(dir);
+    assert.ok(first, 'first run takes the lock');
+    assert.equal(acquireLock(dir), null, 'second run is refused');
+    first!.release();
+    const third = acquireLock(dir);
+    assert.ok(third, 'released lock is available again');
+    third!.release();
+  });
+});
+
+test('a lock left by a dead run is taken over, not obeyed forever', () => {
+  // Otherwise one crash wedges the command until someone deletes a file they
+  // have never heard of.
+  withTmp((dir) => {
+    mkdirSync(join(dir, 'reports'), { recursive: true });
+    // pid 2^31-1 is not a running process on any of these platforms.
+    writeFileSync(join(dir, 'reports', '.ag-qa.lock'), '2147483647');
+    const taken = acquireLock(dir);
+    assert.ok(taken, 'stale lock is reclaimed');
+    taken!.release();
+  });
+});
+
+test('a lock held by a LIVE process is respected', () => {
+  withTmp((dir) => {
+    mkdirSync(join(dir, 'reports'), { recursive: true });
+    writeFileSync(join(dir, 'reports', '.ag-qa.lock'), String(process.pid));
+    assert.equal(acquireLock(dir), null);
+  });
+});
+
+test('releasing twice is not an error', () => {
+  // The release runs in a finally; a run that fails after an external cleanup
+  // must not turn that into a second failure.
+  withTmp((dir) => {
+    const lock = acquireLock(dir);
+    lock!.release();
+    assert.doesNotThrow(() => lock!.release());
+  });
 });
 
 // ---- the policy, as a truth table ------------------------------------------

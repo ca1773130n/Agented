@@ -63,6 +63,10 @@ const savingAutofixBackend = ref(false);
 // the operator cannot touch the select while a read is in flight, and a save
 // disables it again for the duration of the write.
 const loadingAutofixBackend = ref(true);
+// Distinct from the flag above, which starts true so the control is disabled
+// from first paint — before any read has been issued. Using that as the
+// re-entry guard made the very first load return immediately.
+let autofixReadInFlight = false;
 
 function asAutofixBackend(value: string | null | undefined): AutofixBackend | null {
   const v = (value || '').trim().toLowerCase();
@@ -70,6 +74,11 @@ function asAutofixBackend(value: string | null | undefined): AutofixBackend | nu
 }
 
 async function loadAutofixBackend() {
+  // Retry is a button, and a button can be clicked twice. Two reads in flight
+  // can resolve out of order, so the older one would win and could re-raise the
+  // failed state over a successful read.
+  if (autofixReadInFlight) return;
+  autofixReadInFlight = true;
   loadingAutofixBackend.value = true;
   try {
     const { value } = await settingsApi.get('autofix_backend');
@@ -83,6 +92,7 @@ async function loadAutofixBackend() {
     // server may flatly contradict. Say so and stay locked instead.
     autofixReadFailed.value = true;
   } finally {
+    autofixReadInFlight = false;
     loadingAutofixBackend.value = false;
   }
 }
@@ -189,16 +199,27 @@ onUnmounted(() => {
       <label for="autofix-backend">{{ t('systemErrors.autofix.label') }}</label>
       <select
         id="autofix-backend"
-        :value="autofixBackend"
+        :value="autofixReadFailed ? '' : autofixBackend"
         :disabled="savingAutofixBackend || loadingAutofixBackend || autofixReadFailed"
         @change="onChangeAutofixBackend"
       >
+        <!-- After a failed read the control must not name a backend at all.
+             Showing the default here would assert "Codex" while the server may
+             be billing OpenCode — the disabled state alone does not stop a
+             reader taking the visible option as fact. -->
+        <option v-if="autofixReadFailed" value="">—</option>
         <option value="codex">Codex</option>
         <option value="claude">Claude</option>
         <option value="gemini">Gemini (Antigravity)</option>
         <option value="opencode">OpenCode</option>
       </select>
-      <button v-if="autofixReadFailed" type="button" class="autofix-retry" @click="loadAutofixBackend">
+      <button
+        v-if="autofixReadFailed"
+        type="button"
+        class="autofix-retry"
+        :disabled="loadingAutofixBackend"
+        @click="loadAutofixBackend"
+      >
         {{ t('systemErrors.autofix.retry') }}
       </button>
       <p class="autofix-hint">

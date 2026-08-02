@@ -15,7 +15,16 @@
  */
 
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import { note, out, json, isTTY } from '../lib/output.ts';
 import { str, bool, num, UsageError, type Args } from '../lib/args.ts';
@@ -76,17 +85,42 @@ export async function qaCmd(a: Args): Promise<number> {
     return 2;
   }
 
+  // Claimed BEFORE announcing the command: a refused run that has already
+  // printed "mischief …" reads as a run that started and then died.
+  //
+  // Two runs sharing a reports/ directory cannot be told apart: run ids are
+  // second-precise, so runs starting in the same second get the SAME directory
+  // and the same runId, and no amount of inspecting the output distinguishes
+  // them. A run whose json reporter failed could then be proven by the other's
+  // log. Rather than keep inventing heuristics for that, refuse to overlap.
+  const lock = acquireLock(dir);
+  if (!lock) {
+    note(
+      '\nanother `ag qa` is already running against this reports/ directory.\n' +
+        '  Two runs there cannot be told apart — mischief run ids are precise to\n' +
+        '  the second, so a same-second pair shares a directory and an id. Wait\n' +
+        '  for the other run, or point this one at a different report.outDir.',
+    );
+    return 3;
+  }
+
   note(`mischief ${argv.join(' ') || '(default run)'}  [cwd ${dir}]`);
 
   // Floor to the second: mischief's run ids are second-precise, and some
   // filesystems store mtimes at that granularity too. See provenLog().
   const startedAt = Math.floor(Date.now() / 1000) * 1000;
-  const { code: rawCode, stdout } = await run(
-    join(dir, 'node_modules', '.bin', 'mischief'),
-    argv,
-    dir,
-    bool(a, 'json'),
-  );
+  let rawCode: number;
+  let stdout: string;
+  try {
+    ({ code: rawCode, stdout } = await run(
+      join(dir, 'node_modules', '.bin', 'mischief'),
+      argv,
+      dir,
+      bool(a, 'json'),
+    ));
+  } finally {
+    lock.release();
+  }
 
   // A CRASHED HARNESS MUST NOT READ AS FINDINGS — the whole reason 3 exists.
   //
@@ -118,7 +152,8 @@ export async function qaCmd(a: Args): Promise<number> {
   if (code !== rawCode) {
     note(
       proof === 'no-report'
-        ? `\nmischief exited ${rawCode} but printed no REPORT: line — it did not finish.\n` +
+        ? `\nmischief exited ${rawCode} but named no single report — it did not finish, or\n` +
+            '  printed more than one REPORT: line, which cannot be attributed.\n' +
             '  Reporting 3 (unverified) instead: there is no findings list to believe,\n' +
             '  and calling that "findings" — or "clean" — is the exact confusion this\n' +
             '  command exists to prevent.\n' +
@@ -129,9 +164,14 @@ export async function qaCmd(a: Args): Promise<number> {
             '  predates this run — it belongs to an earlier run that happened to get the\n' +
             '  same second-precise run id. This run produced no log of its own, so it is\n' +
             '  3 (unverified) rather than a verdict read off somebody else’s data.'
-          : `\nmischief exited ${rawCode} and named a report, but ${proof === 'no-log' ? 'no log.json sits beside it' : 'that path is unreadable'}.\n` +
-            '  The markdown is a rendering; log.json is the data. Without it there is\n' +
-            '  nothing to parse, so this is 3 (unverified), not a verdict.',
+          : proof === 'corrupt'
+            ? `\nmischief exited ${rawCode} and named ${runDir}, but the log.json there does\n` +
+              '  not parse, or names a different run. A reporter that opened the file and\n' +
+              '  then failed leaves exactly this. `ag qa` tells you to parse that file, so\n' +
+              '  a file that cannot be parsed is 3 (unverified), not a verdict.'
+            : `\nmischief exited ${rawCode} and named a report, but ${proof === 'no-log' ? 'no log.json sits beside it' : 'that path could not be read'}.\n` +
+              '  The markdown is a rendering; log.json is the data. Without it there is\n' +
+              '  nothing to parse, so this is 3 (unverified), not a verdict.',
     );
   }
 
@@ -221,6 +261,10 @@ function provenLog(
   try {
     const s = statSync(log);
     if (!s.isFile()) return 'no-log';
+    // Read it, but not at any size. Only a small prefix is actually needed, and
+    // slurping an arbitrarily large file to answer a yes/no question is how a
+    // verification step becomes the thing that falls over.
+    if (s.size > MAX_LOG_BYTES) return 'unreadable';
     mtimeMs = s.mtimeMs;
     raw = readFileSync(log, 'utf8');
   } catch (e) {
@@ -265,9 +309,69 @@ function resolveExit(code: number, proof: ReturnType<typeof provenLog>): number 
  */
 const STDOUT_TAIL_LINES = 200;
 
+/**
+ * Ceiling on the log we will read to verify a run. Generous next to a real one
+ * (a 24-route run here produced ~35 KB) and far below what would hurt.
+ */
+const MAX_LOG_BYTES = 256 * 1024 * 1024;
+
 /** Trim accumulated output to the last N whole lines, sentinel intact. */
 function keepTail(text: string): string {
   return text.split('\n').slice(-STDOUT_TAIL_LINES).join('\n');
+}
+
+/**
+ * Exclusive claim on a reports/ directory, so two runs cannot interleave in it.
+ *
+ * `wx` is create-or-fail in one syscall, which is the whole mechanism — no
+ * check-then-create window. The pid is written so a lock left behind by a
+ * killed run can be told from a live one and taken over; otherwise a single
+ * crash would wedge the command until someone deleted a file they had never
+ * heard of. Returns null when another LIVE run holds it.
+ */
+function acquireLock(dir: string): { release: () => void } | null {
+  const reports = join(dir, 'reports');
+  mkdirSync(reports, { recursive: true });
+  const lockPath = join(reports, '.ag-qa.lock');
+  const claim = () => {
+    const fd = openSync(lockPath, 'wx');
+    writeFileSync(fd, String(process.pid));
+    closeSync(fd);
+    return {
+      release: () => {
+        try {
+          unlinkSync(lockPath);
+        } catch {
+          // Already gone: nothing to release, and failing here would turn a
+          // finished run into an error.
+        }
+      },
+    };
+  };
+  try {
+    return claim();
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException)?.code !== 'EEXIST') throw e;
+  }
+  const holder = Number(readFileSync(lockPath, 'utf8').trim());
+  if (Number.isInteger(holder) && holder > 0 && isAlive(holder)) return null;
+  // Stale. Clear it and claim; if someone beat us to that, they hold it.
+  try {
+    unlinkSync(lockPath);
+    return claim();
+  } catch {
+    return null;
+  }
+}
+
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0); // signal 0 tests for existence, sends nothing
+    return true;
+  } catch (e) {
+    // EPERM means it exists and belongs to someone else.
+    return (e as NodeJS.ErrnoException)?.code === 'EPERM';
+  }
 }
 
 function run(
@@ -300,4 +404,4 @@ function run(
   });
 }
 
-export { EXIT_MEANING, keepTail, provenLog, reportedRunDir, resolveExit };
+export { acquireLock, EXIT_MEANING, keepTail, provenLog, reportedRunDir, resolveExit };

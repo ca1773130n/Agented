@@ -210,6 +210,29 @@ describe('SystemErrorsPage', () => {
     expect(wrapper.find('#autofix-backend').attributes('disabled')).toBeDefined()
     expect(wrapper.find('.autofix-retry').exists()).toBe(true)
     expect(wrapper.text()).toContain('Could not read the current setting')
+    // And it must not still be DISPLAYING a backend. Disabled is not enough:
+    // a reader takes the visible option as fact, and asserting "Codex" while
+    // the server may hold opencode is the thing this state exists to avoid.
+    expect((wrapper.find('#autofix-backend').element as HTMLSelectElement).value).toBe('')
+  })
+
+  it('does not let two retries race each other', async () => {
+    const { settingsApi } = await import('../../services/api')
+    vi.mocked(settingsApi.get).mockRejectedValueOnce(new Error('unreachable'))
+
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    let pending = 0
+    vi.mocked(settingsApi.get).mockImplementation(() => {
+      pending += 1
+      return new Promise(() => {})
+    })
+    await wrapper.find('.autofix-retry').trigger('click')
+    await wrapper.find('.autofix-retry').trigger('click')
+    await flushPromises()
+
+    expect(pending).toBe(1)
   })
 
   it('recovers when the retry succeeds', async () => {
