@@ -15,18 +15,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import {
-  closeSync,
-  existsSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  renameSync,
-  statSync,
-  unlinkSync,
-  writeFileSync,
-} from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import { note, out, json, isTTY } from '../lib/output.ts';
 import { str, bool, num, UsageError, type Args } from '../lib/args.ts';
@@ -87,50 +76,39 @@ export async function qaCmd(a: Args): Promise<number> {
     return 2;
   }
 
-  // Claimed BEFORE announcing the command: a refused run that has already
-  // printed "mischief …" reads as a run that started and then died.
-  //
-  // Two runs sharing a reports/ directory cannot be told apart: run ids are
-  // second-precise, so runs starting in the same second get the SAME directory
-  // and the same runId, and no amount of inspecting the output distinguishes
-  // them. A run whose json reporter failed could then be proven by the other's
-  // log. Rather than keep inventing heuristics for that, refuse to overlap.
-  const lock = acquireLock(dir);
-  if (!lock) {
-    note(
-      '\nanother `ag qa` is already running against this reports/ directory.\n' +
-        '  Two runs there cannot be told apart — mischief run ids are precise to\n' +
-        '  the second, so a same-second pair shares a directory and an id. Wait\n' +
-        '  for the other run, or point this one at a different report.outDir.',
-    );
-    return 3;
-  }
-
   note(`mischief ${argv.join(' ') || '(default run)'}  [cwd ${dir}]`);
 
+  // CONCURRENT RUNS AGAINST ONE reports/ DIRECTORY ARE NOT SUPPORTED, and this
+  // command does not try to make them safe.
+  //
+  // mischief run ids are precise to the second (util.mjs makeRunId), so two
+  // runs starting in the same second share a directory AND an id. If one of
+  // them then fails to write its own log.json, the other's can satisfy the
+  // proof check below — the wrong exit code on a local QA command.
+  //
+  // An exclusive lock was tried here and removed. It could not deliver what it
+  // promised: it guarded this process, while the thing writing into reports/ is
+  // the mischief child, which outlives a killed parent and keeps writing after
+  // the next run has taken the lock. It also introduced its own failure modes —
+  // an owner dying mid-claim, or a dead recovery marker, wedged every later run.
+  // Four review rounds found four defects in it, all in code that existed only
+  // for this one coincidence. The residual below is smaller than the machinery
+  // was.
+  //
+  // Two concurrent runs already race the app, the database and the browser, so
+  // the honest answer is "don't", not a lock that implies it is handled.
+  //
   // Floor to the second: mischief's run ids are second-precise, and some
   // filesystems store mtimes at that granularity too. See provenLog().
   const startedAt = Math.floor(Date.now() / 1000) * 1000;
-  let rawCode: number;
-  let stdout: string;
-  let runDir: string | null;
-  let proof: ReturnType<typeof provenLog>;
-  try {
-    ({ code: rawCode, stdout } = await run(
-      join(dir, 'node_modules', '.bin', 'mischief'),
-      argv,
-      dir,
-      bool(a, 'json'),
-    ));
-    // Resolve the proof while STILL HOLDING the lock. Releasing at the end of
-    // the child's life reopened the window the lock exists to close: a failed
-    // run could let go, a second run could create the very log.json it was
-    // missing, and the first would then read that as its own evidence.
-    runDir = reportedRunDir(stdout, dir);
-    proof = provenLog(runDir, startedAt);
-  } finally {
-    lock.release();
-  }
+  const { code: rawCode, stdout } = await run(
+    join(dir, 'node_modules', '.bin', 'mischief'),
+    argv,
+    dir,
+    bool(a, 'json'),
+  );
+  const runDir = reportedRunDir(stdout, dir);
+  const proof = provenLog(runDir, startedAt);
 
   // A CRASHED HARNESS MUST NOT READ AS FINDINGS — the whole reason 3 exists.
   //
@@ -333,110 +311,6 @@ function keepTail(text: string): string {
   return text.split('\n').slice(-STDOUT_TAIL_LINES).join('\n');
 }
 
-/**
- * Exclusive claim on a reports/ directory, so two runs cannot interleave in it.
- *
- * `wx` is create-or-fail in one syscall, which is the whole mechanism — no
- * check-then-create window. The pid is written so a lock left behind by a
- * killed run can be told from a live one and taken over; otherwise a single
- * crash would wedge the command until someone deleted a file they had never
- * heard of. Returns null when another LIVE run holds it.
- */
-function acquireLock(dir: string): { release: () => void } | null {
-  const reports = join(dir, 'reports');
-  mkdirSync(reports, { recursive: true });
-  const lockPath = join(reports, '.ag-qa.lock');
-  const token = `${process.pid}:${randomUUID()}`;
-
-  /**
-   * Create the lock, or fail. The token is written into the SAME file the
-   * O_EXCL create produced, so nobody else can be holding it — but the file is
-   * briefly empty between create and write, which a concurrent reader must not
-   * mistake for an abandoned lock. See the read side below.
-   */
-  const claim = () => {
-    const fd = openSync(lockPath, 'wx');
-    try {
-      writeFileSync(fd, token);
-    } finally {
-      closeSync(fd);
-    }
-    return {
-      release: () => {
-        // Only remove a lock we still own. If ours was cleared externally and
-        // another run has since claimed the directory, unlinking here would
-        // delete THEIR lock and let a third run in alongside them.
-        try {
-          if (readFileSync(lockPath, 'utf8') === token) unlinkSync(lockPath);
-        } catch {
-          // Already gone, or unreadable. Either way there is nothing of ours to
-          // remove, and failing here would turn a finished run into an error.
-        }
-      },
-    };
-  };
-
-  try {
-    return claim();
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException)?.code !== 'EEXIST') throw e;
-  }
-
-  // Someone holds it. Recovery is only for a lock whose owner is gone, and it
-  // is serialised through a second O_EXCL file: two runs both deciding a lock
-  // is stale and both replacing it is how they end up both believing they own
-  // it. rename does not help — it is not compare-and-swap, so the loser can
-  // still move the winner's fresh lock aside. Only one process at a time may
-  // even attempt recovery.
-  const recoveryPath = `${lockPath}.recover`;
-  let recoveryFd: number;
-  try {
-    recoveryFd = openSync(recoveryPath, 'wx');
-  } catch {
-    return null; // another run is already recovering; let it finish
-  }
-  try {
-    const holder = readLockOwner(lockPath);
-    // 'unknown' covers both an unreadable lock and one that is still empty
-    // because its owner is mid-write. Neither is evidence of abandonment, and
-    // guessing wrong steals the directory from a live run.
-    if (holder === 'unknown' || (holder !== 'gone' && isAlive(holder))) return null;
-    unlinkSync(lockPath);
-    return claim();
-  } catch {
-    return null;
-  } finally {
-    closeSync(recoveryFd);
-    try {
-      unlinkSync(recoveryPath);
-    } catch {
-      // Best effort; a leftover .recover only costs one retry.
-    }
-  }
-}
-
-/** The pid holding a lock, 'gone' if the file has vanished, 'unknown' if it
- *  cannot be read or has not been written yet. */
-function readLockOwner(lockPath: string): number | 'gone' | 'unknown' {
-  let raw: string;
-  try {
-    raw = readFileSync(lockPath, 'utf8').trim();
-  } catch (e) {
-    return (e as NodeJS.ErrnoException)?.code === 'ENOENT' ? 'gone' : 'unknown';
-  }
-  const pid = Number(raw.split(':')[0]);
-  return Number.isInteger(pid) && pid > 0 ? pid : 'unknown';
-}
-
-function isAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0); // signal 0 tests for existence, sends nothing
-    return true;
-  } catch (e) {
-    // EPERM means it exists and belongs to someone else.
-    return (e as NodeJS.ErrnoException)?.code === 'EPERM';
-  }
-}
 
 function run(
   cmd: string,
@@ -468,4 +342,4 @@ function run(
   });
 }
 
-export { acquireLock, EXIT_MEANING, keepTail, provenLog, reportedRunDir, resolveExit };
+export { EXIT_MEANING, keepTail, provenLog, reportedRunDir, resolveExit };

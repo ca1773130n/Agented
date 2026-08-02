@@ -15,18 +15,11 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import {
-  acquireLock,
-  EXIT_MEANING,
-  keepTail,
-  provenLog,
-  reportedRunDir,
-  resolveExit,
-} from '../commands/qa.ts';
+import { EXIT_MEANING, keepTail, provenLog, reportedRunDir, resolveExit } from '../commands/qa.ts';
 
 function withTmp(fn: (dir: string) => void) {
   // NB: this repo sets TMPDIR to the project root, so fixtures land inside it.
@@ -104,9 +97,11 @@ test('a configured report.outDir is followed, not second-guessed', () => {
   assert.equal(reportedRunDir('REPORT: /elsewhere/qa-alt/r9.md\n', '/frontend'), '/elsewhere/qa-alt/r9');
 });
 
-test("a REAL run's stdout resolves to a directory that holds its log.json", () => {
-  // Replays the exact bytes mischief printed on this machine. A fixture cannot
-  // catch a wrong assumption about mischief's own layout; this can.
+test('a run laid out the way mischief lays one out resolves to its log.json', () => {
+  // Named for what it is: the stdout and the files are both constructed here,
+  // so this checks the parser, not mischief. The layout it assumes is pinned
+  // separately by the contract canary below — that is the part that would
+  // notice mischief moving.
   withTmp((dir) => {
     const md = runDir(dir, '20260802-114440', true);
     const stdout =
@@ -195,100 +190,6 @@ test('the kept tail cannot slice through the sentinel', () => {
   const noise = Array.from({ length: 5000 }, (_, i) => `mischief: step ${i} ${'x'.repeat(200)}`);
   const stdout = keepTail([...noise, 'REPORT: /a/r1.md'].join('\n'));
   assert.equal(reportedRunDir(stdout, '/frontend'), '/a/r1');
-});
-
-// ---- one run at a time ------------------------------------------------------
-
-test('a second run cannot start against the same reports/ directory', () => {
-  // Two runs sharing reports/ cannot be told apart: run ids are second-precise,
-  // so a same-second pair gets the same directory AND the same id, and no
-  // inspection of the output separates them. Refusing to overlap is what makes
-  // the proof check sound rather than probabilistic.
-  withTmp((dir) => {
-    const first = acquireLock(dir);
-    assert.ok(first, 'first run takes the lock');
-    assert.equal(acquireLock(dir), null, 'second run is refused');
-    first!.release();
-    const third = acquireLock(dir);
-    assert.ok(third, 'released lock is available again');
-    third!.release();
-  });
-});
-
-test('a lock left by a dead run is taken over, not obeyed forever', () => {
-  // Otherwise one crash wedges the command until someone deletes a file they
-  // have never heard of.
-  withTmp((dir) => {
-    mkdirSync(join(dir, 'reports'), { recursive: true });
-    // pid 2^31-1 is not a running process on any of these platforms.
-    writeFileSync(join(dir, 'reports', '.ag-qa.lock'), '2147483647');
-    const taken = acquireLock(dir);
-    assert.ok(taken, 'stale lock is reclaimed');
-    taken!.release();
-  });
-});
-
-test('a lock held by a LIVE process is respected', () => {
-  withTmp((dir) => {
-    mkdirSync(join(dir, 'reports'), { recursive: true });
-    writeFileSync(join(dir, 'reports', '.ag-qa.lock'), String(process.pid));
-    assert.equal(acquireLock(dir), null);
-  });
-});
-
-test('a stale lock is taken over by exactly one of two racing runs', () => {
-  // unlink-then-claim had both processes deleting the stale file, the second
-  // deleting the FIRST one's fresh lock. rename did not fix it either — it is
-  // not compare-and-swap, so the loser can still move the winner's lock aside.
-  // Recovery is serialised through its own O_EXCL file instead.
-  withTmp((dir) => {
-    mkdirSync(join(dir, 'reports'), { recursive: true });
-    writeFileSync(join(dir, 'reports', '.ag-qa.lock'), '2147483647'); // no such process
-    const a = acquireLock(dir);
-    const b = acquireLock(dir); // races the same stale lock
-    assert.equal([a, b].filter(Boolean).length, 1, 'exactly one run may hold it');
-    ;(a ?? b)!.release();
-    // No scratch files left behind.
-    assert.deepEqual(
-      readdirSync(join(dir, 'reports')).filter((f) => f.startsWith('.ag-qa.lock')),
-      [],
-    );
-  });
-});
-
-test('a lock still being written is not mistaken for an abandoned one', () => {
-  // openSync(wx) creates the file before the owner writes its token, so a
-  // concurrent reader can see it empty. Number('') is 0, which read as "no
-  // valid pid" and therefore as stale — stealing the directory from a run that
-  // was seconds into starting.
-  withTmp((dir) => {
-    mkdirSync(join(dir, 'reports'), { recursive: true });
-    writeFileSync(join(dir, 'reports', '.ag-qa.lock'), ''); // mid-write
-    assert.equal(acquireLock(dir), null);
-  });
-});
-
-test('release does not remove a lock that now belongs to someone else', () => {
-  // If ours is cleared externally and another run claims the directory, our
-  // finally would otherwise delete THEIR lock and let a third run in beside it.
-  withTmp((dir) => {
-    const mine = acquireLock(dir);
-    assert.ok(mine);
-    const lockPath = join(dir, 'reports', '.ag-qa.lock');
-    writeFileSync(lockPath, `${process.pid}:someone-elses-token`);
-    mine!.release();
-    assert.equal(readFileSync(lockPath, 'utf8'), `${process.pid}:someone-elses-token`);
-  });
-});
-
-test('releasing twice is not an error', () => {
-  // The release runs in a finally; a run that fails after an external cleanup
-  // must not turn that into a second failure.
-  withTmp((dir) => {
-    const lock = acquireLock(dir);
-    lock!.release();
-    assert.doesNotThrow(() => lock!.release());
-  });
 });
 
 // ---- the policy, as a truth table ------------------------------------------
