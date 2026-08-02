@@ -1,10 +1,18 @@
 # Handoff — 2026-08-02
 
-State: `main` at `55276c3355`. No unmerged branches, no stashes, clean tree,
-backend suite green (5469 passed, 0 failed).
+State: `main` at `b39676dd51`. No unmerged branches, no stashes, clean tree,
+backend suite green (5476 passed, 0 failed).
 
-Ten PRs merged (#373–#382). The CLI is done and tested, the super-agent memory
-loop runs end to end, and the backend suite has no tolerated failures left.
+Twelve PRs merged (#373–#384). The CLI is done and tested, the super-agent
+memory loop runs end to end, and the backend suite has no tolerated failures
+left.
+
+Sibling repo: [Mischief#1](https://github.com/ca1773130n/Mischief/pull/1) is
+merged — the two harness bugs `ag qa` surfaced (a config type error that killed
+the run at load-detectable cost, and offline-window exceptions counted as
+critical app bugs) are fixed upstream. Agented pins mischief 0.1.2; those fixes
+are NOT in it yet, so the noise they remove still shows up in local runs until
+there is a release. Do not cut that release from here.
 
 ---
 
@@ -71,6 +79,19 @@ assuming it. Do not "fix" them.
 ---
 
 ## Open, in rough priority order
+
+### 0. The two things waiting on a decision that is yours, not mine
+
+**Compile the 377 imported sessions?** They are in the store and they are real.
+Compiling puts them in the project graph, which is what Tesserae is for and
+improves retrieval regardless of distill. It is a ~300-session LLM extraction,
+so it is real spend, and it does **not** advance the billing-distill goal (see
+above — all 377 carry `agent_label = "Codex"` and cannot reach the distiller).
+Left undone deliberately rather than spent unilaterally.
+
+**Run super-agents against GetResearchDone through the platform?** That is the
+only thing that gets a distill to actually bill, and it is also real spend. The
+preconditions are in place; nobody has pulled the trigger.
 
 ### 1. Upstream bug filed, awaiting a decision — [Tesserae#104](https://github.com/ca1773130n/Tesserae/issues/104)
 
@@ -202,6 +223,39 @@ If you change `frontend/src/services/api/`, run `just cli-gen` and commit the
 result.
 
 ---
+
+## What #384 cost, and why it is written down
+
+Eleven adversarial review rounds on one PR. The first two commits — the crash
+reported as findings, and `graph/map` 500ing on every call — held up unchanged
+through all of them. Everything after was review dismantling machinery added by
+the round before it.
+
+Three ownership schemes for "did THIS run write that report" were unsound in
+turn: directory names, then mtimes, then a lock. The lock is the one worth
+remembering. It was added to satisfy a reviewer-declared blocker, and it
+guarded the wrong thing — this process, while the mischief child is what writes
+into `reports/` and outlives a killed parent. Four rounds found four defects in
+it, every one in code that existed only for a single coincidence. Removing it
+was the fix. The mtime floor went the same way: it could not see the case it
+was written for, because both logs land in the same second.
+
+**A mechanism that reads as a guarantee and is not one is worse than no
+mechanism**, and the honest move twice was to delete rather than harden. If you
+find yourself on round four of hardening something, that is the signal.
+
+Three of the tests written during that PR were green for the wrong reason. Two
+called `@vue/test-utils`' `trigger()` on a disabled element, which is a no-op —
+they asserted that VTU respects `disabled`, not that the code guarded anything.
+One encoded the same wrong assumption as the code it tested. The habit that
+catches this is cheap: revert the fix, confirm the test goes red, restore. Do
+it every time; it caught a fourth case where a sabotage was too gentle to
+actually break the thing under test.
+
+And one paragraph of this very document invented a safety control
+(`AGENTED_AUTOFIX_*`) that does not exist. It took three attempts to state the
+dedup behaviour precisely. A handoff whose job is to stop the next session
+being misled is the worst place to guess.
 
 ## One note on method
 
