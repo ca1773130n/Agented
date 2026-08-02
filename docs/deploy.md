@@ -96,7 +96,7 @@ curl -fsSL https://raw.githubusercontent.com/ca1773130n/Agented/v0.8.0/install.s
 > set `AGENTED_INSTALL_UNVERIFIED=1`, which skips checksum verification and
 > prints a security warning. Do that only when you understand the risk.
 
-[`install.sh`](../install.sh):
+[`install.sh`](https\:\/\/github\.com\/ca1773130n\/Agented\/blob\/main/install.sh):
 
 - pulls `ghcr.io/ca1773130n/agented:${GHCR_TAG:-latest}`,
 - ensures a `docker-compose.yml` (bundled from the clone, or fetched from a
@@ -116,7 +116,7 @@ Environment knobs: `GHCR_TAG` (image tag, default `latest`), `INSTALL_DIR`
 `AGENTED_INSTALL_REF` (git ref the compose fetch is pinned to; defaults to a
 tagged release), `AGENTED_INSTALL_UNVERIFIED=1` (opt in to an unverified
 mutable-ref fetch). Add secrets to `.env` —
-see [docs/deploy/SECRETS.md](deploy/SECRETS.md).
+see [docs/deploy/SECRETS.md](https\:\/\/github\.com\/ca1773130n\/Agented\/blob\/main/docs/deploy/SECRETS.md).
 
 ---
 
@@ -136,7 +136,7 @@ with `GHCR_TAG`:
 GHCR_TAG=v0.10.0 just self-update
 ```
 
-Re-running [`install.sh`](../install.sh) does the same thing on a host without
+Re-running [`install.sh`](https\:\/\/github\.com\/ca1773130n\/Agented\/blob\/main/install.sh) does the same thing on a host without
 the repo checked out.
 
 > A live self-update pull-and-restart (old → new image, DB schema survives) is
@@ -176,6 +176,6 @@ self-hosted install you can point at any Postgres instance by adding
 
 ## See also
 
-- [Runbook](deploy/RUNBOOK.md) · [Backup](deploy/BACKUP.md) · [Secrets](deploy/SECRETS.md)
-- [Security](SECURITY.md)
+- [Runbook](https\:\/\/github\.com\/ca1773130n\/Agented\/blob\/main/docs/deploy/RUNBOOK.md) · [Backup](https\:\/\/github\.com\/ca1773130n\/Agented\/blob\/main/docs/deploy/BACKUP.md) · [Secrets](https\:\/\/github\.com\/ca1773130n\/Agented\/blob\/main/docs/deploy/SECRETS.md)
+- [Security](https\:\/\/github\.com\/ca1773130n\/Agented\/blob\/main/docs/SECURITY.md)
 - [i18n conventions](i18n.md)
