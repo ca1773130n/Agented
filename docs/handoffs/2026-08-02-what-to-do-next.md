@@ -91,7 +91,23 @@ Meanwhile: never run `tesserae sessions discover --import` on a project whose
 store has externally-imported sessions without re-running Agented's export
 afterwards.
 
-### 2. `ag qa` has never been run end to end
+### 2. ~~`ag qa` has never been run end to end~~ — DONE, see PR #384
+
+It has now, against a copy of the local DB with an empty sidecar store. It found
+two bugs: its own crash reporting itself as "HIGH findings" instead of 3, and a
+`GET /admin/system/memory/graph/map` that had 500'd on every call since it was
+wired (`scope` is a Litestar reserved kwarg). Both fixed. The rest of the run's
+8 critical / 85 high was self-inflicted: 7 criticals are the offline mutator's
+own doing, 64 highs are one rate-limited button, and the 7 "unreached" routes
+all render fine on a fresh context.
+
+One thing to know before the next run: the crashes fed `error_capture`, which
+spawned a real `claude -p … --dangerously-skip-permissions` subprocess that
+edited backend source mid-run. Set `AGENTED_AUTOFIX_*` off, or expect the QA
+run to spend tokens and write to your tree.
+
+The original note follows.
+
 
 `cli/commands/qa.ts` wraps mischief for random-click QA and is tested at the unit
 level, but has never been pointed at the running app.
