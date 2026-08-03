@@ -93,24 +93,35 @@ Left undone deliberately rather than spent unilaterally.
 only thing that gets a distill to actually bill, and it is also real spend. The
 preconditions are in place; nobody has pulled the trigger.
 
-### 1. Upstream bug filed, awaiting a decision — [Tesserae#104](https://github.com/ca1773130n/Tesserae/issues/104)
+### 1. STILL BROKEN, twice "fixed" — [Tesserae#104](https://github.com/ca1773130n/Tesserae/issues/104)
 
-`tesserae sessions discover --import` replaces the harness-session store, while
-`tesserae sessions import <path>` merges it. A non-empty discovery therefore
-prunes records it structurally cannot see, meaning anything written by an
-external producer. Agented's session export is exactly that.
+`tesserae sessions discover --import` destroys records written by an external
+producer. Agented's session export is exactly that.
 
-It cost us the only attributed session in the store. Re-running the export
-restored it, and the manifest is now 378 with `sa-apoc` present. The loss is
-silent: the run prints `Imported harness sessions: 377` while the store shrank.
+**Do not trust the issue's history.** It was closed as COMPLETED on 2026-08-01
+with zero comments, before either fix existed. Two then landed — #106 (2026-08-02)
+and #112 (2026-08-03), the second implying the first was incomplete — and the
+reporter was told neither. Reopened 2026-08-04 with a reproduction.
 
-The mechanism is `replace=bool(sessions)` at `cli.py:1973` and `cli.py:2225`,
-against an API that defaults to merge. Present in 0.28.2 and 0.28.5.
+Both fixes scope pruning to the roots a discovery scanned, which cannot help
+here: Agented exports sessions derived from the same transcripts, so their
+`raw_transcript_path` sits under `~/.claude` — inside the scope. **Measured on
+0.28.6 (with #112) against a copy of the real 375-record store:**
 
-Action: if the maintainer picks a direction, send the PR. I offered.
-Meanwhile: never run `tesserae sessions discover --import` on a project whose
-store has externally-imported sessions without re-running Agented's export
-afterwards.
+- a record whose transcript is no longer discoverable is **deleted** (planted
+  one, ran the `cli.py:2236` path, `EXTERNAL RECORD SURVIVED: False`)
+- a record whose transcript IS discoverable is **silently overwritten** —
+  `agent_label: sa-apoc` came back as `Claude Code`, super-agent metadata gone.
+  Nothing is deleted, so `removed` stays 0 and the output looks healthy.
+
+The second shape is the common one, is not a pruning problem at all, and is
+therefore out of reach of any root-scoping fix. What would work is provenance
+on the record: a producer written at import time, with a scan touching only
+what it produced. Offered to send that PR; no direction given yet.
+
+Meanwhile, unchanged: never run `tesserae sessions discover --import` on a
+project whose store has externally-imported sessions without re-running
+Agented's export afterwards. Both loss shapes are silent.
 
 ### 2. ~~`ag qa` has never been run end to end~~ — DONE, see PR #384
 
