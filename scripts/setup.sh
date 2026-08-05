@@ -146,7 +146,17 @@ ensure_node() {
 # IS an answer) and no-compiled-graph (which is not), so branch on the JSON body's `verdict`, never
 # on $?. Endpoints resolve exact-only — no natural language — so free-text input yields
 # NOT_RESOLVABLE, and ABSENT never means false.
-TESSERAE_MIN="0.28.2"
+# 0.28.7 is a DATA-SAFETY floor, not a feature one. Below it, `tesserae sessions
+# discover --import` destroys records written by another producer — which is what
+# Agented's export is (`sessions import`, tesserae_integration.py:769). Two shapes,
+# both silent: a record whose transcript is no longer discoverable is deleted, and
+# one whose transcript is still discoverable is overwritten, losing the agent
+# attribution that was the point of exporting it. 0.28.7 stamps a `producer` on each
+# record and lets a writer touch only its own. Tesserae#104, closed twice against
+# fixes that could not work (they scoped by directory; both producers read the same
+# `~/.claude` transcripts), reopened with a reproduction, fixed on the third attempt.
+# Verified here against a copy of the real 375-record store before this bump.
+TESSERAE_MIN="0.28.7"
 # Portable "A >= B" for dotted versions — BSD/macOS `sort` lacks `-V`.
 _version_ge() {
     local a b IFS=.
