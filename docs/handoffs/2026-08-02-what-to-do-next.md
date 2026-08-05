@@ -93,35 +93,45 @@ Left undone deliberately rather than spent unilaterally.
 only thing that gets a distill to actually bill, and it is also real spend. The
 preconditions are in place; nobody has pulled the trigger.
 
-### 1. STILL BROKEN, twice "fixed" — [Tesserae#104](https://github.com/ca1773130n/Tesserae/issues/104)
+### 1. FIXED in Tesserae 0.28.7 — [#104](https://github.com/ca1773130n/Tesserae/issues/104), on the third attempt
 
-`tesserae sessions discover --import` destroys records written by an external
-producer. Agented's session export is exactly that.
+`tesserae sessions discover --import` used to destroy records written by another
+producer. Agented's export is exactly that (`sessions import`,
+`tesserae_integration.py:769`). Fixed by provenance: each record carries a
+`producer`, and a writer may only prune or overwrite its own. Discovery stamps
+`tesserae:discover`, import stamps `tesserae:import`, so the two no longer
+collide. `scripts/setup.sh` floors at **0.28.7 as a data-safety minimum**; the
+local tool is upgraded.
 
-**Do not trust the issue's history.** It was closed as COMPLETED on 2026-08-01
-with zero comments, before either fix existed. Two then landed — #106 (2026-08-02)
-and #112 (2026-08-03), the second implying the first was incomplete — and the
-reporter was told neither. Reopened 2026-08-04 with a reproduction.
+**Verified here, not taken on trust** — the two earlier "fixes" were both wrong
+and the issue was closed against them. Against a copy of the real 375-record
+store, driving the same call the CLI makes:
 
-Both fixes scope pruning to the roots a discovery scanned, which cannot help
-here: Agented exports sessions derived from the same transcripts, so their
-`raw_transcript_path` sits under `~/.claude` — inside the scope. **Measured on
-0.28.6 (with #112) against a copy of the real 375-record store:**
+| shape | 0.28.6 | 0.28.7 |
+|---|---|---|
+| transcript no longer discoverable | deleted, `removed=1` | **survives**, `removed=0` |
+| transcript still discoverable | overwritten, `sa-apoc` → `Claude Code` | **preserved**, metadata intact |
 
-- a record whose transcript is no longer discoverable is **deleted** (planted
-  one, ran the `cli.py:2236` path, `EXTERNAL RECORD SURVIVED: False`)
-- a record whose transcript IS discoverable is **silently overwritten** —
-  `agent_label: sa-apoc` came back as `Claude Code`, super-agent metadata gone.
-  Nothing is deleted, so `removed` stays 0 and the output looks healthy.
+**⚠ Do not run `discover --import --adopt-unowned`.** Records written before
+0.28.7 have no producer. Unowned means nothing prunes or overwrites them, so the
+existing 375 are safe *by default and need no action* — but `--adopt-unowned`
+hands them to discovery, and they lose that protection. Measured: the adopt run
+deleted 26 records the normal run left alone (`removed: 26` vs `removed: 0`).
 
-The second shape is the common one, is not a pruning problem at all, and is
-therefore out of reach of any root-scoping fix. What would work is provenance
-on the record: a producer written at import time, with a scan touching only
-what it produced. Offered to send that PR; no direction given yet.
+They become owned naturally as Agented's export rewrites them. One full export
+after upgrading stamps them all at once, if you would rather not wait.
 
-Meanwhile, unchanged: never run `tesserae sessions discover --import` on a
-project whose store has externally-imported sessions without re-running
-Agented's export afterwards. Both loss shapes are silent.
+One caveat that comes with the fix: discovery will not refresh legacy unowned
+records either — the same run reported `preserved: 349`. That is the trade
+`--adopt-unowned` exists to resolve, and it is not worth the loss.
+
+A note on method, because it nearly caught me too: my first 0.28.7 run showed
+BOTH modes still failing. The fix was fine; my test called `write_sessions`
+without a `producer`, which the docstring says reverts to owning the whole
+store. I had reproduced my own misuse. Check the signature before reporting a
+regression — the maintainer's two wrong fixes came from tests that encoded an
+assumption rather than checking it, and this was the same error pointing the
+other way.
 
 ### 2. ~~`ag qa` has never been run end to end~~ — DONE, see PR #384
 
