@@ -66,10 +66,13 @@ The blocker was never volume. It is attribution.
 
 ### What will
 
-Real super-agent sessions on an opted-in project, each carrying a `project_id`.
-Run super-agents against GetResearchDone through the platform, let the sessions
-complete, then let the automatic path do its thing. The preconditions are already
-in place:
+Real super-agent sessions on an opted-in project, each carrying a `project_id` —
+run through the platform, allowed to complete, after which the automatic path
+does the rest on its own.
+
+This describes the *mechanism*, not a task to go and perform: §0 records the
+2026-08-07 decision to let this happen through real use rather than seed it. The
+preconditions are already in place:
 
 - `projects.tesserae_distill_enabled = 1` for GetResearchDone
 - the graph is built (5808 nodes), which it was not until 2026-08-01
@@ -111,7 +114,7 @@ assuming it. Do not "fix" them.
 
 ## Open, in rough priority order
 
-### 0. The two things waiting on a decision that is yours, not mine
+### 0. One decision still open, one now made
 
 **Compile the 377 imported sessions?** They are in the store and they are real.
 Compiling puts them in the project graph, which is what Tesserae is for and
@@ -120,9 +123,36 @@ so it is real spend, and it does **not** advance the billing-distill goal (see
 above — all 377 carry `agent_label = "Codex"` and cannot reach the distiller).
 Left undone deliberately rather than spent unilaterally.
 
-**Run super-agents against GetResearchDone through the platform?** That is the
-only thing that gets a distill to actually bill, and it is also real spend. The
-preconditions are in place; nobody has pulled the trigger.
+**Run super-agents against GetResearchDone through the platform? — DECIDED
+2026-08-07: deferred to real use, deliberately.** This is the only thing that
+gets a distill to actually bill. It will happen while Agented is used on real
+projects; it will NOT be triggered synthetically to close the gap.
+
+Read that as a decision, not a loose end, and do not try to advance it by
+seeding sessions. A manufactured run would re-prove only the plumbing that is
+already verified — change detection, the 6 h interval, the pricing gate, the
+persisted record — while the actual unknown is whether real sessions produce
+clusters worth summarising. The blocker was never the mechanism. It is that one
+session with 8 decisions does not cluster.
+
+**Nothing to trigger, so watch instead.** The dispatch is automatic: any compile
+on this project that changes `graph.json` schedules it, at most once per 6 h. The
+first billing run will therefore land during some unrelated working session.
+Check `last_auto_distill` on `/admin/system/memory/tesserae/projects` afterwards
+rather than watching for it.
+
+Two outcomes mean something is wrong, and neither is loud:
+
+- an `estimate_unavailable_*` reason — the pricer failed, and the 6 h window was
+  consumed for nothing. One quiet refusal per window degrades into "the runbook
+  silently stops refreshing";
+- a record still sitting at `graph_changed` with no cost — outcome **unknown**,
+  not "nothing happened". The tesserae child is spawned with
+  `start_new_session=True`, so a worker restart mid-run orphans a child that
+  keeps spending while no job remains to resolve the record.
+
+Still unobserved, and worth writing down the first time either is seen: the `≥n`
+partial-cost path, and the 1800 s timeout with its `killpg` reaping.
 
 ### 1. FIXED in Tesserae 0.28.7 — [#104](https://github.com/ca1773130n/Tesserae/issues/104), on the third attempt
 
