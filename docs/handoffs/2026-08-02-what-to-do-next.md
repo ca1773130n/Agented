@@ -36,8 +36,26 @@ Importing more harness sessions. I tried. `tesserae sessions discover --import`
 pulled 377 real Claude Code / Codex sessions for GetResearchDone, and all 377
 carry `agent_label = "Codex"`. The distill's scope is `known_agent_keys`, read
 from `.tesserae/agents/registry.json`, which `sync_agent_registry` derives from
-Agented's `super_agents` table. That table currently holds exactly one agent,
-matching label `sa-apoc`. None of the 377 can reach the distiller.
+Agented's `super_agents` table. Exactly one agent is *declared* for this project
+— `sa-apoc` — and none of the 377 can reach the distiller.
+
+(Corrected 2026-08-06: this said the table "holds exactly one agent." It holds
+**18**, all seeded 2026-06-21. What is one is the *declared* set, which is a
+narrower thing. `_declared_super_agents` admits agents on **two different
+rules**, and stating only the first is itself a mistake — one this document made
+in its first attempt at this correction:
+
+- a **child** needs an exportable (`completed`) session in the project, because
+  a child with none writes no `distilled.graph.json` and takes the whole pass
+  down via `_distill_manager`;
+- an **ancestor** needs only *some* session in the project, of **any** status.
+  The relaxation is over status, never over project. It exists because a project
+  leader holds a long-lived `session_type='leader'` session designed never to
+  end, so a naive `completed` filter would flatten the org to `org:root`.
+
+Here only `sess-cv1uqiev` → `sa-apoc` qualifies under either rule, so the
+declared set is one. The conclusion was right for a reason the sentence did not
+state, which is the failure mode this document keeps warning about.)
 
 Widening the registry match rule to sweep those sessions under "Apoc" would be
 fabrication, since the runbook would then claim an agent did work it never did.
@@ -61,6 +79,19 @@ in place:
 
 Watch `last_auto_distill` on `/admin/system/memory/tesserae/projects`. The first
 real cost number should show up there.
+
+**Re-verified 2026-08-06, and all four preconditions still hold.** `registry.json`
+declares `claude:unknown:sa-apoc` with `parent: org:root` (flat — no manager
+trap), `graph.json` is 5808 nodes / 8781 edges, the `distilled.graph.json` is
+intact (written `2026-07-31 21:06 KST` — *not* 2026-08-01, and note it therefore
+predates the 2026-08-01 14:42 graph rebuild, so it was distilled against the
+earlier graph), and a free dry run prices the pass at
+`clusters=0 estimated_llm_calls=0 scope=1`, exit 0. Nothing is broken and nothing
+was spent; the blocker is exactly what this section says it is — one session with
+8 decisions does not cluster. Run the dry run with `TESSERAE_AGENT_DISTILL=1`
+from `~/Developer/Workspaces/projects/GetResearchDone`, not from the same-named
+checkout under `~/Developer/Projects/` (see `CLAUDE.md`, "Two traps if you run the
+dry run by hand").
 
 ---
 
@@ -132,6 +163,14 @@ store. I had reproduced my own misuse. Check the signature before reporting a
 regression — the maintainer's two wrong fixes came from tests that encoded an
 assumption rather than checking it, and this was the same error pointing the
 other way.
+
+**Closed 2026-08-06**, with the verification above on the thread. The
+empty-`producer` default was split out to
+[Tesserae#116](https://github.com/ca1773130n/Tesserae/issues/116) so it would not
+close with it: `write_sessions` defaults to `producer=""`, which is whole-store
+ownership, so the destructive reading is the one you get by omission. The
+docstring documents the trap correctly (`harness_sessions.py:167-168`) — the
+defect is the default, not the documentation.
 
 ### 2. ~~`ag qa` has never been run end to end~~ — DONE, see PR #384
 

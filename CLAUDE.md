@@ -100,10 +100,20 @@ the window is still right — a distill genuinely is in flight and a second
 concurrent one would race the same artifact — but read the record as "a distill
 covered this window", never as "this digest is now distilled".
 
-**The 300 s pricing budget is unvalidated.** The dry run has never executed
-against a real corpus; the live `graph.json` is ~12 MB and the pass does full
-scope closure + clustering for *every* agent because it deliberately bypasses the
-watermark skip. It is free of provider calls — verified in tesserae's source, not
+**The 300 s pricing budget is still unvalidated, but no longer unexecuted.** The
+dry run HAS now run against the real corpus (2026-08-06): `tesserae distill --all
+--dry-run` in the live root returns in **under a second**, exit 0,
+`clusters=0 estimated_llm_calls=0 scope=1`. Read that as a floor and nothing more
+— it prices *one* agent holding *one* session, so it never enters the work the
+budget exists to bound. The cost driver is full scope closure + clustering for
+*every* agent with the watermark skip deliberately bypassed, and that work scales
+with the agents and sessions this corpus does not yet have. The budget therefore
+stays unvalidated; what is now false is "has never executed."
+
+(The same paragraph used to put the live `graph.json` at ~12 MB. It is **5.1 MB**
+— 5808 nodes / 8781 edges.)
+
+The pass is free of provider calls — verified in tesserae's source, not
 assumed (`agent_distill.py:1567` returns the deterministic fallback before
 `self.summarizer(request)`) — so overrunning costs CPU, not money, and fails
 closed with `estimate_unavailable_timeout` plus the killed-at elapsed seconds in
@@ -115,6 +125,25 @@ deliberate trade (not re-consuming the window would re-burn the full CPU-bound
 dry run on every compile), which is why the refusal reason is surfaced in the UI
 via `last_auto_distill.reason` rather than left in the log: an
 `estimate_unavailable_*` sitting on that row is the symptom to look for.
+
+**Two traps if you run the dry run by hand.** Both cost a session on 2026-08-06,
+and both look like a broken feature rather than a mistake at the prompt:
+
+- **`TESSERAE_AGENT_DISTILL=1` is required.** Without it tesserae exits **1** with
+  *"Agent distillation is opt-in — set TESSERAE_AGENT_DISTILL=1 or config.json
+  {"agent_distill": {"enabled": true}}"* and prices nothing. The server path is
+  unaffected — `super_agent_memory.py:457,641` set it on the subprocess env — so
+  this bites only a human at the CLI, and it reads as a pricer failure when it is
+  a missing flag. Same shape as the `write_sessions` empty-`producer` default:
+  the path you get by not knowing is the failing one.
+- **The tesserae root is not the repo checkout.** `get_tesserae_root(project_id)`
+  resolves from the project record, and for `proj-xe3qj4` that is
+  `~/Developer/Workspaces/projects/GetResearchDone` — *not* the same-named
+  checkout under `~/Developer/Projects/`, which has its own unrelated
+  `.tesserae/` (2061 nodes). Inspecting the wrong one shows a missing registry
+  and a mismatched graph, i.e. exactly the symptoms of the bug you are hunting.
+  Resolve the root before believing anything you find in a `.tesserae/`
+  directory.
 
 An `estimate_unavailable_*` reason always means the pricer failed. **Two**
 healthy shapes price at 0 and report `nothing_to_distill` instead, and neither
@@ -155,15 +184,32 @@ state: **1 project opted in** (GetResearchDone), **5 session rows, 1 correctly
 attributed** (`sess-cv1uqiev` → `sa-apoc` → `proj-xe3qj4`), and the first
 `distilled.graph.json` on this machine exists at
 `.tesserae/agents/claude:unknown:sa-apoc/` (5 nodes: 2 Agent, 2 DistilledNote,
-1 ExpertiseProfile).
+1 ExpertiseProfile; re-counted 2026-08-06, still 5 nodes / 1 edge).
+
+One timing detail, because the section header dates this work to 2026-08-01 and
+the artifact does not agree: that file was written **2026-07-31 21:06 KST**,
+which is *before* the 2026-08-01 14:42 graph rebuild described just below. So it
+was distilled against the earlier graph, and it is not evidence that anything
+distilled the rebuilt one.
 
 Three things had to be fixed to get there, and each failed silently:
 
 1. **The graph was never built.** `compile --changed-only` reported
    `processed=0 skipped=316` against a `graph.json` holding 302 nodes — the
-   manifest claimed every doc was current. A full re-extraction produced 8734
-   nodes / 12779 edges. A no-op compile is not evidence of anything; check
-   `processed>0` before believing a compile did work.
+   manifest claimed every doc was current. A full re-extraction fixed it. A no-op
+   compile is not evidence of anything; check `processed>0` before believing a
+   compile did work.
+
+   This line used to claim that re-extraction produced **8734 nodes / 12779
+   edges**. It did not. That `graph.json` has not been rewritten since (mtime
+   `2026-08-01 14:42`, two minutes before the auto-distill dispatch stamped in
+   `tesserae_auto_distill_state`), and counted on 2026-08-06 it holds **5808
+   nodes / 8781 edges** — which is the figure the 2026-08-02 handoff also
+   records. Two independent reads agree with each other and disagree with the
+   number that was written here, so treat 5808/8781 as the measurement and 8734/
+   12779 as a transcription error. It is corrected rather than deleted because a
+   node count is exactly the kind of figure that gets carried forward as
+   evidence a compile succeeded.
 2. **Sessions were never imported.** The DB row was correctly attributed and the
    registry declared the agent, yet `distill --all --dry-run` still priced it as
    `no-sessions`. `export_sessions_to_tesserae` had to run before the graph had
