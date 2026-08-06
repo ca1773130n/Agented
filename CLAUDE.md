@@ -184,7 +184,13 @@ state: **1 project opted in** (GetResearchDone), **5 session rows, 1 correctly
 attributed** (`sess-cv1uqiev` → `sa-apoc` → `proj-xe3qj4`), and the first
 `distilled.graph.json` on this machine exists at
 `.tesserae/agents/claude:unknown:sa-apoc/` (5 nodes: 2 Agent, 2 DistilledNote,
-1 ExpertiseProfile).
+1 ExpertiseProfile; re-counted 2026-08-06, still 5 nodes / 1 edge).
+
+One timing detail, because the section header dates this work to 2026-08-01 and
+the artifact does not agree: that file was written **2026-07-31 21:06 KST**,
+which is *before* the 2026-08-01 14:42 graph rebuild described just below. So it
+was distilled against the earlier graph, and it is not evidence that anything
+distilled the rebuilt one.
 
 Three things had to be fixed to get there, and each failed silently:
 
